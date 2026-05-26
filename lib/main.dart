@@ -10,6 +10,7 @@ import 'core/auth/auth_state.dart';
 import 'core/auth/biometric_service.dart';
 import 'core/config/app_config.dart';
 import 'features/dashboard/dashboard_repository.dart';
+import 'features/lock/lock_barrier.dart';
 import 'features/search/household_search_repository.dart';
 import 'features/search/patient_search_repository.dart';
 
@@ -102,6 +103,18 @@ class _UhisNextAppState extends State<UhisNextApp>
             theme: buildAppTheme(),
             routerConfig: router,
             debugShowCheckedModeBanner: false,
+            builder: (ctx, child) {
+              final auth = ctx.watch<AuthState>();
+              final showBarrier = auth.status == AuthStatus.signedIn &&
+                  auth.locked &&
+                  auth.biometricEnabled;
+              return Stack(
+                children: [
+                  child ?? const SizedBox.shrink(),
+                  if (showBarrier) const Positioned.fill(child: LockBarrier()),
+                ],
+              );
+            },
           );
         },
       ),

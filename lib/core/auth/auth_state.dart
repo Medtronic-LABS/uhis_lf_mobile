@@ -128,6 +128,18 @@ class AuthState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// User chose "Use password" from the lock barrier or `/lock` screen.
+  /// Drops the active session locally (server cookies considered abandoned),
+  /// clears the lock flag, and forces signedOut so the user can land on
+  /// `/login?from=lock`. Biometric preference is preserved — successful
+  /// password login will silently re-enrol the new session.
+  Future<void> requestPasswordFallback() async {
+    await _repo.handleSessionExpired();
+    _status = AuthStatus.signedOut;
+    _locked = false;
+    notifyListeners();
+  }
+
   Future<void> handleSessionExpired() async {
     if (_status == AuthStatus.signedOut) return;
     await _repo.handleSessionExpired();

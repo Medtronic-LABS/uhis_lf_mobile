@@ -32,9 +32,9 @@ GoRouter buildRouter(AuthState auth) {
           if (loc.startsWith('/login')) return null;
           return '/login';
         case AuthStatus.signedIn:
-          if (auth.locked && auth.biometricEnabled) {
-            return loc == '/lock' ? null : '/lock';
-          }
+          // Mid-session lock is overlaid by LockBarrier — no route swap, so
+          // route stays where the user was. Cold-start /lock is still
+          // reachable via signedOut + biometricEnabled below.
           if (loc.startsWith('/login') || loc == '/' || loc == '/lock') {
             return '/dashboard';
           }
