@@ -7,6 +7,27 @@
 .buildlog/
 .history
 
+# Environment / build-time config (keep env.example.json checked in)
+.env
+.env.*
+env.json
+env.development.json
+env.staging.json
+env.production.json
+env.local.json
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Test artifacts
+e2e/node_modules/
+e2e/test-results/
+e2e/report/
+e2e/playwright-report/
+
 
 
 # Flutter repo-specific
