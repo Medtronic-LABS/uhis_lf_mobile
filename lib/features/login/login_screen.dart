@@ -38,7 +38,9 @@ class _LoginScreenState extends State<LoginScreen> {
     final auth = context.read<AuthState>();
     final ok = await auth.login(_userCtl.text.trim(), _passCtl.text);
     if (!mounted) return;
-    if (!ok) {
+    if (ok) {
+      context.go('/dashboard');
+    } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(auth.error ?? 'Login failed')),
       );
