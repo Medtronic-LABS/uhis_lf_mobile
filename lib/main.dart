@@ -11,6 +11,7 @@ import 'core/auth/biometric_service.dart';
 import 'core/config/app_config.dart';
 import 'features/dashboard/dashboard_repository.dart';
 import 'features/lock/lock_barrier.dart';
+import 'features/search/global_search_repository.dart';
 import 'features/search/household_search_repository.dart';
 import 'features/search/patient_search_repository.dart';
 
@@ -94,6 +95,10 @@ class _UhisNextAppState extends State<UhisNextApp>
             create: (_) => PatientSearchRepository(widget.api)),
         Provider<HouseholdSearchRepository>(
             create: (_) => HouseholdSearchRepository(widget.api)),
+        ProxyProvider2<PatientSearchRepository, HouseholdSearchRepository,
+            GlobalSearchRepository>(
+          update: (_, p, h, __) => GlobalSearchRepository(p, h),
+        ),
       ],
       child: Builder(
         builder: (context) {

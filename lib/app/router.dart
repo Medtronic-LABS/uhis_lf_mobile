@@ -5,8 +5,6 @@ import '../core/auth/auth_state.dart';
 import '../features/dashboard/dashboard_screen.dart';
 import '../features/lock/lock_screen.dart';
 import '../features/login/login_screen.dart';
-import '../features/search/household_search_screen.dart';
-import '../features/search/patient_search_screen.dart';
 
 GoRouter buildRouter(AuthState auth) {
   return GoRouter(
@@ -59,14 +57,6 @@ GoRouter buildRouter(AuthState auth) {
       GoRoute(
         path: '/dashboard',
         builder: (_, __) => const DashboardScreen(),
-      ),
-      GoRoute(
-        path: '/search/patient',
-        builder: (_, __) => const PatientSearchScreen(),
-      ),
-      GoRoute(
-        path: '/search/household',
-        builder: (_, __) => const HouseholdSearchScreen(),
       ),
     ],
   );
