@@ -34,8 +34,7 @@ Flutter, Android-first.
 
 - **Password sign-in** against `/auth-service/session` (HmacSHA512 client-side hashing, multipart form, cookie + tenant headers).
 - **Post-login dashboard** with two live count tiles (patients, households) and a placeholder for high-risk AI triage.
-- **Patient search** by name / phone / NID (`/spice-service/patient/search`).
-- **Household search** by name / household number — client-side filter over paginated `/spice-service/household/list` (backend has no native household search endpoint).
+- **Unified top SearchBar** (Material 3 `SearchAnchor.bar`) at the top of the dashboard. Searches patients + households in one query. Scope chips: **All** / **Patients** / **Households**. Auto-detects phone vs NID vs name on patient queries. Falls back from household name → householdNo when first pass returns nothing. Debounced 350 ms with in-flight cancellation.
 - **Android biometric login** via the system `BiometricPrompt` (fingerprint / face / PIN / pattern / device password fallback).
 - **Auto-lock on background** — banking-app style. App locks the moment it goes to `paused` / `hidden`.
 - **Session-token storage only** — never username or password (or hash) at rest. `JSESSIONID` + `AuthCookie` + tenantId persist in `flutter_secure_storage` (Android Keystore-encrypted).
@@ -399,9 +398,9 @@ lib/
       dashboard_screen.dart            count tiles, search entry, opt-in dialog
       dashboard_repository.dart        patientCount, householdCount
     search/
-      patient_search_screen.dart       chips (Name/Phone/NID) + results
-      patient_search_repository.dart
-      household_search_screen.dart     chips (Name/Household No) + progress
+      global_search_bar.dart           Material 3 SearchAnchor.bar + SearchView
+      global_search_repository.dart    fans out to patient + household repos in parallel
+      patient_search_repository.dart   patient REST search wrapper
       household_search_repository.dart paginated client-side filter
 
 android/                                Flutter scaffold + FlutterFragmentActivity
