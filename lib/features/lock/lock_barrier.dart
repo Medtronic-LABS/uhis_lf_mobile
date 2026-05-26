@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
+import 'lock_screen.dart' show LockContent;
 
 /// Mid-session lock overlay. Sits on top of the live widget tree so the
 /// underlying screen state (TextField text, scroll position, futures) is
@@ -15,42 +17,34 @@ class LockBarrier extends StatefulWidget {
 }
 
 class _LockBarrierState extends State<LockBarrier> {
-  bool _tried = false;
   bool _failed = false;
+  UserProfileSummary? _summary;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _trigger());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSummary());
+  }
+
+  Future<void> _loadSummary() async {
+    if (!mounted) return;
+    final s = await context.read<AuthState>().userProfileSummary();
+    if (!mounted) return;
+    setState(() => _summary = s);
   }
 
   Future<void> _trigger() async {
-    if (_tried) return;
-    _tried = true;
-    if (!mounted) return;
     final auth = context.read<AuthState>();
+    setState(() => _failed = false);
     final ok = await auth.biometricUnlock();
     if (!mounted) return;
-    if (ok) {
-      // AuthState.biometricUnlock already calls unlock() on success — nothing
-      // else to do; the parent rebuild will tear the barrier down.
-      return;
-    }
+    if (ok) return;
     if (!auth.biometricEnabled) {
-      // Session expired during restore; full sign-in needed.
       await auth.requestPasswordFallback();
       if (mounted) context.go('/login?from=lock');
       return;
     }
     setState(() => _failed = true);
-  }
-
-  void _retry() {
-    setState(() {
-      _tried = false;
-      _failed = false;
-    });
-    _trigger();
   }
 
   Future<void> _usePassword() async {
@@ -63,50 +57,24 @@ class _LockBarrierState extends State<LockBarrier> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthState>();
-    final user = auth.username;
     return PopScope(
       canPop: false,
       child: Material(
         color: Theme.of(context).colorScheme.surface,
         child: SafeArea(
           child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.lock_outline, size: 56),
-                  const SizedBox(height: 16),
-                  Text('UHIS Next',
-                      style: Theme.of(context).textTheme.headlineMedium),
-                  const SizedBox(height: 8),
-                  Text(
-                    user == null ? 'Locked' : 'Locked — $user',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 32),
-                  if (auth.busy)
-                    const CircularProgressIndicator()
-                  else if (_failed)
-                    Column(
-                      children: [
-                        const Text('Biometric cancelled'),
-                        const SizedBox(height: 12),
-                        FilledButton.icon(
-                          onPressed: _retry,
-                          icon: const Icon(Icons.fingerprint),
-                          label: const Text('Try again'),
-                        ),
-                        const SizedBox(height: 8),
-                        TextButton(
-                          onPressed: _usePassword,
-                          child: const Text('Use password'),
-                        ),
-                      ],
-                    )
-                  else
-                    const Icon(Icons.fingerprint, size: 48),
-                ],
+            child: SingleChildScrollView(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 480),
+                child: LockContent(
+                  summary: _summary,
+                  busy: auth.busy,
+                  failed: _failed,
+                  onUnlock: _trigger,
+                  onPassword: _usePassword,
+                ),
               ),
             ),
           ),

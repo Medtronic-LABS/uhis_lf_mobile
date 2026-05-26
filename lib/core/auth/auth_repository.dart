@@ -42,6 +42,14 @@ class AuthRepository {
   static const _kBioTenant = 'bio_tenant_id';
   static const _kBioUsername = 'bio_last_username';
   static const _kBioOfferedOnce = 'bio_offered_once';
+  static const _kFirstName = 'firstName';
+  static const _kLastName = 'lastName';
+  static const _kArea = 'operationalArea';
+  static const _kWard = 'ward';
+  static const _kUpazila = 'upazila';
+  static const _kSkId = 'skId';
+  static const _kNidOrPhone = 'nidOrPhone';
+  static const _kHouseholdCountCache = 'householdCountCache';
 
   Future<String?> currentTenantId() async {
     final cached = _api.tenantId;
@@ -52,6 +60,25 @@ class AuthRepository {
   }
 
   Future<String?> lastUsername() => _storage.read(key: _kUsername);
+
+  Future<String?> firstName() => _storage.read(key: _kFirstName);
+
+  Future<UserProfileSummary> userProfileSummary() async {
+    return UserProfileSummary(
+      firstName: await _storage.read(key: _kFirstName),
+      lastName: await _storage.read(key: _kLastName),
+      skId: await _storage.read(key: _kSkId),
+      nidOrPhone: await _storage.read(key: _kNidOrPhone),
+      ward: await _storage.read(key: _kWard),
+      upazila: await _storage.read(key: _kUpazila),
+      area: await _storage.read(key: _kArea),
+      householdCount: int.tryParse(
+          await _storage.read(key: _kHouseholdCountCache) ?? ''),
+    );
+  }
+
+  Future<void> cacheHouseholdCount(int count) =>
+      _storage.write(key: _kHouseholdCountCache, value: '$count');
 
   Future<void> login(String username, String password) async {
     final form = FormData.fromMap({
@@ -91,6 +118,107 @@ class AuthRepository {
     final tenantStr = tenant.toString();
     _api.setTenantId(tenantStr);
     await _storage.write(key: _kTenantId, value: tenantStr);
+
+    final entityMap = entity as Map;
+    Future<void> writeOrDelete(String key, String? v) async {
+      if (v != null && v.isNotEmpty) {
+        await _storage.write(key: key, value: v);
+      } else {
+        await _storage.delete(key: key);
+      }
+    }
+
+    final firstName = (entityMap['firstName'] as String?)?.trim();
+    await writeOrDelete(_kFirstName, firstName);
+    final lastName = (entityMap['lastName'] as String?)?.trim();
+    await writeOrDelete(_kLastName, lastName);
+
+    final idVal = entityMap['id']?.toString();
+    final fhirId = (entityMap['fhirId'] as String?)?.trim();
+    final regionCode =
+        (entityMap['country'] is Map ? entityMap['country']['regionCode'] : null)
+                ?.toString() ??
+            'BD';
+    String? skId;
+    if (idVal != null && idVal.isNotEmpty) {
+      final year = DateTime.now().year;
+      final padded = idVal.padLeft(3, '0');
+      skId = 'SK-$regionCode-$year-$padded';
+    } else if (fhirId != null && fhirId.isNotEmpty) {
+      skId = 'SK-$regionCode-$fhirId';
+    }
+    await writeOrDelete(_kSkId, skId);
+
+    final phone = (entityMap['phoneNumber'] as String?)?.trim();
+    final nidExtracted = _extractNid(entityMap);
+    await writeOrDelete(_kNidOrPhone, nidExtracted ?? phone);
+
+    String? area;
+    final orgs = entityMap['organizations'];
+    if (orgs is List && orgs.isNotEmpty) {
+      final first = orgs.first;
+      if (first is Map) {
+        final name = (first['name'] as String?)?.trim();
+        if (name != null && name.isNotEmpty) area = name;
+      }
+    }
+    await writeOrDelete(_kArea, area);
+
+    String? ward;
+    final villages = entityMap['villages'];
+    if (villages is List && villages.isNotEmpty) {
+      final first = villages.first;
+      if (first is Map) {
+        final name = (first['name'] as String?)?.trim();
+        if (name != null && name.isNotEmpty) ward = name;
+      }
+    }
+    await writeOrDelete(_kWard, ward);
+    final upazila = _deriveUpazila(area, entityMap);
+    await writeOrDelete(_kUpazila, upazila);
+  }
+
+  static String? _extractNid(Map entity) {
+    for (final k in const ['nid', 'nationalId', 'idCode', 'identifier']) {
+      final v = entity[k];
+      if (v is String && v.trim().isNotEmpty) return v.trim();
+    }
+    final ids = entity['identifiers'];
+    if (ids is List) {
+      for (final entry in ids) {
+        if (entry is Map) {
+          final v = entry['value'];
+          if (v is String && v.trim().isNotEmpty) return v.trim();
+        }
+      }
+    }
+    return null;
+  }
+
+  static String? _deriveUpazila(String? area, Map entity) {
+    if (area != null && area.isNotEmpty) {
+      const tail = ['Community Clinic', 'Health Facility', 'Clinic', 'Centre', 'Center'];
+      var t = area;
+      for (final suffix in tail) {
+        if (t.endsWith(suffix)) {
+          t = t.substring(0, t.length - suffix.length).trim();
+          break;
+        }
+      }
+      if (t.isNotEmpty && t != area) return t;
+    }
+    final country = entity['country'];
+    if (country is Map) {
+      final display = country['displayValues'];
+      if (display is Map) {
+        final chief = display['chiefdom'];
+        if (chief is Map) {
+          final label = chief['s'];
+          if (label is String && label.isNotEmpty) return label;
+        }
+      }
+    }
+    return null;
   }
 
   Future<void> logout() async {
@@ -198,4 +326,29 @@ class AuthException implements Exception {
   final String message;
   @override
   String toString() => message;
+}
+
+class UserProfileSummary {
+  const UserProfileSummary({
+    this.firstName,
+    this.lastName,
+    this.skId,
+    this.nidOrPhone,
+    this.ward,
+    this.upazila,
+    this.area,
+    this.householdCount,
+  });
+
+  final String? firstName;
+  final String? lastName;
+  final String? skId;
+  final String? nidOrPhone;
+  final String? ward;
+  final String? upazila;
+  final String? area;
+  final int? householdCount;
+
+  bool get hasAnyDetail =>
+      [skId, nidOrPhone, ward, upazila, area].any((s) => s != null && s.isNotEmpty);
 }
