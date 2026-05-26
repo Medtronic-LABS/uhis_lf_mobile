@@ -290,13 +290,32 @@ returns success/failure.
 
 `UhisNextApp` extends `WidgetsBindingObserver`. On `AppLifecycleState.paused`
 or `AppLifecycleState.hidden`, calls `AuthState.lock()` synchronously (no await
-to avoid the task-switcher screenshot race). Router redirect funnels
-`signedIn + locked + biometricEnabled` to `/lock`. Unlock returns to wherever
-the user was — no backend round trip.
+to avoid the task-switcher screenshot race).
+
+Mid-session lock is rendered as a full-screen **`LockBarrier` overlay** on
+top of the live widget tree (via `MaterialApp.router(builder:)` + `Stack`),
+NOT a route swap. This means the underlying screen — TextField text, list
+scroll position, in-flight futures — survives the lock/unlock cycle. When
+the user returns from background and passes biometric, the barrier dismisses
+and the user is back exactly where they left off.
+
+The `/lock` ROUTE is reserved for cold-start with biometric enabled (no
+widget tree exists yet to overlay). After cold-start unlock, the router
+sends the user to `/dashboard`.
 
 `AppLifecycleState.inactive` is **not** treated as lock — it fires on
 transient interruptions (notification shade pull, system dialogs) and would
 be too aggressive.
+
+Inside the barrier:
+- BiometricPrompt auto-fires from `postFrame`.
+- Cancel → "Try again" / "Use password" buttons.
+- "Use password" calls `AuthState.requestPasswordFallback()` which drops the
+  session client-side, flips `status=signedOut`, then navigates to
+  `/login?from=lock`. After successful password login, the biometric slot
+  silently re-binds to the new session.
+- `PopScope(canPop: false)` blocks the Android back button from leaking past
+  the barrier into the dashboard.
 
 ### Switching users
 
