@@ -5,7 +5,9 @@ import '../core/auth/auth_state.dart';
 import '../features/dashboard/dashboard_screen.dart';
 import '../features/lock/lock_screen.dart';
 import '../features/login/login_screen.dart';
+import '../features/onboarding/onboarding_screen.dart';
 import '../features/pin/pin_setup_screen.dart';
+import '../features/pin/pin_unlock_screen.dart';
 
 GoRouter buildRouter(AuthState auth) {
   return GoRouter(
@@ -25,7 +27,7 @@ GoRouter buildRouter(AuthState auth) {
                 state.uri.queryParameters['from'] == 'lock') {
               return null;
             }
-            if (loc == '/lock') return null;
+            if (loc == '/lock' || loc == '/pin-unlock') return null;
             return '/lock';
           }
           if (loc.startsWith('/login')) return null;
@@ -34,8 +36,8 @@ GoRouter buildRouter(AuthState auth) {
           // Mid-session lock is overlaid by LockBarrier — no route swap, so
           // route stays where the user was. Cold-start /lock is still
           // reachable via signedOut + reentryEnabled below.
-          // /pin-setup is a signed-in destination (mandatory first-run PIN),
-          // so it is intentionally NOT redirected away.
+          // /pin-setup and /onboarding are signed-in destinations,
+          // so they are intentionally NOT redirected away.
           if (loc.startsWith('/login') || loc == '/' || loc == '/lock') {
             return '/dashboard';
           }
@@ -62,8 +64,16 @@ GoRouter buildRouter(AuthState auth) {
         builder: (_, __) => const DashboardScreen(),
       ),
       GoRoute(
+        path: '/onboarding',
+        builder: (_, __) => const OnboardingScreen(),
+      ),
+      GoRoute(
         path: '/pin-setup',
         builder: (_, __) => const PinSetupScreen(),
+      ),
+      GoRoute(
+        path: '/pin-unlock',
+        builder: (_, __) => const PinUnlockScreen(),
       ),
     ],
   );
@@ -73,7 +83,20 @@ class _SplashScreen extends StatelessWidget {
   const _SplashScreen();
 
   @override
-  Widget build(BuildContext context) => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+  Widget build(BuildContext context) => Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Image.asset(
+                'assets/images/app-logo-name.png',
+                height: 64,
+                fit: BoxFit.contain,
+              ),
+              const SizedBox(height: 32),
+              const CircularProgressIndicator(),
+            ],
+          ),
+        ),
       );
 }

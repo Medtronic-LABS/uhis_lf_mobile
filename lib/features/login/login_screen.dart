@@ -67,16 +67,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const SizedBox(height: 32),
-                    Text(
-                      AppStrings.appName,
-                      style: Theme.of(context).textTheme.headlineMedium,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      AppStrings.appTagline,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                      textAlign: TextAlign.center,
+                    Image.asset(
+                      'assets/images/app-logo-name.png',
+                      height: 56,
+                      fit: BoxFit.contain,
                     ),
                     const SizedBox(height: 32),
                     if (widget.fromLock)
@@ -155,6 +149,24 @@ class _LoginScreenState extends State<LoginScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Text(LoginStrings.signIn),
+                    ),
+                    const SizedBox(height: 48),
+                    Column(
+                      children: [
+                        Text(
+                          AppStrings.poweredBy,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        Image.asset(
+                          'assets/images/medtronic-labs-logo.png',
+                          height: 40,
+                          fit: BoxFit.contain,
+                        ),
+                      ],
                     ),
                   ],
                 ),
