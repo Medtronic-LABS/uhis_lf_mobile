@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
+import '../../core/constants/app_strings.dart';
 import '../search/global_search_bar.dart';
 import 'dashboard_repository.dart';
 
@@ -28,7 +29,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _loadSummary();
       await _maybeOfferBiometric();
+      await _maybePromptPinSetup();
     });
+  }
+
+  /// First-run mandatory step: every account must have a fallback PIN. Runs
+  /// after the biometric offer; sends the user to the dedicated setup screen
+  /// until a PIN exists.
+  Future<void> _maybePromptPinSetup() async {
+    if (!mounted) return;
+    if (context.read<AuthState>().pinEnabled) return;
+    context.go('/pin-setup');
   }
 
   Future<void> _loadSummary() async {
@@ -49,20 +60,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final ans = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Use device unlock?'),
+        title: const Text(DashboardStrings.useDeviceUnlockTitle),
         content: Text(
           supported
-              ? 'Sign in next time with your fingerprint, face, or device PIN — no password needed.'
-              : 'Sign in next time with your fingerprint, face, or device PIN. You may need to set up a screen lock in Android Settings first.',
+              ? DashboardStrings.biometricOfferSupported
+              : DashboardStrings.biometricOfferUnsupported,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Not now'),
+            child: const Text(DashboardStrings.notNow),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Enable'),
+            child: const Text(DashboardStrings.enable),
           ),
         ],
       ),
@@ -72,9 +83,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (!supported) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Set up a screen lock (PIN, pattern, or fingerprint) in Android Settings, then try again.',
-          ),
+          content: Text(DashboardStrings.setUpScreenLock),
         ),
       );
       return;
@@ -83,12 +92,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       await context.read<AuthState>().enrolBiometric();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Device unlock enabled')),
+        const SnackBar(content: Text(DashboardStrings.deviceUnlockEnabled)),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not enable: $e')),
+        SnackBar(content: Text(DashboardStrings.couldNotEnable(e))),
       );
     }
   }
@@ -115,17 +124,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _greeting() {
     final hour = DateTime.now().hour;
     final part = hour < 12
-        ? 'Good Morning'
-        : (hour < 17 ? 'Good Afternoon' : 'Good Evening');
+        ? DashboardStrings.goodMorning
+        : (hour < 17
+            ? DashboardStrings.goodAfternoon
+            : DashboardStrings.goodEvening);
     final first = _summary?.firstName?.trim();
-    if (first != null && first.isNotEmpty) return '$part, $first';
+    if (first != null && first.isNotEmpty) {
+      return DashboardStrings.greetingNamed(part, first);
+    }
     final fallback = context.read<AuthState>().username;
     if (fallback == null || fallback.isEmpty) return part;
     final stub = fallback.split('.').first.split('@').first;
     final cap = stub.isEmpty
         ? ''
         : '${stub[0].toUpperCase()}${stub.substring(1)}';
-    return '$part, $cap';
+    return DashboardStrings.greetingNamed(part, cap);
   }
 
   String? _locationLine() {
@@ -143,10 +156,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final t = _lastRefreshed;
     if (t == null) return '';
     final diff = DateTime.now().difference(t);
-    if (diff.inSeconds < 30) return 'updated just now';
-    if (diff.inMinutes < 1) return 'updated ${diff.inSeconds}s ago';
-    if (diff.inMinutes < 60) return 'updated ${diff.inMinutes}m ago';
-    return 'updated ${diff.inHours}h ago';
+    if (diff.inSeconds < 30) return DashboardStrings.updatedJustNow;
+    if (diff.inMinutes < 1) return DashboardStrings.updatedSecondsAgo(diff.inSeconds);
+    if (diff.inMinutes < 60) return DashboardStrings.updatedMinutesAgo(diff.inMinutes);
+    return DashboardStrings.updatedHoursAgo(diff.inHours);
   }
 
   @override
@@ -154,7 +167,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('UHIS Next'),
+        title: const Text(AppStrings.appName),
         actions: [
           Consumer<AuthState>(
             builder: (ctx, auth, _) => PopupMenuButton<String>(
@@ -169,7 +182,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     if (ctx.mounted) {
                       ScaffoldMessenger.of(ctx).showSnackBar(
                         const SnackBar(
-                            content: Text('Device unlock disabled')),
+                            content: Text(DashboardStrings.deviceUnlockDisabled)),
+                      );
+                    }
+                    break;
+                  case 'set_pin':
+                    ctx.go('/pin-setup');
+                    break;
+                  case 'remove_pin':
+                    await auth.disablePin();
+                    if (ctx.mounted) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(
+                            content: Text(PinStrings.disabledSnack)),
                       );
                     }
                     break;
@@ -185,7 +210,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     value: 'enable_bio',
                     child: ListTile(
                       leading: Icon(Icons.fingerprint),
-                      title: Text('Enable device unlock'),
+                      title: Text(DashboardStrings.enableDeviceUnlock),
                     ),
                   ),
                 if (auth.biometricEnabled)
@@ -193,14 +218,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     value: 'disable_bio',
                     child: ListTile(
                       leading: Icon(Icons.fingerprint_outlined),
-                      title: Text('Disable device unlock'),
+                      title: Text(DashboardStrings.disableDeviceUnlock),
+                    ),
+                  ),
+                if (!auth.pinEnabled)
+                  const PopupMenuItem(
+                    value: 'set_pin',
+                    child: ListTile(
+                      leading: Icon(Icons.pin_outlined),
+                      title: Text(PinStrings.enablePin),
+                    ),
+                  ),
+                if (auth.pinEnabled)
+                  const PopupMenuItem(
+                    value: 'remove_pin',
+                    child: ListTile(
+                      leading: Icon(Icons.pin_outlined),
+                      title: Text(PinStrings.disablePin),
                     ),
                   ),
                 const PopupMenuItem(
                   value: 'logout',
                   child: ListTile(
                     leading: Icon(Icons.logout),
-                    title: Text('Sign out'),
+                    title: Text(DashboardStrings.signOut),
                   ),
                 ),
               ],
@@ -251,7 +292,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         )
                       else
                         Text(
-                          'Your community at a glance',
+                          DashboardStrings.communityAtAGlance,
                           style:
                               Theme.of(context).textTheme.bodyMedium?.copyWith(
                                     color: scheme.onSurfaceVariant,
@@ -261,7 +302,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Refresh',
+                  tooltip: DashboardStrings.refreshTooltip,
                   icon: const Icon(Icons.refresh),
                   onPressed: () => setState(_reload),
                 ),
@@ -276,7 +317,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   Expanded(
                     child: _StatCard(
-                      label: 'Total\nPatients',
+                      label: DashboardStrings.totalPatients,
                       icon: Icons.people_alt_outlined,
                       accent: scheme.primary,
                       background:
@@ -284,8 +325,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       future: _patientFuture,
                       onTap: () => ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text(
-                              'Use the search bar above to look up patients'),
+                          content: Text(DashboardStrings.lookUpPatients),
                         ),
                       ),
                       onRetry: () => setState(_reload),
@@ -294,7 +334,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: _StatCard(
-                      label: 'Total\nHouseholds',
+                      label: DashboardStrings.totalHouseholds,
                       icon: Icons.home_work_outlined,
                       accent: scheme.tertiary,
                       background:
@@ -302,8 +342,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       future: _householdFuture,
                       onTap: () => ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text(
-                              'Use the search bar above to look up households'),
+                          content: Text(DashboardStrings.lookUpHouseholds),
                         ),
                       ),
                       onRetry: () => setState(_reload),
@@ -312,16 +351,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: _StatCard.placeholder(
-                      label: 'High-Risk\nPatients',
+                      label: DashboardStrings.highRiskPatients,
                       icon: Icons.warning_amber_rounded,
                       accent: scheme.error,
                       background:
                           scheme.errorContainer.withValues(alpha: 0.45),
-                      badge: 'SOON',
+                      badge: DashboardStrings.soonBadge,
                       onTap: () => ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content:
-                              Text('AI triage coming soon — not wired yet'),
+                          content: Text(DashboardStrings.aiTriageComingSoon),
                         ),
                       ),
                     ),

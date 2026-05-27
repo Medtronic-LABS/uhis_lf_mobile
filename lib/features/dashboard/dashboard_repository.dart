@@ -1,20 +1,15 @@
-import '../../core/api/api_client.dart';
+import '../../core/api/api_repository.dart';
 import '../../core/api/endpoints.dart';
 
-class DashboardRepository {
-  DashboardRepository(this._api);
-
-  final ApiClient _api;
+class DashboardRepository extends ApiRepository {
+  DashboardRepository(super.api);
 
   Future<int> patientCount() async {
-    final resp = await _api.dio.post(
+    final data = await postOk(
       Endpoints.patientList,
-      data: {'skip': 0, 'limit': 1, 'tenantId': _tenantIdAsNum()},
+      data: {'skip': 0, 'limit': 1, 'tenantId': api.tenantIdAsNum},
+      action: 'Patient count',
     );
-    if (resp.statusCode != 200) {
-      throw Exception('Patient count failed (${resp.statusCode})');
-    }
-    final data = resp.data;
     final total = (data is Map) ? data['totalCount'] : null;
     if (total is int) return total;
     if (total is num) return total.toInt();
@@ -27,39 +22,17 @@ class DashboardRepository {
     int skip = 0;
     int page = 0;
     while (page < hardCapPages) {
-      final resp = await _api.dio.post(
+      final body = await postOk(
         Endpoints.householdList,
-        data: {
-          'skip': skip,
-          'limit': pageSize,
-          'tenantId': _tenantIdAsNum(),
-        },
+        data: {'skip': skip, 'limit': pageSize, 'tenantId': api.tenantIdAsNum},
+        action: 'Household list',
       );
-      if (resp.statusCode != 200) {
-        throw Exception('Household list failed (${resp.statusCode})');
-      }
-      final body = resp.data;
-      final list = _extractList(body);
+      final list = extractList(body);
       total += list.length;
       if (list.length < pageSize) break;
       skip += pageSize;
       page++;
     }
     return total;
-  }
-
-  Object? _tenantIdAsNum() {
-    final t = _api.tenantId;
-    if (t == null) return null;
-    return int.tryParse(t) ?? t;
-  }
-
-  static List _extractList(dynamic body) {
-    if (body is List) return body;
-    if (body is Map) {
-      if (body['entityList'] is List) return body['entityList'] as List;
-      if (body['data'] is List) return body['data'] as List;
-    }
-    return const [];
   }
 }
