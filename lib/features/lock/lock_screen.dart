@@ -4,6 +4,9 @@ import 'package:provider/provider.dart';
 
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
+import '../../core/config/app_config.dart';
+import '../../core/constants/app_strings.dart';
+import '../pin/pin_pad.dart';
 
 class LockScreen extends StatefulWidget {
   const LockScreen({super.key});
@@ -62,7 +65,18 @@ class _LockScreenState extends State<LockScreen> {
                 summary: _summary,
                 busy: auth.busy,
                 failed: _failed,
+                biometricEnabled: auth.biometricEnabled,
+                pinEnabled: auth.pinEnabled,
                 onUnlock: _trigger,
+                onPin: (pin) async {
+                  final ok = await auth.pinUnlock(pin);
+                  if (!mounted) return null;
+                  if (ok) {
+                    context.go('/dashboard');
+                    return null;
+                  }
+                  return auth.error;
+                },
                 onPassword: () => context.go('/login?from=lock'),
               ),
             ),
@@ -73,34 +87,85 @@ class _LockScreenState extends State<LockScreen> {
   }
 }
 
-class LockContent extends StatelessWidget {
+class LockContent extends StatefulWidget {
   const LockContent({
     super.key,
     required this.summary,
     required this.busy,
     required this.failed,
+    required this.biometricEnabled,
+    required this.pinEnabled,
     required this.onUnlock,
+    required this.onPin,
     required this.onPassword,
   });
 
   final UserProfileSummary? summary;
   final bool busy;
   final bool failed;
+  final bool biometricEnabled;
+  final bool pinEnabled;
   final VoidCallback onUnlock;
+
+  /// Verify [pin]; returns a localized error message, or null on success
+  /// (the parent handles navigation / barrier dismissal on success).
+  final Future<String?> Function(String pin) onPin;
   final VoidCallback onPassword;
 
+  @override
+  State<LockContent> createState() => _LockContentState();
+}
+
+class _LockContentState extends State<LockContent> {
+  bool _pinMode = false;
+  String _pinValue = '';
+  String? _pinError;
+  bool _pinBusy = false;
+
+  static const _btnSize = Size.fromHeight(48);
+
   String _displayName() {
-    final s = summary;
+    final s = widget.summary;
     if (s == null) return '';
     final f = s.firstName?.trim() ?? '';
     final l = s.lastName?.trim() ?? '';
     return [f, l].where((e) => e.isNotEmpty).join(' ');
   }
 
+  void _enterPinMode() => setState(() {
+        _pinMode = true;
+        _pinValue = '';
+        _pinError = null;
+      });
+
+  void _exitPinMode() => setState(() {
+        _pinMode = false;
+        _pinValue = '';
+        _pinError = null;
+      });
+
+  Future<void> _onPinChanged(String v) async {
+    setState(() {
+      _pinValue = v;
+      _pinError = null;
+    });
+    if (v.length < AppConfig.pinLength) return;
+    setState(() => _pinBusy = true);
+    final err = await widget.onPin(v);
+    if (!mounted) return;
+    setState(() {
+      _pinBusy = false;
+      if (err != null) {
+        _pinError = err;
+        _pinValue = '';
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final s = summary;
+    final s = widget.summary;
     final name = _displayName();
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -120,7 +185,9 @@ class LockContent extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         Text(
-          name.isEmpty ? 'Welcome back' : 'Welcome back, $name',
+          name.isEmpty
+              ? LockStrings.welcomeBack
+              : LockStrings.welcomeBackNamed(name),
           style: Theme.of(context)
               .textTheme
               .headlineSmall
@@ -129,61 +196,79 @@ class LockContent extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Text(
-          'Verify your identity to access your ward dashboard.',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
+          LockStrings.verifyToAccess,
+          style: Theme.of(context)
+              .textTheme
+              .bodyMedium
+              ?.copyWith(color: scheme.onSurfaceVariant),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 24),
         if (s != null && s.hasAnyDetail) _UserDetailsCard(summary: s),
         const SizedBox(height: 24),
-        if (busy)
-          const CircularProgressIndicator()
-        else if (failed) ...[
-          Text(
-            'Biometric cancelled',
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            onPressed: onUnlock,
-            icon: const Icon(Icons.fingerprint),
-            label: const Text('Unlock with fingerprint'),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(48),
-            ),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: onPassword,
-            icon: const Icon(Icons.password),
-            label: const Text('Use password'),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size.fromHeight(48),
-            ),
-          ),
-        ] else ...[
-          FilledButton.icon(
-            onPressed: onUnlock,
-            icon: const Icon(Icons.fingerprint),
-            label: const Text('Unlock with fingerprint'),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(48),
-            ),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: onPassword,
-            icon: const Icon(Icons.password),
-            label: const Text('Use password'),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size.fromHeight(48),
-            ),
-          ),
-        ],
+        if (_pinMode) ..._pinEntry() else ..._methods(context),
       ],
     );
+  }
+
+  List<Widget> _pinEntry() {
+    return [
+      PinEntryView(
+        length: AppConfig.pinLength,
+        value: _pinValue,
+        onChanged: _onPinChanged,
+        busy: _pinBusy,
+        errorText: _pinError,
+        title: PinStrings.enterTitle(AppConfig.pinLength),
+      ),
+      const SizedBox(height: 8),
+      if (widget.biometricEnabled)
+        TextButton.icon(
+          onPressed: _pinBusy ? null : _exitPinMode,
+          icon: const Icon(Icons.fingerprint),
+          label: const Text(LockStrings.unlockWithPhonePasswordOrBiometrics),
+        ),
+      TextButton(
+        onPressed: _pinBusy ? null : widget.onPassword,
+        child: const Text(CommonStrings.usePassword),
+      ),
+    ];
+  }
+
+  List<Widget> _methods(BuildContext context) {
+    if (widget.busy) return const [CircularProgressIndicator()];
+    return [
+      if (widget.failed) ...[
+        Text(
+          LockStrings.biometricCancelled,
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 12),
+      ],
+      if (widget.biometricEnabled) ...[
+        FilledButton.icon(
+          onPressed: widget.onUnlock,
+          icon: const Icon(Icons.fingerprint),
+          label: const Text(LockStrings.unlockWithPhonePasswordOrBiometrics),
+          style: FilledButton.styleFrom(minimumSize: _btnSize),
+        ),
+        const SizedBox(height: 8),
+      ],
+      if (widget.pinEnabled) ...[
+        OutlinedButton(
+          onPressed: _enterPinMode,
+          style: OutlinedButton.styleFrom(minimumSize: _btnSize),
+          child: Text(PinStrings.usePin(AppConfig.pinLength)),
+        ),
+        const SizedBox(height: 8),
+      ],
+      OutlinedButton.icon(
+        onPressed: widget.onPassword,
+        icon: const Icon(Icons.password),
+        label: const Text(CommonStrings.usePassword),
+        style: OutlinedButton.styleFrom(minimumSize: _btnSize),
+      ),
+    ];
   }
 }
 
@@ -205,12 +290,12 @@ class _UserDetailsCard extends StatelessWidget {
       child: Column(
         children: [
           if (summary.skId != null)
-            _Row(label: 'SK ID', value: summary.skId!),
+            _Row(label: LockStrings.skIdLabel, value: summary.skId!),
           if (summary.upazila != null)
-            _Row(label: 'Upazila', value: summary.upazila!),
+            _Row(label: LockStrings.upazilaLabel, value: summary.upazila!),
           if (summary.nidOrPhone != null)
-            _Row(label: 'NID', value: summary.nidOrPhone!),
-          if (wardLine != null) _Row(label: 'Ward', value: wardLine),
+            _Row(label: LockStrings.nidLabel, value: summary.nidOrPhone!),
+          if (wardLine != null) _Row(label: LockStrings.wardLabel, value: wardLine),
           if (summary.skId == null &&
               summary.upazila == null &&
               summary.nidOrPhone == null &&
@@ -218,7 +303,7 @@ class _UserDetailsCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Text(
-                summary.area ?? 'Profile loading…',
+                summary.area ?? LockStrings.profileLoading,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
@@ -230,9 +315,9 @@ class _UserDetailsCard extends StatelessWidget {
   static String? _wardLine(UserProfileSummary s) {
     final w = s.ward;
     final h = s.householdCount;
-    if (w != null && h != null) return '$w · $h households';
+    if (w != null && h != null) return '$w · $h ${LockStrings.households}';
     if (w != null) return w;
-    if (h != null) return '$h households';
+    if (h != null) return '$h ${LockStrings.households}';
     return null;
   }
 }

@@ -72,7 +72,14 @@ class _LockBarrierState extends State<LockBarrier> {
                   summary: _summary,
                   busy: auth.busy,
                   failed: _failed,
+                  biometricEnabled: auth.biometricEnabled,
+                  pinEnabled: auth.pinEnabled,
                   onUnlock: _trigger,
+                  onPin: (pin) async {
+                    final ok = await auth.pinUnlock(pin);
+                    if (!mounted) return null;
+                    return ok ? null : auth.error;
+                  },
                   onPassword: _usePassword,
                 ),
               ),
