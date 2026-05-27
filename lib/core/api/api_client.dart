@@ -115,6 +115,15 @@ class ApiClient {
 
   String? get tenantId => _tenantId;
 
+  /// `tenantId` coerced to a number when it is numeric, else the raw string.
+  /// The spice/user services expect a numeric `tenantId` in JSON bodies; this
+  /// is the single source for that coercion (was duplicated across repos).
+  Object? get tenantIdAsNum {
+    final t = _tenantId;
+    if (t == null) return null;
+    return int.tryParse(t) ?? t;
+  }
+
   DateTime? get authCookieExpiry => _authCookieExpiry;
 
   Future<({String? jsession, String? authCookie})> exportAuthCookies() async {
