@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -6,7 +8,6 @@ import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
-import '../pin/pin_pad.dart';
 
 class LockScreen extends StatefulWidget {
   const LockScreen({super.key});
@@ -18,11 +19,27 @@ class LockScreen extends StatefulWidget {
 class _LockScreenState extends State<LockScreen> {
   bool _failed = false;
   UserProfileSummary? _summary;
+  bool _isOnline = true;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSummary());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadSummary();
+      _checkConnectivity();
+    });
+  }
+
+  Future<void> _checkConnectivity() async {
+    try {
+      final result = await InternetAddress.lookup('google.com')
+          .timeout(const Duration(seconds: 3));
+      if (!mounted) return;
+      setState(() => _isOnline = result.isNotEmpty && result[0].rawAddress.isNotEmpty);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isOnline = false);
+    }
   }
 
   Future<void> _loadSummary() async {
@@ -56,9 +73,9 @@ class _LockScreenState extends State<LockScreen> {
     }
     return Scaffold(
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 480),
               child: LockContent(
@@ -67,16 +84,9 @@ class _LockScreenState extends State<LockScreen> {
                 failed: _failed,
                 biometricEnabled: auth.biometricEnabled,
                 pinEnabled: auth.pinEnabled,
+                isOnline: _isOnline,
                 onUnlock: _trigger,
-                onPin: (pin) async {
-                  final ok = await auth.pinUnlock(pin);
-                  if (!mounted) return null;
-                  if (ok) {
-                    context.go('/dashboard');
-                    return null;
-                  }
-                  return auth.error;
-                },
+                onPinUnlock: () => context.go('/pin-unlock'),
                 onPassword: () => context.go('/login?from=lock'),
               ),
             ),
@@ -87,7 +97,7 @@ class _LockScreenState extends State<LockScreen> {
   }
 }
 
-class LockContent extends StatefulWidget {
+class LockContent extends StatelessWidget {
   const LockContent({
     super.key,
     required this.summary,
@@ -95,8 +105,9 @@ class LockContent extends StatefulWidget {
     required this.failed,
     required this.biometricEnabled,
     required this.pinEnabled,
+    required this.isOnline,
     required this.onUnlock,
-    required this.onPin,
+    required this.onPinUnlock,
     required this.onPassword,
   });
 
@@ -105,168 +116,142 @@ class LockContent extends StatefulWidget {
   final bool failed;
   final bool biometricEnabled;
   final bool pinEnabled;
+  final bool isOnline;
   final VoidCallback onUnlock;
-
-  /// Verify [pin]; returns a localized error message, or null on success
-  /// (the parent handles navigation / barrier dismissal on success).
-  final Future<String?> Function(String pin) onPin;
+  final VoidCallback onPinUnlock;
   final VoidCallback onPassword;
-
-  @override
-  State<LockContent> createState() => _LockContentState();
-}
-
-class _LockContentState extends State<LockContent> {
-  bool _pinMode = false;
-  String _pinValue = '';
-  String? _pinError;
-  bool _pinBusy = false;
 
   static const _btnSize = Size.fromHeight(48);
 
   String _displayName() {
-    final s = widget.summary;
+    final s = summary;
     if (s == null) return '';
     final f = s.firstName?.trim() ?? '';
     final l = s.lastName?.trim() ?? '';
     return [f, l].where((e) => e.isNotEmpty).join(' ');
   }
 
-  void _enterPinMode() => setState(() {
-        _pinMode = true;
-        _pinValue = '';
-        _pinError = null;
-      });
-
-  void _exitPinMode() => setState(() {
-        _pinMode = false;
-        _pinValue = '';
-        _pinError = null;
-      });
-
-  Future<void> _onPinChanged(String v) async {
-    setState(() {
-      _pinValue = v;
-      _pinError = null;
-    });
-    if (v.length < AppConfig.pinLength) return;
-    setState(() => _pinBusy = true);
-    final err = await widget.onPin(v);
-    if (!mounted) return;
-    setState(() {
-      _pinBusy = false;
-      if (err != null) {
-        _pinError = err;
-        _pinValue = '';
-      }
-    });
+  void _showOfflineMessage(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(LockStrings.offlinePasswordDisabled),
+        duration: Duration(seconds: 3),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final s = widget.summary;
+    final s = summary;
     final name = _displayName();
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const SizedBox(height: 16),
-        CircleAvatar(
-          radius: 36,
-          backgroundColor: scheme.primaryContainer,
-          child: Text(
-            (s?.firstName?.isNotEmpty == true ? s!.firstName![0] : 'U')
-                .toUpperCase(),
-            style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                  color: scheme.onPrimaryContainer,
-                  fontWeight: FontWeight.w700,
-                ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          name.isEmpty
-              ? LockStrings.welcomeBack
-              : LockStrings.welcomeBackNamed(name),
-          style: Theme.of(context)
-              .textTheme
-              .headlineSmall
-              ?.copyWith(fontWeight: FontWeight.w700),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 6),
-        Text(
-          LockStrings.verifyToAccess,
-          style: Theme.of(context)
-              .textTheme
-              .bodyMedium
-              ?.copyWith(color: scheme.onSurfaceVariant),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 24),
-        if (s != null && s.hasAnyDetail) _UserDetailsCard(summary: s),
-        const SizedBox(height: 24),
-        if (_pinMode) ..._pinEntry() else ..._methods(context),
-      ],
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableHeight = constraints.maxHeight;
+        final isCompact = availableHeight < 550;
+        final isTiny = availableHeight < 450;
+
+        // Scale elements based on available height
+        final logoHeight = isTiny ? 30.0 : (isCompact ? 40.0 : 56.0);
+        final titleStyle = isTiny
+            ? Theme.of(context)
+                .textTheme
+                .titleLarge
+                ?.copyWith(fontWeight: FontWeight.w700)
+            : Theme.of(context)
+                .textTheme
+                .headlineSmall
+                ?.copyWith(fontWeight: FontWeight.w700);
+        final subtitleStyle = isTiny
+            ? Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: scheme.onSurfaceVariant)
+            : Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(color: scheme.onSurfaceVariant);
+        final btnSize = isTiny ? const Size.fromHeight(40) : _btnSize;
+
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Spacer(flex: 2),
+            Image.asset(
+              'assets/images/app-logo-name.png',
+              height: logoHeight,
+              fit: BoxFit.contain,
+            ),
+            const Spacer(),
+            Text(
+              name.isEmpty
+                  ? LockStrings.welcomeBack
+                  : LockStrings.welcomeBackNamed(name),
+              style: titleStyle,
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: isTiny ? 2 : 4),
+            Text(
+              LockStrings.verifyToAccess,
+              style: subtitleStyle,
+              textAlign: TextAlign.center,
+            ),
+            const Spacer(),
+            if (s != null && s.hasAnyDetail && !isCompact) ...[
+              _UserDetailsCard(summary: s),
+              const Spacer(),
+            ],
+            ..._methods(context, btnSize: btnSize, isCompact: isCompact),
+            const Spacer(flex: 2),
+          ],
+        );
+      },
     );
   }
 
-  List<Widget> _pinEntry() {
+  List<Widget> _methods(BuildContext context,
+      {required Size btnSize, required bool isCompact}) {
+    if (busy) return const [CircularProgressIndicator()];
     return [
-      PinEntryView(
-        length: AppConfig.pinLength,
-        value: _pinValue,
-        onChanged: _onPinChanged,
-        busy: _pinBusy,
-        errorText: _pinError,
-        title: PinStrings.enterTitle(AppConfig.pinLength),
-      ),
-      const SizedBox(height: 8),
-      if (widget.biometricEnabled)
-        TextButton.icon(
-          onPressed: _pinBusy ? null : _exitPinMode,
-          icon: const Icon(Icons.fingerprint),
-          label: const Text(LockStrings.unlockWithPhonePasswordOrBiometrics),
-        ),
-      TextButton(
-        onPressed: _pinBusy ? null : widget.onPassword,
-        child: const Text(CommonStrings.usePassword),
-      ),
-    ];
-  }
-
-  List<Widget> _methods(BuildContext context) {
-    if (widget.busy) return const [CircularProgressIndicator()];
-    return [
-      if (widget.failed) ...[
+      if (failed) ...[
         Text(
           LockStrings.biometricCancelled,
           style: Theme.of(context).textTheme.bodyMedium,
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: isCompact ? 6 : 12),
       ],
-      if (widget.biometricEnabled) ...[
+      if (biometricEnabled) ...[
         FilledButton.icon(
-          onPressed: widget.onUnlock,
+          onPressed: onUnlock,
           icon: const Icon(Icons.fingerprint),
           label: const Text(LockStrings.unlockWithPhonePasswordOrBiometrics),
-          style: FilledButton.styleFrom(minimumSize: _btnSize),
+          style: FilledButton.styleFrom(minimumSize: btnSize),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: isCompact ? 4 : 8),
       ],
-      if (widget.pinEnabled) ...[
+      if (pinEnabled) ...[
         OutlinedButton(
-          onPressed: _enterPinMode,
-          style: OutlinedButton.styleFrom(minimumSize: _btnSize),
+          onPressed: onPinUnlock,
+          style: OutlinedButton.styleFrom(minimumSize: btnSize),
           child: Text(PinStrings.usePin(AppConfig.pinLength)),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: isCompact ? 4 : 8),
       ],
       OutlinedButton.icon(
-        onPressed: widget.onPassword,
-        icon: const Icon(Icons.password),
-        label: const Text(CommonStrings.usePassword),
-        style: OutlinedButton.styleFrom(minimumSize: _btnSize),
+        onPressed:
+            isOnline ? onPassword : () => _showOfflineMessage(context),
+        icon: Icon(
+          Icons.password,
+          color: isOnline ? null : Theme.of(context).disabledColor,
+        ),
+        label: Text(
+          CommonStrings.usePassword,
+          style: isOnline
+              ? null
+              : TextStyle(color: Theme.of(context).disabledColor),
+        ),
+        style: OutlinedButton.styleFrom(minimumSize: btnSize),
       ),
     ];
   }
