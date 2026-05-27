@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../config/app_config.dart';
+import '../constants/app_strings.dart';
 import 'auth_repository.dart';
 import 'biometric_service.dart';
 
@@ -16,6 +18,7 @@ class AuthState extends ChangeNotifier {
   bool _busy = false;
   bool _biometricEnabled = false;
   bool _biometricAvailable = false;
+  bool _pinEnabled = false;
   bool _locked = false;
 
   AuthStatus get status => _status;
@@ -24,14 +27,20 @@ class AuthState extends ChangeNotifier {
   bool get busy => _busy;
   bool get biometricEnabled => _biometricEnabled;
   bool get biometricAvailable => _biometricAvailable;
+  bool get pinEnabled => _pinEnabled;
+
+  /// Any local re-entry method enrolled (biometric OR PIN). Drives lock /
+  /// barrier / router gating that must not be biometric-specific.
+  bool get reentryEnabled => _biometricEnabled || _pinEnabled;
   bool get locked => _locked;
 
   Future<void> bootstrap() async {
     final t = await _repo.currentTenantId();
     _username = await _repo.lastUsername();
     _biometricEnabled = await _repo.isBiometricEnabled();
+    _pinEnabled = await _repo.isPinSet();
     _biometricAvailable = await _biometric.isAvailable();
-    if (_biometricEnabled) {
+    if (reentryEnabled) {
       _status = AuthStatus.signedOut;
       _locked = true;
     } else if (t != null && t.isNotEmpty) {
@@ -52,6 +61,7 @@ class AuthState extends ChangeNotifier {
       await _repo.login(username, password);
       _username = username;
       _biometricEnabled = await _repo.isBiometricEnabled();
+      _pinEnabled = await _repo.isPinSet();
       _status = AuthStatus.signedIn;
       _locked = false;
       return true;
@@ -72,12 +82,12 @@ class AuthState extends ChangeNotifier {
     notifyListeners();
     try {
       final ok = await _biometric.authenticate(
-        reason: 'Unlock UHIS Next',
+        reason: AppConfig.biometricReason,
       );
       if (!ok) return false;
-      final restored = await _repo.restoreBiometricSession();
+      final restored = await _repo.restorePersistedSession();
       if (!restored) {
-        _error = 'Saved session expired — sign in again';
+        _error = AuthStrings.savedSessionExpired;
         _status = AuthStatus.signedOut;
         _locked = false;
         return false;
@@ -107,6 +117,64 @@ class AuthState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ── Fallback PIN ──────────────────────────────────────────────────────────
+
+  /// Enrol the fallback PIN (also persists the shared re-entry session).
+  Future<void> enrolPin(String pin) async {
+    await _repo.setPin(pin);
+    _pinEnabled = true;
+    notifyListeners();
+  }
+
+  Future<void> disablePin() async {
+    await _repo.disablePinReentry();
+    _pinEnabled = false;
+    notifyListeners();
+  }
+
+  Future<int> pinAttemptsRemaining() async {
+    final left = AppConfig.pinMaxAttempts - await _repo.pinFailedAttempts();
+    return left < 0 ? 0 : left;
+  }
+
+  Future<bool> isPinLockedOut() async => (await pinAttemptsRemaining()) <= 0;
+
+  /// Unlock with the fallback PIN: verify it, then restore the shared re-entry
+  /// session (the same one biometric uses). Returns true on success.
+  Future<bool> pinUnlock(String pin) async {
+    if (!_pinEnabled) return false;
+    _busy = true;
+    _error = null;
+    notifyListeners();
+    try {
+      final ok = await _repo.verifyPin(pin);
+      if (!ok) {
+        final left = await pinAttemptsRemaining();
+        _error = left <= 0
+            ? PinStrings.tooManyAttempts
+            : '${PinStrings.wrong} · ${PinStrings.attemptsRemaining(left)}';
+        return false;
+      }
+      final restored = await _repo.restorePersistedSession();
+      if (!restored) {
+        _error = AuthStrings.savedSessionExpired;
+        _status = AuthStatus.signedOut;
+        _locked = false;
+        return false;
+      }
+      _username = await _repo.biometricLastUsername() ?? _username;
+      _status = AuthStatus.signedIn;
+      _locked = false;
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      return false;
+    } finally {
+      _busy = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> markBiometricOffered() async {
     await _repo.markBiometricOffered();
   }
@@ -118,7 +186,7 @@ class AuthState extends ChangeNotifier {
   /// Background-lock entry — must be synchronous to avoid task-switcher leak.
   void lock() {
     if (_status != AuthStatus.signedIn) return;
-    if (!_biometricEnabled) return;
+    if (!reentryEnabled) return;
     if (_locked) return;
     _locked = true;
     notifyListeners();
@@ -147,7 +215,7 @@ class AuthState extends ChangeNotifier {
     await _repo.handleSessionExpired();
     _status = AuthStatus.signedOut;
     _locked = false;
-    _error = 'Session expired';
+    _error = AuthStrings.sessionExpired;
     notifyListeners();
   }
 

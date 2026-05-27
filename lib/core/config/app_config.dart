@@ -57,4 +57,17 @@ class AppConfig {
 
   static bool get hasDevCredentials =>
       devUser.isNotEmpty && devPass.isNotEmpty;
+
+  /// Length of the app-specific fallback PIN. Supported values: 4 or 6.
+  /// Any other build-define value falls back to 6.
+  static int get pinLength {
+    const raw = int.fromEnvironment('PIN_LENGTH', defaultValue: 6);
+    return raw == 4 ? 4 : 6;
+  }
+
+  /// Wrong-PIN attempts allowed before the user is pushed to password sign-in.
+  static const int pinMaxAttempts = int.fromEnvironment(
+    'PIN_MAX_ATTEMPTS',
+    defaultValue: 5,
+  );
 }

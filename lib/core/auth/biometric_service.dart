@@ -3,6 +3,7 @@ import 'package:local_auth/local_auth.dart';
 import 'package:local_auth_android/local_auth_android.dart';
 
 import '../config/app_config.dart';
+import '../constants/app_strings.dart';
 
 class BiometricService {
   final LocalAuthentication _auth = LocalAuthentication();
@@ -33,9 +34,9 @@ class BiometricService {
         ),
         authMessages: const [
           AndroidAuthMessages(
-            signInTitle: 'UHIS Next',
-            biometricHint: 'Verify your identity',
-            cancelButton: 'Use password',
+            signInTitle: BiometricStrings.promptTitle,
+            biometricHint: BiometricStrings.promptHint,
+            cancelButton: BiometricStrings.cancelButton,
           ),
         ],
       );

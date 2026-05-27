@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
@@ -13,10 +14,23 @@ String hashPassword(String plaintext) {
   return hmac.convert(utf8.encode(plaintext)).toString();
 }
 
+/// Salted HMAC-SHA512 of the fallback PIN. The PIN is never stored in
+/// plaintext — only this hash + its random per-device [salt] are persisted.
+String hashPin(String pin, String salt) {
+  final hmac = Hmac(sha512, utf8.encode('${AppConfig.passwordHashKey}$salt'));
+  return hmac.convert(utf8.encode(pin)).toString();
+}
+
+String _newPinSalt() {
+  final rnd = Random.secure();
+  final bytes = List<int>.generate(16, (_) => rnd.nextInt(256));
+  return base64Url.encode(bytes);
+}
+
 class AuthRepository {
   AuthRepository(this._api) : _storage = const FlutterSecureStorage() {
     _api.onAuthCookieRotated = (cookie, expiry) async {
-      if (await isBiometricEnabled()) {
+      if (await isReentryEnabled()) {
         await _storage.write(key: _kBioAuthCookie, value: cookie);
         await _storage.write(
           key: _kBioAuthCookieExpiry,
@@ -42,6 +56,10 @@ class AuthRepository {
   static const _kBioTenant = 'bio_tenant_id';
   static const _kBioUsername = 'bio_last_username';
   static const _kBioOfferedOnce = 'bio_offered_once';
+  static const _kPinEnabled = 'pin_enabled';
+  static const _kPinHash = 'pin_hash';
+  static const _kPinSalt = 'pin_salt';
+  static const _kPinAttempts = 'pin_failed_attempts';
   static const _kFirstName = 'firstName';
   static const _kLastName = 'lastName';
   static const _kArea = 'operationalArea';
@@ -97,9 +115,11 @@ class AuthRepository {
     }
     await _storage.write(key: _kUsername, value: username);
     await _loadProfile();
-    if (await isBiometricEnabled()) {
+    if (await isReentryEnabled()) {
+      // Best-effort: refresh the persisted re-entry session (biometric or PIN)
+      // after a fresh login. A failure here must not block sign-in.
       try {
-        await enableBiometric();
+        await _persistReentrySession();
       } catch (_) {}
     }
   }
@@ -222,15 +242,24 @@ class AuthRepository {
   }
 
   Future<void> logout() async {
+    // Best-effort server-side logout; local re-entry is fully cleared so a
+    // logged-out device has no silent re-entry (biometric or PIN).
     try {
       await _api.dio.get(Endpoints.logout);
     } catch (_) {}
     await _api.clearSession();
     await _storage.delete(key: _kTenantId);
-    await _clearBiometricSession();
+    await _clearReentrySession();
+    await _storage.delete(key: _kBioEnabled);
+    await _storage.delete(key: _kBioUsername);
+    await clearPin();
   }
 
-  Future<void> _clearBiometricSession() async {
+  /// Clears the shared persisted re-entry session (cookies + tenant) used by
+  /// BOTH biometric and PIN unlock, but KEEPS the enabled flags + PIN hash so
+  /// they re-bind on the next password login (used for expiry + password
+  /// fallback). Full teardown of preferences happens only in [logout].
+  Future<void> _clearReentrySession() async {
     await _storage.delete(key: _kBioJSession);
     await _storage.delete(key: _kBioAuthCookie);
     await _storage.delete(key: _kBioAuthCookieExpiry);
@@ -240,7 +269,7 @@ class AuthRepository {
   Future<void> handleSessionExpired() async {
     await _api.clearSession();
     await _storage.delete(key: _kTenantId);
-    await _clearBiometricSession();
+    await _clearReentrySession();
   }
 
   Future<bool> wasBiometricOffered() async =>
@@ -258,7 +287,10 @@ class AuthRepository {
   Future<String?> biometricLastUsername() =>
       _storage.read(key: _kBioUsername);
 
-  Future<void> enableBiometric() async {
+  /// Persists the shared re-entry session (cookies + tenant + username) from
+  /// the currently-active session. Shared by biometric and PIN enrolment so
+  /// either method can later restore the same session.
+  Future<void> _persistReentrySession() async {
     final cookies = await _api.exportAuthCookies();
     if (cookies.authCookie == null || cookies.jsession == null) {
       throw AuthException('No active session to enrol');
@@ -278,36 +310,96 @@ class AuthRepository {
     if (username != null) {
       await _storage.write(key: _kBioUsername, value: username);
     }
+  }
+
+  Future<void> enableBiometric() async {
+    await _persistReentrySession();
     await _storage.write(key: _kBioEnabled, value: 'true');
   }
 
+  /// Disables biometric. The shared re-entry session is cleared only if a PIN
+  /// is not still relying on it.
   Future<void> disableBiometric() async {
     await _storage.delete(key: _kBioEnabled);
-    await _storage.delete(key: _kBioJSession);
-    await _storage.delete(key: _kBioAuthCookie);
-    await _storage.delete(key: _kBioAuthCookieExpiry);
-    await _storage.delete(key: _kBioTenant);
-    await _storage.delete(key: _kBioUsername);
+    if (!await isPinSet()) {
+      await _clearReentrySession();
+      await _storage.delete(key: _kBioUsername);
+    }
   }
 
-  Future<bool> restoreBiometricSession() async {
-    final enabled = await isBiometricEnabled();
+  // ── Fallback PIN ──────────────────────────────────────────────────────────
+
+  Future<bool> isReentryEnabled() async =>
+      (await isBiometricEnabled()) || (await isPinSet());
+
+  Future<bool> isPinSet() async =>
+      (await _storage.read(key: _kPinEnabled)) == 'true';
+
+  /// Stores a salted hash of [pin] and persists the shared re-entry session so
+  /// the PIN can later restore it (mirrors [enableBiometric]).
+  Future<void> setPin(String pin) async {
+    final salt = _newPinSalt();
+    await _storage.write(key: _kPinSalt, value: salt);
+    await _storage.write(key: _kPinHash, value: hashPin(pin, salt));
+    await _storage.write(key: _kPinAttempts, value: '0');
+    await _storage.write(key: _kPinEnabled, value: 'true');
+    await _persistReentrySession();
+  }
+
+  /// Verifies [pin] against the stored salted hash. On success resets the
+  /// failed-attempt counter; on failure increments it.
+  Future<bool> verifyPin(String pin) async {
+    final salt = await _storage.read(key: _kPinSalt);
+    final stored = await _storage.read(key: _kPinHash);
+    if (salt == null || stored == null) return false;
+    final ok = hashPin(pin, salt) == stored;
+    if (ok) {
+      await _storage.write(key: _kPinAttempts, value: '0');
+    } else {
+      final n = await pinFailedAttempts();
+      await _storage.write(key: _kPinAttempts, value: '${n + 1}');
+    }
+    return ok;
+  }
+
+  Future<int> pinFailedAttempts() async =>
+      int.tryParse(await _storage.read(key: _kPinAttempts) ?? '0') ?? 0;
+
+  Future<void> clearPin() async {
+    await _storage.delete(key: _kPinEnabled);
+    await _storage.delete(key: _kPinHash);
+    await _storage.delete(key: _kPinSalt);
+    await _storage.delete(key: _kPinAttempts);
+  }
+
+  /// Disables the PIN. The shared re-entry session is cleared only if biometric
+  /// is not still relying on it.
+  Future<void> disablePinReentry() async {
+    await clearPin();
+    if (!await isBiometricEnabled()) {
+      await _clearReentrySession();
+      await _storage.delete(key: _kBioUsername);
+    }
+  }
+
+  Future<bool> restorePersistedSession() async {
+    final enabled = await isReentryEnabled();
     if (!enabled) return false;
     final expiryStr = await _storage.read(key: _kBioAuthCookieExpiry);
     if (expiryStr == null) {
-      await _clearBiometricSession();
+      await _clearReentrySession();
       return false;
     }
     final expiry = DateTime.tryParse(expiryStr);
     if (expiry == null || DateTime.now().isAfter(expiry)) {
-      await _clearBiometricSession();
+      await _clearReentrySession();
       return false;
     }
     final js = await _storage.read(key: _kBioJSession);
     final ac = await _storage.read(key: _kBioAuthCookie);
     final tenant = await _storage.read(key: _kBioTenant);
     if (js == null || ac == null || tenant == null) {
-      await _clearBiometricSession();
+      await _clearReentrySession();
       return false;
     }
     await _api.importAuthCookies(
