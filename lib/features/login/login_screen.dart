@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/auth/auth_state.dart';
+import '../../core/config/app_config.dart';
+import '../../core/constants/app_strings.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, this.fromLock = false});
@@ -42,7 +44,7 @@ class _LoginScreenState extends State<LoginScreen> {
       context.go('/dashboard');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(auth.error ?? 'Login failed')),
+        SnackBar(content: Text(auth.error ?? LoginStrings.loginFailed)),
       );
     }
   }
@@ -51,6 +53,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthState>();
     final showBio = auth.biometricEnabled;
+    final showPin = auth.pinEnabled;
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -65,13 +68,13 @@ class _LoginScreenState extends State<LoginScreen> {
                   children: [
                     const SizedBox(height: 32),
                     Text(
-                      'UHIS Next',
+                      AppStrings.appName,
                       style: Theme.of(context).textTheme.headlineMedium,
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'MedtronicLabs · Frontline Health',
+                      AppStrings.appTagline,
                       style: Theme.of(context).textTheme.bodyMedium,
                       textAlign: TextAlign.center,
                     ),
@@ -88,24 +91,33 @@ class _LoginScreenState extends State<LoginScreen> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Text(
-                          'Biometric cancelled — sign in with password.',
+                          LoginStrings.fromLockBanner,
                           textAlign: TextAlign.center,
                         ),
                       ),
-                    if (showBio) ...[
-                      OutlinedButton.icon(
-                        onPressed: auth.busy
-                            ? null
-                            : () => context.go('/lock'),
-                        icon: const Icon(Icons.fingerprint),
-                        label: const Text('Use device unlock'),
-                      ),
+                    if (showBio || showPin) ...[
+                      if (showBio)
+                        OutlinedButton.icon(
+                          onPressed:
+                              auth.busy ? null : () => context.go('/lock'),
+                          icon: const Icon(Icons.fingerprint),
+                          label: const Text(LoginStrings.useDeviceUnlock),
+                        ),
+                      if (showPin) ...[
+                        if (showBio) const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed:
+                              auth.busy ? null : () => context.go('/lock'),
+                          icon: const Icon(Icons.pin_outlined),
+                          label: Text(PinStrings.usePin(AppConfig.pinLength)),
+                        ),
+                      ],
                       const SizedBox(height: 16),
                       const Row(children: [
                         Expanded(child: Divider()),
                         Padding(
                           padding: EdgeInsets.symmetric(horizontal: 8),
-                          child: Text('or'),
+                          child: Text(CommonStrings.or),
                         ),
                         Expanded(child: Divider()),
                       ]),
@@ -116,22 +128,22 @@ class _LoginScreenState extends State<LoginScreen> {
                       keyboardType: TextInputType.emailAddress,
                       autocorrect: false,
                       decoration: const InputDecoration(
-                        labelText: 'Username',
+                        labelText: LoginStrings.usernameLabel,
                         border: OutlineInputBorder(),
                       ),
                       validator: (v) =>
-                          (v == null || v.trim().isEmpty) ? 'Required' : null,
+                          (v == null || v.trim().isEmpty) ? CommonStrings.required : null,
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
                       controller: _passCtl,
                       obscureText: true,
                       decoration: const InputDecoration(
-                        labelText: 'Password',
+                        labelText: LoginStrings.passwordLabel,
                         border: OutlineInputBorder(),
                       ),
                       validator: (v) =>
-                          (v == null || v.isEmpty) ? 'Required' : null,
+                          (v == null || v.isEmpty) ? CommonStrings.required : null,
                     ),
                     const SizedBox(height: 24),
                     FilledButton(
@@ -142,7 +154,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               width: 20,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Text('Sign in'),
+                          : const Text(LoginStrings.signIn),
                     ),
                   ],
                 ),
