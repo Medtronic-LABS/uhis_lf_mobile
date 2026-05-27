@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { waitForFlutterReady } from '../fixtures/flutter';
 
-const USER = process.env.LF_USER || 'sumaiya.sarkar.171@uhis.test';
+const USER = process.env.LF_USER ;
 const PASS = process.env.LF_PASS || 'Uhis123';
 
 test('diag: capture network during login', async ({ page }) => {
