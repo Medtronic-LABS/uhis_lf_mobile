@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -19,11 +21,27 @@ class LockBarrier extends StatefulWidget {
 class _LockBarrierState extends State<LockBarrier> {
   bool _failed = false;
   UserProfileSummary? _summary;
+  bool _isOnline = true;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSummary());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadSummary();
+      _checkConnectivity();
+    });
+  }
+
+  Future<void> _checkConnectivity() async {
+    try {
+      final result = await InternetAddress.lookup('google.com')
+          .timeout(const Duration(seconds: 3));
+      if (!mounted) return;
+      setState(() => _isOnline = result.isNotEmpty && result[0].rawAddress.isNotEmpty);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isOnline = false);
+    }
   }
 
   Future<void> _loadSummary() async {
@@ -62,10 +80,9 @@ class _LockBarrierState extends State<LockBarrier> {
       child: Material(
         color: Theme.of(context).colorScheme.surface,
         child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 480),
                 child: LockContent(
@@ -74,12 +91,9 @@ class _LockBarrierState extends State<LockBarrier> {
                   failed: _failed,
                   biometricEnabled: auth.biometricEnabled,
                   pinEnabled: auth.pinEnabled,
+                  isOnline: _isOnline,
                   onUnlock: _trigger,
-                  onPin: (pin) async {
-                    final ok = await auth.pinUnlock(pin);
-                    if (!mounted) return null;
-                    return ok ? null : auth.error;
-                  },
+                  onPinUnlock: () => context.go('/pin-unlock'),
                   onPassword: _usePassword,
                 ),
               ),
