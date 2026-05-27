@@ -5,6 +5,7 @@ import '../core/auth/auth_state.dart';
 import '../features/dashboard/dashboard_screen.dart';
 import '../features/lock/lock_screen.dart';
 import '../features/login/login_screen.dart';
+import '../features/pin/pin_setup_screen.dart';
 
 GoRouter buildRouter(AuthState auth) {
   return GoRouter(
@@ -16,8 +17,8 @@ GoRouter buildRouter(AuthState auth) {
         case AuthStatus.unknown:
           return loc == '/' ? null : '/';
         case AuthStatus.signedOut:
-          if (auth.biometricEnabled) {
-            // Cold-start or post-expiry with biometric still enrolled.
+          if (auth.reentryEnabled) {
+            // Cold-start or post-expiry with biometric or PIN still enrolled.
             // Bounce login attempts back through /lock unless user explicitly
             // asked for the password fallback.
             if (loc.startsWith('/login') &&
@@ -32,7 +33,9 @@ GoRouter buildRouter(AuthState auth) {
         case AuthStatus.signedIn:
           // Mid-session lock is overlaid by LockBarrier — no route swap, so
           // route stays where the user was. Cold-start /lock is still
-          // reachable via signedOut + biometricEnabled below.
+          // reachable via signedOut + reentryEnabled below.
+          // /pin-setup is a signed-in destination (mandatory first-run PIN),
+          // so it is intentionally NOT redirected away.
           if (loc.startsWith('/login') || loc == '/' || loc == '/lock') {
             return '/dashboard';
           }
@@ -57,6 +60,10 @@ GoRouter buildRouter(AuthState auth) {
       GoRoute(
         path: '/dashboard',
         builder: (_, __) => const DashboardScreen(),
+      ),
+      GoRoute(
+        path: '/pin-setup',
+        builder: (_, __) => const PinSetupScreen(),
       ),
     ],
   );

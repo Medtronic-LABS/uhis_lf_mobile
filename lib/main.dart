@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'app/router.dart';
 import 'app/theme.dart';
 import 'core/api/api_client.dart';
+import 'core/constants/app_strings.dart';
 import 'core/auth/auth_repository.dart';
 import 'core/auth/auth_state.dart';
 import 'core/auth/biometric_service.dart';
@@ -104,7 +105,7 @@ class _UhisNextAppState extends State<UhisNextApp>
         builder: (context) {
           final router = buildRouter(context.read<AuthState>());
           return MaterialApp.router(
-            title: 'UHIS Next',
+            title: AppStrings.appName,
             theme: buildAppTheme(),
             routerConfig: router,
             debugShowCheckedModeBanner: false,
@@ -112,7 +113,7 @@ class _UhisNextAppState extends State<UhisNextApp>
               final auth = ctx.watch<AuthState>();
               final showBarrier = auth.status == AuthStatus.signedIn &&
                   auth.locked &&
-                  auth.biometricEnabled;
+                  auth.reentryEnabled;
               return Stack(
                 children: [
                   child ?? const SizedBox.shrink(),
