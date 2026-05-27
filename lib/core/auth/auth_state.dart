@@ -181,6 +181,12 @@ class AuthState extends ChangeNotifier {
 
   Future<bool> wasBiometricOffered() => _repo.wasBiometricOffered();
 
+  Future<bool> isOnboardingComplete() => _repo.isOnboardingComplete();
+
+  Future<void> markOnboardingComplete() async {
+    await _repo.markOnboardingComplete();
+  }
+
   Future<UserProfileSummary> userProfileSummary() => _repo.userProfileSummary();
 
   /// Background-lock entry — must be synchronous to avoid task-switcher leak.

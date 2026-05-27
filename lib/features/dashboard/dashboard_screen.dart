@@ -18,7 +18,6 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   late Future<int> _patientFuture;
   late Future<int> _householdFuture;
-  bool _bioPrompted = false;
   DateTime? _lastRefreshed;
   UserProfileSummary? _summary;
 
@@ -28,18 +27,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _reload();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _loadSummary();
-      await _maybeOfferBiometric();
-      await _maybePromptPinSetup();
+      await _maybeNavigateToOnboarding();
     });
   }
 
-  /// First-run mandatory step: every account must have a fallback PIN. Runs
-  /// after the biometric offer; sends the user to the dedicated setup screen
-  /// until a PIN exists.
-  Future<void> _maybePromptPinSetup() async {
+  /// First-run: redirect to onboarding if user hasn't completed it yet.
+  /// Onboarding handles biometric enrollment and PIN setup (both optional).
+  Future<void> _maybeNavigateToOnboarding() async {
     if (!mounted) return;
-    if (context.read<AuthState>().pinEnabled) return;
-    context.go('/pin-setup');
+    final auth = context.read<AuthState>();
+
+    // If onboarding is already complete (user chose to set up or skip), stay on dashboard
+    if (await auth.isOnboardingComplete()) return;
+
+    // If PIN is already set, no need for onboarding
+    if (auth.pinEnabled) return;
+
+    // Otherwise, show onboarding screen
+    if (!mounted) return;
+    context.go('/onboarding');
   }
 
   Future<void> _loadSummary() async {
@@ -49,12 +55,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() => _summary = s);
   }
 
-  Future<void> _maybeOfferBiometric({bool force = false}) async {
-    if (_bioPrompted && !force) return;
-    _bioPrompted = true;
+  /// Called from menu when user wants to enable device unlock.
+  Future<void> _offerBiometric() async {
     final auth = context.read<AuthState>();
     if (auth.biometricEnabled) return;
-    if (!force && await auth.wasBiometricOffered()) return;
     if (!mounted) return;
     final supported = auth.biometricAvailable;
     final ans = await showDialog<bool>(
@@ -78,7 +82,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
     );
-    await auth.markBiometricOffered();
     if (ans != true || !mounted) return;
     if (!supported) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -167,17 +170,80 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
-        title: const Text(AppStrings.appName),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _greeting(),
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            if (_locationLine() != null)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.location_on_outlined,
+                      size: 14, color: scheme.onSurfaceVariant),
+                  const SizedBox(width: 2),
+                  Flexible(
+                    child: Text(
+                      _locationLine()!,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w500,
+                          ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              )
+            else
+              Text(
+                DashboardStrings.communityAtAGlance,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+              ),
+          ],
+        ),
         actions: [
+          IconButton(
+            tooltip: DashboardStrings.refreshTooltip,
+            icon: const Icon(Icons.refresh),
+            onPressed: () => setState(_reload),
+          ),
           Consumer<AuthState>(
             builder: (ctx, auth, _) => PopupMenuButton<String>(
+              icon: const Icon(Icons.settings),
               onSelected: (v) async {
                 switch (v) {
                   case 'enable_bio':
-                    _bioPrompted = false;
-                    await _maybeOfferBiometric(force: true);
+                    await _offerBiometric();
                     break;
                   case 'disable_bio':
+                    final confirmBio = await showDialog<bool>(
+                      context: ctx,
+                      builder: (dlgCtx) => AlertDialog(
+                        title: const Text(DashboardStrings.confirmDisableDeviceUnlock),
+                        content: const Text(DashboardStrings.confirmDisableDeviceUnlockBody),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(dlgCtx).pop(false),
+                            child: const Text(DashboardStrings.cancel),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.of(dlgCtx).pop(true),
+                            child: const Text(DashboardStrings.disable),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirmBio != true) break;
                     await auth.disableBiometric();
                     if (ctx.mounted) {
                       ScaffoldMessenger.of(ctx).showSnackBar(
@@ -190,6 +256,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ctx.go('/pin-setup');
                     break;
                   case 'remove_pin':
+                    final confirmPin = await showDialog<bool>(
+                      context: ctx,
+                      builder: (dlgCtx) => AlertDialog(
+                        title: const Text(PinStrings.confirmRemovePin),
+                        content: const Text(PinStrings.confirmRemovePinBody),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(dlgCtx).pop(false),
+                            child: const Text(DashboardStrings.cancel),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.of(dlgCtx).pop(true),
+                            child: const Text(CommonStrings.remove),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirmPin != true) break;
                     await auth.disablePin();
                     if (ctx.mounted) {
                       ScaffoldMessenger.of(ctx).showSnackBar(
@@ -199,6 +283,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     }
                     break;
                   case 'logout':
+                    final confirmLogout = await showDialog<bool>(
+                      context: ctx,
+                      builder: (dlgCtx) => AlertDialog(
+                        title: const Text(DashboardStrings.confirmSignOut),
+                        content: const Text(DashboardStrings.confirmSignOutBody),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(dlgCtx).pop(false),
+                            child: const Text(DashboardStrings.cancel),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.of(dlgCtx).pop(true),
+                            child: const Text(DashboardStrings.signOut),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirmLogout != true) break;
                     await auth.logout();
                     if (ctx.mounted) ctx.go('/login');
                     break;
@@ -254,61 +356,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _greeting(),
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineSmall
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 4),
-                      if (_locationLine() != null)
-                        Row(
-                          children: [
-                            Icon(Icons.location_on_outlined,
-                                size: 16, color: scheme.onSurfaceVariant),
-                            const SizedBox(width: 4),
-                            Flexible(
-                              child: Text(
-                                _locationLine()!,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodyMedium
-                                    ?.copyWith(
-                                      color: scheme.onSurfaceVariant,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                              ),
-                            ),
-                          ],
-                        )
-                      else
-                        Text(
-                          DashboardStrings.communityAtAGlance,
-                          style:
-                              Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: scheme.onSurfaceVariant,
-                                  ),
-                        ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  tooltip: DashboardStrings.refreshTooltip,
-                  icon: const Icon(Icons.refresh),
-                  onPressed: () => setState(_reload),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
             const GlobalSearchBar(),
             const SizedBox(height: 20),
             IntrinsicHeight(

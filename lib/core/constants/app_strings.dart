@@ -21,6 +21,7 @@ abstract final class AppStrings {
 
   static const String appName = 'UHIS Next';
   static const String appTagline = 'MedtronicLabs · Frontline Health';
+  static const String poweredBy = 'Powered by Medtronic Labs';
 }
 
 /// Shared, cross-screen labels reused in more than one feature.
@@ -32,6 +33,7 @@ abstract final class CommonStrings {
   static const String retry = 'Retry';
   static const String usePassword = 'Use password';
   static const String unnamed = '(unnamed)';
+  static const String remove = 'Remove';
 }
 
 /// Login screen + login-flow feedback.
@@ -57,6 +59,8 @@ abstract final class LockStrings {
   static const String biometricCancelled = 'Biometric cancelled';
   static const String unlockWithPhonePasswordOrBiometrics = 'Unlock with Phone password or biometrics';
   static const String profileLoading = 'Profile loading…';
+  static const String offlinePasswordDisabled =
+      'You are offline. Connect to the internet to sign in with password.';
 
   // Profile detail row labels.
   static const String skIdLabel = 'SK ID';
@@ -94,7 +98,7 @@ abstract final class DashboardStrings {
   static const String goodMorning = 'Good Morning';
   static const String goodAfternoon = 'Good Afternoon';
   static const String goodEvening = 'Good Evening';
-  static const String communityAtAGlance = 'Your community at a glance';
+  static const String communityAtAGlance = 'Serving your community';
   static const String refreshTooltip = 'Refresh';
 
   // Stat cards.
@@ -126,6 +130,16 @@ abstract final class DashboardStrings {
   static const String enableDeviceUnlock = 'Enable device unlock';
   static const String disableDeviceUnlock = 'Disable device unlock';
   static const String signOut = 'Sign out';
+
+  // Confirmation dialogs.
+  static const String confirmDisableDeviceUnlock = 'Disable device unlock?';
+  static const String confirmDisableDeviceUnlockBody =
+      'You will need to use your password or PIN to sign in next time.';
+  static const String confirmSignOut = 'Sign out?';
+  static const String confirmSignOutBody =
+      'You will need to sign in again with your password.';
+  static const String cancel = 'Cancel';
+  static const String disable = 'Disable';
 
   static String couldNotEnable(Object error) => 'Could not enable: $error';
 
@@ -183,10 +197,50 @@ abstract final class PinStrings {
   static const String disabledSnack = 'PIN disabled';
   static const String enablePin = 'Set up PIN';
   static const String disablePin = 'Remove PIN';
+
+  // Confirmation dialog.
+  static const String confirmRemovePin = 'Remove PIN?';
+  static const String confirmRemovePinBody =
+      'You will need to use your password or biometrics to sign in next time.';
   static const String deleteKey = 'Delete';
 
   static String createTitle(int len) => 'Create a $len-digit PIN';
   static String enterTitle(int len) => 'Enter your $len-digit PIN';
   static String usePin(int len) => 'Use $len-digit PIN';
   static String attemptsRemaining(int n) => '$n attempts remaining';
+}
+
+/// First-login onboarding: security setup prompt.
+abstract final class OnboardingStrings {
+  OnboardingStrings._();
+
+  static const String title = 'Secure Your Account';
+  static const String subtitle =
+      'Set up quick, secure access to UHIS Next using your device\'s biometrics and a backup PIN.';
+
+  static const String biometricFeatureTitle = 'Device Unlock';
+  static const String biometricFeatureDesc =
+      'Use fingerprint, face, or device PIN for fast sign-in.';
+  static const String biometricNotAvailable =
+      'Set up a screen lock in Android Settings to enable this feature.';
+
+  static const String pinFeatureDesc =
+      'A backup option when biometrics are unavailable.';
+
+  static const String setupButton = 'Set Up Security';
+  static const String skipButton = 'Skip for Now';
+  static const String pinRequiredNote =
+      'Note: You can set up security options later from the settings menu.';
+
+  static const String skipConfirmTitle = 'Skip Security Setup?';
+  static const String skipConfirmBody =
+      'Without biometric or PIN authentication, you will need to enter your password each time you open the app. You can set these up later from settings.';
+  static const String cancelButton = 'Cancel';
+  static const String skipAnywayButton = 'Skip Anyway';
+
+  static const String notAvailable = 'Not available';
+  static const String biometricSetupFailed =
+      'Could not enable device unlock. You can enable it later from the menu.';
+
+  static String pinFeatureTitle(int len) => '$len-Digit Backup PIN';
 }

@@ -60,6 +60,7 @@ class AuthRepository {
   static const _kPinHash = 'pin_hash';
   static const _kPinSalt = 'pin_salt';
   static const _kPinAttempts = 'pin_failed_attempts';
+  static const _kOnboardingComplete = 'onboarding_complete';
   static const _kFirstName = 'firstName';
   static const _kLastName = 'lastName';
   static const _kArea = 'operationalArea';
@@ -277,6 +278,13 @@ class AuthRepository {
 
   Future<void> markBiometricOffered() async {
     await _storage.write(key: _kBioOfferedOnce, value: 'true');
+  }
+
+  Future<bool> isOnboardingComplete() async =>
+      (await _storage.read(key: _kOnboardingComplete)) == 'true';
+
+  Future<void> markOnboardingComplete() async {
+    await _storage.write(key: _kOnboardingComplete, value: 'true');
   }
 
   Future<bool> isBiometricEnabled() async {
