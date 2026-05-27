@@ -382,6 +382,8 @@ lib/
   core/
     config/
       app_config.dart                  build-time env (single source of truth)
+    constants/
+      app_strings.dart                 centralized UI copy (single source, multilingual-ready)
     api/
       api_client.dart                  Dio + cookie session + interceptors
       endpoints.dart                   path constants
@@ -411,6 +413,21 @@ scripts/
   run.sh                                flavor-aware flutter run
 env.example.json                        template
 ```
+
+### Design pattern: centralized content constants
+
+All user-facing copy (labels, hints, button text, dialog/snackbar copy, validation messages)
+lives in **`lib/core/constants/app_strings.dart`**, grouped by feature
+(`AppStrings`, `CommonStrings`, `LoginStrings`, `LockStrings`, `BiometricStrings`,
+`AuthStrings`, `DashboardStrings`, `SearchStrings`). Widgets reference these constants —
+**never inline a string literal.** This mirrors the React `spice_web` `appConstants.ts`
+convention and is the app's single localization seam: add a language by swapping each
+constant for a locale lookup, without touching a screen.
+
+- Interpolated copy is exposed as a `static` helper (e.g. `SearchStrings.scanningHouseholds(loaded, cap)`),
+  not assembled ad hoc with raw literals.
+- Reuse shared copy from `CommonStrings` before defining a new per-screen entry.
+- Rendered values must stay stable — the Playwright e2e selectors match on visible text.
 
 ---
 
