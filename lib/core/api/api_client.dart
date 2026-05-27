@@ -20,6 +20,8 @@ class ApiClient {
   final CookieJar _cookieJar;
   String? _tenantId;
   DateTime? _authCookieExpiry;
+  String? _cachedAuthCookie;
+  String? _cachedJsession;
   void Function(String authCookie, DateTime expiry)? onAuthCookieRotated;
 
   static Future<ApiClient> create() async {
@@ -60,15 +62,20 @@ class ApiClient {
                     final maxAge = parsed.maxAge;
                     final c = parsed
                       ..secure = false
-                      ..domain = null;
+                      ..domain = null
+                      ..path = '/';
                     stored.add(c);
                     if (c.name == _authCookieName) {
+                      client._cachedAuthCookie = c.value;
                       final ttl = (maxAge != null && maxAge > 0)
                           ? Duration(seconds: maxAge)
                           : Duration(seconds: AppConfig.authCookieTtlSeconds);
                       final expiry = DateTime.now().add(ttl);
                       client._authCookieExpiry = expiry;
                       client.onAuthCookieRotated?.call(c.value, expiry);
+                    }
+                    if (c.name == _sessionCookieName) {
+                      client._cachedJsession = c.value;
                     }
                   } catch (_) {}
                 }
@@ -128,15 +135,9 @@ class ApiClient {
 
   Future<({String? jsession, String? authCookie})> exportAuthCookies() async {
     if (kIsWeb) return (jsession: null, authCookie: null);
-    final uri = Uri.parse(_baseUrl);
-    final cookies = await _cookieJar.loadForRequest(uri);
-    String? j;
-    String? a;
-    for (final c in cookies) {
-      if (c.name == _sessionCookieName) j = c.value;
-      if (c.name == _authCookieName) a = c.value;
-    }
-    return (jsession: j, authCookie: a);
+    // Return cached values captured when cookies were received.
+    // This bypasses cookie jar path-matching issues.
+    return (jsession: _cachedJsession, authCookie: _cachedAuthCookie);
   }
 
   Future<void> importAuthCookies({
@@ -144,6 +145,10 @@ class ApiClient {
     required String? authCookie,
     DateTime? authCookieExpiry,
   }) async {
+    // Cache values for exportAuthCookies
+    _cachedJsession = jsession;
+    _cachedAuthCookie = authCookie;
+    _authCookieExpiry = authCookieExpiry;
     if (kIsWeb) return;
     final uri = Uri.parse(_baseUrl);
     final cookies = <Cookie>[];
@@ -164,12 +169,13 @@ class ApiClient {
     if (cookies.isNotEmpty) {
       await _cookieJar.saveFromResponse(uri, cookies);
     }
-    _authCookieExpiry = authCookieExpiry;
   }
 
   Future<void> clearSession() async {
     _tenantId = null;
     _authCookieExpiry = null;
+    _cachedAuthCookie = null;
+    _cachedJsession = null;
     await _cookieJar.deleteAll();
   }
 }
