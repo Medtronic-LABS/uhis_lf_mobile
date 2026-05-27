@@ -1,4 +1,4 @@
-import '../../core/api/api_client.dart';
+import '../../core/api/api_repository.dart';
 import '../../core/api/endpoints.dart';
 
 enum PatientSearchField { name, phone, nid }
@@ -32,10 +32,8 @@ class PatientHit {
   }
 }
 
-class PatientSearchRepository {
-  PatientSearchRepository(this._api);
-
-  final ApiClient _api;
+class PatientSearchRepository extends ApiRepository {
+  PatientSearchRepository(super.api);
 
   Future<List<PatientHit>> search({
     required PatientSearchField field,
@@ -45,7 +43,7 @@ class PatientSearchRepository {
     final body = <String, dynamic>{
       'skip': 0,
       'limit': limit,
-      'tenantId': _tenantIdAsNum(),
+      'tenantId': api.tenantIdAsNum,
     };
     switch (field) {
       case PatientSearchField.name:
@@ -58,23 +56,10 @@ class PatientSearchRepository {
         body['idCode'] = query;
         break;
     }
-    final resp = await _api.dio.post(Endpoints.patientSearch, data: body);
-    if (resp.statusCode != 200) {
-      throw Exception('Search failed (${resp.statusCode})');
-    }
-    final data = resp.data;
-    final list = (data is Map && data['entityList'] is List)
-        ? data['entityList'] as List
-        : (data is List ? data : const []);
-    return list
+    final data = await postOk(Endpoints.patientSearch, data: body, action: 'Search');
+    return extractList(data)
         .whereType<Map>()
         .map((e) => PatientHit.fromJson(e))
         .toList(growable: false);
-  }
-
-  Object? _tenantIdAsNum() {
-    final t = _api.tenantId;
-    if (t == null) return null;
-    return int.tryParse(t) ?? t;
   }
 }

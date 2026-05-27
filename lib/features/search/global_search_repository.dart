@@ -37,11 +37,18 @@ class GlobalSearchRepository {
     final q = query.trim();
     if (q.isEmpty) return GlobalSearchHits();
 
+    // Each source degrades to an empty result on failure so one failing source
+    // never blanks the other — but the error is captured (not swallowed) so the
+    // UI can tell "no matches" apart from "search failed".
+    Object? patientError;
+    Object? householdError;
+
     Future<List<PatientHit>> runPatients() async {
       final field = _detectPatientField(q);
       try {
         return await _patient.search(field: field, query: q);
-      } catch (_) {
+      } catch (e) {
+        patientError = e;
         return const [];
       }
     }
@@ -59,7 +66,8 @@ class GlobalSearchRepository {
           query: q,
           onProgress: onHouseholdProgress,
         );
-      } catch (_) {
+      } catch (e) {
+        householdError = e;
         return HouseholdSearchResult(
           matches: const [],
           totalScanned: 0,
@@ -71,23 +79,28 @@ class GlobalSearchRepository {
     switch (scope) {
       case SearchScope.patients:
         final p = await runPatients();
-        return GlobalSearchHits(patients: p);
+        return GlobalSearchHits(patients: p, error: patientError);
       case SearchScope.households:
         final h = await runHouseholds();
         return GlobalSearchHits(
           households: h.matches,
           householdsScanned: h.totalScanned,
           householdsTruncated: h.truncated,
+          error: householdError,
         );
       case SearchScope.all:
         final results = await Future.wait([runPatients(), runHouseholds()]);
         final p = results[0] as List<PatientHit>;
         final h = results[1] as HouseholdSearchResult;
+        // Surface an error only when both sources failed and nothing returned;
+        // a partial result is shown without an error banner.
+        final bothFailed = patientError != null && householdError != null;
         return GlobalSearchHits(
           patients: p,
           households: h.matches,
           householdsScanned: h.totalScanned,
           householdsTruncated: h.truncated,
+          error: bothFailed ? patientError : null,
         );
     }
   }

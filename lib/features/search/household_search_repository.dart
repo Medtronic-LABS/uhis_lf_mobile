@@ -1,4 +1,4 @@
-import '../../core/api/api_client.dart';
+import '../../core/api/api_repository.dart';
 import '../../core/api/endpoints.dart';
 
 enum HouseholdSearchField { name, householdNo }
@@ -54,10 +54,8 @@ class HouseholdSearchResult {
   final bool truncated;
 }
 
-class HouseholdSearchRepository {
-  HouseholdSearchRepository(this._api);
-
-  final ApiClient _api;
+class HouseholdSearchRepository extends ApiRepository {
+  HouseholdSearchRepository(super.api);
 
   static const int pageSize = 100;
   static const int maxPages = 5;
@@ -82,18 +80,16 @@ class HouseholdSearchRepository {
     bool ranOut = false;
     for (int page = 0; page < maxPages; page++) {
       onProgress?.call(HouseholdSearchProgress(scanned, pageSize * maxPages));
-      final resp = await _api.dio.post(
+      final body = await postOk(
         Endpoints.householdList,
         data: {
           'skip': skip,
           'limit': pageSize,
-          'tenantId': _tenantIdAsNum(),
+          'tenantId': api.tenantIdAsNum,
         },
+        action: 'Household list',
       );
-      if (resp.statusCode != 200) {
-        throw Exception('Household list failed (${resp.statusCode})');
-      }
-      final list = _extractList(resp.data);
+      final list = extractList(body);
       scanned += list.length;
       for (final raw in list) {
         if (raw is! Map) continue;
@@ -119,20 +115,5 @@ class HouseholdSearchRepository {
       totalScanned: scanned,
       truncated: ranOut,
     );
-  }
-
-  Object? _tenantIdAsNum() {
-    final t = _api.tenantId;
-    if (t == null) return null;
-    return int.tryParse(t) ?? t;
-  }
-
-  static List _extractList(dynamic body) {
-    if (body is List) return body;
-    if (body is Map) {
-      if (body['entityList'] is List) return body['entityList'] as List;
-      if (body['data'] is List) return body['data'] as List;
-    }
-    return const [];
   }
 }

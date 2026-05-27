@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/constants/app_strings.dart';
 import 'global_search_repository.dart';
 import 'household_search_repository.dart';
 import 'patient_search_repository.dart';
@@ -27,7 +28,7 @@ class _GlobalSearchBarState extends State<GlobalSearchBar> {
   Widget build(BuildContext context) {
     return SearchAnchor.bar(
       searchController: _controller,
-      barHintText: 'Search patients or households',
+      barHintText: SearchStrings.barHint,
       barLeading: const Icon(Icons.search),
       isFullScreen: true,
       suggestionsBuilder: (context, controller) {
@@ -155,17 +156,17 @@ class _SearchViewState extends State<_SearchView> {
             spacing: 8,
             children: [
               ChoiceChip(
-                label: const Text('All'),
+                label: const Text(SearchStrings.scopeAll),
                 selected: _scope == SearchScope.all,
                 onSelected: (_) => _setScope(SearchScope.all),
               ),
               ChoiceChip(
-                label: const Text('Patients'),
+                label: const Text(SearchStrings.scopePatients),
                 selected: _scope == SearchScope.patients,
                 onSelected: (_) => _setScope(SearchScope.patients),
               ),
               ChoiceChip(
-                label: const Text('Households'),
+                label: const Text(SearchStrings.scopeHouseholds),
                 selected: _scope == SearchScope.households,
                 onSelected: (_) => _setScope(SearchScope.households),
               ),
@@ -180,7 +181,7 @@ class _SearchViewState extends State<_SearchView> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Text(
-              'Scanning households ${_progress!.loaded}/${_progress!.cap}…',
+              SearchStrings.scanningHouseholds(_progress!.loaded, _progress!.cap),
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
@@ -190,26 +191,30 @@ class _SearchViewState extends State<_SearchView> {
     );
   }
 
+  Widget _failureView() {
+    return _Centered(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(SearchStrings.searchFailed),
+          const SizedBox(height: 12),
+          FilledButton.tonal(
+            onPressed: () => _runSearch(_lastQuery),
+            child: const Text(CommonStrings.retry),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _body(BuildContext context, GlobalSearchHits? hits) {
     if (_error != null) {
-      return _Centered(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Search failed — try again.'),
-            const SizedBox(height: 12),
-            FilledButton.tonal(
-              onPressed: () => _runSearch(_lastQuery),
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      );
+      return _failureView();
     }
     if (_lastQuery.isEmpty) {
       return const _Centered(
         child: Text(
-          'Type a name, phone, NID, or household number',
+          SearchStrings.emptyPrompt,
           textAlign: TextAlign.center,
         ),
       );
@@ -220,32 +225,34 @@ class _SearchViewState extends State<_SearchView> {
     final showPatients = _scope != SearchScope.households;
     final showHouseholds = _scope != SearchScope.patients;
     if (hits.isEmpty && !_busy) {
-      return const _Centered(child: Text('No matches.'));
+      // Distinguish a failed search from a genuinely empty result.
+      if (hits.error != null) return _failureView();
+      return const _Centered(child: Text(SearchStrings.noMatches));
     }
     return ListView(
       children: [
         if (showPatients) ...[
-          _SectionHeader(label: 'Patients', count: hits.patients.length),
+          _SectionHeader(label: SearchStrings.scopePatients, count: hits.patients.length),
           if (hits.patients.isEmpty)
-            const _EmptyRow('No patient matches.')
+            const _EmptyRow(SearchStrings.noPatientMatches)
           else
-            ...hits.patients.map((p) => _PatientTile(hit: p, onTap: _closeWith('Patient detail not implemented'))),
+            ...hits.patients.map((p) => _PatientTile(hit: p, onTap: _closeWith(SearchStrings.patientDetailNotImplemented))),
         ],
         if (showHouseholds) ...[
-          _SectionHeader(label: 'Households', count: hits.households.length),
+          _SectionHeader(label: SearchStrings.scopeHouseholds, count: hits.households.length),
           if (hits.households.isEmpty)
-            const _EmptyRow('No household matches.')
+            const _EmptyRow(SearchStrings.noHouseholdMatches)
           else
             ...hits.households.map(
               (h) => _HouseholdTile(
                 hit: h,
-                onTap: _closeWith('Household detail not implemented'),
+                onTap: _closeWith(SearchStrings.householdDetailNotImplemented),
               ),
             ),
           if (hits.householdsTruncated)
             const ListTile(
               leading: Icon(Icons.info_outline),
-              title: Text('Result list capped — refine your query'),
+              title: Text(SearchStrings.resultsCapped),
             ),
         ],
       ],
@@ -298,11 +305,11 @@ class _PatientTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       leading: const CircleAvatar(child: Icon(Icons.person)),
-      title: Text(hit.name ?? '(unnamed)'),
+      title: Text(hit.name ?? CommonStrings.unnamed),
       subtitle: Text([
-        if (hit.age != null) 'Age ${hit.age}',
+        if (hit.age != null) SearchStrings.age(hit.age!),
         if (hit.phone != null) hit.phone!,
-        if (hit.nid != null) 'NID ${hit.nid}',
+        if (hit.nid != null) SearchStrings.nid(hit.nid!),
       ].join(' · ')),
       onTap: onTap,
     );
@@ -317,11 +324,11 @@ class _HouseholdTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       leading: const CircleAvatar(child: Icon(Icons.home)),
-      title: Text(hit.name ?? '(unnamed)'),
+      title: Text(hit.name ?? CommonStrings.unnamed),
       subtitle: Text([
-        if (hit.householdNo != null) 'No ${hit.householdNo}',
+        if (hit.householdNo != null) SearchStrings.householdNo(hit.householdNo!),
         if (hit.village != null) hit.village!,
-        if (hit.memberCount != null) '${hit.memberCount} members',
+        if (hit.memberCount != null) SearchStrings.memberCount(hit.memberCount!),
       ].join(' · ')),
       onTap: onTap,
     );
