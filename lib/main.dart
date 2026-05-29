@@ -1,20 +1,43 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import 'app/router.dart';
 import 'app/theme.dart';
+import 'app/theme_provider.dart';
 import 'core/api/api_client.dart';
-import 'core/constants/app_strings.dart';
 import 'core/auth/auth_repository.dart';
 import 'core/auth/auth_state.dart';
 import 'core/auth/biometric_service.dart';
 import 'core/config/app_config.dart';
+import 'core/constants/app_strings.dart';
+import 'core/db/app_database.dart';
+import 'core/db/assessment_dao.dart';
+import 'core/db/follow_up_dao.dart';
+import 'core/db/immunisation_dao.dart';
+import 'core/db/patient_dao.dart';
+import 'core/db/patient_programmes_dao.dart';
+import 'core/db/referral_dao.dart';
+import 'core/db/sync_meta_dao.dart';
+import 'core/notifications/notification_service.dart';
+import 'core/notifications/repeat_scheduler.dart';
+import 'core/risk/risk_scoring_service.dart';
+import 'core/sla/priority_scorer.dart';
+import 'core/sla/sla_evaluator.dart';
+import 'core/sync/offline_sync_service.dart';
 import 'features/dashboard/dashboard_repository.dart';
 import 'features/lock/lock_barrier.dart';
+import 'features/patient/member_detail_repository.dart';
+import 'features/patient/patient_repository.dart';
+import 'features/referral/referral_repository.dart';
 import 'features/search/global_search_repository.dart';
 import 'features/search/household_search_repository.dart';
+import 'features/search/member_search_repository.dart';
 import 'features/search/patient_search_repository.dart';
+import 'features/worklist/worklist_repository.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,6 +47,7 @@ Future<void> main() async {
   final biometric = BiometricService();
   final authState = AuthState(authRepo, biometric);
   await authState.bootstrap();
+  final appDb = await AppDatabase.open();
   final bioEnabled = await authRepo.isBiometricEnabled();
   if (AppConfig.hasDevCredentials &&
       !bioEnabled &&
@@ -39,6 +63,7 @@ Future<void> main() async {
     authRepo: authRepo,
     authState: authState,
     biometric: biometric,
+    appDb: appDb,
   ));
 }
 
@@ -49,12 +74,14 @@ class UhisNextApp extends StatefulWidget {
     required this.authRepo,
     required this.authState,
     required this.biometric,
+    required this.appDb,
   });
 
   final ApiClient api;
   final AuthRepository authRepo;
   final AuthState authState;
   final BiometricService biometric;
+  final AppDatabase appDb;
 
   @override
   State<UhisNextApp> createState() => _UhisNextAppState();
@@ -62,10 +89,79 @@ class UhisNextApp extends StatefulWidget {
 
 class _UhisNextAppState extends State<UhisNextApp>
     with WidgetsBindingObserver {
+  late final GoRouter _router = buildRouter(widget.authState);
+  late final PatientDao _patientDao = PatientDao(widget.appDb);
+  late final PatientProgrammesDao _progDao =
+      PatientProgrammesDao(widget.appDb);
+  late final FollowUpDao _followUpDao = FollowUpDao(widget.appDb);
+  late final ImmunisationDao _immDao = ImmunisationDao(widget.appDb);
+  late final AssessmentDao _assessmentDao = AssessmentDao(widget.appDb);
+  late final SyncMetaDao _syncMetaDao = SyncMetaDao(widget.appDb);
+  late final RiskScoringService _risk = const RiskScoringService();
+  late final OfflineSyncService _sync = OfflineSyncService(
+    api: widget.api,
+    auth: widget.authRepo,
+    patients: _patientDao,
+    programmes: _progDao,
+    followUps: _followUpDao,
+    immunisations: _immDao,
+    assessments: _assessmentDao,
+    syncMeta: _syncMetaDao,
+  );
+  late final WorklistRepository _worklist = WorklistRepository(
+    patients: _patientDao,
+    programmes: _progDao,
+    followUps: _followUpDao,
+    immunisations: _immDao,
+    syncMeta: _syncMetaDao,
+    risk: _risk,
+  );
+  late final PatientRepository _patientRepo = PatientRepository(
+    patients: _patientDao,
+    programmes: _progDao,
+    sync: _sync,
+  );
+
+  // ── Referral SLA Engine wiring ──────────────────────────────────────────
+  late final ReferralDao _referralDao = ReferralDao(widget.appDb);
+  late final SlaEvaluator _slaEvaluator = const SlaEvaluator();
+  late final PriorityScorer _priorityScorer = const PriorityScorer();
+  late final NotificationService _notifications = NotificationService();
+  late final RepeatScheduler _repeatScheduler = RepeatScheduler(
+    dao: _referralDao,
+    notifications: _notifications,
+  );
+  late final ReferralRepository _referrals = ReferralRepository(
+    referrals: _referralDao,
+    patients: _patientDao,
+    programmes: _progDao,
+    followUps: _followUpDao,
+    slaEvaluator: _slaEvaluator,
+    priorityScorer: _priorityScorer,
+    notificationScheduler: _repeatScheduler,
+  );
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Register notification channels + rehydrate any pending repeat alarms
+    // from the last session. Both are idempotent.
+    unawaited(_bootstrapNotifications());
+  }
+
+  Future<void> _bootstrapNotifications() async {
+    try {
+      await _notifications.initialize();
+      await _repeatScheduler.rehydrateOnBoot();
+      // NOTE: Demo referral seeding moved to dashboard_screen.dart
+      // to run after login when user context is available
+    } catch (e, st) {
+      // Notifications are a non-critical surface; failure should not block
+      // app startup. Surface to console for now; once a telemetry sink lands
+      // (worklist.md §8 / referral-sla-engine.md §8), route through it.
+      debugPrint('[notifications] bootstrap failed: $e\n$st');
+    }
   }
 
   @override
@@ -79,6 +175,12 @@ class _UhisNextAppState extends State<UhisNextApp>
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       widget.authState.lock();
+    } else if (state == AppLifecycleState.resumed) {
+      // SLA states drift while the device sleeps; refresh on every resume.
+      // Fire-and-forget — UI listens to ReferralRepository.changes.
+      unawaited(_referrals
+          .recomputeAllAfterSync()
+          .then((_) => _referrals.dispatchPendingNotifications()));
     }
   }
 
@@ -89,41 +191,141 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<ApiClient>.value(value: widget.api),
         Provider<AuthRepository>.value(value: widget.authRepo),
         Provider<BiometricService>.value(value: widget.biometric),
+        Provider<AppDatabase>.value(value: widget.appDb),
         ChangeNotifierProvider<AuthState>.value(value: widget.authState),
+        ChangeNotifierProvider<ThemeProvider>(create: (_) => ThemeProvider()),
         Provider<DashboardRepository>(
-            create: (_) => DashboardRepository(widget.api)),
+            create: (_) => DashboardRepository(widget.api, widget.authRepo)),
         Provider<PatientSearchRepository>(
             create: (_) => PatientSearchRepository(widget.api)),
+        Provider<MemberSearchRepository>(
+            create: (_) => MemberSearchRepository(widget.api, widget.authRepo)),
         Provider<HouseholdSearchRepository>(
-            create: (_) => HouseholdSearchRepository(widget.api)),
-        ProxyProvider2<PatientSearchRepository, HouseholdSearchRepository,
+            create: (_) => HouseholdSearchRepository(widget.api, widget.authRepo)),
+        ProxyProvider2<MemberSearchRepository, HouseholdSearchRepository,
             GlobalSearchRepository>(
-          update: (_, p, h, __) => GlobalSearchRepository(p, h),
+          update: (_, m, h, __) => GlobalSearchRepository(m, h),
         ),
+        Provider<RiskScoringService>.value(value: _risk),
+        ChangeNotifierProvider<OfflineSyncService>.value(value: _sync),
+        Provider<WorklistRepository>.value(value: _worklist),
+        Provider<PatientRepository>.value(value: _patientRepo),
+        Provider<ReferralDao>.value(value: _referralDao),
+        Provider<SlaEvaluator>.value(value: _slaEvaluator),
+        Provider<PriorityScorer>.value(value: _priorityScorer),
+        Provider<NotificationService>.value(value: _notifications),
+        Provider<RepeatScheduler>.value(value: _repeatScheduler),
+        Provider<ReferralRepository>.value(value: _referrals),
+        Provider<PatientDao>.value(value: _patientDao),
+        Provider<MemberDetailRepository>(
+            create: (_) => MemberDetailRepository(widget.api, widget.authRepo)),
       ],
       child: Builder(
         builder: (context) {
-          final router = buildRouter(context.read<AuthState>());
-          return MaterialApp.router(
-            title: AppStrings.appName,
-            theme: buildAppTheme(),
-            routerConfig: router,
-            debugShowCheckedModeBanner: false,
-            builder: (ctx, child) {
-              final auth = ctx.watch<AuthState>();
-              final showBarrier = auth.status == AuthStatus.signedIn &&
-                  auth.locked &&
-                  auth.reentryEnabled;
-              return Stack(
-                children: [
-                  child ?? const SizedBox.shrink(),
-                  if (showBarrier) const Positioned.fill(child: LockBarrier()),
-                ],
-              );
-            },
+          final themeProvider = context.watch<ThemeProvider>();
+          return Provider<GoRouter>.value(
+            value: _router,
+            // LockBarrier must be outside MaterialApp.router to avoid rebuild
+            // conflicts when GoRouter's refreshListenable triggers.
+            // Wrap in Directionality since it's outside MaterialApp.
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: _LockBarrierOverlay(
+                child: MaterialApp.router(
+                  title: AppStrings.appName,
+                  theme: buildAppTheme(),
+                  darkTheme: buildDarkTheme(),
+                  themeMode: themeProvider.mode,
+                  routerConfig: _router,
+                  debugShowCheckedModeBanner: false,
+                ),
+              ),
+            ),
           );
         },
       ),
+    );
+  }
+}
+
+/// Separate widget to isolate LockBarrier rebuild scope from router rebuilds.
+/// Uses direct listener instead of Selector to avoid Provider inheritance
+/// conflicts when GoRouter's refreshListenable triggers simultaneously.
+class _LockBarrierOverlay extends StatefulWidget {
+  const _LockBarrierOverlay({required this.child});
+  final Widget? child;
+
+  @override
+  State<_LockBarrierOverlay> createState() => _LockBarrierOverlayState();
+}
+
+class _LockBarrierOverlayState extends State<_LockBarrierOverlay> {
+  AuthState? _authState;
+  bool _showBarrier = false;
+  bool _updateScheduled = false;
+
+  void _onAuthChanged() {
+    // Defer setState to the next frame to avoid conflicting with GoRouter's
+    // rebuild triggered by the same notifyListeners() call.
+    if (_updateScheduled) return;
+    _updateScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateScheduled = false;
+      if (!mounted) return;
+      _updateBarrierState();
+    });
+  }
+
+  void _updateBarrierState() {
+    final auth = _authState;
+    if (auth == null) return;
+    final shouldShow =
+        auth.status == AuthStatus.signedIn && auth.locked && auth.reentryEnabled;
+    if (shouldShow != _showBarrier) {
+      setState(() => _showBarrier = shouldShow);
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final newAuth = context.read<AuthState>();
+    if (_authState != newAuth) {
+      _authState?.removeListener(_onAuthChanged);
+      _authState = newAuth;
+      _authState!.addListener(_onAuthChanged);
+      // Defer initial state check to avoid build scope conflicts when
+      // GoRouter's refreshListenable triggers simultaneously.
+      _onAuthChanged();
+    }
+  }
+
+  @override
+  void dispose() {
+    _authState?.removeListener(_onAuthChanged);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final themeProvider = context.watch<ThemeProvider>();
+    final theme = themeProvider.mode == ThemeMode.dark
+        ? buildDarkTheme()
+        : buildAppTheme();
+    return Stack(
+      children: [
+        widget.child ?? const SizedBox.shrink(),
+        if (_showBarrier)
+          Positioned.fill(
+            child: MediaQuery.fromView(
+              view: View.of(context),
+              child: Theme(
+                data: theme,
+                child: const LockBarrier(),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
