@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../app/theme_provider.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/constants/app_strings.dart';
+import '../referral/referral_repository.dart';
 import '../search/global_search_bar.dart';
+import '../worklist/worklist_screen.dart';
 import 'dashboard_repository.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -16,9 +19,8 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  late Future<int> _patientFuture;
+  late Future<int> _memberFuture;
   late Future<int> _householdFuture;
-  DateTime? _lastRefreshed;
   UserProfileSummary? _summary;
 
   @override
@@ -26,31 +28,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.initState();
     _reload();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _loadSummary();
-      await _maybeNavigateToOnboarding();
+      if (!mounted) return;
+      final auth = context.read<AuthState>();
+      await _loadSummary(auth);
+      // Seed demo referral data if empty (runs after login)
+      await _seedReferralsIfNeeded();
     });
   }
 
-  /// First-run: redirect to onboarding if user hasn't completed it yet.
-  /// Onboarding handles biometric enrollment and PIN setup (both optional).
-  Future<void> _maybeNavigateToOnboarding() async {
+  Future<void> _seedReferralsIfNeeded() async {
     if (!mounted) return;
-    final auth = context.read<AuthState>();
-
-    // If onboarding is already complete (user chose to set up or skip), stay on dashboard
-    if (await auth.isOnboardingComplete()) return;
-
-    // If PIN is already set, no need for onboarding
-    if (auth.pinEnabled) return;
-
-    // Otherwise, show onboarding screen
-    if (!mounted) return;
-    context.go('/onboarding');
+    final referralRepo = context.read<ReferralRepository>();
+    final seeded = await referralRepo.seedDemoDataIfEmpty();
+    if (seeded > 0) {
+      debugPrint('[dashboard] seeded $seeded demo referrals');
+      // Trigger rebuild so the notification badge updates
+      if (mounted) setState(() {});
+    }
   }
 
-  Future<void> _loadSummary() async {
+  Future<void> _loadSummary(AuthState auth) async {
     if (!mounted) return;
-    final s = await context.read<AuthState>().userProfileSummary();
+    final s = await auth.userProfileSummary();
     if (!mounted) return;
     setState(() => _summary = s);
   }
@@ -92,7 +91,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return;
     }
     try {
-      await context.read<AuthState>().enrolBiometric();
+      final auth = context.read<AuthState>();
+      await auth.enrolBiometric();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text(DashboardStrings.deviceUnlockEnabled)),
@@ -108,20 +108,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _reload() {
     final repo = context.read<DashboardRepository>();
     final authRepo = context.read<AuthRepository>();
-    _patientFuture = repo.patientCount();
-    _householdFuture = repo.householdCount().then((c) async {
+    final countsFuture = repo.householdAndMemberCount();
+    _householdFuture = countsFuture.then((c) async {
       try {
-        await authRepo.cacheHouseholdCount(c);
+        await authRepo.cacheHouseholdCount(c.households);
       } catch (_) {}
-      return c;
+      return c.households;
     });
-    _lastRefreshed = DateTime.now();
-  }
-
-  Future<void> _onRefresh() async {
-    setState(_reload);
-    await Future.wait([_patientFuture, _householdFuture])
-        .catchError((_) => [0, 0]);
+    _memberFuture = countsFuture.then((c) => c.members);
   }
 
   String _greeting() {
@@ -153,16 +147,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (ward != null) return ward;
     if (upazila != null) return upazila;
     return null;
-  }
-
-  String _lastRefreshedLabel() {
-    final t = _lastRefreshed;
-    if (t == null) return '';
-    final diff = DateTime.now().difference(t);
-    if (diff.inSeconds < 30) return DashboardStrings.updatedJustNow;
-    if (diff.inMinutes < 1) return DashboardStrings.updatedSecondsAgo(diff.inSeconds);
-    if (diff.inMinutes < 60) return DashboardStrings.updatedMinutesAgo(diff.inMinutes);
-    return DashboardStrings.updatedHoursAgo(diff.inHours);
   }
 
   @override
@@ -212,10 +196,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
         actions: [
-          IconButton(
-            tooltip: DashboardStrings.refreshTooltip,
-            icon: const Icon(Icons.refresh),
-            onPressed: () => setState(_reload),
+          _ReferralNotificationButton(
+            onTap: () => context.push('/referrals'),
           ),
           Consumer<AuthState>(
             builder: (ctx, auth, _) => PopupMenuButton<String>(
@@ -282,6 +264,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       );
                     }
                     break;
+                  case 'toggle_dark':
+                    final theme = ctx.read<ThemeProvider>();
+                    await theme.toggleDarkMode();
+                    break;
                   case 'logout':
                     final confirmLogout = await showDialog<bool>(
                       context: ctx,
@@ -301,6 +287,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     );
                     if (confirmLogout != true) break;
+                    // Clear dashboard cache before logout to ensure fresh data on next login
+                    context.read<DashboardRepository>().clearCache();
                     await auth.logout();
                     if (ctx.mounted) ctx.go('/login');
                     break;
@@ -339,6 +327,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       title: Text(PinStrings.disablePin),
                     ),
                   ),
+                PopupMenuItem(
+                  value: 'toggle_dark',
+                  child: Consumer<ThemeProvider>(
+                    builder: (_, theme, __) => ListTile(
+                      leading: Icon(
+                        theme.isDark ? Icons.light_mode : Icons.dark_mode,
+                      ),
+                      title: Text(
+                        theme.isDark
+                            ? SettingsStrings.lightMode
+                            : SettingsStrings.darkMode,
+                      ),
+                    ),
+                  ),
+                ),
                 const PopupMenuItem(
                   value: 'logout',
                   child: ListTile(
@@ -351,282 +354,191 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _onRefresh,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-          children: [
-            const GlobalSearchBar(),
-            const SizedBox(height: 20),
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: _StatCard(
-                      label: DashboardStrings.totalPatients,
-                      icon: Icons.people_alt_outlined,
-                      accent: scheme.primary,
-                      background:
-                          scheme.primaryContainer.withValues(alpha: 0.55),
-                      future: _patientFuture,
-                      onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(DashboardStrings.lookUpPatients),
-                        ),
-                      ),
-                      onRetry: () => setState(_reload),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _StatCard(
-                      label: DashboardStrings.totalHouseholds,
-                      icon: Icons.home_work_outlined,
-                      accent: scheme.tertiary,
-                      background:
-                          scheme.tertiaryContainer.withValues(alpha: 0.55),
-                      future: _householdFuture,
-                      onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(DashboardStrings.lookUpHouseholds),
-                        ),
-                      ),
-                      onRetry: () => setState(_reload),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _StatCard.placeholder(
-                      label: DashboardStrings.highRiskPatients,
-                      icon: Icons.warning_amber_rounded,
-                      accent: scheme.error,
-                      background:
-                          scheme.errorContainer.withValues(alpha: 0.45),
-                      badge: DashboardStrings.soonBadge,
-                      onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(DashboardStrings.aiTriageComingSoon),
-                        ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const GlobalSearchBar(),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _StatPill(
+                        label: DashboardStrings.totalMembers,
+                        icon: Icons.people_alt_outlined,
+                        accent: scheme.primary,
+                        future: _memberFuture,
+                        onTap: () => context.push('/members'),
                       ),
                     ),
-                  ),
-                ],
-              ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _StatPill(
+                        label: DashboardStrings.totalHouseholds,
+                        icon: Icons.home_work_outlined,
+                        accent: scheme.tertiary,
+                        future: _householdFuture,
+                        onTap: () => context.push('/households'),
+                      ),
+                    ),
+                  ],
+                ),
+
+              ],
             ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Text(
-                _lastRefreshedLabel(),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-              ),
-            ),
-          ],
-        ),
+          ),
+          const Expanded(child: WorklistView()),
+        ],
       ),
     );
   }
 }
 
-class _StatCard extends StatelessWidget {
-  const _StatCard({
+/// Notification bell button for referrals in the AppBar.
+class _ReferralNotificationButton extends StatefulWidget {
+  const _ReferralNotificationButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  State<_ReferralNotificationButton> createState() =>
+      _ReferralNotificationButtonState();
+}
+
+class _ReferralNotificationButtonState
+    extends State<_ReferralNotificationButton> {
+  Future<({int critical, int active})>? _future;
+  
+  // Cached reference to avoid context.read on deactivated widget
+  ReferralRepository? _repo;
+  bool _listenerAdded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Defer to didChangeDependencies where context is valid
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _repo = context.read<ReferralRepository>();
+    if (!_listenerAdded) {
+      _listenerAdded = true;
+      _future = _repo!.counts();
+      _repo!.changes.addListener(_onChanges);
+    }
+  }
+
+  @override
+  void dispose() {
+    _repo?.changes.removeListener(_onChanges);
+    super.dispose();
+  }
+
+  void _onChanges() {
+    if (!mounted) return;
+    _reload();
+  }
+
+  void _reload() {
+    if (!mounted) return;
+    final repo = _repo;
+    if (repo == null) return;
+    final future = repo.counts();
+    setState(() { _future = future; });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return FutureBuilder<({int critical, int active})>(
+      future: _future,
+      builder: (context, snap) {
+        final critical = snap.data?.critical ?? 0;
+        final active = snap.data?.active ?? 0;
+        final total = critical + active;
+        final hasUrgent = critical > 0;
+        return IconButton(
+          tooltip: ReferralStrings.dashboardTitle,
+          onPressed: widget.onTap,
+          icon: Badge(
+            isLabelVisible: total > 0,
+            label: Text(
+              total > 99 ? '99+' : total.toString(),
+              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+            ),
+            backgroundColor: hasUrgent ? scheme.error : scheme.primary,
+            child: Icon(
+              hasUrgent
+                  ? Icons.notification_important
+                  : Icons.notifications_outlined,
+              color: hasUrgent ? scheme.error : null,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _StatPill extends StatelessWidget {
+  const _StatPill({
     required this.label,
     required this.icon,
     required this.accent,
-    required this.background,
     required this.future,
     required this.onTap,
-    required this.onRetry,
-  })  : badge = null,
-        isPlaceholder = false;
-
-  const _StatCard.placeholder({
-    required this.label,
-    required this.icon,
-    required this.accent,
-    required this.background,
-    required this.onTap,
-    this.badge,
-  })  : future = null,
-        onRetry = null,
-        isPlaceholder = true;
+  });
 
   final String label;
   final IconData icon;
   final Color accent;
-  final Color background;
-  final Future<int>? future;
+  final Future<int> future;
   final VoidCallback onTap;
-  final VoidCallback? onRetry;
-  final String? badge;
-  final bool isPlaceholder;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: background,
-      borderRadius: BorderRadius.circular(14),
-      clipBehavior: Clip.antiAlias,
+      color: accent.withValues(alpha: 0.10),
+      borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(7),
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(9),
+              Icon(icon, color: accent, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FutureBuilder<int>(
+                  future: future,
+                  builder: (context, snap) {
+                    final value = snap.hasError
+                        ? '—'
+                        : (snap.data == null ? '…' : '${snap.data}');
+                    return Text(
+                      '$value · ${label.replaceAll('\n', ' ')}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: accent,
+                            fontWeight: FontWeight.w700,
+                          ),
+                    );
+                  },
                 ),
-                child: Icon(icon, color: accent, size: 18),
               ),
-              const SizedBox(height: 12),
-              _value(context),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                maxLines: 2,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      height: 1.15,
-                    ),
-              ),
-              if (badge != null) ...[
-                const SizedBox(height: 6),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: accent,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    badge!,
-                    style:
-                        Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: Theme.of(context).colorScheme.onError,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.4,
-                              fontSize: 10,
-                            ),
-                  ),
-                ),
-              ],
             ],
           ),
         ),
       ),
     );
   }
-
-  Widget _value(BuildContext context) {
-    if (isPlaceholder) {
-      return Text(
-        '—',
-        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-              color: accent,
-              fontWeight: FontWeight.w800,
-            ),
-      );
-    }
-    return FutureBuilder<int>(
-      future: future,
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const _SkeletonNumber();
-        }
-        if (snap.hasError) {
-          return Row(
-            children: [
-              Text(
-                '—',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-              const SizedBox(width: 6),
-              if (onRetry != null)
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  iconSize: 18,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  color: accent,
-                  onPressed: onRetry,
-                  icon: const Icon(Icons.refresh),
-                ),
-            ],
-          );
-        }
-        return Text(
-          _formatCount(snap.data ?? 0),
-          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: accent,
-              ),
-        );
-      },
-    );
-  }
-
-  static String _formatCount(int n) {
-    if (n < 1000) return '$n';
-    if (n < 1000000) {
-      final v = n / 1000;
-      return v >= 10 ? '${v.toStringAsFixed(0)}k' : '${v.toStringAsFixed(1)}k';
-    }
-    final v = n / 1000000;
-    return v >= 10 ? '${v.toStringAsFixed(0)}M' : '${v.toStringAsFixed(1)}M';
-  }
 }
 
-class _SkeletonNumber extends StatefulWidget {
-  const _SkeletonNumber();
-
-  @override
-  State<_SkeletonNumber> createState() => _SkeletonNumberState();
-}
-
-class _SkeletonNumberState extends State<_SkeletonNumber>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _c;
-
-  @override
-  void initState() {
-    super.initState();
-    _c = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1100),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final base = Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.08);
-    final hi = Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.18);
-    return AnimatedBuilder(
-      animation: _c,
-      builder: (_, __) => Container(
-        height: 36,
-        width: 96,
-        decoration: BoxDecoration(
-          color: Color.lerp(base, hi, _c.value),
-          borderRadius: BorderRadius.circular(8),
-        ),
-      ),
-    );
-  }
-}
 
