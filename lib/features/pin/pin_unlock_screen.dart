@@ -47,7 +47,9 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthState>();
+    // Use select to only rebuild on specific field changes
+    final biometricEnabled = context.select<AuthState, bool>((a) => a.biometricEnabled);
+    final biometricAvailable = context.select<AuthState, bool>((a) => a.biometricAvailable);
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -95,18 +97,20 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      if (auth.biometricEnabled)
+                      // Show biometric button only if user enabled it AND device has biometric enrolled
+                      if (biometricEnabled && biometricAvailable)
                         TextButton.icon(
                           onPressed: _busy
                               ? null
                               : () async {
+                                  final auth = context.read<AuthState>();
                                   final ok = await auth.biometricUnlock();
                                   if (!mounted) return;
                                   if (ok) context.go('/dashboard');
                                 },
-                          icon: const Icon(Icons.fingerprint),
+                          icon: const Icon(Icons.lock_open),
                           label: const Text(
-                              LockStrings.unlockWithPhonePasswordOrBiometrics),
+                              LockStrings.unlockWithBiometrics),
                         ),
                       TextButton(
                         onPressed: _busy

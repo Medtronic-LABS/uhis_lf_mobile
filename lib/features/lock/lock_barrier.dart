@@ -46,7 +46,8 @@ class _LockBarrierState extends State<LockBarrier> {
 
   Future<void> _loadSummary() async {
     if (!mounted) return;
-    final s = await context.read<AuthState>().userProfileSummary();
+    final auth = context.read<AuthState>();
+    final s = await auth.userProfileSummary();
     if (!mounted) return;
     setState(() => _summary = s);
   }
@@ -59,7 +60,7 @@ class _LockBarrierState extends State<LockBarrier> {
     if (ok) return;
     if (!auth.biometricEnabled) {
       await auth.requestPasswordFallback();
-      if (mounted) context.go('/login?from=lock');
+      if (mounted) context.read<GoRouter>().go('/login?from=lock');
       return;
     }
     setState(() => _failed = true);
@@ -69,12 +70,17 @@ class _LockBarrierState extends State<LockBarrier> {
     final auth = context.read<AuthState>();
     await auth.requestPasswordFallback();
     if (!mounted) return;
-    context.go('/login?from=lock');
+    context.read<GoRouter>().go('/login?from=lock');
   }
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthState>();
+    // Use select to only rebuild on specific field changes, not all auth changes
+    final busy = context.select<AuthState, bool>((a) => a.busy);
+    final biometricEnabled = context.select<AuthState, bool>((a) => a.biometricEnabled);
+    final biometricAvailable = context.select<AuthState, bool>((a) => a.biometricAvailable);
+    final pinEnabled = context.select<AuthState, bool>((a) => a.pinEnabled);
+    
     return PopScope(
       canPop: false,
       child: Material(
@@ -87,13 +93,14 @@ class _LockBarrierState extends State<LockBarrier> {
                 constraints: const BoxConstraints(maxWidth: 480),
                 child: LockContent(
                   summary: _summary,
-                  busy: auth.busy,
+                  busy: busy,
                   failed: _failed,
-                  biometricEnabled: auth.biometricEnabled,
-                  pinEnabled: auth.pinEnabled,
+                  // Show biometric button only if user enabled it AND device has biometric enrolled
+                  biometricEnabled: biometricEnabled && biometricAvailable,
+                  pinEnabled: pinEnabled,
                   isOnline: _isOnline,
                   onUnlock: _trigger,
-                  onPinUnlock: () => context.go('/pin-unlock'),
+                  onPinUnlock: () => context.read<GoRouter>().go('/pin-unlock'),
                   onPassword: _usePassword,
                 ),
               ),

@@ -43,7 +43,8 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
 
     if (v == _firstEntry) {
       setState(() => _busy = true);
-      await context.read<AuthState>().enrolPin(v);
+      final auth = context.read<AuthState>();
+      await auth.enrolPin(v);
       if (!mounted) return;
       context.go('/dashboard');
     } else {

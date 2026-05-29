@@ -74,8 +74,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
     if (confirm != true || !mounted) return;
 
-    setState(() => _busy = true);
     final auth = context.read<AuthState>();
+    setState(() => _busy = true);
 
     // Mark onboarding as complete, skip biometric and PIN
     await auth.markOnboardingComplete();
@@ -90,7 +90,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final auth = context.watch<AuthState>();
+    final biometricAvailable = context.select<AuthState, bool>((a) => a.biometricAvailable);
 
     return PopScope(
       canPop: false,
@@ -145,10 +145,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       _FeatureCard(
                         icon: Icons.fingerprint,
                         title: OnboardingStrings.biometricFeatureTitle,
-                        description: auth.biometricAvailable
+                        description: biometricAvailable
                             ? OnboardingStrings.biometricFeatureDesc
                             : OnboardingStrings.biometricNotAvailable,
-                        available: auth.biometricAvailable,
+                        available: biometricAvailable,
                       ),
                       const SizedBox(height: 12),
                       _FeatureCard(

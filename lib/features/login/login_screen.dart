@@ -51,9 +51,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthState>();
-    final showBio = auth.biometricEnabled;
-    final showPin = auth.pinEnabled;
+    // Use select to only rebuild on specific field changes
+    final showBio = context.select<AuthState, bool>((a) => a.biometricEnabled);
+    final showPin = context.select<AuthState, bool>((a) => a.pinEnabled);
+    final busy = context.select<AuthState, bool>((a) => a.busy);
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -93,7 +94,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       if (showBio)
                         OutlinedButton.icon(
                           onPressed:
-                              auth.busy ? null : () => context.go('/lock'),
+                              busy ? null : () => context.go('/lock'),
                           icon: const Icon(Icons.fingerprint),
                           label: const Text(LoginStrings.useDeviceUnlock),
                         ),
@@ -101,7 +102,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         if (showBio) const SizedBox(height: 8),
                         OutlinedButton.icon(
                           onPressed:
-                              auth.busy ? null : () => context.go('/lock'),
+                              busy ? null : () => context.go('/lock'),
                           icon: const Icon(Icons.pin_outlined),
                           label: Text(PinStrings.usePin(AppConfig.pinLength)),
                         ),
@@ -141,8 +142,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 24),
                     FilledButton(
-                      onPressed: auth.busy ? null : _submit,
-                      child: auth.busy
+                      onPressed: busy ? null : _submit,
+                      child: busy
                           ? const SizedBox(
                               height: 20,
                               width: 20,

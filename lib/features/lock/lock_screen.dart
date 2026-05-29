@@ -44,7 +44,8 @@ class _LockScreenState extends State<LockScreen> {
 
   Future<void> _loadSummary() async {
     if (!mounted) return;
-    final s = await context.read<AuthState>().userProfileSummary();
+    final auth = context.read<AuthState>();
+    final s = await auth.userProfileSummary();
     if (!mounted) return;
     setState(() => _summary = s);
   }
@@ -65,12 +66,13 @@ class _LockScreenState extends State<LockScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthState>();
-    if (auth.status == AuthStatus.signedIn && !auth.locked) {
-      return const Scaffold(
-        body: Center(child: SizedBox.shrink()),
-      );
-    }
+    // Use select to only rebuild on specific field changes, not all auth changes.
+    // GoRouter handles navigation when status changes, so we don't need to react here.
+    final busy = context.select<AuthState, bool>((a) => a.busy);
+    final biometricEnabled = context.select<AuthState, bool>((a) => a.biometricEnabled);
+    final biometricAvailable = context.select<AuthState, bool>((a) => a.biometricAvailable);
+    final pinEnabled = context.select<AuthState, bool>((a) => a.pinEnabled);
+    
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -80,10 +82,11 @@ class _LockScreenState extends State<LockScreen> {
               constraints: const BoxConstraints(maxWidth: 480),
               child: LockContent(
                 summary: _summary,
-                busy: auth.busy,
+                busy: busy,
                 failed: _failed,
-                biometricEnabled: auth.biometricEnabled,
-                pinEnabled: auth.pinEnabled,
+                // Show biometric button only if user enabled it AND device has biometric enrolled
+                biometricEnabled: biometricEnabled && biometricAvailable,
+                pinEnabled: pinEnabled,
                 isOnline: _isOnline,
                 onUnlock: _trigger,
                 onPinUnlock: () => context.go('/pin-unlock'),
@@ -224,8 +227,8 @@ class LockContent extends StatelessWidget {
       if (biometricEnabled) ...[
         FilledButton.icon(
           onPressed: onUnlock,
-          icon: const Icon(Icons.fingerprint),
-          label: const Text(LockStrings.unlockWithPhonePasswordOrBiometrics),
+          icon: const Icon(Icons.lock_open),
+          label: const Text(LockStrings.unlockWithBiometrics),
           style: FilledButton.styleFrom(minimumSize: btnSize),
         ),
         SizedBox(height: isCompact ? 4 : 8),
