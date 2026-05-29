@@ -26,9 +26,27 @@ abstract class ApiRepository {
     return resp.data;
   }
 
+  /// GET [endpoint] and return the decoded body. Throws [ApiException] on any
+  /// non-2xx status. [action] is a short human label used in the error message.
+  Future<dynamic> getOk(
+    String endpoint, {
+    Map<String, dynamic>? queryParameters,
+    String? action,
+  }) async {
+    final resp = await api.dio.get(endpoint, queryParameters: queryParameters);
+    final code = resp.statusCode ?? 0;
+    if (code < 200 || code >= 300) {
+      throw ApiException(action ?? endpoint, code);
+    }
+    return resp.data;
+  }
+
   /// Pull the list payload out of the response shapes the services return:
   /// a bare `List`, a `{ entityList: [...] }`, or a `{ data: [...] }` envelope.
-  List extractList(dynamic body) {
+  List extractList(dynamic body) => extractListStatic(body);
+
+  /// Static version of [extractList] for use outside of repositories.
+  static List extractListStatic(dynamic body) {
     if (body is List) return body;
     if (body is Map) {
       if (body['entityList'] is List) return body['entityList'] as List;

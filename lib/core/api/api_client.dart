@@ -22,6 +22,10 @@ class ApiClient {
   DateTime? _authCookieExpiry;
   String? _cachedAuthCookie;
   String? _cachedJsession;
+  // Bearer token returned by the mobile ('mob') auth flow in the `Authorization`
+  // response header. Community roles (SK) authenticate this way instead of the
+  // web AuthCookie; the token is replayed on every subsequent request.
+  String? _authToken;
   void Function(String authCookie, DateTime expiry)? onAuthCookieRotated;
 
   static Future<ApiClient> create() async {
@@ -47,9 +51,17 @@ class ApiClient {
               options.headers['Cookie'] =
                   cookies.map((c) => '${c.name}=${c.value}').join('; ');
             }
+            final token = client._authToken;
+            if (token != null && token.isNotEmpty) {
+              options.headers['Authorization'] = token;
+            }
             handler.next(options);
           },
           onResponse: (response, handler) async {
+            final authz = response.headers.value('authorization');
+            if (authz != null && authz.isNotEmpty) {
+              client._authToken = authz;
+            }
             final raw = response.headers.map['set-cookie'];
             if (raw != null && raw.isNotEmpty) {
               final stored = <Cookie>[];
@@ -95,8 +107,10 @@ class ApiClient {
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
+          // Skip tenantId for login endpoint - auth service determines tenant from credentials
+          final isLogin = options.path.contains('/session');
           final t = client._tenantId;
-          if (t != null && t.isNotEmpty) {
+          if (!isLogin && t != null && t.isNotEmpty) {
             options.headers['tenantId'] = t;
           }
           handler.next(options);
@@ -108,7 +122,7 @@ class ApiClient {
         request: true,
         requestHeader: true,
         requestBody: false,
-        responseHeader: true,
+        responseHeader: false,
         responseBody: false,
         error: true,
       ),
@@ -132,6 +146,17 @@ class ApiClient {
   }
 
   DateTime? get authCookieExpiry => _authCookieExpiry;
+
+  /// Returns true if currently authenticated via Bearer token (mobile flow).
+  bool get hasAuthToken => _authToken != null && _authToken!.isNotEmpty;
+
+  /// Export the Bearer token used for mobile auth.
+  String? exportAuthToken() => _authToken;
+
+  /// Import a previously persisted Bearer token.
+  void importAuthToken(String? token) {
+    _authToken = token;
+  }
 
   Future<({String? jsession, String? authCookie})> exportAuthCookies() async {
     if (kIsWeb) return (jsession: null, authCookie: null);
@@ -176,6 +201,7 @@ class ApiClient {
     _authCookieExpiry = null;
     _cachedAuthCookie = null;
     _cachedJsession = null;
+    _authToken = null;
     await _cookieJar.deleteAll();
   }
 }
