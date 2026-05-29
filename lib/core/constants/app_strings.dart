@@ -57,7 +57,9 @@ abstract final class LockStrings {
   static const String verifyToAccess =
       'Verify your identity to access your ward dashboard.';
   static const String biometricCancelled = 'Biometric cancelled';
-  static const String unlockWithPhonePasswordOrBiometrics = 'Unlock with Phone password or biometrics';
+  static const String unlockWithBiometrics = 'Unlock with device';
+  /// @deprecated Use [unlockWithBiometrics] instead. Kept for migration.
+  static const String unlockWithPhonePasswordOrBiometrics = unlockWithBiometrics;
   static const String profileLoading = 'Profile loading…';
   static const String offlinePasswordDisabled =
       'You are offline. Connect to the internet to sign in with password.';
@@ -102,12 +104,12 @@ abstract final class DashboardStrings {
   static const String refreshTooltip = 'Refresh';
 
   // Stat cards.
-  static const String totalPatients = 'Total\nPatients';
+  static const String totalMembers = 'Total\nMembers';
   static const String totalHouseholds = 'Total\nHouseholds';
   static const String highRiskPatients = 'High-Risk\nPatients';
   static const String soonBadge = 'SOON';
-  static const String lookUpPatients =
-      'Use the search bar above to look up patients';
+  static const String lookUpMembers =
+      'Use the search bar above to look up members';
   static const String lookUpHouseholds =
       'Use the search bar above to look up households';
   static const String aiTriageComingSoon =
@@ -153,11 +155,20 @@ abstract final class DashboardStrings {
   static String updatedHoursAgo(int h) => 'updated ${h}h ago';
 }
 
+/// Settings menu strings.
+abstract final class SettingsStrings {
+  SettingsStrings._();
+
+  static const String darkMode = 'Dark Mode';
+  static const String lightMode = 'Light Mode';
+  static const String appearance = 'Appearance';
+}
+
 /// Global search bar, scopes, result sections, and detail snackbars.
 abstract final class SearchStrings {
   SearchStrings._();
 
-  static const String barHint = 'Search patients or households';
+  static const String barHint = 'Search by name, phone, NID, household number or name';
   static const String scopeAll = 'All';
   static const String scopePatients = 'Patients';
   static const String scopeHouseholds = 'Households';
@@ -210,6 +221,46 @@ abstract final class PinStrings {
   static String attemptsRemaining(int n) => '$n attempts remaining';
 }
 
+/// First-login data sync: the guided "downloading your ward" gate and the
+/// dashboard data-freshness badge.
+abstract final class SyncStrings {
+  SyncStrings._();
+
+  static const String title = 'Setting up your ward';
+  static const String subtitle =
+      'Downloading your households and patients so you can work offline.';
+
+  // Per-entity labels used in progress lines and the data-as-of badge.
+  static const String households = 'households';
+  static const String members = 'members';
+  static const String patients = 'patients';
+
+  static const String done = 'Ready to go';
+  static const String syncFailed =
+      'We couldn\'t finish downloading your data.';
+  static const String continueOffline = 'Continue with what we have';
+  static const String retry = CommonStrings.retry;
+
+  static const String refreshing = 'Updating your data…';
+  static const String upToDate = 'Data up to date';
+
+  /// `Downloading households… 120 of 340`.
+  static String progressNamed(String entity, int done, int total) =>
+      total > 0
+          ? 'Downloading $entity… $done of $total'
+          : 'Downloading $entity… $done';
+
+  /// `Households 340 · Patients 512` style summary line on completion.
+  static String entityCount(String entity, int count) => '$entity $count';
+
+  /// Relative-time data-freshness badge, e.g. `Data as of 2 days ago`.
+  static String dataAsOf(String relative) => 'Data as of $relative';
+  static const String dataAsOfJustNow = 'Data as of just now';
+  static String dataAsOfMinutes(int m) => 'Data as of ${m}m ago';
+  static String dataAsOfHours(int h) => 'Data as of ${h}h ago';
+  static String dataAsOfDays(int d) => 'Data as of ${d}d ago';
+}
+
 /// First-login onboarding: security setup prompt.
 abstract final class OnboardingStrings {
   OnboardingStrings._();
@@ -243,4 +294,357 @@ abstract final class OnboardingStrings {
       'Could not enable device unlock. You can enable it later from the menu.';
 
   static String pinFeatureTitle(int len) => '$len-Digit Backup PIN';
+}
+
+/// Household / member list screens.
+abstract final class HouseholdListStrings {
+  HouseholdListStrings._();
+
+  static const String allHouseholds = 'All Households';
+  static const String allMembers = 'All Members';
+  static const String loadError = 'Could not load data';
+  static const String noHouseholds = 'No households found';
+  static const String noMembers = 'No members found';
+  static const String unnamedHousehold = '(Unnamed household)';
+  static const String unnamedMember = '(Unnamed)';
+
+  static String householdsCount(int n) => '$n households';
+  static String membersCount(int n) => '$n members';
+  static String totalMembersCount(int n) => '$n total members';
+  static String acrossHouseholds(int n) => 'across $n households';
+}
+
+/// Household detail screen strings.
+abstract final class HouseholdDetailStrings {
+  HouseholdDetailStrings._();
+
+  static const String unnamedHousehold = '(Unnamed household)';
+  static const String unnamed = '(Unnamed)';
+  static const String members = 'Members';
+  static const String location = 'Location';
+  static const String coordinates = 'Coordinates';
+  static const String householdHead = 'Household Head';
+  static const String householdMembers = 'Household Members';
+  static const String noHeadInfo = 'Head information not available';
+  static const String noMembers = 'No members found';
+  static const String head = 'HEAD';
+  static const String personalInfo = 'Personal Information';
+  static const String age = 'Age';
+  static const String gender = 'Gender';
+  static const String phone = 'Phone';
+  static const String notAvailable = 'Not available';
+  static const String householdInfo = 'Household Information';
+  static const String householdName = 'Household';
+  static const String householdNumber = 'Household No.';
+  static const String totalMembers = 'Total Members';
+  static const String viewHealthDetails = 'View Health Details';
+  static const String pregnant = 'PREGNANT';
+  static const String patientId = 'Patient ID';
+  static const String showLess = 'Show less';
+  static String showMore(int count) => 'Show $count more members';
+
+  static String memberDataNotLoaded(int count) =>
+      'This household has $count members.\nDetailed member information will be available once data is synced.';
+}
+
+/// AI Worklist (Screen 2): chip filter labels, programme tags, urgent banner,
+/// last-synced strip, and the empty/error states. All literal copy for the
+/// worklist surface lives here — widgets never inline strings.
+abstract final class WorklistStrings {
+  WorklistStrings._();
+
+  // Programme labels.
+  static const String programmeImci = 'IMCI';
+  static const String programmeAnc = 'ANC';
+  static const String programmeNcd = 'NCD';
+  static const String programmeTb = 'TB';
+
+  // Chip filters.
+  static const String filterAll = 'All';
+  static const String filterImci = 'IMCI';
+  static const String filterAnc = 'ANC';
+  static const String filterNcd = 'NCD';
+  static const String filterTb = 'TB';
+
+  // Urgent banner.
+  static const String urgentBadge = 'URGENT';
+  static String urgentBannerFmt(String name) =>
+      'Highest risk: $name — review first.';
+
+  // Risk band labels (also serve as accessibility hints).
+  static const String bandUrgent = 'Urgent';
+  static const String bandHigh = 'High';
+  static const String bandModerate = 'Moderate';
+  static const String bandLow = 'Low';
+
+  // Empty / error / sync strip.
+  static const String emptyTitle = 'No patients on your worklist yet';
+  static const String emptyBody =
+      'Sync with the server when you have a connection to pull your patients.';
+  static const String loadFailed = 'Could not load worklist';
+  static const String syncNow = 'Sync now';
+  static const String syncing = 'Syncing…';
+  static const String syncedJustNow = 'Synced just now';
+  static const String offlineSuffix = 'Offline';
+  static String syncedMinutes(int m) => 'Synced ${m}m ago';
+  static String syncedHours(int h) => 'Synced ${h}h ago';
+  static String syncedDays(int d) => 'Synced ${d}d ago';
+  static String syncFailed(String reason) => 'Sync failed: $reason';
+  static String syncSummary(int patients) =>
+      patients == 0 ? 'No new updates' : 'Updated $patients patient(s)';
+
+  // Card affordances.
+  static String ageFmt(int age) => 'Age $age';
+  static const String noAge = 'Age —';
+  static const String tapForDetails = 'Tap for details';
+  static const String rationaleHeader = 'Why this score';
+
+  // Rationale bottom sheet.
+  static const String whyThisScore = 'Why this score?';
+  static String riskScoreLabel(int score) => 'Risk score: $score';
+  static const String riskDriversHeader = 'Risk drivers';
+  static const String modelVersionLabel = 'Model version';
+  static const String computedAtLabel = 'Computed';
+  static const String humanReviewRequired = 'Human review required';
+  static const String closeSheet = 'Close';
+}
+
+/// Patient Context Screen (stub) strings. Full design lives in a later spec.
+abstract final class PatientContextStrings {
+  PatientContextStrings._();
+
+  static const String fallbackTitle = 'Patient';
+  static const String loading = 'Loading patient…';
+  static const String notFound = 'Patient not in local cache';
+  static const String idLabel = 'Patient ID';
+  static const String householdLabel = 'Household';
+  static const String villageLabel = 'Village';
+  static const String programmesLabel = 'Programmes';
+  static const String riskLabel = 'Risk';
+  static const String sectionRecentVisits = 'Recent visits';
+  static const String sectionVitals = 'Vitals';
+  static const String sectionAiSuggestions = 'AI suggestions';
+  static const String sectionActions = 'Actions';
+  static const String comingSoon = 'Coming in a future release';
+  static const String refresh = 'Refresh from server';
+  static const String refreshing = 'Refreshing…';
+  static const String refreshDone = 'Patient refreshed';
+  static const String refreshFailed = 'Refresh failed';
+}
+
+
+/// Copy for the Referral SLA dashboard, cards, banners, and notifications.
+/// Spec: `leapfrog-setup/designs/referral-sla-engine.md` §11.
+abstract final class ReferralStrings {
+  ReferralStrings._();
+
+  // ── Dashboard ────────────────────────────────────────────────────────────
+  static const String dashboardTitle = 'Referrals';
+  static const String emptyTitle = 'No active referrals';
+  static const String emptyBody =
+      'Your SLA dashboard populates after you create a referral or sync from the facility.';
+  static const String loadFailed = 'Could not load referrals';
+
+  // ── Filter chips (priority bands) ────────────────────────────────────────
+  static const String filterAll = 'All';
+  static const String filterCritical = 'Critical';
+  static const String filterHigh = 'High';
+  static const String filterMedium = 'Medium';
+  static const String filterLow = 'Low';
+
+  // ── SLA tier labels ──────────────────────────────────────────────────────
+  static const String tierEmergency = 'EMERGENCY';
+  static const String tierUrgent = 'URGENT';
+  static const String tierRoutine = 'ROUTINE';
+
+  // ── SLA strip / data-age badge ───────────────────────────────────────────
+  static String syncedAgo(String relative) => 'Synced $relative';
+  static String breachesCount(int n) => '$n SLA breach${n == 1 ? "" : "es"}';
+  static String escalationsCount(int n) =>
+      '$n escalation${n == 1 ? "" : "s"} pending';
+
+  // ── Critical banner ──────────────────────────────────────────────────────
+  static String criticalBannerFmt(String patientName, String tier, String detail) =>
+      'BREACHED: $patientName · $tier · $detail';
+
+  // ── Timeline node labels ─────────────────────────────────────────────────
+  static const String stepCreated = 'Created';
+  static const String stepAcknowledged = 'Acked';
+  static const String stepInTransit = 'Travel';
+  static const String stepArrived = 'Arrived';
+  static const String stepTreatmentStarted = 'Treated';
+  static const String stepClosedRecovered = 'Recovered';
+  static const String stepClosedDeceased = 'Deceased';
+  static const String stepBreached = 'BREACH';
+  static const String stepPaused = 'Paused';
+  static const String stepRefused = 'Refused';
+  static const String stepTargetUnreachable = 'Target unreachable';
+  static const String stepDuplicate = 'Duplicate';
+  static const String stepTransportDeclined = 'Transport declined';
+  static const String stepDiverted = 'Diverted';
+
+  // ── Driver labels (extends RiskRationale._formatDriver vocabulary) ──────
+  static String formatDriver(String driver) {
+    final parts = driver.split(':');
+    final key = parts[0];
+    final value = parts.length > 1 ? parts[1] : null;
+    switch (key) {
+      case 'sla-breached':
+        return 'SLA breached';
+      case 'emergency-dx':
+        return 'Emergency diagnosis';
+      case 'no-arrival':
+        return 'No arrival recorded';
+      case 'delay-48h':
+        return 'Delay over 48 h';
+      case 'missed-follow-up':
+        return value != null ? '$value missed follow-up(s)' : 'Missed follow-up';
+      case 'escalation-pending':
+        return 'Escalation pending';
+      case 'under-5':
+        return value != null ? 'Under-5 child (age $value)' : 'Under-5 child';
+      case 'pregnancy':
+        return 'Pregnancy / ANC enrolled';
+      default:
+        return driver;
+    }
+  }
+
+  // ── Card labels ──────────────────────────────────────────────────────────
+  static const String tapToSeeWhy = 'Tap to see why';
+  static const String rationaleSheetTitle = 'Why is this referral prioritized?';
+  static const String modelVersionLabel = 'Model version';
+  static String agedFmt(String relative) => 'referred $relative ago';
+  static String overdueFmt(String relative) => 'overdue by $relative';
+
+  // ── Dashboard chip on home screen ────────────────────────────────────────
+  static String dashboardChipCritical(int n) => '$n critical referrals';
+  static String dashboardChipActive(int n) => '$n active referrals';
+
+  // ── Notification copy (Bangla-ready: titles only here) ───────────────────
+  static const String notifCriticalTitle = '🔴 SLA BREACHED';
+  static const String notifWarningTitle = '🟠 Referral warning';
+  static const String notifCompletionTitle = '🟢 Treatment completed';
+  static String notifCriticalBody(String patient, String reason) =>
+      '$patient — $reason';
+  static String notifWarningBody(String patient, String reason) =>
+      '$patient — $reason';
+  static String notifCompletionBody(String patient) =>
+      '$patient discharged successfully.';
+
+  // ── Permission rationale (in-app card before OS prompt) ─────────────────
+  static const String permissionRationaleTitle = 'Enable referral alerts';
+  static const String permissionRationaleBody =
+      'Get notified when a referral is delayed or breaches its SLA — even when the app is closed.';
+  static const String permissionRationaleAction = 'Enable';
+  static const String permissionRationaleDismiss = 'Not now';
+
+  // ── Triage Card — Priority Badges ────────────────────────────────────────
+  static const String badgeCritical = '🔴 CRITICAL';
+  static const String badgeHigh = '🟠 HIGH';
+  static const String badgeMedium = '🟡 MEDIUM';
+  static const String badgeLow = '🟢 LOW';
+  static const String badgeCompleted = '🟢 COMPLETED';
+
+  // ── Triage Card — SLA Status Layer ───────────────────────────────────────
+  static String slaBreached(String overdue) => 'SLA BREACHED +$overdue';
+  static String slaWarning(String remaining) => 'SLA: $remaining left';
+  static const String slaCompleted = 'Completed ✓';
+  static const String slaOnTrack = 'On Track';
+
+  // ── Triage Card — Referral Metadata ──────────────────────────────────────
+  static const String metaReferred = 'Referred:';
+  static const String metaCondition = 'Condition:';
+  static const String metaFacility = 'Facility:';
+  static const String metaProgramme = 'Programme:';
+  static const String metaAssigned = 'Assigned:';
+  static const String metaReferralId = 'Ref ID:';
+
+  // ── Triage Card — Operational Status ─────────────────────────────────────
+  static const String statusLabel = 'Status:';
+  static const String statusNotArrived = 'Not arrived at facility';
+  static const String statusCheckedIn = 'Checked in';
+  static const String statusAwaitingReview = 'Awaiting review';
+  static const String statusDischarged = 'Discharged';
+  static const String statusInTreatment = 'In treatment';
+  static String overdueStatus(String days) => '$days overdue';
+  static String slaWasStatus(String days) => 'SLA was $days';
+  static String waitingStatus(String duration) => '$duration waiting';
+  static String followUpDue(String date) => 'Follow-up due $date';
+  static const String prescriptionShared = 'Prescription shared';
+
+  // ── Triage Card — Operational Status Hints ───────────────────────────────
+  static const String hintNotCheckedIn = '📍 Not checked in';
+  static const String hintTransportBarrier = '🚌 Possible transport barrier';
+  static const String hintAtFacility = '🏥 At facility';
+  static String hintQueueWait(String department, String duration) =>
+      '⏳ $department queue $duration';
+  static const String hintCareCompleted = '✅ Care completed';
+  static String hintFollowUp(String duration) => '📋 Follow-up in $duration';
+
+  // ── Triage Card — Timeline Progress ──────────────────────────────────────
+  static const String timelineSKVisit = 'SK Visit';
+  static const String timelineReferred = 'Referred';
+  static const String timelineArrived = 'Arrived';
+  static const String timelineOBReview = 'OB Review';
+  static const String timelineTreated = 'Treated';
+  static const String timelineDischarged = 'Discharged';
+  static const String timelineWaiting = 'Waiting';
+
+  // ── Triage Card — Action Layer ───────────────────────────────────────────
+  static const String actionCallFamily = 'Call Family';
+  static const String actionUpdateStatus = 'Update Status';
+  static const String actionLocate = 'Locate';
+  static const String actionEscalate = 'Escalate';
+  static const String actionCallFacility = 'Call Facility';
+  static const String actionUpdateQueue = 'Update Queue';
+  static const String actionOpenReferral = 'Open Referral';
+  static const String actionViewPrescription = 'View Prescription';
+  static const String actionScheduleFollowUp = 'Schedule Follow-up';
+  static const String actionSendReminder = 'Send Reminder';
+  static const String actionCloseCase = 'Close Case';
+
+  // ── Contact Sheet ────────────────────────────────────────────────────────
+  static String contactSheetTitle(String name) => 'Contact $name';
+  static const String contactCall = 'Call';
+  static const String contactCallSubtitle = 'Open phone dialer';
+  static const String contactWhatsApp = 'WhatsApp';
+  static const String contactWhatsAppSubtitle = 'Send message via WhatsApp';
+  static const String contactSms = 'SMS';
+  static const String contactSmsSubtitle = 'Send text message';
+
+  // ── Contact Messages ─────────────────────────────────────────────────────
+  static String msgGreeting(String name) => 'Hello $name, ';
+  static const String msgIntro = 'this is UHIS Health Worker. ';
+  static String msgReferralFor(String diagnosis) =>
+      'Regarding your referral for $diagnosis, ';
+  static const String msgReferralGeneric = 'Regarding your health referral, ';
+  static const String msgOverdue =
+      'we noticed your appointment is overdue. Please contact us or visit the health facility as soon as possible. ';
+  static const String msgNewReferral =
+      'please ensure you visit the referred health facility at your earliest convenience. ';
+  static const String msgInTreatment =
+      'we are following up on your treatment progress. Please let us know if you need any assistance. ';
+  static const String msgCompleted =
+      'we hope you are recovering well. Please attend your follow-up appointment as scheduled. ';
+  static const String msgGenericOutreach =
+      'we are reaching out regarding your health care. ';
+  static const String msgClosing =
+      'Reply to this message or call us for any queries. Thank you.';
+
+  // ── Error Messages ───────────────────────────────────────────────────────
+  static const String errorNoPhone = 'No phone number available';
+  static const String errorPhoneDialer = 'Could not open phone dialer';
+  static const String errorWhatsApp = 'Could not open WhatsApp. Is it installed?';
+  static const String errorSms = 'Could not open SMS app';
+  static const String errorMaps = 'Could not open Google Maps';
+  static String errorOpening(String type, String error) =>
+      'Error opening $type: $error';
+
+  // ── Location Sheet ───────────────────────────────────────────────────────
+  static String locateSheetTitle(String name) => 'Locate $name';
+  static const String locateOpenMaps = 'Open in Google Maps';
+  static const String locateOpenMapsSubtitle = 'View location on map';
+  static const String locateGetDirections = 'Get Directions';
+  static const String locateGetDirectionsSubtitle = 'Navigate to patient';
 }

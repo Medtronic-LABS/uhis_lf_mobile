@@ -16,11 +16,11 @@ class AppConfig {
   );
 
   /// Value of the `client` request header expected by the auth pipeline.
+  /// `mob` for mobile app (community-health field accounts).
   /// `web` for desktop browsers + dev-loaned web user accounts.
-  /// `mob` for community-health field accounts (when those are seeded).
   static const String apiClient = String.fromEnvironment(
     'API_CLIENT',
-    defaultValue: 'web',
+    defaultValue: 'mob',
   );
 
   /// HmacSHA512 key the React frontend (and now this app) uses to hash the
@@ -55,6 +55,23 @@ class AppConfig {
     defaultValue: '',
   );
 
+  /// Dev-only: comma-separated list of sub-village IDs for the dev user.
+  /// The household/member list APIs filter by sub-village, not union.
+  static const String devSubVillageIds = String.fromEnvironment(
+    'DEV_SUB_VILLAGE_IDS',
+    defaultValue: '',
+  );
+
+  /// Parsed list of dev sub-village IDs.
+  static List<int> get devSubVillageIdList {
+    if (devSubVillageIds.isEmpty) return const [];
+    return devSubVillageIds
+        .split(',')
+        .map((s) => int.tryParse(s.trim()))
+        .whereType<int>()
+        .toList();
+  }
+
   static bool get hasDevCredentials =>
       devUser.isNotEmpty && devPass.isNotEmpty;
 
@@ -69,5 +86,20 @@ class AppConfig {
   static const int pinMaxAttempts = int.fromEnvironment(
     'PIN_MAX_ATTEMPTS',
     defaultValue: 5,
+  );
+
+  /// Page size used when paginating the spice-service list endpoints during
+  /// the offline-cache sync. The backend caps a page at 1000; a smaller page
+  /// gives smoother progress feedback over slow links.
+  static const int syncPageSize = int.fromEnvironment(
+    'SYNC_PAGE_SIZE',
+    defaultValue: 500,
+  );
+
+  /// Safety cap on pages fetched per entity in a single sync, so a runaway
+  /// (non-terminating) backend response cannot loop forever.
+  static const int syncMaxPages = int.fromEnvironment(
+    'SYNC_MAX_PAGES',
+    defaultValue: 200,
   );
 }
