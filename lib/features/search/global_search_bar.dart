@@ -1,12 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
+import '../household/household_detail_screen.dart';
 import 'global_search_repository.dart';
 import 'household_search_repository.dart';
-import 'patient_search_repository.dart';
+import 'member_search_repository.dart';
 
 class GlobalSearchBar extends StatefulWidget {
   const GlobalSearchBar({super.key});
@@ -62,7 +64,7 @@ class _SearchViewState extends State<_SearchView> {
   String _lastQuery = '';
   bool _busy = false;
   GlobalSearchHits? _hits;
-  HouseholdSearchProgress? _progress;
+  String? _progressText;
   Object? _error;
 
   @override
@@ -98,7 +100,7 @@ class _SearchViewState extends State<_SearchView> {
         setState(() {
           _busy = false;
           _hits = null;
-          _progress = null;
+          _progressText = null;
           _error = null;
           _lastQuery = q;
         });
@@ -109,7 +111,7 @@ class _SearchViewState extends State<_SearchView> {
       setState(() {
         _busy = true;
         _error = null;
-        _progress = null;
+        _progressText = null;
         _lastQuery = q;
       });
     }
@@ -118,9 +120,14 @@ class _SearchViewState extends State<_SearchView> {
       final hits = await repo.search(
         query: q,
         scope: _scope,
+        onMemberProgress: (p) {
+          if (token == _token && mounted) {
+            setState(() => _progressText = 'Scanning members ${p.loaded}/${p.cap}…');
+          }
+        },
         onHouseholdProgress: (p) {
           if (token == _token && mounted) {
-            setState(() => _progress = p);
+            setState(() => _progressText = SearchStrings.scanningHouseholds(p.loaded, p.cap));
           }
         },
       );
@@ -147,47 +154,57 @@ class _SearchViewState extends State<_SearchView> {
   @override
   Widget build(BuildContext context) {
     final hits = _hits;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-          child: Wrap(
-            spacing: 8,
-            children: [
-              ChoiceChip(
-                label: const Text(SearchStrings.scopeAll),
-                selected: _scope == SearchScope.all,
-                onSelected: (_) => _setScope(SearchScope.all),
-              ),
-              ChoiceChip(
-                label: const Text(SearchStrings.scopePatients),
-                selected: _scope == SearchScope.patients,
-                onSelected: (_) => _setScope(SearchScope.patients),
-              ),
-              ChoiceChip(
-                label: const Text(SearchStrings.scopeHouseholds),
-                selected: _scope == SearchScope.households,
-                onSelected: (_) => _setScope(SearchScope.households),
-              ),
-            ],
-          ),
-        ),
-        if (_busy)
-          const LinearProgressIndicator()
-        else
-          const SizedBox(height: 4),
-        if (_busy && _progress != null && _scope != SearchScope.patients)
+    // Use a SizedBox to provide bounded height since this widget is rendered
+    // inside SearchAnchor's suggestionsBuilder (which uses a ListView).
+    // Subtract approximate height for the search bar (~100) and status bar.
+    final availableHeight = MediaQuery.of(context).size.height -
+        MediaQuery.of(context).padding.top -
+        kToolbarHeight -
+        56; // search bar height
+    return SizedBox(
+      height: availableHeight,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Text(
-              SearchStrings.scanningHouseholds(_progress!.loaded, _progress!.cap),
-              style: Theme.of(context).textTheme.bodySmall,
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: Wrap(
+              spacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text(SearchStrings.scopeAll),
+                  selected: _scope == SearchScope.all,
+                  onSelected: (_) => _setScope(SearchScope.all),
+                ),
+                ChoiceChip(
+                  label: const Text(SearchStrings.scopePatients),
+                  selected: _scope == SearchScope.patients,
+                  onSelected: (_) => _setScope(SearchScope.patients),
+                ),
+                ChoiceChip(
+                  label: const Text(SearchStrings.scopeHouseholds),
+                  selected: _scope == SearchScope.households,
+                  onSelected: (_) => _setScope(SearchScope.households),
+                ),
+              ],
             ),
           ),
-        const Divider(height: 1),
-        Expanded(child: _body(context, hits)),
-      ],
+          if (_busy)
+            const LinearProgressIndicator()
+          else
+            const SizedBox(height: 4),
+          if (_busy && _progressText != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Text(
+                _progressText!,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          const Divider(height: 1),
+          Expanded(child: _body(context, hits)),
+        ],
+      ),
     );
   }
 
@@ -222,7 +239,7 @@ class _SearchViewState extends State<_SearchView> {
     if (hits == null) {
       return const SizedBox.shrink();
     }
-    final showPatients = _scope != SearchScope.households;
+    final showMembers = _scope != SearchScope.households;
     final showHouseholds = _scope != SearchScope.patients;
     if (hits.isEmpty && !_busy) {
       // Distinguish a failed search from a genuinely empty result.
@@ -231,12 +248,20 @@ class _SearchViewState extends State<_SearchView> {
     }
     return ListView(
       children: [
-        if (showPatients) ...[
-          _SectionHeader(label: SearchStrings.scopePatients, count: hits.patients.length),
-          if (hits.patients.isEmpty)
+        if (showMembers) ...[
+          _SectionHeader(label: SearchStrings.scopePatients, count: hits.members.length),
+          if (hits.members.isEmpty)
             const _EmptyRow(SearchStrings.noPatientMatches)
           else
-            ...hits.patients.map((p) => _PatientTile(hit: p, onTap: _closeWith(SearchStrings.patientDetailNotImplemented))),
+            ...hits.members.map((m) => _MemberTile(
+              hit: m,
+              onTap: () => _navigateToMember(m),
+            )),
+          if (hits.membersTruncated)
+            const ListTile(
+              leading: Icon(Icons.info_outline),
+              title: Text(SearchStrings.resultsCapped),
+            ),
         ],
         if (showHouseholds) ...[
           _SectionHeader(label: SearchStrings.scopeHouseholds, count: hits.households.length),
@@ -246,7 +271,7 @@ class _SearchViewState extends State<_SearchView> {
             ...hits.households.map(
               (h) => _HouseholdTile(
                 hit: h,
-                onTap: _closeWith(SearchStrings.householdDetailNotImplemented),
+                onTap: () => _navigateToHousehold(h),
               ),
             ),
           if (hits.householdsTruncated)
@@ -257,6 +282,49 @@ class _SearchViewState extends State<_SearchView> {
         ],
       ],
     );
+  }
+
+  void _navigateToMember(MemberHit hit) {
+    widget.onClose();
+    if (hit.id == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Member ID not available')),
+      );
+      return;
+    }
+    context.push('/patient/${hit.id}', extra: {
+      'id': hit.id,
+      'firstName': hit.name,
+      'age': hit.age,
+      'gender': hit.gender,
+      'phoneNumber': hit.phone,
+      'idCode': hit.nid,
+      'householdId': hit.householdId,
+      'householdName': hit.householdName,
+      'householdNo': hit.householdNo,
+    });
+  }
+
+  void _navigateToHousehold(HouseholdHit hit) {
+    widget.onClose();
+    if (hit.id == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Household ID not available')),
+      );
+      return;
+    }
+    // Convert to HouseholdDetailData for the detail screen
+    final detailData = hit.rawJson != null
+        ? HouseholdDetailData.fromJson(hit.rawJson!)
+        : HouseholdDetailData(
+            id: hit.id,
+            name: hit.name,
+            householdNo: hit.householdNo,
+            village: hit.village,
+            memberCount: hit.memberCount ?? 0,
+            members: const [],
+          );
+    context.push('/household/${hit.id}', extra: detailData);
   }
 
   VoidCallback _closeWith(String snack) {
@@ -297,9 +365,9 @@ class _EmptyRow extends StatelessWidget {
       );
 }
 
-class _PatientTile extends StatelessWidget {
-  const _PatientTile({required this.hit, required this.onTap});
-  final PatientHit hit;
+class _MemberTile extends StatelessWidget {
+  const _MemberTile({required this.hit, required this.onTap});
+  final MemberHit hit;
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) {
@@ -310,6 +378,7 @@ class _PatientTile extends StatelessWidget {
         if (hit.age != null) SearchStrings.age(hit.age!),
         if (hit.phone != null) hit.phone!,
         if (hit.nid != null) SearchStrings.nid(hit.nid!),
+        if (hit.householdName != null) hit.householdName!,
       ].join(' · ')),
       onTap: onTap,
     );

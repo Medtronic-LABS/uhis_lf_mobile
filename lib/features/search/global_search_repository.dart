@@ -1,37 +1,40 @@
 import 'household_search_repository.dart';
-import 'patient_search_repository.dart';
+import 'member_search_repository.dart';
 
 enum SearchScope { all, patients, households }
 
 class GlobalSearchHits {
   GlobalSearchHits({
-    this.patients = const [],
+    this.members = const [],
     this.households = const [],
+    this.membersScanned = 0,
+    this.membersTruncated = false,
     this.householdsScanned = 0,
     this.householdsTruncated = false,
     this.error,
   });
 
-  final List<PatientHit> patients;
+  final List<MemberHit> members;
   final List<HouseholdHit> households;
+  final int membersScanned;
+  final bool membersTruncated;
   final int householdsScanned;
   final bool householdsTruncated;
   final Object? error;
 
-  bool get isEmpty => patients.isEmpty && households.isEmpty;
+  bool get isEmpty => members.isEmpty && households.isEmpty;
 }
 
 class GlobalSearchRepository {
-  GlobalSearchRepository(this._patient, this._household);
+  GlobalSearchRepository(this._member, this._household);
 
-  final PatientSearchRepository _patient;
+  final MemberSearchRepository _member;
   final HouseholdSearchRepository _household;
-
-  static const _digitsOnly = r'^\d+$';
 
   Future<GlobalSearchHits> search({
     required String query,
     SearchScope scope = SearchScope.all,
+    void Function(MemberSearchProgress)? onMemberProgress,
     void Function(HouseholdSearchProgress)? onHouseholdProgress,
   }) async {
     final q = query.trim();
@@ -40,16 +43,22 @@ class GlobalSearchRepository {
     // Each source degrades to an empty result on failure so one failing source
     // never blanks the other — but the error is captured (not swallowed) so the
     // UI can tell "no matches" apart from "search failed".
-    Object? patientError;
+    Object? memberError;
     Object? householdError;
 
-    Future<List<PatientHit>> runPatients() async {
-      final field = _detectPatientField(q);
+    Future<MemberSearchResult> runMembers() async {
       try {
-        return await _patient.search(field: field, query: q);
+        return await _member.search(
+          query: q,
+          onProgress: onMemberProgress,
+        );
       } catch (e) {
-        patientError = e;
-        return const [];
+        memberError = e;
+        return MemberSearchResult(
+          matches: const [],
+          totalScanned: 0,
+          truncated: false,
+        );
       }
     }
 
@@ -78,8 +87,14 @@ class GlobalSearchRepository {
 
     switch (scope) {
       case SearchScope.patients:
-        final p = await runPatients();
-        return GlobalSearchHits(patients: p, error: patientError);
+        // "Patients" scope searches all members (name, phone, NID, household)
+        final m = await runMembers();
+        return GlobalSearchHits(
+          members: m.matches,
+          membersScanned: m.totalScanned,
+          membersTruncated: m.truncated,
+          error: memberError,
+        );
       case SearchScope.households:
         final h = await runHouseholds();
         return GlobalSearchHits(
@@ -89,30 +104,21 @@ class GlobalSearchRepository {
           error: householdError,
         );
       case SearchScope.all:
-        final results = await Future.wait([runPatients(), runHouseholds()]);
-        final p = results[0] as List<PatientHit>;
+        final results = await Future.wait([runMembers(), runHouseholds()]);
+        final m = results[0] as MemberSearchResult;
         final h = results[1] as HouseholdSearchResult;
         // Surface an error only when both sources failed and nothing returned;
         // a partial result is shown without an error banner.
-        final bothFailed = patientError != null && householdError != null;
+        final bothFailed = memberError != null && householdError != null;
         return GlobalSearchHits(
-          patients: p,
+          members: m.matches,
+          membersScanned: m.totalScanned,
+          membersTruncated: m.truncated,
           households: h.matches,
           householdsScanned: h.totalScanned,
           householdsTruncated: h.truncated,
-          error: bothFailed ? patientError : null,
+          error: bothFailed ? memberError : null,
         );
     }
-  }
-
-  PatientSearchField _detectPatientField(String q) {
-    if (RegExp(_digitsOnly).hasMatch(q) && q.length >= 6) {
-      return PatientSearchField.phone;
-    }
-    if (q.length >= 4 && RegExp(r'^[A-Za-z0-9-]+$').hasMatch(q) &&
-        RegExp(r'\d').hasMatch(q) && RegExp(r'[A-Za-z]').hasMatch(q)) {
-      return PatientSearchField.nid;
-    }
-    return PatientSearchField.name;
   }
 }

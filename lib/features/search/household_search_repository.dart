@@ -1,15 +1,25 @@
 import '../../core/api/api_repository.dart';
 import '../../core/api/endpoints.dart';
+import '../../core/auth/auth_repository.dart';
 
 enum HouseholdSearchField { name, householdNo }
 
 class HouseholdHit {
-  HouseholdHit({this.name, this.householdNo, this.village, this.memberCount});
+  HouseholdHit({
+    this.id,
+    this.name,
+    this.householdNo,
+    this.village,
+    this.memberCount,
+    this.rawJson,
+  });
 
+  final String? id;
   final String? name;
   final String? householdNo;
   final String? village;
   final int? memberCount;
+  final Map<String, dynamic>? rawJson;
 
   static HouseholdHit fromJson(Map json) {
     String? str(String k) {
@@ -29,10 +39,12 @@ class HouseholdHit {
     }
 
     return HouseholdHit(
+      id: str('id'),
       name: str('name'),
       householdNo: str('householdNo'),
       village: str('village'),
       memberCount: members,
+      rawJson: json is Map<String, dynamic> ? json : Map<String, dynamic>.from(json),
     );
   }
 }
@@ -55,7 +67,12 @@ class HouseholdSearchResult {
 }
 
 class HouseholdSearchRepository extends ApiRepository {
-  HouseholdSearchRepository(super.api);
+  HouseholdSearchRepository(super.api, this._authRepo);
+
+  final AuthRepository _authRepo;
+
+  /// Cached sub-village IDs fetched from the auth repository.
+  List<int>? _cachedSubVillageIds;
 
   static const int pageSize = 100;
   static const int maxPages = 5;
@@ -78,19 +95,39 @@ class HouseholdSearchRepository extends ApiRepository {
     int scanned = 0;
     int skip = 0;
     bool ranOut = false;
+    // Get sub-village IDs for the current user
+    _cachedSubVillageIds ??= await _authRepo.subVillageIds();
+    final subVillageIds = _cachedSubVillageIds!;
+    
+    // ignore: avoid_print
+    print('[HouseholdSearch] query="$q" field=$field villageIds=$subVillageIds');
+
     for (int page = 0; page < maxPages; page++) {
       onProgress?.call(HouseholdSearchProgress(scanned, pageSize * maxPages));
+      final reqData = <String, dynamic>{
+        'skip': skip,
+        'limit': pageSize,
+        'tenantId': api.tenantIdAsNum,
+      };
+      if (subVillageIds.isNotEmpty) {
+        reqData['villageIds'] = subVillageIds;
+      }
       final body = await postOk(
         Endpoints.householdList,
-        data: {
-          'skip': skip,
-          'limit': pageSize,
-          'tenantId': api.tenantIdAsNum,
-        },
+        data: reqData,
         action: 'Household list',
       );
       final list = extractList(body);
+      // ignore: avoid_print
+      print('[HouseholdSearch] page=$page got=${list.length} households');
       scanned += list.length;
+      
+      // Log first item to see structure
+      if (page == 0 && list.isNotEmpty) {
+        // ignore: avoid_print
+        print('[HouseholdSearch] sample keys: ${(list.first as Map).keys.toList()}');
+      }
+      
       for (final raw in list) {
         if (raw is! Map) continue;
         final hit = HouseholdHit.fromJson(raw);
@@ -109,6 +146,8 @@ class HouseholdSearchRepository extends ApiRepository {
       if (list.length < pageSize) break;
       skip += pageSize;
     }
+    // ignore: avoid_print
+    print('[HouseholdSearch] found ${matches.length} matches, scanned=$scanned');
     onProgress?.call(HouseholdSearchProgress(scanned, pageSize * maxPages));
     return HouseholdSearchResult(
       matches: matches,
