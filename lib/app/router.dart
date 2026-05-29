@@ -3,11 +3,16 @@ import 'package:go_router/go_router.dart';
 
 import '../core/auth/auth_state.dart';
 import '../features/dashboard/dashboard_screen.dart';
+import '../features/household/household_detail_screen.dart';
+import '../features/household/household_list_screen.dart';
 import '../features/lock/lock_screen.dart';
 import '../features/login/login_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
+import '../features/patient/patient_context_screen.dart';
 import '../features/pin/pin_setup_screen.dart';
 import '../features/pin/pin_unlock_screen.dart';
+import '../features/referral/referral_detail_screen.dart';
+import '../features/referral/referral_list_screen.dart';
 
 GoRouter buildRouter(AuthState auth) {
   return GoRouter(
@@ -39,6 +44,10 @@ GoRouter buildRouter(AuthState auth) {
           // /pin-setup and /onboarding are signed-in destinations,
           // so they are intentionally NOT redirected away.
           if (loc.startsWith('/login') || loc == '/' || loc == '/lock') {
+            // First-run: redirect to onboarding if not completed yet
+            if (!auth.onboardingComplete && !auth.pinEnabled) {
+              return '/onboarding';
+            }
             return '/dashboard';
           }
           return null;
@@ -74,6 +83,56 @@ GoRouter buildRouter(AuthState auth) {
       GoRoute(
         path: '/pin-unlock',
         builder: (_, __) => const PinUnlockScreen(),
+      ),
+      GoRoute(
+        path: '/households',
+        builder: (_, __) => const HouseholdListScreen(
+          mode: HouseholdListMode.households,
+        ),
+      ),
+      GoRoute(
+        path: '/members',
+        builder: (_, __) => const HouseholdListScreen(
+          mode: HouseholdListMode.members,
+        ),
+      ),
+      GoRoute(
+        path: '/household/:id',
+        builder: (_, state) {
+          final extra = state.extra;
+          if (extra is HouseholdDetailData) {
+            return HouseholdDetailScreen(household: extra);
+          }
+          // Fallback: create minimal data from route params
+          final id = state.pathParameters['id'] ?? '';
+          return HouseholdDetailScreen(
+            household: HouseholdDetailData(
+              id: id,
+              householdNo: id,
+              name: null,
+              village: null,
+              memberCount: 0,
+              members: const [],
+            ),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/patient/:id',
+        builder: (_, state) => PatientContextScreen(
+          patientId: state.pathParameters['id']!,
+          memberData: state.extra as Map<String, dynamic>?,
+        ),
+      ),
+      GoRoute(
+        path: '/patient/:id/referrals',
+        builder: (_, state) => ReferralDetailScreen(
+          patientId: state.pathParameters['id']!,
+        ),
+      ),
+      GoRoute(
+        path: '/referrals',
+        builder: (_, __) => const ReferralListScreen(),
       ),
     ],
   );
