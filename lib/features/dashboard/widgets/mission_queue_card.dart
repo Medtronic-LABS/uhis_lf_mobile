@@ -66,9 +66,10 @@ class MissionQueueCard extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          item.priority.emoji,
-                          style: const TextStyle(fontSize: 10),
+                        Icon(
+                          Icons.circle,
+                          size: 8,
+                          color: priorityColor,
                         ),
                         const SizedBox(width: 3),
                         Text(
@@ -120,7 +121,7 @@ class MissionQueueCard extends StatelessWidget {
               // Patient info row
               Row(
                 children: [
-                  // Avatar
+                  // Avatar with programme icon
                   Container(
                     width: 40,
                     height: 40,
@@ -129,9 +130,10 @@ class MissionQueueCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Center(
-                      child: Text(
-                        item.programmeEmoji,
-                        style: const TextStyle(fontSize: 20),
+                      child: Icon(
+                        _programmeIcon(item.programmes),
+                        size: 22,
+                        color: priorityColor,
                       ),
                     ),
                   ),
@@ -264,6 +266,14 @@ class MissionQueueCard extends StatelessWidget {
     if (lower.contains('follow')) return Icons.event_repeat;
     if (lower.contains('missed')) return Icons.event_busy;
     return Icons.assignment;
+  }
+
+  IconData _programmeIcon(Set<Programme> programmes) {
+    if (programmes.contains(Programme.imci)) return Icons.child_care;
+    if (programmes.contains(Programme.anc)) return Icons.pregnant_woman;
+    if (programmes.contains(Programme.ncd)) return Icons.medication;
+    if (programmes.contains(Programme.tb)) return Icons.air;
+    return Icons.person;
   }
 }
 

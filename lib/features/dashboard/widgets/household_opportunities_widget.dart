@@ -236,7 +236,7 @@ class _ServiceChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final (emoji, color) = _roleInfo(role);
+    final (icon, color) = _roleInfo(role);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -250,7 +250,7 @@ class _ServiceChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(emoji, style: const TextStyle(fontSize: 12)),
+          Icon(icon, size: 14, color: color),
           const SizedBox(width: 4),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -277,20 +277,20 @@ class _ServiceChip extends StatelessWidget {
     );
   }
 
-  (String, Color) _roleInfo(String role) {
+  (IconData, Color) _roleInfo(String role) {
     final lower = role.toLowerCase();
     if (lower.contains('mother') || lower.contains('wife')) {
-      return ('👩', const Color(0xFFEC4899)); // pink
+      return (Icons.woman, const Color(0xFFEC4899)); // pink
     }
     if (lower.contains('father') || lower.contains('husband')) {
-      return ('👨', const Color(0xFF3B82F6)); // blue
+      return (Icons.man, const Color(0xFF3B82F6)); // blue
     }
     if (lower.contains('child') || lower.contains('son') || lower.contains('daughter')) {
-      return ('👶', const Color(0xFF22C55E)); // green
+      return (Icons.child_care, const Color(0xFF22C55E)); // green
     }
     if (lower.contains('elder') || lower.contains('grand')) {
-      return ('👴', const Color(0xFF6B7280)); // gray
+      return (Icons.elderly, const Color(0xFF6B7280)); // gray
     }
-    return ('👤', const Color(0xFF6B7280));
+    return (Icons.person, const Color(0xFF6B7280));
   }
 }

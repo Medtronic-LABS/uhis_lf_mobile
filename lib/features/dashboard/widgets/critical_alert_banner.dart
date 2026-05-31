@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/models/mission_queue_item.dart';
+import '../../../core/models/programme.dart';
 
 /// Critical Alert Banner — sticky banner for urgent cases.
 ///
@@ -122,7 +123,7 @@ class CriticalAlertBanner extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
-                      // Avatar
+                      // Avatar with programme icon
                       Container(
                         width: 36,
                         height: 36,
@@ -131,9 +132,10 @@ class CriticalAlertBanner extends StatelessWidget {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Center(
-                          child: Text(
-                            topAlert.programmeEmoji,
-                            style: const TextStyle(fontSize: 18),
+                          child: Icon(
+                            _programmeIcon(topAlert.programmes),
+                            size: 20,
+                            color: Colors.white,
                           ),
                         ),
                       ),
@@ -236,6 +238,14 @@ class CriticalAlertBanner extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  IconData _programmeIcon(Set<Programme> programmes) {
+    if (programmes.contains(Programme.imci)) return Icons.child_care;
+    if (programmes.contains(Programme.anc)) return Icons.pregnant_woman;
+    if (programmes.contains(Programme.ncd)) return Icons.medication;
+    if (programmes.contains(Programme.tb)) return Icons.air;
+    return Icons.person;
   }
 
   String _alertTitle(MissionQueueItem item) {
