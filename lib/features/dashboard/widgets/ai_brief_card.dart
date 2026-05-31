@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/models/mission_brief.dart';
@@ -71,7 +72,7 @@ class _AIBriefCardState extends State<AIBriefCard> {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  MissionDashboardStrings.aiBriefTitle,
+                  'Today · ${DateFormat('d MMM').format(DateTime.now())}',
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
                         fontWeight: FontWeight.w600,
                         color: scheme.onSurface,
