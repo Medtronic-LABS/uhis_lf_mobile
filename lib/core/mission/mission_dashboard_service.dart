@@ -146,6 +146,9 @@ class MissionDashboardService {
     // Build risk factors list
     final riskFactors = _buildRiskFactors(data);
 
+    // Estimate distance: ~0.5 km average between households in rural areas
+    final estimatedDistanceKm = totalVisits * 0.5;
+
     return MissionBrief(
       visitsRecommended: totalVisits,
       childDangerCases: childDangerCases,
@@ -153,6 +156,7 @@ class MissionDashboardService {
       ancFollowUps: ancFollowUps,
       highRiskDiabeticPatients: diabeticHighRisk,
       expectedWorkloadHours: workloadHours,
+      estimatedDistanceKm: estimatedDistanceKm,
       priorityLevel: priorityLevel,
       riskFactors: riskFactors,
       computedAt: now,

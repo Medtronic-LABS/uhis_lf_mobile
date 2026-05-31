@@ -197,6 +197,25 @@ class _AIBriefCardState extends State<AIBriefCard> {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          Icon(Icons.directions_walk, size: 14, color: scheme.onSurfaceVariant),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${brief.estimatedDistanceKm.toStringAsFixed(1)} km',
+                            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: scheme.onSurface,
+                                ),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        width: 1,
+                        height: 16,
+                        color: scheme.outlineVariant,
+                      ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                           Icon(Icons.flag, size: 14, color: accentColor),
                           const SizedBox(width: 4),
                           Text(

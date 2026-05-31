@@ -34,6 +34,7 @@ class MissionBrief {
     required this.ancFollowUps,
     required this.highRiskDiabeticPatients,
     required this.expectedWorkloadHours,
+    this.estimatedDistanceKm = 0,
     required this.priorityLevel,
     this.riskFactors = const [],
     this.computedAt,
@@ -45,6 +46,7 @@ class MissionBrief {
   final int ancFollowUps;
   final int highRiskDiabeticPatients;
   final double expectedWorkloadHours;
+  final double estimatedDistanceKm;
   final DayPriorityLevel priorityLevel;
   final List<String> riskFactors;
   final DateTime? computedAt;
