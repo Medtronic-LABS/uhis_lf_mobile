@@ -134,21 +134,21 @@ class Endpoints {
   /// patient-controller → getReferralTicket. Controller:
   /// `fhir-mapper/.../patient/controller/PatientController.java:217`.
   static const String fhirReferralTicketList =
-      '/fhir-mapper-service/patient/referral-tickets';
+      '/fhir-mapper/patient/referral-tickets';
 
   /// Create a referral ticket via fhir-mapper — produces a FHIR
   /// `ServiceRequest` server-side. Postman: FHIR Mapper →
   /// patient-controller → createReferralTicket. Controller:
   /// `fhir-mapper/.../patient/controller/PatientController.java:201`.
   static const String fhirReferralTicketCreate =
-      '/fhir-mapper-service/patient/referral-tickets/create';
+      '/fhir-mapper/patient/referral-tickets/create';
 
   /// Update a referral ticket via fhir-mapper — updates server-side
   /// `ServiceRequest.status`. Postman: FHIR Mapper → patient-controller →
   /// updateReferralTicketByMemberId. Controller:
   /// `fhir-mapper/.../patient/controller/PatientController.java:323`.
   static const String fhirReferralTicketUpdate =
-      '/fhir-mapper-service/patient/referral-tickets/update';
+      '/fhir-mapper/patient/referral-tickets/update';
 
   // ── Spice: follow-up (programme-aware overdue signals) ───────────────────
   static const String followUpList = '/spice-service/follow-up/list';
@@ -195,6 +195,32 @@ class Endpoints {
 
   /// Get CQL result by patient ID.
   static const String cqlResult = '/cql-service/cql/result';
+
+  // ── FHIR Server: direct FHIR resource access ────────────────────────────
+  /// Base path for FHIR server (via nginx gateway).
+  static const String fhirServerBase = '/fhir-server/fhir';
+
+  /// Get all resources for a patient (Patient/$everything).
+  /// FHIR R4: Returns a Bundle with Patient, Observations, Conditions, etc.
+  static String fhirPatientEverything(String patientId) =>
+      '/fhir-server/fhir/Patient/$patientId/\$everything';
+
+  /// Get patient by FHIR ID.
+  static String fhirPatient(String patientId) =>
+      '/fhir-server/fhir/Patient/$patientId';
+
+  /// Get encounter with all related resources.
+  static String fhirEncounterEverything(String encounterId) =>
+      '/fhir-server/fhir/Encounter/$encounterId/\$everything';
+
+  /// Search ServiceRequests (referrals) for a patient.
+  /// Returns FHIR Bundle with ServiceRequest resources.
+  static String fhirServiceRequestByPatient(String patientId) =>
+      '/fhir-server/fhir/ServiceRequest?subject=Patient/$patientId&_count=100';
+
+  /// Search ServiceRequests (referrals) by village identifier.
+  static String fhirServiceRequestByVillage(String villageId) =>
+      '/fhir-server/fhir/ServiceRequest?identifier=http://mdtlabs.com/village-id|$villageId&_count=100';
 
   // ── Offline-service: bulk delta sync ─────────────────────────────────────
   /// GZIP'd bundle of households + members + assessments + follow-ups +

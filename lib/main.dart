@@ -29,6 +29,7 @@ import 'core/sla/priority_scorer.dart';
 import 'core/sla/sla_evaluator.dart';
 import 'core/sync/offline_sync_service.dart';
 import 'features/dashboard/dashboard_repository.dart';
+import 'features/dashboard/mission_dashboard_repository.dart';
 import 'features/lock/lock_barrier.dart';
 import 'features/patient/member_detail_repository.dart';
 import 'features/patient/patient_repository.dart';
@@ -98,6 +99,10 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final AssessmentDao _assessmentDao = AssessmentDao(widget.appDb);
   late final SyncMetaDao _syncMetaDao = SyncMetaDao(widget.appDb);
   late final RiskScoringService _risk = const RiskScoringService();
+
+  // ── Referral SLA Engine wiring (initialized early for sync) ─────────────
+  late final ReferralDao _referralDao = ReferralDao(widget.appDb);
+
   late final OfflineSyncService _sync = OfflineSyncService(
     api: widget.api,
     auth: widget.authRepo,
@@ -106,6 +111,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     followUps: _followUpDao,
     immunisations: _immDao,
     assessments: _assessmentDao,
+    referrals: _referralDao,
     syncMeta: _syncMetaDao,
   );
   late final WorklistRepository _worklist = WorklistRepository(
@@ -122,8 +128,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     sync: _sync,
   );
 
-  // ── Referral SLA Engine wiring ──────────────────────────────────────────
-  late final ReferralDao _referralDao = ReferralDao(widget.appDb);
+  // ── Referral SLA Engine wiring (ReferralDao initialized above) ──────────
   late final SlaEvaluator _slaEvaluator = const SlaEvaluator();
   late final PriorityScorer _priorityScorer = const PriorityScorer();
   late final NotificationService _notifications = NotificationService();
@@ -139,6 +144,18 @@ class _UhisNextAppState extends State<UhisNextApp>
     slaEvaluator: _slaEvaluator,
     priorityScorer: _priorityScorer,
     notificationScheduler: _repeatScheduler,
+  );
+
+  // ── Mission Dashboard wiring ──────────────────────────────────────────
+  late final MissionDashboardRepository _missionDashboard =
+      MissionDashboardRepository(
+    worklist: _worklist,
+    referrals: _referrals,
+    patients: _patientDao,
+    referralDao: _referralDao,
+    followUps: _followUpDao,
+    slaEvaluator: _slaEvaluator,
+    priorityScorer: _priorityScorer,
   );
 
   @override
@@ -216,6 +233,7 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<NotificationService>.value(value: _notifications),
         Provider<RepeatScheduler>.value(value: _repeatScheduler),
         Provider<ReferralRepository>.value(value: _referrals),
+        Provider<MissionDashboardRepository>.value(value: _missionDashboard),
         Provider<PatientDao>.value(value: _patientDao),
         Provider<MemberDetailRepository>(
             create: (_) => MemberDetailRepository(widget.api, widget.authRepo)),

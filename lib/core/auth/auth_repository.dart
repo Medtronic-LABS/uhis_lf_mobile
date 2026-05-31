@@ -9,10 +9,12 @@ import '../api/api_client.dart';
 import '../api/endpoints.dart';
 import '../config/app_config.dart';
 
-/// Hash password using SHA-256 (matching backend expectation).
-/// The backend auth-service expects a hex-encoded SHA-256 digest.
+/// Hash password using HmacSHA512 keyed by [AppConfig.passwordHashKey],
+/// matching the platform contract: backend stores
+/// `pgp_sym_encrypt(encode(hmac(plaintext, REACT_APP_PASSWORD_HASH_KEY, 'sha512'), 'hex'), <pg_key>)`.
 String hashPassword(String plaintext) {
-  return sha256.convert(utf8.encode(plaintext)).toString();
+  final hmac = Hmac(sha512, utf8.encode(AppConfig.passwordHashKey));
+  return hmac.convert(utf8.encode(plaintext)).toString();
 }
 
 /// Salted HMAC-SHA512 of the fallback PIN. The PIN is never stored in

@@ -23,10 +23,10 @@ class ProgrammeChipRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final progColors = Theme.of(context).extension<ProgrammeColors>()!;
     return SizedBox(
-      height: 40,
+      height: 34,
       child: ListView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
         children: [
           _chip(
             context,
@@ -35,7 +35,7 @@ class ProgrammeChipRow extends StatelessWidget {
             color: Theme.of(context).colorScheme.primary,
             onTap: () => onChanged(const <Programme>{}),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
           _chip(
             context,
             label: WorklistStrings.filterImci,
@@ -43,7 +43,7 @@ class ProgrammeChipRow extends StatelessWidget {
             color: progColors.imci,
             onTap: () => onChanged(<Programme>{Programme.imci}),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
           _chip(
             context,
             label: WorklistStrings.filterAnc,
@@ -51,7 +51,7 @@ class ProgrammeChipRow extends StatelessWidget {
             color: progColors.anc,
             onTap: () => onChanged(<Programme>{Programme.anc}),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
           _chip(
             context,
             label: WorklistStrings.filterNcd,
@@ -59,7 +59,7 @@ class ProgrammeChipRow extends StatelessWidget {
             color: progColors.ncd,
             onTap: () => onChanged(<Programme>{Programme.ncd}),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
           _chip(
             context,
             label: WorklistStrings.filterTb,
@@ -85,9 +85,13 @@ class ProgrammeChipRow extends StatelessWidget {
       onSelected: (_) => onTap(),
       selectedColor: color.withValues(alpha: 0.15),
       labelStyle: TextStyle(
+        fontSize: 12,
         color: selected ? color : null,
         fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
       ),
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       side: BorderSide(color: selected ? color : Theme.of(context).colorScheme.outlineVariant),
     );
   }

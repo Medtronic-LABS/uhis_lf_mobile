@@ -28,9 +28,9 @@ abstract final class AppColors {
   static const Color surfaceContainerHigh = Color(0xFFE2E8F0); // slate-200
   static const Color surfaceContainerHighest = Color(0xFFCBD5E1); // slate-300
 
-  // Brand accent (kept for primary actions)
-  static const Color primary = Color(0xFF1A6EFF);
-  static const Color primaryContainer = Color(0xFFD6E4FF);
+  // Brand accent — Apon teal (primary actions)
+  static const Color primary = Color(0xFF0E8E80); // Apon teal
+  static const Color primaryContainer = Color(0xFFD0F5F1); // Light teal
   static const Color onPrimary = Color(0xFFFFFFFF);
 
   // Semantic colors
@@ -66,9 +66,9 @@ abstract final class AppColors {
   static const Color surfaceContainerHighDark = Color(0xFF475569); // slate-600
   static const Color surfaceContainerHighestDark = Color(0xFF64748B); // slate-500
 
-  // Brand accent (adjusted for dark)
-  static const Color primaryDark = Color(0xFF60A5FA); // blue-400
-  static const Color primaryContainerDark = Color(0xFF1E3A5F); // darker blue
+  // Brand accent — Apon teal (adjusted for dark)
+  static const Color primaryDark = Color(0xFF5EC4B8); // Lighter teal for dark mode
+  static const Color primaryContainerDark = Color(0xFF0A4F47); // Darker teal
 
   // Semantic colors (dark)
   static const Color errorDark = Color(0xFFF87171); // red-400
@@ -191,6 +191,113 @@ class ProgrammeColors extends ThemeExtension<ProgrammeColors> {
   }
 }
 
+/// Urgency-based color roles for visit prioritization.
+/// Use via `Theme.of(context).extension<UrgencyTheme>()!`.
+@immutable
+class UrgencyTheme extends ThemeExtension<UrgencyTheme> {
+  const UrgencyTheme({
+    required this.visitNow,
+    required this.visitNowContainer,
+    required this.today,
+    required this.todayContainer,
+    required this.thisWeek,
+    required this.thisWeekContainer,
+    required this.routine,
+    required this.routineContainer,
+    required this.urgent,
+    required this.urgentContainer,
+  });
+
+  /// Immediate action required
+  final Color visitNow;
+  final Color visitNowContainer;
+
+  /// Due today
+  final Color today;
+  final Color todayContainer;
+
+  /// Due this week
+  final Color thisWeek;
+  final Color thisWeekContainer;
+
+  /// Routine / scheduled
+  final Color routine;
+  final Color routineContainer;
+
+  /// Urgent / critical
+  final Color urgent;
+  final Color urgentContainer;
+
+  static const UrgencyTheme light = UrgencyTheme(
+    visitNow: Color(0xFFDC2626), // red-600
+    visitNowContainer: Color(0xFFFEE2E2), // red-100
+    today: Color(0xFFD97706), // amber-600
+    todayContainer: Color(0xFFFEF3C7), // amber-100
+    thisWeek: Color(0xFF0E8E80), // Apon teal
+    thisWeekContainer: Color(0xFFD0F5F1), // Light teal
+    routine: Color(0xFF64748B), // slate-500
+    routineContainer: Color(0xFFF1F5F9), // slate-100
+    urgent: Color(0xFFDC2626), // red-600
+    urgentContainer: Color(0xFFFEE2E2), // red-100
+  );
+
+  static const UrgencyTheme dark = UrgencyTheme(
+    visitNow: Color(0xFFF87171), // red-400
+    visitNowContainer: Color(0xFF7F1D1D), // red-900
+    today: Color(0xFFFBBF24), // amber-400
+    todayContainer: Color(0xFF78350F), // amber-900
+    thisWeek: Color(0xFF5EC4B8), // Light teal
+    thisWeekContainer: Color(0xFF0A4F47), // Dark teal
+    routine: Color(0xFF94A3B8), // slate-400
+    routineContainer: Color(0xFF334155), // slate-700
+    urgent: Color(0xFFF87171), // red-400
+    urgentContainer: Color(0xFF7F1D1D), // red-900
+  );
+
+  @override
+  UrgencyTheme copyWith({
+    Color? visitNow,
+    Color? visitNowContainer,
+    Color? today,
+    Color? todayContainer,
+    Color? thisWeek,
+    Color? thisWeekContainer,
+    Color? routine,
+    Color? routineContainer,
+    Color? urgent,
+    Color? urgentContainer,
+  }) =>
+      UrgencyTheme(
+        visitNow: visitNow ?? this.visitNow,
+        visitNowContainer: visitNowContainer ?? this.visitNowContainer,
+        today: today ?? this.today,
+        todayContainer: todayContainer ?? this.todayContainer,
+        thisWeek: thisWeek ?? this.thisWeek,
+        thisWeekContainer: thisWeekContainer ?? this.thisWeekContainer,
+        routine: routine ?? this.routine,
+        routineContainer: routineContainer ?? this.routineContainer,
+        urgent: urgent ?? this.urgent,
+        urgentContainer: urgentContainer ?? this.urgentContainer,
+      );
+
+  @override
+  UrgencyTheme lerp(ThemeExtension<UrgencyTheme>? other, double t) {
+    if (other is! UrgencyTheme) return this;
+    return UrgencyTheme(
+      visitNow: Color.lerp(visitNow, other.visitNow, t)!,
+      visitNowContainer: Color.lerp(visitNowContainer, other.visitNowContainer, t)!,
+      today: Color.lerp(today, other.today, t)!,
+      todayContainer: Color.lerp(todayContainer, other.todayContainer, t)!,
+      thisWeek: Color.lerp(thisWeek, other.thisWeek, t)!,
+      thisWeekContainer: Color.lerp(thisWeekContainer, other.thisWeekContainer, t)!,
+      routine: Color.lerp(routine, other.routine, t)!,
+      routineContainer: Color.lerp(routineContainer, other.routineContainer, t)!,
+      urgent: Color.lerp(urgent, other.urgent, t)!,
+      urgentContainer: Color.lerp(urgentContainer, other.urgentContainer, t)!,
+    );
+  }
+}
+
 ThemeData buildAppTheme() {
   const scheme = ColorScheme(
     brightness: Brightness.light,
@@ -234,6 +341,7 @@ ThemeData buildAppTheme() {
     colorScheme: scheme,
     extensions: const <ThemeExtension<dynamic>>[
       ProgrammeColors.light,
+      UrgencyTheme.light,
     ],
     scaffoldBackgroundColor: AppColors.surface,
     appBarTheme: const AppBarTheme(
@@ -344,6 +452,7 @@ ThemeData buildDarkTheme() {
     colorScheme: scheme,
     extensions: const <ThemeExtension<dynamic>>[
       ProgrammeColors.dark,
+      UrgencyTheme.dark,
     ],
     scaffoldBackgroundColor: AppColors.surfaceDark,
     appBarTheme: const AppBarTheme(

@@ -13,10 +13,13 @@ import '../db/follow_up_dao.dart';
 import '../db/immunisation_dao.dart';
 import '../db/patient_dao.dart';
 import '../db/patient_programmes_dao.dart';
+import '../db/referral_dao.dart';
 import '../db/sync_meta_dao.dart';
 import '../models/json_read.dart';
 import '../models/patient.dart';
 import '../models/programme.dart';
+import '../models/referral.dart';
+import '../models/sla.dart';
 import 'sync_report.dart';
 
 /// Pulls worklist input data from the UHIS platform services into the local
@@ -35,6 +38,7 @@ class OfflineSyncService extends ChangeNotifier {
     required FollowUpDao followUps,
     required ImmunisationDao immunisations,
     required AssessmentDao assessments,
+    required ReferralDao referrals,
     required SyncMetaDao syncMeta,
   })  : _api = api,
         _auth = auth,
@@ -43,6 +47,7 @@ class OfflineSyncService extends ChangeNotifier {
         _followUps = followUps,
         _immunisations = immunisations,
         _assessments = assessments,
+        _referrals = referrals,
         _syncMeta = syncMeta;
 
   static const String _entityKey = 'worklist';
@@ -54,6 +59,7 @@ class OfflineSyncService extends ChangeNotifier {
   final FollowUpDao _followUps;
   final ImmunisationDao _immunisations;
   final AssessmentDao _assessments;
+  final ReferralDao _referrals;
   final SyncMetaDao _syncMeta;
 
   bool _running = false;
@@ -119,12 +125,17 @@ class OfflineSyncService extends ChangeNotifier {
       }
 
       final out = await _persistBundle(bundle);
+      
+      // Sync referrals after patients are persisted
+      final referralCount = await _syncReferrals(villageIds: villageIds);
+      
       report = report.copyWith(
         finishedAt: DateTime.now(),
         patients: out.patients,
         followUps: out.followUps,
         immunisations: out.immunisations,
         assessments: out.assessments,
+        referrals: referralCount,
       );
 
       if (fullSync) {
@@ -270,6 +281,292 @@ class OfflineSyncService extends ChangeNotifier {
       }
     }
     return const [];
+  }
+
+  /// Sync referrals from the backend. Tries fhir-mapper first,
+  /// falls back to direct FHIR queries if mapper fails or returns empty.
+  Future<int> _syncReferrals({required List<int> villageIds}) async {
+    try {
+      debugPrint('[OfflineSyncService] Syncing referrals for ${villageIds.length} villages...');
+      
+      // Try bulk fetch by villageIds first (via fhir-mapper)
+      List referralNodes = [];
+      try {
+        final body = <String, dynamic>{
+          'villageIds': villageIds,
+          'tenantId': _api.tenantIdAsNum,
+          'limit': 1000,
+        };
+        final resp = await _api.dio.post(
+          Endpoints.fhirReferralTicketList,
+          data: body,
+        );
+        referralNodes = _extractList(resp.data);
+        debugPrint('[OfflineSyncService] Fetched ${referralNodes.length} referrals by villageIds');
+      } catch (e) {
+        debugPrint('[OfflineSyncService] Bulk referral fetch failed: $e');
+      }
+      
+      // If fhir-mapper returned empty, try direct FHIR queries
+      if (referralNodes.isEmpty) {
+        debugPrint('[OfflineSyncService] Trying direct FHIR ServiceRequest query...');
+        referralNodes = await _fetchReferralsFromFhir(villageIds);
+      }
+      
+      if (referralNodes.isEmpty) {
+        debugPrint('[OfflineSyncService] No referrals to sync');
+        return 0;
+      }
+      
+      // Parse and persist referrals
+      final referrals = <Referral>[];
+      for (final raw in referralNodes) {
+        if (raw is! Map) continue;
+        final referral = _referralFromPayload(Map<String, Object?>.from(raw));
+        if (referral != null) {
+          referrals.add(referral);
+        }
+      }
+      
+      if (referrals.isNotEmpty) {
+        await _referrals.upsertMany(referrals);
+        debugPrint('[OfflineSyncService] Persisted ${referrals.length} referrals');
+      }
+      
+      return referrals.length;
+    } catch (e) {
+      debugPrint('[OfflineSyncService] Referral sync error: $e');
+      return 0;
+    }
+  }
+
+  /// Fetch referrals directly from FHIR server (bypasses fhir-mapper bugs).
+  Future<List<Map<String, dynamic>>> _fetchReferralsFromFhir(List<int> villageIds) async {
+    final allReferrals = <Map<String, dynamic>>[];
+    
+    try {
+      // First try: query by village identifier (doesn't require local patient DB)
+      debugPrint('[OfflineSyncService] Querying FHIR ServiceRequests for ${villageIds.length} villages...');
+      
+      // Query ServiceRequests by village identifier
+      for (final villageId in villageIds.take(20)) { // Limit to first 20 villages
+        try {
+          final resp = await _api.dio.get(
+            Endpoints.fhirServiceRequestByVillage(villageId.toString()),
+          );
+          final parsed = _parseFhirServiceRequests(resp.data, '');
+          allReferrals.addAll(parsed);
+        } catch (_) {
+          // Continue with next village
+        }
+      }
+      
+      if (allReferrals.isNotEmpty) {
+        debugPrint('[OfflineSyncService] Found ${allReferrals.length} ServiceRequests from FHIR villages');
+        return allReferrals;
+      }
+      
+      // Second try: if no results by village, try by patient IDs from local DB
+      final patients = await _patients.allForVillages(const <String>[]);
+      if (patients.isEmpty) {
+        debugPrint('[OfflineSyncService] No patients in DB to query referrals for');
+        return [];
+      }
+      
+      debugPrint('[OfflineSyncService] Querying FHIR ServiceRequests for ${patients.length} patients...');
+      
+      // Query ServiceRequests for each patient (batched)
+      const batchSize = 10;
+      for (var i = 0; i < patients.length; i += batchSize) {
+        final batch = patients.sublist(
+          i,
+          i + batchSize > patients.length ? patients.length : i + batchSize,
+        );
+        
+        final futures = batch.map((p) async {
+          try {
+            final resp = await _api.dio.get(
+              Endpoints.fhirServiceRequestByPatient(p.id),
+            );
+            return _parseFhirServiceRequests(resp.data, p.id);
+          } catch (_) {
+            return <Map<String, dynamic>>[];
+          }
+        });
+        
+        final results = await Future.wait(futures);
+        for (final list in results) {
+          allReferrals.addAll(list);
+        }
+      }
+      
+      debugPrint('[OfflineSyncService] Found ${allReferrals.length} ServiceRequests from FHIR');
+    } catch (e) {
+      debugPrint('[OfflineSyncService] Direct FHIR query failed: $e');
+    }
+    
+    return allReferrals;
+  }
+
+  /// Parse FHIR Bundle of ServiceRequests into referral payload format.
+  List<Map<String, dynamic>> _parseFhirServiceRequests(dynamic data, String patientId) {
+    final referrals = <Map<String, dynamic>>[];
+    
+    if (data is! Map) return referrals;
+    
+    final entries = data['entry'] as List? ?? [];
+    for (final entry in entries) {
+      if (entry is! Map) continue;
+      final resource = entry['resource'] as Map?;
+      if (resource == null || resource['resourceType'] != 'ServiceRequest') continue;
+      
+      // Extract patient ID from subject reference if not provided
+      String effectivePatientId = patientId;
+      if (effectivePatientId.isEmpty) {
+        final subject = resource['subject'] as Map?;
+        final ref = subject?['reference'] as String? ?? '';
+        if (ref.contains('Patient/')) {
+          effectivePatientId = ref.split('Patient/').last;
+        }
+      }
+      
+      // Extract identifiers
+      String? villageId;
+      String? patientStatus;
+      final identifiers = resource['identifier'] as List? ?? [];
+      for (final ident in identifiers) {
+        if (ident is! Map) continue;
+        final system = ident['system'] as String? ?? '';
+        final value = ident['value'] as String?;
+        if (system.contains('village-id')) villageId = value;
+        if (system.contains('patient-status')) patientStatus = value;
+      }
+      
+      // Skip if no patient ID
+      if (effectivePatientId.isEmpty) continue;
+      
+      // Map FHIR ServiceRequest to referral payload format
+      referrals.add({
+        'id': resource['id']?.toString(),
+        'fhirId': resource['id']?.toString(),
+        'patientId': effectivePatientId,
+        'memberId': effectivePatientId,
+        'villageId': villageId,
+        'patientStatus': patientStatus ?? resource['status']?.toString() ?? 'active',
+        'referredReason': resource['code']?['text'] ?? 
+            (resource['reasonCode'] as List?)?.firstOrNull?['text'] ?? 'Referral',
+        'referredTo': 'District Hospital',
+        'referredDate': resource['authoredOn']?.toString(),
+        'status': resource['status']?.toString() ?? 'active',
+      });
+    }
+    
+    return referrals;
+  }
+
+  /// Fallback: fetch referrals for each patient in the local DB.
+  Future<List> _fetchReferralsForAllPatients() async {
+    try {
+      // Get all patient IDs from local DB
+      final patients = await _patients.allForVillages(const []);
+      if (patients.isEmpty) return [];
+      
+      debugPrint('[OfflineSyncService] Fetching referrals for ${patients.length} patients...');
+      
+      final allReferrals = <dynamic>[];
+      // Batch the requests to avoid overwhelming the server
+      const batchSize = 20;
+      for (var i = 0; i < patients.length; i += batchSize) {
+        final batch = patients.sublist(
+          i,
+          i + batchSize > patients.length ? patients.length : i + batchSize,
+        );
+        
+        // Fetch referrals for each patient in the batch in parallel
+        final futures = batch.map((p) async {
+          try {
+            final body = <String, dynamic>{
+              'patientId': p.id,
+              'tenantId': _api.tenantIdAsNum,
+            };
+            final resp = await _api.dio.post(
+              Endpoints.fhirReferralTicketList,
+              data: body,
+            );
+            return _extractList(resp.data);
+          } catch (_) {
+            return <dynamic>[];
+          }
+        });
+        
+        final results = await Future.wait(futures);
+        for (final list in results) {
+          allReferrals.addAll(list);
+        }
+      }
+      
+      debugPrint('[OfflineSyncService] Fetched ${allReferrals.length} referrals from patients');
+      return allReferrals;
+    } catch (e) {
+      debugPrint('[OfflineSyncService] Per-patient referral fetch error: $e');
+      return [];
+    }
+  }
+
+  /// Parse a referral from the fhir-mapper payload.
+  Referral? _referralFromPayload(Map<String, Object?> p) {
+    final id = JsonRead.firstString(p, const ['id', 'referralId', 'fhirId']);
+    if (id == null || id.isEmpty) return null;
+    
+    final patientId = JsonRead.firstString(p, const ['memberId', 'patientId', 'householdMemberId']);
+    if (patientId == null || patientId.isEmpty) return null;
+    
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final tier = _inferTier(p['referredReason'] as String?);
+    // Derive initial priority level from SLA tier
+    final priorityLevel = switch (tier) {
+      SlaTier.emergency => SlaPriority.critical.wireTag,
+      SlaTier.urgent => SlaPriority.high.wireTag,
+      SlaTier.routine => SlaPriority.low.wireTag,
+    };
+    return Referral(
+      id: id,
+      patientId: patientId,
+      slaTier: tier,
+      diagnosisLabel: p['referredReason'] as String?,
+      state: ReferralStatus.fromWireTag(p['patientStatus'] as String?),
+      priorityLevel: priorityLevel,
+      priorityScore: tier == SlaTier.emergency ? 100 : (tier == SlaTier.urgent ? 60 : 30),
+      createdAt: _parseDateMs(p['referredDate']) ?? ts,
+      updatedAt: ts,
+      rawJson: jsonEncode(p),
+    );
+  }
+
+  /// Infer SLA tier from referred reason (diagnosis).
+  static SlaTier _inferTier(String? reason) {
+    if (reason == null) return SlaTier.routine;
+    final r = reason.toLowerCase();
+    if (r.contains('emergency') || r.contains('critical') || r.contains('severe')) {
+      return SlaTier.emergency;
+    }
+    if (r.contains('urgent') || r.contains('high') || r.contains('danger')) {
+      return SlaTier.urgent;
+    }
+    return SlaTier.routine;
+  }
+
+  /// Parse date from various formats to epoch milliseconds.
+  static int? _parseDateMs(Object? raw) {
+    if (raw == null) return null;
+    if (raw is num) return raw.toInt();
+    if (raw is String) {
+      final parsed = DateTime.tryParse(raw);
+      if (parsed != null) return parsed.millisecondsSinceEpoch;
+      final ms = int.tryParse(raw);
+      if (ms != null) return ms;
+    }
+    return null;
   }
 
   static Set<Programme> _extractProgrammes(Map raw) {
@@ -419,10 +716,15 @@ class OfflineSyncService extends ChangeNotifier {
     for (final entry in programmes.entries) {
       await _programmes.replaceFor(entry.key, entry.value);
     }
+    
+    // Also sync referrals in fallback mode
+    final referralCount = await _syncReferrals(villageIds: villageIds);
+    
     final report = SyncReport(
       startedAt: started,
       finishedAt: DateTime.now(),
       patients: patients.length,
+      referrals: referralCount,
       wasFullSync: fullSync,
       errors: [
         'Aggregate sync degraded — used per-patient fallback ($aggregateError)',

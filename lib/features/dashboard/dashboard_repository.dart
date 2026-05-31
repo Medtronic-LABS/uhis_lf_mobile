@@ -69,6 +69,8 @@ class DashboardRepository extends ApiRepository {
       }
       // ignore: avoid_print
       print('[DashboardRepository] runningTotal: households=$totalHouseholds members=$totalMembers');
+      // API may ignore pagination and return all data - stop if we get more than requested
+      if (list.length > pageSize) break;
       if (list.length < pageSize) break;
       skip += pageSize;
       page++;
@@ -129,6 +131,8 @@ class DashboardRepository extends ApiRepository {
           results.add(Map<String, dynamic>.from(item));
         }
       }
+      // API may ignore pagination and return all data - stop if we get more than requested
+      if (list.length > pageSize) break;
       if (list.length < pageSize) break;
       skip += pageSize;
       page++;
@@ -158,6 +162,8 @@ class DashboardRepository extends ApiRepository {
           results.add(Map<String, dynamic>.from(item));
         }
       }
+      // API may ignore pagination and return all data - stop if we get more than requested
+      if (list.length > pageSize) break;
       if (list.length < pageSize) break;
       skip += pageSize;
       page++;
@@ -179,6 +185,7 @@ class DashboardRepository extends ApiRepository {
   }
 
   /// Returns households with embedded member data.
+  /// For large datasets (>500 households), skips member enrichment to avoid timeouts.
   Future<List<Map<String, dynamic>>> getHouseholdsWithMembers({
     int pageSize = 100,
     int hardCapPages = 5,
@@ -187,6 +194,14 @@ class DashboardRepository extends ApiRepository {
       pageSize: pageSize,
       hardCapPages: hardCapPages,
     );
+    
+    // Skip member enrichment for large datasets - member API times out
+    if (households.length > 500) {
+      // ignore: avoid_print
+      print('[DashboardRepository] Skipping member enrichment for ${households.length} households');
+      return households;
+    }
+    
     final membersByHh = await getMembersByHousehold();
     
     // Enrich households with their members

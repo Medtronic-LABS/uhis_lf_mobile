@@ -20,36 +20,44 @@ class SyncStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
       child: Row(
         children: [
           Icon(
             isOnline ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
-            size: 16,
+            size: 14,
             color: scheme.onSurfaceVariant,
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
           Expanded(
             child: Text(
               _label(),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
             ),
           ),
-          TextButton.icon(
-            onPressed: syncing ? null : onSyncNow,
-            icon: syncing
-                ? const SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.refresh, size: 16),
-            label: Text(syncing
-                ? WorklistStrings.syncing
-                : WorklistStrings.syncNow),
+          SizedBox(
+            height: 28,
+            child: TextButton.icon(
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                visualDensity: VisualDensity.compact,
+              ),
+              onPressed: syncing ? null : onSyncNow,
+              icon: syncing
+                  ? const SizedBox(
+                      width: 10,
+                      height: 10,
+                      child: CircularProgressIndicator(strokeWidth: 1.5))
+                  : const Icon(Icons.refresh, size: 14),
+              label: Text(
+                syncing ? WorklistStrings.syncing : WorklistStrings.syncNow,
+                style: const TextStyle(fontSize: 11),
+              ),
+            ),
           ),
         ],
       ),

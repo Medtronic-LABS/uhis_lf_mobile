@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/auth/auth_state.dart';
-import '../features/dashboard/dashboard_screen.dart';
+import '../features/dashboard/mission_dashboard_screen.dart';
 import '../features/household/household_detail_screen.dart';
 import '../features/household/household_list_screen.dart';
 import '../features/lock/lock_screen.dart';
@@ -13,6 +13,13 @@ import '../features/pin/pin_setup_screen.dart';
 import '../features/pin/pin_unlock_screen.dart';
 import '../features/referral/referral_detail_screen.dart';
 import '../features/referral/referral_list_screen.dart';
+import 'bottom_nav.dart';
+
+/// Navigation keys for each tab's navigator.
+final _homeNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'home');
+final _patientsNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'patients');
+final _tasksNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'tasks');
+final _mapNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'map');
 
 GoRouter buildRouter(AuthState auth) {
   return GoRouter(
@@ -48,12 +55,15 @@ GoRouter buildRouter(AuthState auth) {
             if (!auth.onboardingComplete && !auth.pinEnabled) {
               return '/onboarding';
             }
-            return '/dashboard';
+            return '/home';
           }
           return null;
       }
     },
     routes: [
+      // ─────────────────────────────────────────────────────────────────────
+      // Pre-auth routes
+      // ─────────────────────────────────────────────────────────────────────
       GoRoute(
         path: '/',
         builder: (_, __) => const _SplashScreen(),
@@ -69,10 +79,6 @@ GoRouter buildRouter(AuthState auth) {
         builder: (_, __) => const LockScreen(),
       ),
       GoRoute(
-        path: '/dashboard',
-        builder: (_, __) => const DashboardScreen(),
-      ),
-      GoRoute(
         path: '/onboarding',
         builder: (_, __) => const OnboardingScreen(),
       ),
@@ -84,55 +90,131 @@ GoRouter buildRouter(AuthState auth) {
         path: '/pin-unlock',
         builder: (_, __) => const PinUnlockScreen(),
       ),
+
+      // ─────────────────────────────────────────────────────────────────────
+      // Main app with bottom navigation shell
+      // ─────────────────────────────────────────────────────────────────────
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) => BottomNavShell(
+          navigationShell: navigationShell,
+        ),
+        branches: [
+          // Tab 0: Home
+          StatefulShellBranch(
+            navigatorKey: _homeNavigatorKey,
+            routes: [
+              GoRoute(
+                path: '/home',
+                builder: (_, __) => const DashboardScreen(),
+              ),
+            ],
+          ),
+
+          // Tab 1: Patients
+          StatefulShellBranch(
+            navigatorKey: _patientsNavigatorKey,
+            routes: [
+              GoRoute(
+                path: '/patients',
+                builder: (_, __) => const HouseholdListScreen(
+                  mode: HouseholdListMode.members,
+                ),
+                routes: [
+                  GoRoute(
+                    path: 'household/:id',
+                    builder: (_, state) {
+                      final extra = state.extra;
+                      if (extra is HouseholdDetailData) {
+                        return HouseholdDetailScreen(household: extra);
+                      }
+                      // Fallback: create minimal data from route params
+                      final id = state.pathParameters['id'] ?? '';
+                      return HouseholdDetailScreen(
+                        household: HouseholdDetailData(
+                          id: id,
+                          householdNo: id,
+                          name: null,
+                          village: null,
+                          memberCount: 0,
+                          members: const [],
+                        ),
+                      );
+                    },
+                  ),
+                  GoRoute(
+                    path: ':id',
+                    builder: (_, state) => PatientContextScreen(
+                      patientId: state.pathParameters['id']!,
+                      memberData: state.extra as Map<String, dynamic>?,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+
+          // Tab 2: Tasks
+          StatefulShellBranch(
+            navigatorKey: _tasksNavigatorKey,
+            routes: [
+              GoRoute(
+                path: '/tasks',
+                builder: (_, __) => const ReferralListScreen(),
+                routes: [
+                  GoRoute(
+                    path: ':id',
+                    builder: (_, state) => ReferralDetailScreen(
+                      patientId: state.pathParameters['id']!,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+
+          // Tab 3: Map
+          StatefulShellBranch(
+            navigatorKey: _mapNavigatorKey,
+            routes: [
+              GoRoute(
+                path: '/map',
+                builder: (_, __) => const MapPlaceholderScreen(),
+              ),
+            ],
+          ),
+        ],
+      ),
+
+      // ─────────────────────────────────────────────────────────────────────
+      // Legacy routes (for backward compatibility)
+      // ─────────────────────────────────────────────────────────────────────
+      GoRoute(
+        path: '/dashboard',
+        redirect: (_, __) => '/home',
+      ),
       GoRoute(
         path: '/households',
-        builder: (_, __) => const HouseholdListScreen(
-          mode: HouseholdListMode.households,
-        ),
+        redirect: (_, __) => '/patients',
       ),
       GoRoute(
         path: '/members',
-        builder: (_, __) => const HouseholdListScreen(
-          mode: HouseholdListMode.members,
-        ),
-      ),
-      GoRoute(
-        path: '/household/:id',
-        builder: (_, state) {
-          final extra = state.extra;
-          if (extra is HouseholdDetailData) {
-            return HouseholdDetailScreen(household: extra);
-          }
-          // Fallback: create minimal data from route params
-          final id = state.pathParameters['id'] ?? '';
-          return HouseholdDetailScreen(
-            household: HouseholdDetailData(
-              id: id,
-              householdNo: id,
-              name: null,
-              village: null,
-              memberCount: 0,
-              members: const [],
-            ),
-          );
-        },
-      ),
-      GoRoute(
-        path: '/patient/:id',
-        builder: (_, state) => PatientContextScreen(
-          patientId: state.pathParameters['id']!,
-          memberData: state.extra as Map<String, dynamic>?,
-        ),
-      ),
-      GoRoute(
-        path: '/patient/:id/referrals',
-        builder: (_, state) => ReferralDetailScreen(
-          patientId: state.pathParameters['id']!,
-        ),
+        redirect: (_, __) => '/patients',
       ),
       GoRoute(
         path: '/referrals',
-        builder: (_, __) => const ReferralListScreen(),
+        redirect: (_, __) => '/tasks',
+      ),
+      GoRoute(
+        path: '/patient/:id',
+        redirect: (_, state) => '/patients/${state.pathParameters['id']}',
+      ),
+      GoRoute(
+        path: '/patient/:id/referrals',
+        redirect: (_, state) => '/tasks/${state.pathParameters['id']}',
+      ),
+      GoRoute(
+        path: '/household/:id',
+        redirect: (_, state) => '/patients/household/${state.pathParameters['id']}',
       ),
     ],
   );

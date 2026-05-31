@@ -5,6 +5,8 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/models/programme.dart';
 import '../../../core/models/risk.dart';
 import '../../../core/models/worklist_entry.dart';
+import '../../../core/widgets/alert_badge.dart';
+import '../../../core/widgets/urgency_badge.dart';
 
 class WorklistCard extends StatelessWidget {
   const WorklistCard({
@@ -31,216 +33,181 @@ class WorklistCard extends StatelessWidget {
     );
   }
 
-  /// Get emoji and label for primary programme/condition
-  (String emoji, String label) _conditionInfo() {
-    final progs = entry.programmes;
-    if (progs.contains(Programme.imci)) {
-      return ('🌡️', 'Sick child');
-    } else if (progs.contains(Programme.anc)) {
-      return ('🤰', 'Pregnant');
-    } else if (progs.contains(Programme.ncd)) {
-      return ('💊', 'NCD check');
-    } else if (progs.contains(Programme.tb)) {
-      return ('🫁', 'TB screen');
+  /// Extract initials from display name (up to 2 characters).
+  String _getInitials() {
+    final name = entry.displayName.trim();
+    if (name.isEmpty) return '?';
+    final parts = name.split(RegExp(r'\s+'));
+    if (parts.length >= 2) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
     }
-    return ('👤', 'General');
+    return name.substring(0, name.length >= 2 ? 2 : 1).toUpperCase();
+  }
+
+  /// Map risk band to urgency level.
+  UrgencyLevel _urgencyLevel() {
+    switch (entry.band) {
+      case RiskBand.urgent:
+        return UrgencyLevel.visitNow;
+      case RiskBand.high:
+        return UrgencyLevel.today;
+      case RiskBand.moderate:
+        return UrgencyLevel.thisWeek;
+      case RiskBand.low:
+        return UrgencyLevel.routine;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final accent = _accentFor(entry.band, scheme);
-    final (emoji, conditionLabel) = _conditionInfo();
+    final initials = _getInitials();
     
     // Build the primary alert text from reasons
     final alertText = entry.reasons.isNotEmpty 
         ? entry.reasons.first 
         : _defaultAlertText();
     
-    // Build household display
-    final householdDisplay = entry.householdName ?? 
-        (entry.householdNo != null ? 'House #${entry.householdNo}' : null);
+    // Build demographics line
+    final demographics = <String>[];
+    if (entry.age != null) demographics.add('Age ${entry.age}');
+    if (entry.householdName != null) {
+      demographics.add(entry.householdName!);
+    } else if (entry.householdNo != null) {
+      demographics.add('House #${entry.householdNo}');
+    }
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
       elevation: 0,
       color: scheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         side: entry.isUrgent 
-            ? BorderSide(color: accent.withValues(alpha: 0.5), width: 2)
+            ? BorderSide(color: accent.withValues(alpha: 0.5), width: 1.5)
             : BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.3)),
       ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
+          padding: const EdgeInsets.all(10),
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Row 1: Avatar + Name + Score badge
-              Row(
-                children: [
-                  // Avatar with programme icon
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: accent.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Center(
-                      child: Text(
-                        emoji,
-                        style: const TextStyle(fontSize: 24),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  // Name and household
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          entry.displayName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                color: scheme.onSurface,
-                              ),
-                        ),
-                        const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            if (entry.age != null) ...[
-                              Text(
-                                'Age ${entry.age}',
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: scheme.onSurface.withValues(alpha: 0.7),
-                                    ),
-                              ),
-                              if (householdDisplay != null)
-                                Text(
-                                  ' · ',
-                                  style: TextStyle(color: scheme.onSurface.withValues(alpha: 0.5)),
-                                ),
-                            ],
-                            if (householdDisplay != null)
-                              Flexible(
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.home_outlined,
-                                      size: 14,
-                                      color: scheme.onSurface.withValues(alpha: 0.6),
-                                    ),
-                                    const SizedBox(width: 3),
-                                    Flexible(
-                                      child: Text(
-                                        householdDisplay,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                              color: scheme.onSurface.withValues(alpha: 0.7),
-                                            ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Risk score badge
-                  _RiskScoreBadge(score: entry.score, band: entry.band, color: accent),
-                ],
-              ),
-              
-              const SizedBox(height: 12),
-              
-              // Row 2: Alert reason chip
+              // Avatar with initials
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
-                  color: entry.isUrgent 
-                      ? accent.withValues(alpha: 0.1) 
-                      : scheme.primaryContainer.withValues(alpha: 0.4),
+                  color: scheme.primaryContainer,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Row(
-                  children: [
-                    Icon(
-                      entry.isUrgent ? Icons.warning_amber_rounded : Icons.schedule_outlined,
-                      size: 18,
-                      color: entry.isUrgent ? accent : scheme.primary,
+                child: Center(
+                  child: Text(
+                    initials,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.onPrimaryContainer,
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        alertText,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: entry.isUrgent ? accent : scheme.primary,
-                              fontWeight: FontWeight.w600,
-                            ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              
+              // Main content
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Row 1: Name + Urgency badge
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            entry.displayName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: scheme.onSurface,
+                                ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        UrgencyBadge(level: _urgencyLevel(), compact: true),
+                      ],
+                    ),
+                    
+                    // Row 2: Alert badge with reason
+                    if (alertText.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      AlertIndicator(
+                        reason: alertText,
+                        isUrgent: entry.isUrgent,
                       ),
+                    ],
+                    
+                    // Row 3: Demographics + Programme chips inline
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        if (demographics.isNotEmpty)
+                          Flexible(
+                            child: Text(
+                              demographics.join(' · '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                    color: scheme.onSurface.withValues(alpha: 0.6),
+                                  ),
+                            ),
+                          ),
+                        if (demographics.isNotEmpty && entry.programmes.isNotEmpty)
+                          Text(
+                            ' · ',
+                            style: TextStyle(
+                              color: scheme.onSurface.withValues(alpha: 0.4),
+                              fontSize: 11,
+                            ),
+                          ),
+                        // Programme chips inline
+                        ...entry.programmes.take(2).map((p) => Padding(
+                          padding: const EdgeInsets.only(right: 4),
+                          child: _ProgrammeTag(programme: p),
+                        )),
+                        if (entry.rationale != null || entry.reasons.length > 1)
+                          GestureDetector(
+                            onTap: () => _showRationaleSheet(context),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: scheme.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.help_outline, size: 10, color: scheme.onSurfaceVariant),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    'Why?',
+                                    style: TextStyle(
+                                      color: scheme.onSurfaceVariant,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ],
                 ),
-              ),
-              
-              // Row 3: Programme chips + condition label
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  // Programme chips
-                  Expanded(
-                    child: Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      children: [
-                        for (final p in entry.programmes)
-                          _ProgrammeTag(programme: p),
-                        _ConditionTag(label: conditionLabel, emoji: emoji),
-                      ],
-                    ),
-                  ),
-                  // Why button
-                  if (entry.rationale != null || entry.reasons.length > 1)
-                    GestureDetector(
-                      onTap: () => _showRationaleSheet(context),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: scheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.help_outline, size: 14, color: scheme.onSurfaceVariant),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Why?',
-                              style: TextStyle(
-                                color: scheme.onSurfaceVariant,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                ],
               ),
             ],
           ),
@@ -773,9 +740,9 @@ class _ProgrammeTag extends StatelessWidget {
       case Programme.anc:
         return (scheme.tertiaryContainer, scheme.onTertiaryContainer, Icons.pregnant_woman);
       case Programme.ncd:
-        return (scheme.primaryContainer, scheme.onPrimaryContainer, Icons.medical_services_outlined);
+        return (scheme.primaryContainer, scheme.onPrimaryContainer, Icons.monitor_heart_outlined);
       case Programme.tb:
-        return (scheme.secondaryContainer, scheme.onSecondaryContainer, Icons.air);
+        return (scheme.secondaryContainer, scheme.onSecondaryContainer, Icons.sick_outlined);
     }
   }
 
@@ -790,34 +757,5 @@ class _ProgrammeTag extends StatelessWidget {
       case Programme.tb:
         return WorklistStrings.programmeTb;
     }
-  }
-}
-
-/// Condition tag with emoji.
-class _ConditionTag extends StatelessWidget {
-  const _ConditionTag({required this.label, required this.emoji});
-
-  final String label;
-  final String emoji;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        '$label $emoji',
-        style: TextStyle(
-          color: scheme.onSurfaceVariant,
-          fontSize: 11,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-    );
   }
 }

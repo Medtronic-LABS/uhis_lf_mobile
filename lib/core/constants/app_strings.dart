@@ -648,3 +648,147 @@ abstract final class ReferralStrings {
   static const String locateGetDirections = 'Get Directions';
   static const String locateGetDirectionsSubtitle = 'Navigate to patient';
 }
+
+/// AI Mission Dashboard strings (Screen 2 redesign).
+/// Spec: AI Mission Dashboard — action page answering "Who needs me next?"
+abstract final class MissionDashboardStrings {
+  MissionDashboardStrings._();
+
+  // ── AI Daily Brief Card ──────────────────────────────────────────────────
+  static const String aiBriefTitle = "Today's AI Brief";
+  static const String visitsRecommended = 'Visits Recommended';
+  static const String childDangerCases = 'Child Danger Cases';
+  static const String slaBreachedReferrals = 'SLA Breached Referrals';
+  static const String ancFollowUps = 'ANC Follow-ups';
+  static const String highRiskDiabeticPatients = 'High-Risk Diabetic Patients';
+  static const String expectedWorkload = 'Expected Workload';
+  static const String priorityLevel = 'Priority Level';
+  static const String whyQuestion = 'Why?';
+  static const String riskFactorsIdentified = 'Risk Factors Identified';
+  static String workloadHours(double hours) =>
+      '${hours.toStringAsFixed(1)} Hours';
+
+  // ── Mission Progress Card ────────────────────────────────────────────────
+  static const String todaysProgress = "Today's Progress";
+  static const String visitsCompleted = 'Visits Completed';
+  static const String visitsRemaining = 'Visits Remaining';
+  static const String estimatedTime = 'Estimated Time';
+  static String progressFraction(int done, int total) => '$done / $total';
+  static String progressPercent(int percent) => '$percent%';
+  static String remainingVisits(int n) => '$n Visits Remaining';
+  static String estimatedDuration(String duration) => 'Estimated Time: $duration';
+  static String completionPrediction(String time) =>
+      'At current pace, all visits can be completed by $time';
+
+  // ── Critical Alert Banner ────────────────────────────────────────────────
+  static const String criticalAlert = '🔴 Critical Alert';
+  static const String emergencyAncAlert = '🔴 Emergency ANC Alert';
+  static const String immediateFollowUpRequired = 'Immediate follow-up required.';
+  static String childReferralOverdue(int days) =>
+      '$days Child Referral${days == 1 ? '' : 's'} Overdue';
+  static String highRiskPregnancyWaiting(String name, String duration) =>
+      '$name: High-risk pregnancy waiting $duration for OB review.';
+
+  // ── Mission Queue Card ───────────────────────────────────────────────────
+  static String priorityRank(int rank) => 'Priority #$rank';
+  static String daysOverdue(int days) => '$days Days Overdue';
+  static const String aiInsight = 'AI Insight';
+  static const String aiPrioritisedBecause = 'AI Prioritised because:';
+  static const String reason = 'Reason';
+
+  // ── AI Insight Reasons (human-readable) ──────────────────────────────────
+  static const String insightPatientNeverArrived =
+      'Patient never arrived at facility.';
+  static const String insightPossibleTransportBarrier =
+      'Possible transport barrier.';
+  static const String insightReferralOverdue = 'Referral overdue.';
+  static const String insightChildUnder5 = 'Child under 5.';
+  static const String insightHighRiskPregnancy = 'High-risk pregnancy.';
+  static const String insightNoFacilityArrival = 'No facility arrival.';
+  static const String insightMissedFollowUp = 'Missed follow-up.';
+  static const String insightSlaBreached = 'SLA breached.';
+  static const String insightEmergencyDiagnosis = 'Emergency diagnosis.';
+  static const String insightDiabetesMissedFollowUp =
+      'Diabetes patient missed follow-up.';
+
+  // ── Action Buttons ───────────────────────────────────────────────────────
+  static const String callFamily = 'Call Family';
+  static const String locate = 'Locate';
+  static const String openCase = 'Open Case';
+  static const String callFacility = 'Call Facility';
+  static const String openReferral = 'Open Referral';
+  static const String scheduleVisit = 'Schedule Visit';
+  static const String visitHousehold = 'Visit Household';
+  static const String startRoute = 'Start Route';
+  static const String continueTodaysWork = "Continue Today's Work";
+
+  // ── Referral Operations Widget ───────────────────────────────────────────
+  static const String referralStatus = 'Referral Status';
+  static const String active = 'Active';
+  static const String breached = 'Breached';
+  static const String awaitingReview = 'Awaiting Review';
+  static const String completed = 'Completed';
+  static String referralCount(int count, String status) => '$count $status';
+
+  // ── Follow-Ups Due Widget ────────────────────────────────────────────────
+  static const String followUpsDue = 'Follow-Ups Due';
+  static const String discharged = 'Discharged';
+  static const String followUpDue = 'Follow-up Due';
+  static const String tomorrow = 'Tomorrow';
+  static const String today = 'Today';
+  static String daysAway(int days) =>
+      days == 0 ? today : (days == 1 ? tomorrow : 'In $days days');
+
+  // ── Household Opportunities Widget ───────────────────────────────────────
+  static const String householdOpportunities = 'Household Opportunities';
+  static const String potentialServices = 'Potential Services';
+  static const String mother = 'Mother';
+  static const String child = 'Child';
+  static const String father = 'Father';
+  static const String ancFollowUpDue = 'ANC Follow-up Due';
+  static const String epiVaccineDue = 'EPI Vaccine Due';
+  static const String bpReviewPending = 'BP Review Pending';
+  static String householdNumber(int number) => 'Household #$number';
+  static String potentialServicesCount(int count) =>
+      'Potential Services: $count';
+
+  // ── Route Optimization Widget ────────────────────────────────────────────
+  static const String optimalRoute = 'Optimal Route';
+  static const String distance = 'Distance';
+  static const String estimatedTravelTime = 'Estimated Time';
+  static String distanceKm(double km) => '${km.toStringAsFixed(1)} km';
+  static String travelDuration(String duration) => duration;
+
+  // ── Learning Recommendations Widget ──────────────────────────────────────
+  static const String todaysLearning = "Today's Learning";
+  static String learningDuration(int minutes) => '$minutes Minutes';
+  static const String triggeredByTodaysCases = 'Triggered by today\'s cases';
+
+  // ── Floating AI Assistant ────────────────────────────────────────────────
+  static const String aiAssistant = 'AI Assistant';
+  static const String askAiAssistant = 'Ask AI Assistant';
+  static const String aiAssistantHint =
+      'Ask about patient care, guidelines, or procedures…';
+
+  // ── Priority Levels ──────────────────────────────────────────────────────
+  static const String priorityCritical = 'Critical';
+  static const String priorityHigh = 'High';
+  static const String priorityMedium = 'Medium';
+  static const String priorityLow = 'Low';
+
+  // ── Programme Badges ─────────────────────────────────────────────────────
+  static const String badgeAnc = 'ANC';
+  static const String badgeImci = 'IMCI';
+  static const String badgeNcd = 'NCD';
+  static const String badgeTb = 'TB';
+  static const String badgeEpi = 'EPI';
+  static const String badgeReferral = 'Referral';
+
+  // ── Empty States ─────────────────────────────────────────────────────────
+  static const String noMissionsToday = 'No missions for today';
+  static const String allCaughtUp = 'All caught up! Great work.';
+  static const String noCriticalAlerts = 'No critical alerts';
+  static const String noFollowUpsDue = 'No follow-ups due';
+  static const String noHouseholdOpportunities =
+      'No household opportunities identified';
+}
