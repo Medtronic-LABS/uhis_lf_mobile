@@ -139,16 +139,20 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
           color: scheme.surfaceContainerHighest.withValues(alpha: 0.3),
           child: Row(
             children: [
-              _SummaryChip(
-                icon: Icons.home_work_outlined,
-                label: HouseholdListStrings.householdsCount(items.length),
-                color: scheme.tertiary,
+              Expanded(
+                child: _SummaryChip(
+                  icon: Icons.home_work_outlined,
+                  label: HouseholdListStrings.householdsCount(items.length),
+                  color: scheme.tertiary,
+                ),
               ),
               const SizedBox(width: 12),
-              _SummaryChip(
-                icon: Icons.people_alt_outlined,
-                label: HouseholdListStrings.membersCount(totalMembers),
-                color: scheme.primary,
+              Expanded(
+                child: _SummaryChip(
+                  icon: Icons.people_alt_outlined,
+                  label: HouseholdListStrings.membersCount(totalMembers),
+                  color: scheme.primary,
+                ),
               ),
             ],
           ),
@@ -221,16 +225,20 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
             color: scheme.surfaceContainerHighest.withValues(alpha: 0.3),
             child: Row(
               children: [
-                _SummaryChip(
-                  icon: Icons.people_alt_outlined,
-                  label: HouseholdListStrings.totalMembersCount(totalFromCount),
-                  color: scheme.primary,
+                Expanded(
+                  child: _SummaryChip(
+                    icon: Icons.people_alt_outlined,
+                    label: HouseholdListStrings.totalMembersCount(totalFromCount),
+                    color: scheme.primary,
+                  ),
                 ),
                 const SizedBox(width: 12),
-                _SummaryChip(
-                  icon: Icons.home_work_outlined,
-                  label: HouseholdListStrings.acrossHouseholds(items.length),
-                  color: scheme.tertiary,
+                Expanded(
+                  child: _SummaryChip(
+                    icon: Icons.home_work_outlined,
+                    label: HouseholdListStrings.acrossHouseholds(items.length),
+                    color: scheme.tertiary,
+                  ),
                 ),
               ],
             ),
