@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/models/mission_brief.dart';
@@ -51,7 +52,7 @@ class MissionProgressCard extends StatelessWidget {
           children: [
             // Header
             Text(
-              MissionDashboardStrings.todaysProgress,
+              "Today's Progress · ${DateFormat('d MMM').format(DateTime.now())}",
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: scheme.onSurface,
