@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../app/theme.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/models/mission_brief.dart';
 
@@ -25,15 +26,13 @@ class MissionProgressCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     final percent = progress.percentComplete;
     final isComplete = progress.isComplete;
 
-    // Determine color based on progress
     final progressColor = isComplete
-        ? const Color(0xFF22C55E) // green-500
-        : (percent >= 50
-            ? scheme.primary
-            : const Color(0xFFF97316)); // orange-500
+        ? tokens.statusSuccess
+        : (percent >= 50 ? scheme.primary : tokens.statusWarning);
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -180,10 +179,10 @@ class MissionProgressCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF22C55E).withValues(alpha: 0.1),
+                  color: tokens.statusSuccess.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: const Color(0xFF22C55E).withValues(alpha: 0.3),
+                    color: tokens.statusSuccess.withValues(alpha: 0.3),
                   ),
                 ),
                 child: Row(
@@ -195,7 +194,7 @@ class MissionProgressCard extends StatelessWidget {
                       MissionDashboardStrings.allCaughtUp,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
-                            color: const Color(0xFF22C55E),
+                            color: tokens.statusSuccess,
                           ),
                     ),
                   ],

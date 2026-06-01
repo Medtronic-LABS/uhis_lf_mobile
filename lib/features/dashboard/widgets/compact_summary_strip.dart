@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/theme.dart';
 import '../../../core/models/mission_brief.dart';
 
 /// Compact summary strip showing AI brief + progress in a single row.
@@ -160,11 +161,12 @@ class _CompactProgressRing extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     final percent = progress.percentComplete / 100;
     final isComplete = progress.isComplete;
     final color = isComplete
-        ? const Color(0xFF22C55E)
-        : (percent >= 0.5 ? scheme.primary : const Color(0xFFF97316));
+        ? tokens.statusSuccess
+        : (percent >= 0.5 ? scheme.primary : tokens.statusWarning);
 
     return SizedBox(
       width: size,

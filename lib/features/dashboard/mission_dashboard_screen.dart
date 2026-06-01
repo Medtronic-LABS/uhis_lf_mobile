@@ -1,27 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../app/theme.dart';
 import '../../app/theme_provider.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/local_dashboard_repository.dart';
-import '../../core/models/mission_brief.dart';
 import '../../core/models/mission_queue_item.dart';
 import '../../core/sync/offline_sync_service.dart';
 import '../referral/referral_repository.dart';
 import '../search/global_search_bar.dart';
 import 'dashboard_repository.dart';
 import 'mission_dashboard_repository.dart';
-import 'widgets/ai_brief_card.dart';
 import 'widgets/critical_alert_banner.dart';
-import 'widgets/follow_ups_due_widget.dart';
-import 'widgets/household_opportunities_widget.dart';
-import 'widgets/mission_progress_card.dart';
-import 'widgets/mission_queue_card.dart';
-import 'widgets/referral_operations_widget.dart';
 
 /// AI Mission Dashboard — the operational command center for the SK.
 ///
@@ -42,18 +37,10 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   UserProfileSummary? _summary;
   
-  // Community stats futures (from old dashboard)
-  late Future<int> _memberFuture;
-  late Future<int> _householdFuture;
-
-  // Mission data futures
-  Future<MissionBrief>? _briefFuture;
-  Future<MissionProgress>? _progressFuture;
+  // Mission data futures consumed by the HTML dashboard composition.
   Future<List<MissionQueueItem>>? _queueFuture;
   Future<List<MissionQueueItem>>? _alertsFuture;
   Future<ReferralSummary>? _referralSummaryFuture;
-  Future<List<FollowUpDue>>? _followUpsFuture;
-  Future<List<HouseholdOpportunity>>? _opportunitiesFuture;
 
   @override
   void initState() {
@@ -89,62 +76,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _reloadStats() {
-    // Try local-first for instant response (no network latency)
+    // Local-first household count cache for the auth repo.
     final localRepo = context.read<LocalDashboardRepository>();
     final apiRepo = context.read<DashboardRepository>();
     final authRepo = context.read<AuthRepository>();
-    
-    final countsFuture = localRepo.householdAndMemberCount().then((local) async {
-      // If local has data, use it (instant)
-      if (local.households > 0) {
-        debugPrint('[Dashboard] Using local counts: ${local.households} households, ${local.members} members');
-        return local;
-      }
-      // Fall back to API if local cache is empty
-      debugPrint('[Dashboard] Local empty, fetching from API...');
-      return apiRepo.householdAndMemberCount();
-    });
-    
-    _householdFuture = countsFuture.then((c) async {
+
+    localRepo.householdAndMemberCount().then((local) async {
+      final counts = local.households > 0
+          ? local
+          : await apiRepo.householdAndMemberCount();
       try {
-        await authRepo.cacheHouseholdCount(c.households);
+        await authRepo.cacheHouseholdCount(counts.households);
       } catch (_) {}
-      return c.households;
     });
-    _memberFuture = countsFuture.then((c) => c.members);
   }
 
   void _loadMissionData() {
     if (!mounted) return;
-    
-    // Check if MissionDashboardRepository is available
     final missionRepo = context.read<MissionDashboardRepository?>();
     if (missionRepo == null) {
-      // No repository available - show empty state
       setState(() {
-        _briefFuture = Future.value(MissionBrief.empty);
-        _progressFuture = Future.value(const MissionProgress(
-          completedVisits: 0,
-          totalVisits: 0,
-          estimatedRemainingMinutes: 0,
-        ));
         _queueFuture = Future.value(const <MissionQueueItem>[]);
         _alertsFuture = Future.value(const <MissionQueueItem>[]);
         _referralSummaryFuture = Future.value(ReferralSummary.empty);
-        _followUpsFuture = Future.value(const <FollowUpDue>[]);
-        _opportunitiesFuture = Future.value(const <HouseholdOpportunity>[]);
       });
       return;
     }
-
     setState(() {
-      _briefFuture = missionRepo.loadBrief();
-      _progressFuture = missionRepo.loadProgress();
       _queueFuture = missionRepo.loadQueue(limit: 10);
       _alertsFuture = missionRepo.loadCriticalAlerts();
       _referralSummaryFuture = missionRepo.loadReferralSummary();
-      _followUpsFuture = missionRepo.loadDueFollowUps();
-      _opportunitiesFuture = missionRepo.loadHouseholdOpportunities();
     });
   }
 
@@ -313,316 +274,106 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      backgroundColor: tokens.canvas,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
           children: [
-            Text(
-              _greeting(),
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w700),
+            _DashboardHeader(
+              greeting: _greeting(),
+              locationLine: _locationLine(),
+              onNotifications: () => context.push('/referrals'),
+              onAiAssistant: _showAiAssistant,
+              settingsMenu: _SettingsMenu(onOfferBiometric: _offerBiometric),
             ),
-            if (_locationLine() != null)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.location_on_outlined,
-                      size: 14, color: scheme.onSurfaceVariant),
-                  const SizedBox(width: 2),
-                  Flexible(
-                    child: Text(
-                      _locationLine()!,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w500,
-                          ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              )
-            else
-              Text(
-                DashboardStrings.communityAtAGlance,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-              ),
-          ],
-        ),
-        actions: [
-          // Notifications button
-          _ReferralNotificationButton(
-            onTap: () => context.push('/referrals'),
-          ),
-          const SizedBox(width: 4),
-          // AI Assistant button
-          IconButton(
-            icon: const Icon(Icons.smart_toy_outlined),
-            tooltip: MissionDashboardStrings.aiAssistant,
-            onPressed: _showAiAssistant,
-          ),
-          const SizedBox(width: 4),
-          // Settings menu
-          _SettingsMenu(
-            onOfferBiometric: _offerBiometric,
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: _refresh,
-        child: CustomScrollView(
-          slivers: [
-            // Search bar + Stats
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _refresh,
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 100),
                   children: [
-                    const GlobalSearchBar(),
+                    FutureBuilder<List<MissionQueueItem>>(
+                      future: _queueFuture,
+                      builder: (context, snap) {
+                        final visitCount = (snap.data ?? const []).length;
+                        return _AiRibbon(visitCount: visitCount);
+                      },
+                    ),
                     const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _StatPill(
-                            label: DashboardStrings.totalMembers,
-                            icon: Icons.people_alt_outlined,
-                            accent: Theme.of(context).colorScheme.primary,
-                            future: _memberFuture,
-                            onTap: () => context.push('/members'),
+                    _DashboardStatsRow(
+                      queueFuture: _queueFuture,
+                      referralFuture: _referralSummaryFuture,
+                      onTapVisits: _navigateToFirstQueueItem,
+                      onTapReferrals: () => context.push('/referrals'),
+                    ),
+                    const SizedBox(height: 14),
+                    FutureBuilder<List<MissionQueueItem>>(
+                      future: _alertsFuture,
+                      builder: (context, snap) {
+                        if (!snap.hasData || snap.data!.isEmpty) {
+                          return const SizedBox.shrink();
+                        }
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: CriticalAlertBanner(
+                            alerts: snap.data!,
+                            onOpenCase: (item) {
+                              if (item.patientId != null) {
+                                context.push('/patient/${item.patientId}');
+                              } else if (item.referralId != null) {
+                                context.push('/referral/${item.referralId}');
+                              }
+                            },
                           ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: _StatPill(
-                            label: DashboardStrings.totalHouseholds,
-                            icon: Icons.home_work_outlined,
-                            accent: Theme.of(context).colorScheme.tertiary,
-                            future: _householdFuture,
-                            onTap: () => context.push('/households'),
-                          ),
-                        ),
-                      ],
+                        );
+                      },
                     ),
-                  ],
-                ),
-              ),
-            ),
-
-            // Critical alerts (sticky when present)
-            SliverToBoxAdapter(
-              child: FutureBuilder<List<MissionQueueItem>>(
-                future: _alertsFuture,
-                builder: (context, snap) {
-                  if (!snap.hasData || snap.data!.isEmpty) {
-                    return const SizedBox.shrink();
-                  }
-                  return CriticalAlertBanner(
-                    alerts: snap.data!,
-                    onOpenCase: (item) {
-                      if (item.patientId != null) {
-                        context.push('/patient/${item.patientId}');
-                      } else if (item.referralId != null) {
-                        context.push('/referral/${item.referralId}');
-                      }
-                    },
-                  );
-                },
-              ),
-            ),
-
-            // AI Daily Brief
-            SliverToBoxAdapter(
-              child: FutureBuilder<MissionBrief>(
-                future: _briefFuture,
-                builder: (context, snap) {
-                  if (snap.connectionState == ConnectionState.waiting) {
-                    return const Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  }
-                  final brief = snap.data ?? MissionBrief.empty;
-                  return AIBriefCard(
-                    brief: brief,
-                    onContinueWork: _navigateToFirstQueueItem,
-                  );
-                },
-              ),
-            ),
-
-            // Mission Progress
-            SliverToBoxAdapter(
-              child: FutureBuilder<MissionProgress>(
-                future: _progressFuture,
-                builder: (context, snap) {
-                  final progress = snap.data ?? MissionProgress.empty;
-                  return MissionProgressCard(
-                    progress: progress,
-                    onContinueWork: _navigateToFirstQueueItem,
-                  );
-                },
-              ),
-            ),
-
-            // Section header: Mission Queue
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 16, 12, 6),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.assignment,
-                      size: 18,
-                      color: scheme.primary,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Mission Queue',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // Mission Queue Cards
-            FutureBuilder<List<MissionQueueItem>>(
-              future: _queueFuture,
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Center(child: CircularProgressIndicator()),
-                    ),
-                  );
-                }
-                final queue = snap.data ?? [];
-                if (queue.isEmpty) {
-                  return SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Center(
-                        child: Column(
+                    _TodaysVisitsHeader(),
+                    const SizedBox(height: 8),
+                    FutureBuilder<List<MissionQueueItem>>(
+                      future: _queueFuture,
+                      builder: (context, snap) {
+                        if (snap.connectionState == ConnectionState.waiting) {
+                          return const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 32),
+                            child: Center(child: CircularProgressIndicator()),
+                          );
+                        }
+                        final queue = snap.data ?? const [];
+                        if (queue.isEmpty) {
+                          return _EmptyVisitsCard();
+                        }
+                        return Column(
                           children: [
-                            Icon(
-                              Icons.check_circle_outline,
-                              size: 48,
-                              color: scheme.primary.withValues(alpha: 0.5),
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              MissionDashboardStrings.noMissionsToday,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(
-                                    color: scheme.onSurfaceVariant,
-                                  ),
-                            ),
+                            for (final item in queue)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: _PriorityPatientCard(
+                                  item: item,
+                                  onTap: () {
+                                    if (item.patientId != null) {
+                                      context.push('/patient/${item.patientId}');
+                                    } else if (item.referralId != null) {
+                                      context.push('/referral/${item.referralId}');
+                                    }
+                                  },
+                                  onAction: () =>
+                                      _handleQueueAction(item, MissionAction.openCase),
+                                ),
+                              ),
                           ],
-                        ),
-                      ),
+                        );
+                      },
                     ),
-                  );
-                }
-                return SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final item = queue[index];
-                      return MissionQueueCard(
-                        item: item,
-                        rank: index + 1,
-                        onAction: _handleQueueAction,
-                        onTap: () {
-                          if (item.patientId != null) {
-                            context.push('/patient/${item.patientId}');
-                          } else if (item.referralId != null) {
-                            context.push('/referral/${item.referralId}');
-                          }
-                        },
-                      );
-                    },
-                    childCount: queue.length,
-                  ),
-                );
-              },
-            ),
-
-            // Referral Operations Widget
-            SliverToBoxAdapter(
-              child: FutureBuilder<ReferralSummary>(
-                future: _referralSummaryFuture,
-                builder: (context, snap) {
-                  final summary = snap.data ?? ReferralSummary.empty;
-                  return ReferralOperationsWidget(
-                    summary: summary,
-                    onOpenReferrals: () => context.push('/referrals'),
-                    onOpenReferral: (item) {
-                      if (item.referralId != null) {
-                        context.push('/referral/${item.referralId}');
-                      }
-                    },
-                    onCallPatient: (item) => _handleCall(item.phoneNumber),
-                  );
-                },
+                  ],
+                ),
               ),
-            ),
-
-            // Follow-Ups Due Widget
-            SliverToBoxAdapter(
-              child: FutureBuilder<List<FollowUpDue>>(
-                future: _followUpsFuture,
-                builder: (context, snap) {
-                  final followUps = snap.data ?? [];
-                  if (followUps.isEmpty) return const SizedBox.shrink();
-                  return FollowUpsDueWidget(
-                    followUps: followUps,
-                    onScheduleVisit: (followUp) {
-                      context.push('/patient/${followUp.patientId}');
-                    },
-                  );
-                },
-              ),
-            ),
-
-            // Household Opportunities Widget
-            SliverToBoxAdapter(
-              child: FutureBuilder<List<HouseholdOpportunity>>(
-                future: _opportunitiesFuture,
-                builder: (context, snap) {
-                  final opportunities = snap.data ?? [];
-                  if (opportunities.isEmpty) return const SizedBox.shrink();
-                  return HouseholdOpportunitiesWidget(
-                    opportunities: opportunities,
-                    onVisitHousehold: (opp) {
-                      context.push('/household/${opp.householdId}');
-                    },
-                  );
-                },
-              ),
-            ),
-
-            // Bottom padding
-            const SliverToBoxAdapter(
-              child: SizedBox(height: 100),
             ),
           ],
         ),
       ),
-      // Floating AI Assistant button
       floatingActionButton: FloatingActionButton(
         onPressed: _showAiAssistant,
         tooltip: MissionDashboardStrings.askAiAssistant,
@@ -1094,58 +845,608 @@ class _QuickQuestion extends StatelessWidget {
   }
 }
 
-/// Compact stat pill for member/household counts.
-class _StatPill extends StatelessWidget {
-  const _StatPill({
+// ─────────────────────────────────────────────────────────────────────────────
+// HTML-composition widgets
+// Match `Leapfrog .html` dashboard: navy header, AI ribbon, two-stat row,
+// "Today's visits" priority-ordered patient cards with colored left border.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _DashboardHeader extends StatelessWidget {
+  const _DashboardHeader({
+    required this.greeting,
+    required this.locationLine,
+    required this.onNotifications,
+    required this.onAiAssistant,
+    required this.settingsMenu,
+  });
+
+  final String greeting;
+  final String? locationLine;
+  final VoidCallback onNotifications;
+  final VoidCallback onAiAssistant;
+  final Widget settingsMenu;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    return Container(
+      color: tokens.brandNavy,
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      greeting,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        height: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        const Icon(Icons.location_on_outlined,
+                            size: 14, color: Colors.white70),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            locationLine ??
+                                DashboardStrings.communityAtAGlance,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              _ReferralNotificationButton(onTap: onNotifications),
+              IconButton(
+                icon: const Icon(Icons.smart_toy_outlined, color: Colors.white),
+                tooltip: MissionDashboardStrings.aiAssistant,
+                onPressed: onAiAssistant,
+              ),
+              settingsMenu,
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Search bar with QR-scan affordance
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: tokens.cardSurface,
+              borderRadius:
+                  BorderRadius.circular(LeapfrogColors.radiusMd),
+            ),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4),
+              child: GlobalSearchBar(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AiRibbon extends StatelessWidget {
+  const _AiRibbon({required this.visitCount});
+
+  final int visitCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      decoration: BoxDecoration(
+        color: tokens.brandNavy,
+        borderRadius: BorderRadius.circular(LeapfrogColors.radiusMd),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.auto_awesome,
+                size: 18, color: Colors.white),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  MissionDashboardStrings.aiSortedVisits(visitCount),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: const [
+                    _AiRibbonChip(label: 'Risk scoring'),
+                    _AiRibbonChip(label: 'Overdue flags'),
+                    _AiRibbonChip(label: 'CCE alerts'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AiRibbonChip extends StatelessWidget {
+  const _AiRibbonChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        '✦ $label',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _DashboardStatsRow extends StatelessWidget {
+  const _DashboardStatsRow({
+    required this.queueFuture,
+    required this.referralFuture,
+    required this.onTapVisits,
+    required this.onTapReferrals,
+  });
+
+  final Future<List<MissionQueueItem>>? queueFuture;
+  final Future<ReferralSummary>? referralFuture;
+  final VoidCallback onTapVisits;
+  final VoidCallback onTapReferrals;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: FutureBuilder<List<MissionQueueItem>>(
+            future: queueFuture,
+            builder: (context, snap) {
+              final count = (snap.data ?? const []).length;
+              return _DashboardStatCard(
+                value: '$count',
+                label: MissionDashboardStrings.visitsToday,
+                accentVariant: _DashboardStatVariant.navy,
+                subline: MissionDashboardStrings.visitsTodaySubline,
+                onTap: onTapVisits,
+              );
+            },
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: FutureBuilder<ReferralSummary>(
+            future: referralFuture,
+            builder: (context, snap) {
+              final s = snap.data ?? ReferralSummary.empty;
+              final alerts = s.breached + s.awaitingReview;
+              return _DashboardStatCard(
+                value: '$alerts',
+                label: MissionDashboardStrings.referralAlertsLabel,
+                accentVariant: _DashboardStatVariant.pink,
+                subline: MissionDashboardStrings.tapToFollowUp,
+                onTap: onTapReferrals,
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+enum _DashboardStatVariant { navy, pink }
+
+class _DashboardStatCard extends StatelessWidget {
+  const _DashboardStatCard({
+    required this.value,
     required this.label,
-    required this.icon,
-    required this.accent,
-    required this.future,
+    required this.accentVariant,
+    required this.subline,
     required this.onTap,
   });
 
+  final String value;
   final String label;
-  final IconData icon;
-  final Color accent;
-  final Future<int> future;
+  final _DashboardStatVariant accentVariant;
+  final String subline;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    final accent = accentVariant == _DashboardStatVariant.pink
+        ? tokens.brandPink
+        : tokens.brandNavy;
     return Material(
-      color: accent.withValues(alpha: 0.10),
-      borderRadius: BorderRadius.circular(10),
+      color: tokens.cardSurface,
+      borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          child: Row(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, color: accent, size: 16),
-              const SizedBox(width: 6),
-              Expanded(
-                child: FutureBuilder<int>(
-                  future: future,
-                  builder: (context, snap) {
-                    final value = snap.hasError
-                        ? '—'
-                        : (snap.data == null ? '…' : '${snap.data}');
-                    return Text(
-                      '$value · ${label.replaceAll('\n', ' ')}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: accent,
-                            fontWeight: FontWeight.w700,
-                          ),
-                    );
-                  },
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 30,
+                  fontWeight: FontWeight.w900,
+                  color: accent,
+                  height: 1,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: tokens.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subline,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: accent,
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _TodaysVisitsHeader extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    final dateLabel = DateFormat('EEE d MMM').format(DateTime.now());
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              MissionDashboardStrings.todaysVisits(dateLabel),
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                color: tokens.brandNavy,
+              ),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: tokens.aiPurple.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.auto_awesome, size: 12, color: tokens.aiPurple),
+                const SizedBox(width: 4),
+                Text(
+                  MissionDashboardStrings.aiSortedBadge,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: tokens.aiPurple,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PriorityPatientCard extends StatelessWidget {
+  const _PriorityPatientCard({
+    required this.item,
+    required this.onTap,
+    required this.onAction,
+  });
+
+  final MissionQueueItem item;
+  final VoidCallback onTap;
+  final VoidCallback onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    final urgency = Theme.of(context).extension<UrgencyTheme>()!;
+    final borderColor = _borderColor(item.priority, urgency, tokens);
+    final (actionLabel, actionBg, actionFg) =
+        _actionStyle(item.priority, tokens);
+
+    return Material(
+      color: tokens.cardSurface,
+      borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
+            border: Border(
+              left: BorderSide(color: borderColor, width: 4),
+            ),
+          ),
+          padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: borderColor.withValues(alpha: 0.18),
+                child: Text(
+                  _initials(item.patientName),
+                  style: TextStyle(
+                    color: borderColor,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.patientName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: tokens.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    _PriorityPatientReasonBadge(item: item),
+                    const SizedBox(height: 6),
+                    Text(
+                      _subtitle(item),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: tokens.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Material(
+                color: actionBg,
+                borderRadius: BorderRadius.circular(20),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: onAction,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                    child: Text(
+                      actionLabel,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: actionFg,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _initials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) return '?';
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
+        .toUpperCase();
+  }
+
+  String _subtitle(MissionQueueItem item) {
+    final parts = <String>[];
+    if (item.age != null) parts.add('Age ${item.age}');
+    if (item.village != null && item.village!.isNotEmpty) parts.add(item.village!);
+    if (parts.isEmpty) return item.reason;
+    return parts.join(' · ');
+  }
+
+  Color _borderColor(
+    MissionPriority p,
+    UrgencyTheme urgency,
+    LeapfrogColors tokens,
+  ) {
+    switch (p) {
+      case MissionPriority.critical:
+        return urgency.visitNow;
+      case MissionPriority.high:
+        return urgency.today;
+      case MissionPriority.medium:
+        return urgency.thisWeek;
+      case MissionPriority.low:
+        return tokens.textMuted;
+    }
+  }
+
+  (String, Color, Color) _actionStyle(
+    MissionPriority p,
+    LeapfrogColors tokens,
+  ) {
+    switch (p) {
+      case MissionPriority.critical:
+        return (
+          MissionDashboardStrings.actionVisitNow,
+          tokens.statusCritical,
+          Colors.white,
+        );
+      case MissionPriority.high:
+        return (
+          MissionDashboardStrings.actionVisitToday,
+          tokens.brandNavy,
+          Colors.white,
+        );
+      case MissionPriority.medium:
+        return (
+          MissionDashboardStrings.actionThisWeek,
+          tokens.cardSurfaceMuted,
+          tokens.brandNavy,
+        );
+      case MissionPriority.low:
+        return (
+          MissionDashboardStrings.actionRoutine,
+          tokens.cardSurfaceMuted,
+          tokens.textMuted,
+        );
+    }
+  }
+}
+
+class _PriorityPatientReasonBadge extends StatelessWidget {
+  const _PriorityPatientReasonBadge({required this.item});
+
+  final MissionQueueItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    final urgency = Theme.of(context).extension<UrgencyTheme>()!;
+    final (bg, fg) = _badgeColors(item.priority, urgency, tokens);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Text(
+        item.reason,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          color: fg,
+        ),
+      ),
+    );
+  }
+
+  (Color, Color) _badgeColors(
+    MissionPriority p,
+    UrgencyTheme urgency,
+    LeapfrogColors tokens,
+  ) {
+    switch (p) {
+      case MissionPriority.critical:
+        return (urgency.visitNowContainer, urgency.visitNow);
+      case MissionPriority.high:
+        return (urgency.todayContainer, urgency.today);
+      case MissionPriority.medium:
+        return (urgency.thisWeekContainer, urgency.thisWeek);
+      case MissionPriority.low:
+        return (tokens.cardSurfaceMuted, tokens.textMuted);
+    }
+  }
+}
+
+class _EmptyVisitsCard extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: tokens.cardSurface,
+        borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.check_circle_outline,
+              size: 40, color: tokens.statusSuccess),
+          const SizedBox(height: 8),
+          Text(
+            MissionDashboardStrings.noMissionsToday,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: tokens.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            MissionDashboardStrings.allCaughtUp,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: tokens.textMuted,
+            ),
+          ),
+        ],
       ),
     );
   }

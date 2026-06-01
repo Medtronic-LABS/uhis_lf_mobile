@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/constants/app_strings.dart';
+import 'theme.dart';
+
 /// Shell widget for the persistent 4-tab bottom navigation.
 /// Each tab maintains its own navigation stack.
 class BottomNavShell extends StatelessWidget {
@@ -13,40 +16,41 @@ class BottomNavShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
 
     return Scaffold(
       body: navigationShell,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: navigationShell.currentIndex,
-        onDestinationSelected: (index) => _onTap(context, index),
-        backgroundColor: scheme.surface,
-        indicatorColor: scheme.primaryContainer,
-        surfaceTintColor: Colors.transparent,
-        height: 65,
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.people_outline),
-            selectedIcon: Icon(Icons.people),
-            label: 'Patients',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.task_alt_outlined),
-            selectedIcon: Icon(Icons.task_alt),
-            label: 'Tasks',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.map_outlined),
-            selectedIcon: Icon(Icons.map),
-            label: 'Map',
-          ),
-        ],
+      bottomNavigationBar: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: tokens.divider)),
+        ),
+        child: NavigationBar(
+          selectedIndex: navigationShell.currentIndex,
+          onDestinationSelected: (index) => _onTap(context, index),
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.home_outlined),
+              selectedIcon: Icon(Icons.home),
+              label: BottomNavStrings.home,
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.people_outline),
+              selectedIcon: Icon(Icons.people),
+              label: BottomNavStrings.patients,
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.task_alt_outlined),
+              selectedIcon: Icon(Icons.task_alt),
+              label: BottomNavStrings.tasks,
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.map_outlined),
+              selectedIcon: Icon(Icons.map),
+              label: BottomNavStrings.map,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -66,11 +70,12 @@ class MapPlaceholderScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Map'),
+        title: const Text(BottomNavStrings.mapTitle),
         centerTitle: true,
       ),
       body: Center(
@@ -80,22 +85,22 @@ class MapPlaceholderScreen extends StatelessWidget {
             Icon(
               Icons.map_outlined,
               size: 80,
-              color: scheme.onSurfaceVariant.withValues(alpha: 0.5),
+              color: tokens.textMuted.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 16),
             Text(
-              'Map View',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
-                  ),
+              BottomNavStrings.mapPlaceholderHeading,
+              style: textTheme.headlineSmall?.copyWith(
+                color: tokens.textMuted,
+                fontWeight: FontWeight.w800,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Coming soon',
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
-                  ),
+              BottomNavStrings.mapPlaceholderSubheading,
+              style: textTheme.bodyLarge?.copyWith(
+                color: tokens.textMuted.withValues(alpha: 0.7),
+              ),
             ),
           ],
         ),

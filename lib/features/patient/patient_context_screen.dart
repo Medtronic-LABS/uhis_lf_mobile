@@ -299,95 +299,99 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     return Scaffold(
-      appBar: AppBar(
-        title: FutureBuilder<PatientOrMemberData>(
-          future: _future,
-          builder: (context, snap) {
-            final name = snap.data?.name;
-            return Text(name ?? PatientContextStrings.fallbackTitle);
-          },
-        ),
-        actions: [
-          IconButton(
-            tooltip: PatientContextStrings.refresh,
-            icon: _refreshing
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.cloud_download_outlined),
-            onPressed: _refreshing ? null : _refresh,
-          ),
-        ],
-      ),
+      backgroundColor: tokens.canvas,
       body: FutureBuilder<PatientOrMemberData>(
         future: _future,
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const SafeArea(
+              child: Center(child: CircularProgressIndicator()),
+            );
           }
           final data = snap.data;
           if (data == null || !data.hasData) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.person_search_outlined,
-                      size: 64,
-                      color: Theme.of(context).colorScheme.outline,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      PatientContextStrings.notFound,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-                    const SizedBox(height: 24),
-                    FilledButton.tonal(
-                      onPressed: _load,
-                      child: const Text(CommonStrings.retry),
-                    ),
-                  ],
+            return SafeArea(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.person_search_outlined,
+                        size: 64,
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        PatientContextStrings.notFound,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                      const SizedBox(height: 24),
+                      FilledButton.tonal(
+                        onPressed: _load,
+                        child: const Text(CommonStrings.retry),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
           }
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              _HeaderCardV2(data: data, patientId: widget.patientId),
-              const SizedBox(height: 16),
-              if (data.riskReasons.isNotEmpty)
-                _RationaleCard(reasons: data.riskReasons),
-              if (data.riskReasons.isNotEmpty) const SizedBox(height: 16),
-              _AssessmentsSection(assessments: data.assessments),
-              const SizedBox(height: 16),
-              RecentVitalsSection(
-                // Use patientId (FHIR patient ID like 002014250010) not memberId (354)
-                patientId: data.patientId ?? widget.patientId,
-                memberReference: data.memberReference,
-              ),
-              const SizedBox(height: 16),
-              OpenFollowupsSection(
-                patientId: widget.patientId,
-                memberReference: data.memberReference,
-              ),
-              const SizedBox(height: 16),
-              PatientActionsRow(
-                patientId: widget.patientId,
-                patientName: data.name,
-                patientAge: data.age,
-                patientGender: data.gender,
-                householdId: data.householdId,
-                programmes: data.programmes,
-              ),
-              const SizedBox(height: 24),
-            ],
+          final isUrgent = data.riskBand == RiskBand.urgent ||
+              data.riskBand == RiskBand.high;
+          return SafeArea(
+            bottom: false,
+            child: Column(
+              children: [
+                _PatientDetailHeader(
+                  data: data,
+                  isUrgent: isUrgent,
+                  refreshing: _refreshing,
+                  onBack: () => Navigator.of(context).maybePop(),
+                  onRefresh: _refreshing ? null : _refresh,
+                ),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(14, 14, 14, 110),
+                    children: [
+                      _GreetingCard(data: data),
+                      const SizedBox(height: 10),
+                      if (data.riskReasons.isNotEmpty)
+                        _AiSummaryCard(
+                          name: data.name ?? PatientContextStrings.fallbackTitle,
+                          reasons: data.riskReasons,
+                        ),
+                      if (data.riskReasons.isNotEmpty)
+                        const SizedBox(height: 10),
+                      _AssessmentsSection(assessments: data.assessments),
+                      const SizedBox(height: 10),
+                      RecentVitalsSection(
+                        patientId: data.patientId ?? widget.patientId,
+                        memberReference: data.memberReference,
+                      ),
+                      const SizedBox(height: 10),
+                      OpenFollowupsSection(
+                        patientId: widget.patientId,
+                        memberReference: data.memberReference,
+                      ),
+                      const SizedBox(height: 10),
+                      PatientActionsRow(
+                        patientId: widget.patientId,
+                        patientName: data.name,
+                        patientAge: data.age,
+                        patientGender: data.gender,
+                        householdId: data.householdId,
+                        programmes: data.programmes,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           );
         },
       ),
@@ -1595,6 +1599,326 @@ class _DetailRow extends StatelessWidget {
                 color: valueColor,
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HTML-composition widgets for the Patient Detail screen.
+// Match `Leapfrog .html` patient summary view: purple header strip, greeting
+// card with bilingual prompt, AI summary card with lavender background.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _PatientDetailHeader extends StatelessWidget {
+  const _PatientDetailHeader({
+    required this.data,
+    required this.isUrgent,
+    required this.refreshing,
+    required this.onBack,
+    required this.onRefresh,
+  });
+
+  final PatientOrMemberData data;
+  final bool isUrgent;
+  final bool refreshing;
+  final VoidCallback onBack;
+  final VoidCallback? onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    final name = data.name ?? PatientContextStrings.fallbackTitle;
+    final subtitleParts = <String>[];
+    if (data.age != null) subtitleParts.add('Age ${data.age}');
+    if (data.gender != null) subtitleParts.add(data.gender!);
+    if (data.householdId != null) subtitleParts.add('HH ${data.householdId}');
+    final subtitle = subtitleParts.join(' · ');
+
+    return Container(
+      color: tokens.aiPurpleDark,
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 14),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: onBack,
+                tooltip: PatientContextStrings.backToWorklist,
+              ),
+              Expanded(
+                child: Text(
+                  PatientContextStrings.backToWorklist,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              if (isUrgent)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
+                  margin: const EdgeInsets.only(right: 4),
+                  decoration: BoxDecoration(
+                    color: tokens.statusCritical,
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: const Text(
+                    'URGENT',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              IconButton(
+                tooltip: PatientContextStrings.refresh,
+                icon: refreshing
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.cloud_download_outlined,
+                        color: Colors.white),
+                onPressed: onRefresh,
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 24,
+                  backgroundColor: Colors.white.withValues(alpha: 0.18),
+                  child: Text(
+                    _initials(name),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      if (subtitle.isNotEmpty)
+                        Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _initials(String n) {
+    final parts = n.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) return '?';
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
+        .toUpperCase();
+  }
+}
+
+class _GreetingCard extends StatelessWidget {
+  const _GreetingCard({required this.data});
+
+  final PatientOrMemberData data;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: tokens.cardSurface,
+        borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.waving_hand, size: 18, color: tokens.statusInfo),
+              const SizedBox(width: 6),
+              Text(
+                PatientContextStrings.sayHelloFirst,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: tokens.statusInfo,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: tokens.statusInfoSurface,
+              borderRadius: BorderRadius.circular(LeapfrogColors.radiusMd),
+              border: Border(
+                left: BorderSide(color: tokens.statusInfo, width: 3),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  PatientContextStrings.greetingBangla,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: tokens.brandNavy,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  PatientContextStrings.greetingEnglish,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: tokens.statusInfo,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AiSummaryCard extends StatelessWidget {
+  const _AiSummaryCard({required this.name, required this.reasons});
+
+  final String name;
+  final List<String> reasons;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [tokens.aiSurfaceStart, tokens.aiSurfaceEnd],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
+        border: Border.all(color: tokens.aiBorder),
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            top: -2,
+            right: -2,
+            child: Text(
+              '✦',
+              style: TextStyle(
+                fontSize: 32,
+                color: tokens.aiPurple.withValues(alpha: 0.18),
+              ),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: tokens.aiPurple,
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: const Text(
+                  '✦ AI READ HER RECORD',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                PatientContextStrings.aiSummaryLead(name),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: tokens.brandNavy,
+                  height: 1.5,
+                ),
+              ),
+              if (reasons.isNotEmpty) const SizedBox(height: 8),
+              if (reasons.isNotEmpty)
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final r in reasons.take(4))
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: tokens.cardSurface,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: tokens.aiBorder),
+                        ),
+                        child: Text(
+                          '⚠ $r',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: tokens.aiPurpleDark,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+            ],
           ),
         ],
       ),

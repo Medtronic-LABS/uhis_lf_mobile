@@ -432,6 +432,16 @@ abstract final class PatientContextStrings {
   static const String refreshing = 'Refreshing…';
   static const String refreshDone = 'Patient refreshed';
   static const String refreshFailed = 'Refresh failed';
+
+  // ── HTML detail composition ──────────────────────────────────────────────
+  static const String backToWorklist = 'Back to worklist';
+  static const String sayHelloFirst = '👋 Say hello first';
+  static const String greetingBangla =
+      'আপনাদের কেমন আছেন? রোগী কেমন আছে?';
+  static const String greetingEnglish =
+      'How is everyone? How is the patient today?';
+  static String aiSummaryLead(String name) =>
+      '$name has the following risk drivers worth addressing today.';
 }
 
 
@@ -656,6 +666,19 @@ abstract final class ReferralStrings {
 abstract final class MissionDashboardStrings {
   MissionDashboardStrings._();
 
+  // ── HTML Dashboard composition ───────────────────────────────────────────
+  static String aiSortedVisits(int n) => 'AI sorted your $n visits overnight';
+  static const String visitsToday = 'Visits today';
+  static const String visitsTodaySubline = '2 villages · ~4 km';
+  static const String referralAlertsLabel = 'Referral alerts';
+  static const String tapToFollowUp = 'Tap to follow up →';
+  static String todaysVisits(String date) => "Today's visits · $date";
+  static const String aiSortedBadge = 'AI sorted';
+  static const String actionVisitNow = 'Visit now';
+  static const String actionVisitToday = 'Visit today';
+  static const String actionThisWeek = 'This week';
+  static const String actionRoutine = 'Routine';
+
   // ── AI Daily Brief Card ──────────────────────────────────────────────────
   static const String aiBriefTitle = "Today's AI Brief";
   static const String visitsRecommended = 'Visits Recommended';
@@ -793,4 +816,53 @@ abstract final class MissionDashboardStrings {
   static const String noFollowUpsDue = 'No follow-ups due';
   static const String noHouseholdOpportunities =
       'No household opportunities identified';
+}
+
+/// Visit triage step (HTML composition) — bilingual symptom prompts.
+abstract final class VisitTriageStrings {
+  VisitTriageStrings._();
+
+  static const String triage = 'Triage';
+  static const String patient = 'patient';
+  static const String sessionMissing =
+      'Visit not found. Please start a new visit.';
+  static const String leaveVisitTitle = 'Leave visit?';
+  static const String leaveVisitBody =
+      'Your progress will be saved. You can resume later.';
+  static const String stay = 'Stay';
+  static const String leave = 'Leave';
+
+  static String stepOneOfThree(String programme) =>
+      'STEP 1 OF 3 · AI TRIAGE · $programme';
+  static const String stepLabel1 = 'How are you feeling?';
+  static const String stepLabel2 = 'AI triage';
+  static const String stepLabel3 = 'Detailed check';
+
+  static const String beforeYouKnock = 'Before you knock · AI brief';
+  static String briefBody(String name) =>
+      '⚠ $name · current concerns flagged — act today if symptoms persist';
+
+  static const String skAsksFamily = 'SK ASKS THE FAMILY 👋';
+  static const String skAsksBangla =
+      'রোগী কেমন আছে? কতদিন হলো অসুস্থ?';
+  static const String skAsksEnglish =
+      'How is the patient? How many days unwell?';
+
+  static const String durationQuestion = 'কতদিন হলো? · How many days sick?';
+  static const String aiCheckingCta = 'AI is checking — see what to do next';
+}
+
+/// Bottom-nav tab labels + the Map placeholder copy.
+abstract final class BottomNavStrings {
+  BottomNavStrings._();
+
+  static const String home = 'Home';
+  static const String patients = 'Patients';
+  static const String tasks = 'Tasks';
+  static const String map = 'Map';
+
+  // Map placeholder screen
+  static const String mapTitle = 'Map';
+  static const String mapPlaceholderHeading = 'Map View';
+  static const String mapPlaceholderSubheading = 'Coming soon';
 }

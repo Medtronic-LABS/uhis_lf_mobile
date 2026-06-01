@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/theme.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/models/mission_queue_item.dart';
 import '../../../core/models/programme.dart';
@@ -27,7 +28,7 @@ class MissionQueueCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final priorityColor = _priorityColor(item.priority, scheme);
+    final priorityColor = _priorityColor(context, item.priority, scheme);
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -244,16 +245,18 @@ class MissionQueueCard extends StatelessWidget {
     );
   }
 
-  Color _priorityColor(MissionPriority priority, ColorScheme scheme) {
+  Color _priorityColor(
+      BuildContext context, MissionPriority priority, ColorScheme scheme) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     switch (priority) {
       case MissionPriority.critical:
-        return scheme.error;
+        return tokens.statusCritical;
       case MissionPriority.high:
-        return const Color(0xFFF97316); // orange-500
+        return tokens.statusWarning;
       case MissionPriority.medium:
-        return const Color(0xFFEAB308); // yellow-500
+        return tokens.statusInfo;
       case MissionPriority.low:
-        return const Color(0xFF22C55E); // green-500
+        return tokens.statusSuccess;
     }
   }
 
@@ -284,8 +287,8 @@ class _ProgrammeBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (color, label) = _programmeInfo(programme);
-    
+    final (color, label) = _programmeInfo(context, programme);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
@@ -303,19 +306,21 @@ class _ProgrammeBadge extends StatelessWidget {
     );
   }
 
-  (Color, String) _programmeInfo(Programme p) {
+  (Color, String) _programmeInfo(BuildContext context, Programme p) {
+    final progColors = Theme.of(context).extension<ProgrammeColors>()!;
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     switch (p) {
       case Programme.imci:
-        return (const Color(0xFFDC2626), MissionDashboardStrings.badgeImci);
+        return (progColors.imci, MissionDashboardStrings.badgeImci);
       case Programme.anc:
       case Programme.pnc:
-        return (const Color(0xFFEC4899), MissionDashboardStrings.badgeAnc);
+        return (progColors.anc, MissionDashboardStrings.badgeAnc);
       case Programme.ncd:
-        return (const Color(0xFFD97706), MissionDashboardStrings.badgeNcd);
+        return (progColors.ncd, MissionDashboardStrings.badgeNcd);
       case Programme.tb:
-        return (const Color(0xFF16A34A), MissionDashboardStrings.badgeTb);
+        return (progColors.tb, MissionDashboardStrings.badgeTb);
       case Programme.unknown:
-        return (const Color(0xFF6B7280), 'General');
+        return (tokens.textMuted, 'General');
     }
   }
 }

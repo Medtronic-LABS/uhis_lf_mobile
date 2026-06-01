@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/theme.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/models/mission_queue_item.dart';
 
@@ -236,7 +237,7 @@ class _ServiceChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final (icon, color) = _roleInfo(role);
+    final (icon, color) = _roleInfo(context, role);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -277,20 +278,22 @@ class _ServiceChip extends StatelessWidget {
     );
   }
 
-  (IconData, Color) _roleInfo(String role) {
+  (IconData, Color) _roleInfo(BuildContext context, String role) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    final progColors = Theme.of(context).extension<ProgrammeColors>()!;
     final lower = role.toLowerCase();
     if (lower.contains('mother') || lower.contains('wife')) {
-      return (Icons.woman, const Color(0xFFEC4899)); // pink
+      return (Icons.woman, progColors.anc);
     }
     if (lower.contains('father') || lower.contains('husband')) {
-      return (Icons.man, const Color(0xFF3B82F6)); // blue
+      return (Icons.man, tokens.statusInfo);
     }
     if (lower.contains('child') || lower.contains('son') || lower.contains('daughter')) {
-      return (Icons.child_care, const Color(0xFF22C55E)); // green
+      return (Icons.child_care, tokens.statusSuccess);
     }
     if (lower.contains('elder') || lower.contains('grand')) {
-      return (Icons.elderly, const Color(0xFF6B7280)); // gray
+      return (Icons.elderly, tokens.textMuted);
     }
-    return (Icons.person, const Color(0xFF6B7280));
+    return (Icons.person, tokens.textMuted);
   }
 }

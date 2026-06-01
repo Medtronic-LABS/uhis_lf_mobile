@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../app/theme.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/models/patient.dart';
@@ -698,7 +699,10 @@ class _ReferralListScreenState extends State<ReferralListScreen> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.message, color: Color(0xFF25D366)),
+                leading: Icon(
+                  Icons.message,
+                  color: Theme.of(context).extension<LeapfrogColors>()!.whatsapp,
+                ),
                 title: const Text(ReferralStrings.contactWhatsApp),
                 subtitle: const Text(ReferralStrings.contactWhatsAppSubtitle),
                 onTap: () {

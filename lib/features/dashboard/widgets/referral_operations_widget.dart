@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/theme.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/models/mission_queue_item.dart';
 
@@ -26,6 +27,7 @@ class ReferralOperationsWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -97,12 +99,12 @@ class ReferralOperationsWidget extends StatelessWidget {
                   _StatusCount(
                     count: summary.awaitingReview,
                     label: MissionDashboardStrings.awaitingReview,
-                    color: const Color(0xFFF97316), // orange
+                    color: tokens.statusWarning,
                   ),
                   _StatusCount(
                     count: summary.completed,
                     label: MissionDashboardStrings.completed,
-                    color: const Color(0xFF22C55E), // green
+                    color: tokens.statusSuccess,
                   ),
                 ],
               ),

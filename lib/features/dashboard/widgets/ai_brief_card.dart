@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../app/theme.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/models/mission_brief.dart';
 
@@ -134,7 +135,7 @@ class _AIBriefCardState extends State<AIBriefCard> {
                     Expanded(
                       child: _CompactDetailRow(
                         icon: Icons.timelapse,
-                        iconColor: const Color(0xFFF97316),
+                        iconColor: Theme.of(context).extension<LeapfrogColors>()!.statusWarning,
                         label: MissionDashboardStrings.slaBreachedReferrals,
                         value: brief.slaBreachedReferrals.toString(),
                         isHighlight: brief.slaBreachedReferrals > 0,
@@ -148,7 +149,7 @@ class _AIBriefCardState extends State<AIBriefCard> {
                     Expanded(
                       child: _CompactDetailRow(
                         icon: Icons.pregnant_woman,
-                        iconColor: const Color(0xFFEC4899),
+                        iconColor: Theme.of(context).extension<ProgrammeColors>()!.anc,
                         label: MissionDashboardStrings.ancFollowUps,
                         value: brief.ancFollowUps.toString(),
                       ),
@@ -279,15 +280,16 @@ class _AIBriefCardState extends State<AIBriefCard> {
   }
 
   Color _priorityColor(DayPriorityLevel priority, ColorScheme scheme) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     switch (priority) {
       case DayPriorityLevel.critical:
-        return scheme.error;
+        return tokens.statusCritical;
       case DayPriorityLevel.high:
-        return const Color(0xFFF97316); // orange-500
+        return tokens.statusWarning;
       case DayPriorityLevel.medium:
-        return const Color(0xFFEAB308); // yellow-500
+        return tokens.statusInfo;
       case DayPriorityLevel.low:
-        return scheme.primary;
+        return tokens.aiPurple;
     }
   }
 }
@@ -300,7 +302,7 @@ class _PriorityBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final color = _getColor(scheme);
+    final color = _getColor(context, scheme);
     
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
@@ -326,16 +328,17 @@ class _PriorityBadge extends StatelessWidget {
     );
   }
 
-  Color _getColor(ColorScheme scheme) {
+  Color _getColor(BuildContext context, ColorScheme scheme) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     switch (priority) {
       case DayPriorityLevel.critical:
-        return scheme.error;
+        return tokens.statusCritical;
       case DayPriorityLevel.high:
-        return const Color(0xFFF97316);
+        return tokens.statusWarning;
       case DayPriorityLevel.medium:
-        return const Color(0xFFEAB308);
+        return tokens.statusInfo;
       case DayPriorityLevel.low:
-        return scheme.primary;
+        return tokens.aiPurple;
     }
   }
 }
