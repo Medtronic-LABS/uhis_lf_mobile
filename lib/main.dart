@@ -18,8 +18,11 @@ import 'core/db/app_database.dart';
 import 'core/db/assessment_dao.dart';
 import 'core/db/encounter_dao.dart';
 import 'core/db/follow_up_dao.dart';
+import 'core/db/household_dao.dart';
 import 'core/db/immunisation_dao.dart';
 import 'core/db/local_assessment_dao.dart';
+import 'core/db/local_dashboard_repository.dart';
+import 'core/db/member_dao.dart';
 import 'core/db/patient_dao.dart';
 import 'core/db/patient_programmes_dao.dart';
 import 'core/db/referral_dao.dart';
@@ -108,6 +111,12 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final LocalAssessmentDao _localAssessmentDao =
       LocalAssessmentDao(widget.appDb);
   late final SyncMetaDao _syncMetaDao = SyncMetaDao(widget.appDb);
+  late final HouseholdDao _householdDao = HouseholdDao(widget.appDb);
+  late final MemberDao _memberDao = MemberDao(widget.appDb);
+  late final LocalDashboardRepository _localDashboard = LocalDashboardRepository(
+    households: _householdDao,
+    members: _memberDao,
+  );
   late final RiskScoringService _risk = const RiskScoringService();
 
   // ── Referral SLA Engine wiring (initialized early for sync) ─────────────
@@ -123,6 +132,8 @@ class _UhisNextAppState extends State<UhisNextApp>
     assessments: _assessmentDao,
     referrals: _referralDao,
     syncMeta: _syncMetaDao,
+    households: _householdDao,
+    members: _memberDao,
   );
   late final WorklistRepository _worklist = WorklistRepository(
     patients: _patientDao,
@@ -251,6 +262,9 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<ReferralRepository>.value(value: _referrals),
         Provider<MissionDashboardRepository>.value(value: _missionDashboard),
         Provider<PatientDao>.value(value: _patientDao),
+        Provider<HouseholdDao>.value(value: _householdDao),
+        Provider<MemberDao>.value(value: _memberDao),
+        Provider<LocalDashboardRepository>.value(value: _localDashboard),
         Provider<MemberDetailRepository>(
             create: (_) => MemberDetailRepository(widget.api, widget.authRepo)),
         // Visit flow providers

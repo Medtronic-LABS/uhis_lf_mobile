@@ -10,6 +10,8 @@ class SyncReport {
     this.immunisations = 0,
     this.assessments = 0,
     this.referrals = 0,
+    this.households = 0,
+    this.members = 0,
     this.errors = const <String>[],
     this.wasFullSync = false,
   });
@@ -26,6 +28,8 @@ class SyncReport {
   final int immunisations;
   final int assessments;
   final int referrals;
+  final int households;
+  final int members;
   final List<String> errors;
   final bool wasFullSync;
 
@@ -38,6 +42,8 @@ class SyncReport {
     int? immunisations,
     int? assessments,
     int? referrals,
+    int? households,
+    int? members,
     List<String>? errors,
     bool? wasFullSync,
   }) =>
@@ -49,6 +55,8 @@ class SyncReport {
         immunisations: immunisations ?? this.immunisations,
         assessments: assessments ?? this.assessments,
         referrals: referrals ?? this.referrals,
+        households: households ?? this.households,
+        members: members ?? this.members,
         errors: errors ?? this.errors,
         wasFullSync: wasFullSync ?? this.wasFullSync,
       );

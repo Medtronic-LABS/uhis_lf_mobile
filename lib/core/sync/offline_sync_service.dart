@@ -10,7 +10,9 @@ import '../api/endpoints.dart';
 import '../auth/auth_repository.dart';
 import '../db/assessment_dao.dart';
 import '../db/follow_up_dao.dart';
+import '../db/household_dao.dart';
 import '../db/immunisation_dao.dart';
+import '../db/member_dao.dart';
 import '../db/patient_dao.dart';
 import '../db/patient_programmes_dao.dart';
 import '../db/referral_dao.dart';
@@ -41,6 +43,8 @@ class OfflineSyncService extends ChangeNotifier {
     required AssessmentDao assessments,
     required ReferralDao referrals,
     required SyncMetaDao syncMeta,
+    HouseholdDao? households,
+    MemberDao? members,
   })  : _api = api,
         _auth = auth,
         _patients = patients,
@@ -49,7 +53,9 @@ class OfflineSyncService extends ChangeNotifier {
         _immunisations = immunisations,
         _assessments = assessments,
         _referrals = referrals,
-        _syncMeta = syncMeta;
+        _syncMeta = syncMeta,
+        _households = households,
+        _members = members;
 
   static const String _entityKey = 'worklist';
 
@@ -58,6 +64,8 @@ class OfflineSyncService extends ChangeNotifier {
   final PatientDao _patients;
   final PatientProgrammesDao _programmes;
   final FollowUpDao _followUps;
+  final HouseholdDao? _households;
+  final MemberDao? _members;
   final ImmunisationDao _immunisations;
   final AssessmentDao _assessments;
   final ReferralDao _referrals;
@@ -148,14 +156,21 @@ class OfflineSyncService extends ChangeNotifier {
         );
       }
 
-      // Step 2: Process and persist bundle
+      // Step 2: Sync households and members (like Android spice-2.0)
+      _emitProgress(const SyncProgress(
+        currentStep: SyncStep.fetchingPatients,
+        entityName: 'households',
+      ));
+      final hhCount = await _syncHouseholdsAndMembers(villageIds: villageIds);
+
+      // Step 3: Process and persist bundle
       _emitProgress(const SyncProgress(
         currentStep: SyncStep.processingData,
         entityName: 'patients',
       ));
       final out = await _persistBundle(bundle);
       
-      // Step 3: Sync referrals
+      // Step 4: Sync referrals
       _emitProgress(SyncProgress(
         currentStep: SyncStep.fetchingReferrals,
         entityName: 'referrals',
@@ -171,6 +186,8 @@ class OfflineSyncService extends ChangeNotifier {
         immunisations: out.immunisations,
         assessments: out.assessments,
         referrals: referralCount,
+        households: hhCount.households,
+        members: hhCount.members,
       );
 
       if (fullSync) {
@@ -234,6 +251,127 @@ class OfflineSyncService extends ChangeNotifier {
       return Uint8List.fromList(GZipCodec().decode(raw));
     }
     return raw;
+  }
+
+  /// Syncs households and members from spice-service to local SQLite.
+  /// This follows the Android spice-2.0 pattern: fetch all data and store locally,
+  /// all subsequent reads are from local DB for instant response.
+  Future<({int households, int members})> _syncHouseholdsAndMembers({
+    required List<int> villageIds,
+  }) async {
+    if (_households == null || _members == null) {
+      debugPrint('[OfflineSyncService] HouseholdDao/MemberDao not provided, skipping household sync');
+      return (households: 0, members: 0);
+    }
+
+    int totalHouseholds = 0;
+    int totalMembers = 0;
+
+    try {
+      // Fetch households with pagination
+      int skip = 0;
+      const pageSize = 200;
+      final allHouseholds = <HouseholdEntity>[];
+      
+      while (true) {
+        final body = <String, dynamic>{
+          'skip': skip,
+          'limit': pageSize,
+          'tenantId': _api.tenantIdAsNum,
+          if (villageIds.isNotEmpty) 'villageIds': villageIds,
+        };
+        
+        final resp = await _api.dio.post(
+          Endpoints.householdList,
+          data: body,
+        );
+        
+        final data = resp.data;
+        final list = _extractList(data);
+        
+        if (list.isEmpty) break;
+        
+        for (final raw in list) {
+          if (raw is! Map) continue;
+          final hh = HouseholdEntity.fromApiJson(Map<String, dynamic>.from(raw));
+          if (hh.id.isNotEmpty) allHouseholds.add(hh);
+        }
+        
+        _emitProgress(SyncProgress(
+          currentStep: SyncStep.fetchingPatients,
+          entityName: 'households',
+          itemsDone: allHouseholds.length,
+        ));
+        
+        // Stop if we got fewer than requested (last page)
+        if (list.length < pageSize) break;
+        // Safety: stop if server ignores pagination
+        if (list.length > pageSize) break;
+        skip += pageSize;
+      }
+      
+      // Persist households
+      await _households!.upsertMany(allHouseholds);
+      totalHouseholds = allHouseholds.length;
+      debugPrint('[OfflineSyncService] Synced $totalHouseholds households');
+      
+      // Fetch members with pagination
+      skip = 0;
+      final allMembers = <HouseholdMemberEntity>[];
+      
+      _emitProgress(SyncProgress(
+        currentStep: SyncStep.fetchingPatients,
+        entityName: 'members',
+        itemsDone: totalHouseholds,
+      ));
+      
+      while (true) {
+        final body = <String, dynamic>{
+          'skip': skip,
+          'limit': pageSize,
+          'tenantId': _api.tenantIdAsNum,
+          if (villageIds.isNotEmpty) 'villageIds': villageIds,
+        };
+        
+        final resp = await _api.dio.post(
+          Endpoints.householdMemberList,
+          data: body,
+        );
+        
+        final data = resp.data;
+        final list = _extractList(data);
+        
+        if (list.isEmpty) break;
+        
+        for (final raw in list) {
+          if (raw is! Map) continue;
+          final m = HouseholdMemberEntity.fromApiJson(Map<String, dynamic>.from(raw));
+          if (m.id.isNotEmpty) allMembers.add(m);
+        }
+        
+        _emitProgress(SyncProgress(
+          currentStep: SyncStep.fetchingPatients,
+          entityName: 'members',
+          itemsDone: allMembers.length,
+        ));
+        
+        // Stop if we got fewer than requested (last page)
+        if (list.length < pageSize) break;
+        // Safety: stop if server ignores pagination
+        if (list.length > pageSize) break;
+        skip += pageSize;
+      }
+      
+      // Persist members
+      await _members!.upsertMany(allMembers);
+      totalMembers = allMembers.length;
+      debugPrint('[OfflineSyncService] Synced $totalMembers members');
+      
+    } catch (e) {
+      debugPrint('[OfflineSyncService] Household/member sync error: $e');
+    }
+    
+    return (households: totalHouseholds, members: totalMembers);
   }
 
   Future<_PersistTotals> _persistBundle(Map<String, dynamic> bundle) async {
