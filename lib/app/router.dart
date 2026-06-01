@@ -13,6 +13,7 @@ import '../features/pin/pin_setup_screen.dart';
 import '../features/pin/pin_unlock_screen.dart';
 import '../features/referral/referral_detail_screen.dart';
 import '../features/referral/referral_list_screen.dart';
+import '../features/sync/sync_progress_screen.dart';
 import '../features/visit/visit_assessment_step.dart';
 import '../features/visit/visit_landing_screen.dart';
 import '../features/visit/visit_triage_step.dart';
@@ -85,6 +86,10 @@ GoRouter buildRouter(AuthState auth) {
       GoRoute(
         path: '/onboarding',
         builder: (_, __) => const OnboardingScreen(),
+      ),
+      GoRoute(
+        path: '/sync',
+        builder: (_, __) => const SyncProgressScreen(),
       ),
       GoRoute(
         path: '/pin-setup',

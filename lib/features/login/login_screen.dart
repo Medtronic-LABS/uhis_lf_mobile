@@ -41,7 +41,8 @@ class _LoginScreenState extends State<LoginScreen> {
     final ok = await auth.login(_userCtl.text.trim(), _passCtl.text);
     if (!mounted) return;
     if (ok) {
-      context.go('/dashboard');
+      // Go to sync screen to download data before showing dashboard
+      context.go('/sync');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(auth.error ?? LoginStrings.loginFailed)),

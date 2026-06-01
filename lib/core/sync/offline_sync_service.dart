@@ -20,6 +20,7 @@ import '../models/patient.dart';
 import '../models/programme.dart';
 import '../models/referral.dart';
 import '../models/sla.dart';
+import 'sync_progress.dart';
 import 'sync_report.dart';
 
 /// Pulls worklist input data from the UHIS platform services into the local
@@ -64,6 +65,22 @@ class OfflineSyncService extends ChangeNotifier {
 
   bool _running = false;
 
+  /// Stream controller for sync progress updates.
+  final _progressController = StreamController<SyncProgress>.broadcast();
+
+  /// Stream of sync progress updates for UI consumption.
+  Stream<SyncProgress> get progressStream => _progressController.stream;
+
+  /// Current progress state.
+  SyncProgress _progress = SyncProgress.initial;
+  SyncProgress get progress => _progress;
+
+  void _emitProgress(SyncProgress p) {
+    _progress = p;
+    _progressController.add(p);
+    notifyListeners();
+  }
+
   /// True when a sync is currently in flight — `WorklistView` consumes this to
   /// disable manual refresh.
   bool get isRunning => _running;
@@ -87,13 +104,14 @@ class OfflineSyncService extends ChangeNotifier {
       );
     }
     _running = true;
-    notifyListeners();
+    _emitProgress(const SyncProgress(currentStep: SyncStep.connecting));
     final started = DateTime.now();
     var report = SyncReport(startedAt: started, finishedAt: started)
         .copyWith(wasFullSync: fullSync);
     try {
       final villageIds = await _auth.subVillageIds();
       if (villageIds.isEmpty) {
+        _emitProgress(SyncProgress.failed('No villages assigned'));
         return report.copyWith(
           finishedAt: DateTime.now(),
           errors: const [
@@ -110,6 +128,12 @@ class OfflineSyncService extends ChangeNotifier {
         }
       }
 
+      // Step 1: Fetch patients bundle
+      _emitProgress(const SyncProgress(
+        currentStep: SyncStep.fetchingPatients,
+        entityName: 'patients',
+      ));
+
       Map<String, dynamic>? bundle;
       try {
         bundle = await _fetchBundle(villageIds: villageIds, since: since);
@@ -124,9 +148,20 @@ class OfflineSyncService extends ChangeNotifier {
         );
       }
 
+      // Step 2: Process and persist bundle
+      _emitProgress(const SyncProgress(
+        currentStep: SyncStep.processingData,
+        entityName: 'patients',
+      ));
       final out = await _persistBundle(bundle);
       
-      // Sync referrals after patients are persisted
+      // Step 3: Sync referrals
+      _emitProgress(SyncProgress(
+        currentStep: SyncStep.fetchingReferrals,
+        entityName: 'referrals',
+        itemsDone: out.patients,
+        itemsTotal: out.patients,
+      ));
       final referralCount = await _syncReferrals(villageIds: villageIds);
       
       report = report.copyWith(
@@ -143,8 +178,12 @@ class OfflineSyncService extends ChangeNotifier {
       } else {
         await _syncMeta.stampWarm(_entityKey, report.finishedAt);
       }
+
+      // Done!
+      _emitProgress(SyncProgress.completed());
       return report;
     } catch (e) {
+      _emitProgress(SyncProgress.failed('Sync failed: $e'));
       return report.copyWith(
         finishedAt: DateTime.now(),
         errors: ['Sync failed: $e'],
@@ -821,6 +860,12 @@ class OfflineSyncService extends ChangeNotifier {
       }
       await _followUps.upsertMany(rows);
     }
+  }
+
+  @override
+  void dispose() {
+    _progressController.close();
+    super.dispose();
   }
 }
 
