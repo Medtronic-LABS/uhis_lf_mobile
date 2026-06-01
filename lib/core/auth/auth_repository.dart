@@ -138,13 +138,15 @@ class AuthRepository {
     // ignore: avoid_print
     print('[Auth] Login attempt: user=$username, hash=${hashedPwd.substring(0, 16)}...');
     
-    // Backend expects URL-encoded form data, not multipart
+    // Backend expects multipart/form-data (matching Android's MultipartBody.FORM)
+    final formData = FormData.fromMap({
+      'username': username,
+      'password': hashedPwd,
+    });
+    
     final resp = await _api.dio.post(
       Endpoints.login,
-      data: 'username=${Uri.encodeComponent(username)}&password=${Uri.encodeComponent(hashedPwd)}',
-      options: Options(
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-      ),
+      data: formData,
     );
     // ignore: avoid_print
     print('[Auth] Login response: ${resp.statusCode}');
