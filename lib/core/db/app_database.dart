@@ -16,7 +16,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 6;
+  static const int schemaVersion = 7;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -55,22 +55,39 @@ class AppDatabase {
     await db.execute('''
       CREATE TABLE $tableHouseholds (
         id TEXT PRIMARY KEY,
+        fhir_id TEXT,
         household_no TEXT,
         name TEXT,
         village TEXT,
         village_id TEXT,
         member_count INTEGER,
+        landmark TEXT,
+        head_phone_number TEXT,
+        head_phone_number_category TEXT,
+        latitude REAL,
+        longitude REAL,
+        is_owned_an_improved_latrine INTEGER DEFAULT 0,
+        is_owned_hand_washing_facility INTEGER DEFAULT 0,
+        is_owned_a_treated_bed_net INTEGER DEFAULT 0,
+        bed_net_count INTEGER,
+        version TEXT,
+        last_updated TEXT,
+        created_at INTEGER,
         updated_at INTEGER,
+        sync_status TEXT DEFAULT 'Success',
         raw_json TEXT
       )''');
     await db.execute('''
       CREATE TABLE $tableMembers (
         id TEXT PRIMARY KEY,
+        fhir_id TEXT,
         household_id TEXT,
+        household_reference_id TEXT,
         name TEXT,
         gender TEXT,
         dob TEXT,
         phone TEXT,
+        phone_number_category TEXT,
         national_id TEXT,
         patient_id TEXT,
         village_id TEXT,
@@ -78,7 +95,16 @@ class AppDatabase {
         is_household_head INTEGER,
         is_pregnant INTEGER,
         relation TEXT,
+        initial TEXT,
+        signature TEXT,
+        local_signature_file TEXT,
+        mother_patient_id TEXT,
+        mother_reference_id TEXT,
+        version TEXT,
+        last_updated TEXT,
+        created_at INTEGER,
         updated_at INTEGER,
+        sync_status TEXT DEFAULT 'Success',
         raw_json TEXT
       )''');
     await db.execute('''
@@ -523,6 +549,43 @@ class AppDatabase {
       await addCol6('ALTER TABLE $tableMembers ADD COLUMN is_household_head INTEGER');
       await addCol6('ALTER TABLE $tableMembers ADD COLUMN is_pregnant INTEGER');
       await addCol6('ALTER TABLE $tableMembers ADD COLUMN relation TEXT');
+    }
+    if (from < 7) {
+      // v7 — Add extended fields to households and members tables to match
+      // Android uhis-dev HouseholdEntity and HouseholdMemberEntity.
+      Future<void> addCol7(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* column already present */}
+      }
+      // Households extended fields
+      await addCol7('ALTER TABLE $tableHouseholds ADD COLUMN fhir_id TEXT');
+      await addCol7('ALTER TABLE $tableHouseholds ADD COLUMN landmark TEXT');
+      await addCol7('ALTER TABLE $tableHouseholds ADD COLUMN head_phone_number TEXT');
+      await addCol7('ALTER TABLE $tableHouseholds ADD COLUMN head_phone_number_category TEXT');
+      await addCol7('ALTER TABLE $tableHouseholds ADD COLUMN latitude REAL');
+      await addCol7('ALTER TABLE $tableHouseholds ADD COLUMN longitude REAL');
+      await addCol7('ALTER TABLE $tableHouseholds ADD COLUMN is_owned_an_improved_latrine INTEGER DEFAULT 0');
+      await addCol7('ALTER TABLE $tableHouseholds ADD COLUMN is_owned_hand_washing_facility INTEGER DEFAULT 0');
+      await addCol7('ALTER TABLE $tableHouseholds ADD COLUMN is_owned_a_treated_bed_net INTEGER DEFAULT 0');
+      await addCol7('ALTER TABLE $tableHouseholds ADD COLUMN bed_net_count INTEGER');
+      await addCol7('ALTER TABLE $tableHouseholds ADD COLUMN version TEXT');
+      await addCol7('ALTER TABLE $tableHouseholds ADD COLUMN last_updated TEXT');
+      await addCol7('ALTER TABLE $tableHouseholds ADD COLUMN created_at INTEGER');
+      await addCol7('ALTER TABLE $tableHouseholds ADD COLUMN sync_status TEXT DEFAULT "Success"');
+      // Members extended fields
+      await addCol7('ALTER TABLE $tableMembers ADD COLUMN fhir_id TEXT');
+      await addCol7('ALTER TABLE $tableMembers ADD COLUMN household_reference_id TEXT');
+      await addCol7('ALTER TABLE $tableMembers ADD COLUMN phone_number_category TEXT');
+      await addCol7('ALTER TABLE $tableMembers ADD COLUMN initial TEXT');
+      await addCol7('ALTER TABLE $tableMembers ADD COLUMN signature TEXT');
+      await addCol7('ALTER TABLE $tableMembers ADD COLUMN local_signature_file TEXT');
+      await addCol7('ALTER TABLE $tableMembers ADD COLUMN mother_patient_id TEXT');
+      await addCol7('ALTER TABLE $tableMembers ADD COLUMN mother_reference_id TEXT');
+      await addCol7('ALTER TABLE $tableMembers ADD COLUMN version TEXT');
+      await addCol7('ALTER TABLE $tableMembers ADD COLUMN last_updated TEXT');
+      await addCol7('ALTER TABLE $tableMembers ADD COLUMN created_at INTEGER');
+      await addCol7('ALTER TABLE $tableMembers ADD COLUMN sync_status TEXT DEFAULT "Success"');
     }
   }
 

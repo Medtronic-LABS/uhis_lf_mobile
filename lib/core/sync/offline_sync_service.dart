@@ -156,19 +156,25 @@ class OfflineSyncService extends ChangeNotifier {
         );
       }
 
-      // Step 2: Sync households and members (like Android spice-2.0)
-      _emitProgress(const SyncProgress(
-        currentStep: SyncStep.fetchingPatients,
-        entityName: 'households',
-      ));
-      final hhCount = await _syncHouseholdsAndMembers(villageIds: villageIds);
-
-      // Step 3: Process and persist bundle
+      // Step 2: Process and persist bundle (includes households/members if in bundle - Android pattern)
       _emitProgress(const SyncProgress(
         currentStep: SyncStep.processingData,
         entityName: 'patients',
       ));
       final out = await _persistBundle(bundle);
+
+      // Step 3: If bundle didn't have households/members, fetch them separately (fallback)
+      int totalHouseholds = out.households;
+      int totalMembers = out.members;
+      if (out.households == 0 && out.members == 0) {
+        _emitProgress(const SyncProgress(
+          currentStep: SyncStep.fetchingPatients,
+          entityName: 'households',
+        ));
+        final hhCount = await _syncHouseholdsAndMembers(villageIds: villageIds);
+        totalHouseholds = hhCount.households;
+        totalMembers = hhCount.members;
+      }
       
       // Step 4: Sync referrals
       _emitProgress(SyncProgress(
@@ -186,8 +192,8 @@ class OfflineSyncService extends ChangeNotifier {
         immunisations: out.immunisations,
         assessments: out.assessments,
         referrals: referralCount,
-        households: hhCount.households,
-        members: hhCount.members,
+        households: totalHouseholds,
+        members: totalMembers,
       );
 
       if (fullSync) {
@@ -390,6 +396,22 @@ class OfflineSyncService extends ChangeNotifier {
   Future<_PersistTotals> _persistBundle(Map<String, dynamic> bundle) async {
     if (bundle.isEmpty) return const _PersistTotals();
 
+    // Log bundle keys for debugging
+    debugPrint('[OfflineSyncService] Bundle keys: ${bundle.keys.toList()}');
+
+    // ── Households (Android: ResponseInitialDownload.households) ──────────
+    final householdNodes = _listFromAny(bundle, const [
+      'households',
+      'householdList',
+    ]);
+    
+    // ── Members (Android: ResponseInitialDownload.members) ────────────────
+    final memberNodes = _listFromAny(bundle, const [
+      'members',
+      'memberList',
+      'householdMembers',
+    ]);
+
     // Bundle key names vary across spice / offline-service versions. Accept a
     // small set of synonyms and treat any list-typed entry under those keys
     // as the entity list.
@@ -445,6 +467,24 @@ class OfflineSyncService extends ChangeNotifier {
       if (row != null) assessments.add(row);
     }
 
+    // ── Parse households from bundle (Android: ResponseInitialDownload) ────
+    final households = <HouseholdEntity>[];
+    for (final raw in householdNodes) {
+      if (raw is! Map) continue;
+      final hh = HouseholdEntity.fromApiJson(Map<String, dynamic>.from(raw));
+      if (hh.id.isNotEmpty) households.add(hh);
+    }
+    debugPrint('[OfflineSyncService] Parsed ${households.length} households from bundle');
+
+    // ── Parse members from bundle (Android: ResponseInitialDownload) ────────
+    final members = <HouseholdMemberEntity>[];
+    for (final raw in memberNodes) {
+      if (raw is! Map) continue;
+      final m = HouseholdMemberEntity.fromApiJson(Map<String, dynamic>.from(raw));
+      if (m.id.isNotEmpty) members.add(m);
+    }
+    debugPrint('[OfflineSyncService] Parsed ${members.length} members from bundle');
+
     await _patients.upsertMany(patients);
     for (final entry in programmes.entries) {
       await _programmes.replaceFor(entry.key, entry.value);
@@ -453,11 +493,21 @@ class OfflineSyncService extends ChangeNotifier {
     await _immunisations.upsertMany(immunisations);
     await _assessments.upsertMany(assessments);
 
+    // Persist households and members if found in bundle and DAOs are available
+    if (households.isNotEmpty && _households != null) {
+      await _households!.upsertMany(households);
+    }
+    if (members.isNotEmpty && _members != null) {
+      await _members!.upsertMany(members);
+    }
+
     return _PersistTotals(
       patients: patients.length,
       followUps: followUps.length,
       immunisations: immunisations.length,
       assessments: assessments.length,
+      households: households.length,
+      members: members.length,
     );
   }
 
@@ -1023,11 +1073,15 @@ class _PersistTotals {
     this.followUps = 0,
     this.immunisations = 0,
     this.assessments = 0,
+    this.households = 0,
+    this.members = 0,
   });
 
   final int patients;
   final int followUps;
   final int immunisations;
   final int assessments;
+  final int households;
+  final int members;
 }
 

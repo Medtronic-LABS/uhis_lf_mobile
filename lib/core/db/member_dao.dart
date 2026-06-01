@@ -3,14 +3,18 @@ import 'package:sqflite/sqflite.dart';
 import 'app_database.dart';
 
 /// Entity representing a household member stored locally.
+/// Matches Android HouseholdMemberEntity from spice-2.0-android uhis-dev branch.
 class HouseholdMemberEntity {
   const HouseholdMemberEntity({
     required this.id,
+    this.fhirId,
     this.householdId,
+    this.householdReferenceId,
     this.name,
     this.gender,
     this.dob,
     this.phone,
+    this.phoneNumberCategory,
     this.nationalId,
     this.patientId,
     this.villageId,
@@ -18,16 +22,28 @@ class HouseholdMemberEntity {
     this.isHouseholdHead = false,
     this.isPregnant = false,
     this.relation,
+    this.initial,
+    this.signature,
+    this.localSignatureFile,
+    this.motherPatientId,
+    this.motherReferenceId,
+    this.version,
+    this.lastUpdated,
+    this.createdAt,
     this.updatedAt,
+    this.syncStatus = 'Success',
     this.rawJson,
   });
 
   final String id;
+  final String? fhirId;
   final String? householdId;
+  final String? householdReferenceId;
   final String? name;
   final String? gender;
   final String? dob;
   final String? phone;
+  final String? phoneNumberCategory;
   final String? nationalId;
   final String? patientId;
   final String? villageId;
@@ -35,16 +51,28 @@ class HouseholdMemberEntity {
   final bool isHouseholdHead;
   final bool isPregnant;
   final String? relation;
+  final String? initial;
+  final String? signature;
+  final String? localSignatureFile;
+  final String? motherPatientId;
+  final String? motherReferenceId;
+  final String? version;
+  final String? lastUpdated;
+  final int? createdAt;
   final int? updatedAt;
+  final String syncStatus;
   final String? rawJson;
 
   Map<String, dynamic> toDb() => {
         'id': id,
+        'fhir_id': fhirId,
         'household_id': householdId,
+        'household_reference_id': householdReferenceId,
         'name': name,
         'gender': gender,
         'dob': dob,
         'phone': phone,
+        'phone_number_category': phoneNumberCategory,
         'national_id': nationalId,
         'patient_id': patientId,
         'village_id': villageId,
@@ -52,18 +80,30 @@ class HouseholdMemberEntity {
         'is_household_head': isHouseholdHead ? 1 : 0,
         'is_pregnant': isPregnant ? 1 : 0,
         'relation': relation,
+        'initial': initial,
+        'signature': signature,
+        'local_signature_file': localSignatureFile,
+        'mother_patient_id': motherPatientId,
+        'mother_reference_id': motherReferenceId,
+        'version': version,
+        'last_updated': lastUpdated,
+        'created_at': createdAt,
         'updated_at': updatedAt ?? DateTime.now().millisecondsSinceEpoch,
+        'sync_status': syncStatus,
         'raw_json': rawJson,
       };
 
   factory HouseholdMemberEntity.fromDb(Map<String, dynamic> row) {
     return HouseholdMemberEntity(
       id: row['id'] as String,
+      fhirId: row['fhir_id'] as String?,
       householdId: row['household_id'] as String?,
+      householdReferenceId: row['household_reference_id'] as String?,
       name: row['name'] as String?,
       gender: row['gender'] as String?,
       dob: row['dob'] as String?,
       phone: row['phone'] as String?,
+      phoneNumberCategory: row['phone_number_category'] as String?,
       nationalId: row['national_id'] as String?,
       patientId: row['patient_id'] as String?,
       villageId: row['village_id'] as String?,
@@ -71,12 +111,22 @@ class HouseholdMemberEntity {
       isHouseholdHead: (row['is_household_head'] as int?) == 1,
       isPregnant: (row['is_pregnant'] as int?) == 1,
       relation: row['relation'] as String?,
+      initial: row['initial'] as String?,
+      signature: row['signature'] as String?,
+      localSignatureFile: row['local_signature_file'] as String?,
+      motherPatientId: row['mother_patient_id'] as String?,
+      motherReferenceId: row['mother_reference_id'] as String?,
+      version: row['version'] as String?,
+      lastUpdated: row['last_updated'] as String?,
+      createdAt: row['created_at'] as int?,
       updatedAt: row['updated_at'] as int?,
+      syncStatus: row['sync_status'] as String? ?? 'Success',
       rawJson: row['raw_json'] as String?,
     );
   }
 
-  /// Creates from API JSON (e.g., from /household/member/list response).
+  /// Creates from API JSON (e.g., from /household/member/list or fetch-synced-data response).
+  /// Matches Android HouseHoldMember.toHouseholdMemberEntity() conversion.
   factory HouseholdMemberEntity.fromApiJson(Map<String, dynamic> json) {
     String? str(String k) {
       final v = json[k];
@@ -85,27 +135,60 @@ class HouseholdMemberEntity {
       return s.isEmpty ? null : s;
     }
 
+    bool parseBool(dynamic v) {
+      if (v is bool) return v;
+      if (v is int) return v == 1;
+      if (v is String) return v.toLowerCase() == 'true';
+      return false;
+    }
+
+    // Parse timestamps - Android uses Long milliseconds
+    int? createdAt;
+    int? updatedAt;
+    final createdAtVal = json['createdAt'] ?? json['created_at'];
+    final updatedAtVal = json['updatedAt'] ?? json['updated_at'];
+    if (createdAtVal is int) createdAt = createdAtVal;
+    if (createdAtVal is num) createdAt = createdAtVal.toInt();
+    if (updatedAtVal is int) updatedAt = updatedAtVal;
+    if (updatedAtVal is num) updatedAt = updatedAtVal.toInt();
+
     // Parse householdHeadRelationship (API field name)
     final relation = str('householdHeadRelationship') ?? str('relation');
     // isHouseholdHead = true when relation is "HouseholdHead" or "Self"
     final isHead = relation?.toLowerCase() == 'householdhead' ||
         relation?.toLowerCase() == 'self';
 
+    // Use referenceId as id if fhirId is available (Android pattern)
+    final referenceId = str('referenceId') ?? str('id') ?? str('memberId');
+    final fhirId = str('fhirId') ?? str('fhir_id');
+
     return HouseholdMemberEntity(
-      id: str('fhirId') ?? str('id') ?? str('memberId') ?? '',
-      householdId: str('householdId') ?? str('household_id') ?? str('householdReferenceId'),
+      id: fhirId ?? referenceId ?? '',
+      fhirId: fhirId,
+      householdId: str('householdId') ?? str('household_id'),
+      householdReferenceId: str('householdReferenceId') ?? str('household_reference_id'),
       name: str('name'),
       gender: str('gender'),
       dob: str('dateOfBirth') ?? str('dob'),
       phone: str('phoneNumber') ?? str('phone'),
+      phoneNumberCategory: str('phoneNumberCategory') ?? str('phone_number_category'),
       nationalId: str('nationalId') ?? str('national_id'),
       patientId: str('patientId') ?? str('patient_id'),
       villageId: str('villageId') ?? str('village_id'),
       isActive: json['isActive'] != false,
       isHouseholdHead: isHead,
-      isPregnant: json['isPregnant'] == true,
+      isPregnant: parseBool(json['isPregnant']),
       relation: relation,
-      updatedAt: DateTime.now().millisecondsSinceEpoch,
+      initial: str('initial'),
+      signature: str('signature'),
+      localSignatureFile: str('localSignatureFile') ?? str('local_signature_file'),
+      motherPatientId: str('motherPatientId') ?? str('mother_patient_id') ?? str('parentId'),
+      motherReferenceId: str('motherReferenceId') ?? str('mother_reference_id'),
+      version: str('version'),
+      lastUpdated: str('lastUpdated') ?? str('last_updated'),
+      createdAt: createdAt,
+      updatedAt: updatedAt ?? DateTime.now().millisecondsSinceEpoch,
+      syncStatus: str('syncStatus') ?? str('sync_status') ?? 'Success',
       rawJson: null, // Can serialize full json if needed
     );
   }
