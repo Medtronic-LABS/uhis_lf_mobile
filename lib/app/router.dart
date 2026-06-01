@@ -13,6 +13,7 @@ import '../features/pin/pin_setup_screen.dart';
 import '../features/pin/pin_unlock_screen.dart';
 import '../features/referral/referral_detail_screen.dart';
 import '../features/referral/referral_list_screen.dart';
+import '../features/visit/visit_assessment_step.dart';
 import '../features/visit/visit_landing_screen.dart';
 import '../features/visit/visit_triage_step.dart';
 import '../features/visit/visit_vitals_step.dart';
@@ -173,26 +174,21 @@ GoRouter buildRouter(AuthState auth) {
                   ),
                   GoRoute(
                     path: 'visit/:visitId/assessment/:programme',
-                    builder: (context, state) => Scaffold(
-                      appBar: AppBar(
-                        title: Text('Assessment - ${state.pathParameters['programme']?.toUpperCase()}'),
-                      ),
-                      body: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.construction, size: 64),
-                            const SizedBox(height: 16),
-                            Text(
-                              'Phase 2: ${state.pathParameters['programme']} assessment',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: 8),
-                            const Text('Assessment forms will be added in Phase 2'),
-                          ],
-                        ),
-                      ),
-                    ),
+                    builder: (context, state) {
+                      final extra = state.extra as Map<String, dynamic>?;
+                      return VisitAssessmentStep(
+                        visitId: state.pathParameters['visitId']!,
+                        programme: state.pathParameters['programme']!,
+                        patientId: extra?['patientId'] as String?,
+                        memberId: extra?['memberId'] as String?,
+                        householdId: extra?['householdId'] as String?,
+                        villageId: extra?['villageId'] as String?,
+                        householdMemberLocalId:
+                            extra?['householdMemberLocalId'] as int?,
+                        patientAge: extra?['patientAge'] as int?,
+                        gestationalWeeks: extra?['gestationalWeeks'] as int?,
+                      );
+                    },
                   ),
                 ],
               ),
