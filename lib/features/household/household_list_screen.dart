@@ -27,13 +27,16 @@ class HouseholdListScreen extends StatefulWidget {
 }
 
 class _HouseholdListScreenState extends State<HouseholdListScreen> {
-  late Future<List<_HouseholdItem>> _future;
+  Future<List<_HouseholdItem>>? _future;
   final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    _loadData();
+    // Defer loading until after first frame when context is available
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadData();
+    });
   }
 
   @override
@@ -46,7 +49,9 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
     final householdDao = context.read<HouseholdDao>();
     final memberDao = context.read<MemberDao>();
     final repo = context.read<DashboardRepository>();
-    _future = _fetchHouseholds(householdDao, memberDao, repo);
+    setState(() {
+      _future = _fetchHouseholds(householdDao, memberDao, repo);
+    });
   }
 
   /// Fetches households from LOCAL SQLite first (instant), falls back to API.
@@ -99,7 +104,9 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
           ),
         ],
       ),
-      body: FutureBuilder<List<_HouseholdItem>>(
+      body: _future == null
+          ? const Center(child: CircularProgressIndicator())
+          : FutureBuilder<List<_HouseholdItem>>(
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
