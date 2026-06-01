@@ -241,7 +241,31 @@ GoRouter buildRouter(AuthState auth) {
       ),
       GoRoute(
         path: '/households',
-        redirect: (_, __) => '/patients',
+        builder: (_, __) => const HouseholdListScreen(
+          mode: HouseholdListMode.households,
+        ),
+        routes: [
+          GoRoute(
+            path: ':id',
+            builder: (_, state) {
+              final extra = state.extra;
+              if (extra is HouseholdDetailData) {
+                return HouseholdDetailScreen(household: extra);
+              }
+              final id = state.pathParameters['id'] ?? '';
+              return HouseholdDetailScreen(
+                household: HouseholdDetailData(
+                  id: id,
+                  householdNo: id,
+                  name: null,
+                  village: null,
+                  memberCount: 0,
+                  members: const [],
+                ),
+              );
+            },
+          ),
+        ],
       ),
       GoRoute(
         path: '/members',

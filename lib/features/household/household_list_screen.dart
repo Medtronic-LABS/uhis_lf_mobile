@@ -60,27 +60,35 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
     MemberDao memberDao,
     DashboardRepository repo,
   ) async {
-    // Try local SQLite first (INSTANT - no network latency)
-    final localHouseholds = await householdDao.getAll(limit: 1000);
-    // ignore: avoid_print
-    print('[HouseholdList] Found ${localHouseholds.length} households in local DB');
-    
-    if (localHouseholds.isNotEmpty) {
-      // Local data available - convert entities to UI items
-      final items = <_HouseholdItem>[];
-      for (final hh in localHouseholds) {
-        // Fetch members for this household from local DB
-        final members = await memberDao.getByHouseholdId(hh.id);
-        items.add(_HouseholdItem.fromEntity(hh, members));
+    try {
+      // Try local SQLite first (INSTANT - no network latency)
+      final localHouseholds = await householdDao.getAll(limit: 1000);
+      // ignore: avoid_print
+      print('[HouseholdList] Found ${localHouseholds.length} households in local DB');
+      
+      if (localHouseholds.isNotEmpty) {
+        // Local data available - convert entities to UI items
+        final items = <_HouseholdItem>[];
+        for (final hh in localHouseholds) {
+          // Fetch members for this household from local DB
+          final members = await memberDao.getByHouseholdId(hh.id);
+          items.add(_HouseholdItem.fromEntity(hh, members));
+        }
+        return items;
       }
-      return items;
+      
+      // Fallback to API if local cache is empty
+      // ignore: avoid_print
+      print('[HouseholdList] Local cache empty, falling back to API');
+      final rawList = await repo.getHouseholdsWithMembers();
+      return rawList.map((raw) => _HouseholdItem.fromJson(raw)).toList();
+    } catch (e, stack) {
+      // ignore: avoid_print
+      print('[HouseholdList] Exception: $e');
+      // ignore: avoid_print
+      print('[HouseholdList] Stack: $stack');
+      rethrow;
     }
-    
-    // Fallback to API if local cache is empty
-    // ignore: avoid_print
-    print('[HouseholdList] Local cache empty, falling back to API');
-    final rawList = await repo.getHouseholdsWithMembers();
-    return rawList.map((raw) => _HouseholdItem.fromJson(raw)).toList();
   }
 
   @override
@@ -113,6 +121,8 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
+            // ignore: avoid_print
+            print('[HouseholdList] Error: ${snapshot.error}');
             return Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -120,6 +130,15 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
                   const Icon(Icons.error_outline, size: 48),
                   const SizedBox(height: 16),
                   Text(HouseholdListStrings.loadError),
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Text(
+                      '${snapshot.error}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   FilledButton.tonal(
                     onPressed: () => setState(_loadData),
