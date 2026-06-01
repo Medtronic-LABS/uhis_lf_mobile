@@ -21,6 +21,7 @@ import '../features/visit/visit_vitals_step.dart';
 import 'bottom_nav.dart';
 
 /// Navigation keys for each tab's navigator.
+final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 final _homeNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'home');
 final _patientsNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'patients');
 final _tasksNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'tasks');
@@ -28,6 +29,7 @@ final _mapNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'map');
 
 GoRouter buildRouter(AuthState auth) {
   return GoRouter(
+    navigatorKey: _rootNavigatorKey,
     refreshListenable: auth,
     initialLocation: '/',
     redirect: (context, state) {
@@ -129,6 +131,13 @@ GoRouter buildRouter(AuthState auth) {
                   mode: HouseholdListMode.members,
                 ),
                 routes: [
+                  // Households view (same tab, different mode)
+                  GoRoute(
+                    path: 'households',
+                    builder: (_, __) => const HouseholdListScreen(
+                      mode: HouseholdListMode.households,
+                    ),
+                  ),
                   GoRoute(
                     path: 'household/:id',
                     builder: (_, state) {
@@ -160,38 +169,54 @@ GoRouter buildRouter(AuthState auth) {
                   // Visit flow routes
                   GoRoute(
                     path: 'visit/:patientId/start',
-                    builder: (_, state) => VisitLandingScreen(
-                      patientId: state.pathParameters['patientId']!,
-                      data: state.extra as VisitLandingData?,
+                    name: 'visit-start',
+                    pageBuilder: (context, state) => MaterialPage(
+                      key: ValueKey('visit-start-${state.pathParameters['patientId']}'),
+                      child: VisitLandingScreen(
+                        patientId: state.pathParameters['patientId']!,
+                        data: state.extra as VisitLandingData?,
+                      ),
                     ),
                   ),
                   GoRoute(
                     path: 'visit/:visitId/triage',
-                    builder: (_, state) => VisitTriageStep(
-                      visitId: state.pathParameters['visitId']!,
+                    name: 'visit-triage',
+                    pageBuilder: (context, state) => MaterialPage(
+                      key: ValueKey('visit-triage-${state.pathParameters['visitId']}'),
+                      child: VisitTriageStep(
+                        visitId: state.pathParameters['visitId']!,
+                      ),
                     ),
                   ),
                   GoRoute(
                     path: 'visit/:visitId/vitals',
-                    builder: (_, state) => VisitVitalsStep(
-                      visitId: state.pathParameters['visitId']!,
+                    name: 'visit-vitals',
+                    pageBuilder: (context, state) => MaterialPage(
+                      key: ValueKey('visit-vitals-${state.pathParameters['visitId']}'),
+                      child: VisitVitalsStep(
+                        visitId: state.pathParameters['visitId']!,
+                      ),
                     ),
                   ),
                   GoRoute(
                     path: 'visit/:visitId/assessment/:programme',
-                    builder: (context, state) {
+                    name: 'visit-assessment',
+                    pageBuilder: (context, state) {
                       final extra = state.extra as Map<String, dynamic>?;
-                      return VisitAssessmentStep(
-                        visitId: state.pathParameters['visitId']!,
-                        programme: state.pathParameters['programme']!,
-                        patientId: extra?['patientId'] as String?,
-                        memberId: extra?['memberId'] as String?,
-                        householdId: extra?['householdId'] as String?,
-                        villageId: extra?['villageId'] as String?,
-                        householdMemberLocalId:
-                            extra?['householdMemberLocalId'] as int?,
-                        patientAge: extra?['patientAge'] as int?,
-                        gestationalWeeks: extra?['gestationalWeeks'] as int?,
+                      return MaterialPage(
+                        key: ValueKey('visit-assessment-${state.pathParameters['visitId']}-${state.pathParameters['programme']}'),
+                        child: VisitAssessmentStep(
+                          visitId: state.pathParameters['visitId']!,
+                          programme: state.pathParameters['programme']!,
+                          patientId: extra?['patientId'] as String?,
+                          memberId: extra?['memberId'] as String?,
+                          householdId: extra?['householdId'] as String?,
+                          villageId: extra?['villageId'] as String?,
+                          householdMemberLocalId:
+                              extra?['householdMemberLocalId'] as int?,
+                          patientAge: extra?['patientAge'] as int?,
+                          gestationalWeeks: extra?['gestationalWeeks'] as int?,
+                        ),
                       );
                     },
                   ),
@@ -206,12 +231,20 @@ GoRouter buildRouter(AuthState auth) {
             routes: [
               GoRoute(
                 path: '/tasks',
-                builder: (_, __) => const ReferralListScreen(),
+                name: 'tasks-list',
+                pageBuilder: (context, state) => const MaterialPage(
+                  key: ValueKey('tasks-list-page'),
+                  child: ReferralListScreen(),
+                ),
                 routes: [
                   GoRoute(
                     path: ':id',
-                    builder: (_, state) => ReferralDetailScreen(
-                      patientId: state.pathParameters['id']!,
+                    name: 'task-detail',
+                    pageBuilder: (context, state) => MaterialPage(
+                      key: ValueKey('task-detail-${state.pathParameters['id']}'),
+                      child: ReferralDetailScreen(
+                        patientId: state.pathParameters['id']!,
+                      ),
                     ),
                   ),
                 ],
@@ -225,7 +258,11 @@ GoRouter buildRouter(AuthState auth) {
             routes: [
               GoRoute(
                 path: '/map',
-                builder: (_, __) => const MapPlaceholderScreen(),
+                name: 'map',
+                pageBuilder: (context, state) => const MaterialPage(
+                  key: ValueKey('map-page'),
+                  child: MapPlaceholderScreen(),
+                ),
               ),
             ],
           ),
@@ -241,31 +278,11 @@ GoRouter buildRouter(AuthState auth) {
       ),
       GoRoute(
         path: '/households',
-        builder: (_, __) => const HouseholdListScreen(
-          mode: HouseholdListMode.households,
-        ),
-        routes: [
-          GoRoute(
-            path: ':id',
-            builder: (_, state) {
-              final extra = state.extra;
-              if (extra is HouseholdDetailData) {
-                return HouseholdDetailScreen(household: extra);
-              }
-              final id = state.pathParameters['id'] ?? '';
-              return HouseholdDetailScreen(
-                household: HouseholdDetailData(
-                  id: id,
-                  householdNo: id,
-                  name: null,
-                  village: null,
-                  memberCount: 0,
-                  members: const [],
-                ),
-              );
-            },
-          ),
-        ],
+        redirect: (_, __) => '/patients/households',
+      ),
+      GoRoute(
+        path: '/households/:id',
+        redirect: (_, state) => '/patients/household/${state.pathParameters['id']}',
       ),
       GoRoute(
         path: '/members',

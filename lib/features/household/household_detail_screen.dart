@@ -69,10 +69,13 @@ class HouseholdMemberData {
       }
     }
 
-    final relation = str('relation')?.toLowerCase();
-    final isHead = relation == 'head' ||
-        relation == 'self' ||
-        relation == 'household head' ||
+    // Parse householdHeadRelationship (API field name) or relation
+    final relation = str('householdHeadRelationship') ?? str('relation');
+    final relationLower = relation?.toLowerCase();
+    final isHead = relationLower == 'head' ||
+        relationLower == 'self' ||
+        relationLower == 'household head' ||
+        relationLower == 'householdhead' ||
         json['isHouseholdHead'] == true;
 
     final isPregnant = json['isPregnant'] == true;
@@ -81,7 +84,7 @@ class HouseholdMemberData {
       id: str('id'),
       patientId: str('patientId'),
       name: str('name') ?? str('firstName'),
-      relation: str('relation'),
+      relation: relation,
       age: age,
       gender: str('gender'),
       phoneNumber: str('phoneNumber') ?? str('phone'),
@@ -110,13 +113,13 @@ class HouseholdMemberData {
       id: e.id,
       patientId: e.patientId,
       name: e.name,
-      relation: null,
+      relation: e.relation,
       age: age,
       gender: e.gender,
       phoneNumber: e.phone,
       dateOfBirth: e.dob,
-      isHead: false,
-      isPregnant: false,
+      isHead: e.isHouseholdHead,
+      isPregnant: e.isPregnant,
       householdId: e.householdId,
       villageId: e.villageId,
     );

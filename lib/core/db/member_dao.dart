@@ -15,6 +15,9 @@ class HouseholdMemberEntity {
     this.patientId,
     this.villageId,
     this.isActive = true,
+    this.isHouseholdHead = false,
+    this.isPregnant = false,
+    this.relation,
     this.updatedAt,
     this.rawJson,
   });
@@ -29,6 +32,9 @@ class HouseholdMemberEntity {
   final String? patientId;
   final String? villageId;
   final bool isActive;
+  final bool isHouseholdHead;
+  final bool isPregnant;
+  final String? relation;
   final int? updatedAt;
   final String? rawJson;
 
@@ -43,6 +49,9 @@ class HouseholdMemberEntity {
         'patient_id': patientId,
         'village_id': villageId,
         'is_active': isActive ? 1 : 0,
+        'is_household_head': isHouseholdHead ? 1 : 0,
+        'is_pregnant': isPregnant ? 1 : 0,
+        'relation': relation,
         'updated_at': updatedAt ?? DateTime.now().millisecondsSinceEpoch,
         'raw_json': rawJson,
       };
@@ -59,6 +68,9 @@ class HouseholdMemberEntity {
       patientId: row['patient_id'] as String?,
       villageId: row['village_id'] as String?,
       isActive: (row['is_active'] as int?) == 1,
+      isHouseholdHead: (row['is_household_head'] as int?) == 1,
+      isPregnant: (row['is_pregnant'] as int?) == 1,
+      relation: row['relation'] as String?,
       updatedAt: row['updated_at'] as int?,
       rawJson: row['raw_json'] as String?,
     );
@@ -73,9 +85,15 @@ class HouseholdMemberEntity {
       return s.isEmpty ? null : s;
     }
 
+    // Parse householdHeadRelationship (API field name)
+    final relation = str('householdHeadRelationship') ?? str('relation');
+    // isHouseholdHead = true when relation is "HouseholdHead" or "Self"
+    final isHead = relation?.toLowerCase() == 'householdhead' ||
+        relation?.toLowerCase() == 'self';
+
     return HouseholdMemberEntity(
       id: str('fhirId') ?? str('id') ?? str('memberId') ?? '',
-      householdId: str('householdId') ?? str('household_id'),
+      householdId: str('householdId') ?? str('household_id') ?? str('householdReferenceId'),
       name: str('name'),
       gender: str('gender'),
       dob: str('dateOfBirth') ?? str('dob'),
@@ -84,6 +102,9 @@ class HouseholdMemberEntity {
       patientId: str('patientId') ?? str('patient_id'),
       villageId: str('villageId') ?? str('village_id'),
       isActive: json['isActive'] != false,
+      isHouseholdHead: isHead,
+      isPregnant: json['isPregnant'] == true,
+      relation: relation,
       updatedAt: DateTime.now().millisecondsSinceEpoch,
       rawJson: null, // Can serialize full json if needed
     );
@@ -183,6 +204,40 @@ class MemberDao {
     if (c is int) return c;
     if (c is num) return c.toInt();
     return 0;
+  }
+
+  /// Get all members grouped by household ID (single query - much faster).
+  /// Returns a Map where keys are household IDs and values are lists of members.
+  Future<Map<String, List<HouseholdMemberEntity>>> getAllGroupedByHousehold() async {
+    final rows = await _db.db.query(
+      AppDatabase.tableMembers,
+      orderBy: 'household_id, name ASC',
+    );
+    final grouped = <String, List<HouseholdMemberEntity>>{};
+    for (final row in rows) {
+      final member = HouseholdMemberEntity.fromDb(row);
+      final hhId = member.householdId ?? '';
+      grouped.putIfAbsent(hhId, () => []).add(member);
+    }
+    return grouped;
+  }
+
+  /// Get member counts per household (single query - for list view).
+  Future<Map<String, int>> getMemberCountsByHousehold() async {
+    final rows = await _db.db.rawQuery('''
+      SELECT household_id, COUNT(*) as count 
+      FROM ${AppDatabase.tableMembers} 
+      GROUP BY household_id
+    ''');
+    final counts = <String, int>{};
+    for (final row in rows) {
+      final hhId = row['household_id'] as String?;
+      final count = row['count'] as int? ?? 0;
+      if (hhId != null) {
+        counts[hhId] = count;
+      }
+    }
+    return counts;
   }
 
   /// Count members for a specific household.

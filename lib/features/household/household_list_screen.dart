@@ -67,13 +67,16 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
       print('[HouseholdList] Found ${localHouseholds.length} households in local DB');
       
       if (localHouseholds.isNotEmpty) {
-        // Local data available - convert entities to UI items
-        final items = <_HouseholdItem>[];
-        for (final hh in localHouseholds) {
-          // Fetch members for this household from local DB
-          final members = await memberDao.getByHouseholdId(hh.id);
-          items.add(_HouseholdItem.fromEntity(hh, members));
-        }
+        // Get all members in ONE query (much faster than N queries)
+        final membersByHousehold = await memberDao.getAllGroupedByHousehold();
+        // ignore: avoid_print
+        print('[HouseholdList] Got members grouped by ${membersByHousehold.length} households');
+        
+        // Convert entities to UI items
+        final items = localHouseholds.map((hh) {
+          final members = membersByHousehold[hh.id] ?? [];
+          return _HouseholdItem.fromEntity(hh, members);
+        }).toList();
         return items;
       }
       
@@ -230,11 +233,9 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
   }
 
   void _navigateToDetail(BuildContext context, _HouseholdItem item) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => HouseholdDetailScreen(household: item.toDetailData()),
-      ),
-    );
+    // Use go_router to navigate so that subsequent navigation (e.g., View Health Details)
+    // can use go_router's context properly
+    context.push('/patients/household/${item.id}', extra: item.toDetailData());
   }
 
   void _navigateToMemberDetail(BuildContext context, _MemberInfo member) {
@@ -789,15 +790,24 @@ class _HouseholdMember {
       return s.isEmpty ? null : s;
     }
 
+    // Parse householdHeadRelationship (API field name) or relation
+    final relation = str('householdHeadRelationship') ?? str('relation');
+    final relationLower = relation?.toLowerCase();
+    final isHead = relationLower == 'head' ||
+        relationLower == 'self' ||
+        relationLower == 'household head' ||
+        relationLower == 'householdhead' ||
+        json['isHouseholdHead'] == true;
+
     return _HouseholdMember(
       id: str('id'),
       patientId: str('patientId'),
       name: str('name') ?? str('firstName'),
-      relation: str('relation'),
+      relation: relation,
       gender: str('gender'),
       dateOfBirth: str('dateOfBirth'),
       phoneNumber: str('phoneNumber'),
-      isHouseholdHead: json['isHouseholdHead'] == true,
+      isHouseholdHead: isHead,
       isPregnant: json['isPregnant'] == true,
       householdId: str('householdId'),
       villageId: str('villageId'),
@@ -810,12 +820,12 @@ class _HouseholdMember {
       id: e.id,
       patientId: e.patientId,
       name: e.name,
-      relation: null,
+      relation: e.relation,
       gender: e.gender,
       dateOfBirth: e.dob,
       phoneNumber: e.phone,
-      isHouseholdHead: false,
-      isPregnant: false,
+      isHouseholdHead: e.isHouseholdHead,
+      isPregnant: e.isPregnant,
       householdId: e.householdId,
       villageId: e.villageId,
     );

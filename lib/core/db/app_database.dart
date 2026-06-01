@@ -16,7 +16,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 5;
+  static const int schemaVersion = 6;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -75,6 +75,9 @@ class AppDatabase {
         patient_id TEXT,
         village_id TEXT,
         is_active INTEGER,
+        is_household_head INTEGER,
+        is_pregnant INTEGER,
+        relation TEXT,
         updated_at INTEGER,
         raw_json TEXT
       )''');
@@ -509,6 +512,17 @@ class AppDatabase {
           'CREATE INDEX IF NOT EXISTS idx_local_assessments_patient ON $tableLocalAssessments(patient_id)');
       await addIdx5(
           'CREATE INDEX IF NOT EXISTS idx_local_assessments_sync ON $tableLocalAssessments(sync_status)');
+    }
+    if (from < 6) {
+      // v6 — Add household head, pregnant, relation columns to members table.
+      Future<void> addCol6(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* column already present */}
+      }
+      await addCol6('ALTER TABLE $tableMembers ADD COLUMN is_household_head INTEGER');
+      await addCol6('ALTER TABLE $tableMembers ADD COLUMN is_pregnant INTEGER');
+      await addCol6('ALTER TABLE $tableMembers ADD COLUMN relation TEXT');
     }
   }
 
