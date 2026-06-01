@@ -117,6 +117,34 @@ class Endpoints {
   static const String medicalReviewWeightCreate =
       '/spice-service/medical-review/weight/create';
 
+  /// Height tracking.
+  static const String medicalReviewHeightCreate =
+      '/spice-service/medical-review/height/create';
+
+  /// BMI tracking.
+  static const String medicalReviewBmiCreate =
+      '/spice-service/medical-review/bmi/create';
+
+  /// BP via medical review.
+  static const String medicalReviewBpCreate =
+      '/spice-service/medical-review/bp/create';
+
+  /// Medical review history (encounter-shaped history).
+  static const String medicalReviewHistory =
+      '/spice-service/medical-review/history';
+
+  // ── Spice: patient visits ────────────────────────────────────────────────
+  /// Create a new patient visit (returns visitId).
+  static const String patientVisitCreate =
+      '/spice-service/patientvisit/create';
+
+  /// List patient visits.
+  static const String patientVisitList = '/spice-service/patientvisit/list';
+
+  /// Get patient visit details.
+  static const String patientVisitDetails =
+      '/spice-service/patientvisit/details';
+
   // ── Referral tickets (verified against postman + Java controllers) ───────
   /// List referral tickets for a patient. Postman: Spice Service →
   /// patient-controller → getReferralTicket. Controller:

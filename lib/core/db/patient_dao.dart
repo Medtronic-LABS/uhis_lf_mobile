@@ -125,4 +125,14 @@ class PatientDao {
     if (c is num) return c.toInt();
     return 0;
   }
+
+  /// Query patients by household ID from local database.
+  Future<List<Map<String, dynamic>>> getByHouseholdId(String householdId) async {
+    return _db.db.query(
+      AppDatabase.tablePatients,
+      where: 'household_id = ?',
+      whereArgs: [householdId],
+      orderBy: 'name ASC',
+    );
+  }
 }

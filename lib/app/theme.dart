@@ -110,11 +110,14 @@ class ProgrammeColors extends ThemeExtension<ProgrammeColors> {
       case Programme.imci:
         return imci;
       case Programme.anc:
+      case Programme.pnc:
         return anc;
       case Programme.ncd:
         return ncd;
       case Programme.tb:
         return tb;
+      case Programme.unknown:
+        return ncd; // fallback
     }
   }
 
@@ -123,11 +126,14 @@ class ProgrammeColors extends ThemeExtension<ProgrammeColors> {
       case Programme.imci:
         return imciContainer;
       case Programme.anc:
+      case Programme.pnc:
         return ancContainer;
       case Programme.ncd:
         return ncdContainer;
       case Programme.tb:
         return tbContainer;
+      case Programme.unknown:
+        return ncdContainer; // fallback
     }
   }
 

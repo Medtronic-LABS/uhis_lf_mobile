@@ -16,7 +16,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 3;
+  static const int schemaVersion = 4;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -30,6 +30,7 @@ class AppDatabase {
   static const String tableReferrals = 'referrals';
   static const String tableReferralStatusEvents = 'referral_status_events';
   static const String tableNotificationLog = 'notification_log';
+  static const String tableEncounters = 'encounters';
 
   /// Opens (creating if needed) the on-device database.
   static Future<AppDatabase> open() async {
@@ -223,6 +224,30 @@ class AppDatabase {
         'CREATE INDEX idx_nl_ref ON $tableNotificationLog(referral_id)');
     await db.execute(
         'CREATE INDEX idx_nl_repeat ON $tableNotificationLog(next_repeat_at)');
+
+    // v4 — Encounters table for offline-first visit capture
+    await db.execute('''
+      CREATE TABLE $tableEncounters (
+        id TEXT PRIMARY KEY,
+        patient_id TEXT NOT NULL,
+        programme TEXT NOT NULL,
+        started_at INTEGER NOT NULL,
+        completed_at INTEGER,
+        status TEXT NOT NULL DEFAULT 'draft',
+        sync_status TEXT NOT NULL DEFAULT 'pending',
+        server_visit_id TEXT,
+        triage_json TEXT,
+        vitals_json TEXT,
+        assessment_json TEXT
+      )''');
+    await db.execute(
+        'CREATE INDEX idx_enc_patient ON $tableEncounters(patient_id)');
+    await db.execute(
+        'CREATE INDEX idx_enc_status ON $tableEncounters(status)');
+    await db.execute(
+        'CREATE INDEX idx_enc_sync ON $tableEncounters(sync_status)');
+    await db.execute(
+        'CREATE INDEX idx_enc_started ON $tableEncounters(started_at DESC)');
   }
 
   static Future<void> _onUpgrade(Database db, int from, int to) async {
@@ -381,6 +406,41 @@ class AppDatabase {
           'CREATE INDEX IF NOT EXISTS idx_nl_ref ON $tableNotificationLog(referral_id)');
       await addIdx3(
           'CREATE INDEX IF NOT EXISTS idx_nl_repeat ON $tableNotificationLog(next_repeat_at)');
+    }
+    if (from < 4) {
+      // v4 — Encounters table for offline-first visit capture.
+      Future<void> addTbl4(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* table already present */}
+      }
+      Future<void> addIdx4(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* index already present */}
+      }
+      await addTbl4('''
+        CREATE TABLE IF NOT EXISTS $tableEncounters (
+          id TEXT PRIMARY KEY,
+          patient_id TEXT NOT NULL,
+          programme TEXT NOT NULL,
+          started_at INTEGER NOT NULL,
+          completed_at INTEGER,
+          status TEXT NOT NULL DEFAULT 'draft',
+          sync_status TEXT NOT NULL DEFAULT 'pending',
+          server_visit_id TEXT,
+          triage_json TEXT,
+          vitals_json TEXT,
+          assessment_json TEXT
+        )''');
+      await addIdx4(
+          'CREATE INDEX IF NOT EXISTS idx_enc_patient ON $tableEncounters(patient_id)');
+      await addIdx4(
+          'CREATE INDEX IF NOT EXISTS idx_enc_status ON $tableEncounters(status)');
+      await addIdx4(
+          'CREATE INDEX IF NOT EXISTS idx_enc_sync ON $tableEncounters(sync_status)');
+      await addIdx4(
+          'CREATE INDEX IF NOT EXISTS idx_enc_started ON $tableEncounters(started_at DESC)');
     }
   }
 

@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
+import '../../core/db/patient_dao.dart';
 import '../dashboard/dashboard_repository.dart';
 
 /// Full details of a household member for display.
@@ -207,15 +210,63 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
       _loadError = null;
     });
 
+    final householdId = _household.id;
+    if (householdId == null) {
+      setState(() {
+        _loadError = 'Household ID not available';
+        _loadingMembers = false;
+      });
+      return;
+    }
+
     try {
-      final repo = context.read<DashboardRepository>();
-      final householdId = _household.id;
-      
+      // First try local database (synced patients)
+      final patientDao = context.read<PatientDao>();
       // ignore: avoid_print
-      print('[HouseholdDetail] Fetching household $householdId using dedicated endpoint');
+      print('[HouseholdDetail] Trying local DB for household $householdId');
       
-      // Use the efficient single-household endpoint
-      final householdData = await repo.getHouseholdById(householdId!);
+      final localPatients = await patientDao.getByHouseholdId(householdId);
+      // ignore: avoid_print
+      print('[HouseholdDetail] Found ${localPatients.length} patients in local DB');
+      
+      if (localPatients.isNotEmpty && mounted) {
+        // Convert local patients to member data format
+        final members = localPatients.map((p) {
+          final rawJson = p['raw_json'];
+          if (rawJson is String && rawJson.isNotEmpty && rawJson.startsWith('{')) {
+            try {
+              final decoded = jsonDecode(rawJson);
+              if (decoded is Map<String, dynamic>) {
+                return HouseholdMemberData.fromJson(decoded);
+              }
+            } catch (_) {}
+          }
+          return HouseholdMemberData.fromJson(p);
+        }).toList();
+        
+        setState(() {
+          _household = HouseholdDetailData(
+            id: _household.id,
+            name: _household.name,
+            householdNo: _household.householdNo,
+            village: _household.village,
+            subVillage: _household.subVillage,
+            memberCount: members.length,
+            latitude: _household.latitude,
+            longitude: _household.longitude,
+            members: members,
+          );
+          _loadingMembers = false;
+        });
+        return;
+      }
+
+      // Fall back to API
+      final repo = context.read<DashboardRepository>();
+      // ignore: avoid_print
+      print('[HouseholdDetail] Falling back to API for household $householdId');
+      
+      final householdData = await repo.getHouseholdById(householdId);
       
       if (householdData != null && mounted) {
         final updated = HouseholdDetailData.fromJson(householdData);
@@ -230,7 +281,7 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
         // ignore: avoid_print
         print('[HouseholdDetail] No data returned for household $householdId');
         setState(() {
-          _loadError = 'Household not found';
+          _loadError = 'No members found';
           _loadingMembers = false;
         });
       }

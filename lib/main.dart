@@ -16,6 +16,7 @@ import 'core/config/app_config.dart';
 import 'core/constants/app_strings.dart';
 import 'core/db/app_database.dart';
 import 'core/db/assessment_dao.dart';
+import 'core/db/encounter_dao.dart';
 import 'core/db/follow_up_dao.dart';
 import 'core/db/immunisation_dao.dart';
 import 'core/db/patient_dao.dart';
@@ -31,13 +32,18 @@ import 'core/sync/offline_sync_service.dart';
 import 'features/dashboard/dashboard_repository.dart';
 import 'features/dashboard/mission_dashboard_repository.dart';
 import 'features/lock/lock_barrier.dart';
+import 'features/patient/followup_repository.dart';
 import 'features/patient/member_detail_repository.dart';
 import 'features/patient/patient_repository.dart';
+import 'features/patient/vitals_repository.dart';
 import 'features/referral/referral_repository.dart';
 import 'features/search/global_search_repository.dart';
 import 'features/search/household_search_repository.dart';
 import 'features/search/member_search_repository.dart';
 import 'features/search/patient_search_repository.dart';
+import 'features/visit/encounter_repository.dart';
+import 'features/visit/household_repository.dart';
+import 'features/visit/visit_controller.dart';
 import 'features/worklist/worklist_repository.dart';
 
 Future<void> main() async {
@@ -237,6 +243,22 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<PatientDao>.value(value: _patientDao),
         Provider<MemberDetailRepository>(
             create: (_) => MemberDetailRepository(widget.api, widget.authRepo)),
+        // Visit flow providers
+        Provider<EncounterDao>(
+            create: (_) => EncounterDao(widget.appDb)),
+        Provider<EncounterRepository>(
+            create: (ctx) => EncounterRepository(
+                widget.api, ctx.read<EncounterDao>())),
+        Provider<VitalsRepository>(
+            create: (_) => VitalsRepository(widget.api)),
+        Provider<FollowUpRepository>(
+            create: (_) => FollowUpRepository(widget.api)),
+        Provider<HouseholdRepository>(
+            create: (_) => HouseholdRepository(widget.api)),
+        ChangeNotifierProxyProvider<EncounterRepository, VisitController>(
+          create: (ctx) => VisitController(ctx.read<EncounterRepository>()),
+          update: (_, repo, prev) => prev ?? VisitController(repo),
+        ),
       ],
       child: Builder(
         builder: (context) {

@@ -13,6 +13,9 @@ import '../features/pin/pin_setup_screen.dart';
 import '../features/pin/pin_unlock_screen.dart';
 import '../features/referral/referral_detail_screen.dart';
 import '../features/referral/referral_list_screen.dart';
+import '../features/visit/visit_landing_screen.dart';
+import '../features/visit/visit_triage_step.dart';
+import '../features/visit/visit_vitals_step.dart';
 import 'bottom_nav.dart';
 
 /// Navigation keys for each tab's navigator.
@@ -146,6 +149,49 @@ GoRouter buildRouter(AuthState auth) {
                     builder: (_, state) => PatientContextScreen(
                       patientId: state.pathParameters['id']!,
                       memberData: state.extra as Map<String, dynamic>?,
+                    ),
+                  ),
+                  // Visit flow routes
+                  GoRoute(
+                    path: 'visit/:patientId/start',
+                    builder: (_, state) => VisitLandingScreen(
+                      patientId: state.pathParameters['patientId']!,
+                      data: state.extra as VisitLandingData?,
+                    ),
+                  ),
+                  GoRoute(
+                    path: 'visit/:visitId/triage',
+                    builder: (_, state) => VisitTriageStep(
+                      visitId: state.pathParameters['visitId']!,
+                    ),
+                  ),
+                  GoRoute(
+                    path: 'visit/:visitId/vitals',
+                    builder: (_, state) => VisitVitalsStep(
+                      visitId: state.pathParameters['visitId']!,
+                    ),
+                  ),
+                  GoRoute(
+                    path: 'visit/:visitId/assessment/:programme',
+                    builder: (context, state) => Scaffold(
+                      appBar: AppBar(
+                        title: Text('Assessment - ${state.pathParameters['programme']?.toUpperCase()}'),
+                      ),
+                      body: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.construction, size: 64),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Phase 2: ${state.pathParameters['programme']} assessment',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 8),
+                            const Text('Assessment forms will be added in Phase 2'),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ],

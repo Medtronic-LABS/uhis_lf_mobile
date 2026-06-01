@@ -7,8 +7,10 @@
 enum Programme {
   imci,
   anc,
+  pnc,
   ncd,
-  tb;
+  tb,
+  unknown;
 
   /// Case-insensitive tag mapper. Accepts the strings the spice service
   /// returns in `diagnosisType[]`, on enrolment markers, and on follow-up rows.
@@ -28,8 +30,10 @@ enum Programme {
       case 'PREGNANCY':
       case 'PREGNANT':
       case 'EMTCT':
-      case 'PNC':
         return Programme.anc;
+      case 'PNC':
+      case 'POSTNATAL':
+        return Programme.pnc;
       case 'NCD':
       case 'HYPERTENSION':
       case 'HTN':
@@ -54,10 +58,14 @@ enum Programme {
         return 'IMCI';
       case Programme.anc:
         return 'ANC';
+      case Programme.pnc:
+        return 'PNC';
       case Programme.ncd:
         return 'NCD';
       case Programme.tb:
         return 'TB';
+      case Programme.unknown:
+        return 'UNKNOWN';
     }
   }
 
@@ -68,11 +76,30 @@ enum Programme {
         return Programme.imci;
       case 'ANC':
         return Programme.anc;
+      case 'PNC':
+        return Programme.pnc;
       case 'NCD':
         return Programme.ncd;
       case 'TB':
         return Programme.tb;
     }
     return null;
+  }
+
+  /// Parse from any string, returning [Programme.unknown] if not recognized.
+  static Programme fromString(String? s) {
+    if (s == null || s.isEmpty) return Programme.unknown;
+    final tag = s.trim().toUpperCase();
+    
+    // Try fromTag first (handles many variations)
+    final fromTagResult = fromTag(tag);
+    if (fromTagResult != null) return fromTagResult;
+    
+    // Direct enum name match
+    for (final p in Programme.values) {
+      if (p.name.toUpperCase() == tag) return p;
+    }
+    
+    return Programme.unknown;
   }
 }

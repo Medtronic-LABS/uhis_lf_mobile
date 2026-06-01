@@ -308,11 +308,14 @@ class _ProgrammeBadge extends StatelessWidget {
       case Programme.imci:
         return (const Color(0xFFDC2626), MissionDashboardStrings.badgeImci);
       case Programme.anc:
+      case Programme.pnc:
         return (const Color(0xFFEC4899), MissionDashboardStrings.badgeAnc);
       case Programme.ncd:
         return (const Color(0xFFD97706), MissionDashboardStrings.badgeNcd);
       case Programme.tb:
         return (const Color(0xFF16A34A), MissionDashboardStrings.badgeTb);
+      case Programme.unknown:
+        return (const Color(0xFF6B7280), 'General');
     }
   }
 }

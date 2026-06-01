@@ -356,8 +356,10 @@ abstract final class WorklistStrings {
   // Programme labels.
   static const String programmeImci = 'IMCI';
   static const String programmeAnc = 'ANC';
+  static const String programmePnc = 'PNC';
   static const String programmeNcd = 'NCD';
   static const String programmeTb = 'TB';
+  static const String programmeUnknown = 'General';
 
   // Chip filters.
   static const String filterAll = 'All';

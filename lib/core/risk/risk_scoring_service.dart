@@ -83,7 +83,11 @@ class RiskScoringService {
           drivers.add('imci');
           break;
         case Programme.anc:
+        case Programme.pnc:
           // Already covered by the pregnancy weight above.
+          break;
+        case Programme.unknown:
+          // No weight for unknown programme.
           break;
       }
     }

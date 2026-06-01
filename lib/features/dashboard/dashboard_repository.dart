@@ -11,10 +11,14 @@ class DashboardRepository extends ApiRepository {
   /// IMPORTANT: Must be cleared on logout via [clearCache] to avoid
   /// using stale data from previous login sessions.
   List<int>? _cachedSubVillageIds;
+  
+  /// Cached members grouped by household ID for fast lookup.
+  Map<String, List<Map<String, dynamic>>>? _cachedMembersByHousehold;
 
   /// Clears cached data. Call this on logout to ensure fresh data on next login.
   void clearCache() {
     _cachedSubVillageIds = null;
+    _cachedMembersByHousehold = null;
   }
 
   /// Build the request body for household/member list APIs.
@@ -214,8 +218,122 @@ class DashboardRepository extends ApiRepository {
     return households;
   }
 
+  /// Fetches members for a specific household.
+  /// Tries multiple API approaches since spice-service doesn't reliably support
+  /// household filtering.
+  Future<List<Map<String, dynamic>>> getMembersForHousehold(String householdId) async {
+    // ignore: avoid_print
+    print('[DashboardRepository] fetching members for household: $householdId');
+    
+    // Check cache first
+    if (_cachedMembersByHousehold != null) {
+      final cached = _cachedMembersByHousehold![householdId];
+      if (cached != null) {
+        // ignore: avoid_print
+        print('[DashboardRepository] returning ${cached.length} cached members');
+        return cached;
+      }
+    }
+    
+    // Approach 1: Try household-member-link/list with householdId
+    try {
+      final req = <String, dynamic>{
+        'skip': 0,
+        'limit': 100,
+        'tenantId': api.tenantIdAsNum,
+        'householdId': int.tryParse(householdId) ?? householdId,
+      };
+      // ignore: avoid_print
+      print('[DashboardRepository] trying household-member-link with: $req');
+      final body = await postOk(
+        Endpoints.householdMemberLinkList,
+        data: req,
+        action: 'Household member links',
+      );
+      final list = extractList(body);
+      if (list.isNotEmpty) {
+        final results = <Map<String, dynamic>>[];
+        for (final item in list) {
+          if (item is Map<String, dynamic>) {
+            results.add(item);
+          } else if (item is Map) {
+            results.add(Map<String, dynamic>.from(item));
+          }
+        }
+        // ignore: avoid_print
+        print('[DashboardRepository] got ${results.length} members from household-member-link');
+        return results;
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('[DashboardRepository] household-member-link failed: $e');
+    }
+    
+    // Approach 2: Fall back to member/list with householdIds array
+    try {
+      final req2 = <String, dynamic>{
+        'skip': 0,
+        'limit': 100,
+        'tenantId': api.tenantIdAsNum,
+        'householdIds': [int.tryParse(householdId) ?? householdId],
+      };
+      // ignore: avoid_print
+      print('[DashboardRepository] trying member/list with householdIds: $req2');
+      final body = await postOk(
+        Endpoints.householdMemberList,
+        data: req2,
+        action: 'Household members',
+      );
+      final list = extractList(body);
+      final results = <Map<String, dynamic>>[];
+      for (final item in list) {
+        if (item is Map<String, dynamic>) {
+          results.add(item);
+        } else if (item is Map) {
+          results.add(Map<String, dynamic>.from(item));
+        }
+      }
+      // ignore: avoid_print
+      print('[DashboardRepository] got ${results.length} members from member/list');
+      if (results.isNotEmpty) return results;
+    } catch (e) {
+      // ignore: avoid_print
+      print('[DashboardRepository] member/list failed: $e');
+    }
+    
+    // Approach 3: Fetch ALL members and filter client-side
+    // This is expensive but necessary when API doesn't support filtering
+    try {
+      // ignore: avoid_print
+      print('[DashboardRepository] falling back to fetch-all + client filter');
+      final allMembers = await getAllMembers(pageSize: 500, hardCapPages: 3);
+      // ignore: avoid_print
+      print('[DashboardRepository] fetched ${allMembers.length} total members');
+      
+      // Cache all members grouped by household for future lookups
+      _cachedMembersByHousehold = <String, List<Map<String, dynamic>>>{};
+      for (final m in allMembers) {
+        final hhId = m['householdId']?.toString();
+        if (hhId != null && hhId.isNotEmpty) {
+          _cachedMembersByHousehold!.putIfAbsent(hhId, () => []).add(m);
+        }
+      }
+      // ignore: avoid_print
+      print('[DashboardRepository] cached members for ${_cachedMembersByHousehold!.length} households');
+      
+      final filtered = _cachedMembersByHousehold![householdId] ?? [];
+      // ignore: avoid_print
+      print('[DashboardRepository] returning ${filtered.length} members for household $householdId');
+      return filtered;
+    } catch (e) {
+      // ignore: avoid_print
+      print('[DashboardRepository] fetch-all failed: $e');
+      return [];
+    }
+  }
+
   /// Fetches a single household by ID with embedded member data.
-  /// Uses the dedicated `/household/:householdId` endpoint.
+  /// Uses the dedicated `/household/:householdId` endpoint + separate member fetch.
   Future<Map<String, dynamic>?> getHouseholdById(String householdId) async {
     // ignore: avoid_print
     print('[DashboardRepository] fetching household by ID: $householdId');
@@ -230,15 +348,29 @@ class DashboardRepository extends ApiRepository {
       if (body is Map) {
         // The API returns { "entity": { ... } } or { "data": { ... } }
         final entity = body['entity'] ?? body['data'] ?? body;
+        Map<String, dynamic> result;
         if (entity is Map<String, dynamic>) {
-          // ignore: avoid_print
-          print('[DashboardRepository] household keys: ${entity.keys.toList()}');
-          final members = entity['householdMembers'];
-          // ignore: avoid_print
-          print('[DashboardRepository] householdMembers: ${members?.runtimeType} length=${members is List ? members.length : 0}');
-          return entity;
+          result = entity;
+        } else {
+          result = Map<String, dynamic>.from(entity as Map);
         }
-        return Map<String, dynamic>.from(entity as Map);
+        
+        // ignore: avoid_print
+        print('[DashboardRepository] household keys: ${result.keys.toList()}');
+        
+        // If householdMembers is null/empty, fetch them separately
+        final existingMembers = result['householdMembers'];
+        if (existingMembers == null || (existingMembers is List && existingMembers.isEmpty)) {
+          // ignore: avoid_print
+          print('[DashboardRepository] householdMembers empty, fetching separately');
+          final members = await getMembersForHousehold(householdId);
+          result['householdMembers'] = members;
+        }
+        
+        final members = result['householdMembers'];
+        // ignore: avoid_print
+        print('[DashboardRepository] final householdMembers: ${members?.runtimeType} length=${members is List ? members.length : 0}');
+        return result;
       }
       return null;
     } catch (e) {

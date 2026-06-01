@@ -1,0 +1,332 @@
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+
+import '../../core/models/programme.dart';
+import 'encounter_repository.dart';
+import 'household_repository.dart';
+import 'visit_controller.dart';
+
+/// Data passed to visit landing screen.
+class VisitLandingData {
+  const VisitLandingData({
+    required this.patientId,
+    this.patientName,
+    this.patientAge,
+    this.patientGender,
+    this.householdId,
+    this.programme,
+  });
+
+  final String patientId;
+  final String? patientName;
+  final int? patientAge;
+  final String? patientGender;
+  final String? householdId;
+  final Programme? programme;
+}
+
+/// Visit Landing Screen — entry point for starting a visit.
+///
+/// Shows patient header, "Last seen X ago" line, greeting prompt,
+/// household co-flags, and "Start Visit" CTA.
+class VisitLandingScreen extends StatefulWidget {
+  const VisitLandingScreen({
+    super.key,
+    required this.patientId,
+    this.data,
+  });
+
+  final String patientId;
+  final VisitLandingData? data;
+
+  @override
+  State<VisitLandingScreen> createState() => _VisitLandingScreenState();
+}
+
+class _VisitLandingScreenState extends State<VisitLandingScreen> {
+  Future<VisitSummary?>? _lastVisitFuture;
+  Future<List<HouseholdMemberFlag>>? _coFlagsFuture;
+  bool _starting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  void _loadData() {
+    final encounterRepo = context.read<EncounterRepository>();
+    final householdRepo = context.read<HouseholdRepository>();
+
+    _lastVisitFuture = encounterRepo.lastEncounterSummary(widget.patientId);
+    
+    if (widget.data?.householdId != null) {
+      _coFlagsFuture = householdRepo.coFlagsFor(
+        widget.patientId,
+        householdId: widget.data!.householdId,
+      );
+    }
+  }
+
+  Future<void> _startVisit() async {
+    if (_starting) return;
+    setState(() => _starting = true);
+
+    final controller = context.read<VisitController>();
+    final programme = widget.data?.programme ?? Programme.unknown;
+
+    final encounterId = await controller.startVisit(
+      patientId: widget.patientId,
+      programme: programme,
+      patientName: widget.data?.patientName,
+      patientAge: widget.data?.patientAge,
+      patientGender: widget.data?.patientGender,
+      householdId: widget.data?.householdId,
+    );
+
+    if (!mounted) return;
+
+    if (encounterId != null) {
+      context.go('/patients/visit/$encounterId/triage');
+    } else {
+      setState(() => _starting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(controller.error ?? 'Failed to start visit')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final data = widget.data;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Start Visit'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          // Patient Header Card
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    data?.patientName ?? 'Patient',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    [
+                      if (data?.patientAge != null) '${data!.patientAge} years',
+                      if (data?.patientGender != null) data!.patientGender,
+                    ].join(' • '),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  if (data?.programme != null) ...[
+                    const SizedBox(height: 8),
+                    Chip(
+                      label: Text(data!.programme!.wireTag),
+                      backgroundColor: theme.colorScheme.primaryContainer,
+                      labelStyle: TextStyle(
+                        color: theme.colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Last seen line
+          FutureBuilder<VisitSummary?>(
+            future: _lastVisitFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const SizedBox.shrink();
+              }
+              final lastVisit = snapshot.data;
+              if (lastVisit == null) {
+                return Card(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  child: const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline),
+                        SizedBox(width: 12),
+                        Text('First visit for this patient'),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              final daysSince = DateTime.now().difference(lastVisit.date).inDays;
+              final timeAgo = daysSince == 0
+                  ? 'today'
+                  : daysSince == 1
+                      ? 'yesterday'
+                      : daysSince < 7
+                          ? '$daysSince days ago'
+                          : '${(daysSince / 7).floor()} weeks ago';
+              return Card(
+                color: theme.colorScheme.surfaceContainerHighest,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.schedule),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Last seen $timeAgo — ${lastVisit.programme.wireTag}',
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+
+          const SizedBox(height: 16),
+
+          // Greeting prompt
+          Card(
+            color: theme.colorScheme.primaryContainer,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.emoji_people,
+                        color: theme.colorScheme.onPrimaryContainer,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Say hello first',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onPrimaryContainer,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _getGreeting(data?.patientName, data?.programme),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Household co-flags
+          if (_coFlagsFuture != null)
+            FutureBuilder<List<HouseholdMemberFlag>>(
+              future: _coFlagsFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const SizedBox.shrink();
+                }
+                final flags = snapshot.data ?? [];
+                if (flags.isEmpty) return const SizedBox.shrink();
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Also in this household',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ...flags.map((member) => Card(
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: theme.colorScheme.errorContainer,
+                              child: Icon(
+                                Icons.warning_amber,
+                                color: theme.colorScheme.error,
+                              ),
+                            ),
+                            title: Text(member.name),
+                            subtitle: Text(
+                              member.flags.map((f) => f.label).join(', '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )),
+                    const SizedBox(height: 16),
+                  ],
+                );
+              },
+            ),
+
+          const SizedBox(height: 24),
+        ],
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: FilledButton.icon(
+            onPressed: _starting ? null : _startVisit,
+            icon: _starting
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.play_arrow),
+            label: Text(_starting ? 'Starting...' : 'Start Visit'),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(56),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _getGreeting(String? name, Programme? programme) {
+    final firstName = name?.split(' ').first ?? 'the patient';
+    
+    switch (programme) {
+      case Programme.anc:
+        return 'Ask $firstName how she\'s feeling today and if she has any concerns about her pregnancy.';
+      case Programme.pnc:
+        return 'Ask $firstName how she and the baby are doing. Check on feeding and rest.';
+      case Programme.imci:
+        return 'Ask the caregiver how $firstName is doing today. Ask about any symptoms.';
+      case Programme.ncd:
+        return 'Ask $firstName about medication adherence and any new symptoms since last visit.';
+      case Programme.tb:
+        return 'Ask $firstName about cough, fever, and medication adherence.';
+      default:
+        return 'Greet $firstName warmly and ask how they\'re feeling today.';
+    }
+  }
+}

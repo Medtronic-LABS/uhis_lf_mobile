@@ -8,7 +8,10 @@ import '../../core/constants/app_strings.dart';
 import '../../core/models/programme.dart';
 import '../../core/models/risk.dart';
 import 'member_detail_repository.dart';
+import 'open_followups_section.dart';
+import 'patient_actions_row.dart';
 import 'patient_repository.dart';
+import 'recent_vitals_section.dart';
 
 /// Combined data type that can hold either a local patient or remote member.
 class PatientOrMemberData {
@@ -303,9 +306,19 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
               if (data.riskReasons.isNotEmpty) const SizedBox(height: 16),
               _AssessmentsSection(assessments: data.assessments),
               const SizedBox(height: 16),
-              _ComingSoon(title: PatientContextStrings.sectionVitals),
-              _ComingSoon(title: PatientContextStrings.sectionAiSuggestions),
-              _ComingSoon(title: PatientContextStrings.sectionActions),
+              RecentVitalsSection(patientId: widget.patientId),
+              const SizedBox(height: 16),
+              OpenFollowupsSection(patientId: widget.patientId),
+              const SizedBox(height: 16),
+              PatientActionsRow(
+                patientId: widget.patientId,
+                patientName: data.name,
+                patientAge: data.age,
+                patientGender: data.gender,
+                householdId: data.householdId,
+                programmes: data.programmes,
+              ),
+              const SizedBox(height: 24),
             ],
           );
         },
@@ -437,10 +450,14 @@ class _HeaderCard extends StatelessWidget {
         return WorklistStrings.programmeImci;
       case Programme.anc:
         return WorklistStrings.programmeAnc;
+      case Programme.pnc:
+        return WorklistStrings.programmePnc;
       case Programme.ncd:
         return WorklistStrings.programmeNcd;
       case Programme.tb:
         return WorklistStrings.programmeTb;
+      case Programme.unknown:
+        return WorklistStrings.programmeUnknown;
     }
   }
 }
@@ -683,10 +700,14 @@ class _HeaderCardV2 extends StatelessWidget {
         return WorklistStrings.programmeImci;
       case Programme.anc:
         return WorklistStrings.programmeAnc;
+      case Programme.pnc:
+        return WorklistStrings.programmePnc;
       case Programme.ncd:
         return WorklistStrings.programmeNcd;
       case Programme.tb:
         return WorklistStrings.programmeTb;
+      case Programme.unknown:
+        return WorklistStrings.programmeUnknown;
     }
   }
 }

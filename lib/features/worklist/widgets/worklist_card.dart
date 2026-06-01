@@ -559,10 +559,14 @@ class _ProgrammeChip extends StatelessWidget {
         return WorklistStrings.programmeImci;
       case Programme.anc:
         return WorklistStrings.programmeAnc;
+      case Programme.pnc:
+        return WorklistStrings.programmePnc;
       case Programme.ncd:
         return WorklistStrings.programmeNcd;
       case Programme.tb:
         return WorklistStrings.programmeTb;
+      case Programme.unknown:
+        return WorklistStrings.programmeUnknown;
     }
   }
 }
@@ -627,11 +631,14 @@ class _MiniProgrammeChip extends StatelessWidget {
       case Programme.imci:
         return (scheme.errorContainer, scheme.onErrorContainer);
       case Programme.anc:
+      case Programme.pnc:
         return (scheme.tertiaryContainer, scheme.onTertiaryContainer);
       case Programme.ncd:
         return (scheme.primaryContainer, scheme.onPrimaryContainer);
       case Programme.tb:
         return (scheme.secondaryContainer, scheme.onSecondaryContainer);
+      case Programme.unknown:
+        return (scheme.surfaceContainerHighest, scheme.onSurface);
     }
   }
 
@@ -641,10 +648,14 @@ class _MiniProgrammeChip extends StatelessWidget {
         return WorklistStrings.programmeImci;
       case Programme.anc:
         return WorklistStrings.programmeAnc;
+      case Programme.pnc:
+        return WorklistStrings.programmePnc;
       case Programme.ncd:
         return WorklistStrings.programmeNcd;
       case Programme.tb:
         return WorklistStrings.programmeTb;
+      case Programme.unknown:
+        return WorklistStrings.programmeUnknown;
     }
   }
 }
@@ -738,11 +749,14 @@ class _ProgrammeTag extends StatelessWidget {
       case Programme.imci:
         return (scheme.errorContainer, scheme.onErrorContainer, Icons.child_care);
       case Programme.anc:
+      case Programme.pnc:
         return (scheme.tertiaryContainer, scheme.onTertiaryContainer, Icons.pregnant_woman);
       case Programme.ncd:
         return (scheme.primaryContainer, scheme.onPrimaryContainer, Icons.monitor_heart_outlined);
       case Programme.tb:
         return (scheme.secondaryContainer, scheme.onSecondaryContainer, Icons.sick_outlined);
+      case Programme.unknown:
+        return (scheme.surfaceContainerHighest, scheme.onSurface, Icons.person);
     }
   }
 
@@ -752,10 +766,14 @@ class _ProgrammeTag extends StatelessWidget {
         return WorklistStrings.programmeImci;
       case Programme.anc:
         return WorklistStrings.programmeAnc;
+      case Programme.pnc:
+        return WorklistStrings.programmePnc;
       case Programme.ncd:
         return WorklistStrings.programmeNcd;
       case Programme.tb:
         return WorklistStrings.programmeTb;
+      case Programme.unknown:
+        return WorklistStrings.programmeUnknown;
     }
   }
 }
