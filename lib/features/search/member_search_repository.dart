@@ -90,8 +90,9 @@ class MemberSearchRepository extends ApiRepository {
 
   static const int displayCap = 50;
 
-  /// Searches members by name using server-side search.
-  /// Falls back to client-side filtering for household-specific searches.
+  /// Searches members by name using multiple strategies:
+  /// 1. /patient/list with searchText (enrolled patients)
+  /// 2. FHIR RelatedPerson search (all household members)
   Future<MemberSearchResult> search({
     required String query,
     void Function(MemberSearchProgress)? onProgress,
@@ -106,67 +107,211 @@ class MemberSearchRepository extends ApiRepository {
     }
 
     // ignore: avoid_print
-    print('[MemberSearch] query="$q" - using server-side search');
+    print('[MemberSearch] query="$q" - using multi-strategy search');
 
+    final matches = <MemberHit>[];
+    final seenIds = <String>{};
+    int totalScanned = 0;
+    
+    // Get user's accessible villageIds
+    final villageIds = await _authRepo.subVillageIds();
+    // ignore: avoid_print
+    print('[MemberSearch] villageIds=$villageIds');
+
+    onProgress?.call(MemberSearchProgress(0, displayCap));
+
+    // Strategy 1: Try /patient/list with searchText
     try {
-      // Use server-side patient search for name queries
-      onProgress?.call(MemberSearchProgress(0, displayCap));
-      
       final reqData = <String, dynamic>{
         'skip': 0,
         'limit': displayCap,
         'tenantId': api.tenantIdAsNum,
-        'name': q,  // Server-side name search
+        'searchText': q,
+        if (villageIds.isNotEmpty) 'villageIds': villageIds,
       };
+      
+      // ignore: avoid_print
+      print('[MemberSearch] /patient/list request: $reqData');
 
       final body = await postOk(
-        Endpoints.patientSearch,
+        Endpoints.patientList,
         data: reqData,
-        action: 'Patient search',
+        action: 'Patient list',
       );
       
       final list = extractList(body);
       // ignore: avoid_print
-      print('[MemberSearch] server search returned ${list.length} results');
-      
-      if (list.isNotEmpty) {
-        // ignore: avoid_print
-        print('[MemberSearch] sample keys: ${(list.first as Map).keys.toList()}');
-      }
-
-      final matches = <MemberHit>[];
-      final seenIds = <String>{};
+      print('[MemberSearch] /patient/list returned ${list.length} results');
+      totalScanned += list.length;
       
       for (final raw in list) {
         if (raw is! Map) continue;
         final hit = MemberHit.fromJson(raw);
-        
-        // Skip duplicates
-        if (hit.id != null && seenIds.contains(hit.id)) continue;
-        if (hit.id != null) seenIds.add(hit.id!);
-        
-        matches.add(hit);
+        final key = hit.id ?? hit.name;
+        if (key != null && !seenIds.contains(key)) {
+          seenIds.add(key);
+          matches.add(hit);
+        }
         if (matches.length >= displayCap) break;
       }
-
-      // ignore: avoid_print
-      print('[MemberSearch] found ${matches.length} matches from server');
-      onProgress?.call(MemberSearchProgress(matches.length, displayCap));
-      
-      return MemberSearchResult(
-        matches: matches,
-        totalScanned: list.length,
-        truncated: matches.length >= displayCap,
-      );
     } catch (e) {
       // ignore: avoid_print
-      print('[MemberSearch] server search failed: $e, falling back to client-side');
-      return _clientSideSearch(query: q, onProgress: onProgress);
+      print('[MemberSearch] /patient/list failed: $e');
     }
+
+    onProgress?.call(MemberSearchProgress(matches.length, displayCap));
+
+    // Strategy 2: Search FHIR RelatedPerson directly if we need more results
+    if (matches.length < displayCap) {
+      try {
+        final fhirResults = await _searchFhirRelatedPerson(q, villageIds, displayCap - matches.length);
+        // ignore: avoid_print
+        print('[MemberSearch] FHIR RelatedPerson returned ${fhirResults.length} results');
+        totalScanned += fhirResults.length;
+        
+        for (final hit in fhirResults) {
+          final key = hit.id ?? hit.name;
+          if (key != null && !seenIds.contains(key)) {
+            seenIds.add(key);
+            matches.add(hit);
+          }
+          if (matches.length >= displayCap) break;
+        }
+      } catch (e) {
+        // ignore: avoid_print
+        print('[MemberSearch] FHIR RelatedPerson search failed: $e');
+      }
+    }
+
+    // ignore: avoid_print
+    print('[MemberSearch] Total matches: ${matches.length}, scanned: $totalScanned');
+    onProgress?.call(MemberSearchProgress(matches.length, displayCap));
+
+    return MemberSearchResult(
+      matches: matches,
+      totalScanned: totalScanned,
+      truncated: matches.length >= displayCap,
+    );
   }
 
-  /// Fallback client-side search for when server-side fails or for
-  /// searches that need household info matching.
+  /// Search FHIR RelatedPerson directly for household members
+  Future<List<MemberHit>> _searchFhirRelatedPerson(
+    String query,
+    List<int> villageIds,
+    int limit,
+  ) async {
+    // Build FHIR search URL
+    final params = <String, String>{
+      'name': query,
+      '_count': limit.toString(),
+    };
+
+    // Add village filter if available
+    if (villageIds.isNotEmpty) {
+      final villageFilter = villageIds.take(10).map(
+        (id) => 'http://mdtlabs.com/village-id|$id'
+      ).join(',');
+      params['identifier'] = villageFilter;
+    }
+
+    final queryString = params.entries.map(
+      (e) => '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}'
+    ).join('&');
+
+    final url = '/fhir-server/fhir/RelatedPerson?$queryString';
+    
+    // ignore: avoid_print
+    print('[MemberSearch] FHIR request: $url');
+
+    final resp = await api.dio.get(url);
+    final code = resp.statusCode ?? 0;
+    if (code < 200 || code >= 300) {
+      throw Exception('FHIR search failed ($code)');
+    }
+
+    final data = resp.data;
+    if (data is! Map) return [];
+    
+    final entries = data['entry'] as List? ?? [];
+    return entries
+        .whereType<Map>()
+        .map((entry) {
+          final resource = entry['resource'] as Map? ?? {};
+          return _relatedPersonToHit(resource);
+        })
+        .where((h) => h.name != null)
+        .toList();
+  }
+
+  /// Convert FHIR RelatedPerson to MemberHit
+  MemberHit _relatedPersonToHit(Map resource) {
+    String? name;
+    final names = resource['name'] as List?;
+    if (names != null && names.isNotEmpty) {
+      final nameObj = names.first as Map?;
+      if (nameObj != null) {
+        name = nameObj['text']?.toString();
+        if (name == null) {
+          final given = (nameObj['given'] as List?)?.join(' ') ?? '';
+          final family = nameObj['family']?.toString() ?? '';
+          name = '$given $family'.trim();
+        }
+      }
+    }
+
+    String? phone;
+    final telecoms = resource['telecom'] as List?;
+    if (telecoms != null) {
+      for (final t in telecoms) {
+        if (t is Map && t['system'] == 'phone') {
+          phone = t['value']?.toString();
+          break;
+        }
+      }
+    }
+
+    String? id;
+    String? nid;
+    String? householdId;
+    final identifiers = resource['identifier'] as List?;
+    if (identifiers != null) {
+      for (final ident in identifiers) {
+        if (ident is! Map) continue;
+        final system = ident['system']?.toString() ?? '';
+        final value = ident['value']?.toString();
+        if (system.contains('patient-id')) {
+          id = value;
+        } else if (system.contains('national-id')) {
+          nid = value;
+        } else if (system.contains('household-id')) {
+          householdId = value;
+        }
+      }
+    }
+
+    String? gender = resource['gender']?.toString();
+    
+    String? age;
+    final birthDate = resource['birthDate']?.toString();
+    if (birthDate != null) {
+      final bd = DateTime.tryParse(birthDate);
+      if (bd != null) {
+        age = (DateTime.now().year - bd.year).toString();
+      }
+    }
+
+    return MemberHit(
+      id: id ?? resource['id']?.toString(),
+      name: name,
+      age: age,
+      gender: gender,
+      phone: phone,
+      nid: nid,
+      householdId: householdId,
+    );
+  }
+
+  /// Fallback client-side search (kept for offline mode)
   Future<MemberSearchResult> _clientSideSearch({
     required String query,
     void Function(MemberSearchProgress)? onProgress,

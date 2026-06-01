@@ -9,9 +9,11 @@ class RecentVitalsSection extends StatefulWidget {
   const RecentVitalsSection({
     super.key,
     required this.patientId,
+    this.memberReference,
   });
 
   final String patientId;
+  final String? memberReference;
 
   @override
   State<RecentVitalsSection> createState() => _RecentVitalsSectionState();
@@ -27,9 +29,14 @@ class _RecentVitalsSectionState extends State<RecentVitalsSection> {
   }
 
   void _load() {
+    // ignore: avoid_print
+    print('[RecentVitalsSection] Loading vitals for patientId=${widget.patientId}, memberRef=${widget.memberReference}');
     final repo = context.read<VitalsRepository>();
     setState(() {
-      _future = repo.recent(widget.patientId);
+      _future = repo.recent(
+        widget.patientId,
+        memberReference: widget.memberReference,
+      );
     });
   }
 
@@ -79,7 +86,11 @@ class _RecentVitalsSectionState extends State<RecentVitalsSection> {
             }
 
             final vitals = snap.data;
+            // ignore: avoid_print
+            print('[RecentVitalsSection] Received vitals: isEmpty=${vitals?.isEmpty}, bp=${vitals?.latestBp?.displayValue}, glucose=${vitals?.latestGlucose?.displayValue}');
             if (vitals == null || vitals.isEmpty) {
+              // ignore: avoid_print
+              print('[RecentVitalsSection] No vitals data to display');
               return Card(
                 color: theme.colorScheme.surfaceContainerHighest,
                 child: const Padding(

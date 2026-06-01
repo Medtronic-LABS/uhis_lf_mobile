@@ -20,12 +20,16 @@ class PatientOrMemberData {
     this.remoteMember,
     this.programmes = const {},
     this.remoteAssessments = const [],
+    this.recentVisits = const [],
+    this.memberId,
   });
 
   final PatientWithProgrammes? localPatient;
   final MemberHealthDetails? remoteMember;
   final Set<Programme> programmes;
   final List<MemberAssessment> remoteAssessments;
+  final List<PatientVisit> recentVisits;
+  final String? memberId;
 
   bool get hasData => localPatient != null || remoteMember != null;
 
@@ -46,6 +50,14 @@ class PatientOrMemberData {
   List<String> get riskReasons => localPatient?.patient.riskReasons ?? [];
   List<MemberAssessment> get assessments => 
       remoteAssessments.isNotEmpty ? remoteAssessments : (remoteMember?.assessments ?? []);
+  
+  /// Member reference for FHIR API calls (format: RelatedPerson/xxx).
+  String? get memberReference {
+    final id = memberId ?? remoteMember?.id;
+    if (id == null) return null;
+    if (id.startsWith('RelatedPerson/')) return id;
+    return 'RelatedPerson/$id';
+  }
 }
 
 /// Patient/Member Context Screen — shows health details when tapping on a
@@ -116,10 +128,25 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
       // ignore: avoid_print
       print('[PatientContextScreen] Found ${assessments.length} remote assessments');
       
+      // Fetch recent visits
+      final patientIdForVisits = localPatient.patient.patientId ?? widget.patientId;
+      final memberRef = 'RelatedPerson/${widget.patientId}';
+      // ignore: avoid_print
+      print('[PatientContextScreen] Fetching recent visits for patient: $patientIdForVisits, member: $memberRef, householdId: ${localPatient.patient.householdId}');
+      final visits = await memberRepo.getRecentVisits(
+        patientIdForVisits,
+        memberReference: memberRef,
+        householdId: localPatient.patient.householdId,
+      );
+      // ignore: avoid_print
+      print('[PatientContextScreen] Found ${visits.length} recent visits');
+      
       return PatientOrMemberData(
         localPatient: localPatient,
         programmes: localPatient.programmes,
         remoteAssessments: assessments,
+        recentVisits: visits,
+        memberId: widget.patientId,
       );
     }
 
@@ -149,9 +176,25 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
             break;
         }
       }
+      
+      // Fetch recent visits
+      final patientIdForVisits = member.patientId ?? widget.patientId;
+      final memberRef = 'RelatedPerson/${member.id}';
+      // ignore: avoid_print
+      print('[PatientContextScreen] Fetching recent visits for patient: $patientIdForVisits, member: $memberRef, householdId: ${member.householdId}');
+      final visits = await memberRepo.getRecentVisits(
+        patientIdForVisits,
+        memberReference: memberRef,
+        householdId: member.householdId,
+      );
+      // ignore: avoid_print
+      print('[PatientContextScreen] Found ${visits.length} recent visits');
+      
       return PatientOrMemberData(
         remoteMember: member,
         programmes: progs,
+        recentVisits: visits,
+        memberId: member.id,
       );
     }
 
@@ -194,9 +237,24 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
         }
       }
       
+      // Fetch recent visits
+      final patientIdForVisits = data['patientId'] as String? ?? widget.patientId;
+      final memberId = data['id']?.toString() ?? widget.patientId;
+      final memberRef = 'RelatedPerson/$memberId';
+      final householdIdForVisits = data['householdId']?.toString();
+      // ignore: avoid_print
+      print('[PatientContextScreen] Fetching recent visits for patient: $patientIdForVisits, member: $memberRef, householdId: $householdIdForVisits');
+      final visits = await memberRepo.getRecentVisits(
+        patientIdForVisits,
+        memberReference: memberRef,
+        householdId: householdIdForVisits,
+      );
+      // ignore: avoid_print
+      print('[PatientContextScreen] Found ${visits.length} recent visits');
+      
       return PatientOrMemberData(
         remoteMember: MemberHealthDetails(
-          id: data['id']?.toString() ?? widget.patientId,
+          id: memberId,
           name: data['name'] as String? ?? 'Unknown',
           gender: data['gender'] as String?,
           age: data['age'] as int?,
@@ -209,6 +267,8 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
         ),
         programmes: progs,
         remoteAssessments: assessments,
+        recentVisits: visits,
+        memberId: memberId,
       );
     }
 
@@ -304,9 +364,15 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
               if (data.riskReasons.isNotEmpty)
                 _RationaleCard(reasons: data.riskReasons),
               if (data.riskReasons.isNotEmpty) const SizedBox(height: 16),
+              // Show recent visits (from patientvisit/list endpoint)
+              _RecentVisitsSection(visits: data.recentVisits),
+              const SizedBox(height: 16),
               _AssessmentsSection(assessments: data.assessments),
               const SizedBox(height: 16),
-              RecentVitalsSection(patientId: widget.patientId),
+              RecentVitalsSection(
+                patientId: widget.patientId,
+                memberReference: data.memberReference,
+              ),
               const SizedBox(height: 16),
               OpenFollowupsSection(patientId: widget.patientId),
               const SizedBox(height: 16),
@@ -709,6 +775,203 @@ class _HeaderCardV2 extends StatelessWidget {
       case Programme.unknown:
         return WorklistStrings.programmeUnknown;
     }
+  }
+}
+
+/// Section showing recent patient visits from /spice-service/patientvisit/list.
+class _RecentVisitsSection extends StatelessWidget {
+  const _RecentVisitsSection({required this.visits});
+
+  final List<PatientVisit> visits;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final dateFormat = DateFormat('MMM d, yyyy');
+
+    if (visits.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.calendar_today_outlined, color: scheme.primary),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Recent Visits',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Center(
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.event_busy_outlined,
+                      size: 48,
+                      color: scheme.outline,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'No visits recorded yet',
+                      style: TextStyle(color: scheme.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.calendar_today_outlined, color: scheme.primary),
+                const SizedBox(width: 8),
+                Text(
+                  'Recent Visits',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const Spacer(),
+                Text(
+                  '${visits.length} total',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Divider(height: 1),
+            const SizedBox(height: 8),
+            ...visits.take(5).map((v) => _VisitTile(
+                  visit: v,
+                  dateFormat: dateFormat,
+                )),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _VisitTile extends StatelessWidget {
+  const _VisitTile({
+    required this.visit,
+    required this.dateFormat,
+  });
+
+  final PatientVisit visit;
+  final DateFormat dateFormat;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: scheme.primaryContainer,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              Icons.local_hospital_outlined,
+              size: 20,
+              color: scheme.onPrimaryContainer,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    if (visit.serviceProvided != null ||
+                        visit.encounterType != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: scheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          visit.serviceProvided ??
+                              visit.encounterType ??
+                              'Visit',
+                          style: TextStyle(
+                            color: scheme.onPrimaryContainer,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ),
+                    if (visit.visitNumber != null) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        'Visit ${visit.visitNumber}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  dateFormat.format(visit.visitDate),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                ),
+                if (visit.providerName != null)
+                  Text(
+                    'By ${visit.providerName}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                          fontStyle: FontStyle.italic,
+                        ),
+                  ),
+              ],
+            ),
+          ),
+          if (visit.status != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                visit.status!,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 

@@ -104,75 +104,58 @@ class VitalsRepository extends ApiRepository {
   VitalsRepository(super.api);
 
   /// Fetch recent vitals for a patient.
-  Future<RecentVitals> recent(String patientId, {int limit = 20}) async {
+  /// Tries multiple identifier formats: patientReference, memberReference, patientId.
+  Future<RecentVitals> recent(
+    String patientId, {
+    String? memberReference,
+    int limit = 20,
+  }) async {
+    // ignore: avoid_print
+    print('[VitalsRepository] ========== recent START ==========');
+    print('[VitalsRepository] patientId=$patientId, memberRef=$memberReference, limit=$limit');
     final readings = <VitalReading>[];
 
-    try {
-      // Fetch from patient vitals endpoint
-      final body = await postOk(
-        Endpoints.patientVitalsList,
-        data: {
+    // Build patient reference in FHIR format
+    String patientRef = patientId;
+    if (!patientId.startsWith('Patient/')) {
+      patientRef = 'Patient/$patientId';
+    }
+    // ignore: avoid_print
+    print('[VitalsRepository] Using patientRef=$patientRef');
+
+    // Try to fetch from patient vitals endpoint with different ID formats
+    await _tryFetchVitals(
+      readings,
+      {
+        'patientReference': patientRef,
+        'tenantId': api.tenantIdAsNum,
+        'skip': 0,
+        'limit': limit,
+      },
+      'Patient vitals (patientReference)',
+    );
+
+    // If no results, try with patientId directly
+    if (readings.isEmpty) {
+      // ignore: avoid_print
+      print('[VitalsRepository] No results with patientReference, trying patientId');
+      await _tryFetchVitals(
+        readings,
+        {
           'patientId': patientId,
           'tenantId': api.tenantIdAsNum,
           'skip': 0,
           'limit': limit,
         },
-        action: 'Patient vitals',
+        'Patient vitals (patientId)',
       );
-
-      final list = extractList(body);
-      for (final item in list) {
-        if (item is Map<String, dynamic>) {
-          final reading = _parseVitalReading(item);
-          if (reading != null) readings.add(reading);
-        }
-      }
-    } catch (e) {
-      // ignore: avoid_print
-      print('[VitalsRepository] Failed to fetch vitals: $e');
     }
 
     // Also fetch BP logs
-    try {
-      final bpBody = await postOk(
-        Endpoints.bpLogList,
-        data: {
-          'patientId': patientId,
-          'tenantId': api.tenantIdAsNum,
-          'skip': 0,
-          'limit': limit,
-        },
-        action: 'BP logs',
-      );
-      final bpList = extractList(bpBody);
-      for (final item in bpList) {
-        if (item is Map<String, dynamic>) {
-          final reading = _parseBpReading(item);
-          if (reading != null) readings.add(reading);
-        }
-      }
-    } catch (_) {}
+    await _tryFetchBpLogs(readings, patientId, patientRef, memberReference, limit);
 
     // Fetch glucose logs for NCD patients
-    try {
-      final glucoseBody = await postOk(
-        Endpoints.glucoseLogList,
-        data: {
-          'patientId': patientId,
-          'tenantId': api.tenantIdAsNum,
-          'skip': 0,
-          'limit': limit,
-        },
-        action: 'Glucose logs',
-      );
-      final glucoseList = extractList(glucoseBody);
-      for (final item in glucoseList) {
-        if (item is Map<String, dynamic>) {
-          final reading = _parseGlucoseReading(item);
-          if (reading != null) readings.add(reading);
-        }
-      }
-    } catch (_) {}
+    await _tryFetchGlucoseLogs(readings, patientId, patientRef, memberReference, limit);
 
     // Sort all readings by date descending
     readings.sort((a, b) => b.date.compareTo(a.date));
@@ -214,6 +197,12 @@ class VitalsRepository extends ApiRepository {
       }
     }
 
+    // ignore: avoid_print
+    print('[VitalsRepository] Total readings collected: ${readings.length}');
+    print('[VitalsRepository] LatestBP: ${latestBp?.displayValue}, LatestGlucose: ${latestGlucose?.displayValue}');
+    print('[VitalsRepository] LatestWeight: ${latestWeight?.displayValue}, LatestTemp: ${latestTemp?.displayValue}');
+    print('[VitalsRepository] ========== recent END ==========');
+
     return RecentVitals(
       latestBp: latestBp,
       latestGlucose: latestGlucose,
@@ -224,6 +213,214 @@ class VitalsRepository extends ApiRepository {
       latestBmi: latestBmi,
       allReadings: readings,
     );
+  }
+
+  Future<void> _tryFetchVitals(
+    List<VitalReading> readings,
+    Map<String, dynamic> data,
+    String action,
+  ) async {
+    try {
+      // ignore: avoid_print
+      print('[VitalsRepository] Calling ${Endpoints.patientVitalsList} - $action');
+      print('[VitalsRepository] Request: $data');
+
+      final body = await postOk(
+        Endpoints.patientVitalsList,
+        data: data,
+        action: action,
+      );
+
+      // ignore: avoid_print
+      print('[VitalsRepository] Response body type: ${body.runtimeType}');
+      print('[VitalsRepository] Response: $body');
+
+      final list = extractList(body);
+      // ignore: avoid_print
+      print('[VitalsRepository] $action returned ${list.length} vitals');
+      for (final item in list) {
+        if (item is Map<String, dynamic>) {
+          // ignore: avoid_print
+          print('[VitalsRepository] Vital item: $item');
+          final reading = _parseVitalReading(item);
+          if (reading != null) readings.add(reading);
+        }
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('[VitalsRepository] $action failed: $e');
+    }
+  }
+
+  Future<void> _tryFetchBpLogs(
+    List<VitalReading> readings,
+    String patientId,
+    String patientRef,
+    String? memberReference,
+    int limit,
+  ) async {
+    // ignore: avoid_print
+    print('[VitalsRepository] Fetching BP logs...');
+    
+    // Extract memberId from memberReference (e.g., "RelatedPerson/401" -> "401")
+    String? memberId;
+    if (memberReference != null) {
+      if (memberReference.contains('/')) {
+        memberId = memberReference.split('/').last;
+      } else {
+        memberId = memberReference;
+      }
+    }
+    
+    // API requires memberId field (not memberReference)
+    if (memberId != null) {
+      try {
+        final requestData = {
+          'memberId': memberId,
+          'tenantId': api.tenantIdAsNum,
+          'skip': 0,
+          'limit': limit,
+        };
+        // ignore: avoid_print
+        print('[VitalsRepository] Calling ${Endpoints.bpLogList} with memberId');
+        print('[VitalsRepository] Request: $requestData');
+
+        final bpBody = await postOk(
+          Endpoints.bpLogList,
+          data: requestData,
+          action: 'BP logs (memberId)',
+        );
+        // ignore: avoid_print
+        print('[VitalsRepository] BP response: $bpBody');
+        final bpList = extractList(bpBody);
+        // ignore: avoid_print
+        print('[VitalsRepository] BP logs returned ${bpList.length} records');
+        for (final item in bpList) {
+          if (item is Map<String, dynamic>) {
+            // ignore: avoid_print
+            print('[VitalsRepository] BP item: $item');
+            final reading = _parseBpReading(item);
+            if (reading != null) readings.add(reading);
+          }
+        }
+        if (bpList.isNotEmpty) return;
+      } catch (e) {
+        // ignore: avoid_print
+        print('[VitalsRepository] BP logs (memberId) failed: $e');
+      }
+    }
+
+    // Fallback: try with patientId (for patients without member mapping)
+    try {
+      // ignore: avoid_print
+      print('[VitalsRepository] Trying BP logs with patientId...');
+      final bpBody = await postOk(
+        Endpoints.bpLogList,
+        data: {
+          'memberId': patientId, // Try patientId as memberId
+          'tenantId': api.tenantIdAsNum,
+          'skip': 0,
+          'limit': limit,
+        },
+        action: 'BP logs (patientId as memberId)',
+      );
+      final bpList = extractList(bpBody);
+      // ignore: avoid_print
+      print('[VitalsRepository] BP logs (patientId) returned ${bpList.length} records');
+      for (final item in bpList) {
+        if (item is Map<String, dynamic>) {
+          final reading = _parseBpReading(item);
+          if (reading != null) readings.add(reading);
+        }
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('[VitalsRepository] BP logs (patientId) failed: $e');
+    }
+  }
+
+  Future<void> _tryFetchGlucoseLogs(
+    List<VitalReading> readings,
+    String patientId,
+    String patientRef,
+    String? memberReference,
+    int limit,
+  ) async {
+    // ignore: avoid_print
+    print('[VitalsRepository] Fetching Glucose logs...');
+    
+    // Extract memberId from memberReference (e.g., "RelatedPerson/401" -> "401")
+    String? memberId;
+    if (memberReference != null) {
+      if (memberReference.contains('/')) {
+        memberId = memberReference.split('/').last;
+      } else {
+        memberId = memberReference;
+      }
+    }
+    
+    // API requires memberId field (not memberReference)
+    if (memberId != null) {
+      try {
+        final requestData = {
+          'memberId': memberId,
+          'tenantId': api.tenantIdAsNum,
+          'skip': 0,
+          'limit': limit,
+        };
+        // ignore: avoid_print
+        print('[VitalsRepository] Calling ${Endpoints.glucoseLogList} with memberId');
+        print('[VitalsRepository] Request: $requestData');
+
+        final glucoseBody = await postOk(
+          Endpoints.glucoseLogList,
+          data: requestData,
+          action: 'Glucose logs (memberId)',
+        );
+        // ignore: avoid_print
+        print('[VitalsRepository] Glucose response: $glucoseBody');
+        final glucoseList = extractList(glucoseBody);
+        // ignore: avoid_print
+        print('[VitalsRepository] Glucose logs returned ${glucoseList.length} records');
+        for (final item in glucoseList) {
+          if (item is Map<String, dynamic>) {
+            // ignore: avoid_print
+            print('[VitalsRepository] Glucose item: $item');
+            final reading = _parseGlucoseReading(item);
+            if (reading != null) readings.add(reading);
+          }
+        }
+        if (glucoseList.isNotEmpty) return;
+      } catch (e) {
+        // ignore: avoid_print
+        print('[VitalsRepository] Glucose logs (memberId) failed: $e');
+      }
+    }
+
+    // Fallback: try with patientId as memberId
+    try {
+      // ignore: avoid_print
+      print('[VitalsRepository] Trying Glucose logs with patientId as memberId...');
+      final glucoseBody = await postOk(
+        Endpoints.glucoseLogList,
+        data: {
+          'memberId': patientId,
+          'tenantId': api.tenantIdAsNum,
+          'skip': 0,
+          'limit': limit,
+        },
+        action: 'Glucose logs (patientId as memberId)',
+      );
+      final glucoseList = extractList(glucoseBody);
+      // ignore: avoid_print
+      print('[VitalsRepository] Glucose logs (patientId) returned ${glucoseList.length} records');
+      for (final item in glucoseList) {
+        if (item is Map<String, dynamic>) {
+          final reading = _parseGlucoseReading(item);
+          if (reading != null) readings.add(reading);
+        }
+      }
+    } catch (_) {}
   }
 
   VitalReading? _parseVitalReading(Map<String, dynamic> json) {

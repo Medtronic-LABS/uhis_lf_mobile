@@ -1,4 +1,3 @@
-import '../dashboard/dashboard_repository.dart';
 import '../../core/api/api_repository.dart';
 import '../../core/api/endpoints.dart';
 import '../../core/auth/auth_repository.dart';
@@ -387,6 +386,328 @@ class MemberDetailRepository extends ApiRepository {
       isPregnant: member.isPregnant,
       assessments: assessments,
       rawJson: member.rawJson,
+    );
+  }
+
+  /// Fetch recent patient visits from /spice-service/patientvisit/list.
+  /// Also tries /spice-service/medical-review/history as fallback.
+  /// Finally tries FHIR Encounter search by household Group if available.
+  /// Returns up to [limit] most recent visits.
+  Future<List<PatientVisit>> getRecentVisits(
+    String patientId, {
+    String? memberReference,
+    String? householdId,
+    int limit = 5,
+  }) async {
+    // ignore: avoid_print
+    print('[MemberDetailRepository] ========== getRecentVisits START ==========');
+    print('[MemberDetailRepository] patientId=$patientId, memberRef=$memberReference, limit=$limit');
+    final visits = <PatientVisit>[];
+
+    // Try patientvisit/list endpoint first
+    try {
+      // Build patient reference in FHIR format if not already
+      String patientRef = patientId;
+      if (!patientId.startsWith('Patient/')) {
+        patientRef = 'Patient/$patientId';
+      }
+
+      final requestData = {
+        'patientReference': patientRef,
+        if (memberReference != null) 'memberReference': memberReference,
+        'tenantId': api.tenantIdAsNum,
+        'skip': 0,
+        'limit': limit,
+      };
+      // ignore: avoid_print
+      print('[MemberDetailRepository] Calling ${Endpoints.patientVisitList}');
+      print('[MemberDetailRepository] Request: $requestData');
+
+      final body = await postOk(
+        Endpoints.patientVisitList,
+        data: requestData,
+        action: 'Patient visits list',
+      );
+
+      // ignore: avoid_print
+      print('[MemberDetailRepository] Response body type: ${body.runtimeType}');
+      print('[MemberDetailRepository] Response: $body');
+
+      final list = extractList(body);
+      // ignore: avoid_print
+      print('[MemberDetailRepository] patientVisitList returned ${list.length} visits');
+      for (final item in list) {
+        if (item is Map<String, dynamic>) {
+          // ignore: avoid_print
+          print('[MemberDetailRepository] Visit item: $item');
+          final visit = PatientVisit.fromJson(item);
+          if (visit != null) visits.add(visit);
+        }
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('[MemberDetailRepository] patientVisitList failed: $e');
+    }
+
+    // Fallback: try medical-review/history endpoint
+    if (visits.isEmpty) {
+      // ignore: avoid_print
+      print('[MemberDetailRepository] No visits from patientVisitList, trying medicalReviewHistory...');
+      try {
+        String patientRef = patientId;
+        if (!patientId.startsWith('Patient/')) {
+          patientRef = 'Patient/$patientId';
+        }
+
+        final requestData = {
+          'patientReference': patientRef,
+          'tenantId': api.tenantIdAsNum,
+          'skip': 0,
+          'limit': limit,
+        };
+        // ignore: avoid_print
+        print('[MemberDetailRepository] Calling ${Endpoints.medicalReviewHistory}');
+        print('[MemberDetailRepository] Request: $requestData');
+
+        final body = await postOk(
+          Endpoints.medicalReviewHistory,
+          data: requestData,
+          action: 'Medical review history',
+        );
+
+        // ignore: avoid_print
+        print('[MemberDetailRepository] Response body type: ${body.runtimeType}');
+        print('[MemberDetailRepository] Response: $body');
+
+        final list = extractList(body);
+        // ignore: avoid_print
+        print('[MemberDetailRepository] medicalReviewHistory returned ${list.length} reviews');
+        for (final item in list) {
+          if (item is Map<String, dynamic>) {
+            // ignore: avoid_print
+            print('[MemberDetailRepository] Review item: $item');
+            final visit = PatientVisit.fromMedicalReview(item);
+            if (visit != null) visits.add(visit);
+          }
+        }
+      } catch (e) {
+        // ignore: avoid_print
+        print('[MemberDetailRepository] medicalReviewHistory failed: $e');
+      }
+    }
+
+    // Final fallback: try FHIR server for Encounters by household Group
+    if (visits.isEmpty && householdId != null) {
+      // ignore: avoid_print
+      print('[MemberDetailRepository] No visits from spice-service, trying FHIR Encounters...');
+      print('[MemberDetailRepository] householdId=$householdId');
+      try {
+        // FHIR encounters are linked to Groups (households)
+        // Build the FHIR search URL
+        final fhirUrl = '${Endpoints.fhirServerBase}/Encounter?subject=Group/$householdId&_count=$limit&_sort=-date';
+        // ignore: avoid_print
+        print('[MemberDetailRepository] Calling FHIR: $fhirUrl');
+
+        final body = await getOk(
+          fhirUrl,
+          action: 'FHIR Encounters',
+        );
+
+        // ignore: avoid_print
+        print('[MemberDetailRepository] FHIR response type: ${body.runtimeType}');
+
+        // FHIR returns a Bundle with entries
+        if (body is Map<String, dynamic>) {
+          final entries = body['entry'] as List?;
+          // ignore: avoid_print
+          print('[MemberDetailRepository] FHIR bundle has ${entries?.length ?? 0} entries');
+          if (entries != null) {
+            for (final entry in entries) {
+              if (entry is Map<String, dynamic>) {
+                final resource = entry['resource'] as Map<String, dynamic>?;
+                if (resource != null && resource['resourceType'] == 'Encounter') {
+                  // ignore: avoid_print
+                  print('[MemberDetailRepository] FHIR Encounter: ${resource['id']}');
+                  final visit = PatientVisit.fromFhirEncounter(resource);
+                  if (visit != null) visits.add(visit);
+                }
+              }
+            }
+          }
+        }
+        // ignore: avoid_print
+        print('[MemberDetailRepository] Got ${visits.length} visits from FHIR');
+      } catch (e) {
+        // ignore: avoid_print
+        print('[MemberDetailRepository] FHIR Encounters failed: $e');
+      }
+    }
+
+    // ignore: avoid_print
+    print('[MemberDetailRepository] Final visits count: ${visits.length}');
+    print('[MemberDetailRepository] ========== getRecentVisits END ==========');
+
+    // Sort by date descending
+    visits.sort((a, b) => b.visitDate.compareTo(a.visitDate));
+    return visits.take(limit).toList();
+  }
+}
+
+/// Patient visit data from /spice-service/patientvisit/list.
+class PatientVisit {
+  const PatientVisit({
+    required this.id,
+    required this.visitDate,
+    this.visitNumber,
+    this.encounterType,
+    this.serviceProvided,
+    this.status,
+    this.providerName,
+    this.notes,
+    this.rawJson = const {},
+  });
+
+  final String id;
+  final DateTime visitDate;
+  final int? visitNumber;
+  final String? encounterType;
+  final String? serviceProvided;
+  final String? status;
+  final String? providerName;
+  final String? notes;
+  final Map<String, dynamic> rawJson;
+
+  static PatientVisit? fromJson(Map<String, dynamic> json) {
+    final id = json['id']?.toString() ??
+        json['visitId']?.toString() ??
+        json['encounterReference']?.toString();
+    if (id == null) return null;
+
+    DateTime? date;
+    final dateVal = json['visitDate'] ??
+        json['createdAt'] ??
+        json['startTime'] ??
+        json['date'];
+    if (dateVal is String) {
+      date = DateTime.tryParse(dateVal);
+    } else if (dateVal is int) {
+      date = DateTime.fromMillisecondsSinceEpoch(dateVal);
+    }
+    date ??= DateTime.now();
+
+    return PatientVisit(
+      id: id,
+      visitDate: date,
+      visitNumber: json['visitNumber'] is int ? json['visitNumber'] : null,
+      encounterType: json['encounterType']?.toString(),
+      serviceProvided: json['serviceProvided']?.toString(),
+      status: json['status']?.toString(),
+      providerName: json['providerName']?.toString() ??
+          json['createdByName']?.toString(),
+      notes: json['clinicalNotes']?.toString() ?? json['notes']?.toString(),
+      rawJson: json,
+    );
+  }
+
+  static PatientVisit? fromMedicalReview(Map<String, dynamic> json) {
+    final id = json['encounterId']?.toString() ??
+        json['id']?.toString() ??
+        json['encounterReference']?.toString();
+    if (id == null) return null;
+
+    DateTime? date;
+    final dateVal = json['reviewDate'] ??
+        json['visitDate'] ??
+        json['createdAt'] ??
+        json['date'];
+    if (dateVal is String) {
+      date = DateTime.tryParse(dateVal);
+    } else if (dateVal is int) {
+      date = DateTime.fromMillisecondsSinceEpoch(dateVal);
+    }
+    date ??= DateTime.now();
+
+    return PatientVisit(
+      id: id,
+      visitDate: date,
+      visitNumber: json['visitNumber'] is int ? json['visitNumber'] : null,
+      encounterType: 'Medical Review',
+      serviceProvided: json['reviewType']?.toString() ??
+          json['serviceProvided']?.toString(),
+      status: json['status']?.toString(),
+      providerName: json['reviewerName']?.toString() ??
+          json['createdByName']?.toString(),
+      notes: json['summary']?.toString() ?? json['clinicalNotes']?.toString(),
+      rawJson: json,
+    );
+  }
+
+  /// Parse a FHIR Encounter resource into a PatientVisit.
+  /// FHIR Encounter structure: https://www.hl7.org/fhir/encounter.html
+  static PatientVisit? fromFhirEncounter(Map<String, dynamic> json) {
+    final id = json['id']?.toString();
+    if (id == null) return null;
+
+    // Parse period.start for the visit date
+    DateTime? date;
+    final period = json['period'] as Map<String, dynamic>?;
+    if (period != null) {
+      final startStr = period['start']?.toString();
+      if (startStr != null) {
+        date = DateTime.tryParse(startStr);
+      }
+    }
+    // Fallback to meta.lastUpdated
+    if (date == null) {
+      final meta = json['meta'] as Map<String, dynamic>?;
+      final lastUpdated = meta?['lastUpdated']?.toString();
+      if (lastUpdated != null) {
+        date = DateTime.tryParse(lastUpdated);
+      }
+    }
+    date ??= DateTime.now();
+
+    // Extract encounter type from type[0].coding[0].display or text
+    String? encounterType;
+    final types = json['type'] as List?;
+    if (types != null && types.isNotEmpty) {
+      final firstType = types[0] as Map<String, dynamic>?;
+      if (firstType != null) {
+        encounterType = firstType['text']?.toString();
+        if (encounterType == null) {
+          final codings = firstType['coding'] as List?;
+          if (codings != null && codings.isNotEmpty) {
+            final coding = codings[0] as Map<String, dynamic>?;
+            encounterType = coding?['display']?.toString() ?? coding?['code']?.toString();
+          }
+        }
+      }
+    }
+
+    // Extract service type from serviceType.coding[0].display
+    String? serviceProvided;
+    final serviceType = json['serviceType'] as Map<String, dynamic>?;
+    if (serviceType != null) {
+      serviceProvided = serviceType['text']?.toString();
+      if (serviceProvided == null) {
+        final codings = serviceType['coding'] as List?;
+        if (codings != null && codings.isNotEmpty) {
+          final coding = codings[0] as Map<String, dynamic>?;
+          serviceProvided = coding?['display']?.toString() ?? coding?['code']?.toString();
+        }
+      }
+    }
+
+    // Extract status
+    final status = json['status']?.toString();
+
+    return PatientVisit(
+      id: id,
+      visitDate: date,
+      encounterType: encounterType ?? 'Encounter',
+      serviceProvided: serviceProvided,
+      status: status,
+      rawJson: json,
     );
   }
 }

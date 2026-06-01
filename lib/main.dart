@@ -241,7 +241,7 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<DashboardRepository>(
             create: (_) => DashboardRepository(widget.api, widget.authRepo)),
         Provider<PatientSearchRepository>(
-            create: (_) => PatientSearchRepository(widget.api)),
+            create: (_) => PatientSearchRepository(widget.api, widget.authRepo)),
         Provider<MemberSearchRepository>(
             create: (_) => MemberSearchRepository(widget.api, widget.authRepo)),
         Provider<HouseholdSearchRepository>(
