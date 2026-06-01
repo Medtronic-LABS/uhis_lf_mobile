@@ -12,6 +12,7 @@ import 'open_followups_section.dart';
 import 'patient_actions_row.dart';
 import 'patient_repository.dart';
 import 'recent_vitals_section.dart';
+import 'visit_details_screen.dart';
 
 /// Combined data type that can hold either a local patient or remote member.
 class PatientOrMemberData {
@@ -365,7 +366,10 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
                 _RationaleCard(reasons: data.riskReasons),
               if (data.riskReasons.isNotEmpty) const SizedBox(height: 16),
               // Show recent visits (from patientvisit/list endpoint)
-              _RecentVisitsSection(visits: data.recentVisits),
+              _RecentVisitsSection(
+                visits: data.recentVisits,
+                patientName: data.name,
+              ),
               const SizedBox(height: 16),
               _AssessmentsSection(assessments: data.assessments),
               const SizedBox(height: 16),
@@ -780,9 +784,13 @@ class _HeaderCardV2 extends StatelessWidget {
 
 /// Section showing recent patient visits from /spice-service/patientvisit/list.
 class _RecentVisitsSection extends StatelessWidget {
-  const _RecentVisitsSection({required this.visits});
+  const _RecentVisitsSection({
+    required this.visits,
+    this.patientName,
+  });
 
   final List<PatientVisit> visits;
+  final String? patientName;
 
   @override
   Widget build(BuildContext context) {
@@ -862,6 +870,7 @@ class _RecentVisitsSection extends StatelessWidget {
             ...visits.take(5).map((v) => _VisitTile(
                   visit: v,
                   dateFormat: dateFormat,
+                  patientName: patientName,
                 )),
           ],
         ),
@@ -874,41 +883,57 @@ class _VisitTile extends StatelessWidget {
   const _VisitTile({
     required this.visit,
     required this.dateFormat,
+    this.patientName,
   });
 
   final PatientVisit visit;
   final DateFormat dateFormat;
+  final String? patientName;
+
+  void _navigateToDetails(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => VisitDetailsScreen(
+          visit: visit,
+          patientName: patientName,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: scheme.primaryContainer,
-              borderRadius: BorderRadius.circular(8),
+    return InkWell(
+      onTap: () => _navigateToDetails(context),
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: scheme.primaryContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                Icons.local_hospital_outlined,
+                size: 20,
+                color: scheme.onPrimaryContainer,
+              ),
             ),
-            child: Icon(
-              Icons.local_hospital_outlined,
-              size: 20,
-              color: scheme.onPrimaryContainer,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    if (visit.serviceProvided != null ||
-                        visit.encounterType != null)
-                      Container(
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      if (visit.serviceProvided != null ||
+                          visit.encounterType != null)
+                        Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
@@ -969,7 +994,15 @@ class _VisitTile extends StatelessWidget {
                     ),
               ),
             ),
+          // Chevron to indicate tappable
+          const SizedBox(width: 4),
+          Icon(
+            Icons.chevron_right,
+            size: 20,
+            color: scheme.onSurfaceVariant,
+          ),
         ],
+        ),
       ),
     );
   }
