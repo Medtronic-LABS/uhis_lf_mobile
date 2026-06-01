@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
+import '../../core/db/household_dao.dart';
+import '../../core/db/member_dao.dart';
 import '../dashboard/dashboard_repository.dart';
 import 'household_detail_screen.dart';
 
@@ -41,12 +43,37 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
   }
 
   void _loadData() {
+    final householdDao = context.read<HouseholdDao>();
+    final memberDao = context.read<MemberDao>();
     final repo = context.read<DashboardRepository>();
-    _future = _fetchHouseholds(repo);
+    _future = _fetchHouseholds(householdDao, memberDao, repo);
   }
 
-  Future<List<_HouseholdItem>> _fetchHouseholds(DashboardRepository repo) async {
-    // Fetch households with embedded member data
+  /// Fetches households from LOCAL SQLite first (instant), falls back to API.
+  Future<List<_HouseholdItem>> _fetchHouseholds(
+    HouseholdDao householdDao,
+    MemberDao memberDao,
+    DashboardRepository repo,
+  ) async {
+    // Try local SQLite first (INSTANT - no network latency)
+    final localHouseholds = await householdDao.getAll(limit: 1000);
+    // ignore: avoid_print
+    print('[HouseholdList] Found ${localHouseholds.length} households in local DB');
+    
+    if (localHouseholds.isNotEmpty) {
+      // Local data available - convert entities to UI items
+      final items = <_HouseholdItem>[];
+      for (final hh in localHouseholds) {
+        // Fetch members for this household from local DB
+        final members = await memberDao.getByHouseholdId(hh.id);
+        items.add(_HouseholdItem.fromEntity(hh, members));
+      }
+      return items;
+    }
+    
+    // Fallback to API if local cache is empty
+    // ignore: avoid_print
+    print('[HouseholdList] Local cache empty, falling back to API');
     final rawList = await repo.getHouseholdsWithMembers();
     return rawList.map((raw) => _HouseholdItem.fromJson(raw)).toList();
   }
@@ -579,8 +606,48 @@ class _HouseholdItem {
   final Map<String, dynamic>? rawJson;
 
   /// Convert to HouseholdDetailData for the detail screen.
+  /// Directly creates HouseholdDetailData with our members (no JSON re-parsing).
   HouseholdDetailData toDetailData() {
-    return HouseholdDetailData.fromJson(rawJson ?? {});
+    // Convert _HouseholdMember list to HouseholdMemberData list
+    final memberDataList = members.map((m) {
+      int? age;
+      if (m.dateOfBirth != null) {
+        try {
+          final dob = DateTime.parse(m.dateOfBirth!);
+          final now = DateTime.now();
+          age = now.year - dob.year;
+          if (now.month < dob.month || (now.month == dob.month && now.day < dob.day)) {
+            age = age - 1;
+          }
+        } catch (_) {}
+      }
+      return HouseholdMemberData(
+        id: m.id,
+        patientId: m.patientId,
+        name: m.name,
+        relation: m.relation,
+        age: age,
+        gender: m.gender,
+        phoneNumber: m.phoneNumber,
+        dateOfBirth: m.dateOfBirth,
+        isHead: m.isHouseholdHead ?? false,
+        isPregnant: m.isPregnant ?? false,
+        householdId: m.householdId ?? id,
+        villageId: m.villageId,
+      );
+    }).toList();
+
+    return HouseholdDetailData(
+      id: id,
+      name: name,
+      householdNo: householdNo,
+      village: village,
+      subVillage: subVillage,
+      memberCount: memberDataList.isNotEmpty ? memberDataList.length : memberCount,
+      latitude: latitude,
+      longitude: longitude,
+      members: memberDataList,
+    );
   }
 
   static _HouseholdItem fromJson(Map json) {
@@ -632,6 +699,33 @@ class _HouseholdItem {
       rawJson: json is Map<String, dynamic> ? json : Map<String, dynamic>.from(json),
     );
   }
+
+  /// Creates from local SQLite entities (HouseholdEntity + MemberEntities).
+  static _HouseholdItem fromEntity(
+    HouseholdEntity hh,
+    List<HouseholdMemberEntity> members,
+  ) {
+    final memberList = members.map(_HouseholdMember.fromEntity).toList();
+    return _HouseholdItem(
+      id: hh.id,
+      name: hh.name,
+      householdNo: hh.householdNo,
+      village: hh.village,
+      subVillage: null,
+      memberCount: memberList.isNotEmpty ? memberList.length : hh.memberCount,
+      latitude: null,
+      longitude: null,
+      members: memberList,
+      rawJson: {
+        'id': hh.id,
+        'name': hh.name,
+        'householdNo': hh.householdNo,
+        'village': hh.village,
+        'villageId': hh.villageId,
+        'noOfPeople': memberList.isNotEmpty ? memberList.length : hh.memberCount,
+      },
+    );
+  }
 }
 
 class _HouseholdMember {
@@ -681,6 +775,23 @@ class _HouseholdMember {
       isPregnant: json['isPregnant'] == true,
       householdId: str('householdId'),
       villageId: str('villageId'),
+    );
+  }
+
+  /// Creates from local SQLite HouseholdMemberEntity.
+  static _HouseholdMember fromEntity(HouseholdMemberEntity e) {
+    return _HouseholdMember(
+      id: e.id,
+      patientId: e.patientId,
+      name: e.name,
+      relation: null,
+      gender: e.gender,
+      dateOfBirth: e.dob,
+      phoneNumber: e.phone,
+      isHouseholdHead: false,
+      isPregnant: false,
+      householdId: e.householdId,
+      villageId: e.villageId,
     );
   }
 }

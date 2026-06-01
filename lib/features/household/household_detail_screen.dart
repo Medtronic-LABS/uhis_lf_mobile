@@ -1,11 +1,9 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
-import '../../core/db/patient_dao.dart';
+import '../../core/db/member_dao.dart';
 import '../dashboard/dashboard_repository.dart';
 
 /// Full details of a household member for display.
@@ -92,6 +90,35 @@ class HouseholdMemberData {
       isPregnant: isPregnant,
       householdId: str('householdId'),
       villageId: str('villageId'),
+    );
+  }
+
+  /// Creates from local SQLite HouseholdMemberEntity.
+  static HouseholdMemberData fromEntity(HouseholdMemberEntity e) {
+    int? age;
+    if (e.dob != null && e.dob!.isNotEmpty) {
+      try {
+        final dob = DateTime.parse(e.dob!);
+        final now = DateTime.now();
+        age = now.year - dob.year;
+        if (now.month < dob.month || (now.month == dob.month && now.day < dob.day)) {
+          age = age - 1;
+        }
+      } catch (_) {}
+    }
+    return HouseholdMemberData(
+      id: e.id,
+      patientId: e.patientId,
+      name: e.name,
+      relation: null,
+      age: age,
+      gender: e.gender,
+      phoneNumber: e.phone,
+      dateOfBirth: e.dob,
+      isHead: false,
+      isPregnant: false,
+      householdId: e.householdId,
+      villageId: e.villageId,
     );
   }
 }
@@ -220,29 +247,18 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
     }
 
     try {
-      // First try local database (synced patients)
-      final patientDao = context.read<PatientDao>();
+      // Primary: Use local SQLite (synced members) - INSTANT, no network
+      final memberDao = context.read<MemberDao>();
       // ignore: avoid_print
-      print('[HouseholdDetail] Trying local DB for household $householdId');
+      print('[HouseholdDetail] Fetching members for household $householdId from local DB');
       
-      final localPatients = await patientDao.getByHouseholdId(householdId);
+      final localMembers = await memberDao.getByHouseholdId(householdId);
       // ignore: avoid_print
-      print('[HouseholdDetail] Found ${localPatients.length} patients in local DB');
+      print('[HouseholdDetail] Found ${localMembers.length} members in local DB');
       
-      if (localPatients.isNotEmpty && mounted) {
-        // Convert local patients to member data format
-        final members = localPatients.map((p) {
-          final rawJson = p['raw_json'];
-          if (rawJson is String && rawJson.isNotEmpty && rawJson.startsWith('{')) {
-            try {
-              final decoded = jsonDecode(rawJson);
-              if (decoded is Map<String, dynamic>) {
-                return HouseholdMemberData.fromJson(decoded);
-              }
-            } catch (_) {}
-          }
-          return HouseholdMemberData.fromJson(p);
-        }).toList();
+      if (localMembers.isNotEmpty && mounted) {
+        // Convert local HouseholdMemberEntity to display data
+        final members = localMembers.map(HouseholdMemberData.fromEntity).toList();
         
         setState(() {
           _household = HouseholdDetailData(
@@ -261,10 +277,10 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
         return;
       }
 
-      // Fall back to API
+      // Fall back to API only if local cache is empty
       final repo = context.read<DashboardRepository>();
       // ignore: avoid_print
-      print('[HouseholdDetail] Falling back to API for household $householdId');
+      print('[HouseholdDetail] Local cache empty, falling back to API for household $householdId');
       
       final householdData = await repo.getHouseholdById(householdId);
       

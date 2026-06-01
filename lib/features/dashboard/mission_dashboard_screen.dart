@@ -7,6 +7,7 @@ import '../../app/theme_provider.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/db/local_dashboard_repository.dart';
 import '../../core/models/mission_brief.dart';
 import '../../core/models/mission_queue_item.dart';
 import '../../core/sync/offline_sync_service.dart';
@@ -88,9 +89,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _reloadStats() {
-    final repo = context.read<DashboardRepository>();
+    // Try local-first for instant response (no network latency)
+    final localRepo = context.read<LocalDashboardRepository>();
+    final apiRepo = context.read<DashboardRepository>();
     final authRepo = context.read<AuthRepository>();
-    final countsFuture = repo.householdAndMemberCount();
+    
+    final countsFuture = localRepo.householdAndMemberCount().then((local) async {
+      // If local has data, use it (instant)
+      if (local.households > 0) {
+        debugPrint('[Dashboard] Using local counts: ${local.households} households, ${local.members} members');
+        return local;
+      }
+      // Fall back to API if local cache is empty
+      debugPrint('[Dashboard] Local empty, fetching from API...');
+      return apiRepo.householdAndMemberCount();
+    });
+    
     _householdFuture = countsFuture.then((c) async {
       try {
         await authRepo.cacheHouseholdCount(c.households);
