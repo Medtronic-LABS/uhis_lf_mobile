@@ -10,9 +10,10 @@ class AppConfig {
 
   /// Base URL for the UHIS nginx gateway.
   /// Android emulator → `http://10.0.2.2`. Physical device → host LAN IP.
+  /// Production/Dev server → `https://spice-qa-backend.uhis.labsplatform.com/`
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2',
+    defaultValue: 'https://spice-qa-backend.uhis.labsplatform.com/',
   );
 
   /// Value of the `client` request header expected by the auth pipeline.

@@ -211,16 +211,27 @@ class OfflineSyncService extends ChangeNotifier {
     }
   }
 
+  // App version constants (match pubspec.yaml)
+  static const String _appVersionName = '1.0.0';
+  static const int _appVersionCode = 1;
+  static const String _appType = 'community'; // Matches Android CommonUtils.isCommunityOrNot()
+
   Future<Map<String, dynamic>> _fetchBundle({
     required List<int> villageIds,
     DateTime? since,
   }) async {
+    // Match Android RequestAllEntities format: integer villageIds + metadata
+    final userId = await _auth.userId();
+    final deviceId = await _auth.deviceId();
     final body = <String, dynamic>{
-      'villageIds': villageIds,
-      'tenantId': _api.tenantIdAsNum,
+      'villageIds': villageIds, // integers, not strings
       if (since != null)
-        'lastSyncTime': since.millisecondsSinceEpoch,
-      'currentSyncTime': DateTime.now().millisecondsSinceEpoch,
+        'lastSyncTime': since.toUtc().toIso8601String(),
+      if (userId != null) 'userId': userId,
+      'appVersionName': _appVersionName,
+      'appVersionCode': _appVersionCode,
+      if (deviceId.isNotEmpty) 'deviceId': deviceId,
+      'appType': _appType,
     };
     final resp = await _api.dio.post<List<int>>(
       Endpoints.offlineSyncFetch,
@@ -274,6 +285,7 @@ class OfflineSyncService extends ChangeNotifier {
       final allHouseholds = <HouseholdEntity>[];
       
       while (true) {
+        // Use integer villageIds to match Android RequestAllEntities format
         final body = <String, dynamic>{
           'skip': skip,
           'limit': pageSize,
@@ -326,6 +338,7 @@ class OfflineSyncService extends ChangeNotifier {
       ));
       
       while (true) {
+        // Use integer villageIds to match Android RequestAllEntities format
         final body = <String, dynamic>{
           'skip': skip,
           'limit': pageSize,
@@ -916,16 +929,13 @@ class OfflineSyncService extends ChangeNotifier {
   }
 
   Future<List> _fetchPatientList(List<int> villageIds) async {
-    // fhir-mapper `getPatientDetailsByVillageIds` calls `setTime` on the
-    // `currentSyncTime` field — the request fails with HTTP 500
-    // "date must not be null" if we don't include it.
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    // Use integer villageIds to match Android RequestAllEntities format
     final body = <String, dynamic>{
       'villageIds': villageIds,
       'skip': 0,
       'limit': 1000,
       'tenantId': _api.tenantIdAsNum,
-      'currentSyncTime': nowMs,
+      'currentSyncTime': DateTime.now().toUtc().toIso8601String(),
     };
     try {
       final resp =

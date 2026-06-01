@@ -27,6 +27,12 @@ class Endpoints {
   static String shasthyaShebikaSubVillages(int id) =>
       '/admin-service/shasthya-shebika/$id/sub-villages';
 
+  /// Fetch Shasthya Shebikas (and their sub-villages) for a given SK ID.
+  /// POST with body: { "id": <skId> }
+  /// Response: { "data": { "<skId>": [ { "subVillages": [...] }, ... ] } }
+  static const String shasthyaShebikasBySkId =
+      '/admin-service/shasthya-shebika/by-shasthya-kormi-id';
+
   // ── Spice: household + member ────────────────────────────────────────────
   static const String householdList = '/spice-service/household/list';
   static const String householdMemberList =

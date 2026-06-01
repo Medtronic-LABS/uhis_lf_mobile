@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
+import 'package:uuid/uuid.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -10,8 +11,8 @@ import '../api/endpoints.dart';
 import '../config/app_config.dart';
 
 /// Hash password using HmacSHA512 keyed by [AppConfig.passwordHashKey],
-/// matching the platform contract: backend stores
-/// `pgp_sym_encrypt(encode(hmac(plaintext, REACT_APP_PASSWORD_HASH_KEY, 'sha512'), 'hex'), <pg_key>)`.
+/// matching the Spice Android EncryptionUtil.getSecurePassword() implementation.
+/// Dev endpoint uses empty SALT (UHIS_DEV_SALT_KEY=).
 String hashPassword(String plaintext) {
   final hmac = Hmac(sha512, utf8.encode(AppConfig.passwordHashKey));
   return hmac.convert(utf8.encode(plaintext)).toString();
@@ -80,6 +81,8 @@ class AuthRepository {
   static const _kHouseholdCountCache = 'householdCountCache';
   static const _kVillageIds = 'villageIds';
   static const _kSubVillageIds = 'subVillageIds';
+  static const _kUserId = 'userId';
+  static const _kDeviceId = 'deviceId';
 
   Future<String?> currentTenantId() async {
     final cached = _api.tenantId;
@@ -92,6 +95,22 @@ class AuthRepository {
   Future<String?> lastUsername() => _storage.read(key: _kUsername);
 
   Future<String?> firstName() => _storage.read(key: _kFirstName);
+
+  /// Returns the numeric user ID stored from the profile response.
+  Future<int?> userId() async {
+    final stored = await _storage.read(key: _kUserId);
+    return stored != null ? int.tryParse(stored) : null;
+  }
+
+  /// Returns a stable device ID, generating one on first access.
+  Future<String> deviceId() async {
+    var stored = await _storage.read(key: _kDeviceId);
+    if (stored == null || stored.isEmpty) {
+      stored = const Uuid().v4();
+      await _storage.write(key: _kDeviceId, value: stored);
+    }
+    return stored;
+  }
 
   Future<UserProfileSummary> userProfileSummary() async {
     return UserProfileSummary(
@@ -173,6 +192,8 @@ class AuthRepository {
     await writeOrDelete(_kLastName, lastName);
 
     final idVal = entityMap['id']?.toString();
+    // Store numeric user ID for sync requests
+    await writeOrDelete(_kUserId, idVal);
     final fhirId = (entityMap['fhirId'] as String?)?.trim();
     final regionCode =
         (entityMap['country'] is Map ? entityMap['country']['regionCode'] : null)
@@ -232,11 +253,15 @@ class AuthRepository {
     await writeOrDelete(_kUpazila, upazila);
 
     // Fetch and cache sub-village IDs for all villages
-    await _fetchAndCacheSubVillages(villageIdList);
+    // Extract user ID for fallback SS-based sub-village fetch
+    final userId = entityMap['id'];
+    final userIdInt = (userId is int) ? userId : (userId is num ? userId.toInt() : null);
+    await _fetchAndCacheSubVillages(villageIdList, skId: userIdInt);
   }
 
   /// Fetches sub-villages for each village (union) ID and caches the sub-village IDs.
-  Future<void> _fetchAndCacheSubVillages(List<int> villageIds) async {
+  /// If no village IDs provided, falls back to fetching via Shasthya Shebika endpoint.
+  Future<void> _fetchAndCacheSubVillages(List<int> villageIds, {int? skId}) async {
     // Deduplicate village IDs
     final uniqueVillageIds = villageIds.toSet();
     final subVillageIdSet = <int>{};
@@ -263,9 +288,54 @@ class AuthRepository {
         print('[AuthRepository] Failed to fetch sub-villages for village $villageId: $e');
       }
     }
+    // If no sub-villages found via villages, try fetching from Shasthya Shebika endpoint
+    if (subVillageIdSet.isEmpty && skId != null) {
+      // ignore: avoid_print
+      print('[AuthRepository] No villages in profile, fetching sub-villages via SS endpoint for SK $skId');
+      try {
+        final ssResp = await _api.dio.post(
+          Endpoints.shasthyaShebikasBySkId,
+          data: [skId], // API expects plain array of SK IDs
+          options: Options(contentType: 'application/json'),
+        );
+        // ignore: avoid_print
+        print('[AuthRepository] SS endpoint response: ${ssResp.statusCode}');
+        if (ssResp.statusCode == 200) {
+          final ssData = ssResp.data;
+          // Response: { "success": true, "data": { "87": [ { "subVillages": [...] }, ... ] } }
+          final dataMap = (ssData is Map) ? ssData['data'] : null;
+          // ignore: avoid_print
+          print('[AuthRepository] SS data keys: ${dataMap?.keys}');
+          if (dataMap is Map) {
+            for (final ssListEntry in dataMap.values) {
+              if (ssListEntry is List) {
+                for (final ss in ssListEntry) {
+                  if (ss is Map) {
+                    final svList = ss['subVillages'];
+                    if (svList is List) {
+                      for (final sv in svList) {
+                        if (sv is Map) {
+                          final svId = sv['id'];
+                          if (svId is int) subVillageIdSet.add(svId);
+                          if (svId is num) subVillageIdSet.add(svId.toInt());
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // ignore: avoid_print
+        print('[AuthRepository] Failed to fetch sub-villages via SS endpoint: $e');
+      }
+    }
+
     final subVillageIds = subVillageIdSet.toList();
     // ignore: avoid_print
-    print('[AuthRepository] Cached sub-village IDs: $subVillageIds for villages: ${uniqueVillageIds.toList()}');
+    print('[AuthRepository] Cached sub-village IDs: $subVillageIds');
     if (subVillageIds.isNotEmpty) {
       await _storage.write(key: _kSubVillageIds, value: subVillageIds.join(','));
     } else {
