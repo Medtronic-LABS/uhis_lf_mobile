@@ -16,7 +16,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 4;
+  static const int schemaVersion = 5;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -31,6 +31,7 @@ class AppDatabase {
   static const String tableReferralStatusEvents = 'referral_status_events';
   static const String tableNotificationLog = 'notification_log';
   static const String tableEncounters = 'encounters';
+  static const String tableLocalAssessments = 'local_assessments';
 
   /// Opens (creating if needed) the on-device database.
   static Future<AppDatabase> open() async {
@@ -248,6 +249,34 @@ class AppDatabase {
         'CREATE INDEX idx_enc_sync ON $tableEncounters(sync_status)');
     await db.execute(
         'CREATE INDEX idx_enc_started ON $tableEncounters(started_at DESC)');
+
+    // v5 — Local assessments table for offline-first assessment capture
+    await db.execute('''
+      CREATE TABLE $tableLocalAssessments (
+        id TEXT PRIMARY KEY,
+        household_member_local_id INTEGER NOT NULL,
+        member_id TEXT,
+        household_id TEXT,
+        patient_id TEXT,
+        village_id TEXT,
+        assessment_type TEXT NOT NULL,
+        assessment_details TEXT NOT NULL,
+        other_details TEXT,
+        is_referred INTEGER DEFAULT 0,
+        referral_status TEXT,
+        referred_reasons TEXT,
+        follow_up_id INTEGER,
+        latitude REAL DEFAULT 0.0,
+        longitude REAL DEFAULT 0.0,
+        sync_status TEXT DEFAULT 'pending',
+        fhir_id TEXT,
+        created_at INTEGER,
+        updated_at INTEGER
+      )''');
+    await db.execute(
+        'CREATE INDEX idx_local_assessments_patient ON $tableLocalAssessments(patient_id)');
+    await db.execute(
+        'CREATE INDEX idx_local_assessments_sync ON $tableLocalAssessments(sync_status)');
   }
 
   static Future<void> _onUpgrade(Database db, int from, int to) async {
@@ -441,6 +470,45 @@ class AppDatabase {
           'CREATE INDEX IF NOT EXISTS idx_enc_sync ON $tableEncounters(sync_status)');
       await addIdx4(
           'CREATE INDEX IF NOT EXISTS idx_enc_started ON $tableEncounters(started_at DESC)');
+    }
+    if (from < 5) {
+      // v5 — Local assessments table for offline-first assessment capture.
+      Future<void> addTbl5(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* table already present */}
+      }
+      Future<void> addIdx5(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* index already present */}
+      }
+      await addTbl5('''
+        CREATE TABLE IF NOT EXISTS $tableLocalAssessments (
+          id TEXT PRIMARY KEY,
+          household_member_local_id INTEGER NOT NULL,
+          member_id TEXT,
+          household_id TEXT,
+          patient_id TEXT,
+          village_id TEXT,
+          assessment_type TEXT NOT NULL,
+          assessment_details TEXT NOT NULL,
+          other_details TEXT,
+          is_referred INTEGER DEFAULT 0,
+          referral_status TEXT,
+          referred_reasons TEXT,
+          follow_up_id INTEGER,
+          latitude REAL DEFAULT 0.0,
+          longitude REAL DEFAULT 0.0,
+          sync_status TEXT DEFAULT 'pending',
+          fhir_id TEXT,
+          created_at INTEGER,
+          updated_at INTEGER
+        )''');
+      await addIdx5(
+          'CREATE INDEX IF NOT EXISTS idx_local_assessments_patient ON $tableLocalAssessments(patient_id)');
+      await addIdx5(
+          'CREATE INDEX IF NOT EXISTS idx_local_assessments_sync ON $tableLocalAssessments(sync_status)');
     }
   }
 
