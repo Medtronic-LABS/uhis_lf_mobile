@@ -19,6 +19,7 @@ import 'core/db/assessment_dao.dart';
 import 'core/db/encounter_dao.dart';
 import 'core/db/follow_up_dao.dart';
 import 'core/db/immunisation_dao.dart';
+import 'core/db/local_assessment_dao.dart';
 import 'core/db/patient_dao.dart';
 import 'core/db/patient_programmes_dao.dart';
 import 'core/db/referral_dao.dart';
@@ -41,6 +42,7 @@ import 'features/search/global_search_repository.dart';
 import 'features/search/household_search_repository.dart';
 import 'features/search/member_search_repository.dart';
 import 'features/search/patient_search_repository.dart';
+import 'features/visit/assessment_repository.dart';
 import 'features/visit/encounter_repository.dart';
 import 'features/visit/household_repository.dart';
 import 'features/visit/visit_controller.dart';
@@ -103,6 +105,8 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final FollowUpDao _followUpDao = FollowUpDao(widget.appDb);
   late final ImmunisationDao _immDao = ImmunisationDao(widget.appDb);
   late final AssessmentDao _assessmentDao = AssessmentDao(widget.appDb);
+  late final LocalAssessmentDao _localAssessmentDao =
+      LocalAssessmentDao(widget.appDb);
   late final SyncMetaDao _syncMetaDao = SyncMetaDao(widget.appDb);
   late final RiskScoringService _risk = const RiskScoringService();
 
@@ -162,6 +166,12 @@ class _UhisNextAppState extends State<UhisNextApp>
     followUps: _followUpDao,
     slaEvaluator: _slaEvaluator,
     priorityScorer: _priorityScorer,
+  );
+
+  // ── Assessment Repository for offline-first assessment capture ──────────
+  late final AssessmentRepository _assessmentRepo = AssessmentRepository(
+    dao: _localAssessmentDao,
+    api: widget.api,
   );
 
   @override
@@ -259,6 +269,9 @@ class _UhisNextAppState extends State<UhisNextApp>
           create: (ctx) => VisitController(ctx.read<EncounterRepository>()),
           update: (_, repo, prev) => prev ?? VisitController(repo),
         ),
+        // Assessment offline-first repository
+        ChangeNotifierProvider<AssessmentRepository>.value(
+            value: _assessmentRepo),
       ],
       child: Builder(
         builder: (context) {
