@@ -252,6 +252,56 @@ class VitalsRepository extends ApiRepository {
     }
   }
 
+  /// Extract BP logs from the nested response structure.
+  /// API returns: { entity: { bpLogList: [...], latestBpLog: {...} } }
+  List _extractBpLogList(dynamic body) {
+    if (body is Map) {
+      // Check for entity.bpLogList structure
+      final entity = body['entity'];
+      if (entity is Map) {
+        final bpLogList = entity['bpLogList'];
+        if (bpLogList is List && bpLogList.isNotEmpty) {
+          return bpLogList;
+        }
+        // Also check for latestBpLog (single item)
+        final latestBpLog = entity['latestBpLog'];
+        if (latestBpLog is Map && latestBpLog['avgSystolic'] != null) {
+          return [latestBpLog];
+        }
+      }
+      // Fallback to standard extractList behavior
+      if (body['entityList'] is List) return body['entityList'] as List;
+      if (body['data'] is List) return body['data'] as List;
+    }
+    if (body is List) return body;
+    return const [];
+  }
+
+  /// Extract glucose logs from the nested response structure.
+  /// API returns: { entity: { glucoseLogList: [...], latestGlucoseLog: {...} } }
+  List _extractGlucoseLogList(dynamic body) {
+    if (body is Map) {
+      // Check for entity.glucoseLogList structure
+      final entity = body['entity'];
+      if (entity is Map) {
+        final glucoseLogList = entity['glucoseLogList'];
+        if (glucoseLogList is List && glucoseLogList.isNotEmpty) {
+          return glucoseLogList;
+        }
+        // Also check for latestGlucoseLog (single item)
+        final latestGlucoseLog = entity['latestGlucoseLog'];
+        if (latestGlucoseLog is Map && latestGlucoseLog['glucoseValue'] != null) {
+          return [latestGlucoseLog];
+        }
+      }
+      // Fallback to standard extractList behavior
+      if (body['entityList'] is List) return body['entityList'] as List;
+      if (body['data'] is List) return body['data'] as List;
+    }
+    if (body is List) return body;
+    return const [];
+  }
+
   Future<void> _tryFetchBpLogs(
     List<VitalReading> readings,
     String patientId,
@@ -292,7 +342,7 @@ class VitalsRepository extends ApiRepository {
         );
         // ignore: avoid_print
         print('[VitalsRepository] BP response: $bpBody');
-        final bpList = extractList(bpBody);
+        final bpList = _extractBpLogList(bpBody);
         // ignore: avoid_print
         print('[VitalsRepository] BP logs returned ${bpList.length} records');
         for (final item in bpList) {
@@ -324,7 +374,7 @@ class VitalsRepository extends ApiRepository {
         },
         action: 'BP logs (patientId as memberId)',
       );
-      final bpList = extractList(bpBody);
+      final bpList = _extractBpLogList(bpBody);
       // ignore: avoid_print
       print('[VitalsRepository] BP logs (patientId) returned ${bpList.length} records');
       for (final item in bpList) {
@@ -379,7 +429,7 @@ class VitalsRepository extends ApiRepository {
         );
         // ignore: avoid_print
         print('[VitalsRepository] Glucose response: $glucoseBody');
-        final glucoseList = extractList(glucoseBody);
+        final glucoseList = _extractGlucoseLogList(glucoseBody);
         // ignore: avoid_print
         print('[VitalsRepository] Glucose logs returned ${glucoseList.length} records');
         for (final item in glucoseList) {
@@ -411,7 +461,7 @@ class VitalsRepository extends ApiRepository {
         },
         action: 'Glucose logs (patientId as memberId)',
       );
-      final glucoseList = extractList(glucoseBody);
+      final glucoseList = _extractGlucoseLogList(glucoseBody);
       // ignore: avoid_print
       print('[VitalsRepository] Glucose logs (patientId) returned ${glucoseList.length} records');
       for (final item in glucoseList) {

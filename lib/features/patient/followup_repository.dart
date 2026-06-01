@@ -101,20 +101,28 @@ class FollowUp {
 class FollowUpRepository extends ApiRepository {
   FollowUpRepository(super.api);
 
-  /// Get open follow-ups for a patient.
+  /// Get open follow-ups for a patient using NCD follow-up list endpoint.
+  /// Matches Android's /spice-service/follow-up/ncd/list endpoint.
   Future<List<FollowUp>> openForPatient(String patientId) async {
     final followUps = <FollowUp>[];
 
     try {
+      // ignore: avoid_print
+      print('[FollowUpRepository] Fetching follow-ups for patientId=$patientId');
+      
       final body = await postOk(
-        Endpoints.followUpList,
+        Endpoints.followUpNcdList,
         data: {
-          'patientId': patientId,
-          'tenantId': api.tenantIdAsNum,
-          'isCompleted': false,
+          'memberReference': patientId,
+          'skip': 0,
+          'limit': 20,
+          'type': 'MEDICAL_REVIEW', // or 'SCREENING', 'ASSESSMENT'
         },
         action: 'Open follow-ups',
       );
+
+      // ignore: avoid_print
+      print('[FollowUpRepository] Response: $body');
 
       final list = extractList(body);
       for (final item in list) {
@@ -141,10 +149,11 @@ class FollowUpRepository extends ApiRepository {
 
     try {
       final body = await postOk(
-        Endpoints.followUpList,
+        Endpoints.followUpNcdList,
         data: {
-          'patientId': patientId,
-          'tenantId': api.tenantIdAsNum,
+          'memberReference': patientId,
+          'skip': 0,
+          'limit': 50,
         },
         action: 'All follow-ups',
       );

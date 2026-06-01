@@ -33,8 +33,8 @@ class ApiClient {
     final dio = Dio(
       BaseOptions(
         baseUrl: _baseUrl,
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 30),
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 60),
         headers: {'client': AppConfig.apiClient},
         validateStatus: (s) => s != null && s < 500,
       ),

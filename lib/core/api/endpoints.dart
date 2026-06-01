@@ -113,9 +113,37 @@ class Endpoints {
   static const String medicalReviewPncCreate =
       '/spice-service/medical-review/pnc/create';
 
+  /// ANC (antenatal care) details.
+  static const String medicalReviewAncDetails =
+      '/spice-service/medical-review/anc-pregnancy/details';
+
   /// ANC (antenatal care) history.
   static const String medicalReviewAncHistory =
       '/spice-service/medical-review/anc-history';
+
+  /// NCD medical review history summary (for viewing historical data).
+  static const String medicalReviewNcdDetails =
+      '/spice-service/medical-review/ncd/history-summary';
+
+  /// Mental health / eye care details (includes CATARACT, EYE_CARE).
+  static const String mentalHealthDetails =
+      '/spice-service/mentalhealth/details';
+
+  /// ICCM general details (above 5 years).
+  static const String medicalReviewIccmDetails =
+      '/spice-service/medical-review/iccm-general/details';
+
+  /// ICCM under 2 months details.
+  static const String medicalReviewIccmUnder2MonthsDetails =
+      '/spice-service/medical-review/iccm-under-2months/details';
+
+  /// ICCM under 5 years details.
+  static const String medicalReviewIccmUnder5YearsDetails =
+      '/spice-service/medical-review/iccm-under-5years/details';
+
+  /// Labour/delivery/mother-neonate details.
+  static const String medicalReviewLabourDetails =
+      '/spice-service/medical-review/labour-mother-neonate/details';
 
   /// Weight tracking.
   static const String medicalReviewWeight =
@@ -202,7 +230,6 @@ class Endpoints {
   static const String immunisationCreate = '/spice-service/immunisation/create';
   static const String medicalReviewTbDetails =
       '/spice-service/medical-review/tb/details';
-  static const String mentalHealthDetails = '/spice-service/mentalhealth/details';
   static const String mentalHealthCreate = '/spice-service/mentalhealth/create';
   static const String mentalHealthConditionDetails =
       '/spice-service/mentalhealth/condition-details';

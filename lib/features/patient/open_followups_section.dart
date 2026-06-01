@@ -9,9 +9,11 @@ class OpenFollowupsSection extends StatefulWidget {
   const OpenFollowupsSection({
     super.key,
     required this.patientId,
+    this.memberReference,
   });
 
   final String patientId;
+  final String? memberReference;
 
   @override
   State<OpenFollowupsSection> createState() => _OpenFollowupsSectionState();
@@ -28,8 +30,10 @@ class _OpenFollowupsSectionState extends State<OpenFollowupsSection> {
 
   void _load() {
     final repo = context.read<FollowUpRepository>();
+    // Use memberReference for follow-up API (like Android), fallback to patientId
+    final memberId = widget.memberReference ?? widget.patientId;
     setState(() {
-      _future = repo.openForPatient(widget.patientId);
+      _future = repo.openForPatient(memberId);
     });
   }
 

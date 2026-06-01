@@ -365,20 +365,18 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
               if (data.riskReasons.isNotEmpty)
                 _RationaleCard(reasons: data.riskReasons),
               if (data.riskReasons.isNotEmpty) const SizedBox(height: 16),
-              // Show recent visits (from patientvisit/list endpoint)
-              _RecentVisitsSection(
-                visits: data.recentVisits,
-                patientName: data.name,
-              ),
-              const SizedBox(height: 16),
               _AssessmentsSection(assessments: data.assessments),
               const SizedBox(height: 16),
               RecentVitalsSection(
-                patientId: widget.patientId,
+                // Use patientId (FHIR patient ID like 002014250010) not memberId (354)
+                patientId: data.patientId ?? widget.patientId,
                 memberReference: data.memberReference,
               ),
               const SizedBox(height: 16),
-              OpenFollowupsSection(patientId: widget.patientId),
+              OpenFollowupsSection(
+                patientId: widget.patientId,
+                memberReference: data.memberReference,
+              ),
               const SizedBox(height: 16),
               PatientActionsRow(
                 patientId: widget.patientId,
