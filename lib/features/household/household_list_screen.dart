@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../app/theme.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/household_dao.dart';
 import '../../core/db/member_dao.dart';
@@ -17,6 +18,15 @@ enum HouseholdListMode {
   members,
 }
 
+/// Filter for members: show all members or only assigned patients.
+enum MemberFilter {
+  /// Show only patients assigned to the logged-in SK (via patients table).
+  myPatients,
+
+  /// Show all members in the village.
+  allMembers,
+}
+
 class HouseholdListScreen extends StatefulWidget {
   const HouseholdListScreen({super.key, required this.mode});
 
@@ -26,13 +36,21 @@ class HouseholdListScreen extends StatefulWidget {
   State<HouseholdListScreen> createState() => _HouseholdListScreenState();
 }
 
-class _HouseholdListScreenState extends State<HouseholdListScreen> {
+class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTickerProviderStateMixin {
   Future<List<_HouseholdItem>>? _future;
   final ScrollController _scrollController = ScrollController();
+  late TabController _tabController;
+  
+  // Filter state for members view
+  MemberFilter _filter = MemberFilter.myPatients;
+  Set<String> _myPatientIds = {};
+  int _totalMemberCount = 0;
+  int _myPatientCount = 0;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     // Defer loading until after first frame when context is available
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _loadData();
@@ -41,6 +59,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
 
   @override
   void dispose() {
+    _tabController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -49,8 +68,22 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
     final householdDao = context.read<HouseholdDao>();
     final memberDao = context.read<MemberDao>();
     final repo = context.read<DashboardRepository>();
+    
     setState(() {
-      _future = _fetchHouseholds(householdDao, memberDao, repo);
+      // Load households first, then load filter data in parallel
+      _future = _fetchHouseholds(householdDao, memberDao, repo).then((households) async {
+        // Load filter data after households
+        final patientIds = await memberDao.getMyPatientIds();
+        final totalCount = await memberDao.count();
+        
+        if (mounted) {
+          _myPatientIds = patientIds;
+          _myPatientCount = patientIds.length;
+          _totalMemberCount = totalCount;
+        }
+        
+        return households;
+      });
     });
   }
 
@@ -65,17 +98,58 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
       final localHouseholds = await householdDao.getAll(limit: 1000);
       // ignore: avoid_print
       print('[HouseholdList] Found ${localHouseholds.length} households in local DB');
-      
       if (localHouseholds.isNotEmpty) {
-        // Get all members in ONE query (much faster than N queries)
-        final membersByHousehold = await memberDao.getAllGroupedByHousehold();
         // ignore: avoid_print
-        print('[HouseholdList] Got members grouped by ${membersByHousehold.length} households');
-        
-        // Convert entities to UI items
+        print('[HouseholdList] Sample household IDs: ${localHouseholds.take(3).map((h) => h.id).toList()}');
+      }
+      
+      // Get all members in ONE query - group by household
+      final membersByHousehold = await memberDao.getAllGroupedByHousehold();
+      // ignore: avoid_print
+      print('[HouseholdList] Got members grouped by ${membersByHousehold.length} households');
+      // ignore: avoid_print
+      print('[HouseholdList] Member household IDs: ${membersByHousehold.keys.take(3).toList()}');
+      
+      // For Members view, use members directly grouped by household (bypass household table)
+      // This ensures we show all 39 members, not just those linked to old household records
+      if (membersByHousehold.isNotEmpty) {
+        // ignore: avoid_print
+        print('[HouseholdList] Using member-derived households');
+        final items = <_HouseholdItem>[];
+        for (final entry in membersByHousehold.entries) {
+          final hhId = entry.key;
+          final members = entry.value;
+          if (members.isEmpty) continue;
+          // Create household item from member data
+          final firstMember = members.first;
+          final memberList = members.map(_HouseholdMember.fromEntity).toList();
+          
+          // Find household head to derive household name
+          final head = memberList.firstWhere(
+            (m) => m.isHouseholdHead == true,
+            orElse: () => memberList.first,
+          );
+          // Use head's name as household name, or fallback to "Household #ID"
+          final householdName = head.name != null 
+              ? "${head.name}'s Household"
+              : (hhId.isNotEmpty ? 'Household #$hhId' : null);
+          
+          items.add(_HouseholdItem(
+            id: hhId,
+            householdNo: hhId,
+            name: householdName,
+            village: firstMember.villageId,
+            memberCount: members.length,
+            members: memberList,
+          ));
+        }
+        return items;
+      }
+      
+      // Fallback to household table if no members
+      if (localHouseholds.isNotEmpty) {
         final items = localHouseholds.map((hh) {
-          final members = membersByHousehold[hh.id] ?? [];
-          return _HouseholdItem.fromEntity(hh, members);
+          return _HouseholdItem.fromEntity(hh, []);
         }).toList();
         return items;
       }
@@ -96,24 +170,29 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isMembers = widget.mode == HouseholdListMode.members;
-    final title = isMembers
-        ? HouseholdListStrings.allMembers
-        : HouseholdListStrings.allHouseholds;
+    final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
-        ),
-        title: Text(title),
+        // No back button - this is a root tab in bottom navigation
+        automaticallyImplyLeading: false,
+        title: const Text('Patients'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () => setState(_loadData),
           ),
         ],
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'Members', icon: Icon(Icons.people_outline)),
+            Tab(text: 'Households', icon: Icon(Icons.home_outlined)),
+          ],
+          labelColor: scheme.primary,
+          unselectedLabelColor: scheme.onSurfaceVariant,
+          indicatorColor: scheme.primary,
+        ),
       ),
       body: _future == null
           ? const Center(child: CircularProgressIndicator())
@@ -158,15 +237,13 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    isMembers ? Icons.people_outline : Icons.home_outlined,
+                    Icons.people_outline,
                     size: 64,
                     color: Theme.of(context).colorScheme.outline,
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    isMembers
-                        ? HouseholdListStrings.noMembers
-                        : HouseholdListStrings.noHouseholds,
+                    HouseholdListStrings.noMembers,
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
                 ],
@@ -174,11 +251,14 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
             );
           }
 
-          if (isMembers) {
-            return _buildMembersList(context, items);
-          } else {
-            return _buildHouseholdsList(context, items);
-          }
+          // Use TabBarView to show Members or Households
+          return TabBarView(
+            controller: _tabController,
+            children: [
+              _buildMembersList(context, items),
+              _buildHouseholdsList(context, items),
+            ],
+          );
         },
       ),
     );
@@ -260,20 +340,41 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
   Widget _buildMembersList(BuildContext context, List<_HouseholdItem> items) {
     final scheme = Theme.of(context).colorScheme;
     // Flatten all members from all households
-    final members = <_MemberInfo>[];
+    final allMembers = <_MemberInfo>[];
     for (final household in items) {
       for (final member in household.members) {
-        members.add(_MemberInfo.fromMember(member, household));
+        allMembers.add(_MemberInfo.fromMember(member, household));
       }
     }
+    
+    // Debug: log first few members and their IDs
+    // ignore: avoid_print
+    print('[HouseholdList] allMembers count: ${allMembers.length}');
+    // ignore: avoid_print
+    print('[HouseholdList] _myPatientIds count: ${_myPatientIds.length}');
+    if (allMembers.isNotEmpty) {
+      final sample = allMembers.take(3).map((m) => 'id=${m.id}, patientId=${m.patientId}').join('; ');
+      // ignore: avoid_print
+      print('[HouseholdList] Sample members: $sample');
+    }
+    if (_myPatientIds.isNotEmpty) {
+      // ignore: avoid_print
+      print('[HouseholdList] Sample patientIds: ${_myPatientIds.take(3).toList()}');
+    }
+
+    // Apply filter: show only my patients or all members
+    final members = _filter == MemberFilter.myPatients
+        ? allMembers.where((m) => _myPatientIds.contains(m.id) || _myPatientIds.contains(m.patientId)).toList()
+        : allMembers;
 
     // Calculate total from noOfPeople if we don't have individual members
     final totalFromCount = items.fold<int>(0, (sum, h) => sum + (h.memberCount ?? 0));
 
     // If we have no individual members but have a count, show households with counts
-    if (members.isEmpty && totalFromCount > 0) {
+    if (allMembers.isEmpty && totalFromCount > 0) {
       return Column(
         children: [
+          _buildFilterToggle(scheme),
           Container(
             padding: const EdgeInsets.all(16),
             color: scheme.surfaceContainerHighest.withValues(alpha: 0.3),
@@ -318,8 +419,9 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
 
     return Column(
       children: [
+        _buildFilterToggle(scheme),
         Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           color: scheme.surfaceContainerHighest.withValues(alpha: 0.3),
           child: Row(
             children: [
@@ -342,21 +444,63 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
           ),
         ),
         Expanded(
-          child: ListView.separated(
-            controller: _scrollController,
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: members.length,
-            separatorBuilder: (_, __) => const Divider(height: 1, indent: 72),
-            itemBuilder: (context, index) {
-              final member = members[index];
-              return _MemberTile(
-                member: member,
-                onTap: () => _navigateToMemberDetail(context, member),
-              );
-            },
-          ),
+          child: members.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.people_outline, size: 64, color: scheme.outline),
+                      const SizedBox(height: 16),
+                      Text(
+                        _filter == MemberFilter.myPatients
+                            ? 'No patients assigned to you'
+                            : HouseholdListStrings.noMembers,
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.separated(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  itemCount: members.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1, indent: 72),
+                  itemBuilder: (context, index) {
+                    final member = members[index];
+                    return _MemberTile(
+                      member: member,
+                      onTap: () => _navigateToMemberDetail(context, member),
+                    );
+                  },
+                ),
         ),
       ],
+    );
+  }
+
+  /// Builds the filter toggle chips (My Patients / All Members).
+  Widget _buildFilterToggle(ColorScheme scheme) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border(bottom: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.3))),
+      ),
+      child: Row(
+        children: [
+          _FilterChip(
+            label: HouseholdListStrings.myPatientsCount(_myPatientCount),
+            isSelected: _filter == MemberFilter.myPatients,
+            onTap: () => setState(() => _filter = MemberFilter.myPatients),
+          ),
+          const SizedBox(width: 8),
+          _FilterChip(
+            label: HouseholdListStrings.allMembersCount(_totalMemberCount),
+            isSelected: _filter == MemberFilter.allMembers,
+            onTap: () => setState(() => _filter = MemberFilter.allMembers),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -401,6 +545,45 @@ class _SummaryChip extends StatelessWidget {
   }
 }
 
+/// Chip toggle for filter selection.
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? scheme.primary : scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? scheme.primary : scheme.outline.withValues(alpha: 0.3),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? scheme.onPrimary : scheme.onSurface,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _HouseholdTile extends StatelessWidget {
   const _HouseholdTile({required this.item, this.onTap});
 
@@ -410,11 +593,15 @@ class _HouseholdTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    // Use brand navy for icons - visible in both light and dark modes
+    final iconColor = tokens.brandNavy;
+    final iconBgColor = tokens.brandNavy.withValues(alpha: 0.1);
     return ListTile(
       onTap: onTap,
       leading: CircleAvatar(
-        backgroundColor: scheme.tertiaryContainer,
-        child: Icon(Icons.home_outlined, color: scheme.onTertiaryContainer),
+        backgroundColor: iconBgColor,
+        child: Icon(Icons.home_outlined, color: iconColor),
       ),
       title: Text(
         item.name ?? HouseholdListStrings.unnamedHousehold,
@@ -436,18 +623,18 @@ class _HouseholdTile extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: scheme.primaryContainer,
+              color: iconBgColor,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.people_outline, size: 16, color: scheme.onPrimaryContainer),
+                Icon(Icons.people_outline, size: 16, color: iconColor),
                 const SizedBox(width: 4),
                 Text(
                   '${item.memberCount ?? 0}',
                   style: TextStyle(
-                    color: scheme.onPrimaryContainer,
+                    color: iconColor,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
