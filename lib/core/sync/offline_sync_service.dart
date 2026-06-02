@@ -171,6 +171,7 @@ class OfflineSyncService extends ChangeNotifier {
       // full village (the household screen reads from the members table,
       // which we keep unfiltered).
       final ownerUserId = await _auth.userId();
+      debugPrint('[OfflineSyncService] Using ownerUserId=$ownerUserId for member-patient filtering');
       var out = await _persistBundle(bundle, ownerUserId: ownerUserId);
       debugPrint(
         '[OfflineSyncService] Bundle persisted: patients=${out.patients} '
@@ -213,17 +214,19 @@ class OfflineSyncService extends ChangeNotifier {
         }
       }
 
-      // Step 3: If bundle didn't have households/members, fetch them separately (fallback)
+      // Step 3: If bundle didn't have households, fetch them separately (fallback)
+      // Even if members exist, we need households for the Patients tab UI
       int totalHouseholds = out.households;
       int totalMembers = out.members;
-      if (out.households == 0 && out.members == 0) {
+      if (out.households == 0) {
         _emitProgress(const SyncProgress(
           currentStep: SyncStep.fetchingPatients,
           entityName: 'households',
         ));
         final hhCount = await _syncHouseholdsAndMembers(villageIds: villageIds);
         totalHouseholds = hhCount.households;
-        totalMembers = hhCount.members;
+        // Only update members count if we didn't get any from the bundle
+        if (out.members == 0) totalMembers = hhCount.members;
       }
       
       // Step 4: Sync referrals
@@ -554,6 +557,13 @@ class OfflineSyncService extends ChangeNotifier {
       '[OfflineSyncService] Parsed ${members.length} members from bundle '
       '(${ownedMemberIds.length} owned by user $ownerUserId)',
     );
+    // Verify household-member linking
+    if (households.isNotEmpty && members.isNotEmpty) {
+      final householdIds = households.map((h) => h.id).toSet();
+      final linkedMembers = members.where((m) => m.householdId != null && householdIds.contains(m.householdId)).length;
+      final unassignedMembers = members.where((m) => m.householdId == null).length;
+      debugPrint('[OfflineSyncService] Member-household linking: $linkedMembers linked, $unassignedMembers unassigned');
+    }
 
     // uhis-dev backend ships `members` as the canonical patient list — the
     // offline-sync bundle has no `patients` key. Bridge each member into the
@@ -566,9 +576,19 @@ class OfflineSyncService extends ChangeNotifier {
     // matches — every village member arrives in the bundle, but the
     // dashboard worklist must reflect the SK's own caseload.
     if (patients.isEmpty && members.isNotEmpty) {
+      debugPrint(
+        '[OfflineSyncService] Bridge filter: ownerUserId=$ownerUserId, '
+        'ownedMemberIds=${ownedMemberIds.length}/${members.length}',
+      );
       final bridgeSource = ownedMemberIds.isNotEmpty
           ? members.where((m) => ownedMemberIds.contains(m.id))
           : members;
+      if (ownedMemberIds.isEmpty && ownerUserId != null) {
+        debugPrint(
+          '[OfflineSyncService] WARNING: No members matched shasthyaKormiId=$ownerUserId. '
+          'Bridging all ${members.length} members to patients table.',
+        );
+      }
       for (final m in bridgeSource) {
         final p = _memberToPatient(m);
         if (p != null) patients.add(p);
@@ -631,6 +651,10 @@ class OfflineSyncService extends ChangeNotifier {
       mergeProgramme(memberKey, Programme.fromTag(encounter));
     }
 
+    // Clear patients table before inserting filtered set to remove stale data
+    // from before the owner-user filtering fix
+    await _programmes.clearAll();
+    await _patients.clearAll();
     await _patients.upsertMany(patients);
     for (final entry in programmes.entries) {
       await _programmes.replaceFor(entry.key, entry.value);
