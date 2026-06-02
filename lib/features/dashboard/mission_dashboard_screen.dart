@@ -93,15 +93,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _loadMissionData() {
     if (!mounted) return;
-    final missionRepo = context.read<MissionDashboardRepository?>();
-    if (missionRepo == null) {
-      setState(() {
-        _queueFuture = Future.value(const <MissionQueueItem>[]);
-        _alertsFuture = Future.value(const <MissionQueueItem>[]);
-        _referralSummaryFuture = Future.value(ReferralSummary.empty);
-      });
-      return;
-    }
+    // Provider registers MissionDashboardRepository as non-nullable; reading
+    // `T?` would silently return null on miss and strand the screen on its
+    // empty state.
+    final missionRepo = context.read<MissionDashboardRepository>();
     setState(() {
       _queueFuture = missionRepo.loadQueue(limit: 10);
       _alertsFuture = missionRepo.loadCriticalAlerts();
@@ -110,10 +105,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _refresh() async {
-    final missionRepo = context.read<MissionDashboardRepository?>();
-    if (missionRepo != null) {
-      await missionRepo.refresh();
-    }
+    final missionRepo = context.read<MissionDashboardRepository>();
+    await missionRepo.refresh();
     _reloadStats();
     _loadMissionData();
   }
