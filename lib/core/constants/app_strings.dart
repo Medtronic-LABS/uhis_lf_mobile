@@ -308,6 +308,12 @@ abstract final class HouseholdListStrings {
   static const String unnamedHousehold = '(Unnamed household)';
   static const String unnamedMember = '(Unnamed)';
 
+  // Filter toggle labels
+  static const String myPatients = 'My Patients';
+  static const String allMembersFilter = 'All Members';
+  static String myPatientsCount(int n) => 'My Patients ($n)';
+  static String allMembersCount(int n) => 'All Members ($n)';
+
   static String householdsCount(int n) => '$n households';
   static String membersCount(int n) => '$n members';
   static String totalMembersCount(int n) => '$n total members';
@@ -435,7 +441,7 @@ abstract final class PatientContextStrings {
 
   // ── HTML detail composition ──────────────────────────────────────────────
   static const String backToWorklist = 'Back to worklist';
-  static const String sayHelloFirst = '👋 Say hello first';
+  static const String sayHelloFirst = ' Say hello first';
   static const String greetingBangla =
       'আপনাদের কেমন আছেন? রোগী কেমন আছে?';
   static const String greetingEnglish =
@@ -859,7 +865,7 @@ abstract final class VisitTriageStrings {
   static String briefBody(String name) =>
       '⚠ $name · current concerns flagged — act today if symptoms persist';
 
-  static const String skAsksFamily = 'SK ASKS THE FAMILY 👋';
+  static const String skAsksFamily = 'SK ASKS THE FAMILY ';
   static const String skAsksBangla =
       'রোগী কেমন আছে? কতদিন হলো অসুস্থ?';
   static const String skAsksEnglish =

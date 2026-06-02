@@ -192,15 +192,24 @@ class MissionQueueItem {
   /// often unknown for low-risk routine patients.
   final DateTime? dueAt;
 
-  /// Nulls-last ascending comparator on [dueAt]. Centralised so screens never
-  /// re-implement the null branch.
+  /// Nulls-last ascending comparator on [dueAt]. Falls back to patient name
+  /// as a tiebreaker so the sort is stable even when all dueAt values are null.
   static int compareByDueAtAsc(MissionQueueItem a, MissionQueueItem b) {
     final ad = a.dueAt;
     final bd = b.dueAt;
-    if (ad == null && bd == null) return 0;
-    if (ad == null) return 1;
-    if (bd == null) return -1;
-    return ad.compareTo(bd);
+    if (ad != null && bd != null) {
+      final cmp = ad.compareTo(bd);
+      if (cmp != 0) return cmp;
+    } else if (ad != null) {
+      return -1; // a has date, b doesn't → a first
+    } else if (bd != null) {
+      return 1; // b has date, a doesn't → b first
+    }
+    // Both null or equal dates: fall back to priority score (higher first),
+    // then patient name for stable sort
+    final scoreCmp = b.priorityScore.compareTo(a.priorityScore);
+    if (scoreCmp != 0) return scoreCmp;
+    return (a.patientName ?? '').compareTo(b.patientName ?? '');
   }
 
   /// Whether this is a critical item requiring immediate attention.

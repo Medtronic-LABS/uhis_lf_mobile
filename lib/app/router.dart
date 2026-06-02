@@ -161,10 +161,22 @@ GoRouter buildRouter(AuthState auth) {
                   ),
                   GoRoute(
                     path: ':id',
-                    builder: (_, state) => PatientContextScreen(
-                      patientId: state.pathParameters['id']!,
-                      memberData: state.extra as Map<String, dynamic>?,
-                    ),
+                    builder: (_, state) {
+                      // Handle different types of extra data
+                      Map<String, dynamic>? memberData;
+                      final extra = state.extra;
+                      if (extra is Map<String, dynamic>) {
+                        memberData = extra;
+                      } else if (extra is Map) {
+                        memberData = Map<String, dynamic>.from(extra);
+                      }
+                      // Ignore HouseholdDetailData - it's for household routes, not patient routes
+                      // This can happen during tab switching in StatefulShellRoute
+                      return PatientContextScreen(
+                        patientId: state.pathParameters['id']!,
+                        memberData: memberData,
+                      );
+                    },
                   ),
                   // Visit flow routes
                   GoRoute(
@@ -202,7 +214,13 @@ GoRouter buildRouter(AuthState auth) {
                     path: 'visit/:visitId/assessment/:programme',
                     name: 'visit-assessment',
                     pageBuilder: (context, state) {
-                      final extra = state.extra as Map<String, dynamic>?;
+                      // Safely extract extra data - may be HouseholdDetailData or Map
+                      Map<String, dynamic>? extra;
+                      if (state.extra is Map<String, dynamic>) {
+                        extra = state.extra as Map<String, dynamic>;
+                      } else if (state.extra is Map) {
+                        extra = Map<String, dynamic>.from(state.extra as Map);
+                      }
                       return MaterialPage(
                         key: ValueKey('visit-assessment-${state.pathParameters['visitId']}-${state.pathParameters['programme']}'),
                         child: VisitAssessmentStep(

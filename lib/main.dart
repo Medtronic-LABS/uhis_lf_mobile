@@ -51,6 +51,26 @@ import 'features/visit/household_repository.dart';
 import 'features/visit/visit_controller.dart';
 import 'features/worklist/worklist_repository.dart';
 
+/// Remove any legacy seeded/demo test data from local SQLite.
+/// This ensures only real API data is shown in the worklist.
+Future<void> _clearSeededTestData(AppDatabase db) async {
+  try {
+    // Clear locally seeded test patients
+    await db.db.delete(AppDatabase.tablePatients, where: "id LIKE 'PAT-SEED-%'");
+    await db.db.delete(AppDatabase.tablePatientProgrammes, where: "patient_id LIKE 'PAT-SEED-%'");
+    await db.db.delete(AppDatabase.tableFollowUps, where: "patient_id LIKE 'PAT-SEED-%'");
+    
+    // Clear demo referrals
+    await db.db.delete('referral_status_events', where: "referral_id LIKE 'ref-demo-%'");
+    await db.db.delete(AppDatabase.tableReferrals, where: "id LIKE 'ref-demo-%'");
+    
+    debugPrint('[main] cleared seeded/demo test data');
+  } catch (e) {
+    // Silently ignore — tables might not exist yet on fresh install
+    debugPrint('[main] clearSeededTestData: $e');
+  }
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SemanticsBinding.instance.ensureSemantics();
@@ -60,6 +80,8 @@ Future<void> main() async {
   final authState = AuthState(authRepo, biometric);
   await authState.bootstrap();
   final appDb = await AppDatabase.open();
+  // Clear any legacy seeded test data (PAT-SEED-* entries)
+  await _clearSeededTestData(appDb);
   final bioEnabled = await authRepo.isBiometricEnabled();
   if (AppConfig.hasDevCredentials &&
       !bioEnabled &&
