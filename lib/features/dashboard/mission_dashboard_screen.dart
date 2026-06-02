@@ -15,6 +15,7 @@ import '../../core/sync/offline_sync_service.dart';
 import '../referral/referral_repository.dart';
 import '../search/global_search_bar.dart';
 import '../visit/visit_controller.dart';
+import '../worklist/worklist_repository.dart';
 import 'dashboard_repository.dart';
 import 'mission_dashboard_repository.dart';
 import 'widgets/critical_alert_banner.dart';
@@ -94,6 +95,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final sync = context.read<OfflineSyncService>();
       final report = await sync.coldSync();
       debugPrint('[Dashboard] Sync completed: patients=${report.patients}, referrals=${report.referrals}');
+      // Recompute risk scores and next-due-at after sync so the worklist
+      // sorts correctly by "earliest first"
+      if (!mounted) return;
+      final worklist = context.read<WorklistRepository>();
+      final recomputed = await worklist.recomputeAllAfterSync();
+      debugPrint('[Dashboard] Recomputed risk/nextDueAt for $recomputed patients');
     } catch (e) {
       debugPrint('[Dashboard] Sync failed: $e');
     }

@@ -1,11 +1,8 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
-import '../../core/db/app_database.dart';
-import '../../core/debug/test_data_seeder.dart';
 import '../../core/models/programme.dart';
 import '../../core/models/worklist_entry.dart';
 import '../../core/sync/offline_sync_service.dart';
@@ -104,26 +101,6 @@ class _WorklistViewState extends State<WorklistView> {
     _reload();
   }
 
-  Future<void> _seedTestData() async {
-    final appDb = context.read<AppDatabase>();
-    final seeder = TestDataSeeder(appDb);
-    try {
-      final result = await seeder.seed(householdCount: 40, membersPerHousehold: 4);
-      if (!mounted) return;
-      await _repo.recomputeAllAfterSync();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$result')),
-      );
-      _reload();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Seed failed: $e')),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final sync = context.watch<OfflineSyncService>();
@@ -156,7 +133,7 @@ class _WorklistViewState extends State<WorklistView> {
                 if (list.isEmpty) {
                   return ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
-                    children: [_EmptyState(onSeedTestData: _seedTestData)],
+                    children: [const _EmptyState()],
                   );
                 }
                 final topUrgent = list.first.isUrgent ? list.first : null;
@@ -185,9 +162,7 @@ class _WorklistViewState extends State<WorklistView> {
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({this.onSeedTestData});
-
-  final VoidCallback? onSeedTestData;
+  const _EmptyState();
 
   @override
   Widget build(BuildContext context) {
@@ -211,15 +186,6 @@ class _EmptyState extends StatelessWidget {
                   color: scheme.onSurfaceVariant,
                 ),
           ),
-          // Debug-only: Seed test data button
-          if (kDebugMode && onSeedTestData != null) ...[
-            const SizedBox(height: 24),
-            OutlinedButton.icon(
-              onPressed: onSeedTestData,
-              icon: const Icon(Icons.science_outlined),
-              label: const Text('Seed Test Data (Debug)'),
-            ),
-          ],
         ],
       ),
     );
