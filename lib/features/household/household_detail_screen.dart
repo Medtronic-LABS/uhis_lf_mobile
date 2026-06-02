@@ -221,10 +221,57 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
   bool _loadingMembers = false;
   String? _loadError;
 
+  /// Derives household name from head's name (same logic as household_list_screen).
+  /// Returns: "HeadName's Household" or "Household #ID" or existing name.
+  String? _deriveHouseholdName({
+    required String? existingName,
+    required List<HouseholdMemberData> members,
+    required String householdId,
+  }) {
+    // If we already have a valid name, keep it
+    if (existingName != null && existingName.isNotEmpty) {
+      return existingName;
+    }
+    
+    // Find household head
+    final head = members.firstWhere(
+      (m) => m.isHead,
+      orElse: () => members.isNotEmpty ? members.first : HouseholdMemberData(),
+    );
+    
+    // Use head's name to derive household name
+    if (head.name != null && head.name!.isNotEmpty) {
+      return "${head.name}'s Household";
+    }
+    
+    // Fallback to "Household #ID"
+    if (householdId.isNotEmpty) {
+      return 'Household #$householdId';
+    }
+    
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();
-    _household = widget.household;
+    // Derive household name from head if not available
+    final derivedName = _deriveHouseholdName(
+      existingName: widget.household.name,
+      members: widget.household.members,
+      householdId: widget.household.id ?? '',
+    );
+    _household = HouseholdDetailData(
+      id: widget.household.id,
+      name: derivedName,
+      householdNo: widget.household.householdNo,
+      village: widget.household.village,
+      subVillage: widget.household.subVillage,
+      memberCount: widget.household.memberCount,
+      latitude: widget.household.latitude,
+      longitude: widget.household.longitude,
+      members: widget.household.members,
+    );
     // Auto-fetch members if not provided (defer to avoid setState in initState)
     if (_household.members.isEmpty && _household.id != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -263,10 +310,17 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
         // Convert local HouseholdMemberEntity to display data
         final members = localMembers.map(HouseholdMemberData.fromEntity).toList();
         
+        // Derive household name from head's name (same as household_list_screen)
+        final derivedName = _deriveHouseholdName(
+          existingName: _household.name,
+          members: members,
+          householdId: householdId,
+        );
+        
         setState(() {
           _household = HouseholdDetailData(
             id: _household.id,
-            name: _household.name,
+            name: derivedName,
             householdNo: _household.householdNo,
             village: _household.village,
             subVillage: _household.subVillage,
@@ -292,8 +346,25 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
         // ignore: avoid_print
         print('[HouseholdDetail] Got ${updated.members.length} members from API');
         
+        // Derive name from head if not available
+        final derivedName = _deriveHouseholdName(
+          existingName: updated.name,
+          members: updated.members,
+          householdId: householdId,
+        );
+        
         setState(() {
-          _household = updated;
+          _household = HouseholdDetailData(
+            id: updated.id,
+            name: derivedName,
+            householdNo: updated.householdNo,
+            village: updated.village,
+            subVillage: updated.subVillage,
+            memberCount: updated.memberCount,
+            latitude: updated.latitude,
+            longitude: updated.longitude,
+            members: updated.members,
+          );
           _loadingMembers = false;
         });
       } else if (mounted) {

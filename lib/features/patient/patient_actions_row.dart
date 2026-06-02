@@ -62,6 +62,7 @@ class PatientActionsRow extends StatelessWidget {
     this.patientGender,
     this.householdId,
     this.programmes = const {},
+    this.origin,
   });
 
   final String patientId;
@@ -70,6 +71,8 @@ class PatientActionsRow extends StatelessWidget {
   final String? patientGender;
   final String? householdId;
   final Set<Programme> programmes;
+  /// Origin screen for return navigation ('dashboard' or 'tasks').
+  final String? origin;
 
   void _showProgrammeSelector(BuildContext context) {
     showModalBottomSheet(
@@ -96,6 +99,7 @@ class PatientActionsRow extends StatelessWidget {
       patientGender: patientGender,
       householdId: householdId,
       programme: programme,
+      origin: origin,
     );
     context.push(
       '/patients/visit/$patientId/start',

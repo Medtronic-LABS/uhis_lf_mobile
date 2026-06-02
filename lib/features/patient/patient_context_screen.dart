@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/theme.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/db/member_dao.dart' show MemberDao, HouseholdMemberEntity;
 import '../../core/models/programme.dart';
 import '../../core/models/risk.dart';
 import 'member_detail_repository.dart';
@@ -68,12 +70,15 @@ class PatientContextScreen extends StatefulWidget {
     super.key,
     required this.patientId,
     this.memberData,
+    this.origin,
   });
 
   final String patientId;
   /// Pre-populated member data passed from household detail.
   /// If provided, skips remote lookup when local patient not found.
   final Map<String, dynamic>? memberData;
+  /// Origin screen for return navigation after visit ('dashboard' or 'tasks').
+  final String? origin;
 
   @override
   State<PatientContextScreen> createState() => _PatientContextScreenState();
@@ -208,16 +213,24 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
       final age = data['age'] as int?;
       final gender = data['gender'] as String?;
       final isPregnant = data['isPregnant'] as bool? ?? false;
-      // Fetch assessments for this member using user's sub-village ID
-      final assessments = await memberRepo.getMemberAssessments(
-        widget.patientId,
-        villageId: userVillageId,
-        patientAge: age,
-        patientGender: gender,
-        isPregnant: isPregnant,
-      );
-      // ignore: avoid_print
-      print('[PatientContextScreen] Found ${assessments.length} assessments for pre-passed member');
+      final memberId = data['id']?.toString() ?? widget.patientId;
+      
+      // Try to fetch assessments but don't fail if API is unavailable
+      List<MemberAssessment> assessments = [];
+      try {
+        assessments = await memberRepo.getMemberAssessments(
+          widget.patientId,
+          villageId: userVillageId,
+          patientAge: age,
+          patientGender: gender,
+          isPregnant: isPregnant,
+        );
+        // ignore: avoid_print
+        print('[PatientContextScreen] Found ${assessments.length} assessments for pre-passed member');
+      } catch (e) {
+        // ignore: avoid_print
+        print('[PatientContextScreen] Failed to fetch assessments: $e (continuing with basic info)');
+      }
       
       // Determine programmes from assessments
       final progs = <Programme>{};
@@ -238,20 +251,25 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
         }
       }
       
-      // Fetch recent visits
-      final patientIdForVisits = data['patientId'] as String? ?? widget.patientId;
-      final memberId = data['id']?.toString() ?? widget.patientId;
-      final memberRef = 'RelatedPerson/$memberId';
-      final householdIdForVisits = data['householdId']?.toString();
-      // ignore: avoid_print
-      print('[PatientContextScreen] Fetching recent visits for patient: $patientIdForVisits, member: $memberRef, householdId: $householdIdForVisits');
-      final visits = await memberRepo.getRecentVisits(
-        patientIdForVisits,
-        memberReference: memberRef,
-        householdId: householdIdForVisits,
-      );
-      // ignore: avoid_print
-      print('[PatientContextScreen] Found ${visits.length} recent visits');
+      // Try to fetch recent visits but don't fail if API is unavailable
+      List<PatientVisit> visits = [];
+      try {
+        final patientIdForVisits = data['patientId'] as String? ?? widget.patientId;
+        final memberRef = 'RelatedPerson/$memberId';
+        final householdIdForVisits = data['householdId']?.toString();
+        // ignore: avoid_print
+        print('[PatientContextScreen] Fetching recent visits for patient: $patientIdForVisits, member: $memberRef, householdId: $householdIdForVisits');
+        visits = await memberRepo.getRecentVisits(
+          patientIdForVisits,
+          memberReference: memberRef,
+          householdId: householdIdForVisits,
+        );
+        // ignore: avoid_print
+        print('[PatientContextScreen] Found ${visits.length} recent visits');
+      } catch (e) {
+        // ignore: avoid_print
+        print('[PatientContextScreen] Failed to fetch recent visits: $e (continuing with basic info)');
+      }
       
       return PatientOrMemberData(
         remoteMember: MemberHealthDetails(
@@ -354,6 +372,12 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
                   onBack: () => Navigator.of(context).maybePop(),
                   onRefresh: _refreshing ? null : _refresh,
                 ),
+                // Same-household strip per spec Phase 5
+                if (data.householdId != null)
+                  _SameHouseholdStrip(
+                    currentPatientId: widget.patientId,
+                    householdId: data.householdId!,
+                  ),
                 Expanded(
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(14, 14, 14, 110),
@@ -386,6 +410,7 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
                         patientGender: data.gender,
                         householdId: data.householdId,
                         programmes: data.programmes,
+                        origin: widget.origin,
                       ),
                     ],
                   ),
@@ -1921,6 +1946,208 @@ class _AiSummaryCard extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Horizontal chip strip showing other members of the same household.
+/// Hidden when the household has only the current patient.
+/// Per spec Phase 5: Household clustering = info chip strip on patient
+/// detail screen, not main-list reorder.
+class _SameHouseholdStrip extends StatelessWidget {
+  const _SameHouseholdStrip({
+    required this.currentPatientId,
+    required this.householdId,
+  });
+
+  final String currentPatientId;
+  final String householdId;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    final memberDao = context.read<MemberDao>();
+
+    return FutureBuilder<List<HouseholdMemberEntity>>(
+      future: memberDao.getByHouseholdId(householdId),
+      builder: (context, snap) {
+        if (!snap.hasData) return const SizedBox.shrink();
+        final members = snap.data!;
+        // Filter out current patient and empty names
+        final others = members
+            .where((m) =>
+                m.id != currentPatientId &&
+                m.name != null &&
+                m.name!.isNotEmpty)
+            .toList();
+        if (others.isEmpty) return const SizedBox.shrink();
+
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: tokens.cardSurface,
+            border: Border(
+              bottom: BorderSide(
+                color: tokens.textMuted.withValues(alpha: 0.2),
+              ),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Make header tappable to navigate to household detail
+              GestureDetector(
+                onTap: () {
+                  context.push('/patients/household/$householdId');
+                },
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.home_outlined,
+                      size: 14,
+                      color: tokens.brandNavy,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Same household',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: tokens.brandNavy,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: tokens.brandNavy.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '${others.length + 1}', // +1 for current patient
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: tokens.brandNavy,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 16,
+                      color: tokens.brandNavy,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 6),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: others.map((m) {
+                    final name = m.name ?? 'Unknown';
+                    final age = _ageFromDob(m.dob);
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: _HouseholdMemberChip(
+                        name: name,
+                        age: age,
+                        onTap: () {
+                          context.push('/patient/${m.id}');
+                        },
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  int? _ageFromDob(String? dob) {
+    if (dob == null || dob.isEmpty) return null;
+    try {
+      final birthDate = DateTime.parse(dob);
+      final now = DateTime.now();
+      int age = now.year - birthDate.year;
+      if (now.month < birthDate.month ||
+          (now.month == birthDate.month && now.day < birthDate.day)) {
+        age--;
+      }
+      return age;
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+/// Individual chip for a household member in the same-household strip.
+class _HouseholdMemberChip extends StatelessWidget {
+  const _HouseholdMemberChip({
+    required this.name,
+    required this.age,
+    required this.onTap,
+  });
+
+  final String name;
+  final int? age;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    final ageText = age != null ? ' · ${age}y' : '';
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: tokens.brandNavy.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: tokens.brandNavy.withValues(alpha: 0.3),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircleAvatar(
+              radius: 10,
+              backgroundColor: tokens.brandNavy.withValues(alpha: 0.15),
+              child: Text(
+                name.isNotEmpty ? name[0].toUpperCase() : '?',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: tokens.brandNavy,
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              '$name$ageText',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: tokens.brandNavy,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.chevron_right,
+              size: 14,
+              color: tokens.brandNavy.withValues(alpha: 0.5),
+            ),
+          ],
+        ),
       ),
     );
   }
