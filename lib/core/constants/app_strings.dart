@@ -933,6 +933,8 @@ abstract final class MissionDashboardStrings {
         return 'TB treatment — default risk';
       case 'ncd-drift':
         return 'NCD treatment overdue';
+      case 'referral-arrival-pending':
+        return 'Referral pending arrival';
       case 'child-disability':
         return 'Child under 5 with disability';
       default:
