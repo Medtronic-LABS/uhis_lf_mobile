@@ -1152,16 +1152,34 @@ class OfflineSyncService extends ChangeNotifier {
     );
   }
 
+  /// True when `value` carries meaningful content — non-null, non-empty
+  /// string (rejecting `"null"`, `"[]"`, `"{}"` as sentinels), non-empty
+  /// collection, non-zero number, or truthy bool. Used by
+  /// [_pregnancyFactsFrom] because the bundle returns several "high-risk"
+  /// fields as JSON-encoded arrays of conditions (e.g.
+  /// `"[\"High Fever\",\"Abnormal Pulse\"]"`) rather than booleans — the
+  /// presence of the array itself is the signal.
+  static bool _hasContent(Object? value) {
+    if (value == null) return false;
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is Iterable) return value.isNotEmpty;
+    if (value is Map) return value.isNotEmpty;
+    final s = value.toString().trim();
+    if (s.isEmpty) return false;
+    final lower = s.toLowerCase();
+    if (lower == 'null' || lower == 'false') return false;
+    if (s == '[]' || s == '{}') return false;
+    return true;
+  }
+
   /// Build a [PregnancyFacts] snapshot from one `pregnancyInfos[]` row.
   /// Per-row narrow-catch — one malformed entry should not kill the rest.
   static PregnancyFacts? _pregnancyFactsFrom(Map raw, {required DateTime now}) {
     try {
-      final highRisk = _truthy(raw['highRiskPregnantWoman']) ||
-          _truthy(raw['highRiskMother']);
-      final gapsAnc = raw['gapsInAnc'] != null &&
-          (raw['gapsInAnc'] is! Iterable ||
-              (raw['gapsInAnc'] as Iterable).isNotEmpty) &&
-          raw['gapsInAnc'].toString().trim().isNotEmpty;
+      final highRisk = _hasContent(raw['highRiskPregnantWoman']) ||
+          _hasContent(raw['highRiskMother']);
+      final gapsAnc = _hasContent(raw['gapsInAnc']);
 
       bool withinDays(Object? value, int windowDays, {bool future = false}) {
         final ts = JsonRead.epochMillis({'_': value}, const ['_']);
@@ -1176,14 +1194,11 @@ class OfflineSyncService extends ChangeNotifier {
       final isPostpartum = withinDays(dod, 42);
       final isNearTerm = withinDays(edd, 14, future: true);
 
-      final complications = raw['complicationsDuringDelivery'];
-      final hadComplications = (complications != null &&
-              complications.toString().trim().isNotEmpty) ||
-          _truthy(raw['isDeliveryAtHome']);
+      final hadComplications =
+          _hasContent(raw['complicationsDuringDelivery']) ||
+              _truthy(raw['isDeliveryAtHome']);
 
-      final pncIllness = raw['pncIllness'];
-      final hasPncIll =
-          pncIllness != null && pncIllness.toString().trim().isNotEmpty;
+      final hasPncIll = _hasContent(raw['pncIllness']);
 
       return PregnancyFacts(
         highRiskPregnantWoman: highRisk,
