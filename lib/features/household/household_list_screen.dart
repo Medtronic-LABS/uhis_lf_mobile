@@ -6,7 +6,9 @@ import '../../app/theme.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/household_dao.dart';
 import '../../core/db/member_dao.dart';
+import '../../core/models/dashboard_tier.dart';
 import '../dashboard/dashboard_repository.dart';
+import '../dashboard/mission_dashboard_repository.dart';
 import 'household_detail_screen.dart';
 
 /// View mode for the list screen.
@@ -28,9 +30,18 @@ enum MemberFilter {
 }
 
 class HouseholdListScreen extends StatefulWidget {
-  const HouseholdListScreen({super.key, required this.mode});
+  const HouseholdListScreen({
+    super.key,
+    required this.mode,
+    this.initialTier,
+  });
 
   final HouseholdListMode mode;
+
+  /// Optional tier filter pre-selected from dashboard deep-link
+  /// (`/patients?tier=overdue`). When non-null, the tier chip row appears
+  /// with this tier pre-selected.
+  final DashboardTier? initialTier;
 
   @override
   State<HouseholdListScreen> createState() => _HouseholdListScreenState();
@@ -47,14 +58,41 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
   int _totalMemberCount = 0;
   int _myPatientCount = 0;
 
+  // 5-tier filter state (null = All)
+  DashboardTier? _selectedTier;
+  Map<String, DashboardTier>? _patientTiers;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _selectedTier = widget.initialTier;
     // Defer loading until after first frame when context is available
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _loadData();
+      if (mounted) {
+        _loadData();
+        _loadPatientTiers();
+      }
     });
+  }
+
+  /// Load the tiered queue to get patient-tier mapping for filtering.
+  Future<void> _loadPatientTiers() async {
+    if (!mounted) return;
+    try {
+      final missionRepo = context.read<MissionDashboardRepository>();
+      final queue = await missionRepo.loadQueue();
+      if (!mounted) return;
+      final tiers = <String, DashboardTier>{};
+      for (final item in queue) {
+        if (item.patientId != null) {
+          tiers[item.patientId!] = item.tier;
+        }
+      }
+      setState(() => _patientTiers = tiers);
+    } catch (e) {
+      debugPrint('[HouseholdList] Failed to load patient tiers: $e');
+    }
   }
 
   @override
@@ -363,9 +401,17 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
     }
 
     // Apply filter: show only my patients or all members
-    final members = _filter == MemberFilter.myPatients
+    var members = _filter == MemberFilter.myPatients
         ? allMembers.where((m) => _myPatientIds.contains(m.id) || _myPatientIds.contains(m.patientId)).toList()
         : allMembers;
+
+    // Apply tier filter if selected (5-tier model)
+    if (_selectedTier != null && _patientTiers != null) {
+      members = members.where((m) {
+        final tier = _patientTiers![m.id] ?? _patientTiers![m.patientId];
+        return tier == _selectedTier;
+      }).toList();
+    }
 
     // Calculate total from noOfPeople if we don't have individual members
     final totalFromCount = items.fold<int>(0, (sum, h) => sum + (h.memberCount ?? 0));
@@ -374,30 +420,9 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
     if (allMembers.isEmpty && totalFromCount > 0) {
       return Column(
         children: [
+          if (widget.initialTier != null || _selectedTier != null)
+            _buildTierChipRow(),
           _buildFilterToggle(scheme),
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: scheme.surfaceContainerHighest.withValues(alpha: 0.3),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _SummaryChip(
-                    icon: Icons.people_alt_outlined,
-                    label: HouseholdListStrings.totalMembersCount(totalFromCount),
-                    color: scheme.primary,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _SummaryChip(
-                    icon: Icons.home_work_outlined,
-                    label: HouseholdListStrings.acrossHouseholds(items.length),
-                    color: scheme.tertiary,
-                  ),
-                ),
-              ],
-            ),
-          ),
           Expanded(
             child: ListView.separated(
               controller: _scrollController,
@@ -419,30 +444,9 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
 
     return Column(
       children: [
+        if (widget.initialTier != null || _selectedTier != null)
+          _buildTierChipRow(),
         _buildFilterToggle(scheme),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          color: scheme.surfaceContainerHighest.withValues(alpha: 0.3),
-          child: Row(
-            children: [
-              Flexible(
-                child: _SummaryChip(
-                  icon: Icons.people_alt_outlined,
-                  label: HouseholdListStrings.totalMembersCount(members.length),
-                  color: scheme.primary,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Flexible(
-                child: _SummaryChip(
-                  icon: Icons.home_work_outlined,
-                  label: HouseholdListStrings.acrossHouseholds(items.length),
-                  color: scheme.tertiary,
-                ),
-              ),
-            ],
-          ),
-        ),
         Expanded(
           child: members.isEmpty
               ? Center(
@@ -502,6 +506,103 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
         ],
       ),
     );
+  }
+
+  /// Builds the 5-tier chip row for filtering by dashboard tier.
+  /// Renders when navigating from dashboard with `?tier=...` or when
+  /// the user toggles into tier-filter mode.
+  Widget _buildTierChipRow() {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    final scheme = Theme.of(context).colorScheme;
+    final tiers = [null, ...DashboardTier.values];
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border(
+          bottom: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.3)),
+        ),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: tiers.map((tier) {
+            final isSelected = _selectedTier == tier;
+            final label = tier == null
+                ? 'All'
+                : MissionDashboardStrings.tierLabel(tier);
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: _TierFilterChip(
+                label: label,
+                tier: tier,
+                isSelected: isSelected,
+                onTap: () => setState(() => _selectedTier = tier),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+}
+
+/// Chip for tier filtering.
+class _TierFilterChip extends StatelessWidget {
+  const _TierFilterChip({
+    required this.label,
+    required this.tier,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final String label;
+  final DashboardTier? tier;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    final urgency = Theme.of(context).extension<UrgencyTheme>()!;
+    final color = _tierColor(tier, urgency, tokens);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withValues(alpha: 0.2) : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? color : tokens.textMuted.withValues(alpha: 0.3),
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            color: isSelected ? color : tokens.textPrimary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _tierColor(DashboardTier? t, UrgencyTheme urgency, LeapfrogColors tokens) {
+    if (t == null) return tokens.brandNavy;
+    switch (t) {
+      case DashboardTier.critical:
+      case DashboardTier.overdue:
+        return urgency.visitNow;
+      case DashboardTier.dueToday:
+        return urgency.today;
+      case DashboardTier.thisWeek:
+        return urgency.thisWeek;
+      case DashboardTier.upcoming:
+        return tokens.textMuted;
+    }
   }
 }
 
