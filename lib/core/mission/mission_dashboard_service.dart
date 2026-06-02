@@ -13,6 +13,7 @@
 library;
 
 import '../api/cql_api_service.dart';
+import '../models/dashboard_tier.dart';
 import '../models/mission_brief.dart';
 import '../models/mission_queue_item.dart';
 import '../models/programme.dart';
@@ -20,6 +21,7 @@ import '../models/risk.dart';
 import '../models/sla.dart';
 import '../models/worklist_entry.dart';
 import '../models/referral.dart';
+import 'mission_pregnancy_facts.dart';
 
 /// Input data for computing mission brief and queue.
 class MissionInputData {
@@ -33,6 +35,23 @@ class MissionInputData {
     this.cqlResults = const {},
     this.householdNumbersById = const {},
     this.patientHouseholdsById = const {},
+    this.pregnancyByPatientId = const {},
+    this.patientsOnTreatment = const {},
+    this.patientsLtfu = const {},
+    this.unsuccessfulAttemptsByPatientId = const {},
+    this.patientsEverReferred = const {},
+    this.agesByPatientId = const {},
+    this.disabilityByPatientId = const {},
+    this.lastUpdatedByPatientId = const {},
+    this.hiddenPatientIds = const {},
+    this.completedTodayPatientIds = const {},
+    this.tbAtRiskPatientIds = const {},
+    this.ncdOverduePatientIds = const {},
+    this.redFlagPatientIds = const {},
+    this.pregnantPatientIds = const {},
+    this.householdHeadPatientIds = const {},
+    this.neonatePatientIds = const {},
+    this.youngInfantPatientIds = const {},
   });
 
   /// All patients on the worklist.
@@ -65,6 +84,85 @@ class MissionInputData {
   /// Household UUID keyed by patient ID. Lets referral / follow-up items —
   /// which only know the patient — resolve into [householdNumbersById].
   final Map<String, String> patientHouseholdsById;
+
+  /// Pregnancy / postpartum snapshot keyed by patient ID. Drives CRITICAL
+  /// drivers (`pnc-window`, `anc-near-term`, `delivery-complication`,
+  /// `pnc-illness`, `hi-risk-anc-gap`). Empty when no `pregnancyInfos[]`
+  /// row exists for the patient — callers should treat absence as
+  /// [PregnancyFacts.empty].
+  final Map<String, PregnancyFacts> pregnancyByPatientId;
+
+  /// Patient IDs with at least one `treatmentDetails[]` row in the bundle.
+  /// Drives the `ncd-drift` OVERDUE-min driver and the on-treatment
+  /// composite-score bonus.
+  final Set<String> patientsOnTreatment;
+
+  /// Patient IDs with `followUps[].type == LOST_TO_FOLLOW_UP`. Drives the
+  /// `ltfu-streak` OVERDUE-min driver. A patient may also reach LTFU via
+  /// the `unsuccessfulAttempts > 2` rule (see [unsuccessfulAttemptsByPatientId]).
+  final Set<String> patientsLtfu;
+
+  /// Highest observed `followUps[].unsuccessfulAttempts` per patient.
+  /// Drives `ltfu-streak` promotion and the composite-score
+  /// `min(attempts, 5) × 5` term.
+  final Map<String, int> unsuccessfulAttemptsByPatientId;
+
+  /// Patient IDs that have ever had a `followUps[].referredSiteId` set.
+  /// Drives the ever-referred composite-score bonus (care-continuity).
+  final Set<String> patientsEverReferred;
+
+  /// Patient age in years, keyed by patient ID. Pre-computed at sync time
+  /// so the service doesn't reparse `dateOfBirth`. Null when DOB is missing.
+  final Map<String, int> agesByPatientId;
+
+  /// Disability flag keyed by patient ID — `true` when
+  /// `member.disability != null && member.disability != 'absent'`. Drives
+  /// the `child-disability` OVERDUE-min driver (when paired with age < 5)
+  /// and the composite-score vulnerability bonus.
+  final Map<String, bool> disabilityByPatientId;
+
+  /// Epoch-millis of the last record update per patient. Drives the
+  /// stale-record composite-score bonus (`(now − lastUpdated).days > 30`).
+  final Map<String, int> lastUpdatedByPatientId;
+
+  /// Patients hidden from the queue unconditionally — `member.isActive == false`
+  /// OR `member.deceasedReason != null`.
+  final Set<String> hiddenPatientIds;
+
+  /// Patients with a follow-up marked completed today — hidden from today's
+  /// queue but not from the underlying patient list.
+  final Set<String> completedTodayPatientIds;
+
+  /// Patients on TB treatment whose contact attempts indicate default risk
+  /// (`followUps[].encounterType == TB` AND (`unsuccessfulAttempts > 0` OR
+  /// overdue)). Drives the `tb-default-risk` OVERDUE-min driver.
+  final Set<String> tbAtRiskPatientIds;
+
+  /// Patients on NCD treatment whose next BP/BG assessment date is in the
+  /// past. Drives the `ncd-drift` OVERDUE-min driver.
+  final Set<String> ncdOverduePatientIds;
+
+  /// Patients flagged red by the on-device risk engine
+  /// (`Patient.redFlag == true`). Drives the `red-flag` CRITICAL driver.
+  /// Separate from `RiskBand.urgent` because the spec lets either fire.
+  final Set<String> redFlagPatientIds;
+
+  /// Patients with `member.isPregnant == true`. Drives the pregnancy
+  /// composite-score bonus when no pregnancyInfos[] row exists yet.
+  final Set<String> pregnantPatientIds;
+
+  /// Patients flagged as household head. Drives the cascade-impact
+  /// composite-score bonus.
+  final Set<String> householdHeadPatientIds;
+
+  /// Patients aged under 28 days (DOB-derived at sync time). Drives the
+  /// `neonate` CRITICAL driver. Age in years is too coarse — Phase 2 syncs
+  /// resolve DOB once and bucket the patient here.
+  final Set<String> neonatePatientIds;
+
+  /// Patients aged 28–60 days. Drives the `young-infant` CRITICAL driver.
+  /// Mutually exclusive with [neonatePatientIds].
+  final Set<String> youngInfantPatientIds;
 
   /// True if CQL results are available for scoring.
   bool get hasCqlResults => cqlResults.isNotEmpty;
@@ -174,6 +272,7 @@ class MissionDashboardService {
   }
 
   /// Compute prioritized mission queue from input data.
+  @Deprecated('Use computeTieredQueue for the 5-tier model')
   List<MissionQueueItem> computeQueue(MissionInputData data, {int? limit}) {
     final items = <MissionQueueItem>[];
     final now = DateTime.now();
@@ -645,4 +744,282 @@ class MissionDashboardService {
     final displayMinute = minute.toString().padLeft(2, '0');
     return '$displayHour:$displayMinute $period';
   }
+
+  // ─── 5-tier classifier ─────────────────────────────────────────────────────
+  // Spec: leapfrog-setup/designs/dashboard-prioritization-impl.md
+  //
+  // Composite-score weights drive intra-tier ordering only — strong drivers
+  // promote a candidate to its tier *before* the score is consulted.
+  static const int _csOverduePerDay = 3;
+  static const int _csOverdueCap = 30;
+  static const int _csAttemptsPerTry = 5;
+  static const int _csAttemptsCap = 5;
+  static const int _csUnderOneYear = 25;
+  static const int _csUnderFive = 12;
+  static const int _csElderly = 6;
+  static const int _csPregnant = 10;
+  static const int _csPregnancySnapshot = 4;
+  static const int _csOnTreatment = 8;
+  static const int _csEverReferred = 5;
+  static const int _csHouseholdHead = 3;
+  static const int _csDisability = 6;
+  static const int _csStaleRecord = 5;
+  static const int _csStaleThresholdDays = 30;
+  static const int _csUpcomingPenaltyCap = 14;
+  static const int _ltfuAttemptThreshold = 2;
+  static const int _elderlyAgeThreshold = 60;
+  static const int _childUnder5AgeThreshold = 5;
+
+  /// Composite intra-tier score. Higher is more urgent. Spec formula:
+  ///   + min(daysOverdue, 30)             × 3
+  ///   + min(unsuccessfulAttempts, 5)     × 5
+  ///   + (age < 1 ? 25 : 0)
+  ///   + (age < 5 ? 12 : 0)
+  ///   + (age ≥ 60 ? 6 : 0)
+  ///   + (isPregnant ? 10 : 0)
+  ///   + (pregnancySnapshot present ? 4 : 0)
+  ///   + (onTreatment ? 8 : 0)
+  ///   + (everReferred ? 5 : 0)
+  ///   + (householdHead ? 3 : 0)
+  ///   + (disability ? 6 : 0)
+  ///   + (lastUpdated stale > 30d ? 5 : 0)
+  ///   − (daysUntilDue > 0 ? min(daysUntilDue, 14) : 0)
+  int _compositeScore({
+    required String patientId,
+    required int? age,
+    required DateTime? dueAt,
+    required MissionInputData input,
+    required DateTime now,
+  }) {
+    int score = 0;
+
+    if (dueAt != null) {
+      final today = _atStartOfDay(now);
+      final due = _atStartOfDay(dueAt);
+      final daysOverdue = today.difference(due).inDays;
+      if (daysOverdue > 0) {
+        final clamped =
+            daysOverdue > _csOverdueCap ? _csOverdueCap : daysOverdue;
+        score += clamped * _csOverduePerDay;
+      } else if (daysOverdue < 0) {
+        final daysUntilDue = -daysOverdue;
+        final clamped = daysUntilDue > _csUpcomingPenaltyCap
+            ? _csUpcomingPenaltyCap
+            : daysUntilDue;
+        score -= clamped;
+      }
+    }
+
+    final attempts = input.unsuccessfulAttemptsByPatientId[patientId] ?? 0;
+    if (attempts > 0) {
+      final clamped =
+          attempts > _csAttemptsCap ? _csAttemptsCap : attempts;
+      score += clamped * _csAttemptsPerTry;
+    }
+
+    if (age != null) {
+      if (age < 1) score += _csUnderOneYear;
+      if (age < _childUnder5AgeThreshold) score += _csUnderFive;
+      if (age >= _elderlyAgeThreshold) score += _csElderly;
+    }
+
+    if (input.pregnantPatientIds.contains(patientId)) score += _csPregnant;
+    if (input.pregnancyByPatientId.containsKey(patientId)) {
+      score += _csPregnancySnapshot;
+    }
+    if (input.patientsOnTreatment.contains(patientId)) score += _csOnTreatment;
+    if (input.patientsEverReferred.contains(patientId)) {
+      score += _csEverReferred;
+    }
+    if (input.householdHeadPatientIds.contains(patientId)) {
+      score += _csHouseholdHead;
+    }
+    if (input.disabilityByPatientId[patientId] == true) {
+      score += _csDisability;
+    }
+
+    final lastUpdated = input.lastUpdatedByPatientId[patientId];
+    if (lastUpdated != null) {
+      final ageDays =
+          DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(lastUpdated)).inDays;
+      if (ageDays > _csStaleThresholdDays) score += _csStaleRecord;
+    }
+
+    return score;
+  }
+
+  /// Classify a candidate into a [DashboardTier] and return its driver tags.
+  /// Returns `null` when hide rules apply (inactive / deceased / completed
+  /// today) so the caller drops the candidate without counting it against
+  /// the top-N cap.
+  ({DashboardTier tier, List<String> drivers})? _classify({
+    required String patientId,
+    required int? age,
+    required RiskBand? band,
+    required DateTime? dueAt,
+    required MissionInputData input,
+    required DateTime now,
+  }) {
+    if (input.hiddenPatientIds.contains(patientId)) return null;
+    if (input.completedTodayPatientIds.contains(patientId)) return null;
+
+    final drivers = <String>[];
+    final preg = input.pregnancyByPatientId[patientId];
+
+    // ── CRITICAL: strong drivers (user-locked) ──
+    if (input.redFlagPatientIds.contains(patientId) ||
+        band == RiskBand.urgent) {
+      drivers.add('red-flag');
+    }
+    if (preg != null &&
+        preg.highRiskPregnantWoman &&
+        preg.hasGapsInAnc) {
+      drivers.add('hi-risk-anc-gap');
+    }
+
+    // ── CRITICAL: medical-lens refinements ──
+    if (input.neonatePatientIds.contains(patientId)) {
+      drivers.add('neonate');
+    } else if (input.youngInfantPatientIds.contains(patientId)) {
+      drivers.add('young-infant');
+    }
+    if (preg?.isPostpartumWindow == true) drivers.add('pnc-window');
+    if (preg?.isNearTermAnc == true) drivers.add('anc-near-term');
+    if (preg?.hadDeliveryComplications == true) {
+      drivers.add('delivery-complication');
+    }
+    if (preg?.hasPncIllness == true) drivers.add('pnc-illness');
+
+    if (drivers.isNotEmpty) {
+      return (tier: DashboardTier.critical, drivers: drivers);
+    }
+
+    // ── OVERDUE-minimum drivers ──
+    final attempts = input.unsuccessfulAttemptsByPatientId[patientId] ?? 0;
+    if (input.patientsLtfu.contains(patientId) ||
+        attempts > _ltfuAttemptThreshold) {
+      drivers.add('ltfu-streak');
+    }
+    if (input.tbAtRiskPatientIds.contains(patientId)) {
+      drivers.add('tb-default-risk');
+    }
+    if (input.ncdOverduePatientIds.contains(patientId)) {
+      drivers.add('ncd-drift');
+    }
+    if (age != null &&
+        age < _childUnder5AgeThreshold &&
+        (input.disabilityByPatientId[patientId] ?? false)) {
+      drivers.add('child-disability');
+    }
+
+    // Date-based tier (null-safe: missing dueAt → upcoming).
+    final daysToDue = dueAt == null
+        ? null
+        : _atStartOfDay(dueAt).difference(_atStartOfDay(now)).inDays;
+    final dateTier = DashboardTier.fromDaysToDue(daysToDue);
+
+    if (drivers.isNotEmpty) {
+      final promoted = dateTier.rank > DashboardTier.overdue.rank
+          ? DashboardTier.overdue
+          : dateTier;
+      return (tier: promoted, drivers: drivers);
+    }
+
+    return (tier: dateTier, drivers: drivers);
+  }
+
+  /// Compute the tier-tagged, within-tier-sorted Mission Dashboard queue.
+  /// Coexists with the legacy single-score [computeQueue]; Phase 3 swaps
+  /// the dashboard screen onto this method.
+  ///
+  /// Referrals are deliberately excluded — per the Leapfrog HTML prototype,
+  /// the referral surface is the right-side `Referral alerts` tile, not the
+  /// main patient list.
+  List<MissionQueueItem> computeTieredQueue(MissionInputData input) {
+    final now = DateTime.now();
+    final candidates = <MissionQueueItem>[];
+
+    for (final entry in input.worklistEntries) {
+      final age = entry.age ?? input.agesByPatientId[entry.patientId];
+      final classified = _classify(
+        patientId: entry.patientId,
+        age: age,
+        band: entry.band,
+        dueAt: entry.nextDueAt,
+        input: input,
+        now: now,
+      );
+      if (classified == null) continue;
+      final score = _compositeScore(
+        patientId: entry.patientId,
+        age: age,
+        dueAt: entry.nextDueAt,
+        input: input,
+        now: now,
+      );
+      final base = _worklistToQueueItem(entry, now, input);
+      candidates.add(base.copyWith(
+        priorityScore: score,
+        tier: classified.tier,
+        drivers: classified.drivers,
+      ));
+    }
+
+    for (final followUp in input.followUps) {
+      final age = input.agesByPatientId[followUp.patientId];
+      final classified = _classify(
+        patientId: followUp.patientId,
+        age: age,
+        band: null,
+        dueAt: followUp.dueAt,
+        input: input,
+        now: now,
+      );
+      if (classified == null) continue;
+      final score = _compositeScore(
+        patientId: followUp.patientId,
+        age: age,
+        dueAt: followUp.dueAt,
+        input: input,
+        now: now,
+      );
+      final base = _followUpToQueueItem(followUp, now, input);
+      candidates.add(base.copyWith(
+        priorityScore: score,
+        tier: classified.tier,
+        drivers: classified.drivers,
+      ));
+    }
+
+    // Dedupe by patientId — same patient can appear via worklist + follow-up.
+    // Keep the most-urgent tier; within same tier keep the higher composite.
+    final byPid = <String, MissionQueueItem>{};
+    final nonPatient = <MissionQueueItem>[];
+    for (final c in candidates) {
+      final pid = c.patientId;
+      if (pid == null || pid.isEmpty) {
+        nonPatient.add(c);
+        continue;
+      }
+      final prev = byPid[pid];
+      if (prev == null) {
+        byPid[pid] = c;
+      } else if (c.tier.rank < prev.tier.rank ||
+          (c.tier == prev.tier && c.priorityScore > prev.priorityScore)) {
+        byPid[pid] = c;
+      }
+    }
+
+    final result = <MissionQueueItem>[...byPid.values, ...nonPatient];
+    result.sort((a, b) {
+      final tierCmp = a.tier.rank.compareTo(b.tier.rank);
+      if (tierCmp != 0) return tierCmp;
+      return MissionQueueItem.compareInTier(a, b);
+    });
+    return result;
+  }
+
+  /// Truncates a [DateTime] to local-midnight so `daysToDue` math ignores
+  /// the wall-clock offset.
+  DateTime _atStartOfDay(DateTime dt) => DateTime(dt.year, dt.month, dt.day);
 }

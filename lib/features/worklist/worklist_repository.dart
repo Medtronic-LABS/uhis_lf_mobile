@@ -108,7 +108,7 @@ class WorklistRepository {
         now,
       );
       final assessment = _risk.score(facts);
-      final nextDue = _earliestFutureMillis(
+      final nextDue = _earliestDueMillis(
         followMap[p.id] ?? const <FollowUpRow>[],
         immMap[p.id] ?? const <ImmunisationRow>[],
         now,
@@ -176,24 +176,50 @@ class WorklistRepository {
     );
   }
 
-  static int? _earliestFutureMillis(
+  /// Find the next due date, prioritizing:
+  /// 1. The earliest FUTURE due date if any exists
+  /// 2. Otherwise, the most recent (least overdue) PAST due date
+  /// This ensures overdue items are correctly classified into overdue/dueToday tiers.
+  static int? _earliestDueMillis(
     List<FollowUpRow> follows,
     List<ImmunisationRow> imms,
     DateTime now,
   ) {
-    int? best;
     final nowMs = now.millisecondsSinceEpoch;
+    int? earliestFuture;
+    int? mostRecentPast;
+    
     for (final f in follows) {
       final due = f.dueAt;
-      if (due == null || due < nowMs) continue;
-      if (best == null || due < best) best = due;
+      if (due == null) continue;
+      if (due >= nowMs) {
+        // Future or today
+        if (earliestFuture == null || due < earliestFuture) {
+          earliestFuture = due;
+        }
+      } else {
+        // Past (overdue)
+        if (mostRecentPast == null || due > mostRecentPast) {
+          mostRecentPast = due;
+        }
+      }
     }
     for (final im in imms) {
       final due = im.dueAt;
-      if (due == null || due < nowMs) continue;
-      if (best == null || due < best) best = due;
+      if (due == null) continue;
+      if (due >= nowMs) {
+        if (earliestFuture == null || due < earliestFuture) {
+          earliestFuture = due;
+        }
+      } else {
+        if (mostRecentPast == null || due > mostRecentPast) {
+          mostRecentPast = due;
+        }
+      }
     }
-    return best;
+    
+    // Prefer future dates, fall back to most recent past date
+    return earliestFuture ?? mostRecentPast;
   }
 
   static int? _lastCompletedMillis(List<FollowUpRow> follows) {

@@ -6,8 +6,11 @@ import '../../core/api/cql_api_service.dart';
 import '../../core/db/follow_up_dao.dart';
 import '../../core/db/household_dao.dart';
 import '../../core/db/patient_dao.dart';
+import '../../core/db/pregnancy_snapshot_dao.dart';
 import '../../core/db/referral_dao.dart';
+import '../../core/db/treatment_presence_dao.dart';
 import '../../core/mission/mission_dashboard_service.dart';
+import '../../core/mission/mission_pregnancy_facts.dart';
 import '../../core/models/mission_brief.dart';
 import '../../core/models/mission_queue_item.dart';
 import '../../core/models/referral.dart';
@@ -35,6 +38,8 @@ class MissionDashboardRepository {
     required HouseholdDao households,
     required SlaEvaluator slaEvaluator,
     required PriorityScorer priorityScorer,
+    PregnancySnapshotDao? pregnancySnapshot,
+    TreatmentPresenceDao? treatmentPresence,
     CqlApiService? cqlService,
     DateTime Function()? clock,
   })  : _worklist = worklist,
@@ -45,6 +50,8 @@ class MissionDashboardRepository {
         _households = households,
         _slaEvaluator = slaEvaluator,
         _priorityScorer = priorityScorer,
+        _pregnancySnapshot = pregnancySnapshot,
+        _treatmentPresence = treatmentPresence,
         _cqlService = cqlService,
         _clock = clock ?? DateTime.now,
         _service = const MissionDashboardService();
@@ -57,6 +64,8 @@ class MissionDashboardRepository {
   final HouseholdDao _households;
   final SlaEvaluator _slaEvaluator;
   final PriorityScorer _priorityScorer;
+  final PregnancySnapshotDao? _pregnancySnapshot;
+  final TreatmentPresenceDao? _treatmentPresence;
   final CqlApiService? _cqlService;
   final DateTime Function() _clock;
   final MissionDashboardService _service;
@@ -104,10 +113,17 @@ class MissionDashboardRepository {
     return _service.computeBrief(input);
   }
 
-  /// Load the prioritized mission queue.
+  /// Load the prioritized mission queue using the 5-tier model.
+  /// Returns items tagged with [DashboardTier], sorted by tier then
+  /// composite score. Phase 3 dashboard consumes this; Phase 4
+  /// wires the `+ N more` deep-link onto `/patients?tier=...`.
   Future<List<MissionQueueItem>> loadQueue({int? limit}) async {
     final input = await _loadInputData();
-    return _service.computeQueue(input, limit: limit);
+    final tiered = _service.computeTieredQueue(input);
+    if (limit != null && tiered.length > limit) {
+      return tiered.sublist(0, limit);
+    }
+    return tiered;
   }
 
   /// Load mission progress.
@@ -120,7 +136,7 @@ class MissionDashboardRepository {
   /// Reuses the same input data as loadQueue to avoid duplicate loading.
   Future<List<MissionQueueItem>> loadCriticalAlerts() async {
     final input = await _loadInputData();
-    final queue = _service.computeQueue(input, limit: null);
+    final queue = _service.computeTieredQueue(input);
     return _service.getCriticalAlerts(queue);
   }
 
@@ -152,11 +168,14 @@ class MissionDashboardRepository {
   }
 
   /// Clear cached data.
+  /// Also notifies listeners so dependent widgets can reload.
   void clearCache() {
     _cachedInput = null;
     _cachedCqlResults = null;
     // Cancel any in-flight load so new requests start fresh
     _loadingCompleter = null;
+    // Notify listeners to trigger reload in dependent widgets
+    _changes.value++;
   }
 
   /// Fetch CQL risk results for a batch of patient IDs.
@@ -409,6 +428,124 @@ class MissionDashboardRepository {
       }
     }
 
+    // ── Tier-classifier side maps (Phase 2 wiring) ─────────────────────────
+    // Pull side-channel patient signals so MissionDashboardService.
+    // computeTieredQueue can classify without re-reading the DB per row.
+
+    final pregSnap = _pregnancySnapshot;
+    final pregnancyByPatientId = pregSnap == null
+        ? const <String, PregnancyFacts>{}
+        : await pregSnap.getAll();
+    final tpDao = _treatmentPresence;
+    final patientsOnTreatment =
+        tpDao == null ? const <String>{} : await tpDao.getAll();
+
+    final patientIdSet = <String>{
+      ...worklistEntries.map((e) => e.patientId),
+      ...followUps.map((f) => f.patientId),
+    };
+
+    // Patient-table-derived signals (redFlag, isActive, dob, updatedAt).
+    final agesByPatientId = <String, int>{
+      for (final e in worklistEntries)
+        if (e.age != null) e.patientId: e.age!,
+    };
+    final disabilityByPatientId = <String, bool>{};
+    final lastUpdatedByPatientId = <String, int>{};
+    final hiddenPatientIds = <String>{};
+    final redFlagPatientIds = <String>{};
+    final neonatePatientIds = <String>{};
+    final youngInfantPatientIds = <String>{};
+
+    final today = DateTime(now.year, now.month, now.day);
+    for (final pid in patientIdSet) {
+      try {
+        final p = await _patients.byId(pid);
+        if (p == null) continue;
+        if (p.isActive == false) hiddenPatientIds.add(pid);
+        if (p.redFlag == true) redFlagPatientIds.add(pid);
+        if (p.updatedAt != null) lastUpdatedByPatientId[pid] = p.updatedAt!;
+        if (p.age != null && !agesByPatientId.containsKey(pid)) {
+          agesByPatientId[pid] = p.age!;
+        }
+        final dobIso = p.dob;
+        if (dobIso != null && dobIso.isNotEmpty) {
+          final dob = DateTime.tryParse(dobIso);
+          if (dob != null) {
+            final ageDays = today.difference(DateTime(dob.year, dob.month, dob.day)).inDays;
+            if (ageDays >= 0 && ageDays < 28) {
+              neonatePatientIds.add(pid);
+            } else if (ageDays >= 28 && ageDays < 60) {
+              youngInfantPatientIds.add(pid);
+            }
+          }
+        }
+      } on Object catch (e) {
+        debugPrint(
+          '[MissionDashboardRepository] patient enrich failed for $pid: $e',
+        );
+      }
+    }
+
+    // pregnant proxy: any patient with a stored pregnancy snapshot is
+    // currently pregnant (or recently was — postpartum window is also a
+    // CRITICAL driver via the snapshot). Phase 6 can swap to Member.isPregnant
+    // once MemberDao is wired through this constructor.
+    final pregnantPatientIds = pregnancyByPatientId.keys.toSet();
+    final householdHeadPatientIds = <String>{};
+
+    // Follow-up-row-derived signals: LTFU set, attempts max, ever-referred,
+    // completed-today, TB-default-risk.
+    final followUpRowMap = await _followUps.forMany(patientIdSet.toList());
+    final patientsLtfu = <String>{};
+    final unsuccessfulAttemptsByPatientId = <String, int>{};
+    final patientsEverReferred = <String>{};
+    final completedTodayPatientIds = <String>{};
+    final tbAtRiskPatientIds = <String>{};
+    for (final entry in followUpRowMap.entries) {
+      final pid = entry.key;
+      bool anyTb = false;
+      bool anyTbRisk = false;
+      bool anyTbOverdue = false;
+      for (final r in entry.value) {
+        final type = r.type?.toUpperCase();
+        if (r.isLost || type == 'LOST_TO_FOLLOW_UP') {
+          patientsLtfu.add(pid);
+        }
+        final attempts = r.unsuccessfulAttempts;
+        if (attempts != null) {
+          final prev = unsuccessfulAttemptsByPatientId[pid] ?? 0;
+          if (attempts > prev) {
+            unsuccessfulAttemptsByPatientId[pid] = attempts;
+          }
+        }
+        if (r.referredSiteId != null && r.referredSiteId!.isNotEmpty) {
+          patientsEverReferred.add(pid);
+        }
+        final completedAt = r.completedAt;
+        if (completedAt != null) {
+          final dt = DateTime.fromMillisecondsSinceEpoch(completedAt);
+          if (DateTime(dt.year, dt.month, dt.day) == today) {
+            completedTodayPatientIds.add(pid);
+          }
+        }
+        final isTb = (type ?? '').contains('TB') ||
+            r.kind.toLowerCase().contains('tb');
+        if (isTb) {
+          anyTb = true;
+          if ((attempts ?? 0) > 0) anyTbRisk = true;
+          final dueAt = r.dueAt;
+          if (dueAt != null &&
+              DateTime.fromMillisecondsSinceEpoch(dueAt).isBefore(today)) {
+            anyTbOverdue = true;
+          }
+        }
+      }
+      if (anyTb && (anyTbRisk || anyTbOverdue)) {
+        tbAtRiskPatientIds.add(pid);
+      }
+    }
+
     _cachedInput = MissionInputData(
       worklistEntries: worklistEntries,
       referrals: referrals,
@@ -419,6 +556,23 @@ class MissionDashboardRepository {
       cqlResults: cqlResults, // Pass CQL results for worklist scoring
       householdNumbersById: householdNumbersById,
       patientHouseholdsById: patientHouseholdsById,
+      pregnancyByPatientId: pregnancyByPatientId,
+      patientsOnTreatment: patientsOnTreatment,
+      patientsLtfu: patientsLtfu,
+      unsuccessfulAttemptsByPatientId: unsuccessfulAttemptsByPatientId,
+      patientsEverReferred: patientsEverReferred,
+      agesByPatientId: agesByPatientId,
+      disabilityByPatientId: disabilityByPatientId,
+      lastUpdatedByPatientId: lastUpdatedByPatientId,
+      hiddenPatientIds: hiddenPatientIds,
+      completedTodayPatientIds: completedTodayPatientIds,
+      tbAtRiskPatientIds: tbAtRiskPatientIds,
+      ncdOverduePatientIds: const <String>{},
+      redFlagPatientIds: redFlagPatientIds,
+      pregnantPatientIds: pregnantPatientIds,
+      householdHeadPatientIds: householdHeadPatientIds,
+      neonatePatientIds: neonatePatientIds,
+      youngInfantPatientIds: youngInfantPatientIds,
     );
 
     return _cachedInput!;
