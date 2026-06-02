@@ -164,7 +164,14 @@ class OfflineSyncService extends ChangeNotifier {
       debugPrint(
         '[OfflineSyncService] Bundle top-level keys: ${bundle.keys.toList()}',
       );
-      var out = await _persistBundle(bundle);
+      // Bundle is village-wide (every member in every assigned sub-village).
+      // Each member row carries `shasthyaKormiId` — the SK who owns them.
+      // Pass our user id so the bridge layer keeps only the SK's own patients
+      // on the dashboard worklist while the household list still sees the
+      // full village (the household screen reads from the members table,
+      // which we keep unfiltered).
+      final ownerUserId = await _auth.userId();
+      var out = await _persistBundle(bundle, ownerUserId: ownerUserId);
       debugPrint(
         '[OfflineSyncService] Bundle persisted: patients=${out.patients} '
         'households=${out.households} members=${out.members} '
@@ -436,7 +443,10 @@ class OfflineSyncService extends ChangeNotifier {
     return (households: totalHouseholds, members: totalMembers);
   }
 
-  Future<_PersistTotals> _persistBundle(Map<String, dynamic> bundle) async {
+  Future<_PersistTotals> _persistBundle(
+    Map<String, dynamic> bundle, {
+    int? ownerUserId,
+  }) async {
     if (bundle.isEmpty) return const _PersistTotals();
 
     // Log bundle keys for debugging
@@ -520,13 +530,30 @@ class OfflineSyncService extends ChangeNotifier {
     debugPrint('[OfflineSyncService] Parsed ${households.length} households from bundle');
 
     // ── Parse members from bundle (Android: ResponseInitialDownload) ────────
+    // Members table stays village-wide so the household screen can render the
+    // full roster; ownership filtering is applied separately when bridging
+    // into the patients table below.
     final members = <HouseholdMemberEntity>[];
+    final ownedMemberIds = <String>{};
     for (final raw in memberNodes) {
       if (raw is! Map) continue;
       final m = HouseholdMemberEntity.fromApiJson(Map<String, dynamic>.from(raw));
-      if (m.id.isNotEmpty) members.add(m);
+      if (m.id.isEmpty) continue;
+      members.add(m);
+      if (ownerUserId != null) {
+        final skRaw = raw['shasthyaKormiId'];
+        final sk = skRaw is int
+            ? skRaw
+            : (skRaw is num
+                ? skRaw.toInt()
+                : (skRaw is String ? int.tryParse(skRaw.trim()) : null));
+        if (sk == ownerUserId) ownedMemberIds.add(m.id);
+      }
     }
-    debugPrint('[OfflineSyncService] Parsed ${members.length} members from bundle');
+    debugPrint(
+      '[OfflineSyncService] Parsed ${members.length} members from bundle '
+      '(${ownedMemberIds.length} owned by user $ownerUserId)',
+    );
 
     // uhis-dev backend ships `members` as the canonical patient list — the
     // offline-sync bundle has no `patients` key. Bridge each member into the
@@ -534,8 +561,15 @@ class OfflineSyncService extends ChangeNotifier {
     // Programme membership remains driven by the dedicated `pregnancyInfos` /
     // `treatmentDetails` arrays parsed elsewhere; here we only need the
     // identity columns the worklist query selects.
+    //
+    // When we know who the SK is, keep only members whose `shasthyaKormiId`
+    // matches — every village member arrives in the bundle, but the
+    // dashboard worklist must reflect the SK's own caseload.
     if (patients.isEmpty && members.isNotEmpty) {
-      for (final m in members) {
+      final bridgeSource = ownedMemberIds.isNotEmpty
+          ? members.where((m) => ownedMemberIds.contains(m.id))
+          : members;
+      for (final m in bridgeSource) {
         final p = _memberToPatient(m);
         if (p != null) patients.add(p);
       }
