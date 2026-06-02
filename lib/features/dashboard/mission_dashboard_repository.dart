@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/api/cql_api_service.dart';
 import '../../core/db/follow_up_dao.dart';
+import '../../core/db/household_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/referral_dao.dart';
 import '../../core/mission/mission_dashboard_service.dart';
@@ -29,6 +30,7 @@ class MissionDashboardRepository {
     required PatientDao patients,
     required ReferralDao referralDao,
     required FollowUpDao followUps,
+    required HouseholdDao households,
     required SlaEvaluator slaEvaluator,
     required PriorityScorer priorityScorer,
     CqlApiService? cqlService,
@@ -38,6 +40,7 @@ class MissionDashboardRepository {
         _patients = patients,
         _referralDao = referralDao,
         _followUps = followUps,
+        _households = households,
         _slaEvaluator = slaEvaluator,
         _priorityScorer = priorityScorer,
         _cqlService = cqlService,
@@ -49,6 +52,7 @@ class MissionDashboardRepository {
   final PatientDao _patients;
   final ReferralDao _referralDao;
   final FollowUpDao _followUps;
+  final HouseholdDao _households;
   final SlaEvaluator _slaEvaluator;
   final PriorityScorer _priorityScorer;
   final CqlApiService? _cqlService;
@@ -316,6 +320,50 @@ class MissionDashboardRepository {
     // For now, return empty map — can be wired later
     final householdMembers = <String, List<HouseholdMemberData>>{};
 
+    // Resolve patient → household → household number so queue items can render
+    // `House #NN`. Worklist entries already carry the household UUID in
+    // `householdNo`; referrals + follow-ups only carry patientId, so look those
+    // up via PatientDao. Failures fall back to no number (display will hide).
+    final patientHouseholdsById = <String, String>{};
+    for (final entry in worklistEntries) {
+      final hh = entry.householdNo;
+      if (hh != null && hh.isNotEmpty) {
+        patientHouseholdsById[entry.patientId] = hh;
+      }
+    }
+    final extraPatientIds = <String>{
+      ...referrals.map((r) => r.patientId),
+      ...followUps.map((f) => f.patientId),
+    }..removeAll(patientHouseholdsById.keys);
+    for (final pid in extraPatientIds) {
+      try {
+        final p = await _patients.byId(pid);
+        final hh = p?.householdId;
+        if (hh != null && hh.isNotEmpty) {
+          patientHouseholdsById[pid] = hh;
+        }
+      } on Object catch (e) {
+        debugPrint(
+          '[MissionDashboardRepository] patient lookup failed for $pid: $e',
+        );
+      }
+    }
+    final householdNumbersById = <String, String>{};
+    final uniqueHouseholdIds = patientHouseholdsById.values.toSet();
+    for (final hhId in uniqueHouseholdIds) {
+      try {
+        final hh = await _households.getById(hhId);
+        final no = hh?.householdNo;
+        if (no != null && no.isNotEmpty) {
+          householdNumbersById[hhId] = no;
+        }
+      } on Object catch (e) {
+        debugPrint(
+          '[MissionDashboardRepository] household lookup failed for $hhId: $e',
+        );
+      }
+    }
+
     _cachedInput = MissionInputData(
       worklistEntries: worklistEntries,
       referrals: referrals,
@@ -324,6 +372,8 @@ class MissionDashboardRepository {
       completedVisitsToday: 0, // TODO: Track completed visits
       householdMembers: householdMembers,
       cqlResults: cqlResults, // Pass CQL results for worklist scoring
+      householdNumbersById: householdNumbersById,
+      patientHouseholdsById: patientHouseholdsById,
     );
 
     return _cachedInput!;

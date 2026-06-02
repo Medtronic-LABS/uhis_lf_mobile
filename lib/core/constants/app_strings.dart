@@ -672,6 +672,14 @@ abstract final class MissionDashboardStrings {
   static const String visitsTodaySubline = '2 villages · ~4 km';
   static const String referralAlertsLabel = 'Referral alerts';
   static const String tapToFollowUp = 'Tap to follow up →';
+  static const String referralCceComingSoon = 'CCE integration coming soon';
+  static const String visitStartFailed =
+      'Could not start visit. Try again from the patient screen.';
+  static const String visitMissingPatient =
+      'No patient record — open the case to begin.';
+  static String houseNumber(String no) => 'House #$no';
+  static String moreVisits(int n) =>
+      n == 1 ? '+ 1 more visit today' : '+ $n more visits today';
   static String todaysVisits(String date) => "Today's visits · $date";
   static const String aiSortedBadge = 'AI sorted';
   static const String actionVisitNow = 'Visit now';

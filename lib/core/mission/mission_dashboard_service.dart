@@ -31,6 +31,8 @@ class MissionInputData {
     this.completedVisitsToday = 0,
     this.householdMembers = const {},
     this.cqlResults = const {},
+    this.householdNumbersById = const {},
+    this.patientHouseholdsById = const {},
   });
 
   /// All patients on the worklist.
@@ -55,6 +57,14 @@ class MissionInputData {
   /// CQL risk results keyed by patient ID.
   /// When populated, these take precedence over local risk scoring.
   final Map<String, CqlRiskResult> cqlResults;
+
+  /// Household display number (`'12'`, `'07'`) keyed by household UUID.
+  /// Used so queue items render `House #12` without a per-row DAO lookup.
+  final Map<String, String> householdNumbersById;
+
+  /// Household UUID keyed by patient ID. Lets referral / follow-up items —
+  /// which only know the patient — resolve into [householdNumbersById].
+  final Map<String, String> patientHouseholdsById;
 
   /// True if CQL results are available for scoring.
   bool get hasCqlResults => cqlResults.isNotEmpty;
@@ -170,18 +180,18 @@ class MissionDashboardService {
 
     // Add worklist entries
     for (final entry in data.worklistEntries) {
-      items.add(_worklistToQueueItem(entry, now));
+      items.add(_worklistToQueueItem(entry, now, data));
     }
 
     // Add referrals
     for (final referral in data.referrals) {
       final assessment = data.referralAssessments[referral.id];
-      items.add(_referralToQueueItem(referral, assessment, now));
+      items.add(_referralToQueueItem(referral, assessment, now, data));
     }
 
     // Add follow-ups
     for (final followUp in data.followUps) {
-      items.add(_followUpToQueueItem(followUp, now));
+      items.add(_followUpToQueueItem(followUp, now, data));
     }
 
     // Sort by priority score descending
@@ -289,7 +299,12 @@ class MissionDashboardService {
       for (final referral in data.referrals) {
         final assessment = data.referralAssessments[referral.id];
         if (assessment?.level == SlaPriority.critical) {
-          topBreach = _referralToQueueItem(referral, assessment, DateTime.now());
+          topBreach = _referralToQueueItem(
+            referral,
+            assessment,
+            DateTime.now(),
+            data,
+          );
           break;
         }
       }
@@ -367,7 +382,11 @@ class MissionDashboardService {
     return null;
   }
 
-  MissionQueueItem _worklistToQueueItem(WorklistEntry entry, DateTime now) {
+  MissionQueueItem _worklistToQueueItem(
+    WorklistEntry entry,
+    DateTime now,
+    MissionInputData data,
+  ) {
     int score = 0;
     final drivers = <String>[];
 
@@ -422,6 +441,8 @@ class MissionDashboardService {
       priorityScore: score,
       patientName: entry.displayName,
       patientId: entry.patientId,
+      householdId: entry.householdNo,
+      householdNumber: data.householdNumbersById[entry.householdNo],
       age: entry.age,
       village: entry.householdName ?? entry.villageId,
       programmes: entry.programmes,
@@ -443,6 +464,7 @@ class MissionDashboardService {
     Referral referral,
     PriorityAssessment? assessment,
     DateTime now,
+    MissionInputData data,
   ) {
     int score = assessment?.score ?? 0;
     final drivers = List<String>.from(assessment?.drivers ?? []);
@@ -470,16 +492,19 @@ class MissionDashboardService {
     final createdDateTime = DateTime.fromMillisecondsSinceEpoch(referral.createdAt);
     final daysOverdue = now.difference(createdDateTime).inDays;
 
+    final hhId = data.patientHouseholdsById[referral.patientId];
     return MissionQueueItem(
       id: referral.id,
       type: MissionItemType.referral,
       priority: priority,
       priorityScore: score,
-      patientName: referral.patientId.length > 8 
-          ? 'Patient ${referral.patientId.substring(0, 8)}' 
+      patientName: referral.patientId.length > 8
+          ? 'Patient ${referral.patientId.substring(0, 8)}'
           : 'Patient ${referral.patientId}', // Handle short IDs
       patientId: referral.patientId,
       referralId: referral.id,
+      householdId: hhId,
+      householdNumber: hhId != null ? data.householdNumbersById[hhId] : null,
       village: referral.villageId,
       programmes: const {}, // Referrals don't have programme context here
       reason: referral.diagnosisLabel ?? 'Referral',
@@ -497,7 +522,11 @@ class MissionDashboardService {
     );
   }
 
-  MissionQueueItem _followUpToQueueItem(FollowUpDue followUp, DateTime now) {
+  MissionQueueItem _followUpToQueueItem(
+    FollowUpDue followUp,
+    DateTime now,
+    MissionInputData data,
+  ) {
     int score = _wFollowUp;
     final drivers = <String>['follow-up'];
 
@@ -512,6 +541,7 @@ class MissionDashboardService {
     final priority = _scoreToPriority(score);
     final aiInsight = _buildAiInsight(drivers);
 
+    final hhId = data.patientHouseholdsById[followUp.patientId];
     return MissionQueueItem(
       id: followUp.id,
       type: MissionItemType.followUp,
@@ -519,6 +549,8 @@ class MissionDashboardService {
       priorityScore: score,
       patientName: followUp.patientName,
       patientId: followUp.patientId,
+      householdId: hhId,
+      householdNumber: hhId != null ? data.householdNumbersById[hhId] : null,
       reason: followUp.reason ?? 'Follow-up due',
       daysOverdue: daysUntil < 0 ? -daysUntil : null,
       aiInsight: aiInsight,

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/theme.dart';
 import '../../app/theme_provider.dart';
@@ -14,6 +13,7 @@ import '../../core/models/mission_queue_item.dart';
 import '../../core/sync/offline_sync_service.dart';
 import '../referral/referral_repository.dart';
 import '../search/global_search_bar.dart';
+import '../visit/visit_controller.dart';
 import 'dashboard_repository.dart';
 import 'mission_dashboard_repository.dart';
 import 'widgets/critical_alert_banner.dart';
@@ -200,64 +200,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return null;
   }
 
-  void _handleQueueAction(MissionQueueItem item, MissionAction action) {
-    switch (action) {
-      case MissionAction.openCase:
-        if (item.patientId != null) {
-          context.push('/patient/${item.patientId}');
-        }
-        break;
-      case MissionAction.openReferral:
-        if (item.referralId != null) {
-          context.push('/referral/${item.referralId}');
-        }
-        break;
-      case MissionAction.visitHousehold:
-        if (item.householdId != null) {
-          context.push('/household/${item.householdId}');
-        }
-        break;
-      case MissionAction.callFamily:
-      case MissionAction.callFacility:
-        _handleCall(item.phoneNumber);
-        break;
-      case MissionAction.locate:
-        _handleLocate(item);
-        break;
-      case MissionAction.scheduleVisit:
-        // TODO: Implement visit scheduling
+  /// Begin a visit directly from the dashboard card. Matches the HTML
+  /// prototype's "Visit now" — single tap drops the SK into triage.
+  /// Falls back to opening the patient detail when the visit can't start.
+  Future<void> _startVisitFromQueue(MissionQueueItem item) async {
+    final patientId = item.patientId;
+    if (patientId == null || patientId.isEmpty) {
+      if (item.referralId != null) {
+        context.push('/referral/${item.referralId}');
+      } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Visit scheduling coming soon')),
+          const SnackBar(
+            content: Text(MissionDashboardStrings.visitMissingPatient),
+          ),
         );
-        break;
-      case MissionAction.updateStatus:
-      case MissionAction.escalate:
-        if (item.referralId != null) {
-          context.push('/referral/${item.referralId}');
-        }
-        break;
-    }
-  }
-
-  void _handleCall(String? phone) {
-    if (phone == null || phone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(ReferralStrings.errorNoPhone)),
-      );
+      }
       return;
     }
-    launchUrl(Uri.parse('tel:$phone'));
-  }
-
-  void _handleLocate(MissionQueueItem item) {
-    if (!item.hasLocation) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Location not available')),
-      );
+    final controller = context.read<VisitController>();
+    final encounterId = await controller.startVisit(
+      patientId: patientId,
+      programme: item.primaryProgramme,
+      patientName: item.patientName,
+      patientAge: item.age,
+      householdId: item.householdId,
+    );
+    if (!mounted) return;
+    if (encounterId != null) {
+      context.go('/patients/visit/$encounterId/triage');
       return;
     }
-    final url = 'https://www.google.com/maps/search/?api=1&query=${item.latitude},${item.longitude}';
-    launchUrl(Uri.parse(url));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          controller.error ?? MissionDashboardStrings.visitStartFailed,
+        ),
+      ),
+    );
   }
 
   void _navigateToFirstQueueItem() async {
@@ -345,9 +324,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         if (queue.isEmpty) {
                           return _EmptyVisitsCard();
                         }
+                        const visibleLimit = 6;
+                        final visible = queue.length > visibleLimit
+                            ? queue.sublist(0, visibleLimit)
+                            : queue;
+                        final overflow = queue.length - visible.length;
                         return Column(
                           children: [
-                            for (final item in queue)
+                            for (final item in visible)
                               Padding(
                                 padding: const EdgeInsets.only(bottom: 8),
                                 child: _PriorityPatientCard(
@@ -359,9 +343,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       context.push('/referral/${item.referralId}');
                                     }
                                   },
-                                  onAction: () =>
-                                      _handleQueueAction(item, MissionAction.openCase),
+                                  onAction: () => _startVisitFromQueue(item),
                                 ),
+                              ),
+                            if (overflow > 0)
+                              _MoreVisitsLink(
+                                count: overflow,
+                                onTap: () => context.go('/patients'),
                               ),
                           ],
                         );
@@ -1069,6 +1057,8 @@ class _DashboardStatsRow extends StatelessWidget {
                 label: MissionDashboardStrings.referralAlertsLabel,
                 accentVariant: _DashboardStatVariant.pink,
                 subline: MissionDashboardStrings.tapToFollowUp,
+                footnote: MissionDashboardStrings.referralCceComingSoon,
+                showPulse: s.hasBreaches,
                 onTap: onTapReferrals,
               );
             },
@@ -1088,12 +1078,16 @@ class _DashboardStatCard extends StatelessWidget {
     required this.accentVariant,
     required this.subline,
     required this.onTap,
+    this.footnote,
+    this.showPulse = false,
   });
 
   final String value;
   final String label;
   final _DashboardStatVariant accentVariant;
   final String subline;
+  final String? footnote;
+  final bool showPulse;
   final VoidCallback onTap;
 
   @override
@@ -1113,14 +1107,40 @@ class _DashboardStatCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 30,
-                  fontWeight: FontWeight.w900,
-                  color: accent,
-                  height: 1,
-                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    value,
+                    style: TextStyle(
+                      fontSize: 30,
+                      fontWeight: FontWeight.w900,
+                      color: accent,
+                      height: 1,
+                    ),
+                  ),
+                  if (showPulse) ...[
+                    const SizedBox(width: 6),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: accent,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: accent.withValues(alpha: 0.4),
+                              blurRadius: 6,
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
               const SizedBox(height: 4),
               Text(
@@ -1140,6 +1160,17 @@ class _DashboardStatCard extends StatelessWidget {
                   color: accent,
                 ),
               ),
+              if (footnote != null) ...[
+                const SizedBox(height: 3),
+                Text(
+                  footnote!,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: tokens.textMuted,
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -1311,8 +1342,14 @@ class _PriorityPatientCard extends StatelessWidget {
 
   String _subtitle(MissionQueueItem item) {
     final parts = <String>[];
-    if (item.age != null) parts.add('Age ${item.age}');
-    if (item.village != null && item.village!.isNotEmpty) parts.add(item.village!);
+    if (item.age != null) parts.add(WorklistStrings.ageFmt(item.age!));
+    final house = item.householdDisplay;
+    if (house.isNotEmpty) parts.add(house);
+    if (house.isEmpty &&
+        item.village != null &&
+        item.village!.isNotEmpty) {
+      parts.add(item.village!);
+    }
     if (parts.isEmpty) return item.reason;
     return parts.join(' · ');
   }
@@ -1411,6 +1448,40 @@ class _PriorityPatientReasonBadge extends StatelessWidget {
       case MissionPriority.low:
         return (tokens.cardSurfaceMuted, tokens.textMuted);
     }
+  }
+}
+
+/// Tail link beneath the priority visit list — matches the prototype's
+/// "+ N more visits today" affordance and deep-links into the full worklist.
+class _MoreVisitsLink extends StatelessWidget {
+  const _MoreVisitsLink({required this.count, required this.onTap});
+
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(LeapfrogColors.radiusMd),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          alignment: Alignment.center,
+          child: Text(
+            MissionDashboardStrings.moreVisits(count),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: tokens.brandNavy,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

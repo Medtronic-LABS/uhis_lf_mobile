@@ -175,6 +175,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     patients: _patientDao,
     referralDao: _referralDao,
     followUps: _followUpDao,
+    households: _householdDao,
     slaEvaluator: _slaEvaluator,
     priorityScorer: _priorityScorer,
   );

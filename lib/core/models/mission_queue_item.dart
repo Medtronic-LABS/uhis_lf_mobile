@@ -98,6 +98,7 @@ class MissionQueueItem {
     this.patientId,
     this.referralId,
     this.householdId,
+    this.householdNumber,
     this.age,
     this.village,
     this.programmes = const <Programme>{},
@@ -134,8 +135,16 @@ class MissionQueueItem {
   /// Referral ID if this is a referral item.
   final String? referralId;
 
-  /// Household ID if this is a household opportunity.
+  /// Household ID (server UUID). Populated for patient/referral/follow-up
+  /// items whose patient belongs to a known household, not only for explicit
+  /// household opportunities — repository uses it to resolve
+  /// [householdNumber] for display.
   final String? householdId;
+
+  /// Display-only household number (e.g. `12`, `07`). Resolved by the
+  /// repository from `HouseholdDao` keyed off [householdId]. UI consumes via
+  /// [householdDisplay] and never re-formats it.
+  final String? householdNumber;
 
   /// Patient age.
   final int? age;
@@ -185,6 +194,25 @@ class MissionQueueItem {
 
   /// Age display string.
   String get ageDisplay => age != null ? 'Age $age' : '';
+
+  /// Household display string (`House #12`) or empty when unknown. Centralised
+  /// so screens never inline the prefix.
+  String get householdDisplay =>
+      (householdNumber != null && householdNumber!.isNotEmpty)
+          ? 'House #${householdNumber!}'
+          : '';
+
+  /// Returns the most representative programme for routing the visit flow.
+  /// Falls back to [Programme.unknown] when no programme is tagged so callers
+  /// always get a non-null value (matches `VisitLandingScreen` convention).
+  Programme get primaryProgramme {
+    if (programmes.contains(Programme.imci)) return Programme.imci;
+    if (programmes.contains(Programme.anc)) return Programme.anc;
+    if (programmes.contains(Programme.pnc)) return Programme.pnc;
+    if (programmes.contains(Programme.ncd)) return Programme.ncd;
+    if (programmes.contains(Programme.tb)) return Programme.tb;
+    return programmes.isNotEmpty ? programmes.first : Programme.unknown;
+  }
 
   /// Programme emoji for display.
   String get programmeEmoji {
