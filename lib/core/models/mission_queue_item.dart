@@ -112,6 +112,7 @@ class MissionQueueItem {
     this.longitude,
     this.slaTier,
     this.diagnosisLabel,
+    this.dueAt,
   });
 
   /// Unique identifier (patient ID, referral ID, or composite key).
@@ -182,6 +183,25 @@ class MissionQueueItem {
 
   /// Diagnosis/condition label.
   final String? diagnosisLabel;
+
+  /// Canonical "when is this due / when did it start waiting" timestamp.
+  /// patientVisit → patient.nextDueAt; followUp → followUp.dueAt;
+  /// referral → referral.createdAt (the longer it has waited, the earlier the
+  /// timestamp). Used by the dashboard's earliest-first fallback sort when the
+  /// queue has no critical / high priority items. Nullable — `nextDueAt` is
+  /// often unknown for low-risk routine patients.
+  final DateTime? dueAt;
+
+  /// Nulls-last ascending comparator on [dueAt]. Centralised so screens never
+  /// re-implement the null branch.
+  static int compareByDueAtAsc(MissionQueueItem a, MissionQueueItem b) {
+    final ad = a.dueAt;
+    final bd = b.dueAt;
+    if (ad == null && bd == null) return 0;
+    if (ad == null) return 1;
+    if (bd == null) return -1;
+    return ad.compareTo(bd);
+  }
 
   /// Whether this is a critical item requiring immediate attention.
   bool get isCritical => priority == MissionPriority.critical;

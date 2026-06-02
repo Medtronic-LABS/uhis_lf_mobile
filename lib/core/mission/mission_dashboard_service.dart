@@ -450,6 +450,7 @@ class MissionDashboardService {
       daysOverdue: entry.nextDueAt != null
           ? now.difference(entry.nextDueAt!).inDays.clamp(0, 999)
           : null,
+      dueAt: entry.nextDueAt,
       aiInsight: aiInsight,
       aiDrivers: drivers,
       availableActions: [
@@ -509,6 +510,7 @@ class MissionDashboardService {
       programmes: const {}, // Referrals don't have programme context here
       reason: referral.diagnosisLabel ?? 'Referral',
       daysOverdue: daysOverdue > 0 ? daysOverdue : null,
+      dueAt: createdDateTime,
       aiInsight: aiInsight,
       aiDrivers: drivers,
       slaTier: referral.slaTier,
@@ -553,6 +555,7 @@ class MissionDashboardService {
       householdNumber: hhId != null ? data.householdNumbersById[hhId] : null,
       reason: followUp.reason ?? 'Follow-up due',
       daysOverdue: daysUntil < 0 ? -daysUntil : null,
+      dueAt: followUp.dueAt,
       aiInsight: aiInsight,
       aiDrivers: drivers,
       phoneNumber: followUp.phoneNumber,

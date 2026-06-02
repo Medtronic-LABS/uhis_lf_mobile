@@ -302,28 +302,58 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         );
                       },
                     ),
-                    _TodaysVisitsHeader(),
-                    const SizedBox(height: 8),
                     FutureBuilder<List<MissionQueueItem>>(
                       future: _queueFuture,
                       builder: (context, snap) {
                         if (snap.connectionState == ConnectionState.waiting) {
-                          return const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 32),
-                            child: Center(child: CircularProgressIndicator()),
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _TodaysVisitsHeader(
+                                mode: _PatientListMode.todaysVisits,
+                              ),
+                              const SizedBox(height: 8),
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 32),
+                                child:
+                                    Center(child: CircularProgressIndicator()),
+                              ),
+                            ],
                           );
                         }
                         final queue = snap.data ?? const [];
                         if (queue.isEmpty) {
-                          return _EmptyVisitsCard();
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _TodaysVisitsHeader(
+                                mode: _PatientListMode.todaysVisits,
+                              ),
+                              const SizedBox(height: 8),
+                              _EmptyVisitsCard(),
+                            ],
+                          );
                         }
+                        final hasUrgent = queue.any((i) =>
+                            i.priority == MissionPriority.critical ||
+                            i.priority == MissionPriority.high);
+                        final mode = hasUrgent
+                            ? _PatientListMode.todaysVisits
+                            : _PatientListMode.upcoming;
+                        final display = hasUrgent
+                            ? queue
+                            : (List<MissionQueueItem>.of(queue)
+                              ..sort(MissionQueueItem.compareByDueAtAsc));
                         const visibleLimit = 6;
-                        final visible = queue.length > visibleLimit
-                            ? queue.sublist(0, visibleLimit)
-                            : queue;
-                        final overflow = queue.length - visible.length;
+                        final visible = display.length > visibleLimit
+                            ? display.sublist(0, visibleLimit)
+                            : display;
+                        final overflow = display.length - visible.length;
                         return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
+                            _TodaysVisitsHeader(mode: mode),
+                            const SizedBox(height: 8),
                             for (final item in visible)
                               Padding(
                                 padding: const EdgeInsets.only(bottom: 8),
@@ -1172,18 +1202,31 @@ class _DashboardStatCard extends StatelessWidget {
   }
 }
 
+/// Distinguishes the dashboard's two list modes. `todaysVisits` is the
+/// priority-sorted urgent-first list (queue has at least one critical or
+/// high priority item). `upcoming` is the fallback earliest-pending sort
+/// when the day has no urgent work.
+enum _PatientListMode { todaysVisits, upcoming }
+
 class _TodaysVisitsHeader extends StatelessWidget {
+  const _TodaysVisitsHeader({required this.mode});
+
+  final _PatientListMode mode;
+
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     final dateLabel = DateFormat('EEE d MMM').format(DateTime.now());
+    final title = mode == _PatientListMode.todaysVisits
+        ? MissionDashboardStrings.todaysVisits(dateLabel)
+        : MissionDashboardStrings.upcomingWorkHeader;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
           Expanded(
             child: Text(
-              MissionDashboardStrings.todaysVisits(dateLabel),
+              title,
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w800,
@@ -1191,27 +1234,28 @@ class _TodaysVisitsHeader extends StatelessWidget {
               ),
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: tokens.aiPurple.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.auto_awesome, size: 12, color: tokens.aiPurple),
-                const SizedBox(width: 4),
-                Text(
-                  MissionDashboardStrings.aiSortedBadge,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    color: tokens.aiPurple,
+          if (mode == _PatientListMode.todaysVisits)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: tokens.aiPurple.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.auto_awesome, size: 12, color: tokens.aiPurple),
+                  const SizedBox(width: 4),
+                  Text(
+                    MissionDashboardStrings.aiSortedBadge,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: tokens.aiPurple,
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
           ),
         ],
       ),

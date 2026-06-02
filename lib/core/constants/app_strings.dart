@@ -681,6 +681,7 @@ abstract final class MissionDashboardStrings {
   static String moreVisits(int n) =>
       n == 1 ? '+ 1 more visit today' : '+ $n more visits today';
   static String todaysVisits(String date) => "Today's visits · $date";
+  static const String upcomingWorkHeader = 'Upcoming work — earliest first';
   static const String aiSortedBadge = 'AI sorted';
   static const String actionVisitNow = 'Visit now';
   static const String actionVisitToday = 'Visit today';
