@@ -86,7 +86,11 @@ class VisitTriageStep extends StatelessWidget {
                     : () async {
                         final success = await controller.persistTriage();
                         if (success && context.mounted) {
-                          context.go('/patients/visit/$visitId/vitals');
+                          // Preserve origin query param for return navigation
+                          final origin = GoRouterState.of(context).uri.queryParameters['origin'];
+                          debugPrint('[Triage] origin=$origin, navigating to vitals');
+                          final originParam = origin != null ? '?origin=$origin' : '';
+                          context.go('/patients/visit/$visitId/vitals$originParam');
                         }
                       },
                 icon: controller.loading

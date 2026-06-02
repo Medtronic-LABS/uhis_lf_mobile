@@ -16,6 +16,7 @@ class VisitLandingData {
     this.patientGender,
     this.householdId,
     this.programme,
+    this.origin,
   });
 
   final String patientId;
@@ -24,6 +25,8 @@ class VisitLandingData {
   final String? patientGender;
   final String? householdId;
   final Programme? programme;
+  /// Origin screen for return navigation ('dashboard' or 'tasks').
+  final String? origin;
 }
 
 /// Visit Landing Screen — entry point for starting a visit.
@@ -88,7 +91,11 @@ class _VisitLandingScreenState extends State<VisitLandingScreen> {
     if (!mounted) return;
 
     if (encounterId != null) {
-      context.go('/patients/visit/$encounterId/triage');
+      // Pass origin through to triage for return navigation
+      final origin = widget.data?.origin;
+      final originParam = origin != null ? '?origin=$origin' : '';
+      debugPrint('[VisitLanding] navigating to triage with origin=$origin');
+      context.go('/patients/visit/$encounterId/triage$originParam');
     } else {
       setState(() => _starting = false);
       ScaffoldMessenger.of(context).showSnackBar(

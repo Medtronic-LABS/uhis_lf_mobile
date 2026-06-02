@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/db/encounter_dao.dart';
+import '../../core/db/patient_dao.dart';
+import '../../features/dashboard/mission_dashboard_repository.dart';
+import '../../features/worklist/worklist_repository.dart';
 import 'assessment_repository.dart';
 import 'forms/anc_assessment_form.dart';
 import 'forms/iccm_assessment_form.dart';
@@ -25,6 +29,7 @@ class VisitAssessmentStep extends StatefulWidget {
     this.householdMemberLocalId,
     this.patientAge,
     this.gestationalWeeks,
+    this.origin,
   });
 
   final String visitId;
@@ -36,6 +41,8 @@ class VisitAssessmentStep extends StatefulWidget {
   final int? householdMemberLocalId;
   final int? patientAge;
   final int? gestationalWeeks;
+  /// Origin screen for return navigation ('dashboard' or 'tasks')
+  final String? origin;
 
   @override
   State<VisitAssessmentStep> createState() => _VisitAssessmentStepState();
@@ -49,6 +56,12 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
   IccmAssessment? _iccmData;
 
   bool _isSubmitting = false;
+  
+  /// Return path based on origin
+  String get _returnPath {
+    debugPrint('[Assessment] origin=${widget.origin}');
+    return widget.origin == 'dashboard' ? '/' : '/tasks';
+  }
 
   String get _programmeTitle {
     switch (widget.programme.toUpperCase()) {
@@ -78,6 +91,35 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
       default:
         return false;
     }
+  }
+
+  /// Calculate next due date based on programme type.
+  /// Returns milliseconds since epoch.
+  int _nextDueForProgramme(String programme, DateTime now) {
+    final Duration interval;
+    switch (programme.toUpperCase()) {
+      case 'ANC':
+        // ANC visits typically every 4 weeks
+        interval = const Duration(days: 28);
+        break;
+      case 'NCD':
+        // NCD follow-ups typically every 30 days
+        interval = const Duration(days: 30);
+        break;
+      case 'TB':
+        // TB follow-ups typically every 14 days during treatment
+        interval = const Duration(days: 14);
+        break;
+      case 'ICCM':
+      case 'IMCI':
+        // Child health check-ups typically monthly
+        interval = const Duration(days: 30);
+        break;
+      default:
+        // Default to 30 days
+        interval = const Duration(days: 30);
+    }
+    return now.add(interval).millisecondsSinceEpoch;
   }
 
   @override
@@ -232,6 +274,35 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
       debugPrint('Assessment saved locally with ID: $localId');
       debugPrint('Referral recommended: $_referralRecommended');
 
+      // Mark the encounter as completed so it shows in Tasks completed section
+      final encounterDao = context.read<EncounterDao>();
+      await encounterDao.updateAssessment(widget.visitId, assessmentData);
+      debugPrint('Encounter ${widget.visitId} marked as completed');
+
+      // Update patient's scheduling fields:
+      // - last_visit_at = now
+      // - next_due_at = now + interval (based on programme)
+      // - missed_visit_count = 0 (reset since visit completed)
+      if (widget.patientId != null) {
+        final patientDao = context.read<PatientDao>();
+        final now = DateTime.now();
+        final nowMs = now.millisecondsSinceEpoch;
+        // Schedule next visit based on programme type
+        final nextDueMs = _nextDueForProgramme(widget.programme, now);
+        await patientDao.updateVisitSchedule(
+          patientId: widget.patientId!,
+          lastVisitAt: nowMs,
+          nextDueAt: nextDueMs,
+          missedVisitCount: 0,
+        );
+        debugPrint('Updated patient ${widget.patientId} schedule: lastVisit=$nowMs, nextDue=$nextDueMs');
+
+        // Recompute worklist priorities so patient moves out of Overdue
+        final worklistRepo = context.read<WorklistRepository>();
+        await worklistRepo.recomputeAllAfterSync();
+        debugPrint('Worklist recomputed after assessment');
+      }
+
       // Navigate to completion screen
       if (mounted) {
         _showCompletionDialog();
@@ -308,15 +379,23 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
             OutlinedButton(
               onPressed: () {
                 Navigator.pop(ctx);
+                // Clear mission cache so dashboard/tasks reload with completed patient
+                context.read<MissionDashboardRepository>().clearCache();
                 // TODO: Navigate to create referral
-                context.go('/patients');
+                // Return to origin screen (dashboard or tasks)
+                debugPrint('[Assessment] Create Referral: returnPath=$_returnPath');
+                context.go(_returnPath);
               },
               child: const Text('Create Referral'),
             ),
           FilledButton(
             onPressed: () {
               Navigator.pop(ctx);
-              context.go('/patients');
+              // Clear mission cache so dashboard/tasks reload with completed patient
+              context.read<MissionDashboardRepository>().clearCache();
+              // Return to origin screen (dashboard or tasks)
+              debugPrint('[Assessment] Done: returnPath=$_returnPath');
+              context.go(_returnPath);
             },
             child: const Text('Done'),
           ),

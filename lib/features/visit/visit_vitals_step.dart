@@ -100,9 +100,12 @@ class VisitVitalsStep extends StatelessWidget {
                     : () async {
                         final success = await controller.persistVitals();
                         if (success && context.mounted) {
-                          // Navigate to assessment (Phase 2 placeholder)
+                          // Preserve origin query param for return navigation
+                          final origin = GoRouterState.of(context).uri.queryParameters['origin'];
+                          debugPrint('[Vitals] origin=$origin, navigating to assessment');
+                          final originParam = origin != null ? '?origin=$origin' : '';
                           context.go(
-                            '/patients/visit/$visitId/assessment/${session.programme.name}',
+                            '/patients/visit/$visitId/assessment/${session.programme.name}$originParam',
                           );
                         }
                       },
