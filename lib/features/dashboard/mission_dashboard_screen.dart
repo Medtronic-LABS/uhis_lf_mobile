@@ -9,16 +9,16 @@ import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/household_dao.dart';
+import '../../core/db/encounter_dao.dart';
 import '../../core/db/local_dashboard_repository.dart';
+import '../../core/models/dashboard_tier.dart';
 import '../../core/models/mission_queue_item.dart';
-import '../../core/sync/offline_sync_service.dart';
 import '../referral/referral_repository.dart';
 import '../search/global_search_bar.dart';
 import '../visit/visit_controller.dart';
-import '../worklist/worklist_repository.dart';
+import '../visit/widgets/widgets.dart';
 import 'dashboard_repository.dart';
 import 'mission_dashboard_repository.dart';
-import 'widgets/critical_alert_banner.dart';
 
 /// AI Mission Dashboard — the operational command center for the SK.
 ///
@@ -42,8 +42,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // Mission data futures consumed by the HTML dashboard composition.
   Future<List<MissionQueueItem>>? _queueFuture;
-  Future<List<MissionQueueItem>>? _alertsFuture;
   Future<ReferralSummary>? _referralSummaryFuture;
+  
+  // Completed patient IDs (visited today) - these are excluded from the queue
+  Set<String> _completedPatientIds = {};
+
+  // Cached reference to mission repository for change listening.
+  MissionDashboardRepository? _missionRepo;
+  bool _missionListenerAdded = false;
+  
+  // Flag to track if data needs refresh when widget becomes visible.
+  bool _pendingRefresh = false;
+  
+  // Version counter for forcing FutureBuilder rebuilds.
+  int _refreshVersion = 0;
 
   @override
   void initState() {
@@ -53,11 +65,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (!mounted) return;
       final auth = context.read<AuthState>();
       await _loadSummary(auth);
-      // Trigger offline sync to populate local SQLite with referrals/worklist
-      await _triggerSync();
       await _loadVillagesLine();
+      // Load mission data (may already be cached from sync screen)
       _loadMissionData();
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Set up listener for mission data changes (e.g., after assessment completion).
+    _missionRepo = context.read<MissionDashboardRepository>();
+    if (!_missionListenerAdded) {
+      _missionListenerAdded = true;
+      _missionRepo!.changes.addListener(_onMissionChanges);
+    }
+  }
+
+  @override
+  void dispose() {
+    _missionRepo?.changes.removeListener(_onMissionChanges);
+    super.dispose();
+  }
+
+  /// Called when mission dashboard data changes (e.g., after assessment).
+  void _onMissionChanges() {
+    if (!mounted) return;
+    debugPrint('[Dashboard] Mission data changed, reloading...');
+    // Load new data immediately
+    _loadMissionData();
+    // If widget is not visible (e.g., user on Tasks tab), the setState might
+    // not trigger an immediate rebuild. Set flag so build() can retry.
+    _pendingRefresh = true;
+  }
+  
+  /// Check if refresh is pending and trigger reload.
+  /// Called from build() to ensure data is fresh when tab becomes visible.
+  void _checkPendingRefresh() {
+    if (_pendingRefresh && mounted) {
+      debugPrint('[Dashboard] Tab became visible with pending refresh');
+      _pendingRefresh = false;
+      // The FutureBuilder key (using _refreshVersion) will force it to
+      // re-subscribe to the current _queueFuture. No need to reload again
+      // since _loadMissionData was already called in _onMissionChanges.
+    }
   }
 
   /// Build the header sub-text from the SK's own cached households so the
@@ -85,24 +136,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       });
     } on Object catch (e) {
       debugPrint('[Dashboard] villages line failed: $e');
-    }
-  }
-
-  /// Trigger offline sync to populate local SQLite for mission data.
-  Future<void> _triggerSync() async {
-    if (!mounted) return;
-    try {
-      final sync = context.read<OfflineSyncService>();
-      final report = await sync.coldSync();
-      debugPrint('[Dashboard] Sync completed: patients=${report.patients}, referrals=${report.referrals}');
-      // Recompute risk scores and next-due-at after sync so the worklist
-      // sorts correctly by "earliest first"
-      if (!mounted) return;
-      final worklist = context.read<WorklistRepository>();
-      final recomputed = await worklist.recomputeAllAfterSync();
-      debugPrint('[Dashboard] Recomputed risk/nextDueAt for $recomputed patients');
-    } catch (e) {
-      debugPrint('[Dashboard] Sync failed: $e');
     }
   }
 
@@ -135,15 +168,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // `T?` would silently return null on miss and strand the screen on its
     // empty state.
     final missionRepo = context.read<MissionDashboardRepository>();
+    final encounterDao = context.read<EncounterDao>();
+    
     setState(() {
-      // Pull the full queue (worklist + referrals + follow-ups). The visible
-      // list trims to 6 + "+ N more"; without enough headroom the routine
-      // worklist entries get drowned by follow-ups, leaving the dashboard
-      // looking like generic placeholder cards.
-      _queueFuture = missionRepo.loadQueue(limit: 200);
-      _alertsFuture = missionRepo.loadCriticalAlerts();
+      // Increment version to force FutureBuilder rebuild
+      _refreshVersion++;
+      debugPrint('[Dashboard] Loading mission data, version=$_refreshVersion');
+      // Load completed patient IDs and filter queue to exclude them
+      _queueFuture = _loadFilteredQueue(missionRepo, encounterDao);
       _referralSummaryFuture = missionRepo.loadReferralSummary();
     });
+  }
+  
+  /// Load the mission queue excluding patients who have been visited today.
+  Future<List<MissionQueueItem>> _loadFilteredQueue(
+    MissionDashboardRepository missionRepo,
+    EncounterDao encounterDao,
+  ) async {
+    // Load completed patient IDs first
+    final completedIds = await encounterDao.completedTodayPatientIds();
+    if (mounted) {
+      setState(() => _completedPatientIds = completedIds);
+    }
+    
+    // Load full queue
+    final queue = await missionRepo.loadQueue(limit: 200);
+    
+    // Filter out completed patients
+    return queue.where((item) => 
+      item.patientId == null || !completedIds.contains(item.patientId)
+    ).toList();
   }
 
   Future<void> _refresh() async {
@@ -267,7 +321,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
     if (!mounted) return;
     if (encounterId != null) {
-      context.go('/patients/visit/$encounterId/triage');
+      debugPrint('[Dashboard] Starting visit, navigating with origin=dashboard');
+      context.go('/patients/visit/$encounterId/triage?origin=dashboard');
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(
@@ -280,20 +335,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _navigateToFirstQueueItem() async {
-    final queue = await _queueFuture;
-    if (queue != null && queue.isNotEmpty) {
-      final first = queue.first;
-      if (first.patientId != null) {
-        if (mounted) context.push('/patient/${first.patientId}');
-      } else if (first.referralId != null) {
-        if (mounted) context.push('/referral/${first.referralId}');
-      }
-    }
+    // Navigate to Tasks screen (Visits tab)
+    if (mounted) context.push('/tasks');
   }
 
   @override
   Widget build(BuildContext context) {
+    // Check if a refresh is pending (e.g., assessment completed while on another tab)
+    _checkPendingRefresh();
+    
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    
     return Scaffold(
       backgroundColor: tokens.canvas,
       body: SafeArea(
@@ -313,6 +365,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   padding: const EdgeInsets.fromLTRB(14, 12, 14, 100),
                   children: [
                     _DashboardStatsRow(
+                      key: ValueKey('stats_$_refreshVersion'),
                       queueFuture: _queueFuture,
                       referralFuture: _referralSummaryFuture,
                       onTapVisits: _navigateToFirstQueueItem,
@@ -320,36 +373,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     const SizedBox(height: 14),
                     FutureBuilder<List<MissionQueueItem>>(
-                      future: _alertsFuture,
-                      builder: (context, snap) {
-                        if (!snap.hasData || snap.data!.isEmpty) {
-                          return const SizedBox.shrink();
-                        }
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: CriticalAlertBanner(
-                            alerts: snap.data!,
-                            onOpenCase: (item) {
-                              if (item.patientId != null) {
-                                context.push('/patient/${item.patientId}');
-                              } else if (item.referralId != null) {
-                                context.push('/referral/${item.referralId}');
-                              }
-                            },
-                          ),
-                        );
-                      },
-                    ),
-                    FutureBuilder<List<MissionQueueItem>>(
+                      key: ValueKey('queue_$_refreshVersion'),
                       future: _queueFuture,
                       builder: (context, snap) {
                         if (snap.connectionState == ConnectionState.waiting) {
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              _TodaysVisitsHeader(
-                                mode: _PatientListMode.todaysVisits,
-                              ),
+                              _TodaysVisitsHeader(),
                               const SizedBox(height: 8),
                               const Padding(
                                 padding: EdgeInsets.symmetric(vertical: 32),
@@ -364,53 +395,77 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              _TodaysVisitsHeader(
-                                mode: _PatientListMode.todaysVisits,
-                              ),
+                              _TodaysVisitsHeader(),
                               const SizedBox(height: 8),
                               _EmptyVisitsCard(),
                             ],
                           );
                         }
-                        final hasUrgent = queue.any((i) =>
-                            i.priority == MissionPriority.critical ||
-                            i.priority == MissionPriority.high);
-                        final mode = hasUrgent
-                            ? _PatientListMode.todaysVisits
-                            : _PatientListMode.upcoming;
-                        final display = hasUrgent
-                            ? queue
-                            : (List<MissionQueueItem>.of(queue)
-                              ..sort(MissionQueueItem.compareByDueAtAsc));
-                        const visibleLimit = 6;
-                        final visible = display.length > visibleLimit
-                            ? display.sublist(0, visibleLimit)
-                            : display;
-                        final overflow = display.length - visible.length;
+                        // 5-tier model: top 8 cards mixed across tiers with
+                        // inline tier headers. Queue is already tier-sorted.
+                        const visibleLimit = 8;
+                        final visible = queue.length > visibleLimit
+                            ? queue.sublist(0, visibleLimit)
+                            : queue;
+                        final overflow = queue.length - visible.length;
+                        // Determine dominant overflow tier for deep-link
+                        final overflowTier = overflow > 0
+                            ? queue.sublist(visibleLimit).first.tier
+                            : null;
+
+                        // Build widgets with inline tier headers
+                        final widgets = <Widget>[];
+                        DashboardTier? currentTier;
+                        final tierCounts = <DashboardTier, int>{};
+                        for (final item in visible) {
+                          tierCounts[item.tier] =
+                              (tierCounts[item.tier] ?? 0) + 1;
+                        }
+                        for (final item in visible) {
+                          if (item.tier != currentTier) {
+                            currentTier = item.tier;
+                            widgets.add(Padding(
+                              padding: EdgeInsets.only(
+                                top: widgets.isEmpty ? 0 : 10,
+                                bottom: 6,
+                              ),
+                              child: MissionTierHeader(
+                                tier: currentTier,
+                                count: tierCounts[currentTier] ?? 0,
+                                compact: true,
+                              ),
+                            ));
+                          }
+                          widgets.add(Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: MissionQueueCard(
+                              item: item,
+                              compact: true,
+                              onTap: () {
+                                if (item.patientId != null) {
+                                  context.push('/patient/${item.patientId}?origin=dashboard');
+                                } else if (item.referralId != null) {
+                                  context.push('/referral/${item.referralId}');
+                                }
+                              },
+                              onAction: () => _startVisitFromQueue(item),
+                            ),
+                          ));
+                        }
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            _TodaysVisitsHeader(mode: mode),
+                            _TodaysVisitsHeader(),
                             const SizedBox(height: 8),
-                            for (final item in visible)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 8),
-                                child: _PriorityPatientCard(
-                                  item: item,
-                                  onTap: () {
-                                    if (item.patientId != null) {
-                                      context.push('/patient/${item.patientId}');
-                                    } else if (item.referralId != null) {
-                                      context.push('/referral/${item.referralId}');
-                                    }
-                                  },
-                                  onAction: () => _startVisitFromQueue(item),
-                                ),
-                              ),
+                            ...widgets,
                             if (overflow > 0)
                               _MoreVisitsLink(
                                 count: overflow,
-                                onTap: () => context.go('/patients'),
+                                tier: overflowTier,
+                                onTap: () {
+                                  // Navigate to tasks tab with mission queue items
+                                  context.go('/tasks');
+                                },
                               ),
                           ],
                         );
@@ -768,6 +823,7 @@ class _DashboardHeader extends StatelessWidget {
 
 class _DashboardStatsRow extends StatelessWidget {
   const _DashboardStatsRow({
+    super.key,
     required this.queueFuture,
     required this.referralFuture,
     required this.onTapVisits,
@@ -787,6 +843,7 @@ class _DashboardStatsRow extends StatelessWidget {
           child: FutureBuilder<List<MissionQueueItem>>(
             future: queueFuture,
             builder: (context, snap) {
+              final isLoading = snap.connectionState == ConnectionState.waiting;
               final queue = snap.data ?? const <MissionQueueItem>[];
               final count = queue.length;
               final villageCount = queue
@@ -799,9 +856,11 @@ class _DashboardStatsRow extends StatelessWidget {
                 value: '$count',
                 label: MissionDashboardStrings.visitsToday,
                 accentVariant: _DashboardStatVariant.navy,
-                subline:
-                    MissionDashboardStrings.visitsTodaySubline(villageCount),
+                subline: isLoading
+                    ? 'Loading...'
+                    : MissionDashboardStrings.visitsTodaySubline(villageCount),
                 onTap: onTapVisits,
+                isLoading: isLoading,
               );
             },
           ),
@@ -811,16 +870,20 @@ class _DashboardStatsRow extends StatelessWidget {
           child: FutureBuilder<ReferralSummary>(
             future: referralFuture,
             builder: (context, snap) {
+              final isLoading = snap.connectionState == ConnectionState.waiting;
               final s = snap.data ?? ReferralSummary.empty;
               final alerts = s.breached + s.awaitingReview;
               return _DashboardStatCard(
                 value: '$alerts',
                 label: MissionDashboardStrings.referralAlertsLabel,
                 accentVariant: _DashboardStatVariant.pink,
-                subline: MissionDashboardStrings.tapToFollowUp,
+                subline: isLoading
+                    ? 'Loading...'
+                    : MissionDashboardStrings.tapToFollowUp,
                 footnote: MissionDashboardStrings.referralCceComingSoon,
                 showPulse: s.hasBreaches,
                 onTap: onTapReferrals,
+                isLoading: isLoading,
               );
             },
           ),
@@ -841,6 +904,7 @@ class _DashboardStatCard extends StatelessWidget {
     required this.onTap,
     this.footnote,
     this.showPulse = false,
+    this.isLoading = false,
   });
 
   final String value;
@@ -849,6 +913,7 @@ class _DashboardStatCard extends StatelessWidget {
   final String subline;
   final String? footnote;
   final bool showPulse;
+  final bool isLoading;
   final VoidCallback onTap;
 
   @override
@@ -861,7 +926,7 @@ class _DashboardStatCard extends StatelessWidget {
       color: tokens.cardSurface,
       borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
       child: InkWell(
-        onTap: onTap,
+        onTap: isLoading ? null : onTap,
         borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
         child: Padding(
           padding: const EdgeInsets.all(14),
@@ -871,16 +936,26 @@ class _DashboardStatCard extends StatelessWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    value,
-                    style: TextStyle(
-                      fontSize: 30,
-                      fontWeight: FontWeight.w900,
-                      color: accent,
-                      height: 1,
+                  if (isLoading)
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 3,
+                        color: accent,
+                      ),
+                    )
+                  else
+                    Text(
+                      value,
+                      style: TextStyle(
+                        fontSize: 30,
+                        fontWeight: FontWeight.w900,
+                        color: accent,
+                        height: 1,
+                      ),
                     ),
-                  ),
-                  if (showPulse) ...[
+                  if (showPulse && !isLoading) ...[
                     const SizedBox(width: 6),
                     Padding(
                       padding: const EdgeInsets.only(top: 6),
@@ -940,28 +1015,17 @@ class _DashboardStatCard extends StatelessWidget {
   }
 }
 
-/// Distinguishes the dashboard's two list modes. `todaysVisits` is the
-/// priority-sorted urgent-first list (queue has at least one critical or
-/// high priority item). `upcoming` is the fallback earliest-pending sort
-/// when the day has no urgent work.
-enum _PatientListMode { todaysVisits, upcoming }
-
 class _TodaysVisitsHeader extends StatelessWidget {
-  const _TodaysVisitsHeader({required this.mode});
-
-  final _PatientListMode mode;
+  const _TodaysVisitsHeader();
 
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     final dateLabel = DateFormat('EEE d MMM').format(DateTime.now());
-    final title = mode == _PatientListMode.todaysVisits
-        ? MissionDashboardStrings.todaysVisits(dateLabel)
-        : MissionDashboardStrings.upcomingWorkHeader;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Text(
-        title,
+        MissionDashboardStrings.todaysVisits(dateLabel),
         style: TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w800,
@@ -972,253 +1036,18 @@ class _TodaysVisitsHeader extends StatelessWidget {
   }
 }
 
-class _PriorityPatientCard extends StatelessWidget {
-  const _PriorityPatientCard({
-    required this.item,
+/// Tail link beneath the priority visit list — matches the prototype's
+/// "+ N more visits today" affordance and deep-links into the full worklist
+/// pre-filtered by the dominant overflow tier.
+class _MoreVisitsLink extends StatelessWidget {
+  const _MoreVisitsLink({
+    required this.count,
     required this.onTap,
-    required this.onAction,
+    this.tier,
   });
 
-  final MissionQueueItem item;
-  final VoidCallback onTap;
-  final VoidCallback onAction;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
-    final urgency = Theme.of(context).extension<UrgencyTheme>()!;
-    final borderColor = _borderColor(item.priority, urgency, tokens);
-    final (actionLabel, actionBg, actionFg) =
-        _actionStyle(item.priority, tokens);
-
-    return Material(
-      color: tokens.cardSurface,
-      borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
-            border: Border(
-              left: BorderSide(color: borderColor, width: 4),
-            ),
-          ),
-          padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 22,
-                backgroundColor: borderColor.withValues(alpha: 0.18),
-                child: Text(
-                  _initials(item.patientName),
-                  style: TextStyle(
-                    color: borderColor,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.patientName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        color: tokens.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    _PriorityPatientReasonBadge(item: item),
-                    const SizedBox(height: 6),
-                    Text(
-                      _subtitle(item),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: tokens.textMuted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Material(
-                color: actionBg,
-                borderRadius: BorderRadius.circular(20),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(20),
-                  onTap: onAction,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
-                    child: Text(
-                      actionLabel,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        color: actionFg,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  static String _initials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty || parts.first.isEmpty) return '?';
-    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
-    return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
-        .toUpperCase();
-  }
-
-  String _subtitle(MissionQueueItem item) {
-    final parts = <String>[];
-    if (item.age != null) parts.add(WorklistStrings.ageFmt(item.age!));
-    final house = item.householdDisplay;
-    if (house.isNotEmpty) parts.add(house);
-    if (house.isEmpty &&
-        item.village != null &&
-        item.village!.isNotEmpty) {
-      parts.add(item.village!);
-    }
-    final dueLabel = _dueLabel(item.dueAt);
-    if (dueLabel != null) parts.add(dueLabel);
-    if (parts.isEmpty) return item.reason;
-    return parts.join(' · ');
-  }
-
-  /// Render `Due today` / `Due in 3d` / `Overdue 2d` from a due timestamp,
-  /// or null when no date is known. Centralised so cards never re-implement
-  /// the day-math + plural rules.
-  static String? _dueLabel(DateTime? dueAt) {
-    if (dueAt == null) return null;
-    final now = DateTime.now();
-    final start = DateTime(now.year, now.month, now.day);
-    final due = DateTime(dueAt.year, dueAt.month, dueAt.day);
-    final days = due.difference(start).inDays;
-    if (days == 0) return 'Due today';
-    if (days > 0) return 'Due in ${days}d';
-    return 'Overdue ${-days}d';
-  }
-
-  Color _borderColor(
-    MissionPriority p,
-    UrgencyTheme urgency,
-    LeapfrogColors tokens,
-  ) {
-    switch (p) {
-      case MissionPriority.critical:
-        return urgency.visitNow;
-      case MissionPriority.high:
-        return urgency.today;
-      case MissionPriority.medium:
-        return urgency.thisWeek;
-      case MissionPriority.low:
-        return tokens.textMuted;
-    }
-  }
-
-  (String, Color, Color) _actionStyle(
-    MissionPriority p,
-    LeapfrogColors tokens,
-  ) {
-    switch (p) {
-      case MissionPriority.critical:
-        return (
-          MissionDashboardStrings.actionVisitNow,
-          tokens.statusCritical,
-          Colors.white,
-        );
-      case MissionPriority.high:
-        return (
-          MissionDashboardStrings.actionVisitToday,
-          tokens.brandNavy,
-          Colors.white,
-        );
-      case MissionPriority.medium:
-        return (
-          MissionDashboardStrings.actionThisWeek,
-          tokens.cardSurfaceMuted,
-          tokens.brandNavy,
-        );
-      case MissionPriority.low:
-        return (
-          MissionDashboardStrings.actionRoutine,
-          tokens.cardSurfaceMuted,
-          tokens.textMuted,
-        );
-    }
-  }
-}
-
-class _PriorityPatientReasonBadge extends StatelessWidget {
-  const _PriorityPatientReasonBadge({required this.item});
-
-  final MissionQueueItem item;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
-    final urgency = Theme.of(context).extension<UrgencyTheme>()!;
-    final (bg, fg) = _badgeColors(item.priority, urgency, tokens);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(5),
-      ),
-      child: Text(
-        item.reason,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w800,
-          color: fg,
-        ),
-      ),
-    );
-  }
-
-  (Color, Color) _badgeColors(
-    MissionPriority p,
-    UrgencyTheme urgency,
-    LeapfrogColors tokens,
-  ) {
-    switch (p) {
-      case MissionPriority.critical:
-        return (urgency.visitNowContainer, urgency.visitNow);
-      case MissionPriority.high:
-        return (urgency.todayContainer, urgency.today);
-      case MissionPriority.medium:
-        return (urgency.thisWeekContainer, urgency.thisWeek);
-      case MissionPriority.low:
-        return (tokens.cardSurfaceMuted, tokens.textMuted);
-    }
-  }
-}
-
-/// Tail link beneath the priority visit list — matches the prototype's
-/// "+ N more visits today" affordance and deep-links into the full worklist.
-class _MoreVisitsLink extends StatelessWidget {
-  const _MoreVisitsLink({required this.count, required this.onTap});
-
   final int count;
+  final DashboardTier? tier;
   final VoidCallback onTap;
 
   @override
