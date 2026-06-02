@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../core/api/cql_api_service.dart';
@@ -67,6 +69,11 @@ class MissionDashboardRepository {
   /// Cached input data for reuse.
   MissionInputData? _cachedInput;
 
+  /// In-flight loading operation to prevent duplicate concurrent loads.
+  /// When multiple callers request data simultaneously, they share the same
+  /// future rather than each starting their own load.
+  Completer<MissionInputData>? _loadingCompleter;
+
   /// Cached CQL risk results for the current session.
   Map<String, CqlRiskResult>? _cachedCqlResults;
 
@@ -110,8 +117,10 @@ class MissionDashboardRepository {
   }
 
   /// Load critical alerts only.
+  /// Reuses the same input data as loadQueue to avoid duplicate loading.
   Future<List<MissionQueueItem>> loadCriticalAlerts() async {
-    final queue = await loadQueue();
+    final input = await _loadInputData();
+    final queue = _service.computeQueue(input, limit: null);
     return _service.getCriticalAlerts(queue);
   }
 
@@ -137,8 +146,7 @@ class MissionDashboardRepository {
 
   /// Force refresh all data.
   Future<void> refresh() async {
-    _cachedInput = null;
-    _cachedCqlResults = null;
+    clearCache();
     await _loadInputData();
     _changes.value++;
   }
@@ -147,6 +155,8 @@ class MissionDashboardRepository {
   void clearCache() {
     _cachedInput = null;
     _cachedCqlResults = null;
+    // Cancel any in-flight load so new requests start fresh
+    _loadingCompleter = null;
   }
 
   /// Fetch CQL risk results for a batch of patient IDs.
@@ -212,9 +222,39 @@ class MissionDashboardRepository {
   }
 
   /// Load and cache all input data.
+  /// Uses a Completer lock to ensure concurrent callers share the same load
+  /// operation rather than each triggering their own DB/API queries.
   Future<MissionInputData> _loadInputData() async {
+    // Return cached data immediately if available
     if (_cachedInput != null) return _cachedInput!;
 
+    // If a load is already in progress, wait for it instead of starting another
+    if (_loadingCompleter != null) {
+      return _loadingCompleter!.future;
+    }
+
+    // Start a new load operation
+    final completer = Completer<MissionInputData>();
+    _loadingCompleter = completer;
+
+    try {
+      final result = await _loadInputDataImpl();
+      _cachedInput = result;
+      completer.complete(result);
+      return result;
+    } catch (e) {
+      completer.completeError(e);
+      rethrow;
+    } finally {
+      // Only clear if this is still the active completer
+      if (_loadingCompleter == completer) {
+        _loadingCompleter = null;
+      }
+    }
+  }
+
+  /// Internal implementation of data loading, called once per cache miss.
+  Future<MissionInputData> _loadInputDataImpl() async {
     final now = _clock();
     _lastLoadUsedCql = false;
 
