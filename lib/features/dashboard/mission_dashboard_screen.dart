@@ -297,7 +297,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               greeting: _greeting(),
               locationLine: _locationLine(),
               onNotifications: () => context.push('/referrals'),
-              onAiAssistant: _showAiAssistant,
               settingsMenu: _SettingsMenu(onOfferBiometric: _offerBiometric),
             ),
             Expanded(
@@ -306,14 +305,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(14, 12, 14, 100),
                   children: [
-                    FutureBuilder<List<MissionQueueItem>>(
-                      future: _queueFuture,
-                      builder: (context, snap) {
-                        final visitCount = (snap.data ?? const []).length;
-                        return _AiRibbon(visitCount: visitCount);
-                      },
-                    ),
-                    const SizedBox(height: 10),
                     _DashboardStatsRow(
                       queueFuture: _queueFuture,
                       referralFuture: _referralSummaryFuture,
@@ -425,32 +416,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAiAssistant,
-        tooltip: MissionDashboardStrings.askAiAssistant,
-        child: const Icon(Icons.smart_toy),
-      ),
     );
   }
 
-  void _showAiAssistant() {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        minChildSize: 0.4,
-        maxChildSize: 0.9,
-        expand: false,
-        builder: (ctx, scrollController) => _AiAssistantSheet(
-          scrollController: scrollController,
-        ),
-      ),
-    );
-  }
 
 }
 
@@ -701,201 +669,6 @@ class _ReferralNotificationButtonState
   }
 }
 
-/// AI Assistant bottom sheet.
-class _AiAssistantSheet extends StatelessWidget {
-  const _AiAssistantSheet({required this.scrollController});
-
-  final ScrollController scrollController;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: scheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        children: [
-          // Handle
-          Container(
-            margin: const EdgeInsets.only(top: 12),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: scheme.onSurfaceVariant.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          // Header
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: scheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    Icons.smart_toy,
-                    color: scheme.primary,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        MissionDashboardStrings.aiAssistant,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                      ),
-                      Text(
-                        'Ask about patient care, guidelines, or procedures',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          // Quick questions
-          Expanded(
-            child: ListView(
-              controller: scrollController,
-              padding: const EdgeInsets.all(16),
-              children: [
-                Text(
-                  'Quick Questions',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: scheme.onSurfaceVariant,
-                      ),
-                ),
-                const SizedBox(height: 12),
-                _QuickQuestion(
-                  question: 'What should I do if a child refuses medication?',
-                  onTap: () {},
-                ),
-                _QuickQuestion(
-                  question: 'Can severe pneumonia be managed at home?',
-                  onTap: () {},
-                ),
-                _QuickQuestion(
-                  question: 'When should ANC patients be referred?',
-                  onTap: () {},
-                ),
-                _QuickQuestion(
-                  question: 'What are the danger signs in pregnancy?',
-                  onTap: () {},
-                ),
-                _QuickQuestion(
-                  question: 'How to measure blood pressure correctly?',
-                  onTap: () {},
-                ),
-                const SizedBox(height: 24),
-                // Input field placeholder
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: scheme.surfaceContainerHigh,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          MissionDashboardStrings.aiAssistantHint,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: scheme.onSurfaceVariant,
-                              ),
-                        ),
-                      ),
-                      Icon(
-                        Icons.mic,
-                        color: scheme.primary,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'AI Assistant coming soon — this is a preview',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                        fontStyle: FontStyle.italic,
-                      ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _QuickQuestion extends StatelessWidget {
-  const _QuickQuestion({
-    required this.question,
-    required this.onTap,
-  });
-
-  final String question;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.chat_bubble_outline,
-                  size: 18,
-                  color: scheme.primary,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    question,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ),
-                Icon(
-                  Icons.arrow_forward_ios,
-                  size: 14,
-                  color: scheme.onSurfaceVariant,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // HTML-composition widgets
 // Match `Leapfrog .html` dashboard: navy header, AI ribbon, two-stat row,
@@ -907,14 +680,12 @@ class _DashboardHeader extends StatelessWidget {
     required this.greeting,
     required this.locationLine,
     required this.onNotifications,
-    required this.onAiAssistant,
     required this.settingsMenu,
   });
 
   final String greeting;
   final String? locationLine;
   final VoidCallback onNotifications;
-  final VoidCallback onAiAssistant;
   final Widget settingsMenu;
 
   @override
@@ -966,11 +737,6 @@ class _DashboardHeader extends StatelessWidget {
                 ),
               ),
               _ReferralNotificationButton(onTap: onNotifications),
-              IconButton(
-                icon: const Icon(Icons.smart_toy_outlined, color: Colors.white),
-                tooltip: MissionDashboardStrings.aiAssistant,
-                onPressed: onAiAssistant,
-              ),
               settingsMenu,
             ],
           ),
@@ -988,89 +754,6 @@ class _DashboardHeader extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _AiRibbon extends StatelessWidget {
-  const _AiRibbon({required this.visitCount});
-
-  final int visitCount;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-      decoration: BoxDecoration(
-        color: tokens.brandNavy,
-        borderRadius: BorderRadius.circular(LeapfrogColors.radiusMd),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(Icons.auto_awesome,
-                size: 18, color: Colors.white),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  MissionDashboardStrings.aiSortedVisits(visitCount),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  children: const [
-                    _AiRibbonChip(label: 'Risk scoring'),
-                    _AiRibbonChip(label: 'Overdue flags'),
-                    _AiRibbonChip(label: 'CCE alerts'),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AiRibbonChip extends StatelessWidget {
-  const _AiRibbonChip({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        '✦ $label',
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-        ),
       ),
     );
   }
@@ -1270,42 +953,13 @@ class _TodaysVisitsHeader extends StatelessWidget {
         : MissionDashboardStrings.upcomingWorkHeader;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w800,
-                color: tokens.brandNavy,
-              ),
-            ),
-          ),
-          if (mode == _PatientListMode.todaysVisits)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: tokens.aiPurple.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.auto_awesome, size: 12, color: tokens.aiPurple),
-                  const SizedBox(width: 4),
-                  Text(
-                    MissionDashboardStrings.aiSortedBadge,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      color: tokens.aiPurple,
-                    ),
-                  ),
-                ],
-              ),
-          ),
-        ],
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w800,
+          color: tokens.brandNavy,
+        ),
       ),
     );
   }
