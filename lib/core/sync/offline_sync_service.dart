@@ -15,8 +15,11 @@ import '../db/immunisation_dao.dart';
 import '../db/member_dao.dart';
 import '../db/patient_dao.dart';
 import '../db/patient_programmes_dao.dart';
+import '../db/pregnancy_snapshot_dao.dart';
 import '../db/referral_dao.dart';
 import '../db/sync_meta_dao.dart';
+import '../db/treatment_presence_dao.dart';
+import '../mission/mission_pregnancy_facts.dart';
 import '../models/json_read.dart';
 import '../models/patient.dart';
 import '../models/programme.dart';
@@ -45,6 +48,8 @@ class OfflineSyncService extends ChangeNotifier {
     required SyncMetaDao syncMeta,
     HouseholdDao? households,
     MemberDao? members,
+    PregnancySnapshotDao? pregnancySnapshot,
+    TreatmentPresenceDao? treatmentPresence,
   })  : _api = api,
         _auth = auth,
         _patients = patients,
@@ -55,7 +60,9 @@ class OfflineSyncService extends ChangeNotifier {
         _referrals = referrals,
         _syncMeta = syncMeta,
         _households = households,
-        _members = members;
+        _members = members,
+        _pregnancySnapshot = pregnancySnapshot,
+        _treatmentPresence = treatmentPresence;
 
   static const String _entityKey = 'worklist';
 
@@ -70,6 +77,8 @@ class OfflineSyncService extends ChangeNotifier {
   final AssessmentDao _assessments;
   final ReferralDao _referrals;
   final SyncMetaDao _syncMeta;
+  final PregnancySnapshotDao? _pregnancySnapshot;
+  final TreatmentPresenceDao? _treatmentPresence;
 
   bool _running = false;
 
@@ -627,6 +636,9 @@ class OfflineSyncService extends ChangeNotifier {
       'pregnancyInfoList',
       'pregnancies',
     ]);
+    final pregnancyRows = <PregnancySnapshotRow>[];
+    final now = DateTime.now();
+    final nowMs = now.millisecondsSinceEpoch;
     for (final raw in pregnancyNodes) {
       if (raw is! Map) continue;
       final memberKey = JsonRead.firstString(raw, const [
@@ -635,6 +647,39 @@ class OfflineSyncService extends ChangeNotifier {
         'patientId',
       ]);
       mergeProgramme(memberKey, Programme.anc);
+
+      final patientId =
+          memberKey == null ? null : memberIdToPatientId[memberKey] ?? memberKey;
+      if (patientId == null || patientId.isEmpty) continue;
+      final facts = _pregnancyFactsFrom(raw, now: now);
+      if (facts == null) continue;
+      pregnancyRows.add(PregnancySnapshotRow(
+        patientId: patientId,
+        facts: facts,
+        updatedAt: nowMs,
+      ));
+    }
+
+    // Bundle `treatmentDetails[]` → presence-only set (clinical specifics
+    // live elsewhere). Drives the `ncd-drift` OVERDUE-min driver and the
+    // on-treatment composite-score bonus.
+    final treatmentNodes = _listFromAny(bundle, const [
+      'treatmentDetails',
+      'treatmentDetailsList',
+      'treatments',
+    ]);
+    final treatmentPatientIds = <String>{};
+    for (final raw in treatmentNodes) {
+      if (raw is! Map) continue;
+      final memberKey = JsonRead.firstString(raw, const [
+        'patientId',
+        'memberId',
+        'householdMemberId',
+      ]);
+      if (memberKey == null || memberKey.isEmpty) continue;
+      final patientId = memberIdToPatientId[memberKey] ?? memberKey;
+      if (patientId.isEmpty) continue;
+      treatmentPatientIds.add(patientId);
     }
 
     for (final raw in followUpNodes) {
@@ -651,10 +696,9 @@ class OfflineSyncService extends ChangeNotifier {
       mergeProgramme(memberKey, Programme.fromTag(encounter));
     }
 
-    // Clear patients table before inserting filtered set to remove stale data
-    // from before the owner-user filtering fix
-    await _programmes.clearAll();
-    await _patients.clearAll();
+    // Upsert patients instead of clear+insert to preserve patients fetched
+    // via refreshPatient() (e.g., searched patients outside SK's caseload).
+    // The upsert handles both new inserts and updates to existing rows.
     await _patients.upsertMany(patients);
     for (final entry in programmes.entries) {
       await _programmes.replaceFor(entry.key, entry.value);
@@ -669,6 +713,22 @@ class OfflineSyncService extends ChangeNotifier {
     }
     if (members.isNotEmpty && _members != null) {
       await _members!.upsertMany(members);
+    }
+
+    // Mission Dashboard side tables (schema v8). Replace-then-write so a
+    // re-sync drops stale per-patient flags.
+    if (_pregnancySnapshot != null) {
+      await _pregnancySnapshot!.clearAll();
+      if (pregnancyRows.isNotEmpty) {
+        await _pregnancySnapshot!.upsertMany(pregnancyRows);
+      }
+    }
+    if (_treatmentPresence != null) {
+      await _treatmentPresence!.clearAll();
+      if (treatmentPatientIds.isNotEmpty) {
+        await _treatmentPresence!
+            .upsertAll(treatmentPatientIds, updatedAt: nowMs);
+      }
     }
 
     return _PersistTotals(
@@ -1058,9 +1118,25 @@ class OfflineSyncService extends ChangeNotifier {
     final completedAt =
         JsonRead.epochMillis(raw, const ['completedAt', 'visitDate']);
     final attempts = JsonRead.firstInt(raw, const ['attempts', 'visits']);
+    final unsuccessful = JsonRead.firstInt(raw, const [
+      'unsuccessfulAttempts',
+      'failedAttempts',
+    ]);
+    final referredSiteId = JsonRead.firstString(raw, const [
+      'referredSiteId',
+      'referralSiteId',
+    ]);
+    // Server `type` enum stored verbatim (`REFERRED` / `SCREENED` /
+    // `LOST_TO_FOLLOW_UP` / `MEDICAL_REVIEW`). Orthogonal to [kind] which
+    // is the risk-scoring bucket.
+    final wireType = JsonRead.firstString(raw, const [
+      'type',
+      'followUpType',
+    ])?.toUpperCase();
     final isLost = _truthy(raw['isLostToFollowUp']) ||
         _truthy(raw['lostToFollowUp']) ||
-        (kind != null && kind.toLowerCase().contains('lost'));
+        (kind != null && kind.toLowerCase().contains('lost')) ||
+        wireType == 'LOST_TO_FOLLOW_UP';
     return FollowUpRow(
       id: id,
       patientId: patientId,
@@ -1068,9 +1144,59 @@ class OfflineSyncService extends ChangeNotifier {
       dueAt: dueAt,
       completedAt: completedAt,
       attempts: attempts,
+      unsuccessfulAttempts: unsuccessful,
+      type: wireType,
+      referredSiteId: referredSiteId,
       isLost: isLost,
       rawJson: JsonRead.encode(raw),
     );
+  }
+
+  /// Build a [PregnancyFacts] snapshot from one `pregnancyInfos[]` row.
+  /// Per-row narrow-catch — one malformed entry should not kill the rest.
+  static PregnancyFacts? _pregnancyFactsFrom(Map raw, {required DateTime now}) {
+    try {
+      final highRisk = _truthy(raw['highRiskPregnantWoman']) ||
+          _truthy(raw['highRiskMother']);
+      final gapsAnc = raw['gapsInAnc'] != null &&
+          (raw['gapsInAnc'] is! Iterable ||
+              (raw['gapsInAnc'] as Iterable).isNotEmpty) &&
+          raw['gapsInAnc'].toString().trim().isNotEmpty;
+
+      bool withinDays(Object? value, int windowDays, {bool future = false}) {
+        final ts = JsonRead.epochMillis({'_': value}, const ['_']);
+        if (ts == null) return false;
+        final dt = DateTime.fromMillisecondsSinceEpoch(ts);
+        final diff = future ? dt.difference(now) : now.difference(dt);
+        return diff.inDays >= 0 && diff.inDays <= windowDays;
+      }
+
+      final dod = raw['dateOfDelivery'] ?? raw['deliveryDate'];
+      final edd = raw['estimatedDeliveryDate'] ?? raw['edd'];
+      final isPostpartum = withinDays(dod, 42);
+      final isNearTerm = withinDays(edd, 14, future: true);
+
+      final complications = raw['complicationsDuringDelivery'];
+      final hadComplications = (complications != null &&
+              complications.toString().trim().isNotEmpty) ||
+          _truthy(raw['isDeliveryAtHome']);
+
+      final pncIllness = raw['pncIllness'];
+      final hasPncIll =
+          pncIllness != null && pncIllness.toString().trim().isNotEmpty;
+
+      return PregnancyFacts(
+        highRiskPregnantWoman: highRisk,
+        hasGapsInAnc: gapsAnc,
+        isPostpartumWindow: isPostpartum,
+        isNearTermAnc: isNearTerm,
+        hadDeliveryComplications: hadComplications,
+        hasPncIllness: hasPncIll,
+      );
+    } on Object catch (e) {
+      debugPrint('[OfflineSyncService] pregnancyInfos parse failed: $e');
+      return null;
+    }
   }
 
   static String _normaliseFollowUpKind(String? wire) {
