@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../app/theme.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/sync/offline_sync_service.dart';
 import '../../core/sync/sync_progress.dart';
@@ -103,15 +104,16 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
 
     return Scaffold(
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Spacer(flex: 2),
-              
-              // Logo
-              Image.asset(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Logo
+                Image.asset(
                 'assets/images/app-logo-name.png',
                 height: 64,
                 fit: BoxFit.contain,
@@ -161,18 +163,23 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
               
               const SizedBox(height: 12),
               
-              // Subtitle / current step
-              Text(
-                hasError
-                    ? (_progress.error ?? _report?.errors.first ?? '')
-                    : _progress.isComplete
-                        ? _buildCompletionSummary()
-                        : _progress.currentStep.label,
-                style: textTheme.bodyLarge?.copyWith(
-                  color: hasError ? scheme.error : scheme.onSurfaceVariant,
+              // Subtitle / current step (or icon summary for complete)
+              if (hasError)
+                Text(
+                  _progress.error ?? _report?.errors.first ?? '',
+                  style: textTheme.bodyLarge?.copyWith(color: scheme.error),
+                  textAlign: TextAlign.center,
+                )
+              else if (_progress.isComplete)
+                _buildCompletionSummaryWidget(scheme, textTheme)
+              else
+                Text(
+                  _progress.currentStep.label,
+                  style: textTheme.bodyLarge?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-                textAlign: TextAlign.center,
-              ),
               
               // Progress details
               if (!hasError && !_progress.isComplete && _progress.itemsTotal > 0) ...[
@@ -192,23 +199,25 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
               // Linear progress indicator
               if (!hasError && !_progress.isComplete) ...[
                 const SizedBox(height: 24),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: _progress.overallProgress > 0
-                        ? _progress.overallProgress
-                        : null,
-                    minHeight: 6,
-                    backgroundColor: scheme.surfaceContainerHighest,
-                    valueColor: AlwaysStoppedAnimation(scheme.primary),
+                SizedBox(
+                  width: 200,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: _progress.overallProgress > 0
+                          ? _progress.overallProgress
+                          : null,
+                      minHeight: 6,
+                      backgroundColor: scheme.surfaceContainerHighest,
+                      valueColor: AlwaysStoppedAnimation(scheme.primary),
+                    ),
                   ),
                 ),
               ],
               
-              const Spacer(flex: 2),
-              
               // Action buttons for error state
               if (hasError) ...[
+                const SizedBox(height: 32),
                 FilledButton.icon(
                   onPressed: _retry,
                   icon: const Icon(Icons.refresh_rounded),
@@ -222,7 +231,8 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
               ],
               
               const SizedBox(height: 32),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -262,18 +272,95 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
     );
   }
 
-  String _buildCompletionSummary() {
-    if (_report == null) return '';
-    final parts = <String>[];
+  /// Build a visual summary with icons for households, members, and patients.
+  Widget _buildCompletionSummaryWidget(ColorScheme scheme, TextTheme textTheme) {
+    if (_report == null) {
+      return Text(
+        'Your data is ready',
+        style: textTheme.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
+        textAlign: TextAlign.center,
+      );
+    }
+
+    // Use brand navy for icons - visible in both light and dark modes
+    final iconColor = AppColors.navy;
+
+    final items = <Widget>[];
+
+    if (_report!.households > 0) {
+      items.add(_SyncStatChip(
+        icon: Icons.home_outlined,
+        count: _report!.households,
+        label: SyncStrings.households,
+        color: iconColor,
+      ));
+    }
+
+    if (_report!.members > 0) {
+      items.add(_SyncStatChip(
+        icon: Icons.people_outline,
+        count: _report!.members,
+        label: SyncStrings.members,
+        color: iconColor,
+      ));
+    }
+
     if (_report!.patients > 0) {
-      parts.add(SyncStrings.entityCount(SyncStrings.patients, _report!.patients));
+      items.add(_SyncStatChip(
+        icon: Icons.person_outline,
+        count: _report!.patients,
+        label: SyncStrings.patients,
+        color: iconColor,
+      ));
     }
-    if (_report!.followUps > 0) {
-      parts.add(SyncStrings.entityCount('Follow-ups', _report!.followUps));
+
+    if (items.isEmpty) {
+      return Text(
+        'Your data is ready',
+        style: textTheme.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
+        textAlign: TextAlign.center,
+      );
     }
-    if (_report!.referrals > 0) {
-      parts.add(SyncStrings.entityCount('Referrals', _report!.referrals));
-    }
-    return parts.isEmpty ? 'Your data is ready' : parts.join(' · ');
+
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 16,
+      runSpacing: 8,
+      children: items,
+    );
+  }
+}
+
+/// Compact stat chip with icon and count for sync summary.
+class _SyncStatChip extends StatelessWidget {
+  const _SyncStatChip({
+    required this.icon,
+    required this.count,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final int count;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 20, color: color),
+        const SizedBox(width: 4),
+        Text(
+          '$count',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
+      ],
+    );
   }
 }
