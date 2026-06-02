@@ -135,6 +135,14 @@ class MissionQueueCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         MissionReasonBadge(item: item),
+                        if (item.drivers.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          _DriverChip(
+                            label: MissionDashboardStrings
+                                .driverLabel(item.drivers.first),
+                            color: borderColor,
+                          ),
+                        ],
                         const SizedBox(height: 6),
                         Text(
                           _subtitle(item),
@@ -309,5 +317,39 @@ class MissionReasonBadge extends StatelessWidget {
       case MissionPriority.low:
         return (tokens.cardSurfaceMuted, tokens.textMuted);
     }
+  }
+}
+
+/// Small chip rendering the first driver tag on a [MissionQueueItem] so the
+/// SK can see *why* the card landed in its tier (e.g. `'Referral pending
+/// arrival'`, `'Neonate (under 28 days)'`, `'Lost-to-follow-up streak'`).
+/// Borrowed color from the card's border so it visually inherits the tier
+/// urgency cue.
+class _DriverChip extends StatelessWidget {
+  const _DriverChip({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withValues(alpha: 0.35), width: 0.8),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
+      ),
+    );
   }
 }
