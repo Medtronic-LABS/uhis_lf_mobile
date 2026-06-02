@@ -161,7 +161,50 @@ class OfflineSyncService extends ChangeNotifier {
         currentStep: SyncStep.processingData,
         entityName: 'patients',
       ));
-      final out = await _persistBundle(bundle);
+      debugPrint(
+        '[OfflineSyncService] Bundle top-level keys: ${bundle.keys.toList()}',
+      );
+      var out = await _persistBundle(bundle);
+      debugPrint(
+        '[OfflineSyncService] Bundle persisted: patients=${out.patients} '
+        'households=${out.households} members=${out.members} '
+        'followUps=${out.followUps} immunisations=${out.immunisations} '
+        'assessments=${out.assessments}',
+      );
+
+      // Step 2b: Bundle parsed zero patients — try the granular
+      // /spice-service/patient/offline/list path (Android fallback shape)
+      // before giving up. Aggregate sometimes returns metadata-only payloads
+      // when the bundled endpoint disagrees on the wire schema.
+      if (out.patients == 0) {
+        debugPrint(
+          '[OfflineSyncService] Bundle yielded zero patients — falling back '
+          'to granular /spice-service/patient/offline/list',
+        );
+        final patientNodes = await _fetchPatientList(villageIds);
+        if (patientNodes.isNotEmpty) {
+          final patients = <Patient>[];
+          final programmes = <String, Set<Programme>>{};
+          for (final raw in patientNodes) {
+            if (raw is! Map) continue;
+            final p = Patient.fromApiJson(raw);
+            if (p == null) continue;
+            patients.add(p);
+            programmes[p.id] = _extractProgrammes(raw);
+          }
+          if (patients.isNotEmpty) {
+            await _patients.upsertMany(patients);
+            for (final entry in programmes.entries) {
+              await _programmes.replaceFor(entry.key, entry.value);
+            }
+            out = out.copyWith(patients: patients.length);
+            debugPrint(
+              '[OfflineSyncService] Granular fallback persisted '
+              '${patients.length} patients',
+            );
+          }
+        }
+      }
 
       // Step 3: If bundle didn't have households/members, fetch them separately (fallback)
       int totalHouseholds = out.households;
@@ -1083,5 +1126,22 @@ class _PersistTotals {
   final int assessments;
   final int households;
   final int members;
+
+  _PersistTotals copyWith({
+    int? patients,
+    int? followUps,
+    int? immunisations,
+    int? assessments,
+    int? households,
+    int? members,
+  }) =>
+      _PersistTotals(
+        patients: patients ?? this.patients,
+        followUps: followUps ?? this.followUps,
+        immunisations: immunisations ?? this.immunisations,
+        assessments: assessments ?? this.assessments,
+        households: households ?? this.households,
+        members: members ?? this.members,
+      );
 }
 
