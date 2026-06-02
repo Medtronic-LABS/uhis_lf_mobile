@@ -290,7 +290,14 @@ class MissionDashboardRepository {
     // Load follow-ups for all patients in worklist
     final worklistPatientIds = worklistEntries.map((e) => e.patientId).toList();
     final followUpMap = await _followUps.forMany(worklistPatientIds);
-    
+
+    // Build patientId → displayName lookup off the worklist join so follow-up
+    // cards render the real member name instead of the literal "Patient"
+    // placeholder that used to leak through here.
+    final patientNamesById = <String, String>{
+      for (final e in worklistEntries) e.patientId: e.displayName,
+    };
+
     // Convert to FollowUpDue list
     final followUps = <FollowUpDue>[];
     for (final entry in followUpMap.entries) {
@@ -301,12 +308,10 @@ class MissionDashboardRepository {
         final dueAt = DateTime.fromMillisecondsSinceEpoch(dueMs);
         final diff = dueAt.difference(now).inDays;
         if (diff >= -7 && diff <= 7) {
-          // Use CQL result for patient name if available
-          final cqlResult = cqlResults[row.patientId];
           followUps.add(FollowUpDue(
             id: row.id,
             patientId: row.patientId,
-            patientName: cqlResult?.patientId ?? 'Patient', // Need patient lookup for name
+            patientName: patientNamesById[row.patientId] ?? row.patientId,
             dischargedAt: null, // Not tracked in FollowUpRow
             dueAt: dueAt,
             reason: row.kind, // Use kind as reason

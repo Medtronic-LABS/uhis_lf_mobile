@@ -129,7 +129,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // empty state.
     final missionRepo = context.read<MissionDashboardRepository>();
     setState(() {
-      _queueFuture = missionRepo.loadQueue(limit: 10);
+      // Pull the full queue (worklist + referrals + follow-ups). The visible
+      // list trims to 6 + "+ N more"; without enough headroom the routine
+      // worklist entries get drowned by follow-ups, leaving the dashboard
+      // looking like generic placeholder cards.
+      _queueFuture = missionRepo.loadQueue(limit: 200);
       _alertsFuture = missionRepo.loadCriticalAlerts();
       _referralSummaryFuture = missionRepo.loadReferralSummary();
     });
