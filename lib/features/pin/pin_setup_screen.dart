@@ -46,8 +46,8 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
       final auth = context.read<AuthState>();
       await auth.enrolPin(v);
       if (!mounted) return;
-      // First-time setup: go to sync screen to download data
-      context.go('/sync');
+      // PIN setup complete - go directly to home (sync already done before onboarding)
+      context.go('/home');
     } else {
       setState(() {
         _error = PinStrings.mismatch;

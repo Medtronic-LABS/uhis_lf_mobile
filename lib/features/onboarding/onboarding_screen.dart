@@ -83,8 +83,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
     if (!mounted) return;
 
-    // Go directly to dashboard
-    context.go('/dashboard');
+    // Go directly to home (sync already done before onboarding)
+    context.go('/home');
   }
 
   @override
