@@ -16,7 +16,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 7;
+  static const int schemaVersion = 8;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -32,6 +32,8 @@ class AppDatabase {
   static const String tableNotificationLog = 'notification_log';
   static const String tableEncounters = 'encounters';
   static const String tableLocalAssessments = 'local_assessments';
+  static const String tablePregnancySnapshot = 'patient_pregnancy_snapshot';
+  static const String tableTreatmentPresence = 'patient_treatment_presence';
 
   /// Opens (creating if needed) the on-device database.
   static Future<AppDatabase> open() async {
@@ -152,6 +154,9 @@ class AppDatabase {
         due_at INTEGER,
         completed_at INTEGER,
         attempts INTEGER,
+        unsuccessful_attempts INTEGER,
+        type TEXT,
+        referred_site_id TEXT,
         is_lost INTEGER,
         raw_json TEXT
       )''');
@@ -306,6 +311,25 @@ class AppDatabase {
         'CREATE INDEX idx_local_assessments_patient ON $tableLocalAssessments(patient_id)');
     await db.execute(
         'CREATE INDEX idx_local_assessments_sync ON $tableLocalAssessments(sync_status)');
+
+    // v8 — Tiered Mission Dashboard side tables (spec
+    // leapfrog-setup/designs/dashboard-prioritization-impl.md).
+    await db.execute('''
+      CREATE TABLE $tablePregnancySnapshot (
+        patient_id TEXT PRIMARY KEY,
+        high_risk_pregnant_woman INTEGER NOT NULL DEFAULT 0,
+        has_gaps_in_anc INTEGER NOT NULL DEFAULT 0,
+        is_postpartum_window INTEGER NOT NULL DEFAULT 0,
+        is_near_term_anc INTEGER NOT NULL DEFAULT 0,
+        had_delivery_complications INTEGER NOT NULL DEFAULT 0,
+        has_pnc_illness INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER
+      )''');
+    await db.execute('''
+      CREATE TABLE $tableTreatmentPresence (
+        patient_id TEXT PRIMARY KEY,
+        updated_at INTEGER
+      )''');
   }
 
   static Future<void> _onUpgrade(Database db, int from, int to) async {
@@ -586,6 +610,41 @@ class AppDatabase {
       await addCol7('ALTER TABLE $tableMembers ADD COLUMN last_updated TEXT');
       await addCol7('ALTER TABLE $tableMembers ADD COLUMN created_at INTEGER');
       await addCol7('ALTER TABLE $tableMembers ADD COLUMN sync_status TEXT DEFAULT "Success"');
+    }
+    if (from < 8) {
+      // v8 — Tiered Mission Dashboard side tables. Additive only.
+      Future<void> addCol8(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* column already present */}
+      }
+      Future<void> addTbl8(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* table already present */}
+      }
+      await addCol8(
+          'ALTER TABLE $tableFollowUps ADD COLUMN unsuccessful_attempts INTEGER');
+      await addCol8(
+          'ALTER TABLE $tableFollowUps ADD COLUMN type TEXT');
+      await addCol8(
+          'ALTER TABLE $tableFollowUps ADD COLUMN referred_site_id TEXT');
+      await addTbl8('''
+        CREATE TABLE IF NOT EXISTS $tablePregnancySnapshot (
+          patient_id TEXT PRIMARY KEY,
+          high_risk_pregnant_woman INTEGER NOT NULL DEFAULT 0,
+          has_gaps_in_anc INTEGER NOT NULL DEFAULT 0,
+          is_postpartum_window INTEGER NOT NULL DEFAULT 0,
+          is_near_term_anc INTEGER NOT NULL DEFAULT 0,
+          had_delivery_complications INTEGER NOT NULL DEFAULT 0,
+          has_pnc_illness INTEGER NOT NULL DEFAULT 0,
+          updated_at INTEGER
+        )''');
+      await addTbl8('''
+        CREATE TABLE IF NOT EXISTS $tableTreatmentPresence (
+          patient_id TEXT PRIMARY KEY,
+          updated_at INTEGER
+        )''');
     }
   }
 

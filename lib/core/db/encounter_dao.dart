@@ -310,4 +310,27 @@ class EncounterDao {
       whereArgs: [SyncStatus.synced.name, olderThan],
     );
   }
+
+  /// Get patient IDs with completed visits today.
+  ///
+  /// Returns a set of patient IDs that have at least one completed
+  /// encounter with `completed_at` on the current calendar day.
+  Future<Set<String>> completedTodayPatientIds() async {
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day);
+    final startMs = startOfDay.millisecondsSinceEpoch;
+    
+    final rows = await _db.db.query(
+      AppDatabase.tableEncounters,
+      columns: ['patient_id'],
+      where: 'status IN (?, ?) AND completed_at >= ?',
+      whereArgs: [
+        EncounterStatus.completed.name,
+        EncounterStatus.synced.name,
+        startMs,
+      ],
+      distinct: true,
+    );
+    return rows.map((r) => r['patient_id'] as String).toSet();
+  }
 }

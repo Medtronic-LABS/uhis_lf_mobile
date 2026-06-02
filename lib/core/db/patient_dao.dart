@@ -58,6 +58,26 @@ class PatientDao {
     );
   }
 
+  /// Update only visit scheduling fields after an assessment is completed.
+  /// This is lighter than [updateRisk] — only touches the scheduling columns.
+  Future<void> updateVisitSchedule({
+    required String patientId,
+    required int lastVisitAt,
+    required int nextDueAt,
+    int? missedVisitCount,
+  }) async {
+    await _db.db.update(
+      AppDatabase.tablePatients,
+      {
+        'last_visit_at': lastVisitAt,
+        'next_due_at': nextDueAt,
+        if (missedVisitCount != null) 'missed_visit_count': missedVisitCount,
+      },
+      where: 'id = ?',
+      whereArgs: [patientId],
+    );
+  }
+
   Future<Patient?> byId(String id) async {
     final rows = await _db.db.query(
       AppDatabase.tablePatients,

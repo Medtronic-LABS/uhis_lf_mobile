@@ -23,6 +23,9 @@ class FollowUpRow {
     this.dueAt,
     this.completedAt,
     this.attempts,
+    this.unsuccessfulAttempts,
+    this.type,
+    this.referredSiteId,
     this.isLost = false,
     required this.rawJson,
   });
@@ -33,6 +36,21 @@ class FollowUpRow {
   final int? dueAt;
   final int? completedAt;
   final int? attempts;
+
+  /// Number of unsuccessful contact attempts (bundle field
+  /// `unsuccessfulAttempts`). Drives the `ltfu-streak` OVERDUE-min driver
+  /// and the composite-score `min(attempts, 5) × 5` term.
+  final int? unsuccessfulAttempts;
+
+  /// Server-side classification (`REFERRED` / `SCREENED` / `LOST_TO_FOLLOW_UP`
+  /// / `MEDICAL_REVIEW`). Stored verbatim — orthogonal to [kind] (which is
+  /// derived for risk scoring). Drives the LTFU + TB-default-risk drivers.
+  final String? type;
+
+  /// Facility ID the patient was referred to (`referredSiteId`). Marks the
+  /// patient as ever-referred for the composite-score continuity bonus.
+  final String? referredSiteId;
+
   final bool isLost;
   final String rawJson;
 
@@ -43,6 +61,9 @@ class FollowUpRow {
         'due_at': dueAt,
         'completed_at': completedAt,
         'attempts': attempts,
+        'unsuccessful_attempts': unsuccessfulAttempts,
+        'type': type,
+        'referred_site_id': referredSiteId,
         'is_lost': isLost ? 1 : 0,
         'raw_json': rawJson,
       };
@@ -54,6 +75,9 @@ class FollowUpRow {
         dueAt: row['due_at'] as int?,
         completedAt: row['completed_at'] as int?,
         attempts: row['attempts'] as int?,
+        unsuccessfulAttempts: row['unsuccessful_attempts'] as int?,
+        type: row['type'] as String?,
+        referredSiteId: row['referred_site_id'] as String?,
         isLost: row['is_lost'] == 1,
         rawJson: row['raw_json'] as String? ?? '{}',
       );
