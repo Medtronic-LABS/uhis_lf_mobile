@@ -528,6 +528,22 @@ class OfflineSyncService extends ChangeNotifier {
     }
     debugPrint('[OfflineSyncService] Parsed ${members.length} members from bundle');
 
+    // uhis-dev backend ships `members` as the canonical patient list — the
+    // offline-sync bundle has no `patients` key. Bridge each member into the
+    // patients table so the worklist and mission dashboard can see them.
+    // Programme membership remains driven by the dedicated `pregnancyInfos` /
+    // `treatmentDetails` arrays parsed elsewhere; here we only need the
+    // identity columns the worklist query selects.
+    if (patients.isEmpty && members.isNotEmpty) {
+      for (final m in members) {
+        final p = _memberToPatient(m);
+        if (p != null) patients.add(p);
+      }
+      debugPrint(
+        '[OfflineSyncService] Derived ${patients.length} patients from members',
+      );
+    }
+
     await _patients.upsertMany(patients);
     for (final entry in programmes.entries) {
       await _programmes.replaceFor(entry.key, entry.value);
@@ -551,6 +567,31 @@ class OfflineSyncService extends ChangeNotifier {
       assessments: assessments.length,
       households: households.length,
       members: members.length,
+    );
+  }
+
+  /// Map a household member row into the minimum Patient shape the worklist
+  /// query selects. The uhis-dev backend treats every household member as a
+  /// candidate patient — there is no separate `patients` array in the bundle.
+  /// Returns null if the member lacks a usable identifier.
+  static Patient? _memberToPatient(HouseholdMemberEntity m) {
+    if (m.id.isEmpty) return null;
+    return Patient(
+      // Prefer the explicit patientId when the backend has minted one, else
+      // fall back to the member's own UUID so every member shows up exactly
+      // once in the patients table.
+      id: (m.patientId != null && m.patientId!.isNotEmpty) ? m.patientId! : m.id,
+      patientId: m.patientId,
+      name: m.name,
+      gender: m.gender,
+      dob: m.dob,
+      phone: m.phone,
+      nationalId: m.nationalId,
+      householdId: m.householdId,
+      villageId: m.villageId,
+      isActive: m.isActive,
+      updatedAt: m.updatedAt,
+      rawJson: m.rawJson ?? '{}',
     );
   }
 
