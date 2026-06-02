@@ -197,12 +197,27 @@ class MissionDashboardService {
     // Sort by priority score descending
     items.sort((a, b) => b.priorityScore.compareTo(a.priorityScore));
 
-    // Apply limit if specified
-    if (limit != null && items.length > limit) {
-      return items.sublist(0, limit);
+    // Dedupe by patientId — the same patient may appear via a worklist entry,
+    // a referral, and a follow-up. Keep the highest-scoring representation
+    // (already at the front of `items` after the sort above). Items without
+    // a patientId (e.g. household opportunities) pass through unchanged so
+    // they're not collapsed with each other.
+    final seen = <String>{};
+    final deduped = <MissionQueueItem>[];
+    for (final item in items) {
+      final pid = item.patientId;
+      if (pid != null && pid.isNotEmpty) {
+        if (!seen.add(pid)) continue;
+      }
+      deduped.add(item);
     }
 
-    return items;
+    // Apply limit if specified
+    if (limit != null && deduped.length > limit) {
+      return deduped.sublist(0, limit);
+    }
+
+    return deduped;
   }
 
   /// Compute mission progress from input data.

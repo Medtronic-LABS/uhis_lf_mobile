@@ -544,6 +544,59 @@ class OfflineSyncService extends ChangeNotifier {
       );
     }
 
+    // ── Programme inference from bundle side-tables ──────────────────────────
+    // The aggregate bundle ships member identity in `members` but programme
+    // membership in `pregnancyInfos` (ANC) and `followUps.encounterType`
+    // (NCD / TB / ICCM…). Build a memberId → patientId resolver from the
+    // members we just parsed, then merge any programme hits into the
+    // existing `programmes` map so the dashboard surfaces the right pills.
+    final memberIdToPatientId = <String, String>{};
+    for (final m in members) {
+      final pid = (m.patientId != null && m.patientId!.isNotEmpty)
+          ? m.patientId!
+          : m.id;
+      memberIdToPatientId[m.id] = pid;
+      if (m.patientId != null && m.patientId!.isNotEmpty) {
+        memberIdToPatientId[m.patientId!] = pid;
+      }
+    }
+    void mergeProgramme(String? patientKey, Programme? programme) {
+      if (patientKey == null || patientKey.isEmpty || programme == null) {
+        return;
+      }
+      final patientId = memberIdToPatientId[patientKey] ?? patientKey;
+      programmes.putIfAbsent(patientId, () => <Programme>{}).add(programme);
+    }
+
+    final pregnancyNodes = _listFromAny(bundle, const [
+      'pregnancyInfos',
+      'pregnancyInfoList',
+      'pregnancies',
+    ]);
+    for (final raw in pregnancyNodes) {
+      if (raw is! Map) continue;
+      final memberKey = JsonRead.firstString(raw, const [
+        'householdMemberId',
+        'memberId',
+        'patientId',
+      ]);
+      mergeProgramme(memberKey, Programme.anc);
+    }
+
+    for (final raw in followUpNodes) {
+      if (raw is! Map) continue;
+      final memberKey = JsonRead.firstString(raw, const [
+        'patientId',
+        'memberId',
+        'householdMemberId',
+      ]);
+      final encounter = JsonRead.firstString(raw, const [
+        'encounterType',
+        'encounterName',
+      ]);
+      mergeProgramme(memberKey, Programme.fromTag(encounter));
+    }
+
     await _patients.upsertMany(patients);
     for (final entry in programmes.entries) {
       await _programmes.replaceFor(entry.key, entry.value);

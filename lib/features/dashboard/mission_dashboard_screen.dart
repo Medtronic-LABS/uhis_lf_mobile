@@ -1435,8 +1435,24 @@ class _PriorityPatientCard extends StatelessWidget {
         item.village!.isNotEmpty) {
       parts.add(item.village!);
     }
+    final dueLabel = _dueLabel(item.dueAt);
+    if (dueLabel != null) parts.add(dueLabel);
     if (parts.isEmpty) return item.reason;
     return parts.join(' · ');
+  }
+
+  /// Render `Due today` / `Due in 3d` / `Overdue 2d` from a due timestamp,
+  /// or null when no date is known. Centralised so cards never re-implement
+  /// the day-math + plural rules.
+  static String? _dueLabel(DateTime? dueAt) {
+    if (dueAt == null) return null;
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day);
+    final due = DateTime(dueAt.year, dueAt.month, dueAt.day);
+    final days = due.difference(start).inDays;
+    if (days == 0) return 'Due today';
+    if (days > 0) return 'Due in ${days}d';
+    return 'Overdue ${-days}d';
   }
 
   Color _borderColor(
