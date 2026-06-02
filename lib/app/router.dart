@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/auth/auth_state.dart';
+import '../core/models/dashboard_tier.dart';
 import '../features/dashboard/mission_dashboard_screen.dart';
 import '../features/household/household_detail_screen.dart';
 import '../features/household/household_list_screen.dart';
@@ -127,9 +128,23 @@ GoRouter buildRouter(AuthState auth) {
             routes: [
               GoRoute(
                 path: '/patients',
-                builder: (_, __) => const HouseholdListScreen(
-                  mode: HouseholdListMode.members,
-                ),
+                builder: (_, state) {
+                  // Parse tier query parameter for deep-link filtering
+                  final tierParam = state.uri.queryParameters['tier'];
+                  DashboardTier? initialTier;
+                  if (tierParam != null && tierParam.isNotEmpty) {
+                    initialTier = DashboardTier.values
+                        .cast<DashboardTier?>()
+                        .firstWhere(
+                          (t) => t?.name == tierParam,
+                          orElse: () => null,
+                        );
+                  }
+                  return HouseholdListScreen(
+                    mode: HouseholdListMode.members,
+                    initialTier: initialTier,
+                  );
+                },
                 routes: [
                   // Households view (same tab, different mode)
                   GoRoute(
@@ -170,11 +185,14 @@ GoRouter buildRouter(AuthState auth) {
                       } else if (extra is Map) {
                         memberData = Map<String, dynamic>.from(extra);
                       }
+                      // Read origin from query params for return navigation
+                      final origin = state.uri.queryParameters['origin'];
                       // Ignore HouseholdDetailData - it's for household routes, not patient routes
                       // This can happen during tab switching in StatefulShellRoute
                       return PatientContextScreen(
                         patientId: state.pathParameters['id']!,
                         memberData: memberData,
+                        origin: origin,
                       );
                     },
                   ),
@@ -221,6 +239,8 @@ GoRouter buildRouter(AuthState auth) {
                       } else if (state.extra is Map) {
                         extra = Map<String, dynamic>.from(state.extra as Map);
                       }
+                      // Extract origin from query params for return navigation
+                      final origin = state.uri.queryParameters['origin'];
                       return MaterialPage(
                         key: ValueKey('visit-assessment-${state.pathParameters['visitId']}-${state.pathParameters['programme']}'),
                         child: VisitAssessmentStep(
@@ -234,6 +254,7 @@ GoRouter buildRouter(AuthState auth) {
                               extra?['householdMemberLocalId'] as int?,
                           patientAge: extra?['patientAge'] as int?,
                           gestationalWeeks: extra?['gestationalWeeks'] as int?,
+                          origin: origin,
                         ),
                       );
                     },

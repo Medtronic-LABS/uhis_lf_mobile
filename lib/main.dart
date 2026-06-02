@@ -25,6 +25,8 @@ import 'core/db/local_dashboard_repository.dart';
 import 'core/db/member_dao.dart';
 import 'core/db/patient_dao.dart';
 import 'core/db/patient_programmes_dao.dart';
+import 'core/db/pregnancy_snapshot_dao.dart';
+import 'core/db/treatment_presence_dao.dart';
 import 'core/db/referral_dao.dart';
 import 'core/db/sync_meta_dao.dart';
 import 'core/notifications/notification_service.dart';
@@ -135,6 +137,10 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final SyncMetaDao _syncMetaDao = SyncMetaDao(widget.appDb);
   late final HouseholdDao _householdDao = HouseholdDao(widget.appDb);
   late final MemberDao _memberDao = MemberDao(widget.appDb);
+  late final PregnancySnapshotDao _pregnancySnapshotDao =
+      PregnancySnapshotDao(widget.appDb);
+  late final TreatmentPresenceDao _treatmentPresenceDao =
+      TreatmentPresenceDao(widget.appDb);
   late final LocalDashboardRepository _localDashboard = LocalDashboardRepository(
     households: _householdDao,
     members: _memberDao,
@@ -156,6 +162,8 @@ class _UhisNextAppState extends State<UhisNextApp>
     syncMeta: _syncMetaDao,
     households: _householdDao,
     members: _memberDao,
+    pregnancySnapshot: _pregnancySnapshotDao,
+    treatmentPresence: _treatmentPresenceDao,
   );
   late final WorklistRepository _worklist = WorklistRepository(
     patients: _patientDao,
@@ -200,6 +208,8 @@ class _UhisNextAppState extends State<UhisNextApp>
     households: _householdDao,
     slaEvaluator: _slaEvaluator,
     priorityScorer: _priorityScorer,
+    pregnancySnapshot: _pregnancySnapshotDao,
+    treatmentPresence: _treatmentPresenceDao,
   );
 
   // ── Assessment Repository for offline-first assessment capture ──────────

@@ -292,10 +292,11 @@ class _SearchViewState extends State<_SearchView> {
       );
       return;
     }
-    context.push('/patient/${hit.id}', extra: {
+    // Use /patients/ directly (not /patient/) to avoid redirect that loses extra data
+    context.push('/patients/${hit.id}', extra: {
       'id': hit.id,
-      'firstName': hit.name,
-      'age': hit.age,
+      'name': hit.name,
+      'age': hit.age != null ? int.tryParse(hit.age!) : null,
       'gender': hit.gender,
       'phoneNumber': hit.phone,
       'idCode': hit.nid,

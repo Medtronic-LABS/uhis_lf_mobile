@@ -8,11 +8,17 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/theme.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/db/encounter_dao.dart';
 import '../../core/db/patient_dao.dart';
+import '../../core/models/dashboard_tier.dart';
+import '../../core/models/mission_queue_item.dart';
 import '../../core/models/patient.dart';
 import '../../core/models/referral.dart';
 import '../../core/models/sla.dart';
 import '../../core/sync/offline_sync_service.dart';
+import '../dashboard/mission_dashboard_repository.dart';
+import '../visit/visit_controller.dart';
+import '../visit/widgets/widgets.dart';
 import 'referral_api_service.dart';
 import 'referral_repository.dart';
 import 'widgets/bulk_actions.dart';
@@ -36,7 +42,8 @@ class ReferralListScreen extends StatefulWidget {
   State<ReferralListScreen> createState() => _ReferralListScreenState();
 }
 
-class _ReferralListScreenState extends State<ReferralListScreen> {
+class _ReferralListScreenState extends State<ReferralListScreen>
+    with SingleTickerProviderStateMixin {
   SlaPriority? _filter;
   Future<_DashboardData>? _future;
   
@@ -44,7 +51,24 @@ class _ReferralListScreenState extends State<ReferralListScreen> {
   ReferralRepository? _repo;
   PatientDao? _patientDao;
   OfflineSyncService? _sync;
+  MissionDashboardRepository? _missionRepo;
+  EncounterDao? _encounterDao;
   bool _listenerAdded = false;
+
+  // Tab controller for Visits/Referrals tabs
+  late TabController _tabController;
+
+  // Mission queue state
+  Future<List<MissionQueueItem>>? _missionQueueFuture;
+
+  // Completed patient IDs (visited today)
+  Set<String> _completedPatientIds = {};
+
+  // Visit tier filter
+  DashboardTier? _visitTierFilter;
+  
+  // Show only completed patients filter
+  bool _showCompletedOnly = false;
 
   // Search and filter state
   String _searchQuery = '';
@@ -71,6 +95,7 @@ class _ReferralListScreenState extends State<ReferralListScreen> {
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     // Defer to didChangeDependencies where context is valid
   }
 
@@ -81,11 +106,15 @@ class _ReferralListScreenState extends State<ReferralListScreen> {
     _repo = context.read<ReferralRepository>();
     _patientDao = context.read<PatientDao>();
     _sync = context.read<OfflineSyncService>();
+    _missionRepo = context.read<MissionDashboardRepository>();
+    _encounterDao = context.read<EncounterDao>();
     // Initialize future and listener on first call
     if (!_listenerAdded) {
       _listenerAdded = true;
       _future = _loadAll(_filter);
+      _missionQueueFuture = _loadMissionQueue();
       _repo!.changes.addListener(_onChanges);
+      _missionRepo!.changes.addListener(_onMissionChanges);
       _startAutoRefresh();
       _setupConnectivityListener();
     }
@@ -93,7 +122,9 @@ class _ReferralListScreenState extends State<ReferralListScreen> {
 
   @override
   void dispose() {
+    _tabController.dispose();
     _repo?.changes.removeListener(_onChanges);
+    _missionRepo?.changes.removeListener(_onMissionChanges);
     _autoRefreshTimer?.cancel();
     _connectivitySubscription?.cancel();
     super.dispose();
@@ -130,10 +161,65 @@ class _ReferralListScreenState extends State<ReferralListScreen> {
     _reload();
   }
 
+  /// Called when mission dashboard data changes (e.g., after assessment completion).
+  void _onMissionChanges() {
+    if (!mounted) return;
+    debugPrint('[Tasks] Mission data changed, reloading queue...');
+    _reloadMissionQueue();
+  }
+
   void _reload() {
     if (!mounted || _repo == null) return;
     final future = _loadAll(_filter);
-    setState(() { _future = future; });
+    final missionFuture = _loadMissionQueue();
+    setState(() {
+      _future = future;
+      _missionQueueFuture = missionFuture;
+    });
+  }
+
+  /// Reload just the mission queue (used when mission data changes).
+  void _reloadMissionQueue() {
+    if (!mounted) return;
+    final missionFuture = _loadMissionQueue();
+    setState(() {
+      _missionQueueFuture = missionFuture;
+    });
+  }
+
+  /// Load mission queue items sorted by tier priority.
+  /// Completed patients (visited today) are sorted to the bottom.
+  Future<List<MissionQueueItem>> _loadMissionQueue() async {
+    final missionRepo = _missionRepo;
+    final encounterDao = _encounterDao;
+    if (missionRepo == null) return const [];
+    try {
+      // Load completed patient IDs first
+      if (encounterDao != null) {
+        final completedIds = await encounterDao.completedTodayPatientIds();
+        if (mounted) {
+          setState(() => _completedPatientIds = completedIds);
+        }
+      }
+      
+      final queue = await missionRepo.loadQueue(limit: 200);
+      // Sort by: 1) completed status (not completed first), 2) tier priority
+      final sorted = List<MissionQueueItem>.from(queue)
+        ..sort((a, b) {
+          final aCompleted = _completedPatientIds.contains(a.patientId);
+          final bCompleted = _completedPatientIds.contains(b.patientId);
+          // Completed items go to bottom
+          if (aCompleted != bCompleted) {
+            return aCompleted ? 1 : -1;
+          }
+          // Within same completion status, sort by tier
+          return a.tier.rank.compareTo(b.tier.rank);
+        });
+      return sorted;
+    } catch (e) {
+      debugPrint('[Tasks] Failed to load mission queue: $e');
+      return const [];
+    }
   }
 
   Future<_DashboardData> _loadAll(SlaPriority? filter) async {
@@ -413,10 +499,11 @@ class _ReferralListScreenState extends State<ReferralListScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final tokens = Theme.of(context).extension<LeapfrogColors>();
     
     return Scaffold(
       appBar: AppBar(
-        title: const Text(ReferralStrings.dashboardTitle),
+        title: const Text('Tasks'),
         actions: [
           if (_isSelectionMode)
             IconButton(
@@ -425,8 +512,330 @@ class _ReferralListScreenState extends State<ReferralListScreen> {
               tooltip: 'Cancel selection',
             ),
         ],
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'Visits'),
+            Tab(text: 'Referrals'),
+          ],
+        ),
       ),
-      body: FutureBuilder<_DashboardData>(
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          // Tab 1: Visits (Mission Queue Items)
+          _buildVisitsTab(scheme, tokens),
+          // Tab 2: Referrals (existing referral list)
+          _buildReferralsTab(scheme),
+        ],
+      ),
+    );
+  }
+
+  /// Build the Visits tab showing mission queue items sorted by tier priority.
+  Widget _buildVisitsTab(ColorScheme scheme, LeapfrogColors? tokens) {
+    return FutureBuilder<List<MissionQueueItem>>(
+      future: _missionQueueFuture,
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snap.hasError) {
+          return _ErrorState(
+            message: 'Failed to load visits: ${snap.error}',
+            onRetry: _reload,
+          );
+        }
+        final allQueue = snap.data ?? const <MissionQueueItem>[];
+        
+        // Apply filters
+        List<MissionQueueItem> queue;
+        if (_showCompletedOnly) {
+          // Show only completed patients
+          queue = allQueue.where((item) => _completedPatientIds.contains(item.patientId)).toList();
+        } else if (_visitTierFilter == null) {
+          // Show all (but completed items are sorted to bottom by _loadMissionQueue)
+          queue = allQueue;
+        } else {
+          // Filter by specific tier
+          queue = allQueue.where((item) => item.tier == _visitTierFilter).toList();
+        }
+
+        // Determine empty state message
+        String emptyTitle;
+        String emptySubtitle;
+        VoidCallback? clearAction;
+        if (_showCompletedOnly) {
+          emptyTitle = 'No Completed Visits Today';
+          emptySubtitle = 'Complete patient assessments to see them here.';
+          clearAction = () => setState(() => _showCompletedOnly = false);
+        } else if (_visitTierFilter != null) {
+          emptyTitle = 'No ${MissionDashboardStrings.tierLabel(_visitTierFilter!)} Visits';
+          emptySubtitle = 'No patients in this priority tier.';
+          clearAction = () => setState(() => _visitTierFilter = null);
+        } else {
+          emptyTitle = 'No Visits Scheduled';
+          emptySubtitle = 'All patients are up to date. Pull to refresh.';
+          clearAction = null;
+        }
+
+        return Column(
+          children: [
+            // Tier filter chip row
+            _buildVisitTierChipRow(allQueue),
+            // Main list
+            Expanded(
+              child: queue.isEmpty
+                  ? RefreshIndicator(
+                      onRefresh: _syncNow,
+                      child: ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        children: [
+                          ReferralEmptyState(
+                            title: emptyTitle,
+                            subtitle: emptySubtitle,
+                            icon: _showCompletedOnly 
+                                ? Icons.check_circle_rounded 
+                                : Icons.check_circle_outline_rounded,
+                            actionLabel: clearAction != null ? 'Clear Filter' : null,
+                            onAction: clearAction,
+                          ),
+                        ],
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _syncNow,
+                      child: _buildVisitList(queue),
+                    ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Build tier filter chip row for Visits tab.
+  Widget _buildVisitTierChipRow(List<MissionQueueItem> allQueue) {
+    final scheme = Theme.of(context).colorScheme;
+    
+    // Count items per tier (excluding completed)
+    final pendingQueue = allQueue.where((item) => !_completedPatientIds.contains(item.patientId)).toList();
+    final counts = <DashboardTier?, int>{null: pendingQueue.length};
+    for (final tier in DashboardTier.values) {
+      counts[tier] = pendingQueue.where((item) => item.tier == tier).length;
+    }
+    final completedCount = _completedPatientIds.length;
+    
+    final tiers = [null, ...DashboardTier.values];
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border(
+          bottom: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.3)),
+        ),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            // Tier chips
+            ...tiers.map((tier) {
+              final isSelected = !_showCompletedOnly && _visitTierFilter == tier;
+              final label = tier == null
+                  ? 'All'
+                  : MissionDashboardStrings.tierLabel(tier);
+              final count = counts[tier] ?? 0;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: VisitTierChip(
+                  label: label,
+                  count: count,
+                  tier: tier,
+                  isSelected: isSelected,
+                  onTap: () => setState(() {
+                    _showCompletedOnly = false;
+                    _visitTierFilter = tier;
+                  }),
+                ),
+              );
+            }),
+            // Completed Today chip
+            _CompletedTodayChip(
+              count: completedCount,
+              isSelected: _showCompletedOnly,
+              onTap: () => setState(() {
+                _showCompletedOnly = !_showCompletedOnly;
+                if (_showCompletedOnly) {
+                  _visitTierFilter = null; // Clear tier filter when showing completed
+                }
+              }),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build the visit list with tier headers.
+  Widget _buildVisitList(List<MissionQueueItem> queue) {
+    // If showing completed only, display simple list without headers
+    if (_showCompletedOnly) {
+      return ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        itemCount: queue.length,
+        itemBuilder: (context, index) {
+          final item = queue[index];
+          return MissionQueueCard(
+            item: item,
+            isCompleted: true,
+            onTap: () => _handleVisitTap(item), // Allow tapping to view
+            onAction: null, // No action for completed
+          );
+        },
+      );
+    }
+    
+    // If filtered to a single tier, don't show headers
+    if (_visitTierFilter != null) {
+      return ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        itemCount: queue.length,
+        itemBuilder: (context, index) {
+          final item = queue[index];
+          final isCompleted = _completedPatientIds.contains(item.patientId);
+          return MissionQueueCard(
+            item: item,
+            isCompleted: isCompleted,
+            onTap: isCompleted ? null : () => _handleVisitTap(item),
+            onAction: isCompleted ? null : () => _handleVisitAction(item),
+          );
+        },
+      );
+    }
+
+    // Group by tier for display, but handle completed items separately
+    // Completed items are already sorted to bottom by _loadMissionQueue
+    final grouped = <DashboardTier, List<MissionQueueItem>>{};
+    final completedItems = <MissionQueueItem>[];
+    
+    for (final item in queue) {
+      if (_completedPatientIds.contains(item.patientId)) {
+        completedItems.add(item);
+      } else {
+        grouped.putIfAbsent(item.tier, () => []).add(item);
+      }
+    }
+
+    // Calculate total item count (tiers with items + their items + completed header + completed items)
+    int totalCount = 0;
+    for (final tier in DashboardTier.values) {
+      if (grouped[tier]?.isNotEmpty == true) {
+        totalCount += 1 + grouped[tier]!.length; // header + items
+      }
+    }
+    if (completedItems.isNotEmpty) {
+      totalCount += 1 + completedItems.length; // completed header + items
+    }
+
+    return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: totalCount,
+      itemBuilder: (context, index) {
+        // Build list with tier headers
+        int itemIndex = 0;
+        for (final tier in DashboardTier.values) {
+          final items = grouped[tier];
+          if (items == null || items.isEmpty) continue;
+          
+          // Header
+          if (index == itemIndex) {
+            return MissionTierHeader(tier: tier, count: items.length);
+          }
+          itemIndex++;
+          
+          // Items
+          for (int i = 0; i < items.length; i++) {
+            if (index == itemIndex) {
+              return MissionQueueCard(
+                item: items[i],
+                isCompleted: false,
+                onTap: () => _handleVisitTap(items[i]),
+                onAction: () => _handleVisitAction(items[i]),
+              );
+            }
+            itemIndex++;
+          }
+        }
+        
+        // Completed section
+        if (completedItems.isNotEmpty) {
+          // Completed header
+          if (index == itemIndex) {
+            return CompletedTierHeader(count: completedItems.length);
+          }
+          itemIndex++;
+          
+          // Completed items
+          for (int i = 0; i < completedItems.length; i++) {
+            if (index == itemIndex) {
+              return MissionQueueCard(
+                item: completedItems[i],
+                isCompleted: true,
+                onTap: null,
+                onAction: null,
+              );
+            }
+            itemIndex++;
+          }
+        }
+        
+        return const SizedBox.shrink();
+      },
+    );
+  }
+
+  /// Handle tap on a visit card - navigate to patient.
+  void _handleVisitTap(MissionQueueItem item) {
+    if (item.patientId != null) {
+      context.push('/patient/${item.patientId}?origin=tasks');
+    }
+  }
+
+  /// Handle action button on a visit card - start visit.
+  Future<void> _handleVisitAction(MissionQueueItem item) async {
+    if (item.patientId == null) return;
+    try {
+      final visitController = context.read<VisitController>();
+      final encounterId = await visitController.startVisit(
+        patientId: item.patientId!,
+        programme: item.primaryProgramme,
+        patientName: item.patientName,
+        patientAge: item.age,
+        householdId: item.householdId,
+      );
+      if (!mounted) return;
+      if (encounterId != null) {
+        context.push('/patients/visit/$encounterId/triage?origin=tasks');
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(visitController.error ?? 'Failed to start visit')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to start visit: $e')),
+      );
+    }
+  }
+
+  /// Build the Referrals tab (existing referral list).
+  Widget _buildReferralsTab(ColorScheme scheme) {
+    return FutureBuilder<_DashboardData>(
         future: _future,
         builder: (context, snap) {
           // Show loading skeleton on initial load
@@ -637,8 +1046,7 @@ class _ReferralListScreenState extends State<ReferralListScreen> {
             ],
           );
         },
-      ),
-    );
+      );
   }
 
   // ── Action Handlers ─────────────────────────────────────────────────────────
@@ -1543,6 +1951,76 @@ class _ErrorState extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Chip for filtering to completed visits today.
+class _CompletedTodayChip extends StatelessWidget {
+  const _CompletedTodayChip({
+    required this.count,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final int count;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    final color = tokens.statusSuccess;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withValues(alpha: 0.2) : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? color : tokens.textMuted.withValues(alpha: 0.3),
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.check_circle_rounded,
+              size: 14,
+              color: isSelected ? color : tokens.textMuted,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Completed',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected ? color : tokens.textMuted,
+              ),
+            ),
+            if (count > 0) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isSelected ? color : tokens.textMuted.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '$count',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: isSelected ? Colors.white : tokens.textMuted,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
