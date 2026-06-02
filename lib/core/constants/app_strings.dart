@@ -15,6 +15,8 @@
 ///   * Keep the rendered value stable — e2e selectors match on these strings.
 library;
 
+import '../models/dashboard_tier.dart';
+
 /// App-wide identity strings.
 abstract final class AppStrings {
   AppStrings._();
@@ -259,6 +261,11 @@ abstract final class SyncStrings {
   static String dataAsOfMinutes(int m) => 'Data as of ${m}m ago';
   static String dataAsOfHours(int h) => 'Data as of ${h}h ago';
   static String dataAsOfDays(int d) => 'Data as of ${d}d ago';
+
+  // Dashboard preparation phase (after sync, before navigation)
+  static const String almostReady = 'Almost ready';
+  static const String preparingVisits = 'Preparing today\'s visits…';
+  static const String preparingDashboard = 'Setting up your dashboard…';
 }
 
 /// First-login onboarding: security setup prompt.
@@ -839,6 +846,99 @@ abstract final class MissionDashboardStrings {
   static const String noFollowUpsDue = 'No follow-ups due';
   static const String noHouseholdOpportunities =
       'No household opportunities identified';
+
+  // ── 5-Tier Dashboard Model ───────────────────────────────────────────────
+  // Single source of UI copy for tier headers, CTAs, and driver rationales.
+  // Widgets must call these helpers instead of inlining tier labels.
+
+  static const String tierLabelCritical = 'Critical';
+  static const String tierLabelOverdue = 'Overdue';
+  static const String tierLabelDueToday = 'Due today';
+  static const String tierLabelThisWeek = 'This week';
+  static const String tierLabelUpcoming = 'Upcoming';
+
+  /// Localised label for a [DashboardTier]. Used by inline tier headers and
+  /// the patient-list filter chip row.
+  static String tierLabel(DashboardTier tier) {
+    switch (tier) {
+      case DashboardTier.critical:
+        return tierLabelCritical;
+      case DashboardTier.overdue:
+        return tierLabelOverdue;
+      case DashboardTier.dueToday:
+        return tierLabelDueToday;
+      case DashboardTier.thisWeek:
+        return tierLabelThisWeek;
+      case DashboardTier.upcoming:
+        return tierLabelUpcoming;
+    }
+  }
+
+  /// Inline tier-section header, e.g. `'Overdue · 3'`. Renders above the
+  /// first card of each tier on the Mission Dashboard.
+  static String tierHeaderWithCount(DashboardTier tier, int count) =>
+      '${tierLabel(tier)} · $count';
+
+  // Tier-varied CTA pill labels.
+  static const String ctaVisitNow = 'Visit now';
+  static const String ctaVisitToday = 'Visit today';
+  static const String ctaPlanVisit = 'Plan visit';
+  static const String ctaSchedule = 'Schedule';
+
+  /// CTA pill label for a card in a given tier:
+  ///   critical / overdue → `'Visit now'`
+  ///   dueToday           → `'Visit today'`
+  ///   thisWeek           → `'Plan visit'`
+  ///   upcoming           → `'Schedule'`
+  static String ctaForTier(DashboardTier tier) {
+    switch (tier) {
+      case DashboardTier.critical:
+      case DashboardTier.overdue:
+        return ctaVisitNow;
+      case DashboardTier.dueToday:
+        return ctaVisitToday;
+      case DashboardTier.thisWeek:
+        return ctaPlanVisit;
+      case DashboardTier.upcoming:
+        return ctaSchedule;
+    }
+  }
+
+  /// Human-readable rationale for a driver tag on `MissionQueueItem.drivers`.
+  /// Unknown tags fall back to a generic phrase so the rationale sheet never
+  /// shows a raw tag identifier to the SK.
+  static String driverLabel(String tag) {
+    switch (tag) {
+      case 'sla-breached':
+        return 'Referral SLA breached';
+      case 'red-flag':
+        return 'Red-flag patient';
+      case 'hi-risk-anc-gap':
+        return 'High-risk pregnancy with ANC gap';
+      case 'neonate':
+        return 'Neonate (under 28 days)';
+      case 'young-infant':
+        return 'Young infant (under 60 days)';
+      case 'pnc-window':
+        return 'Postpartum (within 42 days)';
+      case 'anc-near-term':
+        return 'Near-term pregnancy (EDD within 14 days)';
+      case 'delivery-complication':
+        return 'Delivery complications recorded';
+      case 'pnc-illness':
+        return 'Postnatal illness reported';
+      case 'ltfu-streak':
+        return 'Lost-to-follow-up streak';
+      case 'tb-default-risk':
+        return 'TB treatment — default risk';
+      case 'ncd-drift':
+        return 'NCD treatment overdue';
+      case 'child-disability':
+        return 'Child under 5 with disability';
+      default:
+        return 'Clinical priority signal';
+    }
+  }
 }
 
 /// Visit triage step (HTML composition) — bilingual symptom prompts.

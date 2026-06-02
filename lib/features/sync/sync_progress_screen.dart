@@ -5,10 +5,14 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/theme.dart';
+import '../../core/auth/auth_state.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/db/encounter_dao.dart';
 import '../../core/sync/offline_sync_service.dart';
 import '../../core/sync/sync_progress.dart';
 import '../../core/sync/sync_report.dart';
+import '../dashboard/mission_dashboard_repository.dart';
+import '../worklist/worklist_repository.dart';
 
 /// Full-screen loading indicator shown during initial data sync after login.
 ///
@@ -32,6 +36,8 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
   SyncProgress _progress = SyncProgress.initial;
   SyncReport? _report;
   bool _syncStarted = false;
+  bool _preparingDashboard = false;
+  String _preparingMessage = '';
 
   @override
   void initState() {
@@ -74,12 +80,57 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
     
     setState(() => _report = report);
 
-    // If sync completed successfully, navigate to home
+    // If sync completed successfully, prepare dashboard data then navigate
     if (report.errors.isEmpty) {
-      await Future.delayed(const Duration(milliseconds: 800));
+      await _prepareDashboardData();
       if (mounted) {
-        context.go('/home');
+        final auth = context.read<AuthState>();
+        // Check if first-time login needs onboarding (biometric/PIN setup)
+        if (!auth.onboardingComplete && !auth.pinEnabled) {
+          context.go('/onboarding');
+        } else {
+          context.go('/home');
+        }
       }
+    }
+  }
+
+  /// Prepare dashboard data after sync so the dashboard loads instantly.
+  Future<void> _prepareDashboardData() async {
+    if (!mounted) return;
+    
+    setState(() {
+      _preparingDashboard = true;
+      _preparingMessage = SyncStrings.preparingVisits;
+    });
+    
+    try {
+      // Recompute risk scores and next-due-at for proper worklist sorting
+      final worklist = context.read<WorklistRepository>();
+      await worklist.recomputeAllAfterSync();
+      
+      if (!mounted) return;
+      setState(() => _preparingMessage = SyncStrings.preparingDashboard);
+      
+      // Pre-load mission queue and referral summary
+      final missionRepo = context.read<MissionDashboardRepository>();
+      final encounterDao = context.read<EncounterDao>();
+      
+      // Load in parallel
+      await Future.wait([
+        missionRepo.loadQueue(limit: 200),
+        missionRepo.loadReferralSummary(),
+        encounterDao.completedTodayPatientIds(),
+      ]);
+      
+      debugPrint('[Sync] Dashboard data prepared');
+    } catch (e) {
+      debugPrint('[Sync] Failed to prepare dashboard data: $e');
+      // Non-fatal - dashboard will load the data itself
+    }
+    
+    if (mounted) {
+      setState(() => _preparingDashboard = false);
     }
   }
 
@@ -93,7 +144,13 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
   }
 
   void _continueOffline() {
-    context.go('/home');
+    final auth = context.read<AuthState>();
+    // Check if first-time login needs onboarding (biometric/PIN setup)
+    if (!auth.onboardingComplete && !auth.pinEnabled) {
+      context.go('/onboarding');
+    } else {
+      context.go('/home');
+    }
   }
 
   @override
@@ -132,7 +189,7 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
                       color: scheme.error,
                     );
                   }
-                  if (_progress.isComplete) {
+                  if (_progress.isComplete && !_preparingDashboard) {
                     return Icon(
                       Icons.check_circle_rounded,
                       size: 80,
@@ -141,7 +198,9 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
                   }
                   return Transform.scale(
                     scale: _pulseAnimation.value,
-                    child: _buildProgressRing(scheme),
+                    child: _preparingDashboard 
+                        ? _buildPreparingRing(scheme)
+                        : _buildProgressRing(scheme),
                   );
                 },
               ),
@@ -152,9 +211,11 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
               Text(
                 hasError
                     ? SyncStrings.syncFailed
-                    : _progress.isComplete
-                        ? SyncStrings.done
-                        : SyncStrings.title,
+                    : _preparingDashboard
+                        ? SyncStrings.almostReady
+                        : _progress.isComplete
+                            ? SyncStrings.done
+                            : SyncStrings.title,
                 style: textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -168,6 +229,14 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
                 Text(
                   _progress.error ?? _report?.errors.first ?? '',
                   style: textTheme.bodyLarge?.copyWith(color: scheme.error),
+                  textAlign: TextAlign.center,
+                )
+              else if (_preparingDashboard)
+                Text(
+                  _preparingMessage,
+                  style: textTheme.bodyLarge?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
                   textAlign: TextAlign.center,
                 )
               else if (_progress.isComplete)
@@ -196,17 +265,19 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
                 ),
               ],
               
-              // Linear progress indicator
-              if (!hasError && !_progress.isComplete) ...[
+              // Linear progress indicator (show during sync or preparing)
+              if (!hasError && (!_progress.isComplete || _preparingDashboard)) ...[
                 const SizedBox(height: 24),
                 SizedBox(
                   width: 200,
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(4),
                     child: LinearProgressIndicator(
-                      value: _progress.overallProgress > 0
-                          ? _progress.overallProgress
-                          : null,
+                      value: _preparingDashboard 
+                          ? null // Indeterminate during preparing
+                          : _progress.overallProgress > 0
+                              ? _progress.overallProgress
+                              : null,
                       minHeight: 6,
                       backgroundColor: scheme.surfaceContainerHighest,
                       valueColor: AlwaysStoppedAnimation(scheme.primary),
@@ -264,6 +335,31 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
                         : _progress.currentStep == SyncStep.fetchingReferrals
                             ? Icons.swap_horiz_rounded
                             : Icons.storage_rounded,
+            size: 32,
+            color: scheme.primary,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPreparingRing(ColorScheme scheme) {
+    return SizedBox(
+      width: 80,
+      height: 80,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          SizedBox(
+            width: 80,
+            height: 80,
+            child: CircularProgressIndicator(
+              strokeWidth: 4,
+              valueColor: AlwaysStoppedAnimation(scheme.primary),
+            ),
+          ),
+          Icon(
+            Icons.dashboard_customize_rounded,
             size: 32,
             color: scheme.primary,
           ),
