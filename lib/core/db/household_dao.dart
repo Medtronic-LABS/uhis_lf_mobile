@@ -148,9 +148,12 @@ class HouseholdEntity {
     if (updatedAtVal is int) updatedAt = updatedAtVal;
     if (updatedAtVal is num) updatedAt = updatedAtVal.toInt();
 
-    // Use referenceId as id if fhirId is available (Android pattern)
-    final referenceId = str('referenceId') ?? str('id');
-    final fhirId = str('fhirId') ?? str('fhir_id');
+    // Android HouseHold JSON mapping:
+    // - JSON 'id' → @ColumnInfo(name = "fhir_id") var id (the FHIR ID)
+    // - JSON 'referenceId' → @ColumnInfo(name = "id") var referenceId (app-generated ID)
+    // We use FHIR ID as primary key in Flutter for consistency.
+    final fhirId = str('id');  // JSON 'id' field IS the FHIR ID
+    final referenceId = str('referenceId');
     
     return HouseholdEntity(
       id: fhirId ?? referenceId ?? '',

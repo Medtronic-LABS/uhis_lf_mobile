@@ -158,14 +158,18 @@ class HouseholdMemberEntity {
     final isHead = relation?.toLowerCase() == 'householdhead' ||
         relation?.toLowerCase() == 'self';
 
-    // Use referenceId as id if fhirId is available (Android pattern)
-    final referenceId = str('referenceId') ?? str('id') ?? str('memberId');
-    final fhirId = str('fhirId') ?? str('fhir_id');
+    // Android HouseHoldMember JSON mapping:
+    // - JSON 'id' → @ColumnInfo(name = "fhir_id") var id (the FHIR ID)
+    // - JSON 'referenceId' → @ColumnInfo(name = "id") val referenceId (app-generated ID)
+    // - JSON 'householdId' → @ColumnInfo("household_fhir_id") (the FHIR ID of the household)
+    // We use FHIR ID as primary key and relationship key in Flutter for consistency.
+    final fhirId = str('id');  // JSON 'id' field IS the FHIR ID
+    final referenceId = str('referenceId') ?? str('memberId');
 
     return HouseholdMemberEntity(
       id: fhirId ?? referenceId ?? '',
       fhirId: fhirId,
-      householdId: str('householdId') ?? str('household_id'),
+      householdId: str('householdId') ?? str('household_id'),  // This is the FHIR ID of household
       householdReferenceId: str('householdReferenceId') ?? str('household_reference_id'),
       name: str('name'),
       gender: str('gender'),
@@ -321,6 +325,34 @@ class MemberDao {
       }
     }
     return counts;
+  }
+
+  /// Get IDs of members that are in the patients table (assigned to the SK).
+  /// Returns the set of patient IDs from the patients table.
+  /// These are "My Patients" - patients owned by the logged-in SK.
+  Future<Set<String>> getMyPatientIds() async {
+    // Get all patient IDs from the patients table (these are the assigned patients)
+    // Also include the patient_id column for matching
+    final rows = await _db.db.rawQuery(
+        'SELECT id, patient_id FROM ${AppDatabase.tablePatients}');
+    // ignore: avoid_print
+    print('[MemberDao] getMyPatientIds raw: ${rows.take(3).toList()}');
+    
+    // Collect both id and patient_id for matching
+    final ids = <String>{};
+    for (final row in rows) {
+      final id = row['id'];
+      final patientId = row['patient_id'];
+      if (id != null) ids.add(id.toString());
+      if (patientId != null) ids.add(patientId.toString());
+    }
+    // ignore: avoid_print
+    print('[MemberDao] getMyPatientIds: ${ids.length} unique IDs');
+    if (ids.isNotEmpty) {
+      // ignore: avoid_print
+      print('[MemberDao] Sample IDs: ${ids.take(5).toList()}');
+    }
+    return ids;
   }
 
   /// Count members for a specific household.

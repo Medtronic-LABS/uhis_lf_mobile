@@ -126,6 +126,12 @@ class PatientDao {
     return 0;
   }
 
+  /// Clear all patients from the local database.
+  /// Used before a fresh sync to remove stale data.
+  Future<void> clearAll() async {
+    await _db.db.delete(AppDatabase.tablePatients);
+  }
+
   /// Query patients by household ID from local database.
   Future<List<Map<String, dynamic>>> getByHouseholdId(String householdId) async {
     return _db.db.query(

@@ -71,4 +71,10 @@ class PatientProgrammesDao {
     }
     return out;
   }
+
+  /// Clear all patient programme mappings from the local database.
+  /// Used before a fresh sync to remove stale data.
+  Future<void> clearAll() async {
+    await _db.db.delete(AppDatabase.tablePatientProgrammes);
+  }
 }
