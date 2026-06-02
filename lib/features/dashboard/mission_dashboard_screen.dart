@@ -8,6 +8,7 @@ import '../../app/theme_provider.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/db/household_dao.dart';
 import '../../core/db/local_dashboard_repository.dart';
 import '../../core/models/mission_queue_item.dart';
 import '../../core/sync/offline_sync_service.dart';
@@ -36,7 +37,8 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   UserProfileSummary? _summary;
-  
+  String? _villagesLine;
+
   // Mission data futures consumed by the HTML dashboard composition.
   Future<List<MissionQueueItem>>? _queueFuture;
   Future<List<MissionQueueItem>>? _alertsFuture;
@@ -52,8 +54,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
       await _loadSummary(auth);
       // Trigger offline sync to populate local SQLite with referrals/worklist
       await _triggerSync();
+      await _loadVillagesLine();
       _loadMissionData();
     });
+  }
+
+  /// Build the header sub-text from the SK's own cached households so the
+  /// dashboard never falls back to the generic "Serving your community"
+  /// string once data has landed. Empty-result paths leave [_villagesLine]
+  /// null so the existing fallback continues to show.
+  Future<void> _loadVillagesLine() async {
+    if (!mounted) return;
+    try {
+      final hhDao = context.read<HouseholdDao>();
+      final rows = await hhDao.getAll(limit: 50);
+      final names = <String>{};
+      for (final h in rows) {
+        final v = h.village?.trim();
+        if (v != null && v.isNotEmpty) names.add(v);
+        if (names.length >= 3) break;
+      }
+      if (!mounted) return;
+      if (names.isEmpty) return;
+      final ordered = names.toList(growable: false);
+      final shown = ordered.take(2).join(' · ');
+      final remaining = ordered.length > 2 ? ordered.length - 2 : 0;
+      setState(() {
+        _villagesLine = remaining > 0 ? '$shown · +$remaining more' : shown;
+      });
+    } on Object catch (e) {
+      debugPrint('[Dashboard] villages line failed: $e');
+    }
   }
 
   /// Trigger offline sync to populate local SQLite for mission data.
@@ -184,13 +215,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   String? _locationLine() {
     final s = _summary;
-    if (s == null) return null;
-    final ward = s.ward;
-    final upazila = s.upazila ?? s.area;
-    if (ward != null && upazila != null) return '$ward · $upazila';
-    if (ward != null) return ward;
-    if (upazila != null) return upazila;
-    return null;
+    if (s != null) {
+      final ward = s.ward;
+      final upazila = s.upazila ?? s.area;
+      if (ward != null && upazila != null) return '$ward · $upazila';
+      if (ward != null) return ward;
+      if (upazila != null) return upazila;
+    }
+    // Profile carries no ward / upazila (uhis-dev SKs are assigned via
+    // sub-villages only) — fall back to the village names we already
+    // synced into HouseholdDao so the header isn't stuck on the generic
+    // "Serving your community" placeholder.
+    return _villagesLine;
   }
 
   /// Begin a visit directly from the dashboard card. Matches the HTML
@@ -1057,12 +1093,20 @@ class _DashboardStatsRow extends StatelessWidget {
           child: FutureBuilder<List<MissionQueueItem>>(
             future: queueFuture,
             builder: (context, snap) {
-              final count = (snap.data ?? const []).length;
+              final queue = snap.data ?? const <MissionQueueItem>[];
+              final count = queue.length;
+              final villageCount = queue
+                  .map((i) => i.village)
+                  .whereType<String>()
+                  .where((v) => v.trim().isNotEmpty)
+                  .toSet()
+                  .length;
               return _DashboardStatCard(
                 value: '$count',
                 label: MissionDashboardStrings.visitsToday,
                 accentVariant: _DashboardStatVariant.navy,
-                subline: MissionDashboardStrings.visitsTodaySubline,
+                subline:
+                    MissionDashboardStrings.visitsTodaySubline(villageCount),
                 onTap: onTapVisits,
               );
             },

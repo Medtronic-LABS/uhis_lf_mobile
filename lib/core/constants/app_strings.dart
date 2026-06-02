@@ -669,7 +669,15 @@ abstract final class MissionDashboardStrings {
   // ── HTML Dashboard composition ───────────────────────────────────────────
   static String aiSortedVisits(int n) => 'AI sorted your $n visits overnight';
   static const String visitsToday = 'Visits today';
-  static const String visitsTodaySubline = '2 villages · ~4 km';
+  /// Stat subline built from the SK's actual worklist. Returns `'No villages'`
+  /// when the queue is empty (cold start, before sync), `'1 village'` or
+  /// `'N villages'` once data lands. Distance estimate dropped — no source
+  /// data yet; bring it back when geo is wired.
+  static String visitsTodaySubline(int villageCount) {
+    if (villageCount <= 0) return 'No villages assigned';
+    if (villageCount == 1) return '1 village';
+    return '$villageCount villages';
+  }
   static const String referralAlertsLabel = 'Referral alerts';
   static const String tapToFollowUp = 'Tap to follow up →';
   static const String referralCceComingSoon = 'CCE integration coming soon';
