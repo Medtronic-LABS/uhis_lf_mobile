@@ -52,6 +52,7 @@ class MissionInputData {
     this.householdHeadPatientIds = const {},
     this.neonatePatientIds = const {},
     this.youngInfantPatientIds = const {},
+    this.referralArrivalPendingPatientIds = const {},
   });
 
   /// All patients on the worklist.
@@ -163,6 +164,13 @@ class MissionInputData {
   /// Patients aged 28–60 days. Drives the `young-infant` CRITICAL driver.
   /// Mutually exclusive with [neonatePatientIds].
   final Set<String> youngInfantPatientIds;
+
+  /// Patients with a community-side REFERRED follow-up that has not yet
+  /// recorded facility arrival/close-out for ≥3 days. Drives the
+  /// `referral-arrival-pending` OVERDUE-min driver — surfaces patients the
+  /// SK sent to facility but who may have never made it (PPH / sepsis /
+  /// TB-default risk window).
+  final Set<String> referralArrivalPendingPatientIds;
 
   /// True if CQL results are available for scoring.
   bool get hasCqlResults => cqlResults.isNotEmpty;
@@ -905,6 +913,9 @@ class MissionDashboardService {
     }
     if (input.ncdOverduePatientIds.contains(patientId)) {
       drivers.add('ncd-drift');
+    }
+    if (input.referralArrivalPendingPatientIds.contains(patientId)) {
+      drivers.add('referral-arrival-pending');
     }
     if (age != null &&
         age < _childUnder5AgeThreshold &&

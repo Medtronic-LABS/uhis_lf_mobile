@@ -357,26 +357,27 @@ class MissionDashboardRepository {
       for (final e in worklistEntries) e.patientId: e.displayName,
     };
 
-    // Convert to FollowUpDue list
+    // Convert to FollowUpDue list. No date-window filter — the tier
+    // classifier (DashboardTier.fromDaysToDue + composite score) decides
+    // visibility. Old 7-day window was dropping every overdue community
+    // follow-up (most bundle rows are 30-90 days stale), making 24 of 24
+    // SK-owned follow-ups invisible. Dedupe by patientId in
+    // `computeTieredQueue` collapses duplicate worklist + follow-up rows.
     final followUps = <FollowUpDue>[];
     for (final entry in followUpMap.entries) {
       for (final row in entry.value) {
-        // Check if due within next 7 days
         final dueMs = row.dueAt;
         if (dueMs == null) continue;
-        final dueAt = DateTime.fromMillisecondsSinceEpoch(dueMs);
-        final diff = dueAt.difference(now).inDays;
-        if (diff >= -7 && diff <= 7) {
-          followUps.add(FollowUpDue(
-            id: row.id,
-            patientId: row.patientId,
-            patientName: patientNamesById[row.patientId] ?? row.patientId,
-            dischargedAt: null, // Not tracked in FollowUpRow
-            dueAt: dueAt,
-            reason: row.kind, // Use kind as reason
-            phoneNumber: null, // Not on FollowUpRow
-          ));
-        }
+        if (row.completedAt != null) continue; // already done — skip
+        followUps.add(FollowUpDue(
+          id: row.id,
+          patientId: row.patientId,
+          patientName: patientNamesById[row.patientId] ?? row.patientId,
+          dischargedAt: null,
+          dueAt: DateTime.fromMillisecondsSinceEpoch(dueMs),
+          reason: row.kind,
+          phoneNumber: null,
+        ));
       }
     }
 
@@ -502,6 +503,8 @@ class MissionDashboardRepository {
     final patientsEverReferred = <String>{};
     final completedTodayPatientIds = <String>{};
     final tbAtRiskPatientIds = <String>{};
+    final referralArrivalPendingPatientIds = <String>{};
+    const referralArrivalPendingDays = 3;
     for (final entry in followUpRowMap.entries) {
       final pid = entry.key;
       bool anyTb = false;
@@ -521,6 +524,21 @@ class MissionDashboardRepository {
         }
         if (r.referredSiteId != null && r.referredSiteId!.isNotEmpty) {
           patientsEverReferred.add(pid);
+          // Referral arrival pending: bundle's REFERRED follow-up has a
+          // facility recorded but no close-out for ≥3 days. Surfaces lost
+          // referrals — the PPH / sepsis / TB-default loss window.
+          final isReferred = type == 'REFERRED';
+          final notDone = !(r.isLost) && r.completedAt == null;
+          final dueMs = r.dueAt;
+          if (isReferred && notDone && dueMs != null) {
+            final dueAt = DateTime.fromMillisecondsSinceEpoch(dueMs);
+            final daysSince = today.difference(
+              DateTime(dueAt.year, dueAt.month, dueAt.day),
+            ).inDays;
+            if (daysSince >= referralArrivalPendingDays) {
+              referralArrivalPendingPatientIds.add(pid);
+            }
+          }
         }
         final completedAt = r.completedAt;
         if (completedAt != null) {
@@ -573,6 +591,7 @@ class MissionDashboardRepository {
       householdHeadPatientIds: householdHeadPatientIds,
       neonatePatientIds: neonatePatientIds,
       youngInfantPatientIds: youngInfantPatientIds,
+      referralArrivalPendingPatientIds: referralArrivalPendingPatientIds,
     );
 
     return _cachedInput!;

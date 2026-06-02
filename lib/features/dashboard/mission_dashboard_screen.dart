@@ -401,17 +401,81 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ],
                           );
                         }
-                        // 5-tier model: top 8 cards mixed across tiers with
-                        // inline tier headers. Queue is already tier-sorted.
+                        // 5-tier model: top 8 cards genuinely *mixed* across
+                        // tiers per spec
+                        // (leapfrog-setup/designs/dashboard-prioritization.md).
+                        // Pure rank-ASC sort lets the top tier hog all 8 slots
+                        // when ≥8 patients exist there, so the SK never sees
+                        // the per-tier CTA variety (Visit today / Plan visit /
+                        // Schedule). Round-robin: guarantee 1 slot per
+                        // non-empty tier in rank order, then top up the
+                        // remainder rank-ASC while capping any single tier at
+                        // [maxPerTier].
                         const visibleLimit = 8;
-                        final visible = queue.length > visibleLimit
-                            ? queue.sublist(0, visibleLimit)
-                            : queue;
+                        const minPerTier = 1;
+                        const maxPerTier = 3;
+
+                        final byTier =
+                            <DashboardTier, List<MissionQueueItem>>{};
+                        for (final item in queue) {
+                          (byTier[item.tier] ??= <MissionQueueItem>[])
+                              .add(item);
+                        }
+
+                        final visible = <MissionQueueItem>[];
+                        final perTierUsed = <DashboardTier, int>{
+                          for (final t in DashboardTier.values) t: 0,
+                        };
+
+                        // Pass 1 — guarantee [minPerTier] per non-empty tier,
+                        // walking tiers in rank order.
+                        for (final t in DashboardTier.values) {
+                          final list = byTier[t] ?? const <MissionQueueItem>[];
+                          for (var i = 0;
+                              i < list.length && i < minPerTier;
+                              i++) {
+                            if (visible.length >= visibleLimit) break;
+                            visible.add(list[i]);
+                            perTierUsed[t] = (perTierUsed[t] ?? 0) + 1;
+                          }
+                          if (visible.length >= visibleLimit) break;
+                        }
+
+                        // Pass 2 — fill remaining slots rank-ASC, capped at
+                        // [maxPerTier] per tier so urgency variety stays
+                        // visible.
+                        for (final t in DashboardTier.values) {
+                          final list = byTier[t] ?? const <MissionQueueItem>[];
+                          while (visible.length < visibleLimit &&
+                              (perTierUsed[t] ?? 0) < maxPerTier &&
+                              (perTierUsed[t] ?? 0) < list.length) {
+                            visible.add(list[perTierUsed[t]!]);
+                            perTierUsed[t] = (perTierUsed[t] ?? 0) + 1;
+                          }
+                          if (visible.length >= visibleLimit) break;
+                        }
+
+                        // Restore tier-rank ordering for inline tier-header
+                        // rendering. Within-tier order stays composite-DESC.
+                        visible.sort((a, b) {
+                          final c = a.tier.rank.compareTo(b.tier.rank);
+                          if (c != 0) return c;
+                          return MissionQueueItem.compareInTier(a, b);
+                        });
+
                         final overflow = queue.length - visible.length;
-                        // Determine dominant overflow tier for deep-link
-                        final overflowTier = overflow > 0
-                            ? queue.sublist(visibleLimit).first.tier
-                            : null;
+                        // Overflow's dominant tier = first remaining item
+                        // (queue is rank-ASC sorted upstream).
+                        DashboardTier? overflowTier;
+                        if (overflow > 0) {
+                          final visibleSet = visible.toSet();
+                          for (final q in queue) {
+                            if (!visibleSet.contains(q)) {
+                              overflowTier = q.tier;
+                              break;
+                            }
+                          }
+                        }
 
                         // Build widgets with inline tier headers
                         final widgets = <Widget>[];
@@ -463,8 +527,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 count: overflow,
                                 tier: overflowTier,
                                 onTap: () {
-                                  // Navigate to tasks tab with mission queue items
-                                  context.go('/tasks');
+                                  // Deep-link to /patients with the dominant
+                                  // overflow tier preselected as the filter
+                                  // chip. Router parses `?tier=` into
+                                  // `HouseholdListScreen.initialTier`.
+                                  final route = overflowTier == null
+                                      ? '/patients'
+                                      : '/patients?tier=${overflowTier.name}';
+                                  context.go(route);
                                 },
                               ),
                           ],
