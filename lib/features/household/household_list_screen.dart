@@ -357,9 +357,15 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
   }
 
   void _navigateToMemberDetail(BuildContext context, _MemberInfo member) {
-    // Navigate to patient detail with member data
+    // Patient-scoped DAOs (PatientDao, FollowUpDao, EncounterDao) key on
+    // the national-ID-style patient_id (e.g. `0390444750015`), not the
+    // internal member.id (e.g. `1353`). Push the patientId when available
+    // so the detail screen + downstream repositories find their rows.
+    final id = (member.patientId != null && member.patientId!.isNotEmpty)
+        ? member.patientId!
+        : member.id;
     context.push(
-      '/patient/${member.id}',
+      '/patient/$id',
       extra: {
         'id': member.id,
         'name': member.name,
