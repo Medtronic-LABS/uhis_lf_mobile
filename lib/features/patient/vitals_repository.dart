@@ -1,5 +1,6 @@
 import '../../core/api/api_repository.dart';
 import '../../core/api/endpoints.dart';
+import '../../core/db/encounter_dao.dart';
 
 /// Type of vital sign measurement.
 enum VitalType {
@@ -101,7 +102,128 @@ class RecentVitals {
 
 /// Repository for fetching patient vitals history.
 class VitalsRepository extends ApiRepository {
-  VitalsRepository(super.api);
+  VitalsRepository(super.api, {EncounterDao? encounters}) : _encounters = encounters;
+
+  final EncounterDao? _encounters;
+
+  /// Strip a FHIR-style `Resource/id` prefix so callers can pass either
+  /// `Patient/0390444751474` or `0390444751474` interchangeably. DAOs
+  /// store the bare id; remote endpoints accept either.
+  static String _bareId(String id) {
+    final slash = id.lastIndexOf('/');
+    return slash < 0 ? id : id.substring(slash + 1);
+  }
+
+  /// Offline-first vital extraction. Reads every cached encounter for the
+  /// patient, decodes its `vitals_json` blob, and picks the most recent
+  /// non-null value per vital code: BP (systolic+diastolic), pulse,
+  /// glucose, height, weight, BMI, temperature, SpO2, respiratory rate.
+  /// Returns an empty list when no encounter has been captured yet.
+  Future<List<VitalReading>> latestFromLocal(String patientId) async {
+    final encDao = _encounters;
+    if (encDao == null) return const <VitalReading>[];
+    final stripped = _bareId(patientId);
+    final out = <VitalReading>[];
+    try {
+      final rows = await encDao.recentForPatient(stripped, limit: 20);
+      for (final row in rows) {
+        final m = row.vitalsData;
+        if (m == null || m.isEmpty) continue;
+        final ts = DateTime.fromMillisecondsSinceEpoch(
+            row.completedAt ?? row.startedAt);
+
+        double? asDouble(Object? v) {
+          if (v is num) return v.toDouble();
+          if (v is String) return double.tryParse(v);
+          return null;
+        }
+
+        final sys = asDouble(m['systolic'] ?? m['systolicBp']);
+        final dia = asDouble(m['diastolic'] ?? m['diastolicBp']);
+        if (sys != null && dia != null) {
+          out.add(VitalReading(
+            type: VitalType.bloodPressure,
+            date: ts,
+            systolic: sys,
+            diastolic: dia,
+            unit: 'mmHg',
+          ));
+        }
+
+        final pulse = asDouble(m['pulse'] ?? m['heartRate']);
+        if (pulse != null) {
+          out.add(VitalReading(
+            type: VitalType.respiratoryRate, // closest match in enum
+            date: ts,
+            value: pulse,
+            unit: 'bpm',
+          ));
+        }
+
+        final glucose = asDouble(m['glucose'] ?? m['bloodGlucose'] ?? m['glucoseValue']);
+        if (glucose != null) {
+          out.add(VitalReading(
+            type: VitalType.glucose,
+            date: ts,
+            value: glucose,
+            unit: 'mg/dL',
+          ));
+        }
+
+        final height = asDouble(m['height']);
+        if (height != null) {
+          out.add(VitalReading(
+              type: VitalType.height, date: ts, value: height, unit: 'cm'));
+        }
+
+        final weight = asDouble(m['weight']);
+        if (weight != null) {
+          out.add(VitalReading(
+              type: VitalType.weight, date: ts, value: weight, unit: 'kg'));
+        }
+
+        final bmi = asDouble(m['bmi']);
+        double? derivedBmi;
+        if (bmi == null && height != null && weight != null && height > 0) {
+          final h = height / 100.0;
+          derivedBmi = weight / (h * h);
+        }
+        final effectiveBmi = bmi ?? derivedBmi;
+        if (effectiveBmi != null) {
+          out.add(VitalReading(
+              type: VitalType.bmi, date: ts, value: effectiveBmi));
+        }
+
+        final temp = asDouble(m['temperature'] ?? m['temp']);
+        if (temp != null) {
+          out.add(VitalReading(
+              type: VitalType.temperature,
+              date: ts,
+              value: temp,
+              unit: '°C'));
+        }
+
+        final spo2 = asDouble(m['spO2'] ?? m['spo2'] ?? m['oxygenSaturation']);
+        if (spo2 != null) {
+          out.add(VitalReading(
+              type: VitalType.spO2, date: ts, value: spo2, unit: '%'));
+        }
+
+        final rr = asDouble(m['respiratoryRate'] ?? m['respiratoryRateValue']);
+        if (rr != null) {
+          out.add(VitalReading(
+              type: VitalType.respiratoryRate,
+              date: ts,
+              value: rr,
+              unit: '/min'));
+        }
+      }
+    } on Object catch (e) {
+      // ignore: avoid_print
+      print('[VitalsRepository] latestFromLocal failed: $e');
+    }
+    return out;
+  }
 
   /// Fetch recent vitals for a patient.
   /// Tries multiple identifier formats: patientReference, memberReference, patientId.
@@ -114,6 +236,11 @@ class VitalsRepository extends ApiRepository {
     print('[VitalsRepository] ========== recent START ==========');
     print('[VitalsRepository] patientId=$patientId, memberRef=$memberReference, limit=$limit');
     final readings = <VitalReading>[];
+
+    // Local-first — pull whatever the device already captured before
+    // hitting the network. Lets the section render offline; remote calls
+    // below just top up any newer rows the server has.
+    readings.addAll(await latestFromLocal(patientId));
 
     // Build patient reference in FHIR format
     String patientRef = patientId;
