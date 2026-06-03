@@ -152,6 +152,10 @@ class _OpenFollowupsSectionState extends State<OpenFollowupsSection> {
         return 'Medical review';
       case FollowUpType.assessment:
         return 'Assessment follow-up';
+      case FollowUpType.referred:
+        return 'Referral — confirm facility arrival';
+      case FollowUpType.householdVisit:
+        return 'Household visit due';
       case FollowUpType.lost:
         return 'Lost to follow-up check';
       case FollowUpType.other:
