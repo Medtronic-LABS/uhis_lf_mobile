@@ -6,6 +6,9 @@ import 'package:provider/provider.dart';
 import '../../app/theme.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/db/assessment_dao.dart';
+import '../../core/db/encounter_dao.dart';
+import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/member_dao.dart' show MemberDao, HouseholdMemberEntity;
 import '../../core/models/programme.dart';
 import '../../core/models/risk.dart';
@@ -23,6 +26,7 @@ class PatientOrMemberData {
     this.remoteMember,
     this.programmes = const {},
     this.remoteAssessments = const [],
+    this.localAssessments = const [],
     this.recentVisits = const [],
     this.memberId,
   });
@@ -31,6 +35,12 @@ class PatientOrMemberData {
   final MemberHealthDetails? remoteMember;
   final Set<Programme> programmes;
   final List<MemberAssessment> remoteAssessments;
+
+  /// Locally-cached assessments — union of EncounterDao history,
+  /// synced AssessmentDao rows, and sync-pending LocalAssessmentDao
+  /// drafts. Surfaces records even when the remote /medical-review/history
+  /// endpoint is unreachable or returns empty (offline-first §3.1).
+  final List<MemberAssessment> localAssessments;
   final List<PatientVisit> recentVisits;
   final String? memberId;
 
@@ -51,8 +61,28 @@ class PatientOrMemberData {
   int? get riskScore => localPatient?.patient.riskScore;
   RiskBand? get riskBand => localPatient?.patient.riskBand;
   List<String> get riskReasons => localPatient?.patient.riskReasons ?? [];
-  List<MemberAssessment> get assessments => 
-      remoteAssessments.isNotEmpty ? remoteAssessments : (remoteMember?.assessments ?? []);
+  /// Merged Recent Visits feed — locally-cached first (always available
+  /// even offline), then remote-only rows the device hasn't synced yet.
+  /// Deduped by [MemberAssessment.id], sorted DESC by date so newest sits
+  /// at top of the section. Replaces the old remote-or-bust behavior that
+  /// rendered "No assessments yet" whenever the API was offline / empty.
+  List<MemberAssessment> get assessments {
+    final byId = <String, MemberAssessment>{};
+    void addAll(List<MemberAssessment> src) {
+      for (final a in src) {
+        final existing = byId[a.id];
+        if (existing == null || a.date.isAfter(existing.date)) {
+          byId[a.id] = a;
+        }
+      }
+    }
+    addAll(localAssessments);
+    addAll(remoteAssessments);
+    addAll(remoteMember?.assessments ?? const []);
+    final out = byId.values.toList();
+    out.sort((a, b) => b.date.compareTo(a.date));
+    return out;
+  }
   
   /// Member reference for FHIR API calls (format: RelatedPerson/xxx).
   String? get memberReference {
@@ -102,10 +132,93 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
     });
   }
 
+  /// Build the local-first Recent Visits feed from three on-device sources.
+  /// Spec: dashboard-prioritization-impl §Patient Detail; matches the
+  /// offline-first contract (architecture.md §3.1). Returns deduped list
+  /// sorted DESC by date.
+  Future<List<MemberAssessment>> _localAssessmentsFor(String patientId) async {
+    final stripped = patientId.contains('/')
+        ? patientId.substring(patientId.lastIndexOf('/') + 1)
+        : patientId;
+    final encounters = context.read<EncounterDao>();
+    final assessments = context.read<AssessmentDao>();
+    final localDrafts = context.read<LocalAssessmentDao>();
+
+    final out = <MemberAssessment>[];
+
+    try {
+      final encs = await encounters.recentForPatient(stripped, limit: 50);
+      // ignore: avoid_print
+      print('[PatientContextScreen] localAssessmentsFor in=$patientId norm=$stripped encs=${encs.length}');
+      for (final e in encs) {
+        final date = DateTime.fromMillisecondsSinceEpoch(
+            e.completedAt ?? e.startedAt);
+        out.add(MemberAssessment(
+          id: e.id,
+          type: e.programme.toUpperCase(),
+          date: date,
+          status: e.status.name,
+          rawJson: <String, dynamic>{
+            'programme': e.programme,
+            'status': e.status.name,
+            'serverVisitId': e.serverVisitId,
+          },
+        ));
+      }
+    } on Object catch (e) {
+      // ignore: avoid_print
+      print('[PatientContextScreen] local encounters fetch failed: $e');
+    }
+
+    try {
+      final asMap = await assessments.forMany([stripped]);
+      for (final row in asMap[stripped] ?? const []) {
+        final date = row.occurredAt == null
+            ? DateTime.now()
+            : DateTime.fromMillisecondsSinceEpoch(row.occurredAt!);
+        out.add(MemberAssessment(
+          id: row.id,
+          type: (row.kind ?? 'Assessment').toUpperCase(),
+          date: date,
+          rawJson: <String, dynamic>{'kind': row.kind, 'raw': row.rawJson},
+        ));
+      }
+    } on Object catch (e) {
+      // ignore: avoid_print
+      print('[PatientContextScreen] local assessments fetch failed: $e');
+    }
+
+    try {
+      final drafts = await localDrafts.getByPatientId(stripped);
+      for (final d in drafts) {
+        out.add(MemberAssessment(
+          id: d.id.toString(),
+          type: d.assessmentType.toUpperCase(),
+          date: d.createdAt ?? DateTime.now(),
+          status: d.syncStatus.name,
+          notes: d.referredReasons,
+          rawJson: <String, dynamic>{
+            'isReferred': d.isReferred,
+            'referralStatus': d.referralStatus,
+            'syncStatus': d.syncStatus.name,
+          },
+        ));
+      }
+    } on Object catch (e) {
+      // ignore: avoid_print
+      print('[PatientContextScreen] local drafts fetch failed: $e');
+    }
+
+    out.sort((a, b) => b.date.compareTo(a.date));
+    // ignore: avoid_print
+    print('[PatientContextScreen] localAssessmentsFor total=${out.length}');
+    return out;
+  }
+
   Future<PatientOrMemberData> _fetchData() async {
     // ignore: avoid_print
     print('[PatientContextScreen] _fetchData for patientId: ${widget.patientId}');
-    
+
     final memberRepo = context.read<MemberDetailRepository>();
     final authRepo = context.read<AuthRepository>();
     
@@ -147,10 +260,13 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
       // ignore: avoid_print
       print('[PatientContextScreen] Found ${visits.length} recent visits');
       
+      final localAssessments =
+          await _localAssessmentsFor(widget.patientId);
       return PatientOrMemberData(
         localPatient: localPatient,
         programmes: localPatient.programmes,
         remoteAssessments: assessments,
+        localAssessments: localAssessments,
         recentVisits: visits,
         memberId: widget.patientId,
       );
@@ -196,9 +312,11 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
       // ignore: avoid_print
       print('[PatientContextScreen] Found ${visits.length} recent visits');
       
+      final localAssessments = await _localAssessmentsFor(widget.patientId);
       return PatientOrMemberData(
         remoteMember: member,
         programmes: progs,
+        localAssessments: localAssessments,
         recentVisits: visits,
         memberId: member.id,
       );
@@ -271,6 +389,8 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
         print('[PatientContextScreen] Failed to fetch recent visits: $e (continuing with basic info)');
       }
       
+      final localAssessmentsList =
+          await _localAssessmentsFor(widget.patientId);
       return PatientOrMemberData(
         remoteMember: MemberHealthDetails(
           id: memberId,
@@ -286,6 +406,7 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
         ),
         programmes: progs,
         remoteAssessments: assessments,
+        localAssessments: localAssessmentsList,
         recentVisits: visits,
         memberId: memberId,
       );
@@ -2052,13 +2173,21 @@ class _SameHouseholdStrip extends StatelessWidget {
                   children: others.map((m) {
                     final name = m.name ?? 'Unknown';
                     final age = _ageFromDob(m.dob);
+                    // Patient-scoped DAOs key on the national-ID-style
+                    // patient_id (e.g. `0390444751459`), not the internal
+                    // member.id. Push patientId when present so the
+                    // detail screen + downstream repositories find rows.
+                    final navId = (m.patientId != null &&
+                            m.patientId!.isNotEmpty)
+                        ? m.patientId!
+                        : m.id;
                     return Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: _HouseholdMemberChip(
                         name: name,
                         age: age,
                         onTap: () {
-                          context.push('/patient/${m.id}');
+                          context.push('/patient/$navId');
                         },
                       ),
                     );
