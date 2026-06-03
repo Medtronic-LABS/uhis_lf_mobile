@@ -297,6 +297,9 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<PatientDao>.value(value: _patientDao),
         Provider<HouseholdDao>.value(value: _householdDao),
         Provider<MemberDao>.value(value: _memberDao),
+        Provider<FollowUpDao>.value(value: _followUpDao),
+        Provider<AssessmentDao>.value(value: _assessmentDao),
+        Provider<LocalAssessmentDao>.value(value: _localAssessmentDao),
         Provider<LocalDashboardRepository>.value(value: _localDashboard),
         Provider<MemberDetailRepository>(
             create: (_) => MemberDetailRepository(widget.api, widget.authRepo)),
@@ -307,9 +310,11 @@ class _UhisNextAppState extends State<UhisNextApp>
             create: (ctx) => EncounterRepository(
                 widget.api, ctx.read<EncounterDao>())),
         Provider<VitalsRepository>(
-            create: (_) => VitalsRepository(widget.api)),
+            create: (ctx) => VitalsRepository(
+                widget.api, encounters: ctx.read<EncounterDao>())),
         Provider<FollowUpRepository>(
-            create: (_) => FollowUpRepository(widget.api)),
+            create: (_) =>
+                FollowUpRepository(widget.api, dao: _followUpDao)),
         Provider<HouseholdRepository>(
             create: (_) => HouseholdRepository(widget.api)),
         ChangeNotifierProxyProvider<EncounterRepository, VisitController>(
