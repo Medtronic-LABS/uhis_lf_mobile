@@ -14,27 +14,31 @@ Flutter, Android-first.
 
 1. [Features](#features)
 2. [Architecture](#architecture)
-3. [Prerequisites](#prerequisites)
-4. [Setup](#setup)
-5. [Configuration (`env.*.json`)](#configuration-envjson)
-6. [Running on Android](#running-on-android)
-7. [Building APKs](#building-apks)
-8. [Authentication Flow](#authentication-flow)
-9. [Biometric Login](#biometric-login)
-10. [Backend Contract](#backend-contract)
-11. [Project Layout](#project-layout)
-12. [End-to-End Tests](#end-to-end-tests)
-13. [Troubleshooting](#troubleshooting)
-14. [Security Notes](#security-notes)
-15. [Roadmap / Deferred](#roadmap--deferred)
+3. [Mission Dashboard & Tiered Prioritization](#mission-dashboard--tiered-prioritization)
+4. [Prerequisites](#prerequisites)
+5. [Setup](#setup)
+6. [Configuration (`env.*.json`)](#configuration-envjson)
+7. [Running on Android](#running-on-android)
+8. [Building APKs](#building-apks)
+9. [Authentication Flow](#authentication-flow)
+10. [Biometric Login](#biometric-login)
+11. [Backend Contract](#backend-contract)
+12. [Project Layout](#project-layout)
+13. [End-to-End Tests](#end-to-end-tests)
+14. [Troubleshooting](#troubleshooting)
+15. [Security Notes](#security-notes)
+16. [Roadmap / Deferred](#roadmap--deferred)
 
 ---
 
 ## Features
 
 - **Password sign-in** against `/auth-service/session` (HmacSHA512 client-side hashing, multipart form, cookie + tenant headers).
-- **Post-login dashboard** with two live count tiles (patients, households) and a placeholder for high-risk AI triage.
+- **AI Mission Dashboard** with tiered patient prioritization — intelligently ranks patients by clinical urgency (critical → overdue → due today → this week → upcoming). Surfaces AI-powered risk briefs, SLA breach alerts, pregnancy complications, and estimated workload.
+- **5-Tier Patient Prioritization** — strong-driver promotion for red-flags, SLA breach, high-risk pregnancy gaps, LTFU streaks, TB default risk, NCD drift, neonates, young infants, postpartum care, and child-with-disability cases.
+- **Offline-first architecture** — full patient, household, referral, and assessment data sync via `/offline-sync/fetch-synced-data`. Cold sync on first login, delta warm sync on pull-to-refresh.
 - **Unified top SearchBar** (Material 3 `SearchAnchor.bar`) at the top of the dashboard. Searches patients + households in one query. Scope chips: **All** / **Patients** / **Households**. Auto-detects phone vs NID vs name on patient queries. Falls back from household name → householdNo when first pass returns nothing. Debounced 350 ms with in-flight cancellation.
+- **Visit flow with step indicators** — programme-specific assessment forms (NCD, TB, ANC, ICCM) with offline-first storage and sync.
 - **Android biometric login** via the system `BiometricPrompt` (fingerprint / face / PIN / pattern / device password fallback).
 - **Auto-lock on background** — banking-app style. App locks the moment it goes to `paused` / `hidden`.
 - **Session-token storage only** — never username or password (or hash) at rest. `JSESSIONID` + `AuthCookie` + tenantId persist in `flutter_secure_storage` (Android Keystore-encrypted).
@@ -80,6 +84,71 @@ classes that wrap Dio calls. No Riverpod / BLoC. Lightweight by design.
 
 ---
 
+## Mission Dashboard & Tiered Prioritization
+
+The AI Mission Dashboard provides frontline health workers with an intelligently
+prioritized patient worklist, reducing cognitive load and ensuring critical cases
+are addressed first.
+
+### 5-Tier Priority Model
+
+| Tier       | Rank | Criteria                                                                                           |
+|------------|------|----------------------------------------------------------------------------------------------------|
+| **Critical** | 0    | Strong-driver hit: red-flag, SLA breach, high-risk pregnancy gap, neonate, postpartum, PNC illness |
+| **Overdue**  | 1    | Due ≥ 3 days past, LTFU streak, TB default risk, NCD drift, child-with-disability                  |
+| **Due Today**| 2    | Due today or 1–2 days past                                                                        |
+| **This Week**| 3    | Due in 1–7 days                                                                                   |
+| **Upcoming** | 4    | Due > 7 days out, or no scheduled due date                                                        |
+
+### Strong-Driver Promotion Rules
+
+Patients are promoted to **Critical** tier when any of these conditions fire:
+
+- **Red-flag alert** — danger signs identified in last assessment
+- **SLA breach** — referral response time exceeded
+- **High-risk pregnancy + ANC gaps** — overdue antenatal visits with risk factors
+- **Neonate** — infant < 28 days
+- **Young infant** — infant 28 days – 2 months
+- **Postpartum** — mother within 6 weeks of delivery
+- **Near-term ANC** — pregnancy ≥ 36 weeks
+- **Delivery complications** — documented birth complications
+- **PNC illness** — postnatal illness in mother or newborn
+- **TB default risk** — treatment adherence gaps
+- **NCD drift** — BP/glucose readings trending out of control
+- **Child-with-disability** — requires additional care coordination
+
+### Mission Dashboard Components
+
+```
+lib/core/mission/
+  mission_dashboard_service.dart    Pure Dart aggregation service
+  mission_pregnancy_facts.dart      Pregnancy-specific risk factors
+
+lib/core/models/
+  mission_queue_item.dart          Unified action item model
+  mission_brief.dart               AI-generated daily brief
+  dashboard_tier.dart              5-tier enum + ranking
+
+lib/features/dashboard/
+  mission_dashboard_screen.dart    Main dashboard UI
+  mission_dashboard_repository.dart View-model + data loading
+  widgets/
+    ai_brief_card.dart             AI risk summary card
+    mission_progress_card.dart     Visit progress tracker
+    mission_queue_card.dart        Prioritized patient card
+```
+
+### Queue Item Types
+
+| Type                 | Description                                      |
+|----------------------|--------------------------------------------------|
+| `patientVisit`       | Standard worklist visit                         |
+| `referral`           | Active referral requiring follow-up             |
+| `followUp`           | Post-treatment follow-up                        |
+| `householdOpportunity` | Bundled services for multiple household members |
+
+---
+
 ## Prerequisites
 
 - Flutter 3.24+ (`flutter --version` → channel stable, Dart ≥ 3.12).
@@ -98,21 +167,61 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost/auth-service/actuator/
 
 ## Setup
 
+### Quick Start
+
 ```bash
-# 1. clone
+# 1. Clone the repository
 git clone https://github.com/Medtronic-LABS/uhis_lf_mobile.git
 cd uhis_lf_mobile
 
-# 2. dependencies
+# 2. Install Flutter dependencies
 flutter pub get
 
-# 3. configuration
+# 3. Configure environment
 cp env.example.json env.development.json
 $EDITOR env.development.json      # fill in DEV_USER / DEV_PASS / API_BASE_URL
 
-# 4. run
+# 4. Start the UHIS backend (from parent repo)
+cd ../platform-setup && bash setup.sh --start && cd -
+
+# 5. Boot Android emulator
+~/Library/Android/sdk/emulator/emulator -avd Pixel_9 -no-snapshot-load &
+adb wait-for-device
+
+# 6. Run the app
 scripts/run.sh                     # uses env.development.json
 ```
+
+### Offline Sync Setup
+
+The app performs a **cold sync** on first login to download all patient, household,
+referral, and assessment data for offline use. This may take 30–60 seconds depending
+on data volume.
+
+```bash
+# Monitor sync progress in logs
+adb logcat -s flutter | grep -E "(Sync|sync|SYNC)"
+```
+
+After initial sync:
+- **Warm sync** on pull-to-refresh fetches only delta changes
+- Data persists in local SQLite database
+- App functions fully offline after first sync
+
+### Database Layer
+
+| Table                  | Purpose                                       |
+|------------------------|-----------------------------------------------|
+| `patients`             | Patient demographics + risk scores            |
+| `households`           | Household registration + GPS                  |
+| `household_members`    | Members linked to households                  |
+| `referrals`            | Referral tickets + SLA state                  |
+| `follow_ups`           | Scheduled follow-up tasks                     |
+| `assessments`          | Assessment history                            |
+| `local_assessments`    | Offline-first assessment drafts               |
+| `encounters`           | Encounter/visit records                       |
+| `patient_programmes`   | Patient-programme membership (NCD, ANC, etc.) |
+| `sync_meta`            | Last sync timestamp for delta fetching        |
 
 `env.*.json` is gitignored; only `env.example.json` is committed.
 
@@ -491,13 +600,27 @@ Web build requires `SemanticsBinding.instance.ensureSemantics()` (already in
 
 ## Roadmap / Deferred
 
-- iOS support (Face ID / Touch ID + lifecycle).
-- `FLAG_SECURE` for screenshot + recents-thumbnail protection.
-- Server-side household search endpoint (currently client-side filter).
-- Offline cache + sync (FHIR `$everything` + `_since`).
-- AI rationale UI (per architecture tenet #6 "Explainable").
-- OIDC / SMART-on-FHIR auth (replacing the cookie + AuthCookie scheme).
-- Patient + household detail screens.
+### Completed in This Release ✅
+
+- ✅ Offline cache + sync (FHIR `$everything` + delta `_since` filtering)
+- ✅ AI-powered Mission Dashboard with tiered patient prioritization
+- ✅ Patient + household detail screens
+- ✅ Visit flow with programme-specific assessments (NCD, TB, ANC, ICCM)
+- ✅ Referral management with SLA tracking
+- ✅ Follow-up scheduling and tracking
+
+### In Progress 🚧
+
+- 🚧 iOS support (Face ID / Touch ID + lifecycle)
+- 🚧 `FLAG_SECURE` for screenshot + recents-thumbnail protection
+- 🚧 CQL-based AI risk scoring integration
+
+### Planned 📋
+
+- AI rationale UI (per architecture tenet #6 "Explainable")
+- OIDC / SMART-on-FHIR auth (replacing cookie + AuthCookie scheme)
+- Server-side household search endpoint (currently client-side filter)
+- Multi-language localization
 - Multi-account picker (multiple biometric-bound sessions per device).
 - Bind stored cookies to a biometric-only Android Keystore key (currently Keystore-encrypted but not biometric-gated at OS level).
 
