@@ -46,6 +46,8 @@ class _TbAssessmentFormState extends State<TbAssessmentForm> {
     final theme = Theme.of(context);
 
     return ListView(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       children: [
         // TB Screening section

@@ -2,9 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/api/scribe_api_service.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../features/dashboard/mission_dashboard_repository.dart';
+import '../../features/scribe/scribe_controller.dart';
+import '../../features/scribe/scribe_permission_service.dart';
+import '../../features/scribe/scribe_session.dart';
+import '../../features/scribe/widgets/scribe_fab.dart';
+import '../../features/scribe/widgets/scribe_review_sheet.dart';
 import '../../features/worklist/worklist_repository.dart';
 import 'assessment_repository.dart';
 import 'forms/anc_assessment_form.dart';
@@ -56,6 +62,23 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
   IccmAssessment? _iccmData;
 
   bool _isSubmitting = false;
+
+  late final ScribeController _scribeCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _scribeCtrl = ScribeController(
+      api: context.read<ScribeApiService>(),
+      permissionService: ScribePermissionService(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _scribeCtrl.dispose();
+    super.dispose();
+  }
   
   /// Return path based on origin
   String get _returnPath {
@@ -126,40 +149,97 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_programmeTitle),
-        actions: [
-          if (_referralRecommended)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Chip(
-                label: const Text('Referral'),
-                avatar: const Icon(Icons.warning, size: 16),
-                backgroundColor: theme.colorScheme.errorContainer,
-                labelStyle: TextStyle(
-                  color: theme.colorScheme.onErrorContainer,
-                  fontSize: 12,
+    // Bind context so ScribeController can show permission rationale sheet.
+    _scribeCtrl.bindContext(context);
+
+    return ChangeNotifierProvider<ScribeController>.value(
+      value: _scribeCtrl,
+      child: Builder(
+        builder: (ctx) {
+          // Listen for reviewReady so we can show the review sheet automatically.
+          ctx.select<ScribeController, ScribeState>(
+            (c) => c.session.state,
+          );
+          final scribeState = _scribeCtrl.session.state;
+          if (scribeState == ScribeState.reviewReady &&
+              ModalRoute.of(ctx)?.isCurrent == true) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && _scribeCtrl.session.state == ScribeState.reviewReady) {
+                showScribeReviewSheet(ctx);
+              }
+            });
+          }
+
+          return Scaffold(
+            appBar: AppBar(
+              title: Text(_programmeTitle),
+              actions: [
+                if (_referralRecommended)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Chip(
+                      label: const Text('Referral'),
+                      avatar: const Icon(Icons.warning, size: 16),
+                      backgroundColor: theme.colorScheme.errorContainer,
+                      labelStyle: TextStyle(
+                        color: theme.colorScheme.onErrorContainer,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            body: Column(
+              children: [
+                // Scribe pill — appears during recording / upload / processing / ready
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+                  child: ScribePill(
+                    onStop: () => _scribeCtrl.stopRecording(
+                      patientId: widget.patientId,
+                      encounterId: widget.visitId,
+                      programme: widget.programme,
+                    ),
+                  ),
+                ),
+                Expanded(child: _buildForm()),
+              ],
+            ),
+            floatingActionButton: ScribeFab(
+              onStartRecording: () => _scribeCtrl.startRecording(
+                patientId: widget.patientId,
+                encounterId: widget.visitId,
+                programme: widget.programme,
+              ),
+              onStopRecording: () => _scribeCtrl.stopRecording(
+                patientId: widget.patientId,
+                encounterId: widget.visitId,
+                programme: widget.programme,
+              ),
+              onOpenReview: () => showScribeReviewSheet(ctx),
+              onRetry: () => _scribeCtrl.retryUpload(
+                patientId: widget.patientId,
+                encounterId: widget.visitId,
+                programme: widget.programme,
+              ),
+            ),
+            bottomNavigationBar: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: FilledButton(
+                  onPressed: _isSubmitting ? null : _onSubmit,
+                  child: _isSubmitting
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Complete Assessment'),
                 ),
               ),
             ),
-        ],
-      ),
-      body: _buildForm(),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: FilledButton(
-            onPressed: _isSubmitting ? null : _onSubmit,
-            child: _isSubmitting
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Complete Assessment'),
-          ),
-        ),
+          );
+        },
       ),
     );
   }

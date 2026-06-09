@@ -137,6 +137,8 @@ class _NcdAssessmentFormState extends State<NcdAssessmentForm> {
     return Form(
       key: _formKey,
       child: ListView(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         children: [
           // Measurements section

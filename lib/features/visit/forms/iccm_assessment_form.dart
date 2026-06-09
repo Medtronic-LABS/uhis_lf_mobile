@@ -95,6 +95,8 @@ class _IccmAssessmentFormState extends State<IccmAssessmentForm> {
     final urgentReferral = _data.urgentReferralNeeded;
 
     return ListView(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       children: [
         // Urgent referral banner

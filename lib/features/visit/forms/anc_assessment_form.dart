@@ -28,8 +28,6 @@ class AncAssessmentForm extends StatefulWidget {
 
 class _AncAssessmentFormState extends State<AncAssessmentForm> {
   late AncAssessment _data;
-  int _currentSection = 0;
-
   // Vaccination controllers
   String? _ttTdStatus;
   final _folicConsumedController = TextEditingController();
@@ -224,78 +222,26 @@ class _AncAssessmentFormState extends State<AncAssessmentForm> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    final sections = [
-      'Vaccinations',
-      'Danger Signs',
-      'Physical Exam',
-      'Investigations',
-      'Birth Prep',
-    ];
-
-    return Column(
+    return ListView(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(16),
       children: [
-        // Section tabs
-        Container(
-          height: 48,
-          color: theme.colorScheme.surfaceContainerHighest,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: sections.length,
-            itemBuilder: (context, index) {
-              final selected = index == _currentSection;
-              return InkWell(
-                onTap: () => setState(() => _currentSection = index),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(
-                        color: selected
-                            ? theme.colorScheme.primary
-                            : Colors.transparent,
-                        width: 2,
-                      ),
-                    ),
-                  ),
-                  child: Text(
-                    sections[index],
-                    style: TextStyle(
-                      color: selected
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.onSurfaceVariant,
-                      fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-
-        // Section content
-        Expanded(
-          child: IndexedStack(
-            index: _currentSection,
-            children: [
-              _buildVaccinationsSection(),
-              _buildDangerSignsSection(),
-              _buildPhysicalExamSection(),
-              _buildInvestigationsSection(),
-              _buildBirthPrepSection(),
-            ],
-          ),
-        ),
+        ..._buildVaccinationsSection(),
+        const SizedBox(height: 20),
+        ..._buildDangerSignsSection(),
+        const SizedBox(height: 20),
+        ..._buildPhysicalExamSection(),
+        const SizedBox(height: 20),
+        ..._buildInvestigationsSection(),
+        const SizedBox(height: 20),
+        ..._buildBirthPrepSection(),
       ],
     );
   }
 
-  Widget _buildVaccinationsSection() {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
+  List<Widget> _buildVaccinationsSection() {
+    return [
         _SectionHeader(title: 'TT/Td Vaccination', icon: Icons.vaccines),
         Card(
           child: Padding(
@@ -348,11 +294,10 @@ class _AncAssessmentFormState extends State<AncAssessmentForm> {
             ),
           ),
         ),
-      ],
-    );
+    ];
   }
 
-  Widget _buildDangerSignsSection() {
+  List<Widget> _buildDangerSignsSection() {
     final theme = Theme.of(context);
     final trimesterOptions = _trimester == 1
         ? AncDangerSignsOptions.firstTrimester
@@ -367,9 +312,7 @@ class _AncAssessmentFormState extends State<AncAssessmentForm> {
 
     final hasDanger = trimesterSigns.isNotEmpty;
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
+    return [
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
@@ -444,14 +387,11 @@ class _AncAssessmentFormState extends State<AncAssessmentForm> {
             ),
           ),
         ],
-      ],
-    );
+    ];
   }
 
-  Widget _buildPhysicalExamSection() {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
+  List<Widget> _buildPhysicalExamSection() {
+    return [
         _SectionHeader(title: 'Vitals', icon: Icons.favorite),
         Card(
           child: Padding(
@@ -609,18 +549,14 @@ class _AncAssessmentFormState extends State<AncAssessmentForm> {
             ),
           ),
         ),
-      ],
-    );
+    ];
   }
 
-  Widget _buildInvestigationsSection() {
-    final theme = Theme.of(context);
+  List<Widget> _buildInvestigationsSection() {
     final hb = double.tryParse(_hemoglobinController.text);
     final anemiaStatus = _data.pointOfCareInvestigations?.anemiaStatus;
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
+    return [
         _SectionHeader(title: 'Urine Tests', icon: Icons.science),
         Card(
           child: Padding(
@@ -734,8 +670,7 @@ class _AncAssessmentFormState extends State<AncAssessmentForm> {
             ),
           ),
         ),
-      ],
-    );
+    ];
   }
 
   Color _getAnemiaColor(double hb) {
@@ -745,10 +680,8 @@ class _AncAssessmentFormState extends State<AncAssessmentForm> {
     return Colors.red.shade100;
   }
 
-  Widget _buildBirthPrepSection() {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
+  List<Widget> _buildBirthPrepSection() {
+    return [
         _SectionHeader(title: 'Birth Preparedness', icon: Icons.local_hospital),
         Card(
           child: Padding(
@@ -798,8 +731,7 @@ class _AncAssessmentFormState extends State<AncAssessmentForm> {
             ),
           ),
         ),
-      ],
-    );
+    ];
   }
 }
 

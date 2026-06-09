@@ -9,6 +9,7 @@ import 'app/router.dart';
 import 'app/theme.dart';
 import 'app/theme_provider.dart';
 import 'core/api/api_client.dart';
+import 'core/api/scribe_api_service.dart';
 import 'core/auth/auth_repository.dart';
 import 'core/auth/auth_state.dart';
 import 'core/auth/biometric_service.dart';
@@ -324,6 +325,9 @@ class _UhisNextAppState extends State<UhisNextApp>
         // Assessment offline-first repository
         ChangeNotifierProvider<AssessmentRepository>.value(
             value: _assessmentRepo),
+        // AI Scribe API service
+        Provider<ScribeApiService>(
+            create: (_) => ScribeApiService(widget.api)),
       ],
       child: Builder(
         builder: (context) {

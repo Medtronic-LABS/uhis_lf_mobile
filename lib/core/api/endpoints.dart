@@ -283,6 +283,27 @@ class Endpoints {
   static String fhirServiceRequestByVillage(String villageId) =>
       '/fhir-server/fhir/ServiceRequest?identifier=http://mdtlabs.com/village-id|$villageId&_count=100';
 
+  // ── AI Scribe: voice → SOAP note ─────────────────────────────────────────
+  static const String scribeTranscribe =
+      '/ai-scribe-service/scribe/transcribe';
+  static String scribeResult(String jobId) =>
+      '/ai-scribe-service/scribe/results/$jobId';
+  static String scribeNote(String noteId) =>
+      '/ai-scribe-service/scribe/notes/$noteId';
+  static String scribeAccept(String noteId) =>
+      '/ai-scribe-service/scribe/notes/$noteId/accept';
+  static String scribeReject(String noteId) =>
+      '/ai-scribe-service/scribe/notes/$noteId/reject';
+
+  // Chunked upload — for audio files ≥ 1 MB (rural 2G path)
+  static const String scribeUploadInit = '/ai-scribe-service/upload/init';
+  static String scribeUploadChunk(String uploadId, int chunk) =>
+      '/ai-scribe-service/upload/$uploadId/chunk/$chunk';
+  static String scribeUploadStatus(String uploadId) =>
+      '/ai-scribe-service/upload/$uploadId/status';
+  static String scribeUploadComplete(String uploadId) =>
+      '/ai-scribe-service/upload/$uploadId/complete';
+
   // ── Offline-service: bulk delta sync ─────────────────────────────────────
   /// GZIP'd bundle of households + members + assessments + follow-ups +
   /// reference data, scoped to the SK's villages. Nginx routes

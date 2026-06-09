@@ -15,10 +15,8 @@ import '../features/pin/pin_unlock_screen.dart';
 import '../features/referral/referral_detail_screen.dart';
 import '../features/referral/referral_list_screen.dart';
 import '../features/sync/sync_progress_screen.dart';
-import '../features/visit/visit_assessment_step.dart';
+import '../features/visit/visit_form_screen.dart';
 import '../features/visit/visit_landing_screen.dart';
-import '../features/visit/visit_triage_step.dart';
-import '../features/visit/visit_vitals_step.dart';
 import 'bottom_nav.dart';
 
 /// Navigation keys for each tab's navigator.
@@ -209,43 +207,20 @@ GoRouter buildRouter(AuthState auth) {
                     ),
                   ),
                   GoRoute(
-                    path: 'visit/:visitId/triage',
-                    name: 'visit-triage',
-                    pageBuilder: (context, state) => MaterialPage(
-                      key: ValueKey('visit-triage-${state.pathParameters['visitId']}'),
-                      child: VisitTriageStep(
-                        visitId: state.pathParameters['visitId']!,
-                      ),
-                    ),
-                  ),
-                  GoRoute(
-                    path: 'visit/:visitId/vitals',
-                    name: 'visit-vitals',
-                    pageBuilder: (context, state) => MaterialPage(
-                      key: ValueKey('visit-vitals-${state.pathParameters['visitId']}'),
-                      child: VisitVitalsStep(
-                        visitId: state.pathParameters['visitId']!,
-                      ),
-                    ),
-                  ),
-                  GoRoute(
-                    path: 'visit/:visitId/assessment/:programme',
-                    name: 'visit-assessment',
+                    path: 'visit/:visitId/form',
+                    name: 'visit-form',
                     pageBuilder: (context, state) {
-                      // Safely extract extra data - may be HouseholdDetailData or Map
                       Map<String, dynamic>? extra;
                       if (state.extra is Map<String, dynamic>) {
                         extra = state.extra as Map<String, dynamic>;
                       } else if (state.extra is Map) {
                         extra = Map<String, dynamic>.from(state.extra as Map);
                       }
-                      // Extract origin from query params for return navigation
                       final origin = state.uri.queryParameters['origin'];
                       return MaterialPage(
-                        key: ValueKey('visit-assessment-${state.pathParameters['visitId']}-${state.pathParameters['programme']}'),
-                        child: VisitAssessmentStep(
+                        key: ValueKey('visit-form-${state.pathParameters['visitId']}'),
+                        child: VisitFormScreen(
                           visitId: state.pathParameters['visitId']!,
-                          programme: state.pathParameters['programme']!,
                           patientId: extra?['patientId'] as String?,
                           memberId: extra?['memberId'] as String?,
                           householdId: extra?['householdId'] as String?,

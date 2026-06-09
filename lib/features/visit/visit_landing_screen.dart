@@ -95,7 +95,7 @@ class _VisitLandingScreenState extends State<VisitLandingScreen> {
       final origin = widget.data?.origin;
       final originParam = origin != null ? '?origin=$origin' : '';
       debugPrint('[VisitLanding] navigating to triage with origin=$origin');
-      context.go('/patients/visit/$encounterId/triage$originParam');
+      context.go('/patients/visit/$encounterId/form$originParam');
     } else {
       setState(() => _starting = false);
       ScaffoldMessenger.of(context).showSnackBar(

@@ -13,7 +13,7 @@ class AppConfig {
   /// Production/Dev server → `https://spice-qa-backend.uhis.labsplatform.com/`
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://spice-qa-backend.uhis.labsplatform.com/',
+    defaultValue: 'https://spice-dev-backend.uhis.labsplatform.com/',
   );
 
   /// Value of the `client` request header expected by the auth pipeline.
@@ -82,6 +82,17 @@ class AppConfig {
     const raw = int.fromEnvironment('PIN_LENGTH', defaultValue: 6);
     return raw == 4 ? 4 : 6;
   }
+
+  /// Base URL for the AI Scribe service.
+  /// Bypasses the main nginx gateway so the scribe container can be run
+  /// locally independently of the UHIS backend. Nginx strips the
+  /// `/ai-scribe-service/` routing prefix; direct calls omit it.
+  /// Android emulator → `http://10.0.2.2:8095/`
+  /// When deployed behind nginx, set this to the same value as [apiBaseUrl].
+  static const String scribeBaseUrl = String.fromEnvironment(
+    'SCRIBE_BASE_URL',
+    defaultValue: 'http://10.0.2.2:8095/',
+  );
 
   /// Wrong-PIN attempts allowed before the user is pushed to password sign-in.
   static const int pinMaxAttempts = int.fromEnvironment(

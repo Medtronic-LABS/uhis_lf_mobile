@@ -977,6 +977,64 @@ abstract final class VisitTriageStrings {
   static const String aiCheckingCta = 'AI is checking — see what to do next';
 }
 
+/// AI Scribe strings — voice recording → SOAP note flow.
+abstract final class ScribeStrings {
+  ScribeStrings._();
+
+  static const String fabIdle = 'Record consultation';
+  static const String fabStop = 'Stop recording';
+  static const String fabReview = 'Review AI note';
+  static const String fabRetry = 'Retry upload';
+
+  static const String pillRecording = 'Recording…';
+  static const String pillUploading = 'Uploading…';
+  static const String pillProcessing = 'AI processing note…';
+  static const String pillReady = 'AI note ready — tap ✦ to review';
+
+  static const String rationaleTitle = 'AI Scribe';
+  static const String rationaleSubtitle = 'Voice → clinical note';
+  static const String rationaleAllow = 'Allow';
+  static const String rationaleNotNow = 'Not now';
+
+  static const String reviewTitle = 'AI Draft Note';
+  static const String reviewAccept = 'Accept Note';
+  static const String reviewReject = 'Reject';
+  static const String reviewRequired = 'Review required';
+  static const String reviewWarning =
+      'Please review all sections before accepting.';
+
+  static const String acceptedSnackbar = 'Note accepted ✓';
+  static const String rejectedSnackbar = 'Note discarded';
+
+  static const String settingsTitle = 'Microphone access needed';
+  static const String settingsBody =
+      'AI Scribe needs microphone access to record consultations. '
+      'Enable it in Settings → App permissions.';
+  static const String settingsOpen = 'Open Settings';
+  static const String settingsCancel = 'Cancel';
+
+  static String uploadProgress(double pct) =>
+      'Uploading…  ${pct.toStringAsFixed(0)}%';
+  static String recordingTimer(int secs) {
+    final mm = (secs ~/ 60).toString().padLeft(2, '0');
+    final ss = (secs % 60).toString().padLeft(2, '0');
+    return 'Recording…  $mm:$ss';
+  }
+}
+
+/// AI Scribe inline banner strings (replaces FAB labels for the new single-form layout).
+abstract final class ScribeBannerStrings {
+  ScribeBannerStrings._();
+
+  static const String idle = 'AI Scribe — Tap to start listening';
+  static const String idleSub = 'SK talks to family — AI fills the form';
+  static const String recording = 'Recording…';
+  static const String uploading = 'Uploading…';
+  static const String processing = 'AI processing note…';
+  static const String ready = 'AI note ready — tap to review';
+  static const String error = 'Upload failed — tap to retry';
+}
+
 /// Bottom-nav tab labels + the Map placeholder copy.
 abstract final class BottomNavStrings {
   BottomNavStrings._();
