@@ -302,6 +302,8 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<AssessmentDao>.value(value: _assessmentDao),
         Provider<LocalAssessmentDao>.value(value: _localAssessmentDao),
         Provider<LocalDashboardRepository>.value(value: _localDashboard),
+        Provider<PatientProgrammesDao>.value(value: _progDao),
+        Provider<PregnancySnapshotDao>.value(value: _pregnancySnapshotDao),
         Provider<MemberDetailRepository>(
             create: (_) => MemberDetailRepository(widget.api, widget.authRepo)),
         // Visit flow providers

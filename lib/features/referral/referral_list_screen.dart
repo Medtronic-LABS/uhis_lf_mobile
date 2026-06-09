@@ -819,7 +819,14 @@ class _ReferralListScreenState extends State<ReferralListScreen>
       );
       if (!mounted) return;
       if (encounterId != null) {
-        context.push('/patients/visit/$encounterId/triage?origin=tasks');
+        context.push(
+          '/patients/visit/$encounterId/triage?origin=tasks',
+          extra: {
+            'patientId': item.patientId,
+            'householdId': item.householdId,
+            'patientAge': item.age,
+          },
+        );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(visitController.error ?? 'Failed to start visit')),

@@ -15,19 +15,20 @@ Flutter, Android-first.
 1. [Features](#features)
 2. [Architecture](#architecture)
 3. [Mission Dashboard & Tiered Prioritization](#mission-dashboard--tiered-prioritization)
-4. [Prerequisites](#prerequisites)
-5. [Setup](#setup)
-6. [Configuration (`env.*.json`)](#configuration-envjson)
-7. [Running on Android](#running-on-android)
-8. [Building APKs](#building-apks)
-9. [Authentication Flow](#authentication-flow)
-10. [Biometric Login](#biometric-login)
-11. [Backend Contract](#backend-contract)
-12. [Project Layout](#project-layout)
-13. [End-to-End Tests](#end-to-end-tests)
-14. [Troubleshooting](#troubleshooting)
-15. [Security Notes](#security-notes)
-16. [Roadmap / Deferred](#roadmap--deferred)
+4. [Symptom-Driven Triage & Pathway Activation](#symptom-driven-triage--pathway-activation)
+5. [Prerequisites](#prerequisites)
+6. [Setup](#setup)
+7. [Configuration (`env.*.json`)](#configuration-envjson)
+8. [Running on Android](#running-on-android)
+9. [Building APKs](#building-apks)
+10. [Authentication Flow](#authentication-flow)
+11. [Biometric Login](#biometric-login)
+12. [Backend Contract](#backend-contract)
+13. [Project Layout](#project-layout)
+14. [End-to-End Tests](#end-to-end-tests)
+15. [Troubleshooting](#troubleshooting)
+16. [Security Notes](#security-notes)
+17. [Roadmap / Deferred](#roadmap--deferred)
 
 ---
 
@@ -146,6 +147,43 @@ lib/features/dashboard/
 | `referral`           | Active referral requiring follow-up             |
 | `followUp`           | Post-treatment follow-up                        |
 | `householdOpportunity` | Bundled services for multiple household members |
+
+---
+
+## Symptom-Driven Triage & Pathway Activation
+
+The app uses a **symptom-driven unified assessment flow** where the pathway engine
+automatically determines which programmes to assess based on picked symptoms and
+patient context (age, sex, pregnancy status, history).
+
+### How It Works
+
+1. **SK picks symptoms** from a unified symptom catalog (grouped by cluster)
+2. **Pathway engine** evaluates WHO-derived rules against symptoms + demographics
+3. **Activated pathways** determine which programme forms to display (IMCI, ANC, TB, NCD, etc.)
+
+### Key Components
+
+```
+lib/features/visit/triage/
+  unified_symptom_catalog.dart    Symptom definitions with SNOMED codes
+  patient_context_builder.dart    Builds context from patient data
+  triage_view_model.dart          Symptom picker state management
+  symptom_picker_screen.dart      Triage UI
+
+lib/features/visit/pathway/
+  pathway_rules_v1.dart           WHO-derived activation rules
+  pathway_engine.dart             Pure-function pathway activation
+  pathway_review_sheet.dart       "Today's assessment plan" modal
+```
+
+### Documentation
+
+See **[Pathway Activation Rules](lib/features/visit/pathway/README.md)** for:
+- Complete symptom → pathway activation matrix
+- Mix-and-match scenarios by patient profile
+- WHO clinical thresholds
+- History-based auto-triggers
 
 ---
 

@@ -322,7 +322,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (!mounted) return;
     if (encounterId != null) {
       debugPrint('[Dashboard] Starting visit, navigating with origin=dashboard');
-      context.go('/patients/visit/$encounterId/triage?origin=dashboard');
+      context.go(
+        '/patients/visit/$encounterId/triage?origin=dashboard',
+        extra: {
+          'patientId': patientId,
+          'householdId': item.householdId,
+          'patientAge': item.age,
+        },
+      );
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(

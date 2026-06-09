@@ -17,6 +17,7 @@ import '../features/referral/referral_list_screen.dart';
 import '../features/sync/sync_progress_screen.dart';
 import '../features/visit/visit_form_screen.dart';
 import '../features/visit/visit_landing_screen.dart';
+import '../features/visit/triage/symptom_picker_screen.dart';
 import 'bottom_nav.dart';
 
 /// Navigation keys for each tab's navigator.
@@ -205,6 +206,30 @@ GoRouter buildRouter(AuthState auth) {
                         data: state.extra as VisitLandingData?,
                       ),
                     ),
+                  ),
+                  GoRoute(
+                    path: 'visit/:visitId/triage',
+                    name: 'visit-triage',
+                    pageBuilder: (context, state) {
+                      Map<String, dynamic>? extra;
+                      if (state.extra is Map<String, dynamic>) {
+                        extra = state.extra as Map<String, dynamic>;
+                      } else if (state.extra is Map) {
+                        extra = Map<String, dynamic>.from(state.extra as Map);
+                      }
+                      final origin = state.uri.queryParameters['origin'];
+                      return MaterialPage(
+                        key: ValueKey('visit-triage-${state.pathParameters['visitId']}'),
+                        child: SymptomPickerScreen(
+                          encounterId: state.pathParameters['visitId']!,
+                          patientId: extra?['patientId'] as String? ?? '',
+                          memberId: extra?['memberId'] as String?,
+                          householdId: extra?['householdId'] as String?,
+                          patientAge: extra?['patientAge'] as int?,
+                          origin: origin,
+                        ),
+                      );
+                    },
                   ),
                   GoRoute(
                     path: 'visit/:visitId/form',

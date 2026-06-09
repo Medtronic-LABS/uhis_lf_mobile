@@ -1049,3 +1049,218 @@ abstract final class BottomNavStrings {
   static const String mapPlaceholderHeading = 'Map View';
   static const String mapPlaceholderSubheading = 'Coming soon';
 }
+
+/// Symptom triage picker screen strings.
+/// Phase 1: Symptom-driven unified assessment flow.
+abstract final class TriageStrings {
+  TriageStrings._();
+
+  // ── Screen titles ────────────────────────────────────────────────────────
+  static const String pickerTitle = 'What symptoms does the patient have?';
+  static const String pickerSubtitle = 'Select all that apply';
+  static const String noSymptomsRoutineVisit = 'No symptoms / routine visit';
+  static const String continueButton = 'Continue';
+  static const String skipButton = 'Skip';
+
+  // ── Cluster headers ──────────────────────────────────────────────────────
+  static const String clusterDangerSigns = 'Danger Signs';
+  static const String clusterFeverRespiratory = 'Fever & Respiratory';
+  static const String clusterGiNutrition = 'GI & Nutrition';
+  static const String clusterMaternal = 'Maternal';
+  static const String clusterNcdMetabolic = 'NCD / Metabolic';
+  static const String clusterTbIndicators = 'TB Indicators';
+  static const String clusterMentalHealth = 'Mental Health';
+  static const String clusterChildHealth = 'Child Health';
+
+  // ── Symptom labels ───────────────────────────────────────────────────────
+  // Danger signs
+  static const String symptomConvulsions = 'Convulsions / Fits';
+  static const String symptomUnconscious = 'Unconscious / Unresponsive';
+  static const String symptomLethargy = 'Unusually sleepy / Difficult to wake';
+  static const String symptomNotEating = 'Not eating / drinking';
+  static const String symptomChestIndrawing = 'Chest in-drawing';
+  static const String symptomStridor = 'Stridor (noisy breathing)';
+  static const String symptomVaginalBleeding = 'Vaginal bleeding';
+  static const String symptomWaterBreak = 'Water break / Leaking';
+  static const String symptomReducedFetalMovement = 'Reduced fetal movement';
+  static const String symptomChestPain = 'Chest pain';
+  static const String symptomHemoptysis = 'Blood in sputum';
+
+  // Fever & respiratory
+  static const String symptomFever = 'Fever';
+  static const String symptomCough = 'Cough';
+  static const String symptomCoughOver2Weeks = 'Cough > 2 weeks';
+  static const String symptomDifficultyBreathing = 'Difficulty breathing';
+  static const String symptomFastBreathing = 'Fast breathing';
+  static const String symptomShortnessBreath = 'Shortness of breath';
+
+  // GI & nutrition
+  static const String symptomDiarrhea = 'Diarrhea';
+  static const String symptomBloodyDiarrhea = 'Bloody diarrhea';
+  static const String symptomVomiting = 'Vomiting';
+  static const String symptomLossAppetite = 'Loss of appetite';
+  static const String symptomMuacRed = 'MUAC red zone';
+  static const String symptomVisibleWasting = 'Visible wasting';
+  static const String symptomEdemaBothFeet = 'Edema of both feet';
+  static const String symptomWeightLoss = 'Weight loss';
+
+  // Maternal
+  static const String symptomPregnant = 'Pregnant / suspected';
+  static const String symptomHeadacheSevere = 'Severe headache';
+  static const String symptomBlurredVision = 'Blurred vision';
+  static const String symptomAbdominalPain = 'Abdominal pain';
+  static const String symptomSwellingFaceHands = 'Swelling (face / hands)';
+  static const String symptomHighBpKnown = 'High BP known / suspected';
+  static const String symptomLaborSigns = 'Labor signs';
+
+  // NCD / metabolic
+  static const String symptomDizziness = 'Dizziness';
+  static const String symptomNumbness = 'Numbness / Tingling';
+  static const String symptomPolyuria = 'Frequent urination';
+  static const String symptomPolydipsia = 'Excessive thirst';
+  static const String symptomFootPain = 'Foot pain';
+  static const String symptomFootWound = 'Foot wound';
+
+  // TB indicators
+  static const String symptomNightSweats = 'Night sweats';
+  static const String symptomFatigue = 'Fatigue';
+  static const String symptomTbContact = 'TB contact history';
+
+  // Mental health
+  static const String symptomFeelingSad = 'Feeling sad / hopeless';
+  static const String symptomAnxiety = 'Anxiety / Worry';
+  static const String symptomSleepDifficulty = 'Difficulty sleeping';
+
+  // Child health
+  static const String symptomEarProblem = 'Ear problem';
+  static const String symptomSkinRash = 'Skin rash';
+  static const String symptomEyeDischarge = 'Eye discharge';
+  static const String symptomUmbilicusRed = 'Umbilicus red / discharge';
+  static const String symptomJaundice = 'Jaundice (yellow skin / eyes)';
+
+  /// Returns the localized label for a symptom code.
+  static String symptomLabel(String code) {
+    switch (code) {
+      // Danger signs
+      case 'convulsions': return symptomConvulsions;
+      case 'unconscious': return symptomUnconscious;
+      case 'lethargy': return symptomLethargy;
+      case 'not_eating': return symptomNotEating;
+      case 'chest_indrawing': return symptomChestIndrawing;
+      case 'stridor': return symptomStridor;
+      case 'vaginal_bleeding': return symptomVaginalBleeding;
+      case 'water_break': return symptomWaterBreak;
+      case 'reduced_fetal_movement': return symptomReducedFetalMovement;
+      case 'chest_pain': return symptomChestPain;
+      case 'hemoptysis': return symptomHemoptysis;
+      // Fever & respiratory
+      case 'fever': return symptomFever;
+      case 'cough': return symptomCough;
+      case 'cough_over_2_weeks': return symptomCoughOver2Weeks;
+      case 'difficulty_breathing': return symptomDifficultyBreathing;
+      case 'fast_breathing': return symptomFastBreathing;
+      case 'shortness_breath': return symptomShortnessBreath;
+      // GI & nutrition
+      case 'diarrhea': return symptomDiarrhea;
+      case 'bloody_diarrhea': return symptomBloodyDiarrhea;
+      case 'vomiting': return symptomVomiting;
+      case 'loss_appetite': return symptomLossAppetite;
+      case 'muac_red': return symptomMuacRed;
+      case 'visible_wasting': return symptomVisibleWasting;
+      case 'edema_both_feet': return symptomEdemaBothFeet;
+      case 'weight_loss': return symptomWeightLoss;
+      // Maternal
+      case 'pregnant': return symptomPregnant;
+      case 'headache_severe': return symptomHeadacheSevere;
+      case 'blurred_vision': return symptomBlurredVision;
+      case 'abdominal_pain': return symptomAbdominalPain;
+      case 'swelling_face_hands': return symptomSwellingFaceHands;
+      case 'high_bp_known': return symptomHighBpKnown;
+      case 'labor_signs': return symptomLaborSigns;
+      // NCD / metabolic
+      case 'dizziness': return symptomDizziness;
+      case 'numbness': return symptomNumbness;
+      case 'polyuria': return symptomPolyuria;
+      case 'polydipsia': return symptomPolydipsia;
+      case 'foot_pain': return symptomFootPain;
+      case 'foot_wound': return symptomFootWound;
+      // TB indicators
+      case 'night_sweats': return symptomNightSweats;
+      case 'fatigue': return symptomFatigue;
+      case 'tb_contact': return symptomTbContact;
+      // Mental health
+      case 'feeling_sad': return symptomFeelingSad;
+      case 'anxiety': return symptomAnxiety;
+      case 'sleep_difficulty': return symptomSleepDifficulty;
+      // Child health
+      case 'ear_problem': return symptomEarProblem;
+      case 'skin_rash': return symptomSkinRash;
+      case 'eye_discharge': return symptomEyeDischarge;
+      case 'umbilicus_red': return symptomUmbilicusRed;
+      case 'jaundice': return symptomJaundice;
+      default: return code;
+    }
+  }
+}
+
+/// Pathway review sheet + activation rationales.
+/// Phase 1: Symptom-driven unified assessment flow.
+abstract final class PathwayStrings {
+  PathwayStrings._();
+
+  // ── Review sheet ─────────────────────────────────────────────────────────
+  static const String reviewTitle = "Today's Assessment Plan";
+  static const String reviewSubtitle = 'Based on symptoms and patient history';
+  static const String startAssessment = 'Start Assessment';
+  static const String addProgramme = '+ Add section manually';
+  static const String confirmRemoveTitle = 'Skip this assessment?';
+  static String confirmRemoveBody(String programmeName, String trigger) =>
+      '$programmeName was recommended because: $trigger.\n\n'
+      'Skipping will create a follow-up task so it surfaces next visit.';
+  static const String keepButton = 'Keep';
+  static const String skipAnywayButton = 'Skip anyway';
+
+  // ── Pathway rationales (localized explainability) ────────────────────────
+  static const String pathwayNeonateRationale = 'Neonate assessment (age < 2 months)';
+  static const String pathwayIccmRationale = 'Child illness assessment (WHO IMCI)';
+  static const String pathwayAncRationale = 'Antenatal care — pregnancy confirmed';
+  static const String pathwayPncRationale = 'Postnatal care — within 6 weeks of delivery';
+  static const String pathwayTbScreenRationale = 'TB screening — WHO 4-symptom screen';
+  static const String pathwayNcdHtnRationale = 'NCD — hypertension review';
+  static const String pathwayNcdDmRationale = 'NCD — diabetes symptoms';
+  static const String pathwayNutritionRationale = 'Nutrition assessment — malnutrition indicators';
+  static const String pathwayEpiRationale = 'Immunization — vaccines overdue';
+  static const String pathwayManualRationale = 'Manually added';
+
+  // ── Programme display names ──────────────────────────────────────────────
+  static const String programmeImci = 'ICCM / Child Illness';
+  static const String programmeAnc = 'ANC';
+  static const String programmePnc = 'PNC';
+  static const String programmeNcd = 'NCD';
+  static const String programmeTb = 'TB Screening';
+  static const String programmeEpi = 'EPI / Immunization';
+  static const String programmeNeonate = 'Neonate Assessment';
+  static const String programmeNutrition = 'Nutrition Assessment';
+  static const String programmeUnknown = 'Assessment';
+
+  // ── Progress indicator ───────────────────────────────────────────────────
+  static String assessmentProgress(int current, int total, String programme) =>
+      'Assessment $current of $total — $programme';
+
+  /// Returns the localized rationale for a pathway rationale key.
+  static String rationale(String key) {
+    switch (key) {
+      case 'pathwayNeonateRationale': return pathwayNeonateRationale;
+      case 'pathwayIccmRationale': return pathwayIccmRationale;
+      case 'pathwayAncRationale': return pathwayAncRationale;
+      case 'pathwayPncRationale': return pathwayPncRationale;
+      case 'pathwayTbScreenRationale': return pathwayTbScreenRationale;
+      case 'pathwayNcdHtnRationale': return pathwayNcdHtnRationale;
+      case 'pathwayNcdDmRationale': return pathwayNcdDmRationale;
+      case 'pathwayNutritionRationale': return pathwayNutritionRationale;
+      case 'pathwayEpiRationale': return pathwayEpiRationale;
+      case 'pathwayManualRationale': return pathwayManualRationale;
+      default: return key;
+    }
+  }
+}
