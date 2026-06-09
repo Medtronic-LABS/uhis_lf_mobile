@@ -94,6 +94,13 @@ class AppConfig {
     defaultValue: 'http://10.0.2.2:8095/',
   );
 
+  /// Transcription model for AI Scribe.
+  /// Options: 'gpt-4o-mini-transcribe', 'whisper-1', 'gemini-2.5-flash'
+  static const String scribeTranscriptionModel = String.fromEnvironment(
+    'SCRIBE_TRANSCRIPTION_MODEL',
+    defaultValue: 'gpt-4o-mini-transcribe',
+  );
+
   /// Wrong-PIN attempts allowed before the user is pushed to password sign-in.
   static const int pinMaxAttempts = int.fromEnvironment(
     'PIN_MAX_ATTEMPTS',

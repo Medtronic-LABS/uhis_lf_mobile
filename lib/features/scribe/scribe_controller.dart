@@ -11,6 +11,7 @@ import 'form_field_schema_builder.dart';
 import 'models/ai_extracted_field.dart';
 import 'scribe_permission_service.dart';
 import 'scribe_session.dart';
+import 'soap_field_extractor.dart';
 
 /// Manages the full scribe lifecycle for one visit:
 /// permission → record → upload → poll → review → accept/reject.
@@ -531,22 +532,72 @@ class ScribeController extends ChangeNotifier {
             debugPrint('[AIScribe] SOAP note received, noteId=${result.noteId}');
             ScribeRationale? rationale = result.rationale;
             SoapNote? soap = result.soap;
+            debugPrint('[AIScribe] Initial soap from result: ${soap != null}, subjective=${soap?.subjective?.length ?? 0} chars');
+            
             if (result.noteId != null) {
               final note = await _api.getNote(result.noteId!);
+              debugPrint('[AIScribe] Fetched note: ${note != null}, note.soap=${note?.soap != null}');
               if (note != null) {
                 soap = note.soap ?? soap;
                 rationale = note.rationale ?? rationale;
               }
             }
+            
+            debugPrint('[AIScribe] Current mode: ${_currentMode.name}');
+            debugPrint('[AIScribe] Final SOAP: subjective=${soap?.subjective?.length ?? 0} chars, objective=${soap?.objective?.length ?? 0} chars');
+            if (soap?.subjective != null && soap!.subjective!.isNotEmpty) {
+              debugPrint('[AIScribe] SOAP subjective: ${soap.subjective!.substring(0, soap.subjective!.length.clamp(0, 200))}');
+            }
+            if (soap?.objective != null && soap!.objective!.isNotEmpty) {
+              debugPrint('[AIScribe] SOAP objective: ${soap.objective!.substring(0, soap.objective!.length.clamp(0, 200))}');
+            }
 
-            _session = _session.copyWith(
-              state: ScribeState.reviewReady,
-              noteId: result.noteId,
-              soap: soap,
-              transcriptText: result.transcriptText,
-              rationale: rationale,
-            );
-            notifyListeners();
+            // If we're in formPrefill mode client-side but backend returned SOAP,
+            // extract fields from SOAP and use the embedded flow
+            if (_currentMode == ScribeMode.formPrefill && soap != null) {
+              debugPrint('[AIScribe] Converting SOAP to form fields (backend fallback)');
+              final extractedFields = SoapFieldExtractor.extractFromSoap(soap);
+              debugPrint('[AIScribe] Extracted ${extractedFields.length} fields from SOAP:');
+              for (final f in extractedFields) {
+                debugPrint('[AIScribe]   → ${f.fieldId}: ${f.value} '
+                    '(confidence=${(f.confidence * 100).toStringAsFixed(0)}%)');
+              }
+
+              _session = _session.copyWith(
+                state: ScribeState.fieldsPopulated,
+                noteId: result.noteId,
+                transcriptText: result.transcriptText,
+                soap: soap,
+                rationale: rationale,
+                formPrefillResult: FormPrefillResult(
+                  fields: extractedFields,
+                  unmappedFindings: [],
+                  transcriptText: result.transcriptText,
+                  noteId: result.noteId,
+                ),
+                fieldsJustPopulated: true,
+              );
+              debugPrint('[AIScribe] Fields populated inline from SOAP - ${extractedFields.length} fields ready');
+              notifyListeners();
+              
+              // Clear the "just populated" flag after a delay
+              Future.delayed(const Duration(seconds: 5), () {
+                if (_session.fieldsJustPopulated) {
+                  _session = _session.copyWith(fieldsJustPopulated: false);
+                  notifyListeners();
+                }
+              });
+            } else {
+              // Standard SOAP mode - show review sheet
+              _session = _session.copyWith(
+                state: ScribeState.reviewReady,
+                noteId: result.noteId,
+                soap: soap,
+                transcriptText: result.transcriptText,
+                rationale: rationale,
+              );
+              notifyListeners();
+            }
           }
           break;
 

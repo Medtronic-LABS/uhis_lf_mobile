@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../features/scribe/form_field_schema_builder.dart';
 import '../../features/scribe/models/ai_extracted_field.dart';
@@ -133,6 +134,10 @@ class ScribeJobResult {
 
   factory ScribeJobResult.fromJson(Map<String, dynamic> j) {
     final soapJson = j['soap'] as Map<String, dynamic>?;
+    debugPrint('[ScribeJobResult] fromJson - soapJson: ${soapJson?.keys.toList()}');
+    if (soapJson != null) {
+      debugPrint('[ScribeJobResult] fromJson - subjective: ${soapJson['subjective']?.toString().substring(0, (soapJson['subjective']?.toString().length ?? 0).clamp(0, 100))}');
+    }
     final ratJson = j['rationale'] as Map<String, dynamic>?;
     final errJson = j['error'] as Map<String, dynamic>?;
     final transcriptJson = j['transcript'] as Map<String, dynamic>?;
@@ -308,6 +313,7 @@ class ScribeApiService extends ApiRepository {
     return {
       'mode': mode.name == 'formPrefill' ? 'form_prefill' : mode.name,
       'language': language,
+      'transcriptionModel': AppConfig.scribeTranscriptionModel,
       if (patientId != null) 'patientId': patientId,
       if (encounterId != null) 'encounterId': encounterId,
       if (programmes.isNotEmpty) 'programmes': programmes,
@@ -464,8 +470,12 @@ class ScribeApiService extends ApiRepository {
         _scribeUrl(Endpoints.scribeNote(noteId)),
         action: 'scribe get note',
       );
+      debugPrint('[ScribeAPI] getNote response keys: ${body.keys.toList()}');
       // /notes/{id} returns the same shape as the sync endpoint; map it.
       final rendered = body['rendered'] as Map<String, dynamic>?;
+      debugPrint('[ScribeAPI] rendered keys: ${rendered?.keys.toList()}');
+      final subjText = rendered?['subjective']?.toString() ?? '';
+      debugPrint('[ScribeAPI] rendered subjective (${subjText.length} chars): ${subjText.substring(0, subjText.length.clamp(0, 100))}');
       final ratJson = body['rationale'] as Map<String, dynamic>?;
       return ScribeJobResult(
         jobId: '',
@@ -474,7 +484,8 @@ class ScribeApiService extends ApiRepository {
         soap: rendered != null ? SoapNote.fromJson(rendered) : null,
         rationale: ratJson != null ? ScribeRationale.fromJson(ratJson) : null,
       );
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[ScribeAPI] getNote error: $e');
       return null;
     }
   }

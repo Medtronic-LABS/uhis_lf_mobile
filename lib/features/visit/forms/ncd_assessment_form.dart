@@ -81,16 +81,23 @@ class _NcdAssessmentFormState extends State<NcdAssessmentForm> {
     final session = _scribeCtrl?.session;
     if (session == null) return;
     
-    // Apply AI values when fields are populated
+    debugPrint('[NcdForm] Scribe state changed: ${session.state.name}, '
+        'fieldsJustPopulated=${session.fieldsJustPopulated}, '
+        'hasFormPrefillResult=${session.formPrefillResult != null}');
+    
+    // Apply AI values when fields are populated (either just now or previously)
     if (session.state == ScribeState.fieldsPopulated && 
-        session.fieldsJustPopulated) {
+        session.formPrefillResult != null) {
       _applyAIValues();
     }
   }
 
   void _applyAIValues() {
     final result = _scribeCtrl?.session.formPrefillResult;
-    if (result == null) return;
+    if (result == null) {
+      debugPrint('[NcdForm] No formPrefillResult to apply');
+      return;
+    }
 
     debugPrint('[NcdForm] Applying AI values from ${result.fields.length} fields');
 
@@ -112,12 +119,14 @@ class _NcdAssessmentFormState extends State<NcdAssessmentForm> {
           if (_heightController.text.isEmpty) {
             _heightController.text = value.toString();
             _fieldSources['height'] = FieldSource.aiPending;
+            debugPrint('[NcdForm] AI filled height: $value');
           }
           break;
         case 'temperature':
           if (_temperatureController.text.isEmpty) {
             _temperatureController.text = value.toString();
             _fieldSources['temperature'] = FieldSource.aiPending;
+            debugPrint('[NcdForm] AI filled temperature: $value');
           }
           break;
         case 'glucoseValue':
@@ -125,27 +134,40 @@ class _NcdAssessmentFormState extends State<NcdAssessmentForm> {
           if (_glucoseController.text.isEmpty) {
             _glucoseController.text = value.toString();
             _fieldSources['glucose'] = FieldSource.aiPending;
+            debugPrint('[NcdForm] AI filled glucose: $value');
           }
           break;
         case 'hba1c':
           if (_hba1cController.text.isEmpty) {
             _hba1cController.text = value.toString();
             _fieldSources['hba1c'] = FieldSource.aiPending;
+            debugPrint('[NcdForm] AI filled hba1c: $value');
           }
           break;
         case 'glucoseType':
           if (value is String) {
             _glucoseType = value;
             _fieldSources['glucoseType'] = FieldSource.aiPending;
+            debugPrint('[NcdForm] AI filled glucoseType: $value');
           }
           break;
         case 'isRegularSmoker':
         case 'smoker':
+          // Handle both bool and string 'true'/'false'
+          bool? boolValue;
           if (value is bool) {
-            _isRegularSmoker = value;
+            boolValue = value;
+          } else if (value is String) {
+            boolValue = value.toLowerCase() == 'true';
+          }
+          if (boolValue != null) {
+            _isRegularSmoker = boolValue;
             _fieldSources['smoker'] = FieldSource.aiPending;
+            debugPrint('[NcdForm] AI filled smoker: $boolValue');
           }
           break;
+        default:
+          debugPrint('[NcdForm] Unhandled field: ${field.fieldId} = $value');
       }
     }
 
