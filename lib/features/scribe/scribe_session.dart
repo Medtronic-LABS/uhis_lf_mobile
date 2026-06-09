@@ -8,6 +8,9 @@ enum ScribeState {
   recording,
   uploading,
   processing,
+  /// Fields are populated and ready for review inline (no modal).
+  fieldsPopulated,
+  /// Legacy: Ready to show review modal (SOAP mode only).
   reviewReady,
   accepted,
   rejected,
@@ -25,9 +28,11 @@ class ScribeSession {
     this.noteId,
     this.soap,
     this.transcriptText,
+    this.liveTranscript,
     this.rationale,
     this.formPrefillResult,
     this.errorMessage,
+    this.fieldsJustPopulated = false,
   });
 
   final ScribeState state;
@@ -38,22 +43,30 @@ class ScribeSession {
   final String? noteId;
   final SoapNote? soap;
   final String? transcriptText;
+  /// Live transcript shown during recording (partial, streaming).
+  final String? liveTranscript;
   final ScribeRationale? rationale;
   final FormPrefillResult? formPrefillResult;
   final String? errorMessage;
+  /// True when fields were just populated - triggers notification.
+  final bool fieldsJustPopulated;
 
   bool get isActive =>
       state == ScribeState.recording ||
       state == ScribeState.uploading ||
       state == ScribeState.processing;
 
-  bool get hasResult => state == ScribeState.reviewReady && (soap != null || formPrefillResult != null);
+  bool get hasResult => (state == ScribeState.reviewReady || state == ScribeState.fieldsPopulated) && 
+      (soap != null || formPrefillResult != null);
 
   /// Whether this is a form prefill session with extracted fields.
   bool get hasFormPrefillResult => formPrefillResult != null && formPrefillResult!.fields.isNotEmpty;
 
   /// Count of fields pending review.
   int get pendingFieldCount => formPrefillResult?.pendingFieldCount ?? 0;
+  
+  /// Count of accepted fields.
+  int get acceptedFieldCount => formPrefillResult?.fields.where((f) => f.source == FieldSource.aiAccepted).length ?? 0;
 
   ScribeSession copyWith({
     ScribeState? state,
@@ -64,9 +77,11 @@ class ScribeSession {
     String? noteId,
     SoapNote? soap,
     String? transcriptText,
+    String? liveTranscript,
     ScribeRationale? rationale,
     FormPrefillResult? formPrefillResult,
     String? errorMessage,
+    bool? fieldsJustPopulated,
   }) =>
       ScribeSession(
         state: state ?? this.state,
@@ -78,8 +93,10 @@ class ScribeSession {
         noteId: noteId ?? this.noteId,
         soap: soap ?? this.soap,
         transcriptText: transcriptText ?? this.transcriptText,
+        liveTranscript: liveTranscript ?? this.liveTranscript,
         rationale: rationale ?? this.rationale,
         formPrefillResult: formPrefillResult ?? this.formPrefillResult,
         errorMessage: errorMessage ?? this.errorMessage,
+        fieldsJustPopulated: fieldsJustPopulated ?? this.fieldsJustPopulated,
       );
 }

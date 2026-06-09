@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../scribe/models/ai_extracted_field.dart';
+import '../../scribe/scribe_controller.dart';
+import '../../scribe/scribe_session.dart';
 import '../models/ncd_assessment.dart';
 
 /// NCD Assessment form for blood pressure and glucose logging.
 ///
 /// Used for hypertension and diabetes patients.
+/// Integrates with AI Scribe for auto-population of fields.
 class NcdAssessmentForm extends StatefulWidget {
   const NcdAssessmentForm({
     super.key,
@@ -37,11 +42,117 @@ class _NcdAssessmentFormState extends State<NcdAssessmentForm> {
   String _glucoseType = 'fasting';
   bool _isRegularSmoker = false;
 
+  // AI field tracking
+  final Map<String, FieldSource> _fieldSources = {};
+  ScribeController? _scribeCtrl;
+  bool _listeningToScribe = false;
+
   @override
   void initState() {
     super.initState();
     _data = widget.initialData ?? const NcdAssessment();
     _initControllers();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _bindScribeController();
+  }
+
+  void _bindScribeController() {
+    if (_listeningToScribe) return;
+    
+    try {
+      _scribeCtrl = context.read<ScribeController>();
+      _scribeCtrl?.addListener(_onScribeChanged);
+      _listeningToScribe = true;
+      
+      // Apply any existing AI values
+      if (_scribeCtrl?.session.state == ScribeState.fieldsPopulated) {
+        _applyAIValues();
+      }
+    } catch (_) {
+      // ScribeController not available in this context
+    }
+  }
+
+  void _onScribeChanged() {
+    final session = _scribeCtrl?.session;
+    if (session == null) return;
+    
+    // Apply AI values when fields are populated
+    if (session.state == ScribeState.fieldsPopulated && 
+        session.fieldsJustPopulated) {
+      _applyAIValues();
+    }
+  }
+
+  void _applyAIValues() {
+    final result = _scribeCtrl?.session.formPrefillResult;
+    if (result == null) return;
+
+    debugPrint('[NcdForm] Applying AI values from ${result.fields.length} fields');
+
+    for (final field in result.fields) {
+      if (field.source == FieldSource.aiRejected) continue;
+      
+      final value = field.value;
+      if (value == null) continue;
+
+      switch (field.fieldId) {
+        case 'weight':
+          if (_weightController.text.isEmpty) {
+            _weightController.text = value.toString();
+            _fieldSources['weight'] = FieldSource.aiPending;
+            debugPrint('[NcdForm] AI filled weight: $value');
+          }
+          break;
+        case 'height':
+          if (_heightController.text.isEmpty) {
+            _heightController.text = value.toString();
+            _fieldSources['height'] = FieldSource.aiPending;
+          }
+          break;
+        case 'temperature':
+          if (_temperatureController.text.isEmpty) {
+            _temperatureController.text = value.toString();
+            _fieldSources['temperature'] = FieldSource.aiPending;
+          }
+          break;
+        case 'glucoseValue':
+        case 'glucose':
+          if (_glucoseController.text.isEmpty) {
+            _glucoseController.text = value.toString();
+            _fieldSources['glucose'] = FieldSource.aiPending;
+          }
+          break;
+        case 'hba1c':
+          if (_hba1cController.text.isEmpty) {
+            _hba1cController.text = value.toString();
+            _fieldSources['hba1c'] = FieldSource.aiPending;
+          }
+          break;
+        case 'glucoseType':
+          if (value is String) {
+            _glucoseType = value;
+            _fieldSources['glucoseType'] = FieldSource.aiPending;
+          }
+          break;
+        case 'isRegularSmoker':
+        case 'smoker':
+          if (value is bool) {
+            _isRegularSmoker = value;
+            _fieldSources['smoker'] = FieldSource.aiPending;
+          }
+          break;
+      }
+    }
+
+    if (mounted) {
+      setState(() {});
+      _updateData();
+    }
   }
 
   void _initControllers() {
@@ -63,12 +174,93 @@ class _NcdAssessmentFormState extends State<NcdAssessmentForm> {
 
   @override
   void dispose() {
+    _scribeCtrl?.removeListener(_onScribeChanged);
     _weightController.dispose();
     _heightController.dispose();
     _temperatureController.dispose();
     _glucoseController.dispose();
     _hba1cController.dispose();
     super.dispose();
+  }
+
+  /// Mark field as manually edited (clears AI source).
+  void _onFieldEdited(String fieldId) {
+    if (_fieldSources[fieldId] == FieldSource.aiPending) {
+      _fieldSources[fieldId] = FieldSource.aiModified;
+      _scribeCtrl?.modifyField(fieldId, null);
+    }
+  }
+
+  /// Build AI indicator badge for a field.
+  Widget? _buildAIBadge(String fieldId) {
+    final source = _fieldSources[fieldId];
+    if (source == null || source == FieldSource.manual) return null;
+    
+    Color color;
+    String label;
+    IconData icon;
+    
+    switch (source) {
+      case FieldSource.aiPending:
+        color = const Color(0xFF7C3AED);
+        label = 'AI';
+        icon = Icons.auto_awesome;
+        break;
+      case FieldSource.aiAccepted:
+        color = const Color(0xFF059669);
+        label = 'AI ✓';
+        icon = Icons.check;
+        break;
+      case FieldSource.aiModified:
+        color = const Color(0xFF2563EB);
+        label = 'Edited';
+        icon = Icons.edit;
+        break;
+      default:
+        return null;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Wrap a field with AI indicator if applicable.
+  Widget _wrapWithAIIndicator(String fieldId, Widget child) {
+    final badge = _buildAIBadge(fieldId);
+    if (badge == null) return child;
+    
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        child,
+        Positioned(
+          top: -8,
+          right: 8,
+          child: badge,
+        ),
+      ],
+    );
   }
 
   void _updateData() {
@@ -151,28 +343,40 @@ class _NcdAssessmentFormState extends State<NcdAssessmentForm> {
                   Row(
                     children: [
                       Expanded(
-                        child: TextFormField(
-                          controller: _weightController,
-                          decoration: const InputDecoration(
-                            labelText: 'Weight',
-                            suffixText: 'kg',
-                            border: OutlineInputBorder(),
+                        child: _wrapWithAIIndicator(
+                          'weight',
+                          TextFormField(
+                            controller: _weightController,
+                            decoration: const InputDecoration(
+                              labelText: 'Weight',
+                              suffixText: 'kg',
+                              border: OutlineInputBorder(),
+                            ),
+                            keyboardType: TextInputType.number,
+                            onChanged: (_) {
+                              _onFieldEdited('weight');
+                              _updateData();
+                            },
                           ),
-                          keyboardType: TextInputType.number,
-                          onChanged: (_) => _updateData(),
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: TextFormField(
-                          controller: _heightController,
-                          decoration: const InputDecoration(
-                            labelText: 'Height',
-                            suffixText: 'cm',
-                            border: OutlineInputBorder(),
+                        child: _wrapWithAIIndicator(
+                          'height',
+                          TextFormField(
+                            controller: _heightController,
+                            decoration: const InputDecoration(
+                              labelText: 'Height',
+                              suffixText: 'cm',
+                              border: OutlineInputBorder(),
+                            ),
+                            keyboardType: TextInputType.number,
+                            onChanged: (_) {
+                              _onFieldEdited('height');
+                              _updateData();
+                            },
                           ),
-                          keyboardType: TextInputType.number,
-                          onChanged: (_) => _updateData(),
                         ),
                       ),
                     ],
@@ -201,15 +405,21 @@ class _NcdAssessmentFormState extends State<NcdAssessmentForm> {
                     ),
                   ],
                   const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _temperatureController,
-                    decoration: const InputDecoration(
-                      labelText: 'Temperature (optional)',
-                      suffixText: '°C',
-                      border: OutlineInputBorder(),
+                  _wrapWithAIIndicator(
+                    'temperature',
+                    TextFormField(
+                      controller: _temperatureController,
+                      decoration: const InputDecoration(
+                        labelText: 'Temperature (optional)',
+                        suffixText: '°C',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                      onChanged: (_) {
+                        _onFieldEdited('temperature');
+                        _updateData();
+                      },
                     ),
-                    keyboardType: TextInputType.number,
-                    onChanged: (_) => _updateData(),
                   ),
                 ],
               ),
@@ -364,15 +574,21 @@ class _NcdAssessmentFormState extends State<NcdAssessmentForm> {
                     },
                   ),
                   const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _glucoseController,
-                    decoration: const InputDecoration(
-                      labelText: 'Blood Glucose',
-                      suffixText: 'mg/dL',
-                      border: OutlineInputBorder(),
+                  _wrapWithAIIndicator(
+                    'glucose',
+                    TextFormField(
+                      controller: _glucoseController,
+                      decoration: const InputDecoration(
+                        labelText: 'Blood Glucose',
+                        suffixText: 'mg/dL',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                      onChanged: (_) {
+                        _onFieldEdited('glucose');
+                        _updateData();
+                      },
                     ),
-                    keyboardType: TextInputType.number,
-                    onChanged: (_) => _updateData(),
                   ),
                   if (_data.glucoseLog?.glucoseStatus != null) ...[
                     const SizedBox(height: 8),
@@ -383,15 +599,21 @@ class _NcdAssessmentFormState extends State<NcdAssessmentForm> {
                     ),
                   ],
                   const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _hba1cController,
-                    decoration: const InputDecoration(
-                      labelText: 'HbA1c (optional)',
-                      suffixText: '%',
-                      border: OutlineInputBorder(),
+                  _wrapWithAIIndicator(
+                    'hba1c',
+                    TextFormField(
+                      controller: _hba1cController,
+                      decoration: const InputDecoration(
+                        labelText: 'HbA1c (optional)',
+                        suffixText: '%',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                      onChanged: (_) {
+                        _onFieldEdited('hba1c');
+                        _updateData();
+                      },
                     ),
-                    keyboardType: TextInputType.number,
-                    onChanged: (_) => _updateData(),
                   ),
                 ],
               ),
@@ -402,17 +624,21 @@ class _NcdAssessmentFormState extends State<NcdAssessmentForm> {
 
           // Risk factors section
           _SectionHeader(title: 'Risk Factors', icon: Icons.warning_amber),
-          Card(
-            child: SwitchListTile(
-              title: const Text('Regular smoker'),
-              subtitle: const Text('Smokes daily or most days'),
-              value: _isRegularSmoker,
-              onChanged: (value) {
-                setState(() {
-                  _isRegularSmoker = value;
-                });
-                _updateData();
-              },
+          _wrapWithAIIndicator(
+            'smoker',
+            Card(
+              child: SwitchListTile(
+                title: const Text('Regular smoker'),
+                subtitle: const Text('Smokes daily or most days'),
+                value: _isRegularSmoker,
+                onChanged: (value) {
+                  setState(() {
+                    _isRegularSmoker = value;
+                    _onFieldEdited('smoker');
+                  });
+                  _updateData();
+                },
+              ),
             ),
           ),
 

@@ -16,19 +16,20 @@ Flutter, Android-first.
 2. [Architecture](#architecture)
 3. [Mission Dashboard & Tiered Prioritization](#mission-dashboard--tiered-prioritization)
 4. [Symptom-Driven Triage & Pathway Activation](#symptom-driven-triage--pathway-activation)
-5. [Prerequisites](#prerequisites)
-6. [Setup](#setup)
-7. [Configuration (`env.*.json`)](#configuration-envjson)
-8. [Running on Android](#running-on-android)
-9. [Building APKs](#building-apks)
-10. [Authentication Flow](#authentication-flow)
-11. [Biometric Login](#biometric-login)
-12. [Backend Contract](#backend-contract)
-13. [Project Layout](#project-layout)
-14. [End-to-End Tests](#end-to-end-tests)
-15. [Troubleshooting](#troubleshooting)
-16. [Security Notes](#security-notes)
-17. [Roadmap / Deferred](#roadmap--deferred)
+5. [AI Scribe — Embedded Voice-to-Form](#ai-scribe--embedded-voice-to-form)
+6. [Prerequisites](#prerequisites)
+7. [Setup](#setup)
+8. [Configuration (`env.*.json`)](#configuration-envjson)
+9. [Running on Android](#running-on-android)
+10. [Building APKs](#building-apks)
+11. [Authentication Flow](#authentication-flow)
+12. [Biometric Login](#biometric-login)
+13. [Backend Contract](#backend-contract)
+14. [Project Layout](#project-layout)
+15. [End-to-End Tests](#end-to-end-tests)
+16. [Troubleshooting](#troubleshooting)
+17. [Security Notes](#security-notes)
+18. [Roadmap / Deferred](#roadmap--deferred)
 
 ---
 
@@ -184,6 +185,75 @@ See **[Pathway Activation Rules](lib/features/visit/pathway/README.md)** for:
 - Mix-and-match scenarios by patient profile
 - WHO clinical thresholds
 - History-based auto-triggers
+
+---
+
+## AI Scribe — Embedded Voice-to-Form
+
+The AI Scribe feature enables health workers to **dictate clinical observations**
+and have form fields automatically populated. Rather than opening a separate review
+screen, extracted values appear **inline** within the existing assessment forms.
+
+### How It Works
+
+1. **Tap the AI Scribe banner** at the top of the assessment form
+2. **Record** clinical observations in natural language (Bengali/English)
+3. **AI extracts** field values (weight, height, BP, glucose, symptoms, etc.)
+4. **Fields auto-populate** with purple "AI" badges indicating AI-filled values
+5. **Review inline** — edit or accept values directly in the form
+6. **Accept All** or modify individual fields as needed
+
+### Scribe Modes
+
+| Mode | Use Case | Output |
+|------|----------|--------|
+| `formPrefill` | Assessment forms | Structured field values with confidence scores |
+| `soap` | Clinical notes | SOAP-formatted narrative with review modal |
+| `triage` | Symptom extraction | Symptom codes for pathway activation |
+
+### Key Components
+
+```
+lib/features/scribe/
+  scribe_controller.dart          State machine: idle → recording → processing → fieldsPopulated
+  scribe_session.dart             Immutable session state snapshot
+  models/
+    ai_extracted_field.dart       Field value + confidence + audit trail
+    form_field_schema.dart        Programme-specific field definitions
+  widgets/
+    scribe_banner.dart            Inline recording/status UI
+    ai_form_fields.dart           AI-aware form field wrappers
+
+lib/core/api/
+  scribe_api_service.dart         Audio upload + polling + field extraction
+```
+
+### Field Tracking
+
+Each AI-populated field tracks its source:
+
+| Source | Badge | Meaning |
+|--------|-------|---------|">
+| `aiPending` | Purple "AI" | Value from AI, not yet reviewed |
+| `aiAccepted` | Green "AI ✓" | User accepted AI value |
+| `aiModified` | Blue "Edited" | User modified AI value |
+| `manual` | None | User entered manually |
+
+### Backend Requirements
+
+The AI Scribe service runs as a separate Docker container:
+
+```bash
+# Start scribe service
+cd ai-scribe-service && docker-compose up -d
+
+# Configure in env.development.json
+{
+  "SCRIBE_BASE_URL": "http://10.0.2.2:8095/"
+}
+```
+
+Requires a valid `GEMINI_API_KEY` in the scribe service `.env` file.
 
 ---
 

@@ -487,7 +487,7 @@ class ScribeController extends ChangeNotifier {
           
           // Handle result based on mode
           if (result.mode == ScribeMode.formPrefill && result.formPrefill != null) {
-            // Form prefill mode - populate form fields
+            // Form prefill mode - auto-populate form fields inline (no review sheet)
             final fields = result.formPrefill!.fields;
             debugPrint('[AIScribe] Form prefill extracted ${fields.length} fields:');
             for (final f in fields) {
@@ -498,13 +498,24 @@ class ScribeController extends ChangeNotifier {
               debugPrint('[AIScribe] Unmapped findings: ${result.formPrefill!.unmappedFindings}');
             }
 
+            // Use fieldsPopulated state - fields appear inline, no review modal
             _session = _session.copyWith(
-              state: ScribeState.reviewReady,
+              state: ScribeState.fieldsPopulated,
               noteId: result.noteId,
               transcriptText: result.transcriptText,
               formPrefillResult: result.formPrefill,
+              fieldsJustPopulated: true,
             );
+            debugPrint('[AIScribe] Fields populated inline - ${fields.length} fields ready for review in form');
             notifyListeners();
+            
+            // Clear the "just populated" flag after a delay
+            Future.delayed(const Duration(seconds: 5), () {
+              if (_session.fieldsJustPopulated) {
+                _session = _session.copyWith(fieldsJustPopulated: false);
+                notifyListeners();
+              }
+            });
           } else if (result.mode == ScribeMode.triage && result.triageResult != null) {
             // Triage mode - just mark complete with triage results
             debugPrint('[AIScribe] Triage extracted symptoms: ${result.triageResult}');

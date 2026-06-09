@@ -9,7 +9,10 @@ import '../scribe_session.dart';
 ///
 /// Replaces the floating action button. Matches the prototype gradient card
 /// from Leapfrog.html (scribeBanner): purple gradient idle, red recording
-/// with wave bars, green when note is ready to review.
+/// with wave bars, green when fields are populated.
+///
+/// In embedded mode, shows live transcript during recording and auto-fills
+/// form fields without requiring a separate review screen.
 class ScribeBanner extends StatelessWidget {
   const ScribeBanner({
     super.key,
@@ -17,32 +20,38 @@ class ScribeBanner extends StatelessWidget {
     required this.onStopRecording,
     required this.onOpenReview,
     required this.onRetry,
+    this.onAcceptAll,
+    this.onClearAll,
   });
 
   final VoidCallback onStartRecording;
   final VoidCallback onStopRecording;
   final VoidCallback onOpenReview;
   final VoidCallback onRetry;
+  final VoidCallback? onAcceptAll;
+  final VoidCallback? onClearAll;
 
   @override
   Widget build(BuildContext context) {
     return Consumer<ScribeController>(
       builder: (context, ctrl, _) {
         final state = ctrl.session.state;
+        final session = ctrl.session;
         final tappable = state == ScribeState.idle ||
             state == ScribeState.requestingPermission ||
             state == ScribeState.recording ||
             state == ScribeState.reviewReady ||
+            state == ScribeState.fieldsPopulated ||
             state == ScribeState.error;
 
         return GestureDetector(
-          onTap: tappable ? () => _handleTap(state) : null,
+          onTap: tappable ? () => _handleTap(state, ctrl) : null,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 300),
             margin: const EdgeInsets.only(bottom: 14),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
-              gradient: _gradient(state),
+              gradient: _gradient(state, session.fieldsJustPopulated),
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
@@ -52,23 +61,45 @@ class ScribeBanner extends StatelessWidget {
                 ),
               ],
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                _MicIconBox(state: state),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _BannerText(state: state, session: ctrl.session),
-                ),
-                if (state == ScribeState.recording) const _WaveBars(),
-                if (state == ScribeState.uploading)
-                  const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
+                Row(
+                  children: [
+                    _MicIconBox(state: state, fieldsJustPopulated: session.fieldsJustPopulated),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _BannerText(state: state, session: session),
                     ),
+                    if (state == ScribeState.recording) const _WaveBars(),
+                    if (state == ScribeState.uploading || state == ScribeState.processing)
+                      const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      ),
+                    if (state == ScribeState.fieldsPopulated && session.pendingFieldCount > 0) ...[
+                      _AcceptAllButton(onTap: onAcceptAll),
+                    ],
+                  ],
+                ),
+                // Show live transcript during recording
+                if (state == ScribeState.recording && session.liveTranscript != null) ...[
+                  const SizedBox(height: 10),
+                  _LiveTranscriptBox(transcript: session.liveTranscript!),
+                ],
+                // Show transcript preview after processing
+                if (state == ScribeState.fieldsPopulated && session.transcriptText != null) ...[
+                  const SizedBox(height: 10),
+                  _TranscriptPreview(
+                    transcript: session.transcriptText!,
+                    fieldCount: session.pendingFieldCount + session.acceptedFieldCount,
                   ),
+                ],
               ],
             ),
           ),
@@ -77,14 +108,30 @@ class ScribeBanner extends StatelessWidget {
     );
   }
 
-  static LinearGradient _gradient(ScribeState state) {
+  static LinearGradient _gradient(ScribeState state, bool fieldsJustPopulated) {
+    // Flash green when fields just populated
+    if (state == ScribeState.fieldsPopulated && fieldsJustPopulated) {
+      return const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xFF059669), Color(0xFF34D399)],
+      );
+    }
+    
     switch (state) {
+      case ScribeState.fieldsPopulated:
       case ScribeState.reviewReady:
       case ScribeState.accepted:
         return const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [Color(0xFF065F46), Color(0xFF10B981)],
+        );
+      case ScribeState.recording:
+        return const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF991B1B), Color(0xFFDC2626)],
         );
       case ScribeState.error:
         return const LinearGradient(
@@ -103,9 +150,12 @@ class ScribeBanner extends StatelessWidget {
 
   static Color _shadowColor(ScribeState state) {
     switch (state) {
+      case ScribeState.fieldsPopulated:
       case ScribeState.reviewReady:
       case ScribeState.accepted:
         return const Color(0xFF10B981).withValues(alpha: 0.3);
+      case ScribeState.recording:
+        return const Color(0xFFDC2626).withValues(alpha: 0.3);
       case ScribeState.error:
         return const Color(0xFFEF4444).withValues(alpha: 0.3);
       default:
@@ -113,7 +163,7 @@ class ScribeBanner extends StatelessWidget {
     }
   }
 
-  void _handleTap(ScribeState state) {
+  void _handleTap(ScribeState state, ScribeController ctrl) {
     switch (state) {
       case ScribeState.idle:
       case ScribeState.requestingPermission:
@@ -125,6 +175,10 @@ class ScribeBanner extends StatelessWidget {
       case ScribeState.reviewReady:
         onOpenReview();
         break;
+      case ScribeState.fieldsPopulated:
+        // In embedded mode, tapping shows a mini-menu or accepts all
+        onAcceptAll?.call();
+        break;
       case ScribeState.error:
         onRetry();
         break;
@@ -134,10 +188,182 @@ class ScribeBanner extends StatelessWidget {
   }
 }
 
+/// Accept all button shown when fields are populated.
+class _AcceptAllButton extends StatelessWidget {
+  const _AcceptAllButton({required this.onTap});
+
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.2),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.check_circle, color: Colors.white, size: 16),
+            const SizedBox(width: 4),
+            const Text(
+              'Accept All',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Live transcript display during recording.
+class _LiveTranscriptBox extends StatelessWidget {
+  const _LiveTranscriptBox({required this.transcript});
+
+  final String transcript;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          const _PulsingDot(),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              transcript,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.9),
+                fontSize: 12,
+                fontStyle: FontStyle.italic,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Transcript preview after processing.
+class _TranscriptPreview extends StatelessWidget {
+  const _TranscriptPreview({
+    required this.transcript,
+    required this.fieldCount,
+  });
+
+  final String transcript;
+  final int fieldCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.auto_awesome, color: Colors.white, size: 14),
+              const SizedBox(width: 6),
+              Text(
+                '$fieldCount fields auto-filled',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '"${_truncate(transcript, 80)}"',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.7),
+              fontSize: 11,
+              fontStyle: FontStyle.italic,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _truncate(String text, int maxLen) {
+    if (text.length <= maxLen) return text;
+    return '${text.substring(0, maxLen)}...';
+  }
+}
+
+class _PulsingDot extends StatefulWidget {
+  const _PulsingDot();
+
+  @override
+  State<_PulsingDot> createState() => _PulsingDotState();
+}
+
+class _PulsingDotState extends State<_PulsingDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.4, end: 1.0).animate(_ctrl),
+      child: Container(
+        width: 8,
+        height: 8,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+        ),
+      ),
+    );
+  }
+}
+
 class _MicIconBox extends StatelessWidget {
-  const _MicIconBox({required this.state});
+  const _MicIconBox({required this.state, this.fieldsJustPopulated = false});
 
   final ScribeState state;
+  final bool fieldsJustPopulated;
 
   @override
   Widget build(BuildContext context) {
@@ -159,6 +385,12 @@ class _MicIconBox extends StatelessWidget {
             right: -4,
             child: _LiveDot(),
           ),
+        if (state == ScribeState.fieldsPopulated && fieldsJustPopulated)
+          Positioned(
+            top: -4,
+            right: -4,
+            child: _SuccessCheckmark(),
+          ),
       ],
     );
   }
@@ -167,6 +399,8 @@ class _MicIconBox extends StatelessWidget {
     switch (state) {
       case ScribeState.processing:
         return const _PulsingStarIcon();
+      case ScribeState.fieldsPopulated:
+        return const Icon(Icons.auto_awesome, color: Colors.white, size: 22);
       case ScribeState.reviewReady:
         return const Icon(Icons.auto_awesome, color: Colors.white, size: 22);
       case ScribeState.error:
@@ -178,6 +412,22 @@ class _MicIconBox extends StatelessWidget {
       default:
         return const Icon(Icons.mic, color: Colors.white, size: 22);
     }
+  }
+}
+
+class _SuccessCheckmark extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 18,
+      height: 18,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        border: Border.all(color: const Color(0xFF10B981), width: 2),
+      ),
+      child: const Icon(Icons.check, color: Color(0xFF10B981), size: 12),
+    );
   }
 }
 
@@ -229,6 +479,9 @@ class _BannerText extends StatelessWidget {
             : ScribeBannerStrings.uploading;
       case ScribeState.processing:
         return ScribeBannerStrings.processing;
+      case ScribeState.fieldsPopulated:
+        final count = session.pendingFieldCount + session.acceptedFieldCount;
+        return 'AI filled $count fields';
       case ScribeState.reviewReady:
         return ScribeBannerStrings.ready;
       case ScribeState.error:
@@ -248,7 +501,9 @@ class _BannerText extends StatelessWidget {
         final secs = session.elapsedSeconds;
         final mm = (secs ~/ 60).toString().padLeft(2, '0');
         final ss = (secs % 60).toString().padLeft(2, '0');
-        return '$mm:$ss';
+        return '$mm:$ss • Listening...';
+      case ScribeState.fieldsPopulated:
+        return 'Tap fields to review • Accept all →';
       default:
         return '';
     }

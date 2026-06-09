@@ -9,6 +9,7 @@ import '../../core/db/encounter_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/models/programme.dart';
 import '../dashboard/mission_dashboard_repository.dart';
+import '../scribe/form_field_schema_builder.dart';
 import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
 import '../scribe/scribe_session.dart';
@@ -187,13 +188,17 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
             );
           }
 
-          // Auto-show review sheet when scribe note is ready.
+          // Auto-show review sheet ONLY for SOAP mode (reviewReady state).
+          // For form_prefill mode (fieldsPopulated state), fields are populated inline.
           final scribeState = _scribeCtrl.session.state;
+          final scribeMode = _scribeCtrl.session.mode;
           if (scribeState == ScribeState.reviewReady &&
+              scribeMode == ScribeMode.soap &&
               ModalRoute.of(ctx)?.isCurrent == true) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted &&
-                  _scribeCtrl.session.state == ScribeState.reviewReady) {
+                  _scribeCtrl.session.state == ScribeState.reviewReady &&
+                  _scribeCtrl.session.mode == ScribeMode.soap) {
                 showScribeReviewSheet(ctx);
               }
             });
@@ -273,12 +278,25 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
                           icon: Icons.medical_information_outlined,
                         ),
                         ScribeBanner(
-                          onStartRecording: () =>
-                              _scribeCtrl.startRecording(
-                            patientId: widget.patientId,
-                            encounterId: widget.visitId,
-                            programme: session.programme.wireTag,
-                          ),
+                          onStartRecording: () {
+                            // Use form_prefill mode for embedded AI co-pilot experience
+                            final programmes = _hasActivatedPathways
+                                ? widget.activatedPathways!
+                                : [session.programme.wireTag];
+                            final schemas = programmes
+                                .map((p) => FormFieldSchemaBuilder.forProgramme(
+                                    Programme.fromString(p)))
+                                .expand((s) => s)
+                                .toList();
+                            
+                            debugPrint('[VisitForm] Starting AI Scribe for programmes: $programmes');
+                            _scribeCtrl.startRecordingForFormPrefill(
+                              patientId: widget.patientId,
+                              encounterId: widget.visitId,
+                              formSchema: schemas,
+                              programmes: programmes,
+                            );
+                          },
                           onStopRecording: () =>
                               _scribeCtrl.stopRecording(
                             patientId: widget.patientId,
@@ -291,6 +309,10 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
                             encounterId: widget.visitId,
                             programme: session.programme.wireTag,
                           ),
+                          onAcceptAll: () {
+                            _scribeCtrl.acceptAllFields();
+                            debugPrint('[VisitForm] User accepted all AI-filled fields');
+                          },
                         ),
                         ..._buildAssessmentForms(session),
                       ],
