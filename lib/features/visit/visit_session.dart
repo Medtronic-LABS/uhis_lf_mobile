@@ -123,6 +123,7 @@ class VisitSession {
     required this.id,
     required this.patientId,
     required this.programme,
+    this.activatedPathways = const [],
     this.patientName,
     this.patientAge,
     this.patientGender,
@@ -139,6 +140,10 @@ class VisitSession {
   final String id;
   final String patientId;
   final Programme programme;
+  
+  /// Activated pathways from symptom-driven triage (new flow).
+  /// When non-empty, determines which assessment forms to show.
+  final List<Programme> activatedPathways;
   final String? patientName;
   final int? patientAge;
   final String? patientGender;
@@ -156,6 +161,7 @@ class VisitSession {
     required String id,
     required String patientId,
     required Programme programme,
+    List<Programme> activatedPathways = const [],
     String? patientName,
     int? patientAge,
     String? patientGender,
@@ -165,6 +171,7 @@ class VisitSession {
         id: id,
         patientId: patientId,
         programme: programme,
+        activatedPathways: activatedPathways,
         patientName: patientName,
         patientAge: patientAge,
         patientGender: patientGender,
@@ -176,6 +183,7 @@ class VisitSession {
     String? id,
     String? patientId,
     Programme? programme,
+    List<Programme>? activatedPathways,
     String? patientName,
     int? patientAge,
     String? patientGender,
@@ -192,6 +200,7 @@ class VisitSession {
         id: id ?? this.id,
         patientId: patientId ?? this.patientId,
         programme: programme ?? this.programme,
+        activatedPathways: activatedPathways ?? this.activatedPathways,
         patientName: patientName ?? this.patientName,
         patientAge: patientAge ?? this.patientAge,
         patientGender: patientGender ?? this.patientGender,

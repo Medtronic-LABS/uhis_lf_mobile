@@ -242,6 +242,15 @@ GoRouter buildRouter(AuthState auth) {
                         extra = Map<String, dynamic>.from(state.extra as Map);
                       }
                       final origin = state.uri.queryParameters['origin'];
+                      
+                      // Parse activatedPathways from extra data
+                      List<String>? pathways;
+                      if (extra?['activatedPathways'] is List) {
+                        pathways = (extra!['activatedPathways'] as List)
+                            .map((e) => e.toString())
+                            .toList();
+                      }
+                      
                       return MaterialPage(
                         key: ValueKey('visit-form-${state.pathParameters['visitId']}'),
                         child: VisitFormScreen(
@@ -254,6 +263,7 @@ GoRouter buildRouter(AuthState auth) {
                               extra?['householdMemberLocalId'] as int?,
                           patientAge: extra?['patientAge'] as int?,
                           gestationalWeeks: extra?['gestationalWeeks'] as int?,
+                          activatedPathways: pathways,
                           origin: origin,
                         ),
                       );

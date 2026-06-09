@@ -48,9 +48,6 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   bool _isLoading = true;
   String? _error;
 
-  /// Track expanded clusters.
-  final Set<SymptomCluster> _expandedClusters = {};
-
   @override
   void initState() {
     super.initState();
@@ -120,7 +117,6 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       setState(() {
         _patientContext = ctx;
         _viewModel = TriageViewModel(patientContext: ctx);
-        _expandedClusters.addAll(_viewModel!.preExpandedClusters);
         _isLoading = false;
       });
       debugPrint('[SymptomPicker] Load complete');
@@ -274,7 +270,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                   ),
                 ),
 
-                // Symptom clusters
+                // Symptom clusters - always expanded with big icons
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -282,14 +278,12 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                     itemBuilder: (context, index) {
                       final cluster = vm.symptomsByCluster.keys.elementAt(index);
                       final symptoms = vm.symptomsByCluster[cluster]!;
-                      final isExpanded = _expandedClusters.contains(cluster);
                       final isDangerSigns = cluster == SymptomCluster.dangerSigns;
 
                       return _buildClusterSection(
                         context,
                         cluster: cluster,
                         symptoms: symptoms,
-                        isExpanded: isExpanded,
                         isDangerSigns: isDangerSigns,
                         vm: vm,
                       );
@@ -365,111 +359,69 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     BuildContext context, {
     required SymptomCluster cluster,
     required List<UnifiedSymptomDef> symptoms,
-    required bool isExpanded,
     required bool isDangerSigns,
     required TriageViewModel vm,
   }) {
     final theme = Theme.of(context);
 
-    // Count selected symptoms in this cluster
-    final selectedCount = symptoms.where((s) => vm.isSelected(s.code)).length;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      color: isDangerSigns
-          ? theme.colorScheme.errorContainer.withValues(alpha: 0.3)
-          : null,
-      child: Column(
-        children: [
-          // Cluster header
-          InkWell(
-            onTap: () {
-              setState(() {
-                if (isExpanded) {
-                  _expandedClusters.remove(cluster);
-                } else {
-                  _expandedClusters.add(cluster);
-                }
-              });
-            },
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  if (isDangerSigns)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: Icon(
-                        Icons.warning_rounded,
-                        color: theme.colorScheme.error,
-                        size: 20,
-                      ),
-                    ),
-                  Expanded(
-                    child: Text(
-                      _clusterLabel(cluster),
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: isDangerSigns
-                            ? theme.colorScheme.error
-                            : null,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Cluster header - always visible, no expand/collapse
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Row(
+            children: [
+              if (isDangerSigns)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Icon(
+                    Icons.warning_rounded,
+                    color: theme.colorScheme.error,
+                    size: 24,
                   ),
-                  if (selectedCount > 0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      margin: const EdgeInsets.only(right: 8),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '$selectedCount',
-                        style: TextStyle(
-                          color: theme.colorScheme.onPrimary,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  Icon(
-                    isExpanded
-                        ? Icons.expand_less
-                        : Icons.expand_more,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ],
+                ),
+              Text(
+                _clusterLabel(cluster),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: isDangerSigns ? theme.colorScheme.error : null,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
+            ],
           ),
+        ),
 
-          // Symptom tiles
-          if (isExpanded)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: symptoms.map((symptom) {
-                  return _buildSymptomTile(
-                    context,
-                    symptom: symptom,
-                    isSelected: vm.isSelected(symptom.code),
-                    isPreTicked: vm.isPreTicked(symptom.code),
-                    onTap: () => vm.toggleSymptom(symptom.code),
-                  );
-                }).toList(),
-              ),
-            ),
-        ],
-      ),
+        // Big icon grid - always visible
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 0.85,
+          ),
+          itemCount: symptoms.length,
+          itemBuilder: (context, index) {
+            final symptom = symptoms[index];
+            return _buildBigIconTile(
+              context,
+              symptom: symptom,
+              isSelected: vm.isSelected(symptom.code),
+              isPreTicked: vm.isPreTicked(symptom.code),
+              onTap: () => vm.toggleSymptom(symptom.code),
+            );
+          },
+        ),
+
+        const SizedBox(height: 8),
+      ],
     );
   }
 
-  Widget _buildSymptomTile(
+  /// Large icon tile for easy SK interaction.
+  Widget _buildBigIconTile(
     BuildContext context, {
     required UnifiedSymptomDef symptom,
     required bool isSelected,
@@ -481,67 +433,114 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
 
     Color getBackgroundColor() {
       if (isSelected) {
-        if (isDanger) {
-          return theme.colorScheme.error;
-        }
-        return theme.colorScheme.primary;
+        return isDanger
+            ? theme.colorScheme.error
+            : theme.colorScheme.primaryContainer;
       }
-      return theme.colorScheme.surfaceContainerHighest;
+      return isDanger
+          ? theme.colorScheme.errorContainer.withValues(alpha: 0.3)
+          : theme.colorScheme.surfaceContainerHighest;
     }
 
-    Color getForegroundColor() {
+    Color getIconColor() {
       if (isSelected) {
-        if (isDanger) {
-          return theme.colorScheme.onError;
-        }
-        return theme.colorScheme.onPrimary;
+        return isDanger
+            ? theme.colorScheme.onError
+            : theme.colorScheme.onPrimaryContainer;
       }
-      if (isDanger) {
-        return theme.colorScheme.error;
-      }
-      return theme.colorScheme.onSurface;
+      return isDanger
+          ? theme.colorScheme.error
+          : theme.colorScheme.onSurfaceVariant;
     }
 
-    return FilterChip(
-      label: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (symptom.icon != null)
-            Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: Icon(
-                _getIconData(symptom.icon!),
-                size: 16,
-                color: getForegroundColor(),
-              ),
-            ),
-          Flexible(
-            child: Text(
-              TriageStrings.symptomLabel(symptom.code),
-              style: TextStyle(
-                color: getForegroundColor(),
-              ),
+    Color getTextColor() {
+      if (isSelected) {
+        return isDanger
+            ? theme.colorScheme.onError
+            : theme.colorScheme.onPrimaryContainer;
+      }
+      return isDanger
+          ? theme.colorScheme.error
+          : theme.colorScheme.onSurface;
+    }
+
+    return Material(
+      color: getBackgroundColor(),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isSelected
+                  ? (isDanger ? theme.colorScheme.error : theme.colorScheme.primary)
+                  : (isDanger
+                      ? theme.colorScheme.error.withValues(alpha: 0.5)
+                      : Colors.transparent),
+              width: isSelected ? 2 : 1,
             ),
           ),
-          if (isPreTicked && isSelected)
-            Padding(
-              padding: const EdgeInsets.only(left: 4),
-              child: Icon(
-                Icons.auto_awesome,
-                size: 14,
-                color: getForegroundColor().withValues(alpha: 0.7),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Large icon
+              Stack(
+                alignment: Alignment.topRight,
+                children: [
+                  Icon(
+                    _getIconData(symptom.icon ?? 'help_outline'),
+                    size: 40,
+                    color: getIconColor(),
+                  ),
+                  // Pre-ticked indicator
+                  if (isPreTicked && isSelected)
+                    Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.tertiary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.auto_awesome,
+                        size: 12,
+                        color: theme.colorScheme.onTertiary,
+                      ),
+                    ),
+                ],
               ),
-            ),
-        ],
+              const SizedBox(height: 8),
+              // Label
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  TriageStrings.symptomLabel(symptom.code),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: getTextColor(),
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
+              ),
+              // Selection checkmark
+              if (isSelected)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Icon(
+                    Icons.check_circle,
+                    size: 18,
+                    color: isDanger
+                        ? theme.colorScheme.onError
+                        : theme.colorScheme.primary,
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
-      selected: isSelected,
-      onSelected: (_) => onTap(),
-      backgroundColor: getBackgroundColor(),
-      selectedColor: getBackgroundColor(),
-      showCheckmark: false,
-      side: isDanger && !isSelected
-          ? BorderSide(color: theme.colorScheme.error.withValues(alpha: 0.5))
-          : BorderSide.none,
     );
   }
 

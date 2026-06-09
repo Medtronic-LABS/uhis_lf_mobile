@@ -13,6 +13,9 @@ import '../../core/db/local_assessment_dao.dart';
 /// 1. Save to local DB with sync_status = pending
 /// 2. Attempt immediate sync if online
 /// 3. Batch sync via offline-service when connectivity returns
+///
+/// Phase 1: Supports caller-supplied encounterId for unified assessments.
+/// Multiple programme assessments from the same visit share one encounterId.
 class AssessmentRepository extends ChangeNotifier {
   AssessmentRepository({
     required LocalAssessmentDao dao,
@@ -32,6 +35,10 @@ class AssessmentRepository extends ChangeNotifier {
   /// Save assessment locally and attempt sync.
   ///
   /// Returns the local assessment ID for tracking.
+  ///
+  /// [encounterId] - Optional caller-supplied encounter ID (UUID v4).
+  /// When provided, multiple assessments from the same unified visit
+  /// can share this ID, enabling backend deduplication and linking.
   Future<String> saveAssessment({
     required String assessmentType,
     required Map<String, dynamic> assessmentDetails,
@@ -40,6 +47,7 @@ class AssessmentRepository extends ChangeNotifier {
     String? householdId,
     String? patientId,
     String? villageId,
+    String? encounterId,
     bool isReferred = false,
     String? referralStatus,
     List<String>? referredReasons,
@@ -51,6 +59,12 @@ class AssessmentRepository extends ChangeNotifier {
     final id = const Uuid().v4();
     final now = DateTime.now();
 
+    // Include encounterId in otherDetails for persistence and API request
+    final enrichedOtherDetails = <String, dynamic>{
+      ...?otherDetails,
+      if (encounterId != null) 'encounterId': encounterId,
+    };
+
     final entity = LocalAssessmentEntity(
       id: id,
       householdMemberLocalId: householdMemberLocalId,
@@ -60,7 +74,9 @@ class AssessmentRepository extends ChangeNotifier {
       villageId: villageId,
       assessmentType: assessmentType.toUpperCase(),
       assessmentDetails: jsonEncode(assessmentDetails),
-      otherDetails: otherDetails != null ? jsonEncode(otherDetails) : null,
+      otherDetails: enrichedOtherDetails.isNotEmpty
+          ? jsonEncode(enrichedOtherDetails)
+          : null,
       isReferred: isReferred,
       referralStatus: isReferred ? 'Referred' : (referralStatus ?? 'Recovered'),
       referredReasons:
@@ -78,16 +94,19 @@ class AssessmentRepository extends ChangeNotifier {
     await _refreshPendingCount();
 
     // Attempt immediate sync
-    _attemptImmediateSync(entity);
+    _attemptImmediateSync(entity, encounterId: encounterId);
 
     return id;
   }
 
   /// Attempt to sync a single assessment immediately.
-  Future<void> _attemptImmediateSync(LocalAssessmentEntity entity) async {
+  Future<void> _attemptImmediateSync(
+    LocalAssessmentEntity entity, {
+    String? encounterId,
+  }) async {
     try {
       // Check connectivity by making a lightweight request
-      final result = await _syncSingleAssessment(entity);
+      final result = await _syncSingleAssessment(entity, encounterId: encounterId);
       if (result) {
         await _refreshPendingCount();
         notifyListeners();
@@ -101,13 +120,25 @@ class AssessmentRepository extends ChangeNotifier {
   /// Sync a single assessment to the API.
   ///
   /// Returns true if successful.
-  Future<bool> _syncSingleAssessment(LocalAssessmentEntity entity) async {
+  Future<bool> _syncSingleAssessment(
+    LocalAssessmentEntity entity, {
+    String? encounterId,
+  }) async {
     try {
       // Mark as in-progress
       await _dao.updateSyncStatus([entity.id], AssessmentSyncStatus.inProgress);
 
       final type = entity.assessmentType.toUpperCase();
       final details = jsonDecode(entity.assessmentDetails);
+
+      // Extract encounterId from otherDetails if not provided
+      String? effectiveEncounterId = encounterId;
+      if (effectiveEncounterId == null && entity.otherDetails != null) {
+        try {
+          final other = jsonDecode(entity.otherDetails!);
+          effectiveEncounterId = other['encounterId'] as String?;
+        } catch (_) {}
+      }
 
       // Route to appropriate endpoint based on assessment type
       String endpoint;
@@ -116,11 +147,11 @@ class AssessmentRepository extends ChangeNotifier {
       if (type == 'NCD') {
         // NCD uses /assessment/create or separate BP/Glucose endpoints
         endpoint = Endpoints.assessmentCreate;
-        requestBody = _buildNcdRequest(entity, details);
+        requestBody = _buildNcdRequest(entity, details, encounterId: effectiveEncounterId);
       } else {
         // Other types (TB, ANC, ICCM) use the generic create endpoint
         endpoint = Endpoints.assessmentCreate;
-        requestBody = entity.toApiRequest();
+        requestBody = _buildApiRequest(entity, encounterId: effectiveEncounterId);
       }
 
       final response = await _api.dio.post<Map<String, dynamic>>(
@@ -157,8 +188,9 @@ class AssessmentRepository extends ChangeNotifier {
   /// Build NCD-specific request body.
   Map<String, dynamic> _buildNcdRequest(
     LocalAssessmentEntity entity,
-    Map<String, dynamic> details,
-  ) {
+    Map<String, dynamic> details, {
+    String? encounterId,
+  }) {
     return {
       'assessmentType': 'NCD',
       'patientId': entity.patientId,
@@ -180,8 +212,42 @@ class AssessmentRepository extends ChangeNotifier {
         'longitude': entity.longitude,
         'startTime': entity.createdAt?.toUtc().toIso8601String(),
         'endTime': entity.updatedAt?.toUtc().toIso8601String(),
+        if (encounterId != null) 'encounterId': encounterId,
       },
       'assessmentTakenOn': entity.createdAt?.toUtc().toIso8601String(),
+    };
+  }
+
+  /// Build generic API request body with optional encounterId.
+  Map<String, dynamic> _buildApiRequest(
+    LocalAssessmentEntity entity, {
+    String? encounterId,
+  }) {
+    final details = jsonDecode(entity.assessmentDetails);
+    return {
+      'referenceId': entity.householdMemberLocalId,
+      'assessmentType': entity.assessmentType.toUpperCase(),
+      'assessmentDetails': details,
+      'villageId': entity.villageId,
+      'assessmentDate': entity.createdAt?.toUtc().toIso8601String(),
+      'patientStatus': entity.referralStatus ?? 'Recovered',
+      if (entity.referredReasons != null)
+        'referredReasons': entity.referredReasons,
+      if (entity.otherDetails != null)
+        'summary': jsonDecode(entity.otherDetails!),
+      'encounter': {
+        'householdId': entity.householdId,
+        'memberId': entity.memberId,
+        'referred': entity.isReferred,
+        'patientId': entity.patientId,
+        'latitude': entity.latitude,
+        'longitude': entity.longitude,
+        'startTime': entity.createdAt?.toUtc().toIso8601String(),
+        'endTime': entity.updatedAt?.toUtc().toIso8601String(),
+        if (encounterId != null) 'encounterId': encounterId,
+      },
+      if (entity.followUpId != null) 'followUpId': entity.followUpId,
+      'updatedAt': entity.updatedAt?.millisecondsSinceEpoch ?? 0,
     };
   }
 

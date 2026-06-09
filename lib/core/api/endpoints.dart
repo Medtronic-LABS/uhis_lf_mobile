@@ -215,6 +215,7 @@ class Endpoints {
   // ── Spice: follow-up (programme-aware overdue signals) ───────────────────
   static const String followUpList = '/spice-service/follow-up/list';
   static const String followUpNcdList = '/spice-service/follow-up/ncd/list';
+  static const String followUpCreate = '/spice-service/follow-up/create';
   static const String followUpOfflineLost =
       '/spice-service/follow-up/offline/lost-to-followups';
   static const String followUpOfflineScreening =

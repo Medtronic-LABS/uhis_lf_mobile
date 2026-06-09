@@ -44,6 +44,7 @@ class VisitFormScreen extends StatefulWidget {
     this.householdMemberLocalId,
     this.patientAge,
     this.gestationalWeeks,
+    this.activatedPathways,
     this.origin,
   });
 
@@ -55,6 +56,11 @@ class VisitFormScreen extends StatefulWidget {
   final int? householdMemberLocalId;
   final int? patientAge;
   final int? gestationalWeeks;
+  
+  /// Activated pathways from symptom-driven triage.
+  /// When non-empty, determines which assessment forms to show.
+  final List<String>? activatedPathways;
+  
   final String? origin;
 
   @override
@@ -71,6 +77,10 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
   IccmAssessment? _iccmData;
 
   bool _isSubmitting = false;
+
+  /// Whether we're using the new pathway-driven flow.
+  bool get _hasActivatedPathways =>
+      widget.activatedPathways != null && widget.activatedPathways!.isNotEmpty;
 
   @override
   void didChangeDependencies() {
@@ -92,6 +102,33 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
 
   String get _returnPath =>
       widget.origin == 'dashboard' ? '/' : '/tasks';
+
+  /// Build the programme label for the header.
+  /// Shows activated pathways if available, otherwise single programme.
+  String _buildProgrammeLabel(VisitSession session) {
+    final pathways = widget.activatedPathways;
+    if (pathways != null && pathways.isNotEmpty) {
+      final labels = pathways.map((p) {
+        final programme = Programme.fromString(p);
+        switch (programme) {
+          case Programme.imci:
+            return 'ICCM';
+          case Programme.anc:
+            return 'ANC';
+          case Programme.pnc:
+            return 'PNC';
+          case Programme.ncd:
+            return 'NCD';
+          case Programme.tb:
+            return 'TB';
+          default:
+            return p.toUpperCase();
+        }
+      }).toSet().toList(); // Dedupe
+      return labels.join(' + ');
+    }
+    return session.programme.wireTag;
+  }
 
   int _nextDueForProgramme(Programme programme, DateTime now) {
     final Duration interval;
@@ -172,61 +209,64 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
                     patientName:
                         session.patientName ?? VisitTriageStrings.patient,
                     patientAge: session.patientAge,
-                    programme: session.programme.wireTag,
+                    programme: _buildProgrammeLabel(session),
                     onBack: () => _confirmLeave(ctx, session.patientId),
                   ),
                   Expanded(
                     child: ListView(
                       padding: const EdgeInsets.fromLTRB(14, 14, 14, 110),
                       children: [
-                        // ── Section 1: Symptom check ─────────────────────
-                        _SectionDivider(
-                          label: 'Symptom Check',
-                          icon: Icons.search,
-                        ),
-                        _AiBriefCard(
-                          patientName: session.patientName ??
-                              VisitTriageStrings.patient,
-                        ),
-                        const SizedBox(height: 12),
-                        _SkAsksFamilyCard(),
-                        const SizedBox(height: 14),
-                        _SymptomTilesGrid(
-                          symptoms: session.symptoms,
-                          onToggle: visitCtrl.toggleSymptom,
-                        ),
-                        const SizedBox(height: 16),
-                        _DurationSelector(
-                          selected: session.duration,
-                          onSelect: visitCtrl.setDuration,
-                        ),
-
-                        const SizedBox(height: 20),
-                        // ── Section 2: Vitals ─────────────────────────────
-                        _SectionDivider(
-                          label: 'Vital Signs',
-                          icon: Icons.favorite_border,
-                        ),
-                        ...session.vitals.map(
-                          (v) => _VitalCard(
-                            vital: v,
-                            patientAge: widget.patientAge,
-                            onChanged: (value,
-                                {double? systolic,
-                                double? diastolic,
-                                bool? boolValue}) {
-                              visitCtrl.updateVital(
-                                v.code,
-                                value: value,
-                                systolic: systolic,
-                                diastolic: diastolic,
-                                boolValue: boolValue,
-                              );
-                            },
+                        // For new pathway-driven flow, skip old symptom/vitals
+                        // sections since those were handled in triage screen
+                        if (!_hasActivatedPathways) ...[
+                          // ── Section 1: Symptom check (Legacy flow) ─────
+                          _SectionDivider(
+                            label: 'Symptom Check',
+                            icon: Icons.search,
                           ),
-                        ),
+                          _AiBriefCard(
+                            patientName: session.patientName ??
+                                VisitTriageStrings.patient,
+                          ),
+                          const SizedBox(height: 12),
+                          _SkAsksFamilyCard(),
+                          const SizedBox(height: 14),
+                          _SymptomTilesGrid(
+                            symptoms: session.symptoms,
+                            onToggle: visitCtrl.toggleSymptom,
+                          ),
+                          const SizedBox(height: 16),
+                          _DurationSelector(
+                            selected: session.duration,
+                            onSelect: visitCtrl.setDuration,
+                          ),
 
-                        const SizedBox(height: 20),
+                          const SizedBox(height: 20),
+                          // ── Section 2: Vitals (Legacy flow) ────────────
+                          _SectionDivider(
+                            label: 'Vital Signs',
+                            icon: Icons.favorite_border,
+                          ),
+                          ...session.vitals.map(
+                            (v) => _VitalCard(
+                              vital: v,
+                              patientAge: widget.patientAge,
+                              onChanged: (value,
+                                  {double? systolic,
+                                  double? diastolic,
+                                  bool? boolValue}) {
+                                visitCtrl.updateVital(
+                                  v.code,
+                                  value: value,
+                                  systolic: systolic,
+                                  diastolic: diastolic,
+                                  boolValue: boolValue,
+                                );
+                              },
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                        ],
                         // ── Section 3: Assessment + AI Scribe ─────────────
                         _SectionDivider(
                           label: 'Assessment',
@@ -252,7 +292,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
                             programme: session.programme.wireTag,
                           ),
                         ),
-                        _buildAssessmentForm(session.programme),
+                        ..._buildAssessmentForms(session),
                       ],
                     ),
                   ),
@@ -280,6 +320,43 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         },
       ),
     );
+  }
+
+  /// Build assessment forms based on activated pathways.
+  ///
+  /// If activatedPathways is provided (new symptom-driven flow), shows
+  /// forms for each activated pathway. Otherwise falls back to single
+  /// programme-based form (legacy flow).
+  List<Widget> _buildAssessmentForms(VisitSession session) {
+    // Use activated pathways if available (new flow)
+    final pathways = widget.activatedPathways;
+    if (pathways != null && pathways.isNotEmpty) {
+      final programmes = pathways
+          .map((p) => Programme.fromString(p))
+          .where((p) => p != Programme.unknown)
+          .toSet() // Dedupe
+          .toList();
+
+      if (programmes.isEmpty) {
+        return [_buildAssessmentForm(session.programme)];
+      }
+
+      return programmes.map((programme) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (programmes.length > 1) ...[
+              const SizedBox(height: 16),
+              _PathwayHeader(programme: programme),
+            ],
+            _buildAssessmentForm(programme),
+          ],
+        );
+      }).toList();
+    }
+
+    // Fallback: single programme (legacy flow)
+    return [_buildAssessmentForm(session.programme)];
   }
 
   Widget _buildAssessmentForm(Programme programme) {
@@ -339,65 +416,32 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
   ) async {
     setState(() => _isSubmitting = true);
     try {
-      // Persist triage + vitals before saving assessment.
-      await visitCtrl.persistTriage();
-      await visitCtrl.persistVitals();
-
-      final Map<String, dynamic> assessmentData;
-      final List<String>? referredReasons;
-
-      switch (session.programme) {
-        case Programme.ncd:
-          assessmentData = _ncdData?.toJson() ?? {};
-          referredReasons = null;
-          break;
-        case Programme.tb:
-          assessmentData = _tbData?.toJson() ?? {};
-          referredReasons =
-              _tbData?.isPositive == true ? ['Positive TB Screen'] : null;
-          break;
-        case Programme.anc:
-        case Programme.pnc:
-          assessmentData = _ancData?.toJson() ?? {};
-          referredReasons = _ancData?.referralRecommended == true
-              ? ['ANC Danger Signs']
-              : null;
-          break;
-        case Programme.imci:
-          assessmentData = _iccmData?.toJson() ?? {};
-          referredReasons = _iccmData?.referralRecommended == true
-              ? _iccmData!.conditionsSummary
-              : null;
-          break;
-        default:
-          assessmentData = {};
-          referredReasons = null;
+      // Skip triage/vitals persistence for new pathway-driven flow
+      // since those were handled in the triage screen
+      if (!_hasActivatedPathways) {
+        await visitCtrl.persistTriage();
+        await visitCtrl.persistVitals();
       }
 
-      final repo = ctx.read<AssessmentRepository>();
-      await repo.saveAssessment(
-        assessmentType: session.programme.wireTag,
-        assessmentDetails: assessmentData,
-        householdMemberLocalId: widget.householdMemberLocalId ?? 0,
-        memberId: widget.memberId,
-        householdId: widget.householdId,
-        patientId: widget.patientId,
-        villageId: widget.villageId,
-        isReferred: _referralRecommended,
-        referralStatus: _referralRecommended ? 'Referred' : 'Recovered',
-        referredReasons: referredReasons,
-      );
-
-      final encounterDao = ctx.read<EncounterDao>();
-      await encounterDao.updateAssessment(widget.visitId, assessmentData);
+      // For new pathway-driven flow, save each activated pathway's assessment
+      if (_hasActivatedPathways) {
+        await _saveMultiPathwayAssessments(ctx);
+      } else {
+        // Legacy flow: single programme assessment
+        await _saveSingleProgrammeAssessment(ctx, session.programme);
+      }
 
       if (widget.patientId != null) {
         final patientDao = ctx.read<PatientDao>();
         final now = DateTime.now();
+        // For multi-pathway, use shortest interval
+        final primaryProgramme = _hasActivatedPathways
+            ? _getPrimaryProgramme()
+            : session.programme;
         await patientDao.updateVisitSchedule(
           patientId: widget.patientId!,
           lastVisitAt: now.millisecondsSinceEpoch,
-          nextDueAt: _nextDueForProgramme(session.programme, now),
+          nextDueAt: _nextDueForProgramme(primaryProgramme, now),
           missedVisitCount: 0,
         );
         final worklistRepo = ctx.read<WorklistRepository>();
@@ -417,8 +461,141 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     }
   }
 
+  /// Get primary programme for multi-pathway flow (first non-unknown).
+  Programme _getPrimaryProgramme() {
+    if (widget.activatedPathways != null) {
+      for (final name in widget.activatedPathways!) {
+        final p = Programme.fromString(name);
+        if (p != Programme.unknown) return p;
+      }
+    }
+    return Programme.unknown;
+  }
+
+  /// Save assessments for each activated pathway.
+  Future<void> _saveMultiPathwayAssessments(BuildContext ctx) async {
+    final repo = ctx.read<AssessmentRepository>();
+    final encounterDao = ctx.read<EncounterDao>();
+    final combinedData = <String, dynamic>{};
+
+    // Process each activated pathway
+    for (final name in widget.activatedPathways!) {
+      final programme = Programme.fromString(name);
+      if (programme == Programme.unknown) continue;
+
+      final data = _getAssessmentDataForProgramme(programme);
+      if (data != null && data.isNotEmpty) {
+        // Save each assessment
+        await repo.saveAssessment(
+          assessmentType: programme.wireTag,
+          assessmentDetails: data,
+          householdMemberLocalId: widget.householdMemberLocalId ?? 0,
+          memberId: widget.memberId,
+          householdId: widget.householdId,
+          patientId: widget.patientId,
+          villageId: widget.villageId,
+          isReferred: _referralRecommendedForProgramme(programme),
+          referralStatus: _referralRecommendedForProgramme(programme)
+              ? 'Referred'
+              : 'Recovered',
+          referredReasons: _getReferralReasonsForProgramme(programme),
+        );
+        combinedData[programme.wireTag] = data;
+      }
+    }
+
+    // Update encounter with combined assessment data
+    await encounterDao.updateAssessment(widget.visitId, combinedData);
+  }
+
+  /// Save single programme assessment (legacy flow).
+  Future<void> _saveSingleProgrammeAssessment(
+    BuildContext ctx,
+    Programme programme,
+  ) async {
+    final assessmentData = _getAssessmentDataForProgramme(programme) ?? {};
+    final referredReasons = _getReferralReasonsForProgramme(programme);
+
+    final repo = ctx.read<AssessmentRepository>();
+    await repo.saveAssessment(
+      assessmentType: programme.wireTag,
+      assessmentDetails: assessmentData,
+      householdMemberLocalId: widget.householdMemberLocalId ?? 0,
+      memberId: widget.memberId,
+      householdId: widget.householdId,
+      patientId: widget.patientId,
+      villageId: widget.villageId,
+      isReferred: _referralRecommended,
+      referralStatus: _referralRecommended ? 'Referred' : 'Recovered',
+      referredReasons: referredReasons,
+    );
+
+    final encounterDao = ctx.read<EncounterDao>();
+    await encounterDao.updateAssessment(widget.visitId, assessmentData);
+  }
+
+  /// Get assessment data for a specific programme.
+  Map<String, dynamic>? _getAssessmentDataForProgramme(Programme programme) {
+    switch (programme) {
+      case Programme.ncd:
+        return _ncdData?.toJson();
+      case Programme.tb:
+        return _tbData?.toJson();
+      case Programme.anc:
+      case Programme.pnc:
+        return _ancData?.toJson();
+      case Programme.imci:
+        return _iccmData?.toJson();
+      default:
+        return null;
+    }
+  }
+
+  /// Check if referral is recommended for a specific programme.
+  bool _referralRecommendedForProgramme(Programme programme) {
+    switch (programme) {
+      case Programme.tb:
+        return _tbData?.isPositive ?? false;
+      case Programme.anc:
+      case Programme.pnc:
+        return _ancData?.referralRecommended ?? false;
+      case Programme.imci:
+        return _iccmData?.referralRecommended ?? false;
+      default:
+        return false;
+    }
+  }
+
+  /// Get referral reasons for a specific programme.
+  List<String>? _getReferralReasonsForProgramme(Programme programme) {
+    switch (programme) {
+      case Programme.tb:
+        return _tbData?.isPositive == true ? ['Positive TB Screen'] : null;
+      case Programme.anc:
+      case Programme.pnc:
+        return _ancData?.referralRecommended == true
+            ? ['ANC Danger Signs']
+            : null;
+      case Programme.imci:
+        return _iccmData?.referralRecommended == true
+            ? _iccmData!.conditionsSummary
+            : null;
+      default:
+        return null;
+    }
+  }
+
   void _showCompletionDialog(BuildContext ctx, VisitSession session) {
     final theme = Theme.of(ctx);
+    
+    // Build the appropriate completion message
+    final String savedMessage;
+    if (_hasActivatedPathways) {
+      savedMessage = '${_buildProgrammeLabel(session)} assessments saved.';
+    } else {
+      savedMessage = '${session.programme.wireTag} assessment saved.';
+    }
+    
     showDialog<void>(
       context: ctx,
       barrierDismissible: false,
@@ -437,7 +614,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${session.programme.wireTag} assessment saved.'),
+            Text(savedMessage),
             if (_referralRecommended) ...[
               const SizedBox(height: 12),
               Container(
@@ -549,6 +726,78 @@ class _SectionDivider extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Container(height: 1, color: tokens.divider),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Pathway header for multi-pathway assessments ────────────────────────────
+
+class _PathwayHeader extends StatelessWidget {
+  const _PathwayHeader({required this.programme});
+
+  final Programme programme;
+
+  String get _label {
+    switch (programme) {
+      case Programme.imci:
+        return 'Child Health (ICCM)';
+      case Programme.anc:
+        return 'Antenatal Care';
+      case Programme.pnc:
+        return 'Postnatal Care';
+      case Programme.ncd:
+        return 'NCD Screening';
+      case Programme.tb:
+        return 'TB Screening';
+      default:
+        return programme.wireTag.toUpperCase();
+    }
+  }
+
+  IconData get _icon {
+    switch (programme) {
+      case Programme.imci:
+        return Icons.child_care;
+      case Programme.anc:
+        return Icons.pregnant_woman;
+      case Programme.pnc:
+        return Icons.family_restroom;
+      case Programme.ncd:
+        return Icons.favorite;
+      case Programme.tb:
+        return Icons.coronavirus;
+      default:
+        return Icons.medical_services;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            _icon,
+            size: 20,
+            color: theme.colorScheme.onSecondaryContainer,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            _label,
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: theme.colorScheme.onSecondaryContainer,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),
