@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../../core/models/programme.dart';
 import '../triage/patient_context_builder.dart';
 import 'pathway_rules_v1.dart';
@@ -93,6 +95,10 @@ class PathwayEngine {
     PatientContext ctx, {
     DateTime? now,
   }) {
+    debugPrint('[PathwayEngine] activate() called with ${symptoms.length} symptoms: $symptoms');
+    debugPrint('[PathwayEngine] Patient context: age=${ctx.ageMonths}mo, pregnant=${ctx.isPregnant}, '
+        'htn=${ctx.hasKnownHypertension}, dm=${ctx.hasKnownDiabetes}, tb=${ctx.hasPriorTb}');
+
     final activated = <ActivatedPathway>[];
     final now_ = now ?? DateTime.now();
 
@@ -166,6 +172,15 @@ class PathwayEngine {
     // Sort by priority (ascending = higher priority first)
     final result = deduped.values.toList()
       ..sort((a, b) => a.priority.compareTo(b.priority));
+
+    debugPrint('[PathwayEngine] Activated ${result.length} pathways: '
+        '${result.map((p) => '${p.programme.name}(pri=${p.priority})').join(', ')}');
+    for (final pathway in result) {
+      debugPrint('[PathwayEngine]   → ${pathway.programme.name}: '
+          'symptoms=${pathway.triggerSymptoms}, '
+          'conditions=${pathway.triggerConditions}, '
+          'flags=${pathway.triggerFlags}');
+    }
 
     return result;
   }

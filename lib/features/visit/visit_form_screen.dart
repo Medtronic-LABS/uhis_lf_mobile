@@ -331,13 +331,17 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     // Use activated pathways if available (new flow)
     final pathways = widget.activatedPathways;
     if (pathways != null && pathways.isNotEmpty) {
+      debugPrint('[VisitForm] Building forms for activated pathways: $pathways');
       final programmes = pathways
           .map((p) => Programme.fromString(p))
           .where((p) => p != Programme.unknown)
           .toSet() // Dedupe
           .toList();
 
+      debugPrint('[VisitForm] Resolved programmes: ${programmes.map((p) => p.name).toList()}');
+
       if (programmes.isEmpty) {
+        debugPrint('[VisitForm] No valid programmes, falling back to: ${session.programme.name}');
         return [_buildAssessmentForm(session.programme)];
       }
 
@@ -356,6 +360,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     }
 
     // Fallback: single programme (legacy flow)
+    debugPrint('[VisitForm] Legacy flow, single programme: ${session.programme.name}');
     return [_buildAssessmentForm(session.programme)];
   }
 

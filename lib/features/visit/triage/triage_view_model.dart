@@ -93,10 +93,13 @@ class TriageViewModel extends ChangeNotifier {
   void toggleSymptom(String code) {
     if (_selectedSymptoms.contains(code)) {
       _selectedSymptoms.remove(code);
+      debugPrint('[Triage] Symptom deselected: $code');
     } else {
       _selectedSymptoms.add(code);
+      debugPrint('[Triage] Symptom selected: $code');
     }
     _updateActivatedPathways();
+    debugPrint('[Triage] Current selection: $_selectedSymptoms');
     notifyListeners();
   }
 
@@ -127,6 +130,7 @@ class TriageViewModel extends ChangeNotifier {
       _selectedSymptoms,
       _patientContext,
     );
+    debugPrint('[Triage] Pathways updated: ${_activatedPathways.map((p) => p.programme.name).toList()}');
   }
 
   /// Get symptoms grouped by cluster for display.
