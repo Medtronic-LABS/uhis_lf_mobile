@@ -86,8 +86,10 @@ class RiskScoringService {
         case Programme.pnc:
           // Already covered by the pregnancy weight above.
           break;
+        case Programme.epi:
+        case Programme.nutrition:
         case Programme.unknown:
-          // No weight for unknown programme.
+          // No additional weight for these programmes.
           break;
       }
     }

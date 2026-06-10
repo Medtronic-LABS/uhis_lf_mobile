@@ -372,6 +372,8 @@ abstract final class WorklistStrings {
   static const String programmePnc = 'PNC';
   static const String programmeNcd = 'NCD';
   static const String programmeTb = 'TB';
+  static const String programmeEpi = 'EPI';
+  static const String programmeNutrition = 'Nutrition';
   static const String programmeUnknown = 'General';
 
   // Chip filters.
@@ -1020,6 +1022,12 @@ abstract final class ScribeStrings {
     final ss = (secs % 60).toString().padLeft(2, '0');
     return 'Recording…  $mm:$ss';
   }
+
+  // ── S4 triage pre-tick hook (S4.6) ───────────────────────────────────────
+  static const String triageConsentPrompt =
+      'Record conversation to auto-select symptoms?';
+  static const String triageConsentAllow = 'Allow';
+  static const String triageConsentDeny = 'Not now';
 }
 
 /// AI Scribe inline banner strings (replaces FAB labels for the new single-form layout).
@@ -1061,6 +1069,7 @@ abstract final class TriageStrings {
   static const String noSymptomsRoutineVisit = 'No symptoms / routine visit';
   static const String continueButton = 'Continue';
   static const String skipButton = 'Skip';
+  static const String retryButton = 'Retry';
 
   // ── Cluster headers ──────────────────────────────────────────────────────
   static const String clusterDangerSigns = 'Danger Signs';
@@ -1199,6 +1208,446 @@ abstract final class TriageStrings {
       case 'umbilicus_red': return symptomUmbilicusRed;
       case 'jaundice': return symptomJaundice;
       default: return code;
+    }
+  }
+}
+
+/// Form compositor strings — section titles, field labels, banners, and
+/// orchestrator progress copy for the Phase 2 sectioned assessment flow.
+///
+/// All user-facing strings for the composer pipeline live here — widgets must
+/// never inline string literals.
+abstract final class ComposerStrings {
+  ComposerStrings._();
+
+  // ── Section titles ──────────────────────────────────────────────────────────
+  static const String sectionVitals = 'Vitals';
+  static const String sectionDangerSigns = 'Danger Signs';
+  static const String sectionSymptomDetail = 'Symptoms';
+  static const String sectionIccmClassify = 'ICCM Assessment';
+  static const String sectionTbDetail = 'TB Screening';
+
+  /// Progress indicator label — e.g. `'Section 2 of 5 — Vitals'`.
+  static String sectionProgress(int current, int total, String sectionTitle) =>
+      'Section $current of $total — $sectionTitle';
+
+  // ── Field labels ────────────────────────────────────────────────────────────
+  static const String fieldTemperature = 'Temperature';
+  static const String fieldBreathsPerMinute = 'Respiratory rate';
+  static const String fieldWeightKg = 'Weight (kg)';
+  static const String fieldMuacCm = 'MUAC (cm)';
+  static const String fieldSpo2 = 'SpO2 (%)';
+  static const String fieldHasCough = 'Has cough';
+  static const String fieldCoughDays = 'Cough duration (days)';
+  static const String fieldHasFever = 'Has fever';
+  static const String fieldFeverDays = 'Fever duration (days)';
+  static const String fieldHasDiarrhea = 'Has diarrhea';
+  static const String fieldUnableToBreastfeed = 'Unable to drink / breastfeed';
+  static const String fieldVomitsEverything = 'Vomits everything';
+  static const String fieldHasConvulsions = 'Has convulsions';
+  static const String fieldLethargic = 'Lethargic / unconscious';
+  static const String fieldChestIndrawing = 'Chest in-drawing';
+  static const String fieldStridor = 'Stridor when calm';
+  static const String fieldIsBloodyDiarrhea = 'Bloody diarrhea';
+  static const String fieldHasFastBreathing = 'Fast breathing';
+  static const String fieldRdtResult = 'RDT result';
+  static const String fieldActDispensed = 'ACT dispensed';
+  static const String fieldOrsDispensed = 'ORS dispensed';
+  static const String fieldZincDispensed = 'Zinc dispensed';
+  static const String fieldAmoxicillinDispensed = 'Amoxicillin dispensed';
+  static const String fieldHasCoughLastedLonger = 'Cough ≥ 2 weeks';
+  static const String fieldHasNightSweats = 'Night sweats';
+  static const String fieldHasWeightLoss = 'Weight loss';
+  static const String fieldRelationshipToIC = 'Relationship to index case';
+  static const String fieldSleepLocation = 'Sleep location';
+  static const String fieldPreviouslyTreatedForTB = 'Previously treated for TB';
+
+  // ── ANC field labels ────────────────────────────────────────────────────────
+  static const String fieldBloodPressureSystolic = 'Systolic BP';
+  static const String fieldBloodPressureDiastolic = 'Diastolic BP';
+  static const String fieldAncWeight = 'Weight';
+  static const String fieldFundalHeight = 'Fundal height';
+  static const String fieldFetalHeartRate = 'Fetal heart rate';
+  static const String fieldFetalMovement = 'Fetal movement';
+  static const String fieldOedema = 'Oedema';
+  static const String fieldPallor = 'Pallor';
+  static const String fieldTtTdCompleted = 'TT/Td vaccination';
+  static const String fieldIfaProvided = 'IFA tablets provided';
+  static const String fieldCalciumProvided = 'Calcium tablets provided';
+  static const String fieldFacilityIdentifiedForDelivery =
+      'Facility identified for delivery';
+  static const String fieldUltrasound = 'Ultrasound';
+
+  // ── NCD field labels ────────────────────────────────────────────────────────
+  static const String fieldSystolic2 = 'Systolic BP (2nd reading)';
+  static const String fieldDiastolic2 = 'Diastolic BP (2nd reading)';
+  static const String fieldPulse = 'Pulse';
+  static const String fieldIsRegularSmoker = 'Regular smoker';
+  static const String fieldMedAdherence = 'Medication adherence';
+  static const String fieldNcdSymptoms = 'Symptoms';
+  static const String fieldGlucoseValue = 'Blood glucose';
+  static const String fieldGlucoseType = 'Glucose measurement type';
+  static const String fieldHba1c = 'HbA1c';
+  static const String fieldFootExam = 'Foot examination';
+  static const String fieldFootWound = 'Foot wound present';
+
+  /// Resolve a field label by its [labelKey].  Matches the key constants used
+  /// in [FieldDef.labelKey] and returns the localized string.  Unknown keys
+  /// fall back to [key] (raw) so the UI never shows blank labels.
+  static String fieldLabel(String key) {
+    switch (key) {
+      case 'fieldTemperature':
+        return fieldTemperature;
+      case 'fieldBreathsPerMinute':
+        return fieldBreathsPerMinute;
+      case 'fieldWeightKg':
+        return fieldWeightKg;
+      case 'fieldMuacCm':
+        return fieldMuacCm;
+      case 'fieldSpo2':
+        return fieldSpo2;
+      case 'fieldHasCough':
+        return fieldHasCough;
+      case 'fieldCoughDays':
+        return fieldCoughDays;
+      case 'fieldHasFever':
+        return fieldHasFever;
+      case 'fieldFeverDays':
+        return fieldFeverDays;
+      case 'fieldHasDiarrhea':
+        return fieldHasDiarrhea;
+      case 'fieldUnableToBreastfeed':
+        return fieldUnableToBreastfeed;
+      case 'fieldVomitsEverything':
+        return fieldVomitsEverything;
+      case 'fieldHasConvulsions':
+        return fieldHasConvulsions;
+      case 'fieldLethargic':
+        return fieldLethargic;
+      case 'fieldChestIndrawing':
+        return fieldChestIndrawing;
+      case 'fieldStridor':
+        return fieldStridor;
+      case 'fieldIsBloodyDiarrhea':
+        return fieldIsBloodyDiarrhea;
+      case 'fieldHasFastBreathing':
+        return fieldHasFastBreathing;
+      case 'fieldRdtResult':
+        return fieldRdtResult;
+      case 'fieldActDispensed':
+        return fieldActDispensed;
+      case 'fieldOrsDispensed':
+        return fieldOrsDispensed;
+      case 'fieldZincDispensed':
+        return fieldZincDispensed;
+      case 'fieldAmoxicillinDispensed':
+        return fieldAmoxicillinDispensed;
+      case 'fieldHasCoughLastedLonger':
+        return fieldHasCoughLastedLonger;
+      case 'fieldHasNightSweats':
+        return fieldHasNightSweats;
+      case 'fieldHasWeightLoss':
+        return fieldHasWeightLoss;
+      case 'fieldRelationshipToIC':
+        return fieldRelationshipToIC;
+      case 'fieldSleepLocation':
+        return fieldSleepLocation;
+      case 'fieldPreviouslyTreatedForTB':
+        return fieldPreviouslyTreatedForTB;
+      // ANC fields
+      case 'fieldBloodPressureSystolic':
+        return fieldBloodPressureSystolic;
+      case 'fieldBloodPressureDiastolic':
+        return fieldBloodPressureDiastolic;
+      case 'fieldAncWeight':
+        return fieldAncWeight;
+      case 'fieldFundalHeight':
+        return fieldFundalHeight;
+      case 'fieldFetalHeartRate':
+        return fieldFetalHeartRate;
+      case 'fieldFetalMovement':
+        return fieldFetalMovement;
+      case 'fieldOedema':
+        return fieldOedema;
+      case 'fieldPallor':
+        return fieldPallor;
+      case 'fieldTtTdCompleted':
+        return fieldTtTdCompleted;
+      case 'fieldIfaProvided':
+        return fieldIfaProvided;
+      case 'fieldCalciumProvided':
+        return fieldCalciumProvided;
+      case 'fieldFacilityIdentifiedForDelivery':
+        return fieldFacilityIdentifiedForDelivery;
+      case 'fieldUltrasound':
+        return fieldUltrasound;
+      // NCD fields
+      case 'fieldSystolic2':
+        return fieldSystolic2;
+      case 'fieldDiastolic2':
+        return fieldDiastolic2;
+      case 'fieldPulse':
+        return fieldPulse;
+      case 'fieldIsRegularSmoker':
+        return fieldIsRegularSmoker;
+      case 'fieldMedAdherence':
+        return fieldMedAdherence;
+      case 'fieldNcdSymptoms':
+        return fieldNcdSymptoms;
+      case 'fieldGlucoseValue':
+        return fieldGlucoseValue;
+      case 'fieldGlucoseType':
+        return fieldGlucoseType;
+      case 'fieldHba1c':
+        return fieldHba1c;
+      case 'fieldFootExam':
+        return fieldFootExam;
+      case 'fieldFootWound':
+        return fieldFootWound;
+      // EPI fields
+      case 'fieldOverdueVaccines':
+        return fieldOverdueVaccines;
+      case 'fieldVaccinesGivenToday':
+        return fieldVaccinesGivenToday;
+      // NUTRITION fields
+      case 'fieldEdemaOfBothFeet':
+        return fieldEdemaOfBothFeet;
+      case 'fieldVisibleWasting':
+        return fieldVisibleWasting;
+      case 'fieldFeedingDifficulty':
+        return fieldFeedingDifficulty;
+      case 'fieldSupplementaryFoodGiven':
+        return fieldSupplementaryFoodGiven;
+      case 'fieldReferredForSam':
+        return fieldReferredForSam;
+      // PNC fields
+      case 'fieldDaysPostDelivery':
+        return fieldDaysPostDelivery;
+      case 'fieldHasUterinePain':
+        return fieldHasUterinePain;
+      case 'fieldHasExcessiveBleeding':
+        return fieldHasExcessiveBleeding;
+      case 'fieldHasBreastProblem':
+        return fieldHasBreastProblem;
+      case 'fieldNewbornPresent':
+        return fieldNewbornPresent;
+      case 'fieldNewbornBreastfeeding':
+        return fieldNewbornBreastfeeding;
+      case 'fieldPncVitaminsGiven':
+        return fieldPncVitaminsGiven;
+      default:
+        return key;
+    }
+  }
+
+  // ── Section title resolver ──────────────────────────────────────────────────
+
+  // ── Section titles (ANC + NCD) ──────────────────────────────────────────────
+  static const String sectionAncVitals = 'ANC Vitals';
+  static const String sectionAncSpecific = 'ANC Assessment';
+  static const String sectionNcdHtn = 'Hypertension';
+  static const String sectionNcdDm = 'Diabetes';
+
+  // ── Section titles (EPI + NUTRITION + PNC) ─────────────────────────────────
+  static const String sectionEpiReview = 'EPI / Immunization';
+  static const String sectionNutritionDetail = 'Nutrition Assessment';
+  static const String sectionPncCheck = 'Postnatal Check';
+
+  // ── Field labels (EPI) ──────────────────────────────────────────────────────
+  static const String fieldOverdueVaccines = 'Overdue vaccines';
+  static const String fieldVaccinesGivenToday = 'Vaccines given today';
+
+  // ── Field labels (NUTRITION) ────────────────────────────────────────────────
+  static const String fieldEdemaOfBothFeet = 'Edema of both feet';
+  static const String fieldVisibleWasting = 'Visible wasting';
+  static const String fieldFeedingDifficulty = 'Feeding difficulty';
+  static const String fieldSupplementaryFoodGiven = 'Supplementary food given';
+  static const String fieldReferredForSam = 'Referred for SAM';
+
+  // ── Field labels (PNC) ──────────────────────────────────────────────────────
+  static const String fieldDaysPostDelivery = 'Days post-delivery';
+  static const String fieldHasUterinePain = 'Uterine pain';
+  static const String fieldHasExcessiveBleeding = 'Excessive bleeding';
+  static const String fieldHasBreastProblem = 'Breast problem';
+  static const String fieldNewbornPresent = 'Newborn present';
+  static const String fieldNewbornBreastfeeding = 'Newborn breastfeeding';
+  static const String fieldPncVitaminsGiven = 'PNC vitamins given';
+
+  /// Resolve a section title from its [sectionId].
+  static String sectionTitle(String sectionId) {
+    switch (sectionId) {
+      case 'vitals':
+        return sectionVitals;
+      case 'danger-signs':
+        return sectionDangerSigns;
+      case 'symptom-detail':
+        return sectionSymptomDetail;
+      case 'iccm-classify':
+        return sectionIccmClassify;
+      case 'tb-screen-detail':
+        return sectionTbDetail;
+      case 'anc-vitals':
+        return sectionAncVitals;
+      case 'anc-specific':
+        return sectionAncSpecific;
+      case 'ncd-htn':
+        return sectionNcdHtn;
+      case 'ncd-dm':
+        return sectionNcdDm;
+      case 'epi-review':
+        return sectionEpiReview;
+      case 'nutrition-detail':
+        return sectionNutritionDetail;
+      case 'pnc-check':
+        return sectionPncCheck;
+      default:
+        return sectionId;
+    }
+  }
+
+  // ── AI Scribe pre-fill indicators (S4.6) ───────────────────────────────────
+  static const String unmappedFindingsTitle = 'Also mentioned';
+  static const String scribeAiBadge = 'AI';
+  static const String scribeAiPreFilledHint = 'Pre-filled by AI — please verify';
+  static const String scribeRecordButton = 'Record';
+
+  // ── Cross-section reveal banner ─────────────────────────────────────────────
+  static const String tbAddedBannerText = 'TB screening added — cough ≥ 2 weeks';
+
+  // ── Submit / orchestrator ───────────────────────────────────────────────────
+  static String syncProgress(int done, int total) =>
+      '$done of $total programmes synced';
+  static const String submitButton = 'Submit Assessment';
+  static const String resumeDraftTitle = 'Resume visit?';
+  static const String resumeDraftMessage = 'An unfinished assessment was found.';
+  static const String resumeButton = 'Resume';
+  static const String discardButton = 'Discard';
+  static const String nextButton = 'Next';
+  static const String dismissOkButton = 'OK';
+}
+
+/// CDS (Clinical Decision Support) alert strings.
+/// Phase 3: Symptom-Driven Unified Assessment — CDS rules layer.
+///
+/// All keys used in [CdsAlert.messageKey] and [CdsAlert.rationaleKey]
+/// must resolve through this class.  No string literals in widgets.
+abstract final class CdsStrings {
+  CdsStrings._();
+
+  // ── Alert messages ──────────────────────────────────────────────────────────
+  static const String bpSevereMessage =
+      'Severe hypertension detected — refer immediately';
+  static const String bpStage1Message =
+      'High BP — add NCD hypertension assessment';
+  static const String dangerSignMessage =
+      'Danger sign present — refer immediately';
+  static const String severePneumoniaMessage =
+      'Severe pneumonia — refer immediately';
+  static const String pneumoniaMessage =
+      'Pneumonia — treat or refer if worsening';
+  static const String samMessage =
+      'Severe acute malnutrition — refer immediately';
+  static const String mamMessage =
+      'Moderate malnutrition — treat at community';
+  static const String severeAnemiaMessage =
+      'Severe anemia — refer immediately';
+  static const String anemiaMessage =
+      'Anemia detected — supplement and follow up';
+  static const String glucoseHighMessage =
+      'High blood glucose — diabetes screening indicated';
+  static const String tbScreenAddMessage =
+      'TB screening added — cough ≥ 2 weeks';
+  static const String conflictReferralOverridesKey =
+      'Referral recommended — treat-at-community overridden';
+
+  // ── Alert actions ───────────────────────────────────────────────────────────
+  static const String referNowButton = 'Refer now';
+  static const String addPathwayButton = 'Add to assessment';
+  static const String dismissButton = 'Dismiss';
+
+  // ── Rationale / explainability keys ────────────────────────────────────────
+  static const String rationaleWhoHeartsBpSevere =
+      'WHO HEARTS: systolic ≥ 160 or diastolic ≥ 100 = severe hypertension';
+  static const String rationaleWhoHeartsStage1 =
+      'WHO HEARTS: systolic ≥ 140 or diastolic ≥ 90 = stage 1 hypertension';
+  static const String rationaleWhoImciDangerSign =
+      'WHO IMCI: general danger sign = refer urgently';
+  static const String rationaleWhoImciSeverePneumonia =
+      'WHO IMCI: chest indrawing = severe pneumonia';
+  static const String rationaleWhoImciPneumonia =
+      'WHO IMCI: fast breathing without chest indrawing = pneumonia';
+  static const String rationaleWhoMuacSam =
+      'WHO: MUAC < 11.5 cm = severe acute malnutrition';
+  static const String rationaleWhoMuacMam =
+      'WHO: MUAC 11.5–12.5 cm = moderate acute malnutrition';
+  static const String rationaleWhoAncAnemia =
+      'WHO ANC: Hb < 7 g/dL = severe anemia requiring referral';
+  static const String rationaleWhoAncMildAnemia =
+      'WHO ANC: Hb < 11 g/dL = anemia in pregnancy';
+  static const String rationaleWhoPenDm =
+      'WHO PEN: glucose > 200 mg/dL random or > 126 mg/dL fasting = diabetes threshold';
+  static const String rationaleWhoTb4Symptom =
+      'WHO: cough ≥ 2 weeks is a TB indicator — screen urgently';
+
+  /// Resolve a message string by its key (as stored in [CdsAlert.messageKey]).
+  static String message(String key) {
+    switch (key) {
+      case 'bpSevereMessage':
+        return bpSevereMessage;
+      case 'bpStage1Message':
+        return bpStage1Message;
+      case 'dangerSignMessage':
+        return dangerSignMessage;
+      case 'severePneumoniaMessage':
+        return severePneumoniaMessage;
+      case 'pneumoniaMessage':
+        return pneumoniaMessage;
+      case 'samMessage':
+        return samMessage;
+      case 'mamMessage':
+        return mamMessage;
+      case 'severeAnemiaMessage':
+        return severeAnemiaMessage;
+      case 'anemiaMessage':
+        return anemiaMessage;
+      case 'glucoseHighMessage':
+        return glucoseHighMessage;
+      case 'tbScreenAddMessage':
+        return tbScreenAddMessage;
+      case 'conflictReferralOverridesKey':
+        return conflictReferralOverridesKey;
+      default:
+        return key;
+    }
+  }
+
+  /// Resolve a rationale string by its key (as stored in [CdsAlert.rationaleKey]).
+  static String rationale(String key) {
+    switch (key) {
+      case 'rationaleWhoHeartsBpSevere':
+        return rationaleWhoHeartsBpSevere;
+      case 'rationaleWhoHeartsStage1':
+        return rationaleWhoHeartsStage1;
+      case 'rationaleWhoImciDangerSign':
+        return rationaleWhoImciDangerSign;
+      case 'rationaleWhoImciSeverePneumonia':
+        return rationaleWhoImciSeverePneumonia;
+      case 'rationaleWhoImciPneumonia':
+        return rationaleWhoImciPneumonia;
+      case 'rationaleWhoMuacSam':
+        return rationaleWhoMuacSam;
+      case 'rationaleWhoMuacMam':
+        return rationaleWhoMuacMam;
+      case 'rationaleWhoAncAnemia':
+        return rationaleWhoAncAnemia;
+      case 'rationaleWhoAncMildAnemia':
+        return rationaleWhoAncMildAnemia;
+      case 'rationaleWhoPenDm':
+        return rationaleWhoPenDm;
+      case 'rationaleWhoTb4Symptom':
+        return rationaleWhoTb4Symptom;
+      default:
+        return key;
     }
   }
 }

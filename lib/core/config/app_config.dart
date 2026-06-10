@@ -98,7 +98,7 @@ class AppConfig {
   /// Options: 'gpt-4o-mini-transcribe', 'whisper-1', 'gemini-2.5-flash'
   static const String scribeTranscriptionModel = String.fromEnvironment(
     'SCRIBE_TRANSCRIPTION_MODEL',
-    defaultValue: 'gpt-4o-mini-transcribe',
+    defaultValue: 'gemini-2.5-flash',
   );
 
   /// Wrong-PIN attempts allowed before the user is pushed to password sign-in.
@@ -121,4 +121,51 @@ class AppConfig {
     'SYNC_MAX_PAGES',
     defaultValue: 200,
   );
+
+  /// Timeout in milliseconds for the AI pathway suggestion call.
+  ///
+  /// The call is fire-and-forget; the picker never blocks on it.
+  /// Default is 3 000 ms — enough for a fast rural connection.
+  static int get aiPathwayTimeoutMs =>
+      int.tryParse(const String.fromEnvironment('AI_PATHWAY_TIMEOUT_MS')) ??
+      3000;
+
+  /// Whether AI pathway suggestions are enabled.
+  ///
+  /// Set `--dart-define=AI_PATHWAY_ENABLED=false` to disable without a rebuild.
+  static bool get aiPathwayEnabled => const bool.fromEnvironment(
+        'AI_PATHWAY_ENABLED',
+        defaultValue: true,
+      );
+
+  // ── AI Scribe feature flags (S4.5) ────────────────────────────────────────
+
+  /// Whether the AI Scribe feature is enabled at all.
+  /// Set `--dart-define=SCRIBE_ENABLED=false` to hide all scribe UI and skip
+  /// all scribe calls without a code change.
+  static bool get scribeEnabled =>
+      const bool.fromEnvironment('SCRIBE_ENABLED', defaultValue: true);
+
+  /// Minimum confidence for a scribe-extracted symptom code to be
+  /// auto-ticked on the triage picker. Codes below this floor are silently
+  /// skipped so the SK is never burdened with low-confidence noise.
+  static double get scribeSymptomConfidenceFloor =>
+      double.tryParse(
+        const String.fromEnvironment('SCRIBE_SYMPTOM_CONFIDENCE_FLOOR'),
+      ) ??
+      0.7;
+
+  /// Minimum confidence for a scribe-extracted form field to be pre-filled
+  /// in the sectioned assessment. Fields below this floor are not written
+  /// to the draft.
+  static double get scribeFieldConfidenceFloor =>
+      double.tryParse(
+        const String.fromEnvironment('SCRIBE_FIELD_CONFIDENCE_FLOOR'),
+      ) ??
+      0.6;
+
+  // NOTE: scribeConsentGiven is intentionally NOT stored in AppConfig because
+  // it is a per-user runtime preference, not a compile-time build flag.
+  // It must be read from SharedPreferences / SecureStorage and managed by
+  // a dedicated ConsentRepository (TODO: wire in a future sprint).
 }

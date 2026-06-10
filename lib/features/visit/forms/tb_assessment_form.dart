@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../scribe/models/ai_extracted_field.dart';
+import '../../scribe/scribe_controller.dart';
+import '../../scribe/scribe_session.dart';
 import '../models/tb_assessment.dart';
 
 /// TB Assessment form with WHO 4-symptom screen and contact tracing.
@@ -24,6 +28,11 @@ class _TbAssessmentFormState extends State<TbAssessmentForm> {
 
   String? _otherRelationship;
 
+  // AI field tracking
+  final Map<String, FieldSource> _fieldSources = {};
+  ScribeController? _scribeCtrl;
+  bool _listeningToScribe = false;
+
   @override
   void initState() {
     super.initState();
@@ -31,6 +40,92 @@ class _TbAssessmentFormState extends State<TbAssessmentForm> {
     _screening = _data.tbScreening ?? const TbScreening();
     _contactTracing = _data.contactTracing ?? const ContactTracing();
     _otherRelationship = _contactTracing.otherRelationshipIC;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _bindScribeController();
+  }
+
+  void _bindScribeController() {
+    if (_listeningToScribe) return;
+    
+    try {
+      _scribeCtrl = context.read<ScribeController>();
+      _scribeCtrl?.addListener(_onScribeChanged);
+      _listeningToScribe = true;
+      
+      if (_scribeCtrl?.session.state == ScribeState.fieldsPopulated) {
+        _applyAIValues();
+      }
+    } catch (_) {}
+  }
+
+  void _onScribeChanged() {
+    final session = _scribeCtrl?.session;
+    if (session == null) return;
+    
+    debugPrint('[TbForm] Scribe state changed: ${session.state.name}');
+    
+    if (session.state == ScribeState.fieldsPopulated && 
+        session.formPrefillResult != null) {
+      _applyAIValues();
+    }
+  }
+
+  void _applyAIValues() {
+    final result = _scribeCtrl?.session.formPrefillResult;
+    if (result == null) return;
+
+    debugPrint('[TbForm] Applying AI values from ${result.fields.length} fields');
+
+    for (final field in result.fields) {
+      if (field.source == FieldSource.aiRejected) continue;
+      final value = field.value;
+      if (value == null) continue;
+
+      switch (field.fieldId) {
+        case 'cough':
+          if (value == 'true') {
+            _screening = _screening.copyWith(hasCough: true);
+            debugPrint('[TbForm] AI detected cough');
+          }
+          break;
+        case 'fever':
+          if (value == 'true') {
+            _screening = _screening.copyWith(hasFever: true);
+            debugPrint('[TbForm] AI detected fever');
+          }
+          break;
+        case 'nightSweats':
+          if (value == 'true') {
+            _screening = _screening.copyWith(hasNightSweats: true);
+            debugPrint('[TbForm] AI detected night sweats');
+          }
+          break;
+        case 'weightLoss':
+        case 'fatigue':
+          if (value == 'true') {
+            _screening = _screening.copyWith(hasWeightLoss: true);
+            debugPrint('[TbForm] AI detected weight loss/fatigue');
+          }
+          break;
+        default:
+          debugPrint('[TbForm] Unhandled field: ${field.fieldId} = $value');
+      }
+    }
+
+    if (mounted) {
+      setState(() {});
+      _updateData();
+    }
+  }
+
+  @override
+  void dispose() {
+    _scribeCtrl?.removeListener(_onScribeChanged);
+    super.dispose();
   }
 
   void _updateData() {

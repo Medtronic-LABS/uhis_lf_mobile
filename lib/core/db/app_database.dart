@@ -16,7 +16,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 8;
+  static const int schemaVersion = 11;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -34,6 +34,9 @@ class AppDatabase {
   static const String tableLocalAssessments = 'local_assessments';
   static const String tablePregnancySnapshot = 'patient_pregnancy_snapshot';
   static const String tableTreatmentPresence = 'patient_treatment_presence';
+  static const String tableAssessmentDraft = 'assessment_draft';
+  static const String tableAiSuggestions = 'ai_suggestions';
+  static const String tableEvalLog = 'eval_log';
 
   /// Opens (creating if needed) the on-device database.
   static Future<AppDatabase> open() async {
@@ -330,6 +333,56 @@ class AppDatabase {
         patient_id TEXT PRIMARY KEY,
         updated_at INTEGER
       )''');
+
+    // v9 — Assessment draft table for offline-first sectioned assessment flow.
+    await db.execute('''
+      CREATE TABLE $tableAssessmentDraft (
+        encounter_id TEXT PRIMARY KEY,
+        patient_id TEXT NOT NULL,
+        member_id TEXT,
+        activated_programmes TEXT NOT NULL,
+        skipped_pathways TEXT,
+        field_values TEXT NOT NULL,
+        section_status TEXT NOT NULL,
+        created_at INTEGER,
+        updated_at INTEGER
+      )''');
+    await db.execute(
+        'CREATE INDEX idx_draft_patient ON $tableAssessmentDraft(patient_id)');
+    await db.execute(
+        'CREATE INDEX idx_draft_updated ON $tableAssessmentDraft(updated_at DESC)');
+
+    // v10 — AI suggestions cache for fire-and-forget pathway suggestions.
+    await db.execute('''
+      CREATE TABLE $tableAiSuggestions (
+        member_id TEXT PRIMARY KEY,
+        suggestions_json TEXT NOT NULL,
+        fetched_at INTEGER NOT NULL
+      )''');
+
+    // v11 — Phase 6 eval-dataset shadow log.
+    await db.execute('''
+      CREATE TABLE $tableEvalLog (
+        id TEXT PRIMARY KEY,
+        encounter_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        member_id TEXT NOT NULL,
+        captured_at INTEGER NOT NULL,
+        activated_programmes TEXT NOT NULL,
+        symptoms TEXT NOT NULL,
+        field_values TEXT NOT NULL,
+        cds_alerts TEXT NOT NULL,
+        patient_context_json TEXT NOT NULL,
+        upload_status TEXT NOT NULL DEFAULT 'pending',
+        uploaded_at INTEGER,
+        fhir_doc_ref_id TEXT
+      )''');
+    await db.execute(
+        'CREATE INDEX idx_eval_log_patient ON $tableEvalLog(patient_id)');
+    await db.execute(
+        'CREATE INDEX idx_eval_log_upload ON $tableEvalLog(upload_status)');
+    await db.execute(
+        'CREATE INDEX idx_eval_log_captured ON $tableEvalLog(captured_at DESC)');
   }
 
   static Future<void> _onUpgrade(Database db, int from, int to) async {
@@ -645,6 +698,84 @@ class AppDatabase {
           patient_id TEXT PRIMARY KEY,
           updated_at INTEGER
         )''');
+    }
+    if (from < 9) {
+      // v9 — Assessment draft table for the Phase 2 sectioned assessment flow.
+      Future<void> addTbl9(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* table already present */}
+      }
+      Future<void> addIdx9(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* index already present */}
+      }
+      await addTbl9('''
+        CREATE TABLE IF NOT EXISTS $tableAssessmentDraft (
+          encounter_id TEXT PRIMARY KEY,
+          patient_id TEXT NOT NULL,
+          member_id TEXT,
+          activated_programmes TEXT NOT NULL,
+          skipped_pathways TEXT,
+          field_values TEXT NOT NULL,
+          section_status TEXT NOT NULL,
+          created_at INTEGER,
+          updated_at INTEGER
+        )''');
+      await addIdx9(
+          'CREATE INDEX IF NOT EXISTS idx_draft_patient ON $tableAssessmentDraft(patient_id)');
+      await addIdx9(
+          'CREATE INDEX IF NOT EXISTS idx_draft_updated ON $tableAssessmentDraft(updated_at DESC)');
+    }
+    if (from < 10) {
+      // v10 — AI suggestions cache table. Additive only.
+      Future<void> addTbl10(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* table already present */}
+      }
+      await addTbl10('''
+        CREATE TABLE IF NOT EXISTS $tableAiSuggestions (
+          member_id TEXT PRIMARY KEY,
+          suggestions_json TEXT NOT NULL,
+          fetched_at INTEGER NOT NULL
+        )''');
+    }
+    if (from < 11) {
+      // v11 — Phase 6 eval-dataset shadow log. Additive only.
+      Future<void> addTbl11(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* table already present */}
+      }
+      Future<void> addIdx11(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* index already present */}
+      }
+      await addTbl11('''
+        CREATE TABLE IF NOT EXISTS $tableEvalLog (
+          id TEXT PRIMARY KEY,
+          encounter_id TEXT NOT NULL,
+          patient_id TEXT NOT NULL,
+          member_id TEXT NOT NULL,
+          captured_at INTEGER NOT NULL,
+          activated_programmes TEXT NOT NULL,
+          symptoms TEXT NOT NULL,
+          field_values TEXT NOT NULL,
+          cds_alerts TEXT NOT NULL,
+          patient_context_json TEXT NOT NULL,
+          upload_status TEXT NOT NULL DEFAULT 'pending',
+          uploaded_at INTEGER,
+          fhir_doc_ref_id TEXT
+        )''');
+      await addIdx11(
+          'CREATE INDEX IF NOT EXISTS idx_eval_log_patient ON $tableEvalLog(patient_id)');
+      await addIdx11(
+          'CREATE INDEX IF NOT EXISTS idx_eval_log_upload ON $tableEvalLog(upload_status)');
+      await addIdx11(
+          'CREATE INDEX IF NOT EXISTS idx_eval_log_captured ON $tableEvalLog(captured_at DESC)');
     }
   }
 

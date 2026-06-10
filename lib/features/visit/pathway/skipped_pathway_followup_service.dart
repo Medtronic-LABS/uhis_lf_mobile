@@ -32,6 +32,8 @@ abstract final class DeferredScreeningReason {
         return skippedNcd;
       case Programme.tb:
         return skippedTb;
+      case Programme.epi:
+      case Programme.nutrition:
       case Programme.unknown:
         return deferredScreening;
     }
@@ -69,6 +71,8 @@ abstract final class DeferredScreeningInterval {
         return ncdDays;
       case Programme.tb:
         return tbDays;
+      case Programme.epi:
+      case Programme.nutrition:
       case Programme.unknown:
         return defaultDays;
     }

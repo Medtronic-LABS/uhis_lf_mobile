@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../scribe/models/ai_extracted_field.dart';
+import '../../scribe/scribe_controller.dart';
+import '../../scribe/scribe_session.dart';
 import '../models/iccm_assessment.dart';
 
 /// ICCM Assessment form for children under 5.
@@ -40,11 +44,154 @@ class _IccmAssessmentFormState extends State<IccmAssessmentForm> {
   final _feverDaysController = TextEditingController();
   final _coughDaysController = TextEditingController();
 
+  // AI field tracking
+  final Map<String, FieldSource> _fieldSources = {};
+  ScribeController? _scribeCtrl;
+  bool _listeningToScribe = false;
+
   @override
   void initState() {
     super.initState();
     _data = widget.initialData ?? IccmAssessment(ageInMonths: widget.ageInMonths);
     _initFromData();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _bindScribeController();
+  }
+
+  void _bindScribeController() {
+    if (_listeningToScribe) return;
+    
+    try {
+      _scribeCtrl = context.read<ScribeController>();
+      _scribeCtrl?.addListener(_onScribeChanged);
+      _listeningToScribe = true;
+      
+      if (_scribeCtrl?.session.state == ScribeState.fieldsPopulated) {
+        _applyAIValues();
+      }
+    } catch (_) {}
+  }
+
+  void _onScribeChanged() {
+    final session = _scribeCtrl?.session;
+    if (session == null) return;
+    
+    debugPrint('[IccmForm] Scribe state changed: ${session.state.name}');
+    
+    if (session.state == ScribeState.fieldsPopulated && 
+        session.formPrefillResult != null) {
+      _applyAIValues();
+    }
+  }
+
+  void _applyAIValues() {
+    final result = _scribeCtrl?.session.formPrefillResult;
+    if (result == null) return;
+
+    debugPrint('[IccmForm] Applying AI values from ${result.fields.length} fields');
+
+    for (final field in result.fields) {
+      if (field.source == FieldSource.aiRejected) continue;
+      final value = field.value;
+      if (value == null) continue;
+
+      switch (field.fieldId) {
+        case 'weight':
+          if (_weightController.text.isEmpty) {
+            _weightController.text = value.toString();
+            _fieldSources['weight'] = FieldSource.aiPending;
+            debugPrint('[IccmForm] AI filled weight: $value');
+          }
+          break;
+        case 'height':
+          if (_heightController.text.isEmpty) {
+            _heightController.text = value.toString();
+            _fieldSources['height'] = FieldSource.aiPending;
+            debugPrint('[IccmForm] AI filled height: $value');
+          }
+          break;
+        case 'temperature':
+          if (_temperatureController.text.isEmpty) {
+            _temperatureController.text = value.toString();
+            _fieldSources['temperature'] = FieldSource.aiPending;
+            debugPrint('[IccmForm] AI filled temperature: $value');
+          }
+          break;
+        case 'muac':
+          if (_muacController.text.isEmpty) {
+            _muacController.text = value.toString();
+            _fieldSources['muac'] = FieldSource.aiPending;
+            debugPrint('[IccmForm] AI filled muac: $value');
+          }
+          break;
+        case 'respiratoryRate':
+          if (_breathsController.text.isEmpty) {
+            _breathsController.text = value.toString();
+            _fieldSources['respiratoryRate'] = FieldSource.aiPending;
+            debugPrint('[IccmForm] AI filled respiratoryRate: $value');
+          }
+          break;
+        case 'durationDays':
+          // Apply to most relevant duration field
+          if (_diarrhoea.hasDiarrhoea == true && _diarrhoeaDaysController.text.isEmpty) {
+            _diarrhoeaDaysController.text = value.toString();
+          } else if (_fever.hasFever == true && _feverDaysController.text.isEmpty) {
+            _feverDaysController.text = value.toString();
+          } else if (_cough.hasCough == true && _coughDaysController.text.isEmpty) {
+            _coughDaysController.text = value.toString();
+          }
+          debugPrint('[IccmForm] AI filled durationDays: $value');
+          break;
+        // Symptoms
+        case 'fever':
+          if (value == 'true') {
+            _fever = _fever.copyWith(hasFever: true);
+            debugPrint('[IccmForm] AI detected fever');
+          }
+          break;
+        case 'cough':
+          if (value == 'true') {
+            _cough = _cough.copyWith(hasCough: true);
+            debugPrint('[IccmForm] AI detected cough');
+          }
+          break;
+        case 'diarrhea':
+          if (value == 'true') {
+            _diarrhoea = _diarrhoea.copyWith(hasDiarrhoea: true);
+            debugPrint('[IccmForm] AI detected diarrhoea');
+          }
+          break;
+        case 'vomiting':
+          if (value == 'true') {
+            _dangerSigns = _dangerSigns.copyWith(vomitsEverything: true);
+            debugPrint('[IccmForm] AI detected vomiting (danger sign)');
+          }
+          break;
+        case 'convulsions':
+          if (value == 'true') {
+            _dangerSigns = _dangerSigns.copyWith(hasConvulsions: true);
+            debugPrint('[IccmForm] AI detected convulsions (danger sign)');
+          }
+          break;
+        case 'notEating':
+          if (value == 'true') {
+            _dangerSigns = _dangerSigns.copyWith(unableToBreastfeed: true);
+            debugPrint('[IccmForm] AI detected not eating (danger sign)');
+          }
+          break;
+        default:
+          debugPrint('[IccmForm] Unhandled field: ${field.fieldId} = $value');
+      }
+    }
+
+    if (mounted) {
+      setState(() {});
+      _updateData();
+    }
   }
 
   void _initFromData() {
@@ -66,6 +213,7 @@ class _IccmAssessmentFormState extends State<IccmAssessmentForm> {
 
   @override
   void dispose() {
+    _scribeCtrl?.removeListener(_onScribeChanged);
     _muacController.dispose();
     _weightController.dispose();
     _heightController.dispose();

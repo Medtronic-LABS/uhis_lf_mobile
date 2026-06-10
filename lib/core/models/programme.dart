@@ -10,6 +10,8 @@ enum Programme {
   pnc,
   ncd,
   tb,
+  epi,
+  nutrition,
   unknown;
 
   /// Case-insensitive tag mapper. Accepts the strings the spice service
@@ -46,6 +48,15 @@ enum Programme {
       case 'TUBERCULOSIS':
       case 'PRESUMPTIVE_TB':
         return Programme.tb;
+      case 'EPI':
+      case 'IMMUNIZATION':
+      case 'IMMUNISATION':
+        return Programme.epi;
+      case 'NUTRITION':
+      case 'SAM':
+      case 'MAM':
+      case 'MALNUTRITION':
+        return Programme.nutrition;
     }
     return null;
   }
@@ -64,6 +75,10 @@ enum Programme {
         return 'NCD';
       case Programme.tb:
         return 'TB';
+      case Programme.epi:
+        return 'EPI';
+      case Programme.nutrition:
+        return 'NUTRITION';
       case Programme.unknown:
         return 'UNKNOWN';
     }
@@ -82,6 +97,10 @@ enum Programme {
         return Programme.ncd;
       case 'TB':
         return Programme.tb;
+      case 'EPI':
+        return Programme.epi;
+      case 'NUTRITION':
+        return Programme.nutrition;
     }
     return null;
   }

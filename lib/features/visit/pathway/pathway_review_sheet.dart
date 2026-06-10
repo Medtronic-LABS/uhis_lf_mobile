@@ -95,6 +95,10 @@ class _PathwayReviewSheetState extends State<PathwayReviewSheet> {
         return PathwayStrings.programmeNcd;
       case Programme.tb:
         return PathwayStrings.programmeTb;
+      case Programme.epi:
+        return PathwayStrings.programmeEpi;
+      case Programme.nutrition:
+        return PathwayStrings.programmeNutrition;
       case Programme.unknown:
         return PathwayStrings.programmeUnknown;
     }
@@ -366,6 +370,10 @@ class _PathwayReviewSheetState extends State<PathwayReviewSheet> {
         return Icons.favorite;
       case Programme.tb:
         return Icons.air;
+      case Programme.epi:
+        return Icons.vaccines;
+      case Programme.nutrition:
+        return Icons.restaurant;
       case Programme.unknown:
         return Icons.medical_services;
     }
@@ -440,6 +448,10 @@ class _ManualProgrammeSheet extends StatelessWidget {
         return PathwayStrings.programmeNcd;
       case Programme.tb:
         return PathwayStrings.programmeTb;
+      case Programme.epi:
+        return PathwayStrings.programmeEpi;
+      case Programme.nutrition:
+        return PathwayStrings.programmeNutrition;
       case Programme.unknown:
         return PathwayStrings.programmeUnknown;
     }
@@ -457,6 +469,10 @@ class _ManualProgrammeSheet extends StatelessWidget {
         return Icons.favorite;
       case Programme.tb:
         return Icons.air;
+      case Programme.epi:
+        return Icons.vaccines;
+      case Programme.nutrition:
+        return Icons.restaurant;
       case Programme.unknown:
         return Icons.medical_services;
     }

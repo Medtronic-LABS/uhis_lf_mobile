@@ -269,6 +269,59 @@ class SoapFieldExtractor {
       }
     }
 
+    // ANC Supplements: "folic acid consumed is 7", "folic acid provided 3"
+    final folicConsumedMatch = RegExp(
+      r'folic\s*acid\s*(?:total\s*)?consumed\s*(?:is\s*)?(\d+)',
+      caseSensitive: false,
+    ).firstMatch(text);
+    if (folicConsumedMatch != null) {
+      fields.add(AIExtractedField(
+        fieldId: 'folicAcidConsumed',
+        value: folicConsumedMatch.group(1)!,
+        confidence: 0.85,
+        sourceSegment: folicConsumedMatch.group(0)!,
+      ));
+    }
+
+    final folicProvidedMatch = RegExp(
+      r'(?:folic\s*acid\s*)?(?:provided|given)\s*(?:today\s*)?(?:is\s*)?(\d+)|(\d+)\s*(?:folic\s*acid\s*)?provided',
+      caseSensitive: false,
+    ).firstMatch(text);
+    if (folicProvidedMatch != null) {
+      final value = folicProvidedMatch.group(1) ?? folicProvidedMatch.group(2);
+      if (value != null) {
+        fields.add(AIExtractedField(
+          fieldId: 'folicAcidProvided',
+          value: value,
+          confidence: 0.85,
+          sourceSegment: folicProvidedMatch.group(0)!,
+        ));
+      }
+    }
+
+    // Vaccination status: "completed vaccination", "vaccination completed"
+    if (lowerText.contains('vaccination') && 
+        (lowerText.contains('completed') || lowerText.contains('complete'))) {
+      fields.add(AIExtractedField(
+        fieldId: 'ttTdCompleted',
+        value: 'yes',
+        confidence: 0.80,
+        sourceSegment: 'vaccination completed',
+      ));
+    }
+
+    // Ultrasound: "ultrasound planned", "ultrasound done"
+    if (lowerText.contains('ultrasound')) {
+      final planned = lowerText.contains('planned') || lowerText.contains('scheduled');
+      final done = lowerText.contains('done') || lowerText.contains('completed');
+      fields.add(AIExtractedField(
+        fieldId: 'ultrasound',
+        value: done ? 'done' : (planned ? 'planned' : 'mentioned'),
+        confidence: 0.80,
+        sourceSegment: 'ultrasound',
+      ));
+    }
+
     return fields;
   }
 
@@ -295,6 +348,16 @@ class SoapFieldExtractor {
       'convulsions': ['convulsion', 'seizure', 'fit'],
       'notEating': ['not eating', 'poor appetite', 'anorexia', 'not feeding'],
       'bloodInStool': ['blood in stool', 'bloody stool', 'melena', 'hematochezia'],
+      // TB symptoms
+      'nightSweats': ['night sweats', 'sweating at night', 'nocturnal sweating', 'drenching sweats'],
+      'weightLoss': ['weight loss', 'losing weight', 'lost weight', 'unintentional weight loss'],
+      // ANC danger signs
+      'vaginalBleeding': ['vaginal bleeding', 'bleeding', 'spotting', 'hemorrhage'],
+      'blurredVision': ['blurred vision', 'vision problems', 'visual disturbance'],
+      'swellingHandsFace': ['swelling', 'edema', 'oedema', 'swollen hands', 'swollen face', 'puffy'],
+      'reducedFetalMovement': ['reduced fetal movement', 'baby not moving', 'decreased movement'],
+      'leakingFluid': ['leaking fluid', 'amniotic fluid', 'water breaking', 'rupture of membranes'],
+      'severeAbdominalPain': ['severe abdominal pain', 'severe pain', 'intense pain'],
     };
 
     for (final entry in symptomPatterns.entries) {

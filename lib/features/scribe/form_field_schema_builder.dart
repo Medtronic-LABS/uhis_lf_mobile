@@ -6,6 +6,7 @@
 library;
 
 import '../../../core/models/programme.dart';
+import '../visit/composer/section_registry.dart';
 
 /// Field type for the AI scribe extraction contract.
 enum FieldType {
@@ -71,37 +72,22 @@ abstract final class FormFieldSchemaBuilder {
   FormFieldSchemaBuilder._();
 
   /// Build schema for a programme.
-  static List<FormFieldSchema> forProgramme(Programme programme) {
-    switch (programme) {
-      case Programme.ncd:
-        return _ncdSchema;
-      case Programme.tb:
-        return _tbSchema;
-      case Programme.anc:
-        return _ancSchema;
-      case Programme.pnc:
-        return _pncSchema;
-      case Programme.imci:
-        return _imciSchema;
-      default:
-        return _commonVitalsSchema;
-    }
-  }
+  ///
+  /// Delegates to [SectionRegistry.toScribeSchema] so that [SectionRegistry]
+  /// remains the single source of truth for field definitions (DRY).
+  static List<FormFieldSchema> forProgramme(Programme programme) =>
+      SectionRegistry.toScribeSchema(
+        SectionRegistry.forProgrammes({programme}),
+      );
 
   /// Build schema for multiple programmes (merged, deduplicated).
-  static List<FormFieldSchema> forProgrammes(List<Programme> programmes) {
-    final seen = <String>{};
-    final result = <FormFieldSchema>[];
-    for (final programme in programmes) {
-      for (final field in forProgramme(programme)) {
-        if (!seen.contains(field.fieldId)) {
-          seen.add(field.fieldId);
-          result.add(field);
-        }
-      }
-    }
-    return result;
-  }
+  ///
+  /// Delegates to [SectionRegistry.toScribeSchema] so that [SectionRegistry]
+  /// remains the single source of truth for field definitions (DRY).
+  static List<FormFieldSchema> forProgrammes(List<Programme> programmes) =>
+      SectionRegistry.toScribeSchema(
+        SectionRegistry.forProgrammes(programmes.toSet()),
+      );
 
   // ═══════════════════════════════════════════════════════════════════════════
   // COMMON VITALS (shared across programmes)

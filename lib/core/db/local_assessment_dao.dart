@@ -370,3 +370,194 @@ class LocalAssessmentDao {
     return rows.map(LocalAssessmentEntity.fromDb).toList();
   }
 }
+
+// ── Assessment draft DAO (Phase 2) ────────────────────────────────────────────
+
+/// A single in-progress assessment draft, persisted across section saves so
+/// the SK can close the app and resume without losing work.
+///
+/// The row is keyed by [encounterId] (one draft per encounter), which lets the
+/// submission orchestrator fan out per-programme legs after all sections are
+/// complete.
+class AssessmentDraftRow {
+  const AssessmentDraftRow({
+    required this.encounterId,
+    required this.patientId,
+    this.memberId,
+    required this.activatedProgrammes,
+    this.skippedPathways,
+    required this.fieldValues,
+    required this.sectionStatus,
+    this.createdAt,
+    this.updatedAt,
+  });
+
+  /// PRIMARY KEY — matches the encounter UUID created by [AssessmentRepository].
+  final String encounterId;
+
+  /// FHIR patient ID.
+  final String patientId;
+
+  /// FHIR member ID (nullable for household head or pre-registration).
+  final String? memberId;
+
+  /// JSON array of activated programme wire-tags (e.g. `["IMCI","TB"]`).
+  final String activatedProgrammes;
+
+  /// JSON array of skipped pathway wire-tags (nullable).
+  final String? skippedPathways;
+
+  /// JSON map of fieldId → value (e.g. `{"temperature":37.5,"hasCough":true}`).
+  final String fieldValues;
+
+  /// JSON map of sectionId → status (`'done'` or `'pending'`).
+  final String sectionStatus;
+
+  /// Unix epoch ms — set on first insert.
+  final int? createdAt;
+
+  /// Unix epoch ms — updated on every save.
+  final int? updatedAt;
+
+  Map<String, Object?> toDb() => {
+        'encounter_id': encounterId,
+        'patient_id': patientId,
+        'member_id': memberId,
+        'activated_programmes': activatedProgrammes,
+        'skipped_pathways': skippedPathways,
+        'field_values': fieldValues,
+        'section_status': sectionStatus,
+        'created_at': createdAt,
+        'updated_at': updatedAt,
+      };
+
+  factory AssessmentDraftRow.fromDb(Map<String, Object?> row) =>
+      AssessmentDraftRow(
+        encounterId: row['encounter_id'] as String,
+        patientId: row['patient_id'] as String,
+        memberId: row['member_id'] as String?,
+        activatedProgrammes: row['activated_programmes'] as String,
+        skippedPathways: row['skipped_pathways'] as String?,
+        fieldValues: row['field_values'] as String,
+        sectionStatus: row['section_status'] as String,
+        createdAt: row['created_at'] as int?,
+        updatedAt: row['updated_at'] as int?,
+      );
+
+  AssessmentDraftRow copyWith({
+    String? encounterId,
+    String? patientId,
+    String? memberId,
+    String? activatedProgrammes,
+    String? skippedPathways,
+    String? fieldValues,
+    String? sectionStatus,
+    int? createdAt,
+    int? updatedAt,
+  }) =>
+      AssessmentDraftRow(
+        encounterId: encounterId ?? this.encounterId,
+        patientId: patientId ?? this.patientId,
+        memberId: memberId ?? this.memberId,
+        activatedProgrammes: activatedProgrammes ?? this.activatedProgrammes,
+        skippedPathways: skippedPathways ?? this.skippedPathways,
+        fieldValues: fieldValues ?? this.fieldValues,
+        sectionStatus: sectionStatus ?? this.sectionStatus,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+}
+
+/// DAO for in-progress assessment drafts.
+///
+/// Supports resume-on-relaunch: the screen queries [getAllPending] on startup
+/// and offers the SK a "Resume visit?" dialog if a draft is found.
+class AssessmentDraftDao {
+  AssessmentDraftDao(this._db);
+
+  final AppDatabase _db;
+
+  static const String tableName = 'assessment_draft';
+
+  /// Upsert a draft (insert or replace on primary-key conflict).
+  Future<void> saveDraft(AssessmentDraftRow draft) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final data = draft.toDb();
+    // Preserve created_at on updates.
+    if (data['created_at'] == null) {
+      data['created_at'] = now;
+    }
+    data['updated_at'] = now;
+    await _db.db.insert(
+      tableName,
+      data,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Return the draft for [encounterId], or null if none exists.
+  Future<AssessmentDraftRow?> getDraft(String encounterId) async {
+    final rows = await _db.db.query(
+      tableName,
+      where: 'encounter_id = ?',
+      whereArgs: [encounterId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return AssessmentDraftRow.fromDb(rows.first);
+  }
+
+  /// Return the most recently updated draft for [patientId], or null.
+  Future<AssessmentDraftRow?> getLatestDraftForPatient(
+      String patientId) async {
+    final rows = await _db.db.query(
+      tableName,
+      where: 'patient_id = ?',
+      whereArgs: [patientId],
+      orderBy: 'updated_at DESC',
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return AssessmentDraftRow.fromDb(rows.first);
+  }
+
+  /// Delete the draft for [encounterId] (called after successful submission).
+  Future<void> deleteDraft(String encounterId) async {
+    await _db.db.delete(
+      tableName,
+      where: 'encounter_id = ?',
+      whereArgs: [encounterId],
+    );
+  }
+
+  /// Return all drafts (used by the resume-on-relaunch check).
+  Future<List<AssessmentDraftRow>> getAllPending() async {
+    final rows = await _db.db.query(
+      tableName,
+      orderBy: 'updated_at DESC',
+    );
+    return rows.map(AssessmentDraftRow.fromDb).toList();
+  }
+
+  /// Create the [assessment_draft] table (called during DB schema creation /
+  /// migration).
+  static Future<void> createTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $tableName (
+        encounter_id TEXT PRIMARY KEY,
+        patient_id TEXT NOT NULL,
+        member_id TEXT,
+        activated_programmes TEXT NOT NULL,
+        skipped_pathways TEXT,
+        field_values TEXT NOT NULL,
+        section_status TEXT NOT NULL,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    ''');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_draft_patient ON $tableName(patient_id)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_draft_updated ON $tableName(updated_at DESC)');
+  }
+}

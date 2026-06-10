@@ -236,6 +236,11 @@ class Endpoints {
       '/spice-service/mentalhealth/condition-details';
 
   // ── CQL Service: risk scoring + clinical decision support ────────────────
+  /// AI-powered clinical pathway suggestion. Returns candidate programmes with
+  /// confidence scores and rationale for explainability.
+  static const String clinicalPathwaySuggest =
+      '/cql-service/clinical-pathway/suggest';
+
   /// Evaluate patient against CQL library rules.
   static const String cqlEvaluate = '/cql-service/cql/evaluate';
 

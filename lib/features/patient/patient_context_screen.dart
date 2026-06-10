@@ -674,6 +674,10 @@ class _HeaderCard extends StatelessWidget {
         return WorklistStrings.programmeNcd;
       case Programme.tb:
         return WorklistStrings.programmeTb;
+      case Programme.epi:
+        return WorklistStrings.programmeEpi;
+      case Programme.nutrition:
+        return WorklistStrings.programmeNutrition;
       case Programme.unknown:
         return WorklistStrings.programmeUnknown;
     }
@@ -924,6 +928,10 @@ class _HeaderCardV2 extends StatelessWidget {
         return WorklistStrings.programmeNcd;
       case Programme.tb:
         return WorklistStrings.programmeTb;
+      case Programme.epi:
+        return WorklistStrings.programmeEpi;
+      case Programme.nutrition:
+        return WorklistStrings.programmeNutrition;
       case Programme.unknown:
         return WorklistStrings.programmeUnknown;
     }

@@ -565,6 +565,10 @@ class _ProgrammeChip extends StatelessWidget {
         return WorklistStrings.programmeNcd;
       case Programme.tb:
         return WorklistStrings.programmeTb;
+      case Programme.epi:
+        return WorklistStrings.programmeEpi;
+      case Programme.nutrition:
+        return WorklistStrings.programmeNutrition;
       case Programme.unknown:
         return WorklistStrings.programmeUnknown;
     }
@@ -637,6 +641,8 @@ class _MiniProgrammeChip extends StatelessWidget {
         return (scheme.primaryContainer, scheme.onPrimaryContainer);
       case Programme.tb:
         return (scheme.secondaryContainer, scheme.onSecondaryContainer);
+      case Programme.epi:
+      case Programme.nutrition:
       case Programme.unknown:
         return (scheme.surfaceContainerHighest, scheme.onSurface);
     }
@@ -654,6 +660,10 @@ class _MiniProgrammeChip extends StatelessWidget {
         return WorklistStrings.programmeNcd;
       case Programme.tb:
         return WorklistStrings.programmeTb;
+      case Programme.epi:
+        return WorklistStrings.programmeEpi;
+      case Programme.nutrition:
+        return WorklistStrings.programmeNutrition;
       case Programme.unknown:
         return WorklistStrings.programmeUnknown;
     }
@@ -755,6 +765,10 @@ class _ProgrammeTag extends StatelessWidget {
         return (scheme.primaryContainer, scheme.onPrimaryContainer, Icons.monitor_heart_outlined);
       case Programme.tb:
         return (scheme.secondaryContainer, scheme.onSecondaryContainer, Icons.sick_outlined);
+      case Programme.epi:
+        return (scheme.surfaceContainerHighest, scheme.onSurface, Icons.vaccines);
+      case Programme.nutrition:
+        return (scheme.surfaceContainerHighest, scheme.onSurface, Icons.restaurant);
       case Programme.unknown:
         return (scheme.surfaceContainerHighest, scheme.onSurface, Icons.person);
     }
@@ -772,6 +786,10 @@ class _ProgrammeTag extends StatelessWidget {
         return WorklistStrings.programmeNcd;
       case Programme.tb:
         return WorklistStrings.programmeTb;
+      case Programme.epi:
+        return WorklistStrings.programmeEpi;
+      case Programme.nutrition:
+        return WorklistStrings.programmeNutrition;
       case Programme.unknown:
         return WorklistStrings.programmeUnknown;
     }

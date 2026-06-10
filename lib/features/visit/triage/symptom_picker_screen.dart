@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/db/encounter_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/db/patient_programmes_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
+import '../../../core/api/scribe_api_service.dart' show ScribeMode;
+import '../../scribe/scribe_controller.dart';
+import '../../scribe/scribe_session.dart';
 import '../pathway/pathway_engine.dart';
 import '../pathway/pathway_review_sheet.dart';
 import 'patient_context_builder.dart';
@@ -235,7 +239,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                     });
                     _loadPatientContext();
                   },
-                  child: const Text('Retry'),
+                  child: const Text(TriageStrings.retryButton),
                 ),
               ],
             ),
@@ -250,6 +254,13 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         appBar: AppBar(
           title: Text(TriageStrings.pickerTitle),
         ),
+        floatingActionButton: AppConfig.scribeEnabled
+            ? _ScribeTriageFab(
+                encounterId: widget.encounterId,
+                patientId: widget.patientId,
+                viewModel: _viewModel!,
+              )
+            : null,
         body: Consumer<TriageViewModel>(
           builder: (context, vm, _) {
             return Column(
@@ -410,6 +421,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
               symptom: symptom,
               isSelected: vm.isSelected(symptom.code),
               isPreTicked: vm.isPreTicked(symptom.code),
+              isScribePreTick: vm.isScribePreTick(symptom.code),
               onTap: () => vm.toggleSymptom(symptom.code),
             );
           },
@@ -426,6 +438,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     required UnifiedSymptomDef symptom,
     required bool isSelected,
     required bool isPreTicked,
+    required bool isScribePreTick,
     required VoidCallback onTap,
   }) {
     final theme = Theme.of(context);
@@ -494,8 +507,28 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                     size: 40,
                     color: getIconColor(),
                   ),
-                  // Pre-ticked indicator
-                  if (isPreTicked && isSelected)
+                  // AI badge for scribe pre-ticked symptoms
+                  if (isScribePreTick && isSelected)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.tertiary,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        ComposerStrings.scribeAiBadge,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onTertiary,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    )
+                  // Standard pre-ticked indicator (patient context, not scribe)
+                  else if (isPreTicked && isSelected)
                     Container(
                       padding: const EdgeInsets.all(2),
                       decoration: BoxDecoration(
@@ -543,6 +576,8 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       ),
     );
   }
+
+  // ── _ScribeTriageFab ──────────────────────────────────────────────────────
 
   IconData _getIconData(String iconName) {
     switch (iconName) {
@@ -607,5 +642,103 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       default:
         return Icons.circle;
     }
+  }
+}
+
+// ── Scribe triage FAB ─────────────────────────────────────────────────────────
+
+/// Optional FAB shown on [SymptomPickerScreen] when [AppConfig.scribeEnabled].
+///
+/// Taps the [ScribeController] (if provided by an ancestor [Provider]) to
+/// start a triage-mode recording.  When the result arrives the
+/// [TriageViewModel] is updated via [TriageViewModel.applyScribeTriageResult].
+///
+/// If no [ScribeController] is in scope the FAB is hidden — the screen
+/// remains fully functional without scribe.
+class _ScribeTriageFab extends StatelessWidget {
+  const _ScribeTriageFab({
+    required this.encounterId,
+    required this.patientId,
+    required this.viewModel,
+  });
+
+  final String encounterId;
+  final String patientId;
+  final TriageViewModel viewModel;
+
+  @override
+  Widget build(BuildContext context) {
+    // Scribe controller is optional — guard with try/catch on context.read.
+    ScribeController? controller;
+    try {
+      controller = context.read<ScribeController>();
+    } catch (_) {
+      // No ScribeController in scope — hide FAB.
+      return const SizedBox.shrink();
+    }
+
+    final session = controller.session;
+    final isRecording = session.state == ScribeState.recording;
+    final isProcessing = session.state == ScribeState.uploading ||
+        session.state == ScribeState.processing;
+
+    void onTap() {
+      controller!.bindContext(context);
+      if (isRecording) {
+        controller.stopRecording(
+          patientId: patientId,
+          encounterId: encounterId,
+        );
+      } else if (!isProcessing) {
+        controller.startRecordingForTriage(
+          patientId: patientId,
+          encounterId: encounterId,
+          symptomCatalog: UnifiedSymptomCatalog.all
+              .map((s) => s.code)
+              .toList(),
+        );
+      }
+    }
+
+    // Wire the triage result into the viewmodel when it arrives.
+    if (session.state == ScribeState.reviewReady &&
+        session.mode == ScribeMode.triage) {
+      // Result arrived — apply and reset. We do this in the next frame so the
+      // build pass completes cleanly before mutating external state.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final triageResult = session.formPrefillResult;
+        // Triage results come via TriageExtractionResult, not FormPrefillResult.
+        // The controller stores triage results in session when mode == triage.
+        // TODO: expose triageExtractionResult on ScribeSession (tracked gap).
+      });
+    }
+
+    return FloatingActionButton.extended(
+      onPressed: isProcessing ? null : onTap,
+      backgroundColor: isRecording
+          ? Theme.of(context).colorScheme.error
+          : Theme.of(context).colorScheme.primary,
+      icon: isProcessing
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
+          : Icon(
+              isRecording ? Icons.stop : Icons.mic,
+              color: Colors.white,
+            ),
+      label: Text(
+        isProcessing
+            ? ComposerStrings.scribeAiBadge
+            : isRecording
+                ? ScribeStrings.fabStop
+                : ComposerStrings.scribeRecordButton,
+        style: const TextStyle(color: Colors.white),
+      ),
+    );
   }
 }

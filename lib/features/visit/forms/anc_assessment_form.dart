@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../scribe/models/ai_extracted_field.dart';
+import '../../scribe/scribe_controller.dart';
+import '../../scribe/scribe_session.dart';
 import '../models/anc_assessment.dart';
 
 /// ANC Assessment form for pregnant women.
@@ -68,12 +72,155 @@ class _AncAssessmentFormState extends State<AncAssessmentForm> {
   final Set<String> _dangerSigns13To27 = {};
   final Set<String> _dangerSigns28To40 = {};
 
+  // AI field tracking
+  final Map<String, FieldSource> _fieldSources = {};
+  ScribeController? _scribeCtrl;
+  bool _listeningToScribe = false;
+
   @override
   void initState() {
     super.initState();
     _data = widget.initialData ??
         AncAssessment(gestationalWeeks: widget.gestationalWeeks);
     _initFromData();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _bindScribeController();
+  }
+
+  void _bindScribeController() {
+    if (_listeningToScribe) return;
+    
+    try {
+      _scribeCtrl = context.read<ScribeController>();
+      _scribeCtrl?.addListener(_onScribeChanged);
+      _listeningToScribe = true;
+      
+      // Apply any existing AI values
+      if (_scribeCtrl?.session.state == ScribeState.fieldsPopulated) {
+        _applyAIValues();
+      }
+    } catch (_) {
+      // ScribeController not available in this context
+    }
+  }
+
+  void _onScribeChanged() {
+    final session = _scribeCtrl?.session;
+    if (session == null) return;
+    
+    debugPrint('[AncForm] Scribe state changed: ${session.state.name}, '
+        'fieldsJustPopulated=${session.fieldsJustPopulated}, '
+        'hasFormPrefillResult=${session.formPrefillResult != null}');
+    
+    if (session.state == ScribeState.fieldsPopulated && 
+        session.formPrefillResult != null) {
+      _applyAIValues();
+    }
+  }
+
+  void _applyAIValues() {
+    final result = _scribeCtrl?.session.formPrefillResult;
+    if (result == null) return;
+
+    debugPrint('[AncForm] Applying AI values from ${result.fields.length} fields');
+
+    for (final field in result.fields) {
+      if (field.source == FieldSource.aiRejected) continue;
+      
+      final value = field.value;
+      if (value == null) continue;
+
+      switch (field.fieldId) {
+        case 'weight':
+          if (_weightController.text.isEmpty) {
+            _weightController.text = value.toString();
+            _fieldSources['weight'] = FieldSource.aiPending;
+            debugPrint('[AncForm] AI filled weight: $value');
+          }
+          break;
+        case 'height':
+          if (_heightController.text.isEmpty) {
+            _heightController.text = value.toString();
+            _fieldSources['height'] = FieldSource.aiPending;
+            debugPrint('[AncForm] AI filled height: $value');
+          }
+          break;
+        case 'systolic':
+          if (_systolicController.text.isEmpty) {
+            _systolicController.text = value.toString();
+            _fieldSources['systolic'] = FieldSource.aiPending;
+            debugPrint('[AncForm] AI filled systolic: $value');
+          }
+          break;
+        case 'diastolic':
+          if (_diastolicController.text.isEmpty) {
+            _diastolicController.text = value.toString();
+            _fieldSources['diastolic'] = FieldSource.aiPending;
+            debugPrint('[AncForm] AI filled diastolic: $value');
+          }
+          break;
+        case 'hemoglobin':
+          if (_hemoglobinController.text.isEmpty) {
+            _hemoglobinController.text = value.toString();
+            _fieldSources['hemoglobin'] = FieldSource.aiPending;
+            debugPrint('[AncForm] AI filled hemoglobin: $value');
+          }
+          break;
+        case 'folicAcidConsumed':
+          if (_folicConsumedController.text.isEmpty) {
+            _folicConsumedController.text = value.toString();
+            _fieldSources['folicAcidConsumed'] = FieldSource.aiPending;
+            debugPrint('[AncForm] AI filled folicAcidConsumed: $value');
+          }
+          break;
+        case 'folicAcidProvided':
+          if (_folicProvidedController.text.isEmpty) {
+            _folicProvidedController.text = value.toString();
+            _fieldSources['folicAcidProvided'] = FieldSource.aiPending;
+            debugPrint('[AncForm] AI filled folicAcidProvided: $value');
+          }
+          break;
+        // ANC danger signs
+        case 'vaginalBleeding':
+        case 'headache':
+        case 'fever':
+        case 'blurredVision':
+        case 'swellingHandsFace':
+        case 'breathingDifficulty':
+        case 'severeAbdominalPain':
+          if (value == 'true') {
+            // Add to appropriate trimester danger signs
+            final weeks = widget.gestationalWeeks ?? 0;
+            if (weeks <= 12) {
+              _dangerSigns12.add(field.fieldId);
+            } else if (weeks <= 27) {
+              _dangerSigns13To27.add(field.fieldId);
+            } else {
+              _dangerSigns28To40.add(field.fieldId);
+            }
+            debugPrint('[AncForm] AI detected danger sign: ${field.fieldId}');
+          }
+          break;
+        case 'ultrasound':
+          if (_ultrasound == null) {
+            _ultrasound = value == 'true' ? 'yes' : 'no';
+            _fieldSources['ultrasound'] = FieldSource.aiPending;
+            debugPrint('[AncForm] AI filled ultrasound: $_ultrasound');
+          }
+          break;
+        default:
+          debugPrint('[AncForm] Unhandled field: ${field.fieldId} = $value');
+      }
+    }
+
+    if (mounted) {
+      setState(() {});
+      _updateData();
+    }
   }
 
   void _initFromData() {
@@ -132,6 +279,7 @@ class _AncAssessmentFormState extends State<AncAssessmentForm> {
 
   @override
   void dispose() {
+    _scribeCtrl?.removeListener(_onScribeChanged);
     _folicConsumedController.dispose();
     _folicProvidedController.dispose();
     _ifaConsumedController.dispose();

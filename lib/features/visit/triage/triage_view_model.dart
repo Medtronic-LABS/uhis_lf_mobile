@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/models/programme.dart';
+import '../../scribe/models/ai_extracted_field.dart';
+import '../pathway/ai_pathway_client.dart';
 import '../pathway/pathway_engine.dart';
 import 'patient_context_builder.dart';
 import 'unified_symptom_catalog.dart';
@@ -9,14 +12,27 @@ import 'unified_symptom_catalog.dart';
 ///
 /// Manages selected symptoms, patient context pre-ticks, and
 /// pathway activation preview.
+///
+/// Phase 4.4: Also wires AI pathway suggestions (fire-and-forget). AI
+/// suggestions are merged into [allPathways] but can never remove a
+/// rule-activated pathway. The invariant is:
+///   allPathways = rule pathways ∪ ai suggestions (deduped by programme,
+///   with rule winning on dedup).
 class TriageViewModel extends ChangeNotifier {
   TriageViewModel({
     required PatientContext patientContext,
-  }) : _patientContext = patientContext {
+    AiPathwayClient? aiPathwayClient,
+    String? memberId,
+  })  : _patientContext = patientContext,
+        _aiClient = aiPathwayClient,
+        _memberId = memberId {
     _initPreTicks();
+    _initAiSuggestions();
   }
 
   final PatientContext _patientContext;
+  final AiPathwayClient? _aiClient;
+  final String? _memberId;
 
   /// Currently selected symptom codes.
   final Set<String> _selectedSymptoms = {};
@@ -26,8 +42,44 @@ class TriageViewModel extends ChangeNotifier {
   final Set<String> _preTicked = {};
   Set<String> get preTickedSymptoms => Set.unmodifiable(_preTicked);
 
-  /// Activated pathways based on current selection.
+  /// Codes that were pre-ticked specifically by a scribe triage result.
+  ///
+  /// Used by the UI to render an "AI" badge on the tile. This is a subset of
+  /// [_preTicked] — all scribe pre-ticks are also added to [_preTicked].
+  final Set<String> _scribePreTicked = {};
+  Set<String> get scribePreTickedSymptoms =>
+      Set.unmodifiable(_scribePreTicked);
+
+  /// Rule-activated pathways based on current selection.
   List<ActivatedPathway> _activatedPathways = [];
+
+  /// AI-suggested pathways (from fire-and-forget fetch or SQLite cache).
+  List<PathwaySuggestion> _aiSuggestions = [];
+
+  /// Whether the last-used AI cache entry is stale (> 24 h old).
+  bool _aiCacheIsStale = false;
+  bool get aiCacheIsStale => _aiCacheIsStale;
+
+  /// Unified pathway list: rule pathways ∪ AI suggestions.
+  ///
+  /// Invariant: removing an AI suggestion never removes a rule-activated
+  /// pathway. Deduplication: if both rule and AI suggest the same programme,
+  /// the rule-activated entry wins (trigger = rule, confidence = 1.0).
+  /// AI-only entries appear with trigger = PathwayTrigger.ai.
+  List<ActivatedPathway> get allPathways {
+    final result = List<ActivatedPathway>.from(_activatedPathways);
+    final rulePrograms = _activatedPathways.map((p) => p.programme).toSet();
+    for (final suggestion in _aiSuggestions) {
+      if (suggestion.programme == Programme.unknown) continue;
+      if (!rulePrograms.contains(suggestion.programme)) {
+        result.add(suggestion.toActivatedPathway());
+      }
+    }
+    result.sort((a, b) => a.priority.compareTo(b.priority));
+    return List.unmodifiable(result);
+  }
+
+  /// Activated pathways (rule-only). Kept for backward compatibility.
   List<ActivatedPathway> get activatedPathways =>
       List.unmodifiable(_activatedPathways);
 
@@ -82,6 +134,71 @@ class TriageViewModel extends ChangeNotifier {
 
     // Update pathways after pre-ticks
     _updateActivatedPathways();
+  }
+
+  /// Load cached AI suggestions on init, then fire-and-forget the live fetch.
+  ///
+  /// Step 1: load stale-or-fresh cache so the UI has something immediately.
+  /// Step 2: fire-and-forget a live fetch; when it returns, merge and notify.
+  void _initAiSuggestions() {
+    final client = _aiClient;
+    final memberId = _memberId;
+    if (client == null || memberId == null || memberId.isEmpty) return;
+
+    // Load cache synchronously (async task; we don't await the whole method).
+    client.getCached(memberId).then((cache) {
+      if (cache == null) return;
+      if (!disposed) {
+        _aiSuggestions = cache.suggestions;
+        _aiCacheIsStale = cache.isStale;
+        notifyListeners();
+        debugPrint(
+          '[Triage] Loaded ${_aiSuggestions.length} AI suggestions from cache '
+          '(stale=${_aiCacheIsStale})',
+        );
+      }
+    });
+
+    // Fire-and-forget live fetch — do NOT await on the UI thread.
+    _fetchAiSuggestionsForeground(client, memberId);
+  }
+
+  /// Build a [PathwaySuggestionRequest] from current state and fire the fetch.
+  /// When it resolves, merge the result into [_aiSuggestions] and notify.
+  void _fetchAiSuggestionsForeground(
+    AiPathwayClient client,
+    String memberId,
+  ) {
+    final req = PathwaySuggestionRequest(
+      memberId: memberId,
+      symptoms: _selectedSymptoms.toList(),
+      ageMonths: _patientContext.ageMonths,
+      sex: _patientContext.sex.name.toUpperCase(),
+      activeConditions: _patientContext.knownConditions.toList(),
+      openFlags: _patientContext.openFlags.toList(),
+    );
+
+    // Intentionally not awaited — picker must never block on this.
+    client.fetchSuggestions(req).then((cache) {
+      if (cache == null) return;
+      if (!disposed) {
+        _aiSuggestions = cache.suggestions;
+        _aiCacheIsStale = false;
+        notifyListeners();
+        debugPrint(
+          '[Triage] Merged ${_aiSuggestions.length} live AI suggestions',
+        );
+      }
+    });
+  }
+
+  /// Whether this [ChangeNotifier] has been disposed (guards async callbacks).
+  bool disposed = false;
+
+  @override
+  void dispose() {
+    disposed = true;
+    super.dispose();
   }
 
   void _addPreTick(String code) {
@@ -185,6 +302,33 @@ class TriageViewModel extends ChangeNotifier {
 
   /// Whether a symptom was pre-ticked from patient context.
   bool isPreTicked(String code) => _preTicked.contains(code);
+
+  /// Whether a symptom was pre-ticked specifically by a scribe result.
+  ///
+  /// Used by the tile to render an "AI" badge overlay.
+  bool isScribePreTick(String code) => _scribePreTicked.contains(code);
+
+  /// Apply a triage extraction result from the AI scribe service.
+  ///
+  /// For each [AIExtractedField] in [result.symptomCodes] whose confidence
+  /// meets [AppConfig.scribeSymptomConfidenceFloor], the code is added to
+  /// the selected set and marked as a scribe pre-tick. This is a no-op when
+  /// [AppConfig.scribeEnabled] is false.
+  void applyScribeTriageResult(TriageExtractionResult result) {
+    if (!AppConfig.scribeEnabled) return;
+
+    final floor = AppConfig.scribeSymptomConfidenceFloor;
+    for (final extracted in result.symptomCodes) {
+      if (extracted.confidence < floor) continue;
+      _scribePreTicked.add(extracted.fieldId);
+      _addPreTick(extracted.fieldId);
+    }
+    debugPrint(
+      '[Triage] Scribe applied ${_scribePreTicked.length} pre-ticks from result',
+    );
+    _updateActivatedPathways();
+    notifyListeners();
+  }
 
   /// Get the patient context.
   PatientContext get patientContext => _patientContext;
