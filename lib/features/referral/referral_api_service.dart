@@ -159,7 +159,7 @@ class ReferralApiService extends ApiRepository {
   }) async {
     try {
       final body = await postOk(
-        Endpoints.patientTreatmentDetails,
+        Endpoints.prescriptionPrescribedDetails,
         data: {
           'patientId': patientId,
           'tenantId': api.tenantIdAsNum,

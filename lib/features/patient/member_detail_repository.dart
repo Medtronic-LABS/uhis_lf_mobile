@@ -1,6 +1,7 @@
 import '../../core/api/api_repository.dart';
 import '../../core/api/endpoints.dart';
 import '../../core/auth/auth_repository.dart';
+import '../../core/db/member_dao.dart';
 
 /// Health assessment data for a member.
 class MemberAssessment {
@@ -156,54 +157,61 @@ class MemberHealthDetails {
 
 /// Repository for fetching member health details.
 class MemberDetailRepository extends ApiRepository {
-  MemberDetailRepository(super.api, this._authRepo);
+  MemberDetailRepository(super.api, this._authRepo, {MemberDao? members})
+      : _memberDao = members;
   
   final AuthRepository _authRepo;
-  List<int>? _cachedSubVillageIds;
+  final MemberDao? _memberDao;
 
-  /// Fetch member details by ID from the member list endpoint.
+  /// Fetch member details by ID from local SQLite (populated by offline sync).
   Future<MemberHealthDetails?> getMemberById(String memberId) async {
     // ignore: avoid_print
     print('[MemberDetailRepository] getMemberById: $memberId');
     try {
-      _cachedSubVillageIds ??= await _authRepo.subVillageIds();
-      final villageIds = _cachedSubVillageIds!;
-      // ignore: avoid_print
-      print('[MemberDetailRepository] villageIds=$villageIds');
-      
-      // First try to get from member list with the ID
-      final body = await postOk(
-        Endpoints.householdMemberList,
-        data: {
-          'skip': 0,
-          'limit': 500,
-          'tenantId': api.tenantIdAsNum,
-          if (villageIds.isNotEmpty) 'villageIds': villageIds,
-        },
-        action: 'Member list',
-      );
-      
-      // ignore: avoid_print
-      print('[MemberDetailRepository] Response body type: ${body.runtimeType}');
-
-      final list = extractList(body);
-      // ignore: avoid_print
-      print('[MemberDetailRepository] Found ${list.length} members, looking for $memberId');
-      for (final item in list) {
-        if (item is Map<String, dynamic> && item['id']?.toString() == memberId) {
+      if (_memberDao != null) {
+        HouseholdMemberEntity? entity = await _memberDao!.getById(memberId);
+        entity ??= await _memberDao!.getByPatientId(memberId);
+        if (entity != null) {
           // ignore: avoid_print
-          print('[MemberDetailRepository] Found member: ${item['name']}');
-          return MemberHealthDetails.fromJson(item);
+          print('[MemberDetailRepository] Found in local DB: ${entity.name}');
+          return _entityToDetails(entity);
         }
       }
       // ignore: avoid_print
-      print('[MemberDetailRepository] Member not found');
+      print('[MemberDetailRepository] Member not found in local DB');
       return null;
     } catch (e) {
       // ignore: avoid_print
       print('[MemberDetailRepository] Error fetching member: $e');
       return null;
     }
+  }
+
+  MemberHealthDetails _entityToDetails(HouseholdMemberEntity m) {
+    int? age;
+    if (m.dob != null) {
+      final dob = DateTime.tryParse(m.dob!);
+      if (dob != null) {
+        final now = DateTime.now();
+        age = now.year - dob.year;
+        if (now.month < dob.month ||
+            (now.month == dob.month && now.day < dob.day)) {
+          age = age - 1;
+        }
+      }
+    }
+    return MemberHealthDetails(
+      id: m.id,
+      patientId: m.patientId,
+      name: m.name,
+      gender: m.gender,
+      age: age,
+      dateOfBirth: m.dob,
+      phoneNumber: m.phone,
+      householdId: m.householdId,
+      villageId: m.villageId,
+      isPregnant: m.isPregnant,
+    );
   }
 
   /// Fetch assessment history for a member.

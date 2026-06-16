@@ -273,13 +273,15 @@ class _UhisNextAppState extends State<UhisNextApp>
         ChangeNotifierProvider<AuthState>.value(value: widget.authState),
         ChangeNotifierProvider<ThemeProvider>(create: (_) => ThemeProvider()),
         Provider<DashboardRepository>(
-            create: (_) => DashboardRepository(widget.api, widget.authRepo)),
+            create: (_) => DashboardRepository(
+                widget.api, widget.authRepo, _householdDao, _memberDao)),
         Provider<PatientSearchRepository>(
             create: (_) => PatientSearchRepository(widget.api, widget.authRepo)),
         Provider<MemberSearchRepository>(
-            create: (_) => MemberSearchRepository(widget.api, widget.authRepo)),
+            create: (_) =>
+                MemberSearchRepository(widget.api, widget.authRepo, _memberDao)),
         Provider<HouseholdSearchRepository>(
-            create: (_) => HouseholdSearchRepository(widget.api, widget.authRepo)),
+            create: (_) => HouseholdSearchRepository(_householdDao)),
         ProxyProvider2<MemberSearchRepository, HouseholdSearchRepository,
             GlobalSearchRepository>(
           update: (_, m, h, __) => GlobalSearchRepository(m, h),
@@ -305,7 +307,8 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<PatientProgrammesDao>.value(value: _progDao),
         Provider<PregnancySnapshotDao>.value(value: _pregnancySnapshotDao),
         Provider<MemberDetailRepository>(
-            create: (_) => MemberDetailRepository(widget.api, widget.authRepo)),
+            create: (_) => MemberDetailRepository(widget.api, widget.authRepo,
+                members: _memberDao)),
         // Visit flow providers
         Provider<EncounterDao>(
             create: (_) => EncounterDao(widget.appDb)),
@@ -319,7 +322,10 @@ class _UhisNextAppState extends State<UhisNextApp>
             create: (_) =>
                 FollowUpRepository(widget.api, dao: _followUpDao)),
         Provider<HouseholdRepository>(
-            create: (_) => HouseholdRepository(widget.api)),
+            create: (_) => HouseholdRepository(widget.api,
+                members: _memberDao,
+                followUps: _followUpDao,
+                immunisations: _immDao)),
         ChangeNotifierProxyProvider<EncounterRepository, VisitController>(
           create: (ctx) => VisitController(ctx.read<EncounterRepository>()),
           update: (_, repo, prev) => prev ?? VisitController(repo),

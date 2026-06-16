@@ -126,7 +126,7 @@ class OfflineSyncService extends ChangeNotifier {
     var report = SyncReport(startedAt: started, finishedAt: started)
         .copyWith(wasFullSync: fullSync);
     try {
-      final villageIds = await _auth.subVillageIds();
+      final villageIds = await _auth.villageIds();
       if (villageIds.isEmpty) {
         _emitProgress(SyncProgress.failed('No villages assigned'));
         return report.copyWith(

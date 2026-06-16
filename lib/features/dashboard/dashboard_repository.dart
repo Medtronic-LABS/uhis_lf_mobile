@@ -1,94 +1,38 @@
 import '../../core/api/api_repository.dart';
 import '../../core/api/endpoints.dart';
 import '../../core/auth/auth_repository.dart';
+import '../../core/db/household_dao.dart';
+import '../../core/db/member_dao.dart';
 
 class DashboardRepository extends ApiRepository {
-  DashboardRepository(super.api, this._authRepo);
+  DashboardRepository(super.api, this._authRepo, this._households, this._members);
 
   final AuthRepository _authRepo;
+  final HouseholdDao _households;
+  final MemberDao _members;
 
-  /// Cached sub-village IDs fetched from the auth repository.
-  /// IMPORTANT: Must be cleared on logout via [clearCache] to avoid
-  /// using stale data from previous login sessions.
-  List<int>? _cachedSubVillageIds;
-  
-  /// Cached members grouped by household ID for fast lookup.
-  Map<String, List<Map<String, dynamic>>>? _cachedMembersByHousehold;
+  Future<List<int>> getSubVillageIds() => _authRepo.villageIds();
 
-  /// Clears cached data. Call this on logout to ensure fresh data on next login.
-  void clearCache() {
-    _cachedSubVillageIds = null;
-    _cachedMembersByHousehold = null;
+  /// Household and member counts from local SQLite — instant, no network.
+  Future<({int households, int members})> householdAndMemberCount() async {
+    final h = await _households.count();
+    final m = await _members.count();
+    return (households: h, members: m);
   }
 
-  /// Build the request body for household/member list APIs.
-  /// IMPORTANT: These APIs filter by SUB-VILLAGE IDs (stored in FHIR as
-  /// `village-id` identifier), NOT the union (village) IDs from user profile.
-  Future<Map<String, dynamic>> _listRequest(int skip, int limit) async {
-    final req = <String, dynamic>{
-      'skip': skip,
-      'limit': limit,
-      'tenantId': api.tenantIdAsNum,
-    };
-    // Fetch sub-village IDs from auth repository (cached after login)
-    _cachedSubVillageIds ??= await _authRepo.subVillageIds();
-    final subVillageIds = _cachedSubVillageIds!;
-    // ignore: avoid_print
-    print('[DashboardRepository] subVillageIds=$subVillageIds tenantId=${api.tenantIdAsNum}');
-    if (subVillageIds.isNotEmpty) {
-      req['villageIds'] = subVillageIds;
-    }
-    // ignore: avoid_print
-    print('[DashboardRepository] request body=$req');
-    return req;
-  }
+  Future<int> householdCount() async => _households.count();
 
-  /// Returns both household count and total member count in a single pass.
-  /// Members are counted by summing `noOfPeople` from each household.
-  Future<({int households, int members})> householdAndMemberCount({
-    int pageSize = 100,
-    int hardCapPages = 50,
-  }) async {
-    int totalHouseholds = 0;
-    int totalMembers = 0;
-    int skip = 0;
-    int page = 0;
-    while (page < hardCapPages) {
-      final body = await postOk(
-        Endpoints.householdList,
-        data: await _listRequest(skip, pageSize),
-        action: 'Household list',
-      );
-      final list = extractList(body);
-      // ignore: avoid_print
-      print('[DashboardRepository] page=$page skip=$skip got=${list.length} households');
-      totalHouseholds += list.length;
-      for (final hh in list) {
-        final n = (hh is Map) ? hh['noOfPeople'] : null;
-        if (n is int) {
-          totalMembers += n;
-        } else if (n is num) {
-          totalMembers += n.toInt();
-        }
-      }
-      // ignore: avoid_print
-      print('[DashboardRepository] runningTotal: households=$totalHouseholds members=$totalMembers');
-      // API may ignore pagination and return all data - stop if we get more than requested
-      if (list.length > pageSize) break;
-      if (list.length < pageSize) break;
-      skip += pageSize;
-      page++;
-    }
-    return (households: totalHouseholds, members: totalMembers);
-  }
-
-  /// Returns the count of enrolled patients (clinical patients who have
-  /// received care). This is typically 0 for new SK assignments - most
-  /// people are just household members until they receive clinical services.
+  /// Enrolled patient count from server (not in local DB).
   Future<int> patientCount() async {
+    final villageIds = await _authRepo.villageIds();
     final data = await postOk(
       Endpoints.patientList,
-      data: await _listRequest(0, 1),
+      data: {
+        'skip': 0,
+        'limit': 1,
+        'tenantId': api.tenantIdAsNum,
+        if (villageIds.isNotEmpty) 'villageIds': villageIds,
+      },
       action: 'Patient count',
     );
     final total = (data is Map) ? data['totalCount'] : null;
@@ -98,285 +42,57 @@ class DashboardRepository extends ApiRepository {
     return 0;
   }
 
-  Future<int> householdCount({int pageSize = 100, int hardCapPages = 50}) async {
-    final result = await householdAndMemberCount(
-      pageSize: pageSize,
-      hardCapPages: hardCapPages,
-    );
-    return result.households;
+  /// All households from local SQLite.
+  Future<List<Map<String, dynamic>>> getAllHouseholds() async {
+    final rows = await _households.getAll(limit: 1000);
+    return rows.map((h) => h.toDb().cast<String, dynamic>()).toList();
   }
 
-  /// Returns the sub-village IDs for the current user.
-  /// Used by the household list screen to fetch all households.
-  Future<List<int>> getSubVillageIds() async {
-    _cachedSubVillageIds ??= await _authRepo.subVillageIds();
-    return _cachedSubVillageIds!;
-  }
-
-  /// Returns all households for the current user's sub-villages.
-  Future<List<Map<String, dynamic>>> getAllHouseholds({
-    int pageSize = 100,
-    int hardCapPages = 5,
-  }) async {
-    final results = <Map<String, dynamic>>[];
-    int skip = 0;
-    int page = 0;
-    while (page < hardCapPages) {
-      final body = await postOk(
-        Endpoints.householdList,
-        data: await _listRequest(skip, pageSize),
-        action: 'Household list',
-      );
-      final list = extractList(body);
-      for (final item in list) {
-        if (item is Map<String, dynamic>) {
-          results.add(item);
-        } else if (item is Map) {
-          results.add(Map<String, dynamic>.from(item));
-        }
-      }
-      // API may ignore pagination and return all data - stop if we get more than requested
-      if (list.length > pageSize) break;
-      if (list.length < pageSize) break;
-      skip += pageSize;
-      page++;
-    }
-    return results;
-  }
-
-  /// Returns all members for the current user's sub-villages.
-  Future<List<Map<String, dynamic>>> getAllMembers({
-    int pageSize = 100,
-    int hardCapPages = 10,
-  }) async {
-    final results = <Map<String, dynamic>>[];
-    int skip = 0;
-    int page = 0;
-    while (page < hardCapPages) {
-      final body = await postOk(
-        Endpoints.householdMemberList,
-        data: await _listRequest(skip, pageSize),
-        action: 'Member list',
-      );
-      final list = extractList(body);
-      for (final item in list) {
-        if (item is Map<String, dynamic>) {
-          results.add(item);
-        } else if (item is Map) {
-          results.add(Map<String, dynamic>.from(item));
-        }
-      }
-      // API may ignore pagination and return all data - stop if we get more than requested
-      if (list.length > pageSize) break;
-      if (list.length < pageSize) break;
-      skip += pageSize;
-      page++;
-    }
-    return results;
-  }
-
-  /// Returns members grouped by household ID.
+  /// Members grouped by household ID from local SQLite.
   Future<Map<String, List<Map<String, dynamic>>>> getMembersByHousehold() async {
-    final members = await getAllMembers();
-    final grouped = <String, List<Map<String, dynamic>>>{};
-    for (final m in members) {
-      final hhId = m['householdId']?.toString();
-      if (hhId != null && hhId.isNotEmpty) {
-        grouped.putIfAbsent(hhId, () => []).add(m);
-      }
-    }
-    return grouped;
+    final grouped = await _members.getAllGroupedByHousehold();
+    return grouped.map((hhId, members) => MapEntry(
+          hhId,
+          members.map((m) => m.toDb().cast<String, dynamic>()).toList(),
+        ));
   }
 
-  /// Returns households with embedded member data.
-  /// For large datasets (>500 households), skips member enrichment to avoid timeouts.
-  Future<List<Map<String, dynamic>>> getHouseholdsWithMembers({
-    int pageSize = 100,
-    int hardCapPages = 5,
-  }) async {
-    final households = await getAllHouseholds(
-      pageSize: pageSize,
-      hardCapPages: hardCapPages,
-    );
-    
-    // Skip member enrichment for large datasets - member API times out
-    if (households.length > 500) {
-      // ignore: avoid_print
-      print('[DashboardRepository] Skipping member enrichment for ${households.length} households');
-      return households;
-    }
-    
-    final membersByHh = await getMembersByHousehold();
-    
-    // Enrich households with their members
-    for (final hh in households) {
-      final hhId = hh['id']?.toString();
-      if (hhId != null && membersByHh.containsKey(hhId)) {
-        hh['householdMembers'] = membersByHh[hhId];
-      }
-    }
-    return households;
-  }
-
-  /// Fetches members for a specific household.
-  /// Tries multiple API approaches since spice-service doesn't reliably support
-  /// household filtering.
+  /// Members for a specific household from local SQLite.
   Future<List<Map<String, dynamic>>> getMembersForHousehold(String householdId) async {
-    // ignore: avoid_print
-    print('[DashboardRepository] fetching members for household: $householdId');
-    
-    // Check cache first
-    if (_cachedMembersByHousehold != null) {
-      final cached = _cachedMembersByHousehold![householdId];
-      if (cached != null) {
-        // ignore: avoid_print
-        print('[DashboardRepository] returning ${cached.length} cached members');
-        return cached;
-      }
-    }
-    
-    // Approach 1: Try household-member-link/list with householdId
-    try {
-      final req = <String, dynamic>{
-        'skip': 0,
-        'limit': 100,
-        'tenantId': api.tenantIdAsNum,
-        'householdId': int.tryParse(householdId) ?? householdId,
-      };
-      // ignore: avoid_print
-      print('[DashboardRepository] trying household-member-link with: $req');
-      final body = await postOk(
-        Endpoints.householdMemberLinkList,
-        data: req,
-        action: 'Household member links',
-      );
-      final list = extractList(body);
-      if (list.isNotEmpty) {
-        final results = <Map<String, dynamic>>[];
-        for (final item in list) {
-          if (item is Map<String, dynamic>) {
-            results.add(item);
-          } else if (item is Map) {
-            results.add(Map<String, dynamic>.from(item));
-          }
-        }
-        // ignore: avoid_print
-        print('[DashboardRepository] got ${results.length} members from household-member-link');
-        return results;
-      }
-    } catch (e) {
-      // ignore: avoid_print
-      print('[DashboardRepository] household-member-link failed: $e');
-    }
-    
-    // Approach 2: Fall back to member/list with householdIds array
-    try {
-      final req2 = <String, dynamic>{
-        'skip': 0,
-        'limit': 100,
-        'tenantId': api.tenantIdAsNum,
-        'householdIds': [int.tryParse(householdId) ?? householdId],
-      };
-      // ignore: avoid_print
-      print('[DashboardRepository] trying member/list with householdIds: $req2');
-      final body = await postOk(
-        Endpoints.householdMemberList,
-        data: req2,
-        action: 'Household members',
-      );
-      final list = extractList(body);
-      final results = <Map<String, dynamic>>[];
-      for (final item in list) {
-        if (item is Map<String, dynamic>) {
-          results.add(item);
-        } else if (item is Map) {
-          results.add(Map<String, dynamic>.from(item));
-        }
-      }
-      // ignore: avoid_print
-      print('[DashboardRepository] got ${results.length} members from member/list');
-      if (results.isNotEmpty) return results;
-    } catch (e) {
-      // ignore: avoid_print
-      print('[DashboardRepository] member/list failed: $e');
-    }
-    
-    // Approach 3: Fetch ALL members and filter client-side
-    // This is expensive but necessary when API doesn't support filtering
-    try {
-      // ignore: avoid_print
-      print('[DashboardRepository] falling back to fetch-all + client filter');
-      final allMembers = await getAllMembers(pageSize: 500, hardCapPages: 3);
-      // ignore: avoid_print
-      print('[DashboardRepository] fetched ${allMembers.length} total members');
-      
-      // Cache all members grouped by household for future lookups
-      _cachedMembersByHousehold = <String, List<Map<String, dynamic>>>{};
-      for (final m in allMembers) {
-        final hhId = m['householdId']?.toString();
-        if (hhId != null && hhId.isNotEmpty) {
-          _cachedMembersByHousehold!.putIfAbsent(hhId, () => []).add(m);
-        }
-      }
-      // ignore: avoid_print
-      print('[DashboardRepository] cached members for ${_cachedMembersByHousehold!.length} households');
-      
-      final filtered = _cachedMembersByHousehold![householdId] ?? [];
-      // ignore: avoid_print
-      print('[DashboardRepository] returning ${filtered.length} members for household $householdId');
-      return filtered;
-    } catch (e) {
-      // ignore: avoid_print
-      print('[DashboardRepository] fetch-all failed: $e');
-      return [];
-    }
+    final rows = await _members.getByHouseholdId(householdId);
+    return rows.map((m) => m.toDb().cast<String, dynamic>()).toList();
   }
 
-  /// Fetches a single household by ID with embedded member data.
-  /// Uses the dedicated `/household/:householdId` endpoint + separate member fetch.
+  /// Household with embedded members from local SQLite.
   Future<Map<String, dynamic>?> getHouseholdById(String householdId) async {
-    // ignore: avoid_print
-    print('[DashboardRepository] fetching household by ID: $householdId');
-    try {
-      final body = await getOk(
-        Endpoints.householdById(householdId),
-        action: 'Household detail',
-      );
-      // ignore: avoid_print
-      print('[DashboardRepository] household response: ${body.runtimeType}');
-      
-      if (body is Map) {
-        // The API returns { "entity": { ... } } or { "data": { ... } }
-        final entity = body['entity'] ?? body['data'] ?? body;
-        Map<String, dynamic> result;
-        if (entity is Map<String, dynamic>) {
-          result = entity;
-        } else {
-          result = Map<String, dynamic>.from(entity as Map);
-        }
-        
-        // ignore: avoid_print
-        print('[DashboardRepository] household keys: ${result.keys.toList()}');
-        
-        // If householdMembers is null/empty, fetch them separately
-        final existingMembers = result['householdMembers'];
-        if (existingMembers == null || (existingMembers is List && existingMembers.isEmpty)) {
-          // ignore: avoid_print
-          print('[DashboardRepository] householdMembers empty, fetching separately');
-          final members = await getMembersForHousehold(householdId);
-          result['householdMembers'] = members;
-        }
-        
-        final members = result['householdMembers'];
-        // ignore: avoid_print
-        print('[DashboardRepository] final householdMembers: ${members?.runtimeType} length=${members is List ? members.length : 0}');
-        return result;
-      }
-      return null;
-    } catch (e) {
-      // ignore: avoid_print
-      print('[DashboardRepository] error fetching household: $e');
-      rethrow;
-    }
+    final hh = await _households.getById(householdId);
+    if (hh == null) return null;
+    final result = hh.toDb().cast<String, dynamic>();
+    final memberRows = await _members.getByHouseholdId(householdId);
+    result['householdMembers'] =
+        memberRows.map((m) => m.toDb().cast<String, dynamic>()).toList();
+    return result;
+  }
+
+  /// Households with embedded members from local SQLite.
+  Future<List<Map<String, dynamic>>> getHouseholdsWithMembers() async {
+    final households = await _households.getAll(limit: 1000);
+    final grouped = await _members.getAllGroupedByHousehold();
+    return households.map((hh) {
+      final result = hh.toDb().cast<String, dynamic>();
+      final memberRows = grouped[hh.id] ?? [];
+      result['householdMembers'] =
+          memberRows.map((m) => m.toDb().cast<String, dynamic>()).toList();
+      return result;
+    }).toList();
+  }
+
+  /// All members as flat list from local SQLite.
+  Future<List<Map<String, dynamic>>> getAllMembers() async {
+    final grouped = await _members.getAllGroupedByHousehold();
+    return grouped.values
+        .expand((list) => list)
+        .map((m) => m.toDb().cast<String, dynamic>())
+        .toList();
   }
 }

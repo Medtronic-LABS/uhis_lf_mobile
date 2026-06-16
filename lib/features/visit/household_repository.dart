@@ -1,5 +1,7 @@
 import '../../core/api/api_repository.dart';
-import '../../core/api/endpoints.dart';
+import '../../core/db/follow_up_dao.dart';
+import '../../core/db/immunisation_dao.dart';
+import '../../core/db/member_dao.dart';
 
 /// A household member with flags indicating care needs.
 class HouseholdMemberFlag {
@@ -61,155 +63,90 @@ class CareFlag {
 }
 
 /// Repository for household-level data including co-flags.
+/// All reads from local SQLite populated during offline sync.
 class HouseholdRepository extends ApiRepository {
-  HouseholdRepository(super.api);
+  HouseholdRepository(super.api, {
+    MemberDao? members,
+    FollowUpDao? followUps,
+    ImmunisationDao? immunisations,
+  })  : _members = members,
+        _followUps = followUps,
+        _immunisations = immunisations;
+
+  final MemberDao? _members;
+  final FollowUpDao? _followUps;
+  final ImmunisationDao? _immunisations;
 
   /// Get care flags for other members in the same household.
-  /// 
-  /// This is used on the Visit Landing screen to show "Also in this household"
-  /// section with relevant flags for follow-ups, immunisations, etc.
+  /// Reads entirely from local SQLite — no API calls.
   Future<List<HouseholdMemberFlag>> coFlagsFor(
     String patientId, {
     String? householdId,
   }) async {
     final memberFlags = <HouseholdMemberFlag>[];
+    if (householdId == null || householdId.isEmpty) return memberFlags;
+    if (_members == null) return memberFlags;
 
-    if (householdId == null || householdId.isEmpty) {
-      return memberFlags;
-    }
+    final members = await _members!.getByHouseholdId(householdId);
+    final now = DateTime.now();
 
-    try {
-      // 1. Get household members
-      final householdBody = await getOk(
-        Endpoints.householdById(householdId),
-        action: 'Household details',
-      );
+    for (final m in members) {
+      // Skip the current patient
+      if (m.id == patientId || m.patientId == patientId) continue;
+      if (!m.isActive) continue;
 
-      final entity = householdBody['entity'] as Map<String, dynamic>?;
-      if (entity == null) return memberFlags;
+      final flags = <CareFlag>[];
+      final memberPatientId = m.patientId ?? m.id;
 
-      final members = entity['householdMembers'] as List<dynamic>? ?? [];
-
-      // 2. Get follow-ups for each member (excluding current patient)
-      for (final member in members) {
-        if (member is! Map<String, dynamic>) continue;
-
-        final memberId = member['id']?.toString();
-        final memberPatientId = member['patientId']?.toString();
-        
-        // Skip the current patient
-        if (memberId == patientId || memberPatientId == patientId) continue;
-
-        final name = member['name']?.toString() ?? 
-                     member['firstName']?.toString() ?? 
-                     'Unknown';
-        final relationship = member['relationship']?.toString();
-        final gender = member['gender']?.toString();
-        
-        int? age;
-        final ageVal = member['age'];
-        if (ageVal is int) {
-          age = ageVal;
-        } else if (ageVal is num) {
-          age = ageVal.toInt();
-        }
-
-        final flags = <CareFlag>[];
-
-        // Check for open follow-ups
+      // Check open follow-ups from local DB
+      if (_followUps != null) {
         try {
-          if (memberPatientId != null) {
-            final fuBody = await postOk(
-              Endpoints.followUpList,
-              data: {
-                'patientId': memberPatientId,
-                'tenantId': api.tenantIdAsNum,
-                'isCompleted': false,
-              },
-              action: 'Member follow-ups',
-            );
-            final fuList = extractList(fuBody);
-            for (final fu in fuList) {
-              if (fu is Map<String, dynamic>) {
-                DateTime? dueDate;
-                final dueDateVal = fu['nextFollowUpDate'] ?? fu['dueDate'];
-                if (dueDateVal is String) {
-                  dueDate = DateTime.tryParse(dueDateVal);
-                } else if (dueDateVal is int) {
-                  dueDate = DateTime.fromMillisecondsSinceEpoch(dueDateVal);
-                }
-                
-                final isOverdue = dueDate?.isBefore(DateTime.now()) ?? false;
-                if (isOverdue) {
-                  flags.add(CareFlag(
-                    type: CareFlagType.overdueFollowUp,
-                    label: 'Follow-up overdue',
-                    dueDate: dueDate,
-                    programme: fu['programme']?.toString(),
-                  ));
-                }
-              }
+          final fus = await _followUps!.forPatient(memberPatientId);
+          for (final fu in fus) {
+            if (fu.completedAt != null) continue;
+            if (fu.dueAt == null) continue;
+            final due = DateTime.fromMillisecondsSinceEpoch(fu.dueAt!);
+            if (due.isBefore(now)) {
+              flags.add(CareFlag(
+                type: CareFlagType.overdueFollowUp,
+                label: 'Follow-up overdue',
+                dueDate: due,
+              ));
+              break;
             }
           }
         } catch (_) {}
-
-        // Check for overdue immunisations (for children)
-        if (age != null && age < 5) {
-          try {
-            final immunBody = await postOk(
-              Endpoints.immunisationList,
-              data: {
-                'patientId': memberPatientId ?? memberId,
-                'tenantId': api.tenantIdAsNum,
-              },
-              action: 'Member immunisations',
-            );
-            final immunList = extractList(immunBody);
-            for (final immun in immunList) {
-              if (immun is Map<String, dynamic>) {
-                final givenAt = immun['givenAt'] ?? immun['administeredDate'];
-                if (givenAt == null) {
-                  DateTime? dueDate;
-                  final dueDateVal = immun['dueAt'] ?? immun['dueDate'];
-                  if (dueDateVal is String) {
-                    dueDate = DateTime.tryParse(dueDateVal);
-                  } else if (dueDateVal is int) {
-                    dueDate = DateTime.fromMillisecondsSinceEpoch(dueDateVal);
-                  }
-                  
-                  final isOverdue = dueDate?.isBefore(DateTime.now()) ?? false;
-                  if (isOverdue) {
-                    final vaccine = immun['vaccineName']?.toString() ?? 
-                                   immun['vaccineCode']?.toString() ?? 
-                                   'Immunisation';
-                    flags.add(CareFlag(
-                      type: CareFlagType.overdueImmunisation,
-                      label: '$vaccine overdue',
-                      dueDate: dueDate,
-                    ));
-                    break; // Only show first overdue immunisation
-                  }
-                }
-              }
-            }
-          } catch (_) {}
-        }
-
-        // Only add member if they have flags
-        if (flags.isNotEmpty) {
-          memberFlags.add(HouseholdMemberFlag(
-            memberId: memberId ?? '',
-            name: name,
-            relationship: relationship,
-            age: age,
-            gender: gender,
-            flags: flags,
-          ));
-        }
       }
-    } catch (e) {
-      // ignore: avoid_print
-      print('[HouseholdRepository] Failed to fetch co-flags: $e');
+
+      // Check overdue immunisations for children under 5
+      final dob = m.dob != null ? DateTime.tryParse(m.dob!) : null;
+      final ageYears = dob != null ? now.year - dob.year : null;
+      if (ageYears != null && ageYears < 5 && _immunisations != null) {
+        try {
+          final immMap = await _immunisations!.forMany([memberPatientId]);
+          final imms = immMap[memberPatientId] ?? [];
+          for (final imm in imms) {
+            if (imm.givenAt == null) {
+              flags.add(CareFlag(
+                type: CareFlagType.overdueImmunisation,
+                label: 'Immunisation due',
+              ));
+              break;
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (flags.isNotEmpty) {
+        memberFlags.add(HouseholdMemberFlag(
+          memberId: m.id,
+          name: m.name ?? 'Unknown',
+          relationship: m.relation,
+          age: ageYears,
+          gender: m.gender,
+          flags: flags,
+        ));
+      }
     }
 
     return memberFlags;

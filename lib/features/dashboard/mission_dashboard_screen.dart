@@ -656,7 +656,6 @@ class _SettingsMenu extends StatelessWidget {
                 ),
               );
               if (confirmLogout != true) break;
-              ctx.read<DashboardRepository>().clearCache();
               await auth.logout();
               if (ctx.mounted) ctx.go('/login');
               break;

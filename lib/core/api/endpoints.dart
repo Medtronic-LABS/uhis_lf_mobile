@@ -15,23 +15,8 @@ class Endpoints {
       '/user-service/user/user-villages/$userId';
 
   // ── Admin: village hierarchy ─────────────────────────────────────────────
-  /// Returns sub-villages for a given village (union) ID.
-  /// Response: { "entity": [ { "id": 18, "name": "Meherpur Sadar", ... }, ... ] }
-  static String subVillagesByVillage(int villageId) =>
-      '/admin-service/sub-villages/by-village/$villageId';
-
-  /// Bulk sub-village fetch — preferred over the per-village loop.
-  static const String subVillagesByVillageIds =
-      '/admin-service/sub-villages-by-village-ids';
-
-  static String shasthyaShebikaSubVillages(int id) =>
-      '/admin-service/shasthya-shebika/$id/sub-villages';
-
-  /// Fetch Shasthya Shebikas (and their sub-villages) for a given SK ID.
-  /// POST with body: { "id": <skId> }
-  /// Response: { "data": { "<skId>": [ { "subVillages": [...] }, ... ] } }
-  static const String shasthyaShebikasBySkId =
-      '/admin-service/shasthya-shebika/by-shasthya-kormi-id';
+  // Village/sub-village data comes from offline sync bundle (subVillageEntity).
+  // No admin-service API calls needed for hierarchy resolution.
 
   // ── Spice: household + member ────────────────────────────────────────────
   static const String householdList = '/spice-service/household/list';
@@ -40,23 +25,12 @@ class Endpoints {
   static const String householdMemberLinkList =
       '/spice-service/household-member-link/list';
 
-  /// Get a single household by ID with embedded members.
-  /// Response: { "entity": { "id": ..., "householdMembers": [...], ... } }
-  static String householdById(String householdId) =>
-      '/spice-service/household/$householdId';
+  // householdById removed — household detail reads from local SQLite via HouseholdDao.
 
   // ── FHIR Mapper: household member lookups ────────────────────────────────
-  /// Get household member by patient ID.
-  static const String fhirHouseholdMemberByPatientId =
-      '/fhir-mapper-service/household/member/patient-id';
-
-  /// Get household member by member ID.
-  static const String fhirHouseholdMemberById =
-      '/fhir-mapper-service/household/member/id';
-
-  /// Get households by member IDs (bulk lookup).
-  static const String fhirHouseholdByMemberIds =
-      '/fhir-mapper-service/household/member/ids';
+  // Household/member data comes from offline sync bundle.
+  // Direct fhir-mapper household lookups removed — nginx has no
+  // /fhir-mapper-service/ route (correct prefix is /fhir-mapper/).
 
   // ── Spice: patient (worklist primary signals) ────────────────────────────
   static const String patientList = '/spice-service/patient/list';
@@ -66,21 +40,15 @@ class Endpoints {
   static const String patientDetails = '/spice-service/patient/patientDetails';
   static const String patientDiagnosisDetails =
       '/spice-service/patient/diagnosis-details';
-  static const String patientGetDiagnosisDetails =
-      '/spice-service/patient/get-diagnosis-details';
   static const String patientMemberAssessmentHistory =
       '/spice-service/patient/member-assessment-history';
-  static const String patientPregnancyInfo =
-      '/spice-service/patient/pregnancy/info';
   static const String patientPregnancyDetails =
       '/spice-service/patient/pregnancy/details';
 
-  /// Patient treatment history (prescriptions, medications).
-  static const String patientTreatmentDetails =
-      '/spice-service/patient/treatment-details';
-
-  /// Patient vitals list (BP, glucose, weight history).
-  static const String patientVitalsList = '/spice-service/patient/vitals/list';
+  /// Prescription details for a patient (prescribed medications).
+  /// Matches Android: POST /spice-service/prescription-request/prescribed-details
+  static const String prescriptionPrescribedDetails =
+      '/spice-service/prescription-request/prescribed-details';
 
   /// Patient status (enrolled, active, transferred, deceased).
   static const String patientStatus = '/spice-service/patient/patient-status';

@@ -1,6 +1,4 @@
-import '../../core/api/api_repository.dart';
-import '../../core/api/endpoints.dart';
-import '../../core/auth/auth_repository.dart';
+import '../../core/db/household_dao.dart';
 
 enum HouseholdSearchField { name, householdNo }
 
@@ -21,6 +19,15 @@ class HouseholdHit {
   final int? memberCount;
   final Map<String, dynamic>? rawJson;
 
+  static HouseholdHit fromEntity(HouseholdEntity h) => HouseholdHit(
+        id: h.id,
+        name: h.name,
+        householdNo: h.householdNo,
+        village: h.village,
+        memberCount: h.memberCount,
+        rawJson: h.toDb().cast<String, dynamic>(),
+      );
+
   static HouseholdHit fromJson(Map json) {
     String? str(String k) {
       final v = json[k];
@@ -30,14 +37,12 @@ class HouseholdHit {
     }
 
     int? members;
-    final members1 = json['noOfPeople'];
-    if (members1 is int) members = members1;
-    else if (members1 is num) members = members1.toInt();
-    else if (members1 is String) members = int.tryParse(members1);
+    final m = json['noOfPeople'] ?? json['memberCount'];
+    if (m is int) members = m;
+    else if (m is num) members = m.toInt();
     if (members == null && json['householdMembers'] is List) {
       members = (json['householdMembers'] as List).length;
     }
-
     return HouseholdHit(
       id: str('id'),
       name: str('name'),
@@ -66,16 +71,11 @@ class HouseholdSearchResult {
   final bool truncated;
 }
 
-class HouseholdSearchRepository extends ApiRepository {
-  HouseholdSearchRepository(super.api, this._authRepo);
+/// Searches households from local SQLite — all data comes from offline sync.
+class HouseholdSearchRepository {
+  HouseholdSearchRepository(this._households);
 
-  final AuthRepository _authRepo;
-
-  /// Cached sub-village IDs fetched from the auth repository.
-  List<int>? _cachedSubVillageIds;
-
-  static const int pageSize = 100;
-  static const int maxPages = 5;
+  final HouseholdDao _households;
   static const int displayCap = 50;
 
   Future<HouseholdSearchResult> search({
@@ -83,76 +83,25 @@ class HouseholdSearchRepository extends ApiRepository {
     required String query,
     void Function(HouseholdSearchProgress)? onProgress,
   }) async {
-    final q = query.trim().toLowerCase();
+    final q = query.trim();
     if (q.isEmpty) {
-      return HouseholdSearchResult(
-        matches: const [],
-        totalScanned: 0,
-        truncated: false,
-      );
+      return HouseholdSearchResult(matches: const [], totalScanned: 0, truncated: false);
     }
-    final matches = <HouseholdHit>[];
-    int scanned = 0;
-    int skip = 0;
-    bool ranOut = false;
-    // Get sub-village IDs for the current user
-    _cachedSubVillageIds ??= await _authRepo.subVillageIds();
-    final subVillageIds = _cachedSubVillageIds!;
-    
-    // ignore: avoid_print
-    print('[HouseholdSearch] query="$q" field=$field villageIds=$subVillageIds');
 
-    for (int page = 0; page < maxPages; page++) {
-      onProgress?.call(HouseholdSearchProgress(scanned, pageSize * maxPages));
-      final reqData = <String, dynamic>{
-        'skip': skip,
-        'limit': pageSize,
-        'tenantId': api.tenantIdAsNum,
-      };
-      if (subVillageIds.isNotEmpty) {
-        reqData['villageIds'] = subVillageIds;
-      }
-      final body = await postOk(
-        Endpoints.householdList,
-        data: reqData,
-        action: 'Household list',
-      );
-      final list = extractList(body);
-      // ignore: avoid_print
-      print('[HouseholdSearch] page=$page got=${list.length} households');
-      scanned += list.length;
-      
-      // Log first item to see structure
-      if (page == 0 && list.isNotEmpty) {
-        // ignore: avoid_print
-        print('[HouseholdSearch] sample keys: ${(list.first as Map).keys.toList()}');
-      }
-      
-      for (final raw in list) {
-        if (raw is! Map) continue;
-        final hit = HouseholdHit.fromJson(raw);
-        final hay = (field == HouseholdSearchField.name)
-            ? (hit.name ?? '')
-            : (hit.householdNo ?? '');
-        if (hay.toLowerCase().contains(q)) {
-          matches.add(hit);
-          if (matches.length >= displayCap) {
-            ranOut = true;
-            break;
-          }
-        }
-      }
-      if (ranOut) break;
-      if (list.length < pageSize) break;
-      skip += pageSize;
-    }
-    // ignore: avoid_print
-    print('[HouseholdSearch] found ${matches.length} matches, scanned=$scanned');
-    onProgress?.call(HouseholdSearchProgress(scanned, pageSize * maxPages));
+    onProgress?.call(HouseholdSearchProgress(0, displayCap));
+
+    final rows = field == HouseholdSearchField.householdNo
+        ? await _households.search(q, limit: displayCap + 1)
+        : await _households.search(q, limit: displayCap + 1);
+
+    final truncated = rows.length > displayCap;
+    final hits = rows.take(displayCap).map(HouseholdHit.fromEntity).toList();
+
+    onProgress?.call(HouseholdSearchProgress(hits.length, displayCap));
     return HouseholdSearchResult(
-      matches: matches,
-      totalScanned: scanned,
-      truncated: ranOut,
+      matches: hits,
+      totalScanned: rows.length,
+      truncated: truncated,
     );
   }
 }

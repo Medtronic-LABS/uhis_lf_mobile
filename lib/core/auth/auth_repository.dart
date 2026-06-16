@@ -252,109 +252,20 @@ class AuthRepository {
     final upazila = _deriveUpazila(area, entityMap);
     await writeOrDelete(_kUpazila, upazila);
 
-    // Fetch and cache sub-village IDs for all villages
-    // Extract user ID for fallback SS-based sub-village fetch
-    final userId = entityMap['id'];
-    final userIdInt = (userId is int) ? userId : (userId is num ? userId.toInt() : null);
-    await _fetchAndCacheSubVillages(villageIdList, skId: userIdInt);
-  }
-
-  /// Fetches sub-villages for each village (union) ID and caches the sub-village IDs.
-  /// If no village IDs provided, falls back to fetching via Shasthya Shebika endpoint.
-  Future<void> _fetchAndCacheSubVillages(List<int> villageIds, {int? skId}) async {
-    // Deduplicate village IDs
-    final uniqueVillageIds = villageIds.toSet();
-    final subVillageIdSet = <int>{};
-    for (final villageId in uniqueVillageIds) {
-      try {
-        final resp = await _api.dio.get(Endpoints.subVillagesByVillage(villageId));
-        if (resp.statusCode == 200) {
-          final data = resp.data;
-          // Response format: { "entity": [ { "id": 18, ... }, ... ] }
-          final entity = (data is Map) ? data['entity'] : data;
-          if (entity is List) {
-            for (final sv in entity) {
-              if (sv is Map) {
-                final id = sv['id'];
-                if (id is int) subVillageIdSet.add(id);
-                if (id is num) subVillageIdSet.add(id.toInt());
-              }
-            }
-          }
-        }
-      } catch (e) {
-        // Log but continue - sub-village fetch is best-effort
-        // ignore: avoid_print
-        print('[AuthRepository] Failed to fetch sub-villages for village $villageId: $e');
-      }
-    }
-    // If no sub-villages found via villages, try fetching from Shasthya Shebika endpoint
-    if (subVillageIdSet.isEmpty && skId != null) {
-      // ignore: avoid_print
-      print('[AuthRepository] No villages in profile, fetching sub-villages via SS endpoint for SK $skId');
-      try {
-        final ssResp = await _api.dio.post(
-          Endpoints.shasthyaShebikasBySkId,
-          data: [skId], // API expects plain array of SK IDs
-          options: Options(contentType: 'application/json'),
-        );
-        // ignore: avoid_print
-        print('[AuthRepository] SS endpoint response: ${ssResp.statusCode}');
-        if (ssResp.statusCode == 200) {
-          final ssData = ssResp.data;
-          // Response: { "success": true, "data": { "87": [ { "subVillages": [...] }, ... ] } }
-          final dataMap = (ssData is Map) ? ssData['data'] : null;
-          // ignore: avoid_print
-          print('[AuthRepository] SS data keys: ${dataMap?.keys}');
-          if (dataMap is Map) {
-            for (final ssListEntry in dataMap.values) {
-              if (ssListEntry is List) {
-                for (final ss in ssListEntry) {
-                  if (ss is Map) {
-                    final svList = ss['subVillages'];
-                    if (svList is List) {
-                      for (final sv in svList) {
-                        if (sv is Map) {
-                          final svId = sv['id'];
-                          if (svId is int) subVillageIdSet.add(svId);
-                          if (svId is num) subVillageIdSet.add(svId.toInt());
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      } catch (e) {
-        // ignore: avoid_print
-        print('[AuthRepository] Failed to fetch sub-villages via SS endpoint: $e');
-      }
-    }
-
-    final subVillageIds = subVillageIdSet.toList();
-    // ignore: avoid_print
-    print('[AuthRepository] Cached sub-village IDs: $subVillageIds');
-    if (subVillageIds.isNotEmpty) {
-      await _storage.write(key: _kSubVillageIds, value: subVillageIds.join(','));
-    } else {
-      await _storage.delete(key: _kSubVillageIds);
+    // Store village IDs as the sync scope — the offline-sync endpoint takes
+    // the user's assigned village (union) IDs directly. Sub-village resolution
+    // via admin-service APIs is not available on this platform.
+    if (villageIdList.isNotEmpty) {
+      await _storage.write(key: _kSubVillageIds, value: villageIdList.join(','));
     }
   }
 
-  /// Returns the cached sub-village IDs for the logged-in user.
-  /// In dev mode, prefers the DEV_SUB_VILLAGE_IDS config if set.
-  Future<List<int>> subVillageIds() async {
-    // Dev mode: prefer config override
+  /// Returns the user's assigned village IDs from the profile.
+  /// These are sent as `villageIds` to the offline-sync endpoint.
+  Future<List<int>> villageIds() async {
     final devIds = AppConfig.devSubVillageIdList;
-    if (devIds.isNotEmpty) {
-      // ignore: avoid_print
-      print('[AuthRepository] Using dev sub-village IDs: $devIds');
-      return devIds;
-    }
-    
-    final stored = await _storage.read(key: _kSubVillageIds);
+    if (devIds.isNotEmpty) return devIds;
+    final stored = await _storage.read(key: _kVillageIds);
     if (stored == null || stored.isEmpty) return const [];
     return stored
         .split(',')
@@ -362,6 +273,10 @@ class AuthRepository {
         .whereType<int>()
         .toList();
   }
+
+  /// Returns village IDs for the logged-in user.
+  /// Delegates to [villageIds] — the platform provides village-level scoping.
+  Future<List<int>> subVillageIds() async => villageIds();
 
   static String? _extractNid(Map entity) {
     for (final k in const ['nid', 'nationalId', 'idCode', 'identifier']) {

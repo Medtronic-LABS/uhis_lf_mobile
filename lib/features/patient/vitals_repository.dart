@@ -250,38 +250,8 @@ class VitalsRepository extends ApiRepository {
     // ignore: avoid_print
     print('[VitalsRepository] Using patientRef=$patientRef');
 
-    // Try to fetch from patient vitals endpoint with different ID formats
-    await _tryFetchVitals(
-      readings,
-      {
-        'patientReference': patientRef,
-        'tenantId': api.tenantIdAsNum,
-        'skip': 0,
-        'limit': limit,
-      },
-      'Patient vitals (patientReference)',
-    );
-
-    // If no results, try with patientId directly
-    if (readings.isEmpty) {
-      // ignore: avoid_print
-      print('[VitalsRepository] No results with patientReference, trying patientId');
-      await _tryFetchVitals(
-        readings,
-        {
-          'patientId': patientId,
-          'tenantId': api.tenantIdAsNum,
-          'skip': 0,
-          'limit': limit,
-        },
-        'Patient vitals (patientId)',
-      );
-    }
-
-    // Also fetch BP logs
+    // Fetch BP and glucose logs via the correct spice-service endpoints
     await _tryFetchBpLogs(readings, patientId, patientRef, memberReference, limit);
-
-    // Fetch glucose logs for NCD patients
     await _tryFetchGlucoseLogs(readings, patientId, patientRef, memberReference, limit);
 
     // Sort all readings by date descending
@@ -340,43 +310,6 @@ class VitalsRepository extends ApiRepository {
       latestBmi: latestBmi,
       allReadings: readings,
     );
-  }
-
-  Future<void> _tryFetchVitals(
-    List<VitalReading> readings,
-    Map<String, dynamic> data,
-    String action,
-  ) async {
-    try {
-      // ignore: avoid_print
-      print('[VitalsRepository] Calling ${Endpoints.patientVitalsList} - $action');
-      print('[VitalsRepository] Request: $data');
-
-      final body = await postOk(
-        Endpoints.patientVitalsList,
-        data: data,
-        action: action,
-      );
-
-      // ignore: avoid_print
-      print('[VitalsRepository] Response body type: ${body.runtimeType}');
-      print('[VitalsRepository] Response: $body');
-
-      final list = extractList(body);
-      // ignore: avoid_print
-      print('[VitalsRepository] $action returned ${list.length} vitals');
-      for (final item in list) {
-        if (item is Map<String, dynamic>) {
-          // ignore: avoid_print
-          print('[VitalsRepository] Vital item: $item');
-          final reading = _parseVitalReading(item);
-          if (reading != null) readings.add(reading);
-        }
-      }
-    } catch (e) {
-      // ignore: avoid_print
-      print('[VitalsRepository] $action failed: $e');
-    }
   }
 
   /// Extract BP logs from the nested response structure.
