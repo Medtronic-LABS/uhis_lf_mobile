@@ -325,6 +325,18 @@ abstract final class HouseholdListStrings {
   static String membersCount(int n) => '$n members';
   static String totalMembersCount(int n) => '$n total members';
   static String acrossHouseholds(int n) => 'across $n households';
+
+  // Location / SS filter strings
+  static const String filterTitle = 'Filter';
+  static const String filterVillage = 'Village';
+  static const String filterSubVillage = 'Sub-village';
+  static const String filterSS = 'Shasthya Shebika (SS)';
+  static const String filterAllVillages = 'All Villages';
+  static const String filterAllSubVillages = 'All Sub-villages';
+  static const String filterAllSS = 'All SS';
+  static const String filterClearAll = 'Clear All';
+  static const String filterApply = 'Apply';
+  static String activeFilterCount(int n) => '$n filter${n == 1 ? '' : 's'} active';
 }
 
 /// Household detail screen strings.

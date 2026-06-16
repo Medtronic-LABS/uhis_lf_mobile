@@ -35,6 +35,7 @@ import 'core/notifications/repeat_scheduler.dart';
 import 'core/risk/risk_scoring_service.dart';
 import 'core/sla/priority_scorer.dart';
 import 'core/sla/sla_evaluator.dart';
+import 'core/auth/user_hierarchy_service.dart';
 import 'core/sync/offline_sync_service.dart';
 import 'features/dashboard/dashboard_repository.dart';
 import 'features/dashboard/mission_dashboard_repository.dart';
@@ -336,6 +337,9 @@ class _UhisNextAppState extends State<UhisNextApp>
         // AI Scribe API service
         Provider<ScribeApiService>(
             create: (_) => ScribeApiService(widget.api)),
+        // SK → SS → sub-village hierarchy (session cache, invalidated on logout)
+        ChangeNotifierProvider<UserHierarchyService>(
+            create: (_) => UserHierarchyService(widget.api, widget.authRepo)),
       ],
       child: Builder(
         builder: (context) {

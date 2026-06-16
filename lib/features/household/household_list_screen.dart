@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/theme.dart';
+import '../../core/auth/user_hierarchy_service.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/household_dao.dart';
 import '../../core/db/member_dao.dart';
@@ -52,8 +53,9 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
   final ScrollController _scrollController = ScrollController();
   late TabController _tabController;
   
-  // Filter state for members view
-  MemberFilter _filter = MemberFilter.myPatients;
+  // Filter state for members view — default to allMembers so data is visible
+  // before patient-ID cross-reference is verified against the members table.
+  MemberFilter _filter = MemberFilter.allMembers;
   Set<String> _myPatientIds = {};
   int _totalMemberCount = 0;
   int _myPatientCount = 0;
@@ -61,6 +63,11 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
   // 5-tier filter state (null = All)
   DashboardTier? _selectedTier;
   Map<String, DashboardTier>? _patientTiers;
+
+  // Location / SS filter state (null = show all)
+  String? _selectedVillageId;
+  String? _selectedSubVillageId;
+  String? _selectedShebikaId;
 
   @override
   void initState() {
@@ -106,31 +113,98 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
     final householdDao = context.read<HouseholdDao>();
     final memberDao = context.read<MemberDao>();
     final repo = context.read<DashboardRepository>();
-    
+
     setState(() {
-      // Load households first, then load filter data in parallel
-      _future = _fetchHouseholds(householdDao, memberDao, repo).then((households) async {
-        // Load filter data after households
+      _future = _fetchHouseholds(
+        householdDao,
+        memberDao,
+        repo,
+        villageId: _selectedVillageId,
+        subVillageId: _selectedSubVillageId,
+        shebikaId: _selectedShebikaId,
+      ).then((households) async {
         final patientIds = await memberDao.getMyPatientIds();
-        final totalCount = await memberDao.count();
-        
         if (mounted) {
           _myPatientIds = patientIds;
-          _myPatientCount = patientIds.length;
-          _totalMemberCount = totalCount;
+          var totalMembers = 0;
+          var myPatientMembers = 0;
+          for (final hh in households) {
+            for (final m in hh.members) {
+              totalMembers++;
+              if (patientIds.contains(m.id) ||
+                  (m.patientId != null &&
+                      patientIds.contains(m.patientId))) {
+                myPatientMembers++;
+              }
+            }
+          }
+          _myPatientCount = myPatientMembers;
+          _totalMemberCount = totalMembers;
         }
-        
         return households;
       });
     });
+  }
+
+  /// Opens the location/SS filter bottom sheet backed by the API hierarchy.
+  Future<void> _openFilterSheet() async {
+    final hierarchySvc = context.read<UserHierarchyService>();
+    // One prefetch covers villages, subVillages, and ssWorkers — single HTTP call.
+    await hierarchySvc.prefetch();
+    if (!mounted) return;
+    final villages = hierarchySvc.villages ?? const [];
+    final allSubVillages = hierarchySvc.subVillages ?? const [];
+    final ssWorkers = hierarchySvc.ssWorkers ?? const [];
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _LocationFilterSheet(
+        villages: villages
+            .map((v) => (id: v.id, name: v.name))
+            .toList(),
+        allSubVillages: allSubVillages,
+        ssWorkers: ssWorkers,
+        selectedVillageId: _selectedVillageId,
+        selectedSubVillageId: _selectedSubVillageId,
+        selectedShebikaId: _selectedShebikaId,
+        onApply: (v, sv, ss) {
+          setState(() {
+            _selectedVillageId = v;
+            _selectedSubVillageId = sv;
+            _selectedShebikaId = ss;
+          });
+          _loadData();
+        },
+      ),
+    );
   }
 
   /// Fetches households from LOCAL SQLite first (instant), falls back to API.
   Future<List<_HouseholdItem>> _fetchHouseholds(
     HouseholdDao householdDao,
     MemberDao memberDao,
-    DashboardRepository repo,
-  ) async {
+    DashboardRepository repo, {
+    String? villageId,
+    String? subVillageId,
+    String? shebikaId,
+  }) async {
+    // Resolve SS → sub-village IDs before the first await so we don't use
+    // BuildContext across an async gap.
+    List<String>? ssSubVillageIds;
+    if (shebikaId != null) {
+      final hierarchySvc = context.read<UserHierarchyService>();
+      final ssWorkers = hierarchySvc.ssWorkers ?? const [];
+      final ss = ssWorkers.where((s) => s.id == shebikaId).firstOrNull;
+      if (ss != null && ss.subVillages.isNotEmpty) {
+        ssSubVillageIds = ss.subVillages.map((sv) => sv.id).toList();
+        // ignore: avoid_print
+        print('[HouseholdList] SS $shebikaId → ${ssSubVillageIds.length} sub-villages');
+      }
+    }
+
     try {
       // Try local SQLite first (INSTANT - no network latency)
       final localHouseholds = await householdDao.getAll(limit: 1000);
@@ -140,9 +214,14 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
         // ignore: avoid_print
         print('[HouseholdList] Sample household IDs: ${localHouseholds.take(3).map((h) => h.id).toList()}');
       }
-      
-      // Get all members in ONE query - group by household
-      final membersByHousehold = await memberDao.getAllGroupedByHousehold();
+
+      // Get members grouped by household, with optional location/SS filter.
+      final membersByHousehold = await memberDao.getAllGroupedByHousehold(
+        villageId: villageId,
+        subVillageId: subVillageId,
+        shasthyaShebikaId: shebikaId,
+        subVillageIds: ssSubVillageIds,
+      );
       // ignore: avoid_print
       print('[HouseholdList] Got members grouped by ${membersByHousehold.length} households');
       // ignore: avoid_print
@@ -216,6 +295,32 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
         automaticallyImplyLeading: false,
         title: const Text('Patients'),
         actions: [
+          // Filter icon shows a badge dot when any location filter is active.
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.filter_list),
+                tooltip: HouseholdListStrings.filterTitle,
+                onPressed: _openFilterSheet,
+              ),
+              if (_selectedVillageId != null ||
+                  _selectedSubVillageId != null ||
+                  _selectedShebikaId != null)
+                Positioned(
+                  top: 10,
+                  right: 10,
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+            ],
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () => setState(_loadData),
@@ -293,11 +398,98 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
           return TabBarView(
             controller: _tabController,
             children: [
-              _buildMembersList(context, items),
-              _buildHouseholdsList(context, items),
+              Column(children: [
+                _buildActiveFilterRow(context, householdCount: items.length),
+                Expanded(child: _buildMembersList(context, items)),
+              ]),
+              Column(children: [
+                _buildActiveFilterRow(context, householdCount: items.length),
+                Expanded(child: _buildHouseholdsList(context, items)),
+              ]),
             ],
           );
         },
+      ),
+    );
+  }
+
+  /// Renders household count + dismissible chips for active location/SS filters.
+  /// Hidden when no location filters are active.
+  Widget _buildActiveFilterRow(
+    BuildContext context, {
+    required int householdCount,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    final hasLocationFilter = _selectedVillageId != null ||
+        _selectedSubVillageId != null ||
+        _selectedShebikaId != null;
+    if (!hasLocationFilter) return const SizedBox.shrink();
+
+    final chips = <Widget>[];
+
+    void addChip(String label, VoidCallback onRemove) {
+      chips.add(Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: InputChip(
+          label: Text(label, style: const TextStyle(fontSize: 12)),
+          onDeleted: onRemove,
+          deleteIconColor: scheme.onSecondaryContainer,
+          backgroundColor: scheme.secondaryContainer,
+          labelStyle: TextStyle(color: scheme.onSecondaryContainer),
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
+        ),
+      ));
+    }
+
+    if (_selectedVillageId != null) {
+      addChip('Village: $_selectedVillageId', () {
+        setState(() {
+          _selectedVillageId = null;
+          _selectedSubVillageId = null;
+          _selectedShebikaId = null;
+        });
+        _loadData();
+      });
+    }
+    if (_selectedSubVillageId != null) {
+      addChip('Sub-village: $_selectedSubVillageId', () {
+        setState(() {
+          _selectedSubVillageId = null;
+          _selectedShebikaId = null;
+        });
+        _loadData();
+      });
+    }
+    if (_selectedShebikaId != null) {
+      addChip('SS: $_selectedShebikaId', () {
+        setState(() => _selectedShebikaId = null);
+        _loadData();
+      });
+    }
+
+    return Container(
+      width: double.infinity,
+      color: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Row(
+        children: [
+          Text(
+            HouseholdListStrings.householdsCount(householdCount),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: chips),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -351,19 +543,23 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
   }
 
   void _navigateToDetail(BuildContext context, _HouseholdItem item) {
-    // Use go_router to navigate so that subsequent navigation (e.g., View Health Details)
-    // can use go_router's context properly
-    context.push('/patients/household/${item.id}', extra: item.toDetailData());
+    final id = item.id;
+    if (id == null || id.isEmpty) {
+      debugPrint('[HouseholdList] Skipping nav — household has empty ID');
+      return;
+    }
+    context.push('/patients/household/$id', extra: item.toDetailData());
   }
 
   void _navigateToMemberDetail(BuildContext context, _MemberInfo member) {
-    // Patient-scoped DAOs (PatientDao, FollowUpDao, EncounterDao) key on
-    // the national-ID-style patient_id (e.g. `0390444750015`), not the
-    // internal member.id (e.g. `1353`). Push the patientId when available
-    // so the detail screen + downstream repositories find their rows.
     final id = (member.patientId != null && member.patientId!.isNotEmpty)
         ? member.patientId!
         : member.id;
+    // Guard: id must be a non-empty, non-keyword string before navigating.
+    if (id == null || id.isEmpty || id == 'household' || id == 'households') {
+      debugPrint('[HouseholdList] Skipping nav — member has no usable ID: ${member.name}');
+      return;
+    }
     context.push(
       '/patient/$id',
       extra: {
@@ -391,21 +587,6 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
       }
     }
     
-    // Debug: log first few members and their IDs
-    // ignore: avoid_print
-    print('[HouseholdList] allMembers count: ${allMembers.length}');
-    // ignore: avoid_print
-    print('[HouseholdList] _myPatientIds count: ${_myPatientIds.length}');
-    if (allMembers.isNotEmpty) {
-      final sample = allMembers.take(3).map((m) => 'id=${m.id}, patientId=${m.patientId}').join('; ');
-      // ignore: avoid_print
-      print('[HouseholdList] Sample members: $sample');
-    }
-    if (_myPatientIds.isNotEmpty) {
-      // ignore: avoid_print
-      print('[HouseholdList] Sample patientIds: ${_myPatientIds.take(3).toList()}');
-    }
-
     // Apply filter: show only my patients or all members
     var members = _filter == MemberFilter.myPatients
         ? allMembers.where((m) => _myPatientIds.contains(m.id) || _myPatientIds.contains(m.patientId)).toList()
@@ -1186,6 +1367,240 @@ class _MemberInfo {
       householdId: member.householdId ?? household.id,
       householdName: household.name,
       householdNo: household.householdNo,
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Location / SS filter bottom sheet
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Filter sheet backed by the full static-data API hierarchy.
+///
+/// Cascade rules:
+///   SS selected    → sub-villages = that SS's nested `subVillages`
+///   Village selected (no SS) → sub-villages = top-level list filtered by villageId
+///   Neither selected → all top-level sub-villages shown
+class _LocationFilterSheet extends StatefulWidget {
+  const _LocationFilterSheet({
+    required this.villages,
+    required this.allSubVillages,
+    required this.ssWorkers,
+    required this.selectedVillageId,
+    required this.selectedSubVillageId,
+    required this.selectedShebikaId,
+    required this.onApply,
+  });
+
+  final List<({String id, String name})> villages;
+
+  /// Top-level sub-village list from the API (all assigned sub-villages).
+  /// Used for village → sub-village cascade when no SS is selected.
+  final List<SubVillageRef> allSubVillages;
+
+  final List<SsWorker> ssWorkers;
+  final String? selectedVillageId;
+  final String? selectedSubVillageId;
+  final String? selectedShebikaId;
+  final void Function(String? village, String? subVillage, String? shebika) onApply;
+
+  @override
+  State<_LocationFilterSheet> createState() => _LocationFilterSheetState();
+}
+
+class _LocationFilterSheetState extends State<_LocationFilterSheet> {
+  String? _village;
+  String? _subVillage;
+  String? _shebika;
+  List<({String id, String name})> _subVillages = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _village = widget.selectedVillageId;
+    _subVillage = widget.selectedSubVillageId;
+    _shebika = widget.selectedShebikaId;
+    _rebuildSubVillages();
+  }
+
+  List<({String id, String name})> get _shebikas =>
+      widget.ssWorkers.map((ss) => (id: ss.id, name: ss.name)).toList();
+
+  void _rebuildSubVillages() {
+    if (_shebika != null) {
+      // SS selected: use that SS's assigned sub-villages.
+      final ss = widget.ssWorkers.where((s) => s.id == _shebika).firstOrNull;
+      _subVillages = ss?.subVillages
+              .map((sv) => (id: sv.id, name: sv.name))
+              .toList() ??
+          const [];
+    } else if (_village != null) {
+      // Village selected, no SS: filter top-level sub-villages by villageId.
+      _subVillages = widget.allSubVillages
+          .where((sv) => sv.villageId == _village)
+          .map((sv) => (id: sv.id, name: sv.name))
+          .toList();
+    } else {
+      // No filter: show all top-level sub-villages.
+      _subVillages = widget.allSubVillages
+          .map((sv) => (id: sv.id, name: sv.name))
+          .toList();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + 24,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                HouseholdListStrings.filterTitle,
+                style: textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    _village = null;
+                    _subVillage = null;
+                    _shebika = null;
+                    _rebuildSubVillages();
+                  });
+                },
+                child: Text(HouseholdListStrings.filterClearAll,
+                    style: TextStyle(color: scheme.error)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Village (from API top-level villages list)
+          _FilterDropdown<String?>(
+            label: HouseholdListStrings.filterVillage,
+            value: _village,
+            items: [
+              DropdownMenuItem(
+                  value: null,
+                  child: Text(HouseholdListStrings.filterAllVillages)),
+              ...widget.villages.map((v) =>
+                  DropdownMenuItem(value: v.id, child: Text(v.name))),
+            ],
+            onChanged: (v) => setState(() {
+              _village = v;
+              _subVillage = null;
+              _shebika = null;
+              _rebuildSubVillages();
+            }),
+          ),
+          const SizedBox(height: 12),
+
+          // SS (from API shasthyaShebikas list)
+          if (_shebikas.isNotEmpty) ...[
+            _FilterDropdown<String?>(
+              label: HouseholdListStrings.filterSS,
+              value: _shebika,
+              items: [
+                DropdownMenuItem(
+                    value: null,
+                    child: Text(HouseholdListStrings.filterAllSS)),
+                ..._shebikas.map((ss) =>
+                    DropdownMenuItem(value: ss.id, child: Text(ss.name))),
+              ],
+              onChanged: (ss) => setState(() {
+                _shebika = ss;
+                _subVillage = null;
+                _rebuildSubVillages();
+              }),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // Sub-village — cascades from SS (or village if no SS selected)
+          if (_subVillages.isNotEmpty) ...[
+            _FilterDropdown<String?>(
+              label: HouseholdListStrings.filterSubVillage,
+              value: _subVillage,
+              items: [
+                DropdownMenuItem(
+                    value: null,
+                    child: Text(HouseholdListStrings.filterAllSubVillages)),
+                ..._subVillages.map((sv) =>
+                    DropdownMenuItem(value: sv.id, child: Text(sv.name))),
+              ],
+              onChanged: (sv) => setState(() => _subVillage = sv),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          const SizedBox(height: 8),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              widget.onApply(_village, _subVillage, _shebika);
+            },
+            child: Text(HouseholdListStrings.filterApply),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Labeled dropdown used in the filter sheet.
+class _FilterDropdown<T> extends StatelessWidget {
+  const _FilterDropdown({
+    required this.label,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+  });
+
+  final String label;
+  final T value;
+  final List<DropdownMenuItem<T>> items;
+  final ValueChanged<T?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: Theme.of(context)
+                .textTheme
+                .labelMedium
+                ?.copyWith(color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 4),
+        DropdownButtonFormField<T>(
+          value: value,
+          items: items,
+          onChanged: onChanged,
+          isExpanded: true,
+          decoration: InputDecoration(
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: scheme.outline),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

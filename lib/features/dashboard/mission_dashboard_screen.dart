@@ -513,8 +513,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               item: item,
                               compact: true,
                               onTap: () {
-                                if (item.patientId != null) {
-                                  context.push('/patient/${item.patientId}?origin=dashboard');
+                                final pid = item.patientId;
+                                if (pid != null && pid.isNotEmpty &&
+                                    pid != 'household' && pid != 'households') {
+                                  context.push('/patient/$pid?origin=dashboard');
                                 } else if (item.referralId != null) {
                                   context.push('/referral/${item.referralId}');
                                 }

@@ -203,6 +203,12 @@ class Endpoints {
   static const String mentalHealthConditionDetails =
       '/spice-service/mentalhealth/condition-details';
 
+  // ── Spice: static user data (SS list, sub-villages, facility hierarchy) ──
+  /// Returns MetaDataResponse including `shasthyaShebikas` (each with
+  /// nested `subVillages`) scoped to the logged-in SK. No request body needed.
+  /// Android: ApiService.getMetaDataInformation() @POST("/spice-service/static-data/user-data")
+  static const String staticUserData = '/spice-service/static-data/user-data';
+
   // ── CQL Service: risk scoring + clinical decision support ────────────────
   /// AI-powered clinical pathway suggestion. Returns candidate programmes with
   /// confidence scores and rationale for explainability.

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 
 import 'app_database.dart';
@@ -18,6 +19,10 @@ class HouseholdMemberEntity {
     this.nationalId,
     this.patientId,
     this.villageId,
+    this.villageName,
+    this.subVillageId,
+    this.subVillageName,
+    this.shasthyaShebikaId,
     this.isActive = true,
     this.isHouseholdHead = false,
     this.isPregnant = false,
@@ -47,6 +52,10 @@ class HouseholdMemberEntity {
   final String? nationalId;
   final String? patientId;
   final String? villageId;
+  final String? villageName;
+  final String? subVillageId;
+  final String? subVillageName;
+  final String? shasthyaShebikaId;
   final bool isActive;
   final bool isHouseholdHead;
   final bool isPregnant;
@@ -76,6 +85,10 @@ class HouseholdMemberEntity {
         'national_id': nationalId,
         'patient_id': patientId,
         'village_id': villageId,
+        'village_name': villageName,
+        'sub_village_id': subVillageId,
+        'sub_village_name': subVillageName,
+        'shasthya_shebika_id': shasthyaShebikaId,
         'is_active': isActive ? 1 : 0,
         'is_household_head': isHouseholdHead ? 1 : 0,
         'is_pregnant': isPregnant ? 1 : 0,
@@ -93,6 +106,47 @@ class HouseholdMemberEntity {
         'raw_json': rawJson,
       };
 
+  /// Returns a copy with location fields overridden (null means keep existing).
+  HouseholdMemberEntity copyWithVillage({
+    String? villageId,
+    String? subVillageId,
+    String? shasthyaShebikaId,
+  }) {
+    return HouseholdMemberEntity(
+      id: id,
+      fhirId: fhirId,
+      householdId: householdId,
+      householdReferenceId: householdReferenceId,
+      name: name,
+      gender: gender,
+      dob: dob,
+      phone: phone,
+      phoneNumberCategory: phoneNumberCategory,
+      nationalId: nationalId,
+      patientId: patientId,
+      villageId: villageId ?? this.villageId,
+      villageName: villageName,
+      subVillageId: subVillageId ?? this.subVillageId,
+      subVillageName: subVillageName,
+      shasthyaShebikaId: shasthyaShebikaId ?? this.shasthyaShebikaId,
+      isActive: isActive,
+      isHouseholdHead: isHouseholdHead,
+      isPregnant: isPregnant,
+      relation: relation,
+      initial: initial,
+      signature: signature,
+      localSignatureFile: localSignatureFile,
+      motherPatientId: motherPatientId,
+      motherReferenceId: motherReferenceId,
+      version: version,
+      lastUpdated: lastUpdated,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      syncStatus: syncStatus,
+      rawJson: rawJson,
+    );
+  }
+
   factory HouseholdMemberEntity.fromDb(Map<String, dynamic> row) {
     return HouseholdMemberEntity(
       id: row['id'] as String,
@@ -107,6 +161,10 @@ class HouseholdMemberEntity {
       nationalId: row['national_id'] as String?,
       patientId: row['patient_id'] as String?,
       villageId: row['village_id'] as String?,
+      villageName: row['village_name'] as String?,
+      subVillageId: row['sub_village_id'] as String?,
+      subVillageName: row['sub_village_name'] as String?,
+      shasthyaShebikaId: row['shasthya_shebika_id'] as String?,
       isActive: (row['is_active'] as int?) == 1,
       isHouseholdHead: (row['is_household_head'] as int?) == 1,
       isPregnant: (row['is_pregnant'] as int?) == 1,
@@ -179,6 +237,10 @@ class HouseholdMemberEntity {
       nationalId: str('nationalId') ?? str('national_id'),
       patientId: str('patientId') ?? str('patient_id'),
       villageId: str('villageId') ?? str('village_id'),
+      villageName: str('village') ?? str('villageName') ?? str('village_name'),
+      subVillageId: str('subVillageId') ?? str('sub_village_id'),
+      subVillageName: str('subVillage') ?? str('subVillageName') ?? str('sub_village_name'),
+      shasthyaShebikaId: str('shasthyaShebikaId') ?? str('shasthya_shebika_id'),
       isActive: json['isActive'] != false,
       isHouseholdHead: isHead,
       isPregnant: parseBool(json['isPregnant']),
@@ -293,13 +355,48 @@ class MemberDao {
     return 0;
   }
 
-  /// Get all members grouped by household ID (single query - much faster).
-  /// Returns a Map where keys are household IDs and values are lists of members.
-  Future<Map<String, List<HouseholdMemberEntity>>> getAllGroupedByHousehold() async {
+  /// Get all members grouped by household ID with optional SS/village/sub-village filters.
+  /// Returns members grouped by household_id, with optional location filters.
+  ///
+  /// village_id / sub_village_id / shasthya_shebika_id are populated by the
+  /// sync enrichment step (offline_sync_service propagates them from household
+  /// referenceId → villageId maps). Filters work correctly after the first sync
+  /// that ran with the enrichment code in place.
+  Future<Map<String, List<HouseholdMemberEntity>>> getAllGroupedByHousehold({
+    String? villageId,
+    String? subVillageId,
+    String? shasthyaShebikaId,
+    List<String>? subVillageIds, // IN clause — used for SS filter
+  }) async {
+    final whereClauses = <String>[];
+    final whereArgs = <dynamic>[];
+
+    if (villageId != null) {
+      whereClauses.add('village_id = ?');
+      whereArgs.add(villageId);
+    }
+    if (subVillageId != null) {
+      whereClauses.add('sub_village_id = ?');
+      whereArgs.add(subVillageId);
+    }
+    final effectiveSvIds =
+        subVillageIds?.isNotEmpty == true ? subVillageIds : null;
+    if (effectiveSvIds != null) {
+      final ph = List.filled(effectiveSvIds.length, '?').join(',');
+      whereClauses.add('sub_village_id IN ($ph)');
+      whereArgs.addAll(effectiveSvIds);
+    } else if (shasthyaShebikaId != null) {
+      whereClauses.add('shasthya_shebika_id = ?');
+      whereArgs.add(shasthyaShebikaId);
+    }
+
     final rows = await _db.db.query(
       AppDatabase.tableMembers,
+      where: whereClauses.isEmpty ? null : whereClauses.join(' AND '),
+      whereArgs: whereArgs.isEmpty ? null : whereArgs,
       orderBy: 'household_id, name ASC',
     );
+
     final grouped = <String, List<HouseholdMemberEntity>>{};
     for (final row in rows) {
       final member = HouseholdMemberEntity.fromDb(row);
@@ -307,6 +404,162 @@ class MemberDao {
       grouped.putIfAbsent(hhId, () => []).add(member);
     }
     return grouped;
+  }
+
+  /// Back-propagates village/sub-village to member rows that still have NULL
+  /// village_id after a previous sync that ran without the enrichment step.
+  /// [hhRefToVillage] maps household.referenceId → villageId.
+  /// [hhRefToSubVillage] maps household.referenceId → subVillageId (optional).
+  Future<void> propagateVillageFromHouseholds(
+    Map<String, String> hhRefToVillage, {
+    Map<String, String> hhRefToSubVillage = const {},
+  }) async {
+    if (hhRefToVillage.isEmpty) return;
+    final rows = await _db.db.rawQuery(
+      'SELECT id, household_id FROM ${AppDatabase.tableMembers} '
+      'WHERE village_id IS NULL AND household_id IS NOT NULL',
+    );
+    if (rows.isEmpty) return;
+    final batch = _db.db.batch();
+    int count = 0;
+    for (final row in rows) {
+      final memberId = row['id']?.toString();
+      final householdId = row['household_id']?.toString();
+      if (memberId == null || householdId == null) continue;
+      final villageId = hhRefToVillage[householdId];
+      if (villageId == null) continue;
+      final updates = <String, dynamic>{'village_id': villageId};
+      final svId = hhRefToSubVillage[householdId];
+      if (svId != null) updates['sub_village_id'] = svId;
+      batch.update(
+        AppDatabase.tableMembers,
+        updates,
+        where: 'id = ?',
+        whereArgs: [memberId],
+      );
+      count++;
+    }
+    if (count > 0) {
+      await batch.commit(noResult: true);
+      debugPrint('[MemberDao] Propagated village_id to $count member records');
+    }
+  }
+
+  /// SQL JOIN-based village propagation — derives village/sub-village directly
+  /// from the households table instead of an in-memory map.
+  /// Requires households to have village_id populated first (e.g. after
+  /// _syncHouseholdsAndMembers upserts them from the household-list API).
+  /// Works correctly because members.household_id = households.id (1152/1155
+  /// members link via this join in practice).
+  Future<void> propagateVillageFromHouseholdTable() async {
+    final db = _db.db;
+    final villageResult = await db.rawUpdate('''
+      UPDATE ${AppDatabase.tableMembers}
+      SET village_id = (
+        SELECT village_id FROM ${AppDatabase.tableHouseholds}
+        WHERE id = ${AppDatabase.tableMembers}.household_id
+        AND village_id IS NOT NULL
+      )
+      WHERE village_id IS NULL
+      AND household_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM ${AppDatabase.tableHouseholds}
+        WHERE id = ${AppDatabase.tableMembers}.household_id
+        AND village_id IS NOT NULL
+      )
+    ''');
+    final subVillageResult = await db.rawUpdate('''
+      UPDATE ${AppDatabase.tableMembers}
+      SET sub_village_id = (
+        SELECT sub_village_id FROM ${AppDatabase.tableHouseholds}
+        WHERE id = ${AppDatabase.tableMembers}.household_id
+        AND sub_village_id IS NOT NULL
+      )
+      WHERE sub_village_id IS NULL
+      AND household_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM ${AppDatabase.tableHouseholds}
+        WHERE id = ${AppDatabase.tableMembers}.household_id
+        AND sub_village_id IS NOT NULL
+      )
+    ''');
+    if (villageResult > 0 || subVillageResult > 0) {
+      debugPrint(
+        '[MemberDao] JOIN propagation: village_id→$villageResult rows, '
+        'sub_village_id→$subVillageResult rows',
+      );
+    }
+  }
+
+  /// Returns distinct (villageId, villageName) pairs for filter UI.
+  Future<List<({String id, String name})>> getDistinctVillages() async {
+    final rows = await _db.db.rawQuery('''
+      SELECT DISTINCT village_id, village_name
+      FROM ${AppDatabase.tableMembers}
+      WHERE village_id IS NOT NULL AND village_id != ''
+      ORDER BY COALESCE(village_name, village_id) ASC
+    ''');
+    return rows.map((r) {
+      final id = r['village_id'].toString();
+      final name = (r['village_name'] as String?)?.trim();
+      return (id: id, name: (name != null && name.isNotEmpty) ? name : id);
+    }).toList();
+  }
+
+  /// Returns distinct (subVillageId, subVillageName) pairs for filter UI.
+  Future<List<({String id, String name})>> getDistinctSubVillages({
+    String? villageId,
+  }) async {
+    final where = villageId != null
+        ? 'sub_village_id IS NOT NULL AND sub_village_id != \'\' AND village_id = ?'
+        : 'sub_village_id IS NOT NULL AND sub_village_id != \'\'';
+    final rows = await _db.db.rawQuery(
+      '''
+      SELECT DISTINCT sub_village_id, sub_village_name
+      FROM ${AppDatabase.tableMembers}
+      WHERE $where
+      ORDER BY COALESCE(sub_village_name, sub_village_id) ASC
+      ''',
+      villageId != null ? [villageId] : null,
+    );
+    return rows.map((r) {
+      final id = r['sub_village_id'].toString();
+      final name = (r['sub_village_name'] as String?)?.trim();
+      return (id: id, name: (name != null && name.isNotEmpty) ? name : id);
+    }).toList();
+  }
+
+  /// Returns distinct shasthyaShebikaId values (with label) for filter UI.
+  Future<List<({String id, String name})>> getDistinctShebikas({
+    String? villageId,
+    String? subVillageId,
+  }) async {
+    final whereClauses = [
+      'shasthya_shebika_id IS NOT NULL',
+      "shasthya_shebika_id != ''",
+    ];
+    final args = <dynamic>[];
+    if (villageId != null) {
+      whereClauses.add('village_id = ?');
+      args.add(villageId);
+    }
+    if (subVillageId != null) {
+      whereClauses.add('sub_village_id = ?');
+      args.add(subVillageId);
+    }
+    final rows = await _db.db.rawQuery(
+      '''
+      SELECT DISTINCT shasthya_shebika_id
+      FROM ${AppDatabase.tableMembers}
+      WHERE ${whereClauses.join(' AND ')}
+      ORDER BY shasthya_shebika_id ASC
+      ''',
+      args.isEmpty ? null : args,
+    );
+    return rows.map((r) {
+      final id = r['shasthya_shebika_id'].toString();
+      return (id: id, name: 'SS $id');
+    }).toList();
   }
 
   /// Get member counts per household (single query - for list view).
@@ -327,31 +580,36 @@ class MemberDao {
     return counts;
   }
 
-  /// Get IDs of members that are in the patients table (assigned to the SK).
-  /// Returns the set of patient IDs from the patients table.
-  /// These are "My Patients" - patients owned by the logged-in SK.
+  /// IDs assigned to this SK — from the patients table, plus member entity IDs
+  /// only when that member is linked to an assigned patient (id or patient_id match).
   Future<Set<String>> getMyPatientIds() async {
-    // Get all patient IDs from the patients table (these are the assigned patients)
-    // Also include the patient_id column for matching
-    final rows = await _db.db.rawQuery(
-        'SELECT id, patient_id FROM ${AppDatabase.tablePatients}');
-    // ignore: avoid_print
-    print('[MemberDao] getMyPatientIds raw: ${rows.take(3).toList()}');
-    
-    // Collect both id and patient_id for matching
     final ids = <String>{};
-    for (final row in rows) {
+
+    final patientRows = await _db.db.rawQuery(
+        'SELECT id, patient_id FROM ${AppDatabase.tablePatients}');
+    for (final row in patientRows) {
       final id = row['id'];
       final patientId = row['patient_id'];
       if (id != null) ids.add(id.toString());
       if (patientId != null) ids.add(patientId.toString());
     }
-    // ignore: avoid_print
-    print('[MemberDao] getMyPatientIds: ${ids.length} unique IDs');
-    if (ids.isNotEmpty) {
-      // ignore: avoid_print
-      print('[MemberDao] Sample IDs: ${ids.take(5).toList()}');
+
+    if (ids.isEmpty) return ids;
+
+    // Bridge member IDs only for rows tied to an assigned patient — not every member.
+    final placeholders = List.filled(ids.length, '?').join(',');
+    final memberRows = await _db.db.rawQuery(
+      'SELECT id, patient_id FROM ${AppDatabase.tableMembers} '
+      'WHERE id IN ($placeholders) OR patient_id IN ($placeholders)',
+      [...ids, ...ids],
+    );
+    for (final row in memberRows) {
+      final memberId = row['id'];
+      final memberPatientId = row['patient_id'];
+      if (memberId != null) ids.add(memberId.toString());
+      if (memberPatientId != null) ids.add(memberPatientId.toString());
     }
+
     return ids;
   }
 

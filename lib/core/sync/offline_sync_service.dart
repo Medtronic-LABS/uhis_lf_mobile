@@ -126,7 +126,14 @@ class OfflineSyncService extends ChangeNotifier {
     var report = SyncReport(startedAt: started, finishedAt: started)
         .copyWith(wasFullSync: fullSync);
     try {
-      final villageIds = await _auth.villageIds();
+      var villageIds = await _auth.villageIds();
+      if (villageIds.isEmpty) {
+        // Profile endpoint returned no villages (common for kakina_sk accounts
+        // whose villages come from static-data, not /user-service/user/profile).
+        // Fetch the authoritative list now and persist it so this sync — and
+        // every subsequent one — succeeds without requiring a filter-sheet open.
+        villageIds = await _fetchAndSaveVillageIds();
+      }
       if (villageIds.isEmpty) {
         _emitProgress(SyncProgress.failed('No villages assigned'));
         return report.copyWith(
@@ -223,19 +230,23 @@ class OfflineSyncService extends ChangeNotifier {
         }
       }
 
-      // Step 3: If bundle didn't have households, fetch them separately (fallback)
-      // Even if members exist, we need households for the Patients tab UI
+      // Step 3: Sync households and members from the separate household-list
+      // endpoint. This always runs on a cold sync because the bundle endpoint
+      // strips villageId / subVillageId from its household JSON, leaving
+      // members with null village_id that makes every filter return 0 rows.
+      // On warm syncs we skip it when the bundle already returned households,
+      // to avoid the extra 6-8 paginated API calls on every pull-to-refresh.
       int totalHouseholds = out.households;
       int totalMembers = out.members;
-      if (out.households == 0) {
+      if (out.households == 0 || fullSync) {
         _emitProgress(const SyncProgress(
           currentStep: SyncStep.fetchingPatients,
           entityName: 'households',
         ));
         final hhCount = await _syncHouseholdsAndMembers(villageIds: villageIds);
-        totalHouseholds = hhCount.households;
+        if (hhCount.households > 0) totalHouseholds = hhCount.households;
         // Only update members count if we didn't get any from the bundle
-        if (out.members == 0) totalMembers = hhCount.members;
+        if (out.members == 0 && hhCount.members > 0) totalMembers = hhCount.members;
       }
       
       // Step 4: Sync referrals
@@ -333,8 +344,12 @@ class OfflineSyncService extends ChangeNotifier {
   }
 
   /// Syncs households and members from spice-service to local SQLite.
-  /// This follows the Android spice-2.0 pattern: fetch all data and store locally,
-  /// all subsequent reads are from local DB for instant response.
+  ///
+  /// Fetches per static-data village so API-internal village/sub-village IDs
+  /// (which differ from the static-data IDs the filter UI uses) can be replaced
+  /// with the correct static-data IDs at storage time. Sub-village IDs are
+  /// translated via a name→static-data-ID map fetched from the same static-data
+  /// endpoint, since the two systems share names but not numeric IDs.
   Future<({int households, int members})> _syncHouseholdsAndMembers({
     required List<int> villageIds,
   }) async {
@@ -343,116 +358,270 @@ class OfflineSyncService extends ChangeNotifier {
       return (households: 0, members: 0);
     }
 
+    // Build sub-village translation tables. The household/member APIs return
+    // their own internal sub-village IDs (e.g. 26) which differ from the
+    // static-data IDs (e.g. 238) that UserHierarchyService exposes and the
+    // filter UI queries against. Two strategies:
+    //   byName — match on sub-village name (when API returns a name field)
+    //   byCode — match on static-data `code`/`referenceId` vs API's numeric ID
+    final svMapping = await _fetchSubVillageMapping();
+
     int totalHouseholds = 0;
     int totalMembers = 0;
 
     try {
-      // Fetch households with pagination
-      int skip = 0;
       const pageSize = 200;
-      final allHouseholds = <HouseholdEntity>[];
-      
-      while (true) {
-        // Use integer villageIds to match Android RequestAllEntities format
-        final body = <String, dynamic>{
-          'skip': skip,
-          'limit': pageSize,
-          'tenantId': _api.tenantIdAsNum,
-          if (villageIds.isNotEmpty) 'villageIds': villageIds,
-        };
-        
-        final resp = await _api.dio.post(
-          Endpoints.householdList,
-          data: body,
-        );
-        
-        final data = resp.data;
-        final list = _extractList(data);
-        
-        if (list.isEmpty) break;
-        
-        for (final raw in list) {
-          if (raw is! Map) continue;
-          final hh = HouseholdEntity.fromApiJson(Map<String, dynamic>.from(raw));
-          if (hh.id.isNotEmpty) allHouseholds.add(hh);
+
+      for (final staticVillageId in villageIds) {
+        final staticVillageIdStr = staticVillageId.toString();
+
+        // ── Fetch households for this static-data village ─────────────────
+        int skip = 0;
+        final batchHouseholds = <HouseholdEntity>[];
+        // household FHIR ID → translated static-data sub-village ID,
+        // for enriching members that share the same household.
+        final hhIdToStaticSvId = <String, String>{};
+
+        while (true) {
+          final body = <String, dynamic>{
+            'skip': skip,
+            'limit': pageSize,
+            'tenantId': _api.tenantIdAsNum,
+            'villageIds': [staticVillageId],
+          };
+          final resp = await _api.dio.post(Endpoints.householdList, data: body);
+          final list = _extractList(resp.data);
+          if (list.isEmpty) break;
+
+          for (final raw in list) {
+            if (raw is! Map) continue;
+            final rawMap = Map<String, dynamic>.from(raw);
+
+            // Translate sub-village: name match first, then code match.
+            final svName = _firstNonEmpty(rawMap, const ['subVillage', 'subVillageName', 'sub_village_name'])
+                ?.toLowerCase();
+            final apiSvId = _firstNonEmpty(rawMap, const ['subVillageId', 'sub_village_id']);
+            final staticSvId = (svName != null ? svMapping.byName[svName] : null)
+                ?? (apiSvId != null ? svMapping.byCode[apiSvId] : null)
+                ?? apiSvId;
+
+            // Override API-internal village ID with the static-data ID we
+            // used for the request — all returned rows belong to this village.
+            rawMap['villageId'] = staticVillageIdStr;
+            rawMap['village_id'] = staticVillageIdStr;
+
+            final hh = HouseholdEntity.fromApiJson(rawMap);
+            if (hh.id.isEmpty) continue;
+            batchHouseholds.add(hh);
+            if (staticSvId != null) hhIdToStaticSvId[hh.id] = staticSvId;
+
+            if (batchHouseholds.length == 1) {
+              debugPrint(
+                '[OfflineSyncService] Sample household: id=${hh.id} '
+                'villageId=$staticVillageIdStr apiSvId=$apiSvId svName=$svName '
+                'staticSvId=$staticSvId allKeys=${rawMap.keys.toList()}',
+              );
+            }
+          }
+
+          _emitProgress(SyncProgress(
+            currentStep: SyncStep.fetchingPatients,
+            entityName: 'households',
+            itemsDone: totalHouseholds + batchHouseholds.length,
+          ));
+
+          if (list.length < pageSize) break;
+          if (list.length > pageSize) break;
+          skip += pageSize;
         }
-        
-        _emitProgress(SyncProgress(
-          currentStep: SyncStep.fetchingPatients,
-          entityName: 'households',
-          itemsDone: allHouseholds.length,
-        ));
-        
-        // Stop if we got fewer than requested (last page)
-        if (list.length < pageSize) break;
-        // Safety: stop if server ignores pagination
-        if (list.length > pageSize) break;
-        skip += pageSize;
-      }
-      
-      // Persist households
-      await _households!.upsertMany(allHouseholds);
-      totalHouseholds = allHouseholds.length;
-      debugPrint('[OfflineSyncService] Synced $totalHouseholds households');
-      
-      // Fetch members with pagination
-      skip = 0;
-      final allMembers = <HouseholdMemberEntity>[];
-      
-      _emitProgress(SyncProgress(
-        currentStep: SyncStep.fetchingPatients,
-        entityName: 'members',
-        itemsDone: totalHouseholds,
-      ));
-      
-      while (true) {
-        // Use integer villageIds to match Android RequestAllEntities format
-        final body = <String, dynamic>{
-          'skip': skip,
-          'limit': pageSize,
-          'tenantId': _api.tenantIdAsNum,
-          if (villageIds.isNotEmpty) 'villageIds': villageIds,
-        };
-        
-        final resp = await _api.dio.post(
-          Endpoints.householdMemberList,
-          data: body,
-        );
-        
-        final data = resp.data;
-        final list = _extractList(data);
-        
-        if (list.isEmpty) break;
-        
-        for (final raw in list) {
-          if (raw is! Map) continue;
-          final m = HouseholdMemberEntity.fromApiJson(Map<String, dynamic>.from(raw));
-          if (m.id.isNotEmpty) allMembers.add(m);
-        }
-        
+
+        await _households!.upsertMany(batchHouseholds);
+        totalHouseholds += batchHouseholds.length;
+        debugPrint('[OfflineSyncService] Synced ${batchHouseholds.length} households for village $staticVillageIdStr');
+
+        // ── Fetch members for this static-data village ────────────────────
+        skip = 0;
+        final batchMembers = <HouseholdMemberEntity>[];
+
         _emitProgress(SyncProgress(
           currentStep: SyncStep.fetchingPatients,
           entityName: 'members',
-          itemsDone: allMembers.length,
+          itemsDone: totalHouseholds,
         ));
-        
-        // Stop if we got fewer than requested (last page)
-        if (list.length < pageSize) break;
-        // Safety: stop if server ignores pagination
-        if (list.length > pageSize) break;
-        skip += pageSize;
+
+        while (true) {
+          final body = <String, dynamic>{
+            'skip': skip,
+            'limit': pageSize,
+            'tenantId': _api.tenantIdAsNum,
+            'villageIds': [staticVillageId],
+          };
+          final resp = await _api.dio.post(Endpoints.householdMemberList, data: body);
+          final list = _extractList(resp.data);
+          if (list.isEmpty) break;
+
+          for (final raw in list) {
+            if (raw is! Map) continue;
+            final rawMap = Map<String, dynamic>.from(raw);
+
+            // Translate sub-village: name match, then code match, then household map.
+            final svName = _firstNonEmpty(rawMap, const ['subVillage', 'subVillageName', 'sub_village_name'])
+                ?.toLowerCase();
+            final apiSvId = _firstNonEmpty(rawMap, const ['subVillageId', 'sub_village_id']);
+            final nameOrCodeSvId = (svName != null ? svMapping.byName[svName] : null)
+                ?? (apiSvId != null ? svMapping.byCode[apiSvId] : null);
+
+            // Override API-internal village ID.
+            rawMap['villageId'] = staticVillageIdStr;
+            rawMap['village_id'] = staticVillageIdStr;
+
+            var m = HouseholdMemberEntity.fromApiJson(rawMap);
+            if (m.id.isEmpty) continue;
+
+            // Apply translated sub-village ID:
+            //   1. name/code translation (most reliable)
+            //   2. household-level translated ID (propagated from hhIdToStaticSvId)
+            //   3. raw API sub-village ID (last resort — filter won't match but at least stored)
+            final effectiveSvId = nameOrCodeSvId
+                ?? (m.householdId != null ? hhIdToStaticSvId[m.householdId!] : null)
+                ?? m.subVillageId;
+            if (effectiveSvId != m.subVillageId) {
+              m = m.copyWithVillage(subVillageId: effectiveSvId);
+            }
+
+            // Enrich shasthya_shebika_id when absent.
+            if (m.shasthyaShebikaId == null) {
+              final ssObj = raw['shasthyaShebika'];
+              final ssRaw = raw['shasthyaShebikaId']
+                  ?? (ssObj is Map ? ssObj['id'] : null)
+                  ?? raw['ssId'];
+              final ssId = ssRaw?.toString();
+              if (ssId != null && ssId.isNotEmpty) {
+                m = m.copyWithVillage(shasthyaShebikaId: ssId);
+              }
+            }
+
+            if (batchMembers.isEmpty) {
+              debugPrint(
+                '[OfflineSyncService] Sample member: id=${m.id} '
+                'villageId=${m.villageId} apiSvId=$apiSvId svName=$svName '
+                'staticSvId=${m.subVillageId} allKeys=${rawMap.keys.toList()}',
+              );
+            }
+
+            batchMembers.add(m);
+          }
+
+          _emitProgress(SyncProgress(
+            currentStep: SyncStep.fetchingPatients,
+            entityName: 'members',
+            itemsDone: totalMembers + batchMembers.length,
+          ));
+
+          if (list.length < pageSize) break;
+          if (list.length > pageSize) break;
+          skip += pageSize;
+        }
+
+        await _members!.upsertMany(batchMembers);
+        totalMembers += batchMembers.length;
+        debugPrint(
+          '[OfflineSyncService] Synced ${batchMembers.length} members for village $staticVillageIdStr '
+          '(villageId populated: ${batchMembers.where((m) => m.villageId != null).length}, '
+          'subVillageId populated: ${batchMembers.where((m) => m.subVillageId != null).length})',
+        );
       }
-      
-      // Persist members
-      await _members!.upsertMany(allMembers);
-      totalMembers = allMembers.length;
-      debugPrint('[OfflineSyncService] Synced $totalMembers members');
-      
+
+      // SQL JOIN fallback: fills village_id for any bundle-synced member rows
+      // that were not overwritten by the per-village fetch above (e.g. rows
+      // whose household FHIR IDs match households now holding the correct
+      // static-data village_id).
+      await _members!.propagateVillageFromHouseholdTable();
+
     } catch (e) {
       debugPrint('[OfflineSyncService] Household/member sync error: $e');
     }
-    
+
     return (households: totalHouseholds, members: totalMembers);
+  }
+
+  /// Returns the first non-empty string value found under [keys] in [raw].
+  static String? _firstNonEmpty(Map raw, List<String> keys) {
+    for (final k in keys) {
+      final v = raw[k];
+      if (v == null) continue;
+      final s = v.toString().trim();
+      if (s.isNotEmpty) return s;
+    }
+    return null;
+  }
+
+  /// Fetches the static-data endpoint and builds two lookup tables for
+  /// translating API-internal sub-village IDs to the static-data IDs that
+  /// UserHierarchyService exposes and the filter UI queries against.
+  ///
+  /// Returns `({byName, byCode})`:
+  ///  - `byName`: lowercased sub-village name → static-data ID
+  ///  - `byCode`: `code` / `referenceId` / any string field that may hold the
+  ///    API-internal ID → static-data ID (used when the API returns only the
+  ///    internal ID and a name field is absent)
+  Future<({Map<String, String> byName, Map<String, String> byCode})>
+      _fetchSubVillageMapping() async {
+    final byName = <String, String>{};
+    final byCode = <String, String>{};
+    try {
+      final resp = await _api.dio.post(Endpoints.staticUserData);
+      final data = resp.data;
+      Map<String, dynamic> entity;
+      if (data is Map && data['entity'] is Map) {
+        entity = Map<String, dynamic>.from(data['entity'] as Map);
+      } else if (data is Map) {
+        entity = Map<String, dynamic>.from(data);
+      } else {
+        return (byName: byName, byCode: byCode);
+      }
+      final svRaw = entity['subVillages'];
+      if (svRaw is! List) return (byName: byName, byCode: byCode);
+
+      bool loggedSample = false;
+      for (final sv in svRaw.whereType<Map>()) {
+        final id = sv['id']?.toString();
+        if (id == null || id.isEmpty) continue;
+
+        // Name map — used when household/member API returns a sub-village name.
+        final name = sv['name']?.toString().trim();
+        if (name != null && name.isNotEmpty) {
+          byName[name.toLowerCase()] = id;
+        }
+
+        // Code map — `code` often holds the API's internal numeric ID, which
+        // is a different ID space from the static-data `id`. Also try
+        // `referenceId` as an alternative cross-reference field.
+        for (final field in const ['code', 'referenceId', 'fhirId']) {
+          final v = sv[field]?.toString().trim();
+          if (v != null && v.isNotEmpty) byCode[v] = id;
+        }
+
+        // Log sample to surface available cross-reference fields.
+        if (!loggedSample) {
+          loggedSample = true;
+          final keys = sv.keys.toList();
+          debugPrint(
+            '[OfflineSyncService] Static-data sub-village sample: '
+            'id=$id name=$name code=${sv['code']} '
+            'referenceId=${sv['referenceId']} '
+            'allKeys=$keys',
+          );
+        }
+      }
+      debugPrint(
+        '[OfflineSyncService] Sub-village maps: '
+        'byName=${byName.length} byCode=${byCode.length}',
+      );
+    } catch (e) {
+      debugPrint('[OfflineSyncService] Sub-village mapping fetch failed: $e');
+    }
+    return (byName: byName, byCode: byCode);
   }
 
   Future<_PersistTotals> _persistBundle(
@@ -470,11 +639,12 @@ class OfflineSyncService extends ChangeNotifier {
       'householdList',
     ]);
     
-    // ── Members (Android: ResponseInitialDownload.members) ────────────────
+    // ── Members (Android: ResponseInitialDownload.members / householdMemberLinks) ─
     final memberNodes = _listFromAny(bundle, const [
       'members',
       'memberList',
       'householdMembers',
+      'householdMemberLinks',
     ]);
 
     // Bundle key names vary across spice / offline-service versions. Accept a
@@ -534,12 +704,33 @@ class OfflineSyncService extends ChangeNotifier {
 
     // ── Parse households from bundle (Android: ResponseInitialDownload) ────
     final households = <HouseholdEntity>[];
+
+    // Build referenceId → {villageId, subVillageId} BEFORE fromApiJson discards
+    // the referenceId field. Member.householdId references the household's
+    // referenceId (small internal ID), not the FHIR ID stored as
+    // HouseholdEntity.id. We use this map to propagate village data to members
+    // whose village_id is absent from the bundle payload.
+    final hhRefToVillage = <String, String>{};
+    final hhRefToSubVillage = <String, String>{};
+
     for (final raw in householdNodes) {
       if (raw is! Map) continue;
-      final hh = HouseholdEntity.fromApiJson(Map<String, dynamic>.from(raw));
+      final rawMap = Map<String, dynamic>.from(raw);
+      final hh = HouseholdEntity.fromApiJson(rawMap);
       if (hh.id.isNotEmpty) households.add(hh);
+
+      final ref = raw['referenceId']?.toString();
+      if (ref != null && ref.isNotEmpty) {
+        final vid = (raw['villageId'] ?? raw['village_id'])?.toString();
+        final svid = (raw['subVillageId'] ?? raw['sub_village_id'])?.toString();
+        if (vid != null && vid.isNotEmpty) hhRefToVillage[ref] = vid;
+        if (svid != null && svid.isNotEmpty) hhRefToSubVillage[ref] = svid;
+      }
     }
-    debugPrint('[OfflineSyncService] Parsed ${households.length} households from bundle');
+    debugPrint(
+      '[OfflineSyncService] Parsed ${households.length} households from bundle '
+      '(${hhRefToVillage.length} with referenceId→village mapping)',
+    );
 
     // ── Parse members from bundle (Android: ResponseInitialDownload) ────────
     // Members table stays village-wide so the household screen can render the
@@ -549,8 +740,30 @@ class OfflineSyncService extends ChangeNotifier {
     final ownedMemberIds = <String>{};
     for (final raw in memberNodes) {
       if (raw is! Map) continue;
-      final m = HouseholdMemberEntity.fromApiJson(Map<String, dynamic>.from(raw));
+      var m = HouseholdMemberEntity.fromApiJson(Map<String, dynamic>.from(raw));
       if (m.id.isEmpty) continue;
+
+      // Enrich village/sub-village from household if missing.
+      // Member.householdId = household.referenceId (the small internal ID).
+      if (m.householdId != null) {
+        final vid = m.villageId ?? hhRefToVillage[m.householdId!];
+        final svid = m.subVillageId ?? hhRefToSubVillage[m.householdId!];
+        if (vid != m.villageId || svid != m.subVillageId) {
+          m = m.copyWithVillage(villageId: vid, subVillageId: svid);
+        }
+      }
+
+      // Also try to capture shasthyaShebikaId from alternate raw key shapes.
+      if (m.shasthyaShebikaId == null) {
+        final ssRaw = raw['shasthyaShebikaId']
+            ?? raw['shasthyaShebika']?['id']
+            ?? raw['ssId'];
+        final ssId = ssRaw?.toString();
+        if (ssId != null && ssId.isNotEmpty) {
+          m = m.copyWithVillage(shasthyaShebikaId: ssId);
+        }
+      }
+
       members.add(m);
       if (ownerUserId != null) {
         final skRaw = raw['shasthyaKormiId'];
@@ -715,6 +928,22 @@ class OfflineSyncService extends ChangeNotifier {
       await _members!.upsertMany(members);
     }
 
+    // Back-propagate village data via in-memory map (handles rows saved by
+    // earlier syncs without enrichment). Idempotent — already-set rows skipped.
+    if (_members != null && hhRefToVillage.isNotEmpty) {
+      await _members!.propagateVillageFromHouseholds(
+        hhRefToVillage,
+        hhRefToSubVillage: hhRefToSubVillage,
+      );
+    }
+
+    // SQL JOIN fallback: use households.village_id (populated by the
+    // _syncHouseholdsAndMembers call that runs after _persistBundle on cold
+    // sync) to fill any remaining member rows with null village_id.
+    if (_members != null) {
+      await _members!.propagateVillageFromHouseholdTable();
+    }
+
     // Mission Dashboard side tables (schema v8). Replace-then-write so a
     // re-sync drops stale per-patient flags.
     if (_pregnancySnapshot != null) {
@@ -800,12 +1029,6 @@ class OfflineSyncService extends ChangeNotifier {
         debugPrint('[OfflineSyncService] Fetched ${referralNodes.length} referrals by villageIds');
       } catch (e) {
         debugPrint('[OfflineSyncService] Bulk referral fetch failed: $e');
-      }
-      
-      // If fhir-mapper returned empty, try direct FHIR queries
-      if (referralNodes.isEmpty) {
-        debugPrint('[OfflineSyncService] Trying direct FHIR ServiceRequest query...');
-        referralNodes = await _fetchReferralsFromFhir(villageIds);
       }
       
       if (referralNodes.isEmpty) {
@@ -1397,6 +1620,45 @@ class OfflineSyncService extends ChangeNotifier {
   }
 
   @override
+  /// Calls `POST /spice-service/static-data/user-data`, extracts village IDs,
+  /// persists them via [AuthRepository.saveLinkedVillageIds], and returns the
+  /// list. Returns an empty list if the endpoint fails or returns no villages.
+  Future<List<int>> _fetchAndSaveVillageIds() async {
+    try {
+      final resp = await _api.dio.post(Endpoints.staticUserData);
+      final data = resp.data;
+      Map<String, dynamic> entity;
+      if (data is Map && data['entity'] is Map) {
+        entity = Map<String, dynamic>.from(data['entity'] as Map);
+      } else if (data is Map) {
+        entity = Map<String, dynamic>.from(data);
+      } else {
+        return const [];
+      }
+      final villagesRaw = entity['villages'];
+      if (villagesRaw is! List) return const [];
+      final ids = villagesRaw
+          .whereType<Map>()
+          .map((m) {
+            final id = m['id'];
+            if (id is int) return id;
+            if (id is num) return id.toInt();
+            if (id is String) return int.tryParse(id);
+            return null;
+          })
+          .whereType<int>()
+          .toList();
+      if (ids.isNotEmpty) {
+        await _auth.saveLinkedVillageIds(ids);
+        debugPrint('[OfflineSyncService] Fetched ${ids.length} village IDs from static-data fallback');
+      }
+      return ids;
+    } catch (e) {
+      debugPrint('[OfflineSyncService] static-data fallback failed: $e');
+      return const [];
+    }
+  }
+
   void dispose() {
     _progressController.close();
     super.dispose();

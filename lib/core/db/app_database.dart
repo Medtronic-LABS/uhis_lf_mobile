@@ -16,7 +16,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 11;
+  static const int schemaVersion = 12;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -96,6 +96,10 @@ class AppDatabase {
         national_id TEXT,
         patient_id TEXT,
         village_id TEXT,
+        village_name TEXT,
+        sub_village_id TEXT,
+        sub_village_name TEXT,
+        shasthya_shebika_id TEXT,
         is_active INTEGER,
         is_household_head INTEGER,
         is_pregnant INTEGER,
@@ -776,6 +780,20 @@ class AppDatabase {
           'CREATE INDEX IF NOT EXISTS idx_eval_log_upload ON $tableEvalLog(upload_status)');
       await addIdx11(
           'CREATE INDEX IF NOT EXISTS idx_eval_log_captured ON $tableEvalLog(captured_at DESC)');
+    }
+    if (from < 12) {
+      // v12 — Add village name, sub-village, and Shasthya Shebika columns to
+      // members table to enable SS / village / sub-village filter UI.
+      Future<void> addCol12(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* column already present */}
+      }
+      await addCol12('ALTER TABLE $tableMembers ADD COLUMN village_name TEXT');
+      await addCol12('ALTER TABLE $tableMembers ADD COLUMN sub_village_id TEXT');
+      await addCol12('ALTER TABLE $tableMembers ADD COLUMN sub_village_name TEXT');
+      await addCol12(
+          'ALTER TABLE $tableMembers ADD COLUMN shasthya_shebika_id TEXT');
     }
   }
 

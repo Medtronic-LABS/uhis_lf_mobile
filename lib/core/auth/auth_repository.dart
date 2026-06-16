@@ -243,11 +243,12 @@ class AuthRepository {
       }
     }
     await writeOrDelete(_kWard, ward);
-    // Store village IDs as comma-separated string
+    // Store village IDs as comma-separated string.
+    // Only write when the profile carries villages — never delete, because
+    // UserHierarchyService may have already saved authoritative IDs from
+    // /spice-service/static-data/user-data and we must not clobber them.
     if (villageIdList.isNotEmpty) {
       await _storage.write(key: _kVillageIds, value: villageIdList.join(','));
-    } else {
-      await _storage.delete(key: _kVillageIds);
     }
     final upazila = _deriveUpazila(area, entityMap);
     await writeOrDelete(_kUpazila, upazila);
@@ -277,6 +278,16 @@ class AuthRepository {
   /// Returns village IDs for the logged-in user.
   /// Delegates to [villageIds] — the platform provides village-level scoping.
   Future<List<int>> subVillageIds() async => villageIds();
+
+  /// Persists LINKED_VILLAGE_IDS obtained from
+  /// `POST /spice-service/static-data/user-data`.
+  /// Overwrites the profile-derived village IDs so offline sync uses the
+  /// authoritative list from the static-data endpoint (matches Android).
+  Future<void> saveLinkedVillageIds(List<int> ids) async {
+    final joined = ids.join(',');
+    await _storage.write(key: _kVillageIds, value: joined);
+    await _storage.write(key: _kSubVillageIds, value: joined);
+  }
 
   static String? _extractNid(Map entity) {
     for (final k in const ['nid', 'nationalId', 'idCode', 'identifier']) {
