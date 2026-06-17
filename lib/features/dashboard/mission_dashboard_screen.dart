@@ -7,12 +7,15 @@ import '../../app/theme.dart';
 import '../../app/theme_provider.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
+import '../../core/auth/user_hierarchy_service.dart';
 import '../../core/constants/app_strings.dart';
-import '../../core/db/household_dao.dart';
 import '../../core/db/encounter_dao.dart';
+import '../../core/db/household_dao.dart';
 import '../../core/db/local_dashboard_repository.dart';
+import '../../core/db/member_dao.dart';
 import '../../core/models/dashboard_tier.dart';
 import '../../core/models/mission_queue_item.dart';
+import '../../core/widgets/location_filter_sheet.dart';
 import '../referral/referral_repository.dart';
 import '../search/global_search_bar.dart';
 import '../visit/visit_controller.dart';
@@ -53,9 +56,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   
   // Flag to track if data needs refresh when widget becomes visible.
   bool _pendingRefresh = false;
-  
+
   // Version counter for forcing FutureBuilder rebuilds.
   int _refreshVersion = 0;
+
+  // Location / SS filter state
+  String? _selectedVillageId;
+  String? _selectedSubVillageId;
+  String? _selectedShebikaId;
 
   @override
   void initState() {
@@ -180,7 +188,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
   
-  /// Load the mission queue excluding patients who have been visited today.
+  /// Load the mission queue excluding patients who have been visited today,
+  /// then apply any active location filter.
   Future<List<MissionQueueItem>> _loadFilteredQueue(
     MissionDashboardRepository missionRepo,
     EncounterDao encounterDao,
@@ -190,14 +199,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (mounted) {
       setState(() => _completedPatientIds = completedIds);
     }
-    
+
     // Load full queue
     final queue = await missionRepo.loadQueue(limit: 200);
-    
+
     // Filter out completed patients
-    return queue.where((item) => 
+    final withoutCompleted = queue.where((item) =>
       item.patientId == null || !completedIds.contains(item.patientId)
     ).toList();
+
+    // Apply location filter
+    // ignore: use_build_context_synchronously
+    if (!mounted) return withoutCompleted;
+    // ignore: use_build_context_synchronously
+    final locationFiltered = await _applyLocationFilter(withoutCompleted, context);
+    return locationFiltered;
   }
 
   Future<void> _refresh() async {
@@ -346,6 +362,124 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (mounted) context.push('/tasks');
   }
 
+  /// Resolved display label for the most-specific active filter, or null.
+  /// Priority: sub-village > SS > village.
+  String? _activeFilterLabel() {
+    final hierarchy = context.read<UserHierarchyService>();
+    if (_selectedSubVillageId != null) {
+      return hierarchy.subVillages
+              ?.where((sv) => sv.id == _selectedSubVillageId)
+              .firstOrNull
+              ?.name ??
+          _selectedSubVillageId;
+    }
+    if (_selectedShebikaId != null) {
+      return hierarchy.ssWorkers
+              ?.where((ss) => ss.id == _selectedShebikaId)
+              .firstOrNull
+              ?.name ??
+          _selectedShebikaId;
+    }
+    if (_selectedVillageId != null) {
+      return hierarchy.villages
+              ?.where((v) => v.id == _selectedVillageId)
+              .firstOrNull
+              ?.name ??
+          _selectedVillageId;
+    }
+    return null;
+  }
+
+  void _clearAllFilters() {
+    setState(() {
+      _selectedVillageId = null;
+      _selectedSubVillageId = null;
+      _selectedShebikaId = null;
+    });
+    _loadMissionData();
+  }
+
+  /// Opens the location/SS filter bottom sheet backed by the API hierarchy.
+  Future<void> _openFilterSheet() async {
+    final hierarchySvc = context.read<UserHierarchyService>();
+    await hierarchySvc.prefetch();
+    if (!mounted) return;
+    final villages = hierarchySvc.villages ?? const [];
+    final allSubVillages = hierarchySvc.subVillages ?? const [];
+    final ssWorkers = hierarchySvc.ssWorkers ?? const [];
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => LocationFilterSheet(
+        villages: villages.map((v) => (id: v.id, name: v.name)).toList(),
+        allSubVillages: allSubVillages,
+        ssWorkers: ssWorkers,
+        selectedVillageId: _selectedVillageId,
+        selectedSubVillageId: _selectedSubVillageId,
+        selectedShebikaId: _selectedShebikaId,
+        onApply: (v, sv, ss) {
+          setState(() {
+            _selectedVillageId = v;
+            _selectedSubVillageId = sv;
+            _selectedShebikaId = ss;
+          });
+          _loadMissionData();
+        },
+      ),
+    );
+  }
+
+  /// Applies the active location filter to a list of [MissionQueueItem].
+  /// Returns the original list unchanged when no filter is active.
+  Future<List<MissionQueueItem>> _applyLocationFilter(
+    List<MissionQueueItem> items,
+    BuildContext context,
+  ) async {
+    if (_selectedVillageId == null &&
+        _selectedSubVillageId == null &&
+        _selectedShebikaId == null) {
+      return items;
+    }
+
+    // Resolve SS → sub-village IDs before any async gap.
+    List<String>? ssSubVillageIds;
+    if (_selectedShebikaId != null) {
+      final hierarchySvc = context.read<UserHierarchyService>();
+      final ss = (hierarchySvc.ssWorkers ?? const [])
+          .where((s) => s.id == _selectedShebikaId)
+          .firstOrNull;
+      if (ss != null && ss.subVillages.isNotEmpty) {
+        ssSubVillageIds = ss.subVillages.map((sv) => sv.id).toList();
+      }
+    }
+
+    // Village filter on queue items directly (item.village = villageId after sync fix).
+    var filtered = items;
+    if (_selectedVillageId != null) {
+      filtered = filtered
+          .where((i) => i.village == _selectedVillageId)
+          .toList();
+    }
+
+    // Sub-village / SS filter via members table.
+    final subVillageIds = ssSubVillageIds ??
+        (_selectedSubVillageId != null ? [_selectedSubVillageId!] : null);
+    if (subVillageIds != null) {
+      final memberDao = context.read<MemberDao>();
+      final matchingIds =
+          await memberDao.getPatientIdsBySubVillages(subVillageIds);
+      filtered = filtered
+          .where((i) =>
+              i.patientId != null && matchingIds.contains(i.patientId))
+          .toList();
+    }
+
+    return filtered;
+  }
+
   @override
   Widget build(BuildContext context) {
     // Check if a refresh is pending (e.g., assessment completed while on another tab)
@@ -387,7 +521,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              _TodaysVisitsHeader(),
+                              _TodaysVisitsHeader(
+                                onFilter: _openFilterSheet,
+                                activeFilterLabel: _activeFilterLabel(),
+                                onClearFilter: _clearAllFilters,
+                              ),
                               const SizedBox(height: 8),
                               const Padding(
                                 padding: EdgeInsets.symmetric(vertical: 32),
@@ -402,7 +540,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              _TodaysVisitsHeader(),
+                              _TodaysVisitsHeader(
+                                onFilter: _openFilterSheet,
+                                activeFilterLabel: _activeFilterLabel(),
+                                onClearFilter: _clearAllFilters,
+                              ),
                               const SizedBox(height: 8),
                               _EmptyVisitsCard(),
                             ],
@@ -528,7 +670,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            _TodaysVisitsHeader(),
+                            _TodaysVisitsHeader(
+                                onFilter: _openFilterSheet,
+                                activeFilterLabel: _activeFilterLabel(),
+                                onClearFilter: _clearAllFilters,
+                              ),
                             const SizedBox(height: 8),
                             ...widgets,
                             if (overflow > 0)
@@ -1094,21 +1240,64 @@ class _DashboardStatCard extends StatelessWidget {
 }
 
 class _TodaysVisitsHeader extends StatelessWidget {
-  const _TodaysVisitsHeader();
+  const _TodaysVisitsHeader({
+    required this.onFilter,
+    this.activeFilterLabel,
+    this.onClearFilter,
+  });
+
+  final VoidCallback onFilter;
+
+  /// Resolved display label when a filter is active (e.g. "Dinajpur").
+  /// Null when no filter is selected — shows the placeholder chip instead.
+  final String? activeFilterLabel;
+  final VoidCallback? onClearFilter;
 
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    final scheme = Theme.of(context).colorScheme;
     final dateLabel = DateFormat('EEE d MMM').format(DateTime.now());
+    final isFiltered = activeFilterLabel != null;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Text(
-        MissionDashboardStrings.todaysVisits(dateLabel),
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w800,
-          color: tokens.brandNavy,
-        ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              MissionDashboardStrings.todaysVisits(dateLabel),
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                color: tokens.brandNavy,
+              ),
+            ),
+          ),
+          if (isFiltered)
+            InputChip(
+              label: Text(activeFilterLabel!,
+                  style: const TextStyle(fontSize: 11)),
+              onDeleted: onClearFilter,
+              onPressed: onFilter,
+              deleteIconColor: scheme.onSecondaryContainer,
+              backgroundColor: scheme.secondaryContainer,
+              labelStyle: TextStyle(color: scheme.onSecondaryContainer),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+            )
+          else
+            ActionChip(
+              avatar: Icon(Icons.filter_list_rounded,
+                  size: 14, color: scheme.onSurfaceVariant),
+              label: Text(MissionDashboardStrings.filterByLocation,
+                  style: TextStyle(
+                      fontSize: 11, color: scheme.onSurfaceVariant)),
+              onPressed: onFilter,
+              backgroundColor: scheme.surfaceContainerHighest,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+            ),
+        ],
       ),
     );
   }
