@@ -357,7 +357,7 @@ abstract final class HouseholdDetailStrings {
   static const String age = 'Age';
   static const String gender = 'Gender';
   static const String phone = 'Phone';
-  static const String notAvailable = 'Not available';
+  static const String notAvailable = 'N/A';
   static const String householdInfo = 'Household Information';
   static const String householdName = 'Household';
   static const String householdNumber = 'Household No.';
@@ -367,6 +367,13 @@ abstract final class HouseholdDetailStrings {
   static const String patientId = 'Patient ID';
   static const String showLess = 'Show less';
   static String showMore(int count) => 'Show $count more members';
+  static const String village = 'Village';
+  static const String ssName = 'Shasthya Shebika';
+  static const String lastVisitDate = 'Last Visit';
+  static const String recentService = 'Recent Service';
+  static const String recentServiceDate = 'Service Date';
+  static const String neverVisited = 'Never visited';
+  static const String noSsAssigned = 'Not assigned';
 
   static String memberDataNotLoaded(int count) =>
       'This household has $count members.\nDetailed member information will be available once data is synced.';

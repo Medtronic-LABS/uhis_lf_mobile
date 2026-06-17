@@ -161,4 +161,21 @@ class PatientDao {
       orderBy: 'name ASC',
     );
   }
+
+  /// Returns a map of patientId → last_visit_at (ms) for the given IDs.
+  Future<Map<String, int>> lastVisitAtForPatients(
+      List<String> patientIds) async {
+    if (patientIds.isEmpty) return const {};
+    final ph = List.filled(patientIds.length, '?').join(',');
+    final rows = await _db.db.rawQuery(
+      'SELECT id, last_visit_at FROM ${AppDatabase.tablePatients} '
+      'WHERE id IN ($ph) AND last_visit_at IS NOT NULL',
+      patientIds,
+    );
+    return {
+      for (final r in rows)
+        if (r['id'] != null && r['last_visit_at'] != null)
+          r['id'] as String: (r['last_visit_at'] as num).toInt(),
+    };
+  }
 }

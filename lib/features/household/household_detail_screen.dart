@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/auth/user_hierarchy_service.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/db/assessment_dao.dart';
 import '../../core/db/member_dao.dart';
+import '../../core/db/patient_dao.dart';
 import '../dashboard/dashboard_repository.dart';
 
 /// Full details of a household member for display.
@@ -21,6 +25,8 @@ class HouseholdMemberData {
     this.isPregnant = false,
     this.householdId,
     this.villageId,
+    this.recentService,
+    this.recentServiceAt,
   });
 
   final String? id;
@@ -35,6 +41,8 @@ class HouseholdMemberData {
   final bool isPregnant;
   final String? householdId;
   final String? villageId;
+  final String? recentService;
+  final DateTime? recentServiceAt;
 
   static HouseholdMemberData fromJson(Map<String, dynamic> json) {
     String? str(String k) {
@@ -96,6 +104,27 @@ class HouseholdMemberData {
     );
   }
 
+  HouseholdMemberData withService({
+    required String? recentService,
+    required DateTime? recentServiceAt,
+  }) =>
+      HouseholdMemberData(
+        id: id,
+        patientId: patientId,
+        name: name,
+        relation: relation,
+        age: age,
+        gender: gender,
+        phoneNumber: phoneNumber,
+        dateOfBirth: dateOfBirth,
+        isHead: isHead,
+        isPregnant: isPregnant,
+        householdId: householdId,
+        villageId: villageId,
+        recentService: recentService,
+        recentServiceAt: recentServiceAt,
+      );
+
   /// Creates from local SQLite HouseholdMemberEntity.
   static HouseholdMemberData fromEntity(HouseholdMemberEntity e) {
     int? age;
@@ -138,6 +167,8 @@ class HouseholdDetailData {
     this.latitude,
     this.longitude,
     this.members = const [],
+    this.ssName,
+    this.lastVisitAt,
   });
 
   final String? id;
@@ -149,6 +180,8 @@ class HouseholdDetailData {
   final double? latitude;
   final double? longitude;
   final List<HouseholdMemberData> members;
+  final String? ssName;
+  final DateTime? lastVisitAt;
 
   HouseholdMemberData? get head => members.where((m) => m.isHead).firstOrNull;
 
@@ -297,26 +330,26 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
     }
 
     try {
-      // Primary: Use local SQLite (synced members) - INSTANT, no network
       final memberDao = context.read<MemberDao>();
-      // ignore: avoid_print
-      print('[HouseholdDetail] Fetching members for household $householdId from local DB');
-      
+      final assessmentDao = context.read<AssessmentDao>();
+      final patientDao = context.read<PatientDao>();
+      final hierarchy = context.read<UserHierarchyService>();
+      await hierarchy.prefetch();
+
       final localMembers = await memberDao.getByHouseholdId(householdId);
-      // ignore: avoid_print
-      print('[HouseholdDetail] Found ${localMembers.length} members in local DB');
-      
+
       if (localMembers.isNotEmpty && mounted) {
-        // Convert local HouseholdMemberEntity to display data
-        final members = localMembers.map(HouseholdMemberData.fromEntity).toList();
-        
-        // Derive household name from head's name (same as household_list_screen)
+        final base = localMembers.map(HouseholdMemberData.fromEntity).toList();
+        final enriched = await _enrichMembers(base, assessmentDao, patientDao);
+        final ssName = _resolveSsName(
+            localMembers.first.shasthyaShebikaId, hierarchy);
+        final lastVisitAt = _householdLastVisit(enriched);
         final derivedName = _deriveHouseholdName(
           existingName: _household.name,
-          members: members,
+          members: enriched,
           householdId: householdId,
         );
-        
+        if (!mounted) return;
         setState(() {
           _household = HouseholdDetailData(
             id: _household.id,
@@ -324,10 +357,12 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
             householdNo: _household.householdNo,
             village: _household.village,
             subVillage: _household.subVillage,
-            memberCount: members.length,
+            memberCount: enriched.length,
             latitude: _household.latitude,
             longitude: _household.longitude,
-            members: members,
+            members: enriched,
+            ssName: ssName,
+            lastVisitAt: lastVisitAt,
           );
           _loadingMembers = false;
         });
@@ -336,23 +371,23 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
 
       // Fall back to API only if local cache is empty
       final repo = context.read<DashboardRepository>();
-      // ignore: avoid_print
-      print('[HouseholdDetail] Local cache empty, falling back to API for household $householdId');
-      
       final householdData = await repo.getHouseholdById(householdId);
-      
+
       if (householdData != null && mounted) {
         final updated = HouseholdDetailData.fromJson(householdData);
-        // ignore: avoid_print
-        print('[HouseholdDetail] Got ${updated.members.length} members from API');
-        
-        // Derive name from head if not available
+        final enriched =
+            await _enrichMembers(updated.members, assessmentDao, patientDao);
+        final ssName = enriched.isNotEmpty
+            ? _resolveSsName(
+                localMembers.firstOrNull?.shasthyaShebikaId, hierarchy)
+            : null;
+        final lastVisitAt = _householdLastVisit(enriched);
         final derivedName = _deriveHouseholdName(
           existingName: updated.name,
-          members: updated.members,
+          members: enriched,
           householdId: householdId,
         );
-        
+        if (!mounted) return;
         setState(() {
           _household = HouseholdDetailData(
             id: updated.id,
@@ -363,21 +398,19 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
             memberCount: updated.memberCount,
             latitude: updated.latitude,
             longitude: updated.longitude,
-            members: updated.members,
+            members: enriched,
+            ssName: ssName,
+            lastVisitAt: lastVisitAt,
           );
           _loadingMembers = false;
         });
       } else if (mounted) {
-        // ignore: avoid_print
-        print('[HouseholdDetail] No data returned for household $householdId');
         setState(() {
           _loadError = 'No members found';
           _loadingMembers = false;
         });
       }
     } catch (e) {
-      // ignore: avoid_print
-      print('[HouseholdDetail] Error fetching household: $e');
       if (mounted) {
         setState(() {
           _loadError = e.toString();
@@ -387,13 +420,59 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
     }
   }
 
+  /// Enriches members with most-recent assessment kind + date from local DB.
+  Future<List<HouseholdMemberData>> _enrichMembers(
+    List<HouseholdMemberData> members,
+    AssessmentDao assessmentDao,
+    PatientDao patientDao,
+  ) async {
+    final patientIds =
+        members.map((m) => m.patientId).whereType<String>().toList();
+    if (patientIds.isEmpty) return members;
+
+    final assessments = await assessmentDao.forMany(patientIds);
+    final lastVisits = await patientDao.lastVisitAtForPatients(patientIds);
+
+    return members.map((m) {
+      final pid = m.patientId;
+      if (pid == null) return m;
+      final latestAssessment = assessments[pid]?.first;
+      final lastVisitMs = lastVisits[pid];
+      final serviceAt = latestAssessment?.occurredAt != null
+          ? DateTime.fromMillisecondsSinceEpoch(latestAssessment!.occurredAt!)
+          : (lastVisitMs != null
+              ? DateTime.fromMillisecondsSinceEpoch(lastVisitMs)
+              : null);
+      return m.withService(
+        recentService: latestAssessment?.kind,
+        recentServiceAt: serviceAt,
+      );
+    }).toList();
+  }
+
+  String? _resolveSsName(String? shebikaId, UserHierarchyService hierarchy) {
+    if (shebikaId == null) return null;
+    return hierarchy.ssWorkers
+        ?.where((ss) => ss.id == shebikaId)
+        .firstOrNull
+        ?.name;
+  }
+
+  DateTime? _householdLastVisit(List<HouseholdMemberData> members) {
+    DateTime? latest;
+    for (final m in members) {
+      final d = m.recentServiceAt;
+      if (d != null && (latest == null || d.isAfter(latest))) latest = d;
+    }
+    return latest;
+  }
+
   HouseholdDetailData get household => _household;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
-    final head = household.head;
 
     return Scaffold(
       appBar: AppBar(
@@ -418,149 +497,40 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 28,
-                        backgroundColor: scheme.tertiaryContainer,
-                        child: Icon(
-                          Icons.home_work_outlined,
-                          size: 28,
-                          color: scheme.onTertiaryContainer,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              household.name ??
-                                  HouseholdDetailStrings.unnamedHousehold,
-                              style: textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: scheme.onSurface,
-                              ),
-                            ),
-                            if (household.householdNo != null)
-                              Text(
-                                household.householdNo!,
-                                style: textTheme.bodyMedium?.copyWith(
-                                  color: scheme.onSurfaceVariant,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  const Divider(),
-                  const SizedBox(height: 8),
                   _InfoRow(
-                    icon: Icons.people_alt_outlined,
-                    label: HouseholdDetailStrings.members,
-                    value: '${household.memberCount ?? 0}',
+                    icon: Icons.tag_outlined,
+                    label: HouseholdDetailStrings.householdNumber,
+                    value: household.householdNo ??
+                        HouseholdDetailStrings.notAvailable,
                     color: scheme.primary,
                   ),
-                  if (household.village != null || household.subVillage != null)
-                    _InfoRow(
-                      icon: Icons.location_on_outlined,
-                      label: HouseholdDetailStrings.location,
-                      value: [household.subVillage, household.village]
-                          .where((s) => s != null && s.isNotEmpty)
-                          .join(', '),
-                      color: scheme.secondary,
-                    ),
-                  if (household.latitude != null && household.longitude != null)
-                    _InfoRow(
-                      icon: Icons.my_location_outlined,
-                      label: HouseholdDetailStrings.coordinates,
-                      value:
-                          '${household.latitude!.toStringAsFixed(4)}, ${household.longitude!.toStringAsFixed(4)}',
-                      color: scheme.tertiary,
-                    ),
+                  _InfoRow(
+                    icon: Icons.location_on_outlined,
+                    label: HouseholdDetailStrings.village,
+                    value: household.village ??
+                        HouseholdDetailStrings.notAvailable,
+                    color: scheme.secondary,
+                  ),
+                  _InfoRow(
+                    icon: Icons.person_pin_outlined,
+                    label: HouseholdDetailStrings.ssName,
+                    value: household.ssName ??
+                        HouseholdDetailStrings.noSsAssigned,
+                    color: scheme.tertiary,
+                  ),
+                  _InfoRow(
+                    icon: Icons.calendar_today_outlined,
+                    label: HouseholdDetailStrings.lastVisitDate,
+                    value: household.lastVisitAt != null
+                        ? DateFormat('d MMM yyyy').format(household.lastVisitAt!)
+                        : HouseholdDetailStrings.neverVisited,
+                    color: scheme.primary,
+                  ),
                 ],
               ),
             ),
 
-            // Household Head section
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                HouseholdDetailStrings.householdHead,
-                style: textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: scheme.onSurface,
-                ),
-              ),
-            ),
             const SizedBox(height: 8),
-            if (_loadingMembers)
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: scheme.outlineVariant,
-                    width: 1,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Loading…',
-                        style: TextStyle(color: scheme.outline),
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            else if (head != null)
-              _MemberCard(
-                member: head,
-                isHead: true,
-                onTap: () => _showMemberDetail(context, head),
-              )
-            else
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: scheme.outlineVariant,
-                    width: 1,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.person_off_outlined,
-                      color: scheme.outline,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        HouseholdDetailStrings.noHeadInfo,
-                        style: TextStyle(color: scheme.outline),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-            const SizedBox(height: 24),
 
             // Members section
             Padding(
@@ -698,10 +668,8 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
                 final cappedMembers = allMembers.length > actualMemberCount 
                     ? allMembers.take(actualMemberCount).toList() 
                     : allMembers;
-                final nonHeadMembers = cappedMembers.where((m) => !m.isHead).toList();
-                
                 return [
-                  ...nonHeadMembers.map((m) => _MemberCard(
+                  ...cappedMembers.map((m) => _MemberCard(
                     member: m,
                     onTap: () => _showMemberDetail(context, m),
                   )),
@@ -786,23 +754,30 @@ class _InfoRow extends StatelessWidget {
 class _MemberCard extends StatelessWidget {
   const _MemberCard({
     required this.member,
-    this.isHead = false,
     this.onTap,
   });
 
   final HouseholdMemberData member;
-  final bool isHead;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+
+    // Age · Gender summary line
+    final ageParts = <String>[
+      if (member.age != null) '${member.age} yrs',
+      if (member.gender != null) member.gender!,
+    ];
+
+    final serviceDate = member.recentServiceAt != null
+        ? DateFormat('d MMM yyyy').format(member.recentServiceAt!)
+        : null;
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Material(
-        color: isHead
-            ? scheme.primaryContainer
-            : scheme.surfaceContainerLow,
+        color: scheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           onTap: onTap,
@@ -810,14 +785,13 @@ class _MemberCard extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 CircleAvatar(
-                  backgroundColor:
-                      isHead ? scheme.primary : scheme.secondaryContainer,
+                  backgroundColor: scheme.secondaryContainer,
                   child: Icon(
-                    isHead ? Icons.star : Icons.person_outline,
-                    color:
-                        isHead ? scheme.onPrimary : scheme.onSecondaryContainer,
+                    Icons.person_outline,
+                    color: scheme.onSecondaryContainer,
                     size: 20,
                   ),
                 ),
@@ -826,89 +800,57 @@ class _MemberCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              member.name ?? HouseholdDetailStrings.unnamed,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: isHead ? scheme.onPrimaryContainer : scheme.onSurface,
-                              ),
-                            ),
+                      Text(
+                        member.name ?? HouseholdDetailStrings.unnamed,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: scheme.onSurface,
+                        ),
+                      ),
+                      if (ageParts.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          ageParts.join(' · '),
+                          style: TextStyle(
+                            color: scheme.onSurfaceVariant,
+                            fontSize: 12,
                           ),
-                          if (isHead)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: scheme.primary,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                HouseholdDetailStrings.head,
-                                style: TextStyle(
-                                  color: scheme.onPrimary,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          if (member.relation != null && !isHead)
-                            Text(
-                              member.relation!,
-                              style: TextStyle(
-                                color: scheme.onSurfaceVariant,
-                                fontSize: 12,
-                              ),
-                            ),
-                          if (member.age != null) ...[
-                            if (member.relation != null && !isHead)
-                              Text(
-                                ' • ',
-                                style: TextStyle(
-                                  color: scheme.outline,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            Text(
-                              '${member.age} yrs',
-                              style: TextStyle(
-                                color: scheme.onSurfaceVariant,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                          if (member.gender != null) ...[
-                            Text(
-                              ' • ',
-                              style: TextStyle(
-                                color: scheme.outline,
-                                fontSize: 12,
-                              ),
-                            ),
-                            Text(
-                              member.gender!,
-                              style: TextStyle(
-                                color: scheme.onSurfaceVariant,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
+                        ),
+                      ],
+                      if (member.recentService != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          '${HouseholdDetailStrings.recentService}: ${member.recentService!}',
+                          style: TextStyle(
+                            color: scheme.onSurfaceVariant,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                      if (serviceDate != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          '${HouseholdDetailStrings.recentServiceDate}: $serviceDate',
+                          style: TextStyle(
+                            color: scheme.onSurfaceVariant,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                      if (member.patientId != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          '${HouseholdDetailStrings.patientId}: ${member.patientId!}',
+                          style: TextStyle(
+                            color: scheme.outline,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
-                Icon(
-                  Icons.chevron_right,
-                  color: scheme.outline,
-                ),
+                Icon(Icons.chevron_right, color: scheme.outline),
               ],
             ),
           ),
