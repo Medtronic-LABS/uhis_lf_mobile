@@ -390,6 +390,18 @@ class MemberDao {
       whereArgs.add(shasthyaShebikaId);
     }
 
+    if (whereClauses.isNotEmpty) {
+      final sample = await _db.db.rawQuery('''
+        SELECT DISTINCT village_id, sub_village_id, shasthya_shebika_id
+        FROM ${AppDatabase.tableMembers}
+        WHERE village_id IS NOT NULL OR sub_village_id IS NOT NULL OR shasthya_shebika_id IS NOT NULL
+        LIMIT 5
+      ''');
+      debugPrint('[MemberDao] Filter args: villageId=$villageId subVillageId=$subVillageId '
+          'shebikaId=$shasthyaShebikaId subVillageIds=$subVillageIds');
+      debugPrint('[MemberDao] DB sample (village/subVillage/shebika): $sample');
+    }
+
     final rows = await _db.db.query(
       AppDatabase.tableMembers,
       where: whereClauses.isEmpty ? null : whereClauses.join(' AND '),
@@ -453,6 +465,9 @@ class MemberDao {
   /// members link via this join in practice).
   Future<void> propagateVillageFromHouseholdTable() async {
     final db = _db.db;
+    // No village_id IS NULL guard — bundle sets API-internal IDs (e.g. 5);
+    // household table has static-data IDs (e.g. 26) after _syncHouseholdsAndMembers.
+    // Unconditional overwrite ensures filter-correct IDs win.
     final villageResult = await db.rawUpdate('''
       UPDATE ${AppDatabase.tableMembers}
       SET village_id = (
@@ -460,35 +475,32 @@ class MemberDao {
         WHERE id = ${AppDatabase.tableMembers}.household_id
         AND village_id IS NOT NULL
       )
-      WHERE village_id IS NULL
-      AND household_id IS NOT NULL
+      WHERE household_id IS NOT NULL
       AND EXISTS (
         SELECT 1 FROM ${AppDatabase.tableHouseholds}
         WHERE id = ${AppDatabase.tableMembers}.household_id
         AND village_id IS NOT NULL
       )
     ''');
-    final subVillageResult = await db.rawUpdate('''
-      UPDATE ${AppDatabase.tableMembers}
-      SET sub_village_id = (
-        SELECT sub_village_id FROM ${AppDatabase.tableHouseholds}
-        WHERE id = ${AppDatabase.tableMembers}.household_id
-        AND sub_village_id IS NOT NULL
-      )
-      WHERE sub_village_id IS NULL
-      AND household_id IS NOT NULL
-      AND EXISTS (
-        SELECT 1 FROM ${AppDatabase.tableHouseholds}
-        WHERE id = ${AppDatabase.tableMembers}.household_id
-        AND sub_village_id IS NOT NULL
-      )
-    ''');
-    if (villageResult > 0 || subVillageResult > 0) {
-      debugPrint(
-        '[MemberDao] JOIN propagation: village_id→$villageResult rows, '
-        'sub_village_id→$subVillageResult rows',
+    if (villageResult > 0) {
+      debugPrint('[MemberDao] JOIN propagation: village_id→$villageResult rows');
+    }
+  }
+
+  /// Propagates static-data sub_village_id to ALL member rows in each
+  /// household (including bundle-synced rows whose IDs differ from the
+  /// household/member list rows). Call after upsertMany in _syncHouseholdsAndMembers.
+  Future<void> propagateSubVillageFromMap(Map<String, String> hhIdToSvId) async {
+    if (hhIdToSvId.isEmpty) return;
+    final batch = _db.db.batch();
+    for (final entry in hhIdToSvId.entries) {
+      batch.rawUpdate(
+        'UPDATE ${AppDatabase.tableMembers} SET sub_village_id = ? WHERE household_id = ?',
+        [entry.value, entry.key],
       );
     }
+    await batch.commit(noResult: true);
+    debugPrint('[MemberDao] propagateSubVillageFromMap: ${hhIdToSvId.length} household groups updated');
   }
 
   /// Returns distinct (villageId, villageName) pairs for filter UI.
@@ -580,6 +592,24 @@ class MemberDao {
     return counts;
   }
 
+  /// Returns all member/patient IDs whose sub_village_id is in [subVillageIds].
+  Future<Set<String>> getPatientIdsBySubVillages(List<String> subVillageIds) async {
+    if (subVillageIds.isEmpty) return const {};
+    final ph = List.filled(subVillageIds.length, '?').join(',');
+    final rows = await _db.db.rawQuery(
+      'SELECT id, patient_id FROM ${AppDatabase.tableMembers} WHERE sub_village_id IN ($ph)',
+      subVillageIds,
+    );
+    final ids = <String>{};
+    for (final row in rows) {
+      final id = row['id'];
+      final patientId = row['patient_id'];
+      if (id != null) ids.add(id.toString());
+      if (patientId != null) ids.add(patientId.toString());
+    }
+    return ids;
+  }
+
   /// IDs assigned to this SK — from the patients table, plus member entity IDs
   /// only when that member is linked to an assigned patient (id or patient_id match).
   Future<Set<String>> getMyPatientIds() async {
@@ -622,6 +652,18 @@ class MemberDao {
     if (c is int) return c;
     if (c is num) return c.toInt();
     return 0;
+  }
+
+  /// Sets village_id on ALL member rows. Called after bundle persist when the
+  /// bundle returns API-internal village IDs (e.g. 5) but the sync was
+  /// triggered with the static-data village ID (e.g. 26). Single-village syncs
+  /// guarantee every member row belongs to that village.
+  Future<void> setVillageIdForAll(String villageId) async {
+    final count = await _db.db.rawUpdate(
+      'UPDATE ${AppDatabase.tableMembers} SET village_id = ?',
+      [villageId],
+    );
+    debugPrint('[MemberDao] setVillageIdForAll: $count rows → village_id=$villageId');
   }
 
   /// Delete all members (used before full sync).

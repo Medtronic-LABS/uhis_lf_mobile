@@ -196,6 +196,14 @@ class OfflineSyncService extends ChangeNotifier {
         'assessments=${out.assessments}',
       );
 
+      // Bundle returns API-internal village IDs (e.g. 5) but the request used
+      // static-data IDs (e.g. 26). When there is exactly one village, every
+      // member row belongs to that village — stamp it unconditionally so filters
+      // using static-data IDs find the rows.
+      if (villageIds.length == 1 && _members != null) {
+        await _members!.setVillageIdForAll(villageIds.first.toString());
+      }
+
       // Step 2b: Bundle parsed zero patients — try the granular
       // /spice-service/patient/offline/list path (Android fallback shape)
       // before giving up. Aggregate sometimes returns metadata-only payloads
@@ -530,12 +538,18 @@ class OfflineSyncService extends ChangeNotifier {
           '(villageId populated: ${batchMembers.where((m) => m.villageId != null).length}, '
           'subVillageId populated: ${batchMembers.where((m) => m.subVillageId != null).length})',
         );
+
+        // Push translated sub_village_id to ALL members in these households —
+        // including bundle-synced rows whose primary keys differ from the
+        // household/member list rows (so upsertMany alone can't reach them).
+        if (hhIdToStaticSvId.isNotEmpty) {
+          await _members!.propagateSubVillageFromMap(hhIdToStaticSvId);
+        }
       }
 
-      // SQL JOIN fallback: fills village_id for any bundle-synced member rows
-      // that were not overwritten by the per-village fetch above (e.g. rows
-      // whose household FHIR IDs match households now holding the correct
-      // static-data village_id).
+      // SQL JOIN: overwrites bundle's API-internal village_id (e.g. 5) with
+      // the static-data village_id (e.g. 26) now held by the households table.
+      // No IS NULL guard — unconditional so bundle rows are always corrected.
       await _members!.propagateVillageFromHouseholdTable();
 
     } catch (e) {
@@ -583,7 +597,7 @@ class OfflineSyncService extends ChangeNotifier {
       final svRaw = entity['subVillages'];
       if (svRaw is! List) return (byName: byName, byCode: byCode);
 
-      bool loggedSample = false;
+      int loggedSample = 0;
       for (final sv in svRaw.whereType<Map>()) {
         final id = sv['id']?.toString();
         if (id == null || id.isEmpty) continue;
@@ -602,15 +616,13 @@ class OfflineSyncService extends ChangeNotifier {
           if (v != null && v.isNotEmpty) byCode[v] = id;
         }
 
-        // Log sample to surface available cross-reference fields.
-        if (!loggedSample) {
-          loggedSample = true;
-          final keys = sv.keys.toList();
+        // Log first 3 samples — surface every cross-reference field available.
+        if (loggedSample < 3) {
+          loggedSample++;
           debugPrint(
-            '[OfflineSyncService] Static-data sub-village sample: '
-            'id=$id name=$name code=${sv['code']} '
-            'referenceId=${sv['referenceId']} '
-            'allKeys=$keys',
+            '[OfflineSyncService] Static-data SV sample #$loggedSample: '
+            'id=$id name=$name code=${sv['code']} referenceId=${sv['referenceId']} '
+            'fhirId=${sv['fhirId']} allFields=${Map.fromEntries(sv.entries.map((e) => MapEntry(e.key, e.value?.toString())))}',
           );
         }
       }
