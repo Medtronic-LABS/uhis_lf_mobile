@@ -12,8 +12,8 @@ import '../../../core/api/scribe_api_service.dart' show ScribeMode;
 import '../../scribe/scribe_controller.dart';
 import '../../scribe/scribe_session.dart';
 import '../pathway/pathway_engine.dart';
-import '../pathway/pathway_review_sheet.dart';
 import 'patient_context_builder.dart';
+import 'visit_step_header.dart';
 import 'triage_view_model.dart';
 import 'unified_symptom_catalog.dart';
 
@@ -22,8 +22,8 @@ import 'unified_symptom_catalog.dart';
 /// This is a routed screen that:
 /// 1. Builds PatientContext from local DB
 /// 2. Shows symptom picker
-/// 3. Shows PathwayReviewSheet on continue
-/// 4. Navigates to visit form with activated pathways
+/// 3. Navigates to TriageResultScreen (Step 2) with activated pathways
+/// 4. TriageResultScreen navigates to visit form (Step 3)
 class SymptomPickerScreen extends StatefulWidget {
   const SymptomPickerScreen({
     super.key,
@@ -105,7 +105,10 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
 
       final ctx = await builder.build(patientId);
       debugPrint('[SymptomPicker] PatientContext built: ${ctx != null}');
-      
+      if (ctx != null) {
+        debugPrint('[SymptomPicker] PatientContext: age=${ctx.ageMonths}mo, sex=${ctx.sex.name}, pregnant=${ctx.isPregnant}, programmes=${ctx.activeProgrammes.map((p) => p.name).join(',')}');
+      }
+
       if (!mounted) return;
       
       if (ctx == null) {
@@ -145,23 +148,24 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     final vm = _viewModel;
     if (vm == null || _patientContext == null) return;
 
-    // Show pathway review sheet
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (sheetContext) => PathwayReviewSheet(
-        patientName: '', // We don't have the name here, but it's for display
-        activatedPathways: vm.activatedPathways,
-        selectedSymptoms: vm.selectedSymptoms,
-        onConfirm: (pathways, skipped) {
-          Navigator.of(sheetContext).pop();
-          _navigateToForm(pathways);
-        },
-        onSkip: (pathway) {
-          // Skip handling is done internally by the sheet
-        },
-      ),
+    debugPrint('[SymptomPicker] Continue tapped — ${vm.activatedPathways.length} pathways: ${vm.activatedPathways.map((p) => p.programme.name).join(', ')}');
+
+    if (vm.activatedPathways.isEmpty) {
+      // No pathways — go straight to form (routine visit).
+      _navigateToForm([]);
+      return;
+    }
+
+    context.go(
+      '/patients/visit/${widget.encounterId}/triage-result',
+      extra: {
+        'patientId': widget.patientId,
+        'memberId': widget.memberId,
+        'householdId': widget.householdId,
+        'patientAge': widget.patientAge,
+        'patientLabel': 'Visit',
+        'pathwayObjects': vm.activatedPathways,
+      },
     );
   }
 
@@ -251,8 +255,10 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     return ChangeNotifierProvider<TriageViewModel>.value(
       value: _viewModel!,
       child: Scaffold(
-        appBar: AppBar(
-          title: Text(TriageStrings.pickerTitle),
+        appBar: VisitStepHeader(
+          step: VisitStep.symptomPicker,
+          patientLabel: TriageStrings.pickerTitle,
+          onBack: () => context.pop(),
         ),
         floatingActionButton: AppConfig.scribeEnabled
             ? _ScribeTriageFab(
@@ -263,42 +269,60 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
             : null,
         body: Consumer<TriageViewModel>(
           builder: (context, vm, _) {
-            return Column(
-              children: [
-                // Header
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        TriageStrings.pickerSubtitle,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
+            final clusters = vm.symptomsByCluster;
+            return CustomScrollView(
+              slivers: [
+                // Subtitle header
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                    child: Text(
+                      TriageStrings.pickerSubtitle,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
                       ),
-                    ],
+                    ),
                   ),
                 ),
 
-                // Symptom clusters - always expanded with big icons
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: vm.symptomsByCluster.length,
-                    itemBuilder: (context, index) {
-                      final cluster = vm.symptomsByCluster.keys.elementAt(index);
-                      final symptoms = vm.symptomsByCluster[cluster]!;
-                      final isDangerSigns = cluster == SymptomCluster.dangerSigns;
+                // Gap 1 — Before you knock · AI brief (collapsible)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: _BeforeYouKnockCard(
+                      patientContext: _patientContext!,
+                    ),
+                  ),
+                ),
 
-                      return _buildClusterSection(
+                // Gap 2 — SK asks the family opener card
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                    child: const _SkAsksCard(),
+                  ),
+                ),
+
+                // Symptom clusters
+                for (final entry in clusters.entries)
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    sliver: SliverToBoxAdapter(
+                      child: _buildClusterSection(
                         context,
-                        cluster: cluster,
-                        symptoms: symptoms,
-                        isDangerSigns: isDangerSigns,
+                        cluster: entry.key,
+                        symptoms: entry.value,
+                        isDangerSigns: entry.key == SymptomCluster.dangerSigns,
                         vm: vm,
-                      );
-                    },
+                      ),
+                    ),
+                  ),
+
+                // Gap 3 — Duration picker (below clusters)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                    child: _DurationPicker(vm: vm),
                   ),
                 ),
               ],
@@ -328,31 +352,14 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                       width: double.infinity,
                       child: FilledButton(
                         onPressed: _onContinue,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Text(TriageStrings.continueButton),
-                            if (vm.activatedPathways.isNotEmpty) ...[
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: theme.colorScheme.onPrimary
-                                      .withValues(alpha: 0.2),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  '${vm.activatedPathways.length}',
-                                  style: TextStyle(
-                                    color: theme.colorScheme.onPrimary,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFFE8356D),
+                          foregroundColor: Colors.white,
+                        ),
+                        child: Text(
+                          vm.activatedPathways.isNotEmpty
+                              ? SymptomPickerStrings.ctaWithPathways
+                              : SymptomPickerStrings.ctaRoutine,
                         ),
                       ),
                     ),
@@ -408,10 +415,10 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
+            crossAxisCount: 2,
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
-            childAspectRatio: 0.85,
+            childAspectRatio: 0.8,
           ),
           itemCount: symptoms.length,
           itemBuilder: (context, index) {
@@ -645,6 +652,356 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   }
 }
 
+// ── Gap 1: Before you knock · AI brief card ───────────────────────────────────
+
+/// Collapsible card showing contextual patient brief derived from
+/// [PatientContext]. Starts collapsed; tapping the header toggles expansion.
+class _BeforeYouKnockCard extends StatefulWidget {
+  const _BeforeYouKnockCard({required this.patientContext});
+
+  final PatientContext patientContext;
+
+  @override
+  State<_BeforeYouKnockCard> createState() => _BeforeYouKnockCardState();
+}
+
+class _BeforeYouKnockCardState extends State<_BeforeYouKnockCard> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final ctx = widget.patientContext;
+
+    // Build chips from patient context flags
+    final chips = <_ContextChip>[];
+    if (ctx.isPregnant) {
+      chips.add(_ContextChip(
+        label: SymptomPickerStrings.chipPregnant,
+        color: const Color(0xFFF59E0B),
+        textColor: Colors.white,
+      ));
+    }
+    if (ctx.hasKnownHypertension) {
+      chips.add(_ContextChip(
+        label: SymptomPickerStrings.chipHtn,
+        color: const Color(0xFFEF4444),
+        textColor: Colors.white,
+      ));
+    }
+    if (ctx.hasKnownDiabetes) {
+      chips.add(_ContextChip(
+        label: SymptomPickerStrings.chipDm,
+        color: const Color(0xFF3B82F6),
+        textColor: Colors.white,
+      ));
+    }
+    if (ctx.isTbScreenDue) {
+      chips.add(_ContextChip(
+        label: SymptomPickerStrings.chipTbDue,
+        color: const Color(0xFF22C55E),
+        textColor: Colors.white,
+      ));
+    }
+    if (ctx.isUnder5) {
+      chips.add(_ContextChip(
+        label: SymptomPickerStrings.chipUnder5,
+        color: const Color(0xFF14B8A6),
+        textColor: Colors.white,
+      ));
+    }
+    if (chips.isEmpty) {
+      chips.add(_ContextChip(
+        label: SymptomPickerStrings.chipRoutine,
+        color: const Color(0xFF9CA3AF),
+        textColor: Colors.white,
+      ));
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row — always visible
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            borderRadius: BorderRadius.circular(14),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              child: Row(
+                children: [
+                  // Navy rounded icon box
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1B2B5E),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Icon(
+                      Icons.auto_awesome,
+                      size: 16,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      SymptomPickerStrings.briefCardTitle,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: Color(0xFF1B2B5E),
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    _expanded
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
+                    color: const Color(0xFF6B7280),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Expanded content — chips
+          if (_expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: chips
+                    .map((c) => _ContextChipWidget(chip: c))
+                    .toList(),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Data holder for a patient-context chip.
+class _ContextChip {
+  const _ContextChip({
+    required this.label,
+    required this.color,
+    required this.textColor,
+  });
+
+  final String label;
+  final Color color;
+  final Color textColor;
+}
+
+/// Renders a single patient-context chip.
+class _ContextChipWidget extends StatelessWidget {
+  const _ContextChipWidget({required this.chip});
+
+  final _ContextChip chip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: chip.color,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        chip.label,
+        style: TextStyle(
+          color: chip.textColor,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Gap 2: SK asks the family opener card ─────────────────────────────────────
+
+/// Always-visible gradient card with the SK opener phrase.
+class _SkAsksCard extends StatelessWidget {
+  const _SkAsksCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFEFF6FF), Color(0xFFDBEAFE)],
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF93C5FD)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            SymptomPickerStrings.skAsksLabel,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1E40AF),
+              letterSpacing: 0.06,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            SymptomPickerStrings.skOpenerPhrase,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1E3A8A),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Gap 3: Duration picker ────────────────────────────────────────────────────
+
+/// Three-option duration selector rendered below the symptom clusters.
+///
+/// Stores selection via [TriageViewModel.setDuration].
+class _DurationPicker extends StatelessWidget {
+  const _DurationPicker({required this.vm});
+
+  final TriageViewModel vm;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D000000),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            SymptomPickerStrings.durationTitle,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1B2B5E),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _DurationButton(
+                  label: SymptomPickerStrings.duration1Day,
+                  value: SymptomPickerStrings.durationValue1,
+                  selected: vm.sicknessDuration,
+                  onTap: (v) => vm.setDuration(
+                    vm.sicknessDuration == v ? null : v,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _DurationButton(
+                  label: SymptomPickerStrings.duration2To3Days,
+                  value: SymptomPickerStrings.durationValue2to3,
+                  selected: vm.sicknessDuration,
+                  onTap: (v) => vm.setDuration(
+                    vm.sicknessDuration == v ? null : v,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _DurationButton(
+                  label: SymptomPickerStrings.duration4Plus,
+                  value: SymptomPickerStrings.durationValue4plus,
+                  selected: vm.sicknessDuration,
+                  onTap: (v) => vm.setDuration(
+                    vm.sicknessDuration == v ? null : v,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Single duration option button.
+class _DurationButton extends StatelessWidget {
+  const _DurationButton({
+    required this.label,
+    required this.value,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final String value;
+  final String? selected;
+  final ValueChanged<String> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isSelected = selected == value;
+    final isHighRisk = value == SymptomPickerStrings.durationValue4plus;
+
+    final bgColor = isSelected
+        ? (isHighRisk ? const Color(0xFFFEE2E2) : const Color(0xFF1B2B5E))
+        : Colors.white;
+    final borderColor = isSelected
+        ? (isHighRisk ? const Color(0xFFEF4444) : const Color(0xFF1B2B5E))
+        : const Color(0xFFE5E7EB);
+    final textColor = isSelected
+        ? (isHighRisk ? const Color(0xFF991B1B) : Colors.white)
+        : const Color(0xFF1B2B5E);
+
+    return GestureDetector(
+      onTap: () => onTap(value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: borderColor),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: textColor,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ── Scribe triage FAB ─────────────────────────────────────────────────────────
 
 /// Optional FAB shown on [SymptomPickerScreen] when [AppConfig.scribeEnabled].
@@ -706,10 +1063,11 @@ class _ScribeTriageFab extends StatelessWidget {
       // Result arrived — apply and reset. We do this in the next frame so the
       // build pass completes cleanly before mutating external state.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        final triageResult = session.formPrefillResult;
         // Triage results come via TriageExtractionResult, not FormPrefillResult.
         // The controller stores triage results in session when mode == triage.
         // TODO: expose triageExtractionResult on ScribeSession (tracked gap).
+        // ignore: unused_local_variable
+        final _ = session.formPrefillResult;
       });
     }
 

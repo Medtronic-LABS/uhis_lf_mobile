@@ -27,6 +27,8 @@ class UnifiedSymptomDef {
     this.programmes = const {},
     this.isDangerSign = false,
     this.snomedCode,
+    this.requiresFemale = false,
+    this.maxAgeMonths,
   });
 
   /// Canonical code, e.g. 'cough', 'fever'. Used as fieldId for deduplication.
@@ -49,6 +51,19 @@ class UnifiedSymptomDef {
 
   /// SNOMED-CT code for interoperability (e.g., cough = 49727002).
   final String? snomedCode;
+
+  /// If true, hide this symptom for male patients.
+  ///
+  /// Symptoms that are anatomically or clinically exclusive to female patients
+  /// (pregnancy-related findings, obstetric danger signs) should set this to
+  /// true.  Unknown sex shows the symptom.
+  final bool requiresFemale;
+
+  /// Maximum patient age in months for this symptom to be relevant.
+  ///
+  /// Null means no upper limit.  Used to hide neonatal findings (e.g.,
+  /// umbilicus redness) from adult patients.
+  final int? maxAgeMonths;
 }
 
 /// Unified catalog of all symptoms across programmes.
@@ -125,6 +140,7 @@ class UnifiedSymptomCatalog {
       programmes: {Programme.anc, Programme.pnc},
       isDangerSign: true,
       snomedCode: '266599000',
+      requiresFemale: true,
     ),
     UnifiedSymptomDef(
       code: 'water_break',
@@ -134,6 +150,7 @@ class UnifiedSymptomCatalog {
       programmes: {Programme.anc},
       isDangerSign: true,
       snomedCode: '289259007',
+      requiresFemale: true,
     ),
     UnifiedSymptomDef(
       code: 'reduced_fetal_movement',
@@ -143,6 +160,7 @@ class UnifiedSymptomCatalog {
       programmes: {Programme.anc},
       isDangerSign: true,
       snomedCode: '276367008',
+      requiresFemale: true,
     ),
     UnifiedSymptomDef(
       code: 'chest_pain',
@@ -304,6 +322,7 @@ class UnifiedSymptomCatalog {
       icon: 'pregnant_woman',
       programmes: {Programme.anc},
       snomedCode: '77386006',
+      requiresFemale: true,
     ),
     UnifiedSymptomDef(
       code: 'headache_severe',
@@ -328,6 +347,7 @@ class UnifiedSymptomCatalog {
       icon: 'healing',
       programmes: {Programme.anc},
       snomedCode: '21522001',
+      requiresFemale: true,
     ),
     UnifiedSymptomDef(
       code: 'swelling_face_hands',
@@ -337,6 +357,7 @@ class UnifiedSymptomCatalog {
       programmes: {Programme.anc},
       isDangerSign: true,
       snomedCode: '267038008',
+      requiresFemale: true,
     ),
     UnifiedSymptomDef(
       code: 'high_bp_known',
@@ -353,6 +374,7 @@ class UnifiedSymptomCatalog {
       icon: 'child_care',
       programmes: {Programme.anc},
       snomedCode: '289530006',
+      requiresFemale: true,
     ),
   ];
 
@@ -507,6 +529,7 @@ class UnifiedSymptomCatalog {
       programmes: {Programme.imci},
       isDangerSign: true,
       snomedCode: '239095007',
+      maxAgeMonths: 3,
     ),
     UnifiedSymptomDef(
       code: 'jaundice',

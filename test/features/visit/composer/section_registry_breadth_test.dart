@@ -3,7 +3,7 @@
 /// Tests:
 /// 1. forProgrammes({epi}) includes epi-review.
 /// 2. forProgrammes({nutrition}) includes nutrition-detail.
-/// 3. forProgrammes({pnc}) includes pnc-check.
+/// 3. forProgrammes({pnc}) includes pnc-mother, pnc-neonatal, pnc-child.
 /// 4. compose([ICCM, NUTRITION]) — nutrition-detail at priority 35 appears
 ///    after symptom-detail (30) and before iccm-classify (40).
 /// 5. All 7 programmes compose together — no crashes, no field duplicates.
@@ -42,7 +42,7 @@ void main() {
       expect(ids, isNot(contains('ncd-htn')));
       expect(ids, isNot(contains('tb-screen-detail')));
       expect(ids, isNot(contains('nutrition-detail')));
-      expect(ids, isNot(contains('pnc-check')));
+      expect(ids, isNot(contains('pnc-mother')));
     },
   );
 
@@ -61,19 +61,21 @@ void main() {
       expect(ids, isNot(contains('ncd-htn')));
       expect(ids, isNot(contains('tb-screen-detail')));
       expect(ids, isNot(contains('epi-review')));
-      expect(ids, isNot(contains('pnc-check')));
+      expect(ids, isNot(contains('pnc-mother')));
     },
   );
 
   // ── Test 3: PNC ────────────────────────────────────────────────────────────────
   test(
-    '3 — forProgrammes({Programme.pnc}) includes pnc-check; '
-    'excludes ICCM, ANC, NCD, TB, EPI, NUTRITION sections',
+    '3 — forProgrammes({Programme.pnc}) includes pnc-mother, pnc-neonatal, '
+    'pnc-child; excludes ICCM, ANC, NCD, TB, EPI, NUTRITION sections',
     () {
       final sections = SectionRegistry.forProgrammes({Programme.pnc});
       final ids = sections.map((s) => s.sectionId).toSet();
 
-      expect(ids, contains('pnc-check'));
+      expect(ids, contains('pnc-mother'));
+      expect(ids, contains('pnc-neonatal'));
+      expect(ids, contains('pnc-child'));
       expect(ids, isNot(contains('vitals')));
       expect(ids, isNot(contains('anc-vitals')));
       expect(ids, isNot(contains('ncd-htn')));
@@ -153,8 +155,12 @@ void main() {
           reason: 'EPI: epi-review must be present');
       expect(sectionIds, contains('nutrition-detail'),
           reason: 'NUTRITION: nutrition-detail must be present');
-      expect(sectionIds, contains('pnc-check'),
-          reason: 'PNC: pnc-check must be present');
+      expect(sectionIds, contains('pnc-mother'),
+          reason: 'PNC: pnc-mother must be present');
+      expect(sectionIds, contains('pnc-neonatal'),
+          reason: 'PNC: pnc-neonatal must be present');
+      expect(sectionIds, contains('pnc-child'),
+          reason: 'PNC: pnc-child must be present');
 
       // No duplicate section IDs.
       expect(sectionIds.toSet().length, equals(sectionIds.length),

@@ -1,7 +1,8 @@
 /// Sectioned assessment screen + viewmodel.
 ///
-/// Renders sections sequentially, saving drafts per section and revealing
-/// `tb-screen-detail` dynamically when coughDays ≥ 14.
+/// Renders all activated sections in a single scrollable view, grouped by
+/// programme ("NCD checks", "TB checks", etc.).  CDS and TB injection are
+/// evaluated live on every field change.
 ///
 /// Engineering Design Standards:
 ///   - Widgets carry no business logic or I/O — all logic is in
@@ -15,7 +16,6 @@ library;
 
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart' show DatabaseException;
 
@@ -27,11 +27,47 @@ import '../../scribe/models/ai_extracted_field.dart';
 import '../../scribe/widgets/ai_field_indicator.dart';
 import '../pathway/pathway_engine.dart';
 import '../triage/patient_context_builder.dart';
+import '../triage/visit_step_header.dart';
 import 'cds_banner.dart';
 import 'cds_rules.dart';
 import 'form_compositor.dart';
 import 'form_section.dart';
 import 'section_registry.dart';
+
+// ── Private helpers ───────────────────────────────────────────────────────────
+
+/// Returns the single "primary" programme for grouping purposes.
+///
+/// Sections with multiple programmes (shared sections like vitals) map to
+/// [Programme.unknown] → "General checks" group.
+Programme _sectionPrimaryProgramme(FormSection section) {
+  if (section.programmes.isEmpty || section.programmes.length > 1) {
+    return Programme.unknown;
+  }
+  return section.programmes.first;
+}
+
+/// Returns the group header label for a programme.
+String _programmeGroupLabel(Programme p) {
+  switch (p) {
+    case Programme.ncd:
+      return ComposerStrings.groupNcd;
+    case Programme.tb:
+      return ComposerStrings.groupTb;
+    case Programme.anc:
+      return ComposerStrings.groupAnc;
+    case Programme.pnc:
+      return ComposerStrings.groupPnc;
+    case Programme.imci:
+      return ComposerStrings.groupImci;
+    case Programme.epi:
+      return ComposerStrings.groupEpi;
+    case Programme.nutrition:
+      return ComposerStrings.groupNutrition;
+    default:
+      return ComposerStrings.groupGeneral;
+  }
+}
 
 // ── ViewModel ─────────────────────────────────────────────────────────────────
 
@@ -49,6 +85,7 @@ class SectionedAssessmentViewModel extends ChangeNotifier {
   })  : _pathways = List.unmodifiable(pathways),
         _draftDao = draftDao {
     _form = FormCompositor.compose(pathways);
+    debugPrint('[SectionedAssessment] Form composed — ${_form.sections.length} sections: ${_form.sections.map((s) => s.sectionId).join(' → ')}');
     _sectionStatus = {
       for (final s in _form.sections) s.sectionId: 'pending',
     };
@@ -132,15 +169,11 @@ class SectionedAssessmentViewModel extends ChangeNotifier {
   late Map<String, String> _sectionStatus;
   Map<String, String> get sectionStatus => Map.unmodifiable(_sectionStatus);
 
-  /// Index of the section currently being rendered (0-based).
-  int _currentSectionIndex = 0;
-  int get currentSectionIndex => _currentSectionIndex;
-
   /// Whether the TB-added banner should be visible.
   bool _tbBannerVisible = false;
   bool get tbBannerVisible => _tbBannerVisible;
 
-  /// Current CDS alerts — updated after each section completes.
+  /// Current CDS alerts — updated live on every field change.
   List<CdsAlert> _currentAlerts = const [];
   List<CdsAlert> get currentAlerts => List.unmodifiable(_currentAlerts);
 
@@ -155,62 +188,41 @@ class SectionedAssessmentViewModel extends ChangeNotifier {
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
 
-  // ── Derived ───────────────────────────────────────────────────────────────
-
-  FormSection get currentSection =>
-      _form.sections[_currentSectionIndex];
-
-  int get totalSections => _form.sections.length;
-
-  bool get isLastSection => _currentSectionIndex >= totalSections - 1;
-
-  bool get isAllDone =>
-      _sectionStatus.values.every((s) => s == 'done');
-
   // ── Mutations ─────────────────────────────────────────────────────────────
 
-  /// Update the value of a single field.
+  /// Update a single field value, evaluating CDS and TB injection live.
   void setFieldValue(String fieldId, dynamic value) {
     _fieldValues[fieldId] = value;
+    _checkTbInjection();
+    _evaluateCds();
     notifyListeners();
   }
 
-  /// Mark the current section done, persist a draft, and advance.
-  ///
-  /// Cross-section reveal: after `symptom-detail`, if coughDays ≥ 14 and
-  /// `tb-screen-detail` is not already active, inject it into the composed
-  /// form and show the banner.
-  Future<void> completeCurrentSection() async {
-    final sectionId = currentSection.sectionId;
-    _sectionStatus[sectionId] = 'done';
+  /// Mark all sections done, persist the draft, and signal readiness for
+  /// final submission.
+  Future<void> submitAll() async {
+    for (final section in _form.sections) {
+      _sectionStatus[section.sectionId] = 'done';
+    }
     _errorMessage = null;
-
-    // Cross-section reveal: TB screening for extended cough.
-    if (sectionId == 'symptom-detail') {
-      final coughDays = _fieldValues['coughDays'];
-      final hasCough = _fieldValues['hasCough'];
-      final hasTbSection =
-          _form.sections.any((s) => s.sectionId == 'tb-screen-detail');
-
-      if (hasCough == true &&
-          coughDays is int &&
-          coughDays >= 14 &&
-          !hasTbSection) {
-        _injectTbSection();
-        _tbBannerVisible = true;
-      }
-    }
-
-    // CDS evaluation — pure, synchronous, no I/O.
-    _evaluateCds();
-
     await _saveDraft();
-
-    // Advance to next section if not at the end.
-    if (!isLastSection) {
-      _currentSectionIndex++;
-    }
     notifyListeners();
+  }
+
+  /// Inject TB section if cough ≥ 14 days is detected and not yet present.
+  void _checkTbInjection() {
+    final hasCough = _fieldValues['hasCough'];
+    final coughDays = _fieldValues['coughDays'];
+    final hasTbSection =
+        _form.sections.any((s) => s.sectionId == 'tb-screen-detail');
+
+    if (hasCough == true &&
+        coughDays is int &&
+        coughDays >= 14 &&
+        !hasTbSection) {
+      _injectTbSection();
+      _tbBannerVisible = true;
+    }
   }
 
   /// Evaluate CDS rules against current field values and active pathways.
@@ -327,11 +339,11 @@ class SectionedAssessmentViewModel extends ChangeNotifier {
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
-/// Renders the sectioned assessment form.
+/// Renders all activated assessment sections in a single scrollable view.
 ///
-/// Takes an already-activated list of [pathways] (from the triage step) and
-/// renders them as sequentially completed form sections with per-section draft
-/// saves.
+/// Sections are grouped by programme ("NCD checks", "TB checks", etc.) with
+/// visual group headers.  CDS and TB injection evaluate live on every field
+/// change.  A single "Submit Assessment" button appears at the bottom.
 class SectionedAssessmentScreen extends StatefulWidget {
   const SectionedAssessmentScreen({
     super.key,
@@ -354,7 +366,7 @@ class SectionedAssessmentScreen extends StatefulWidget {
   final String? memberId;
   final AssessmentDraftDao draftDao;
 
-  /// Callback invoked when all sections are marked done.
+  /// Callback invoked when the SK taps Submit and the draft is persisted.
   final VoidCallback? onSubmit;
 
   /// Callback invoked when a CDS alert triggers an immediate referral.
@@ -415,39 +427,21 @@ class _SectionedAssessmentView extends StatelessWidget {
 
   final SectionedAssessmentViewModel viewModel;
   final VoidCallback? onSubmit;
-
-  /// Callback for referral flow entry — supplied by the parent screen.
-  /// Receives the alertId so the caller can pre-fill the referral form.
   final void Function(String alertId)? onReferNow;
 
   @override
   Widget build(BuildContext context) {
-    final current = viewModel.currentSection;
-    final sectionTitle = ComposerStrings.sectionTitle(current.sectionId);
-
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          ComposerStrings.sectionProgress(
-            viewModel.currentSectionIndex + 1,
-            viewModel.totalSections,
-            sectionTitle,
-          ),
-        ),
+      appBar: VisitStepHeader(
+        step: VisitStep.detailedForm,
+        patientLabel: 'Assessment',
+        onBack: () => Navigator.of(context).maybePop(),
       ),
       body: Column(
         children: [
-          // ── Progress bar ───────────────────────────────────────────────────
-          LinearProgressIndicator(
-            value: (viewModel.currentSectionIndex + 1) /
-                viewModel.totalSections,
-          ),
-
           // ── TB added banner ────────────────────────────────────────────────
           if (viewModel.tbBannerVisible)
-            _TbAddedBanner(
-              onDismiss: viewModel.dismissTbBanner,
-            ),
+            _TbAddedBanner(onDismiss: viewModel.dismissTbBanner),
 
           // ── CDS alert banners ──────────────────────────────────────────────
           for (final alert in viewModel.currentAlerts)
@@ -468,42 +462,32 @@ class _SectionedAssessmentView extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               child: Text(
                 viewModel.errorMessage!,
-                style:
-                    TextStyle(color: Theme.of(context).colorScheme.error),
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ),
 
-          // ── Section fields ─────────────────────────────────────────────────
+          // ── All sections scrollable ────────────────────────────────────────
           Expanded(
-            child: _SectionFieldList(
-              section: current,
+            child: _AllSectionsBody(
+              sections: viewModel.form.sections,
               fieldValues: viewModel.fieldValues,
               onFieldChanged: viewModel.setFieldValue,
               isScribePreFilled: viewModel.isScribePreFilled,
               onFieldTouched: viewModel.markFieldTouched,
-              // Show unmapped findings card only in the last section.
-              unmappedFindings: viewModel.isLastSection
-                  ? viewModel.unmappedFindings
-                  : const [],
+              unmappedFindings: viewModel.unmappedFindings,
             ),
           ),
 
-          // ── Action row ─────────────────────────────────────────────────────
+          // ── Submit button ──────────────────────────────────────────────────
           SafeArea(
             child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: viewModel.isLastSection && viewModel.isAllDone
-                  ? _SubmitButton(
-                      isSaving: viewModel.isSaving,
-                      onPressed: onSubmit,
-                    )
-                  : _NextButton(
-                      isSaving: viewModel.isSaving,
-                      onPressed: viewModel.isSaving
-                          ? null
-                          : viewModel.completeCurrentSection,
-                    ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: _SubmitButton(
+                isSaving: viewModel.isSaving,
+                onPressed: viewModel.isSaving
+                    ? null
+                    : () => viewModel.submitAll().then((_) => onSubmit?.call()),
+              ),
             ),
           ),
         ],
@@ -533,9 +517,13 @@ class _TbAddedBanner extends StatelessWidget {
   }
 }
 
-class _SectionFieldList extends StatelessWidget {
-  const _SectionFieldList({
-    required this.section,
+/// Renders all sections in a single scrollable list, grouped by programme.
+///
+/// Inserts a [_ProgrammeGroupHeader] whenever the primary programme changes.
+/// Sections with no visible fields are omitted to keep the form clean.
+class _AllSectionsBody extends StatelessWidget {
+  const _AllSectionsBody({
+    required this.sections,
     required this.fieldValues,
     required this.onFieldChanged,
     required this.isScribePreFilled,
@@ -543,56 +531,154 @@ class _SectionFieldList extends StatelessWidget {
     this.unmappedFindings = const [],
   });
 
-  final FormSection section;
+  final List<FormSection> sections;
   final Map<String, dynamic> fieldValues;
   final void Function(String fieldId, dynamic value) onFieldChanged;
-
-  /// Returns true if [fieldId] holds an unverified scribe pre-fill.
   final bool Function(String fieldId) isScribePreFilled;
-
-  /// Called when the SK interacts with a field, removing any scribe pre-fill.
   final void Function(String fieldId) onFieldTouched;
-
-  /// Unmapped clinical findings from the last scribe result. Rendered as an
-  /// informational card at the bottom of the last section.
   final List<String> unmappedFindings;
 
   @override
   Widget build(BuildContext context) {
-    final visibleFields = section.fields
-        .where((f) =>
-            f.visibleWhen == null || f.visibleWhen!.evaluate(fieldValues))
-        .toList();
+    final items = <Widget>[];
+    String? lastGroupLabel;
 
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: visibleFields.length + (unmappedFindings.isNotEmpty ? 1 : 0),
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        // Unmapped findings card at the end.
-        if (index == visibleFields.length) {
-          return _UnmappedFindingsCard(findings: unmappedFindings);
-        }
+    for (final section in sections) {
+      final visibleFields = section.fields
+          .where((f) =>
+              f.visibleWhen == null || f.visibleWhen!.evaluate(fieldValues))
+          .toList();
 
-        final field = visibleFields[index];
-        final preFilledByScribe = isScribePreFilled(field.fieldId);
+      if (visibleFields.isEmpty) continue;
 
-        return _FieldWidget(
-          field: field,
-          currentValue: fieldValues[field.fieldId],
-          isScribePreFilled: preFilledByScribe,
-          onChanged: (value) {
-            onFieldTouched(field.fieldId);
-            onFieldChanged(field.fieldId, value);
-          },
-        );
-      },
+      final groupLabel =
+          _programmeGroupLabel(_sectionPrimaryProgramme(section));
+      if (groupLabel != lastGroupLabel) {
+        items.add(_ProgrammeGroupHeader(label: groupLabel));
+        lastGroupLabel = groupLabel;
+      }
+
+      items.add(_SectionBlock(
+        sectionId: section.sectionId,
+        fields: visibleFields,
+        fieldValues: fieldValues,
+        onFieldChanged: onFieldChanged,
+        isScribePreFilled: isScribePreFilled,
+        onFieldTouched: onFieldTouched,
+      ));
+    }
+
+    if (unmappedFindings.isNotEmpty) {
+      items.add(Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        child: _UnmappedFindingsCard(findings: unmappedFindings),
+      ));
+    }
+
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 16),
+      children: items,
     );
   }
 }
 
-/// Info card shown at the bottom of the last section when the scribe
-/// detected clinical findings that didn't map to any registered field.
+/// Coloured group header — rendered once per programme group.
+class _ProgrammeGroupHeader extends StatelessWidget {
+  const _ProgrammeGroupHeader({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFF1E40AF).withValues(alpha: 0.08),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.medical_services_outlined,
+            size: 14,
+            color: Color(0xFF1E40AF),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label.toUpperCase(),
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.8,
+              color: Color(0xFF1E40AF),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Renders the section subtitle and its visible fields.
+class _SectionBlock extends StatelessWidget {
+  const _SectionBlock({
+    required this.sectionId,
+    required this.fields,
+    required this.fieldValues,
+    required this.onFieldChanged,
+    required this.isScribePreFilled,
+    required this.onFieldTouched,
+  });
+
+  final String sectionId;
+  final List<FieldDef> fields;
+  final Map<String, dynamic> fieldValues;
+  final void Function(String fieldId, dynamic value) onFieldChanged;
+  final bool Function(String fieldId) isScribePreFilled;
+  final void Function(String fieldId) onFieldTouched;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final title = ComposerStrings.sectionTitle(sectionId);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Text(
+            title,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            children: [
+              for (int i = 0; i < fields.length; i++) ...[
+                _FieldWidget(
+                  field: fields[i],
+                  currentValue: fieldValues[fields[i].fieldId],
+                  isScribePreFilled: isScribePreFilled(fields[i].fieldId),
+                  onChanged: (value) {
+                    onFieldTouched(fields[i].fieldId);
+                    onFieldChanged(fields[i].fieldId, value);
+                  },
+                ),
+                if (i < fields.length - 1) const SizedBox(height: 12),
+              ],
+            ],
+          ),
+        ),
+        const Divider(height: 1, indent: 16, endIndent: 16),
+      ],
+    );
+  }
+}
+
+/// Info card shown at the bottom of the form when the scribe detected
+/// clinical findings that didn't map to any registered field.
 class _UnmappedFindingsCard extends StatelessWidget {
   const _UnmappedFindingsCard({required this.findings});
 
@@ -646,9 +732,6 @@ class _UnmappedFindingsCard extends StatelessWidget {
 
 /// Minimal field widget — renders the correct input type per [FieldType].
 ///
-/// In production, each branch would expand to the full UHIS design-system
-/// widget; here the structure is correct and test-stable.
-///
 /// When [isScribePreFilled] is true the field is wrapped with a light blue
 /// background tint and an "AI" chip via [ConfidenceBadge], signalling that
 /// the value came from the AI scribe and should be verified by the SK.
@@ -677,10 +760,10 @@ class _FieldWidget extends StatelessWidget {
     // Wrap with a scribe pre-fill visual indicator (light blue tint + AI chip).
     return Container(
       decoration: BoxDecoration(
-        color: theme.colorScheme.primaryContainer.withOpacity(0.25),
+        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.25),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: theme.colorScheme.primary.withOpacity(0.3),
+          color: theme.colorScheme.primary.withValues(alpha: 0.3),
         ),
       ),
       child: Column(
@@ -728,8 +811,7 @@ class _FieldWidget extends StatelessWidget {
           ),
           keyboardType:
               const TextInputType.numberWithOptions(decimal: true),
-          initialValue:
-              currentValue != null ? currentValue.toString() : null,
+          initialValue: currentValue?.toString(),
           onChanged: (text) {
             if (field.type == FieldType.intField) {
               final v = int.tryParse(text);
@@ -747,7 +829,7 @@ class _FieldWidget extends StatelessWidget {
             labelText: _label,
             border: const OutlineInputBorder(),
           ),
-          value: currentValue as String?,
+          initialValue: currentValue as String?,
           items: (field.options ?? [])
               .map((opt) =>
                   DropdownMenuItem(value: opt, child: Text(opt)))
@@ -796,42 +878,6 @@ class _FieldWidget extends StatelessWidget {
   }
 }
 
-class _NextButton extends StatelessWidget {
-  const _NextButton({
-    required this.isSaving,
-    required this.onPressed,
-  });
-
-  final bool isSaving;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      child: FilledButton(
-        onPressed: onPressed != null
-            ? () {
-                // Wrap the async call — widgets don't own Future chains.
-                if (onPressed is Future<void> Function()) {
-                  (onPressed as Future<void> Function())();
-                } else {
-                  onPressed!();
-                }
-              }
-            : null,
-        child: isSaving
-            ? const SizedBox(
-                height: 20,
-                width: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Text(ComposerStrings.nextButton),
-      ),
-    );
-  }
-}
-
 class _SubmitButton extends StatelessWidget {
   const _SubmitButton({
     required this.isSaving,
@@ -846,8 +892,20 @@ class _SubmitButton extends StatelessWidget {
     return SizedBox(
       width: double.infinity,
       child: FilledButton(
+        style: FilledButton.styleFrom(
+          backgroundColor: const Color(0xFFE8356D),
+        ),
         onPressed: onPressed,
-        child: Text(ComposerStrings.submitButton),
+        child: isSaving
+            ? const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : Text(ComposerStrings.submitButton),
       ),
     );
   }

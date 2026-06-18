@@ -15,6 +15,8 @@ import '../features/pin/pin_unlock_screen.dart';
 import '../features/referral/referral_detail_screen.dart';
 import '../features/referral/referral_list_screen.dart';
 import '../features/sync/sync_progress_screen.dart';
+import '../features/visit/pathway/pathway_engine.dart';
+import '../features/visit/triage/triage_result_screen.dart';
 import '../features/visit/visit_form_screen.dart';
 import '../features/visit/visit_landing_screen.dart';
 import '../features/visit/triage/symptom_picker_screen.dart';
@@ -227,6 +229,37 @@ GoRouter buildRouter(AuthState auth) {
                           householdId: extra?['householdId'] as String?,
                           patientAge: extra?['patientAge'] as int?,
                           origin: origin,
+                        ),
+                      );
+                    },
+                  ),
+                  GoRoute(
+                    path: 'visit/:visitId/triage-result',
+                    name: 'visit-triage-result',
+                    pageBuilder: (context, state) {
+                      Map<String, dynamic>? extra;
+                      if (state.extra is Map<String, dynamic>) {
+                        extra = state.extra as Map<String, dynamic>;
+                      } else if (state.extra is Map) {
+                        extra = Map<String, dynamic>.from(state.extra as Map);
+                      }
+                      List<ActivatedPathway> pathways = [];
+                      if (extra?['pathwayObjects'] is List) {
+                        // Pathways passed as pre-built objects.
+                        pathways = List<ActivatedPathway>.from(
+                            extra!['pathwayObjects'] as List);
+                      }
+                      return MaterialPage(
+                        key: ValueKey(
+                            'visit-triage-result-${state.pathParameters['visitId']}'),
+                        child: TriageResultScreen(
+                          encounterId: state.pathParameters['visitId']!,
+                          patientId: extra?['patientId'] as String? ?? '',
+                          patientLabel: extra?['patientLabel'] as String? ?? 'Visit',
+                          pathways: pathways,
+                          memberId: extra?['memberId'] as String?,
+                          householdId: extra?['householdId'] as String?,
+                          patientAge: extra?['patientAge'] as int?,
                         ),
                       );
                     },

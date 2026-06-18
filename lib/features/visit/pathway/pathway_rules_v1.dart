@@ -368,7 +368,7 @@ abstract final class PathwayRulesV1 {
         'foot_wound',
         'weight_loss',
       },
-      gate: DemographicGate.any,
+      gate: DemographicGate(minAgeMonths: 216),
       historyTriggers: {'DIABETES', 'DM', 'E11'},
       rationaleKey: 'pathwayNcdDmRationale',
     ),

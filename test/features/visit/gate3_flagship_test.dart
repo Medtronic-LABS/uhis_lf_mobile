@@ -186,7 +186,7 @@ void main() {
       fieldValues: jsonEncode({
         'bloodPressureSystolic': 150,
         'bloodPressureDiastolic': 95,
-        'ancWeight': 62.5,
+        'weight': 62.5,
         'fundalHeight': 28,
         'glucoseValue': null,
       }),

@@ -192,6 +192,16 @@ class TriageViewModel extends ChangeNotifier {
     });
   }
 
+  /// Selected sickness duration. One of '1', '2-3', '4+', or null.
+  String? _sicknessDuration;
+  String? get sicknessDuration => _sicknessDuration;
+
+  /// Set the sickness duration selection and notify listeners.
+  void setDuration(String? d) {
+    _sicknessDuration = d;
+    notifyListeners();
+  }
+
   /// Whether this [ChangeNotifier] has been disposed (guards async callbacks).
   bool disposed = false;
 
@@ -251,12 +261,21 @@ class TriageViewModel extends ChangeNotifier {
   }
 
   /// Get symptoms grouped by cluster for display.
+  ///
+  /// Applies demographic filters: female-only symptoms are hidden for male
+  /// patients; age-gated symptoms are hidden when the patient exceeds the
+  /// maximum age.  Entire clusters with no visible symptoms are omitted.
   Map<SymptomCluster, List<UnifiedSymptomDef>> get symptomsByCluster {
+    final isMale = _patientContext.sex == Sex.male;
+    final ageMonths = _patientContext.ageMonths;
     final result = <SymptomCluster, List<UnifiedSymptomDef>>{};
 
-    // Get all clusters in order
     for (final cluster in SymptomCluster.values) {
-      final symptoms = UnifiedSymptomCatalog.byCluster(cluster);
+      final symptoms = UnifiedSymptomCatalog.byCluster(cluster).where((s) {
+        if (s.requiresFemale && isMale) return false;
+        if (s.maxAgeMonths != null && ageMonths > s.maxAgeMonths!) return false;
+        return true;
+      }).toList();
       if (symptoms.isNotEmpty) {
         result[cluster] = symptoms;
       }

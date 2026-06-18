@@ -1282,6 +1282,11 @@ abstract final class ComposerStrings {
   static const String fieldSleepLocation = 'Sleep location';
   static const String fieldPreviouslyTreatedForTB = 'Previously treated for TB';
 
+  // ── Shared vitals labels ────────────────────────────────────────────────────
+  static const String fieldHeight = 'Height (cm)';
+  static const String fieldWeight = 'Weight (kg)';
+  static const String fieldPulse = 'Pulse';
+
   // ── ANC field labels ────────────────────────────────────────────────────────
   static const String fieldBloodPressureSystolic = 'Systolic BP';
   static const String fieldBloodPressureDiastolic = 'Diastolic BP';
@@ -1290,6 +1295,7 @@ abstract final class ComposerStrings {
   static const String fieldFetalHeartRate = 'Fetal heart rate';
   static const String fieldFetalMovement = 'Fetal movement';
   static const String fieldOedema = 'Oedema';
+  static const String fieldEdema = 'Edema';
   static const String fieldPallor = 'Pallor';
   static const String fieldTtTdCompleted = 'TT/Td vaccination';
   static const String fieldIfaProvided = 'IFA tablets provided';
@@ -1297,14 +1303,35 @@ abstract final class ComposerStrings {
   static const String fieldFacilityIdentifiedForDelivery =
       'Facility identified for delivery';
   static const String fieldUltrasound = 'Ultrasound';
+  static const String fieldHemoglobin = 'Hemoglobin (Hb)';
+  static const String fieldBloodSugar = 'Blood sugar type';
+  static const String fieldBloodSugarFasting = 'Fasting blood sugar';
+  static const String fieldBloodSugarRandom = 'Random blood sugar';
+  static const String fieldUrinaryAlbumin = 'Urinary albumin';
+  static const String fieldUrinarySugar = 'Urinary sugar';
+  static const String fieldUrinaryBilirubin = 'Urinary bilirubin';
+  static const String fieldFolicAcidConsumed = 'Folic acid consumed (last month)';
+  static const String fieldFolicAcidProvided = 'Folic acid provided';
+  static const String fieldIfaConsumed = 'IFA tablets consumed (last month)';
+  static const String fieldCalciumConsumed = 'Calcium consumed (last month)';
+  static const String fieldAncVisitsOtherProviders = 'ANC visits with other providers';
+  static const String fieldAncFromMedicalDoctor = 'ANC from medical doctor?';
+  static const String fieldPreviousPregnancyComplications =
+      'Previous pregnancy complications';
+  static const String fieldDangerSigns12 = 'Danger signs (weeks 1–12)';
+  static const String fieldDangerSigns13to27 = 'Danger signs (weeks 13–27)';
+  static const String fieldDangerSigns28to40 = 'Danger signs (weeks 28–40)';
+  static const String fieldReferralFacility = 'Referral facility';
 
   // ── NCD field labels ────────────────────────────────────────────────────────
   static const String fieldSystolic2 = 'Systolic BP (2nd reading)';
   static const String fieldDiastolic2 = 'Diastolic BP (2nd reading)';
-  static const String fieldPulse = 'Pulse';
   static const String fieldIsRegularSmoker = 'Regular smoker';
   static const String fieldMedAdherence = 'Medication adherence';
   static const String fieldNcdSymptoms = 'Symptoms';
+  static const String fieldHasSymptoms = 'Had symptoms since last follow-up?';
+  static const String fieldNewWorseningSymptoms = 'New or worsening symptoms';
+  static const String fieldCompliance = 'Taking medication regularly?';
   static const String fieldGlucoseValue = 'Blood glucose';
   static const String fieldGlucoseType = 'Glucose measurement type';
   static const String fieldHba1c = 'HbA1c';
@@ -1374,6 +1401,13 @@ abstract final class ComposerStrings {
         return fieldSleepLocation;
       case 'fieldPreviouslyTreatedForTB':
         return fieldPreviouslyTreatedForTB;
+      // Shared vitals
+      case 'fieldHeight':
+        return fieldHeight;
+      case 'fieldWeight':
+        return fieldWeight;
+      case 'fieldPulse':
+        return fieldPulse;
       // ANC fields
       case 'fieldBloodPressureSystolic':
         return fieldBloodPressureSystolic;
@@ -1389,6 +1423,8 @@ abstract final class ComposerStrings {
         return fieldFetalMovement;
       case 'fieldOedema':
         return fieldOedema;
+      case 'fieldEdema':
+        return fieldEdema;
       case 'fieldPallor':
         return fieldPallor;
       case 'fieldTtTdCompleted':
@@ -1401,19 +1437,59 @@ abstract final class ComposerStrings {
         return fieldFacilityIdentifiedForDelivery;
       case 'fieldUltrasound':
         return fieldUltrasound;
+      case 'fieldHemoglobin':
+        return fieldHemoglobin;
+      case 'fieldBloodSugar':
+        return fieldBloodSugar;
+      case 'fieldBloodSugarFasting':
+        return fieldBloodSugarFasting;
+      case 'fieldBloodSugarRandom':
+        return fieldBloodSugarRandom;
+      case 'fieldUrinaryAlbumin':
+        return fieldUrinaryAlbumin;
+      case 'fieldUrinarySugar':
+        return fieldUrinarySugar;
+      case 'fieldUrinaryBilirubin':
+        return fieldUrinaryBilirubin;
+      case 'fieldFolicAcidConsumed':
+        return fieldFolicAcidConsumed;
+      case 'fieldFolicAcidProvided':
+        return fieldFolicAcidProvided;
+      case 'fieldIfaConsumed':
+        return fieldIfaConsumed;
+      case 'fieldCalciumConsumed':
+        return fieldCalciumConsumed;
+      case 'fieldAncVisitsOtherProviders':
+        return fieldAncVisitsOtherProviders;
+      case 'fieldAncFromMedicalDoctor':
+        return fieldAncFromMedicalDoctor;
+      case 'fieldPreviousPregnancyComplications':
+        return fieldPreviousPregnancyComplications;
+      case 'fieldDangerSigns12':
+        return fieldDangerSigns12;
+      case 'fieldDangerSigns13to27':
+        return fieldDangerSigns13to27;
+      case 'fieldDangerSigns28to40':
+        return fieldDangerSigns28to40;
+      case 'fieldReferralFacility':
+        return fieldReferralFacility;
       // NCD fields
       case 'fieldSystolic2':
         return fieldSystolic2;
       case 'fieldDiastolic2':
         return fieldDiastolic2;
-      case 'fieldPulse':
-        return fieldPulse;
       case 'fieldIsRegularSmoker':
         return fieldIsRegularSmoker;
       case 'fieldMedAdherence':
         return fieldMedAdherence;
       case 'fieldNcdSymptoms':
         return fieldNcdSymptoms;
+      case 'fieldHasSymptoms':
+        return fieldHasSymptoms;
+      case 'fieldNewWorseningSymptoms':
+        return fieldNewWorseningSymptoms;
+      case 'fieldCompliance':
+        return fieldCompliance;
       case 'fieldGlucoseValue':
         return fieldGlucoseValue;
       case 'fieldGlucoseType':
@@ -1440,7 +1516,7 @@ abstract final class ComposerStrings {
         return fieldSupplementaryFoodGiven;
       case 'fieldReferredForSam':
         return fieldReferredForSam;
-      // PNC fields
+      // PNC fields (legacy)
       case 'fieldDaysPostDelivery':
         return fieldDaysPostDelivery;
       case 'fieldHasUterinePain':
@@ -1455,12 +1531,99 @@ abstract final class ComposerStrings {
         return fieldNewbornBreastfeeding;
       case 'fieldPncVitaminsGiven':
         return fieldPncVitaminsGiven;
+      // PNC Mother fields
+      case 'fieldGravida':
+        return fieldGravida;
+      case 'fieldParity':
+        return fieldParity;
+      case 'fieldLivingChildren':
+        return fieldLivingChildren;
+      case 'fieldHtnPatient':
+        return fieldHtnPatient;
+      case 'fieldEclampsia':
+        return fieldEclampsia;
+      case 'fieldOnTreatmentHtnEclampsia':
+        return fieldOnTreatmentHtnEclampsia;
+      case 'fieldDmPatient':
+        return fieldDmPatient;
+      case 'fieldGdmPatient':
+        return fieldGdmPatient;
+      case 'fieldOnTreatmentDmGdm':
+        return fieldOnTreatmentDmGdm;
+      case 'fieldFastingBloodSugar':
+        return fieldFastingBloodSugar;
+      case 'fieldRandomBloodSugar':
+        return fieldRandomBloodSugar;
+      case 'fieldPostpartumDangerSigns':
+        return fieldPostpartumDangerSigns;
+      case 'fieldVitaminAConsumed':
+        return fieldVitaminAConsumed;
+      case 'fieldIfaTabletsConsumed':
+        return fieldIfaTabletsConsumed;
+      case 'fieldIfaTabletsProvided':
+        return fieldIfaTabletsProvided;
+      case 'fieldCalciumTabletsConsumed':
+        return fieldCalciumTabletsConsumed;
+      case 'fieldCalciumTabletsProvided':
+        return fieldCalciumTabletsProvided;
+      case 'fieldFamilyPlanningMethods':
+        return fieldFamilyPlanningMethods;
+      // PNC Neonatal fields
+      case 'fieldPncNeonateSigns':
+        return fieldPncNeonateSigns;
+      case 'fieldOtherPncNeonateSigns':
+        return fieldOtherPncNeonateSigns;
+      case 'fieldNewbornReferredToSbcu':
+        return fieldNewbornReferredToSbcu;
+      case 'fieldLowBirthWeight':
+        return fieldLowBirthWeight;
+      case 'fieldDeathOfNewborn':
+        return fieldDeathOfNewborn;
+      // PNC Child fields
+      case 'fieldCongenitalDefect':
+        return fieldCongenitalDefect;
+      case 'fieldPncChildWeight':
+        return fieldPncChildWeight;
+      case 'fieldChildFeedLast24Hrs':
+        return fieldChildFeedLast24Hrs;
+      case 'fieldOtherChildFeed':
+        return fieldOtherChildFeed;
+      case 'fieldHrsBreastFed':
+        return fieldHrsBreastFed;
+      case 'fieldMonthAdditionalFeedGiven':
+        return fieldMonthAdditionalFeedGiven;
+      case 'fieldChildBreastFeeding':
+        return fieldChildBreastFeeding;
+      case 'fieldAdditionalFood24Hrs':
+        return fieldAdditionalFood24Hrs;
+      case 'fieldReceivedVaccine':
+        return fieldReceivedVaccine;
+      case 'fieldDewormingMedicine':
+        return fieldDewormingMedicine;
+      case 'fieldAnyIllness':
+        return fieldAnyIllness;
+      case 'fieldChildIllnessType':
+        return fieldChildIllnessType;
+      case 'fieldChildReferral':
+        return fieldChildReferral;
+      case 'fieldChildReferralFacilityType':
+        return fieldChildReferralFacilityType;
       default:
         return key;
     }
   }
 
   // ── Section title resolver ──────────────────────────────────────────────────
+
+  // ── Programme group headers ─────────────────────────────────────────────────
+  static const String groupGeneral = 'General checks';
+  static const String groupNcd = 'NCD checks';
+  static const String groupTb = 'TB checks';
+  static const String groupAnc = 'Antenatal checks';
+  static const String groupPnc = 'Postnatal checks';
+  static const String groupImci = 'Child health checks';
+  static const String groupEpi = 'Immunization';
+  static const String groupNutrition = 'Nutrition';
 
   // ── Section titles (ANC + NCD) ──────────────────────────────────────────────
   static const String sectionAncVitals = 'ANC Vitals';
@@ -1472,6 +1635,9 @@ abstract final class ComposerStrings {
   static const String sectionEpiReview = 'EPI / Immunization';
   static const String sectionNutritionDetail = 'Nutrition Assessment';
   static const String sectionPncCheck = 'Postnatal Check';
+  static const String sectionPncMother = 'Postnatal — Mother';
+  static const String sectionPncNeonatal = 'Postnatal — Newborn';
+  static const String sectionPncChild = 'Postnatal — Child';
 
   // ── Field labels (EPI) ──────────────────────────────────────────────────────
   static const String fieldOverdueVaccines = 'Overdue vaccines';
@@ -1492,6 +1658,47 @@ abstract final class ComposerStrings {
   static const String fieldNewbornPresent = 'Newborn present';
   static const String fieldNewbornBreastfeeding = 'Newborn breastfeeding';
   static const String fieldPncVitaminsGiven = 'PNC vitamins given';
+  // PNC Mother
+  static const String fieldGravida = 'Gravida';
+  static const String fieldParity = 'Parity (total births)';
+  static const String fieldLivingChildren = 'Living children';
+  static const String fieldHtnPatient = 'Known HTN patient?';
+  static const String fieldEclampsia = 'Pre-eclampsia / eclampsia?';
+  static const String fieldOnTreatmentHtnEclampsia =
+      'On treatment for HTN / eclampsia?';
+  static const String fieldDmPatient = 'Known DM patient?';
+  static const String fieldGdmPatient = 'Known GDM patient?';
+  static const String fieldOnTreatmentDmGdm = 'On treatment for DM / GDM?';
+  static const String fieldFastingBloodSugar = 'Fasting blood sugar (mmol/L)';
+  static const String fieldRandomBloodSugar = 'Random blood sugar (mmol/L)';
+  static const String fieldPostpartumDangerSigns = 'Postpartum danger signs';
+  static const String fieldVitaminAConsumed = 'Vitamin A capsule consumed?';
+  static const String fieldIfaTabletsConsumed = 'IFA tablets consumed';
+  static const String fieldIfaTabletsProvided = 'IFA tablets provided';
+  static const String fieldCalciumTabletsConsumed = 'Calcium tablets consumed';
+  static const String fieldCalciumTabletsProvided = 'Calcium tablets provided';
+  static const String fieldFamilyPlanningMethods = 'Family planning method';
+  // PNC Neonatal
+  static const String fieldPncNeonateSigns = 'Newborn danger signs';
+  static const String fieldOtherPncNeonateSigns = 'Other newborn signs';
+  static const String fieldNewbornReferredToSbcu = 'Newborn referred to SBCU?';
+  static const String fieldLowBirthWeight = 'Low birth weight?';
+  static const String fieldDeathOfNewborn = 'Death of newborn?';
+  // PNC Child
+  static const String fieldCongenitalDefect = 'Congenital defect?';
+  static const String fieldPncChildWeight = 'Child weight (kg)';
+  static const String fieldChildFeedLast24Hrs = 'Child feeding in last 24 hours';
+  static const String fieldOtherChildFeed = 'Other feed';
+  static const String fieldHrsBreastFed = 'Hours after birth breastfeeding started';
+  static const String fieldMonthAdditionalFeedGiven = 'Month additional food started';
+  static const String fieldChildBreastFeeding = 'Child breastfeeding?';
+  static const String fieldAdditionalFood24Hrs = 'Additional food in last 24 hours?';
+  static const String fieldReceivedVaccine = 'Child received vaccines?';
+  static const String fieldDewormingMedicine = 'Child took deworming medicine?';
+  static const String fieldAnyIllness = 'Any illness / complications?';
+  static const String fieldChildIllnessType = 'Type of illness / complication';
+  static const String fieldChildReferral = 'Referral made?';
+  static const String fieldChildReferralFacilityType = 'Referral facility type';
 
   /// Resolve a section title from its [sectionId].
   static String sectionTitle(String sectionId) {
@@ -1520,6 +1727,12 @@ abstract final class ComposerStrings {
         return sectionNutritionDetail;
       case 'pnc-check':
         return sectionPncCheck;
+      case 'pnc-mother':
+        return sectionPncMother;
+      case 'pnc-neonatal':
+        return sectionPncNeonatal;
+      case 'pnc-child':
+        return sectionPncChild;
       default:
         return sectionId;
     }
@@ -1732,4 +1945,99 @@ abstract final class PathwayStrings {
       default: return key;
     }
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TriageResultStrings
+// ─────────────────────────────────────────────────────────────────────────────
+
+abstract final class TriageResultStrings {
+  TriageResultStrings._();
+
+  // ── Step bar ────────────────────────────────────────────────────────────────
+  static const String step1Label = 'How are you feeling?';
+  static const String step2Label = 'AI triage';
+  static const String step3Label = 'Detailed check';
+
+  static String stepSubtitle(int stepIndex) {
+    switch (stepIndex) {
+      case 0: return 'Step 1 of 3 · Tap all symptoms mentioned';
+      case 1: return 'Step 2 of 3 · AI triage active';
+      default: return 'Step 3 of 3 · Fill in what you see';
+    }
+  }
+
+  // ── Urgency card ────────────────────────────────────────────────────────────
+  static const String urgentTitle = 'AI noticed something serious';
+  static const String warningTitle = 'AI flagged a concern';
+  static const String infoTitle = 'AI identified a programme';
+
+  // ── Measurements section ────────────────────────────────────────────────────
+  static const String measureSectionLabel = 'AI asks you to check these now';
+
+  // IMCI measurements
+  static const String measureTempLabel = 'Take temperature';
+  static const String measureTempHint = 'Place thermometer under arm for 1 minute';
+  static const String measureBreathLabel = 'Count breaths in 1 minute';
+  static const String measureBreathHint = 'Watch the chest go up and down — count for 60 seconds';
+  static const String measureChestLabel = 'Look at the chest';
+  static const String measureChestHint = 'Does the chest go IN when breathing? (chest in-drawing)';
+
+  // NCD measurements
+  static const String measureBpLabel = 'Take blood pressure';
+  static const String measureBpHint = 'Left arm, patient seated, at rest for 5 minutes';
+  static const String measureWeightLabel = 'Weigh the patient';
+  static const String measureWeightHint = 'Remove shoes — record to nearest 0.1 kg';
+
+  // ANC measurements
+  static const String measureFundalLabel = 'Measure fundal height';
+  static const String measureFundalHint = 'Pubic symphysis to uterine fundus in cm';
+
+  // ── Programme banner ────────────────────────────────────────────────────────
+  static const String programmeBannerPrefix = 'AI identified: ';
+  static const String programmeBannerSuffix = ' programme';
+  static const String programmeBannerCta = 'Opening checklist →';
+
+  // ── CTA ─────────────────────────────────────────────────────────────────────
+  static const String ctaOpenChecklist = 'Open checklist →';
+  static const String ctaNoPathways = 'Start routine visit →';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SymptomPickerStrings
+// ─────────────────────────────────────────────────────────────────────────────
+
+abstract final class SymptomPickerStrings {
+  SymptomPickerStrings._();
+
+  // ── Before-you-knock card ────────────────────────────────────────────────
+  static const String briefCardTitle = 'Before you knock · AI brief';
+
+  // ── Patient context chips ────────────────────────────────────────────────
+  static const String chipPregnant = 'Pregnant · ANC';
+  static const String chipHtn = 'Known HTN';
+  static const String chipDm = 'Known DM';
+  static const String chipTbDue = 'TB screen due';
+  static const String chipUnder5 = 'Under 5 · IMCI';
+  static const String chipRoutine = 'Routine visit';
+
+  // ── SK opener card ───────────────────────────────────────────────────────
+  static const String skAsksLabel = 'SK ASKS THE FAMILY 👋';
+  static const String skOpenerPhrase =
+      'How is the family? Who needs to be seen today?';
+
+  // ── Duration picker ──────────────────────────────────────────────────────
+  static const String durationTitle = 'How many days unwell?';
+  static const String duration1Day = '1 day';
+  static const String duration2To3Days = '2–3 days';
+  static const String duration4Plus = '4+ days';
+
+  // Duration values (stored in TriageViewModel)
+  static const String durationValue1 = '1';
+  static const String durationValue2to3 = '2-3';
+  static const String durationValue4plus = '4+';
+
+  // ── CTA button ───────────────────────────────────────────────────────────
+  static const String ctaWithPathways = 'AI is checking — see what to do next →';
+  static const String ctaRoutine = 'Continue (routine visit)';
 }
