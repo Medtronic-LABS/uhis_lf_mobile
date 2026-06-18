@@ -1,9 +1,13 @@
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
+
 import '../../core/api/api_repository.dart';
 import '../../core/api/endpoints.dart';
 import '../../core/db/encounter_dao.dart';
+import '../../core/models/assessment_history_item.dart';
 import '../../core/models/programme.dart';
+import '../../core/sync/offline_sync_service.dart';
 
 /// Summary of a past visit/encounter for display.
 class VisitSummary {
@@ -27,37 +31,19 @@ class VisitSummary {
   final bool isLocal;
   final Map<String, dynamic> rawJson;
 
-  static VisitSummary? fromAssessmentJson(Map<String, dynamic> json) {
-    final id = json['encounterId']?.toString() ?? json['id']?.toString();
-    if (id == null) return null;
-
-    DateTime? date;
-    final dateStr = json['visitDate'] ??
-        json['createdAt'] ??
-        json['startTime'] ??
-        json['date'];
-    if (dateStr is String) {
-      date = DateTime.tryParse(dateStr);
-    } else if (dateStr is int) {
-      date = DateTime.fromMillisecondsSinceEpoch(dateStr);
-    }
-    date ??= DateTime.now();
-
-    final typeStr = json['serviceProvided']?.toString() ??
-        json['assessmentName']?.toString() ??
-        json['type']?.toString() ??
-        'Assessment';
-    
-    final programme = Programme.fromString(typeStr);
-
+  /// Build a [VisitSummary] from an offline-sync assessment-history row.
+  /// This is now the authoritative server-side source for past visits —
+  /// the row already carries the encounter id, visit date, and programme
+  /// hint, so no further fetch is needed to render the worklist row.
+  static VisitSummary fromAssessmentHistory(AssessmentHistoryItem item) {
+    final typeStr = item.serviceProvided ?? 'Assessment';
     return VisitSummary(
-      id: id,
-      date: date,
-      programme: programme,
+      id: item.encounterId,
+      date: item.visitDate,
+      programme: Programme.fromString(typeStr),
       type: typeStr,
-      status: json['referralStatus']?.toString() ?? json['status']?.toString(),
-      visitNumber: json['visitNumber'] is int ? json['visitNumber'] : null,
-      rawJson: json,
+      status: item.referralStatus,
+      rawJson: item.rawJson,
     );
   }
 
@@ -74,12 +60,18 @@ class VisitSummary {
 }
 
 /// Repository for visit/encounter data.
-/// 
-/// Combines local offline storage with server API calls.
+///
+/// Combines local offline drafts with server-side history. The server
+/// history is sourced exclusively from the offline-sync
+/// `member-assessment-history` endpoint via [OfflineSyncService] —
+/// the legacy spice-service `patient/member-assessment-history` route is
+/// no longer called here.
 class EncounterRepository extends ApiRepository {
-  EncounterRepository(super.api, this._dao);
+  EncounterRepository(super.api, this._dao, {OfflineSyncService? offlineSync})
+      : _offlineSync = offlineSync;
 
   final EncounterDao _dao;
+  final OfflineSyncService? _offlineSync;
   static final _random = Random.secure();
 
   /// Generate a simple unique ID.
@@ -90,8 +82,10 @@ class EncounterRepository extends ApiRepository {
   }
 
   /// Get recent visits for a patient.
-  /// 
-  /// Merges local drafts with server history, deduplicating by ID.
+  ///
+  /// Merges local drafts with the offline-sync `member-assessment-history`
+  /// rows, deduplicating by encounter id. When the offline-sync service
+  /// has not been wired (legacy test setups) we fall back to local-only.
   Future<List<VisitSummary>> recentEncounters(
     String patientId, {
     int limit = 10,
@@ -99,44 +93,51 @@ class EncounterRepository extends ApiRepository {
   }) async {
     final visits = <String, VisitSummary>{};
 
-    // 1. Get local encounters first (includes drafts)
+    // 1. Local encounters first — includes drafts the device has captured
+    //    but not yet synced.
     final local = await _dao.recentForPatient(patientId, limit: limit);
     for (final row in local) {
       visits[row.id] = VisitSummary.fromEncounterRow(row);
     }
 
-    // 2. Fetch from server (assessment history)
-    try {
-      final body = await postOk(
-        Endpoints.patientMemberAssessmentHistory,
-        data: {
-          'patientId': patientId,
-          if (villageId != null) 'villageIds': [int.tryParse(villageId)],
-          'tenantId': api.tenantIdAsNum,
-          'skip': 0,
-          'limit': limit,
-        },
-        action: 'Recent encounters',
-      );
-      final list = extractList(body);
-      for (final item in list) {
-        if (item is Map<String, dynamic>) {
-          final summary = VisitSummary.fromAssessmentJson(item);
-          if (summary != null && !visits.containsKey(summary.id)) {
-            visits[summary.id] = summary;
-          }
+    // 2. Server history from offline-sync. The endpoint is village-scoped;
+    //    pass the caller's hint when available, else the user's full set.
+    final sync = _offlineSync;
+    if (sync != null) {
+      final scope = villageId != null
+          ? (int.tryParse(villageId) != null ? [int.parse(villageId)] : null)
+          : null;
+      final history = await sync.fetchAssessmentHistory(villageIds: scope);
+      final wantedMember = _memberHint(patientId);
+      for (final row in history) {
+        if (wantedMember != null &&
+            row.householdMemberId != wantedMember &&
+            !row.householdMemberId.endsWith('/$wantedMember')) {
+          continue;
         }
+        if (visits.containsKey(row.encounterId)) continue;
+        visits[row.encounterId] = VisitSummary.fromAssessmentHistory(row);
       }
-    } catch (e) {
-      // Offline or error — local data only
-      // ignore: avoid_print
-      print('[EncounterRepository] Server fetch failed: $e');
+    } else {
+      debugPrint(
+          '[EncounterRepository] No OfflineSyncService wired — local only');
     }
 
-    // 3. Sort by date descending and limit
     final result = visits.values.toList()
       ..sort((a, b) => b.date.compareTo(a.date));
     return result.take(limit).toList();
+  }
+
+  /// Server-side history rows are keyed by `householdMemberId`. When the
+  /// caller already passes a numeric or FHIR-referenced id we can filter
+  /// down to that member; otherwise we leave the row set unfiltered.
+  String? _memberHint(String patientId) {
+    if (int.tryParse(patientId) != null) return patientId;
+    if (patientId.contains('/')) {
+      final last = patientId.split('/').last;
+      if (int.tryParse(last) != null) return last;
+    }
+    return null;
   }
 
   /// Get the most recent visit summary for "Last seen X ago" display.

@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
+
 import '../../core/api/api_repository.dart';
-import '../../core/api/endpoints.dart';
 import '../../core/db/encounter_dao.dart';
+import '../visit/observation_repository.dart';
 
 /// Type of vital sign measurement.
 enum VitalType {
@@ -101,10 +103,21 @@ class RecentVitals {
 }
 
 /// Repository for fetching patient vitals history.
+///
+/// Server-side vitals are sourced exclusively from the FHIR Observation
+/// search by encounter (`GET /fhir-server/fhir/Observation?encounter=
+/// Encounter/{id}`) via [ObservationRepository]. The legacy spice-service
+/// log endpoints (`bplog/list`, `glucoselog/list`) are no longer called.
 class VitalsRepository extends ApiRepository {
-  VitalsRepository(super.api, {EncounterDao? encounters}) : _encounters = encounters;
+  VitalsRepository(
+    super.api, {
+    EncounterDao? encounters,
+    ObservationRepository? observations,
+  })  : _encounters = encounters,
+        _observations = observations;
 
   final EncounterDao? _encounters;
+  final ObservationRepository? _observations;
 
   /// Strip a FHIR-style `Resource/id` prefix so callers can pass either
   /// `Patient/0390444751474` or `0390444751474` interchangeably. DAOs
@@ -226,35 +239,32 @@ class VitalsRepository extends ApiRepository {
   }
 
   /// Fetch recent vitals for a patient.
-  /// Tries multiple identifier formats: patientReference, memberReference, patientId.
+  ///
+  /// Local cache is the offline-first source — every row written to the
+  /// encounter table by [OfflineSyncService] is read here first so the
+  /// section renders before any network call. To top up with the server's
+  /// view we pull the FHIR Observation bundle for the most recent encounters
+  /// from local cache and map LOINC-coded observations onto [VitalReading]s.
   Future<RecentVitals> recent(
     String patientId, {
     String? memberReference,
     int limit = 20,
   }) async {
-    // ignore: avoid_print
-    print('[VitalsRepository] ========== recent START ==========');
-    print('[VitalsRepository] patientId=$patientId, memberRef=$memberReference, limit=$limit');
     final readings = <VitalReading>[];
-
-    // Local-first — pull whatever the device already captured before
-    // hitting the network. Lets the section render offline; remote calls
-    // below just top up any newer rows the server has.
     readings.addAll(await latestFromLocal(patientId));
 
-    // Build patient reference in FHIR format
-    String patientRef = patientId;
-    if (!patientId.startsWith('Patient/')) {
-      patientRef = 'Patient/$patientId';
+    final obsRepo = _observations;
+    if (obsRepo != null && _encounters != null) {
+      final encounterIds = await _recentEncounterIdsForPatient(patientId);
+      for (final encounterId in encounterIds) {
+        final vitals = await obsRepo.vitalsForEncounter(encounterId);
+        readings.addAll(vitals);
+      }
+    } else {
+      debugPrint(
+          '[VitalsRepository] ObservationRepository/EncounterDao not wired — local only');
     }
-    // ignore: avoid_print
-    print('[VitalsRepository] Using patientRef=$patientRef');
 
-    // Fetch BP and glucose logs via the correct spice-service endpoints
-    await _tryFetchBpLogs(readings, patientId, patientRef, memberReference, limit);
-    await _tryFetchGlucoseLogs(readings, patientId, patientRef, memberReference, limit);
-
-    // Sort all readings by date descending
     readings.sort((a, b) => b.date.compareTo(a.date));
 
     // Extract latest of each type
@@ -294,12 +304,6 @@ class VitalsRepository extends ApiRepository {
       }
     }
 
-    // ignore: avoid_print
-    print('[VitalsRepository] Total readings collected: ${readings.length}');
-    print('[VitalsRepository] LatestBP: ${latestBp?.displayValue}, LatestGlucose: ${latestGlucose?.displayValue}');
-    print('[VitalsRepository] LatestWeight: ${latestWeight?.displayValue}, LatestTemp: ${latestTemp?.displayValue}');
-    print('[VitalsRepository] ========== recent END ==========');
-
     return RecentVitals(
       latestBp: latestBp,
       latestGlucose: latestGlucose,
@@ -312,345 +316,17 @@ class VitalsRepository extends ApiRepository {
     );
   }
 
-  /// Extract BP logs from the nested response structure.
-  /// API returns: { entity: { bpLogList: [...], latestBpLog: {...} } }
-  List _extractBpLogList(dynamic body) {
-    if (body is Map) {
-      // Check for entity.bpLogList structure
-      final entity = body['entity'];
-      if (entity is Map) {
-        final bpLogList = entity['bpLogList'];
-        if (bpLogList is List && bpLogList.isNotEmpty) {
-          return bpLogList;
-        }
-        // Also check for latestBpLog (single item)
-        final latestBpLog = entity['latestBpLog'];
-        if (latestBpLog is Map && latestBpLog['avgSystolic'] != null) {
-          return [latestBpLog];
-        }
-      }
-      // Fallback to standard extractList behavior
-      if (body['entityList'] is List) return body['entityList'] as List;
-      if (body['data'] is List) return body['data'] as List;
-    }
-    if (body is List) return body;
-    return const [];
+  /// Returns the encounter ids most recently cached for [patientId] so we
+  /// know which encounters to request observations for.
+  Future<List<String>> _recentEncounterIdsForPatient(
+    String patientId, {
+    int limit = 5,
+  }) async {
+    final dao = _encounters;
+    if (dao == null) return const [];
+    final stripped = _bareId(patientId);
+    final rows = await dao.recentForPatient(stripped, limit: limit);
+    return rows.map((r) => r.id).where((id) => id.isNotEmpty).toList();
   }
 
-  /// Extract glucose logs from the nested response structure.
-  /// API returns: { entity: { glucoseLogList: [...], latestGlucoseLog: {...} } }
-  List _extractGlucoseLogList(dynamic body) {
-    if (body is Map) {
-      // Check for entity.glucoseLogList structure
-      final entity = body['entity'];
-      if (entity is Map) {
-        final glucoseLogList = entity['glucoseLogList'];
-        if (glucoseLogList is List && glucoseLogList.isNotEmpty) {
-          return glucoseLogList;
-        }
-        // Also check for latestGlucoseLog (single item)
-        final latestGlucoseLog = entity['latestGlucoseLog'];
-        if (latestGlucoseLog is Map && latestGlucoseLog['glucoseValue'] != null) {
-          return [latestGlucoseLog];
-        }
-      }
-      // Fallback to standard extractList behavior
-      if (body['entityList'] is List) return body['entityList'] as List;
-      if (body['data'] is List) return body['data'] as List;
-    }
-    if (body is List) return body;
-    return const [];
-  }
-
-  Future<void> _tryFetchBpLogs(
-    List<VitalReading> readings,
-    String patientId,
-    String patientRef,
-    String? memberReference,
-    int limit,
-  ) async {
-    // ignore: avoid_print
-    print('[VitalsRepository] Fetching BP logs...');
-    
-    // Extract memberId from memberReference (e.g., "RelatedPerson/401" -> "401")
-    String? memberId;
-    if (memberReference != null) {
-      if (memberReference.contains('/')) {
-        memberId = memberReference.split('/').last;
-      } else {
-        memberId = memberReference;
-      }
-    }
-    
-    // API requires memberId field (not memberReference)
-    if (memberId != null) {
-      try {
-        final requestData = {
-          'memberId': memberId,
-          'tenantId': api.tenantIdAsNum,
-          'skip': 0,
-          'limit': limit,
-        };
-        // ignore: avoid_print
-        print('[VitalsRepository] Calling ${Endpoints.bpLogList} with memberId');
-        print('[VitalsRepository] Request: $requestData');
-
-        final bpBody = await postOk(
-          Endpoints.bpLogList,
-          data: requestData,
-          action: 'BP logs (memberId)',
-        );
-        // ignore: avoid_print
-        print('[VitalsRepository] BP response: $bpBody');
-        final bpList = _extractBpLogList(bpBody);
-        // ignore: avoid_print
-        print('[VitalsRepository] BP logs returned ${bpList.length} records');
-        for (final item in bpList) {
-          if (item is Map<String, dynamic>) {
-            // ignore: avoid_print
-            print('[VitalsRepository] BP item: $item');
-            final reading = _parseBpReading(item);
-            if (reading != null) readings.add(reading);
-          }
-        }
-        if (bpList.isNotEmpty) return;
-      } catch (e) {
-        // ignore: avoid_print
-        print('[VitalsRepository] BP logs (memberId) failed: $e');
-      }
-    }
-
-    // Fallback: try with patientId (for patients without member mapping)
-    try {
-      // ignore: avoid_print
-      print('[VitalsRepository] Trying BP logs with patientId...');
-      final bpBody = await postOk(
-        Endpoints.bpLogList,
-        data: {
-          'memberId': patientId, // Try patientId as memberId
-          'tenantId': api.tenantIdAsNum,
-          'skip': 0,
-          'limit': limit,
-        },
-        action: 'BP logs (patientId as memberId)',
-      );
-      final bpList = _extractBpLogList(bpBody);
-      // ignore: avoid_print
-      print('[VitalsRepository] BP logs (patientId) returned ${bpList.length} records');
-      for (final item in bpList) {
-        if (item is Map<String, dynamic>) {
-          final reading = _parseBpReading(item);
-          if (reading != null) readings.add(reading);
-        }
-      }
-    } catch (e) {
-      // ignore: avoid_print
-      print('[VitalsRepository] BP logs (patientId) failed: $e');
-    }
-  }
-
-  Future<void> _tryFetchGlucoseLogs(
-    List<VitalReading> readings,
-    String patientId,
-    String patientRef,
-    String? memberReference,
-    int limit,
-  ) async {
-    // ignore: avoid_print
-    print('[VitalsRepository] Fetching Glucose logs...');
-    
-    // Extract memberId from memberReference (e.g., "RelatedPerson/401" -> "401")
-    String? memberId;
-    if (memberReference != null) {
-      if (memberReference.contains('/')) {
-        memberId = memberReference.split('/').last;
-      } else {
-        memberId = memberReference;
-      }
-    }
-    
-    // API requires memberId field (not memberReference)
-    if (memberId != null) {
-      try {
-        final requestData = {
-          'memberId': memberId,
-          'tenantId': api.tenantIdAsNum,
-          'skip': 0,
-          'limit': limit,
-        };
-        // ignore: avoid_print
-        print('[VitalsRepository] Calling ${Endpoints.glucoseLogList} with memberId');
-        print('[VitalsRepository] Request: $requestData');
-
-        final glucoseBody = await postOk(
-          Endpoints.glucoseLogList,
-          data: requestData,
-          action: 'Glucose logs (memberId)',
-        );
-        // ignore: avoid_print
-        print('[VitalsRepository] Glucose response: $glucoseBody');
-        final glucoseList = _extractGlucoseLogList(glucoseBody);
-        // ignore: avoid_print
-        print('[VitalsRepository] Glucose logs returned ${glucoseList.length} records');
-        for (final item in glucoseList) {
-          if (item is Map<String, dynamic>) {
-            // ignore: avoid_print
-            print('[VitalsRepository] Glucose item: $item');
-            final reading = _parseGlucoseReading(item);
-            if (reading != null) readings.add(reading);
-          }
-        }
-        if (glucoseList.isNotEmpty) return;
-      } catch (e) {
-        // ignore: avoid_print
-        print('[VitalsRepository] Glucose logs (memberId) failed: $e');
-      }
-    }
-
-    // Fallback: try with patientId as memberId
-    try {
-      // ignore: avoid_print
-      print('[VitalsRepository] Trying Glucose logs with patientId as memberId...');
-      final glucoseBody = await postOk(
-        Endpoints.glucoseLogList,
-        data: {
-          'memberId': patientId,
-          'tenantId': api.tenantIdAsNum,
-          'skip': 0,
-          'limit': limit,
-        },
-        action: 'Glucose logs (patientId as memberId)',
-      );
-      final glucoseList = _extractGlucoseLogList(glucoseBody);
-      // ignore: avoid_print
-      print('[VitalsRepository] Glucose logs (patientId) returned ${glucoseList.length} records');
-      for (final item in glucoseList) {
-        if (item is Map<String, dynamic>) {
-          final reading = _parseGlucoseReading(item);
-          if (reading != null) readings.add(reading);
-        }
-      }
-    } catch (_) {}
-  }
-
-  VitalReading? _parseVitalReading(Map<String, dynamic> json) {
-    final typeStr = json['type']?.toString()?.toLowerCase() ?? '';
-    
-    DateTime? date;
-    final dateVal = json['createdAt'] ?? json['date'] ?? json['recordedAt'];
-    if (dateVal is String) {
-      date = DateTime.tryParse(dateVal);
-    } else if (dateVal is int) {
-      date = DateTime.fromMillisecondsSinceEpoch(dateVal);
-    }
-    date ??= DateTime.now();
-
-    VitalType? type;
-    double? value;
-    double? systolic;
-    double? diastolic;
-
-    if (typeStr.contains('bp') || typeStr.contains('blood_pressure')) {
-      type = VitalType.bloodPressure;
-      systolic = _parseDouble(json['systolic'] ?? json['avgSystolic']);
-      diastolic = _parseDouble(json['diastolic'] ?? json['avgDiastolic']);
-    } else if (typeStr.contains('glucose')) {
-      type = VitalType.glucose;
-      value = _parseDouble(json['value'] ?? json['glucoseValue']);
-    } else if (typeStr.contains('weight')) {
-      type = VitalType.weight;
-      value = _parseDouble(json['value'] ?? json['weight']);
-    } else if (typeStr.contains('height')) {
-      type = VitalType.height;
-      value = _parseDouble(json['value'] ?? json['height']);
-    } else if (typeStr.contains('temp')) {
-      type = VitalType.temperature;
-      value = _parseDouble(json['value'] ?? json['temperature']);
-    } else if (typeStr.contains('spo2') || typeStr.contains('oxygen')) {
-      type = VitalType.spO2;
-      value = _parseDouble(json['value'] ?? json['spO2']);
-    } else if (typeStr.contains('rr') || typeStr.contains('respiratory')) {
-      type = VitalType.respiratoryRate;
-      value = _parseDouble(json['value'] ?? json['respiratoryRate']);
-    } else if (typeStr.contains('bmi')) {
-      type = VitalType.bmi;
-      value = _parseDouble(json['value'] ?? json['bmi']);
-    } else if (typeStr.contains('muac')) {
-      type = VitalType.muac;
-      value = _parseDouble(json['value'] ?? json['muac']);
-    }
-
-    if (type == null) return null;
-
-    return VitalReading(
-      type: type,
-      date: date,
-      value: value,
-      systolic: systolic,
-      diastolic: diastolic,
-      unit: json['unit']?.toString(),
-      classification: json['classification']?.toString() ??
-          json['status']?.toString(),
-      rawJson: json,
-    );
-  }
-
-  VitalReading? _parseBpReading(Map<String, dynamic> json) {
-    DateTime? date;
-    final dateVal = json['createdAt'] ?? json['bpTakenOn'] ?? json['date'];
-    if (dateVal is String) {
-      date = DateTime.tryParse(dateVal);
-    } else if (dateVal is int) {
-      date = DateTime.fromMillisecondsSinceEpoch(dateVal);
-    }
-    date ??= DateTime.now();
-
-    final systolic = _parseDouble(json['avgSystolic'] ?? json['systolic']);
-    final diastolic = _parseDouble(json['avgDiastolic'] ?? json['diastolic']);
-
-    if (systolic == null && diastolic == null) return null;
-
-    return VitalReading(
-      type: VitalType.bloodPressure,
-      date: date,
-      systolic: systolic,
-      diastolic: diastolic,
-      unit: 'mmHg',
-      classification: json['bpClassification']?.toString() ??
-          json['riskLevel']?.toString(),
-      rawJson: json,
-    );
-  }
-
-  VitalReading? _parseGlucoseReading(Map<String, dynamic> json) {
-    DateTime? date;
-    final dateVal = json['createdAt'] ?? json['glucoseLogDate'] ?? json['date'];
-    if (dateVal is String) {
-      date = DateTime.tryParse(dateVal);
-    } else if (dateVal is int) {
-      date = DateTime.fromMillisecondsSinceEpoch(dateVal);
-    }
-    date ??= DateTime.now();
-
-    final value = _parseDouble(json['glucoseValue'] ?? json['value']);
-    if (value == null) return null;
-
-    return VitalReading(
-      type: VitalType.glucose,
-      date: date,
-      value: value,
-      unit: json['glucoseUnit']?.toString() ?? 'mg/dL',
-      classification: json['glucoseClassification']?.toString() ??
-          json['diabetesStatus']?.toString(),
-      rawJson: json,
-    );
-  }
-
-  double? _parseDouble(dynamic v) {
-    if (v == null) return null;
-    if (v is double) return v;
-    if (v is int) return v.toDouble();
-    if (v is String) return double.tryParse(v);
-    return null;
-  }
 }

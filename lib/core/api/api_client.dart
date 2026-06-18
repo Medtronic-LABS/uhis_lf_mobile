@@ -19,6 +19,7 @@ class ApiClient {
   final Dio dio;
   final CookieJar _cookieJar;
   String? _tenantId;
+  String? _organizationFhirId;
   DateTime? _authCookieExpiry;
   String? _cachedAuthCookie;
   String? _cachedJsession;
@@ -107,11 +108,21 @@ class ApiClient {
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
-          // Skip tenantId for login endpoint - auth service determines tenant from credentials
+          // Skip auth-scoped headers for the login endpoint — auth-service
+          // determines tenant + org from credentials and rejects extras.
           final isLogin = options.path.contains('/session');
-          final t = client._tenantId;
-          if (!isLogin && t != null && t.isNotEmpty) {
-            options.headers['tenantId'] = t;
+          if (!isLogin) {
+            final t = client._tenantId;
+            if (t != null && t.isNotEmpty) {
+              options.headers['tenantId'] = t;
+            }
+            final org = client._organizationFhirId;
+            if (org != null && org.isNotEmpty) {
+              options.headers['organizationId'] = org;
+            }
+            options.headers['App-Version'] = AppConfig.appVersionName;
+            options.headers['App-Version-Code'] =
+                AppConfig.appVersionCode.toString();
           }
           handler.next(options);
         },
@@ -121,9 +132,9 @@ class ApiClient {
       LogInterceptor(
         request: true,
         requestHeader: true,
-        requestBody: false,
+        requestBody: true,
         responseHeader: false,
-        responseBody: false,
+        responseBody: true,
         error: true,
       ),
     );
@@ -135,6 +146,15 @@ class ApiClient {
   }
 
   String? get tenantId => _tenantId;
+
+  /// FHIR ID of the organization the logged-in user belongs to. Replayed in
+  /// the `organizationId` header on every authed request (matches the Spice
+  /// Android reference interceptor at `AppInterceptor` in `di/AppModule.kt`).
+  void setOrganizationFhirId(String? id) {
+    _organizationFhirId = id;
+  }
+
+  String? get organizationFhirId => _organizationFhirId;
 
   /// `tenantId` coerced to a number when it is numeric, else the raw string.
   /// The spice/user services expect a numeric `tenantId` in JSON bodies; this
@@ -198,6 +218,7 @@ class ApiClient {
 
   Future<void> clearSession() async {
     _tenantId = null;
+    _organizationFhirId = null;
     _authCookieExpiry = null;
     _cachedAuthCookie = null;
     _cachedJsession = null;

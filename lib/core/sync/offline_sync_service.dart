@@ -8,6 +8,8 @@ import 'package:flutter/foundation.dart';
 import '../api/api_client.dart';
 import '../api/endpoints.dart';
 import '../auth/auth_repository.dart';
+import '../config/app_config.dart';
+import '../models/assessment_history_item.dart';
 import '../db/assessment_dao.dart';
 import '../db/follow_up_dao.dart';
 import '../db/household_dao.dart';
@@ -298,10 +300,10 @@ class OfflineSyncService extends ChangeNotifier {
     }
   }
 
-  // App version constants (match pubspec.yaml)
-  static const String _appVersionName = '1.0.0';
-  static const int _appVersionCode = 1;
-  static const String _appType = 'community'; // Matches Android CommonUtils.isCommunityOrNot()
+  // App version + type are sourced from AppConfig so the Engineering Design
+  // Standards "Configuration management" rule (no hardcoded build values) is
+  // honoured and a single `--dart-define` bump propagates to both headers
+  // (set in `ApiClient`) and request bodies.
 
   Future<Map<String, dynamic>> _fetchBundle({
     required List<int> villageIds,
@@ -315,10 +317,10 @@ class OfflineSyncService extends ChangeNotifier {
       if (since != null)
         'lastSyncTime': since.toUtc().toIso8601String(),
       if (userId != null) 'userId': userId,
-      'appVersionName': _appVersionName,
-      'appVersionCode': _appVersionCode,
+      'appVersionName': AppConfig.appVersionName,
+      'appVersionCode': AppConfig.appVersionCode,
       if (deviceId.isNotEmpty) 'deviceId': deviceId,
-      'appType': _appType,
+      'appType': AppConfig.appType,
     };
     final resp = await _api.dio.post<List<int>>(
       Endpoints.offlineSyncFetch,
@@ -1669,6 +1671,97 @@ class OfflineSyncService extends ChangeNotifier {
       debugPrint('[OfflineSyncService] static-data fallback failed: $e');
       return const [];
     }
+  }
+
+  /// Fetches the offline-sync member-assessment-history list.
+  ///
+  /// Wraps `POST /offline-service/offline-sync/member-assessment-history`.
+  /// Mirrors the Android reference contract (`OfflineSyncRepository
+  /// .fetchMemberAssessmentHistory`): the request scopes by [villageIds] for
+  /// CHW users and falls back to the logged-in user's assigned villages so
+  /// the call site does not have to remember to thread them through.
+  ///
+  /// Returns an empty list (rather than throwing) on transport failure so a
+  /// flaky cell connection cannot blank the Service-History tab while the
+  /// local SQLite cache still holds usable data.
+  Future<List<AssessmentHistoryItem>> fetchAssessmentHistory({
+    List<int>? villageIds,
+    String? memberId,
+    DateTime? since,
+  }) async {
+    var villages = villageIds;
+    if (villages == null || villages.isEmpty) {
+      villages = await _auth.villageIds();
+    }
+    if (villages.isEmpty) return const [];
+    // Dedupe — `villageIds()` can return duplicates when sub-village + village
+    // IDs collapse to the same numeric scope. Backend treats `[26, 26]` and
+    // `[26]` the same but the duplicate is noise on the wire.
+    final scope = villages.toSet().toList();
+
+    final userId = await _auth.userId();
+    final deviceId = await _auth.deviceId();
+
+    // NOTE: `memberId` is intentionally omitted from the request body even when
+    // the caller passes one. Spice-side member-history filter keys on the
+    // numeric internal id, not the FHIR id we hold on the client, so a
+    // memberId in the body silently excludes every row. The endpoint already
+    // scopes by `villageIds`; we filter to the requested member client-side
+    // via [_filterHistoryForMember] in the calling repository.
+    final body = <String, dynamic>{
+      'appType': AppConfig.appType,
+      'villageIds': scope,
+      if (since != null) 'lastSyncTime': since.toUtc().toIso8601String(),
+      if (userId != null) 'userId': userId,
+      'appVersionName': AppConfig.appVersionName,
+      'appVersionCode': AppConfig.appVersionCode,
+      if (deviceId.isNotEmpty) 'deviceId': deviceId,
+    };
+
+    try {
+      final resp = await _api.dio.post(
+        Endpoints.offlineSyncMemberAssessmentHistory,
+        data: body,
+      );
+      final status = resp.statusCode ?? 0;
+      if (status < 200 || status >= 300) {
+        debugPrint(
+          '[OfflineSyncService] member-assessment-history HTTP $status',
+        );
+        return const [];
+      }
+      final data = resp.data;
+      final raw = _extractHistoryList(data);
+      final items = <AssessmentHistoryItem>[];
+      for (final row in raw) {
+        if (row is! Map) continue;
+        final item =
+            AssessmentHistoryItem.fromJson(Map<String, dynamic>.from(row));
+        if (item != null) items.add(item);
+      }
+      items.sort((a, b) => b.visitDate.compareTo(a.visitDate));
+      debugPrint(
+        '[OfflineSyncService] member-assessment-history villages=$scope rawRows=${raw.length} parsed=${items.length}',
+      );
+      return items;
+    } catch (e) {
+      debugPrint('[OfflineSyncService] member-assessment-history failed: $e');
+      return const [];
+    }
+  }
+
+  /// The endpoint sometimes returns a bare list, sometimes wraps it in
+  /// `{ entity: [...] }` / `{ entityList: [...] }` / `{ data: [...] }` — the
+  /// spice envelope conventions leak through. Tolerate all three.
+  static List<dynamic> _extractHistoryList(Object? body) {
+    if (body is List) return body;
+    if (body is Map) {
+      for (final key in const ['entity', 'entityList', 'data']) {
+        final v = body[key];
+        if (v is List) return v;
+      }
+    }
+    return const [];
   }
 
   void dispose() {

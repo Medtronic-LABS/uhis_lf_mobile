@@ -1,7 +1,13 @@
+import 'package:flutter/foundation.dart';
+
 import '../../core/api/api_repository.dart';
 import '../../core/api/endpoints.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/db/member_dao.dart';
+import '../../core/models/assessment_history_item.dart';
+import '../../core/models/fhir_observation.dart';
+import '../../core/sync/offline_sync_service.dart';
+import '../visit/observation_repository.dart';
 
 /// Health assessment data for a member.
 class MemberAssessment {
@@ -156,12 +162,34 @@ class MemberHealthDetails {
 }
 
 /// Repository for fetching member health details.
+///
+/// Authoritative data path (Engineering Design Standards: single source of
+/// truth + FHIR R4 on the wire):
+///   * Past visits / referrals / service status →
+///     `POST /offline-service/offline-sync/member-assessment-history`
+///     via [OfflineSyncService.fetchAssessmentHistory].
+///   * Encounter-level observations (vitals, screening) →
+///     `GET /fhir-server/fhir/Observation?encounter=Encounter/{id}` via
+///     [ObservationRepository].
+/// Legacy spice-service endpoints (`/spice-service/patient/member-assessment
+/// -history`, `/spice-service/patientvisit/list`, `/spice-service/medical
+/// -review/history`) are not called from here any more — every member
+/// assessment goes through the offline-sync contract.
 class MemberDetailRepository extends ApiRepository {
-  MemberDetailRepository(super.api, this._authRepo, {MemberDao? members})
-      : _memberDao = members;
-  
+  MemberDetailRepository(
+    super.api,
+    this._authRepo, {
+    MemberDao? members,
+    OfflineSyncService? offlineSync,
+    ObservationRepository? observations,
+  })  : _memberDao = members,
+        _offlineSync = offlineSync,
+        _observations = observations;
+
   final AuthRepository _authRepo;
   final MemberDao? _memberDao;
+  final OfflineSyncService? _offlineSync;
+  final ObservationRepository? _observations;
 
   /// Fetch member details by ID from local SQLite (populated by offline sync).
   Future<MemberHealthDetails?> getMemberById(String memberId) async {
@@ -215,8 +243,16 @@ class MemberDetailRepository extends ApiRepository {
   }
 
   /// Fetch assessment history for a member.
-  /// If [villageId] is provided, uses the villageIds-based endpoint for better results.
-  /// For demo/test patients, filters by patient profile (age, gender, isPregnant).
+  ///
+  /// Calls the offline-sync `member-assessment-history` endpoint scoped to
+  /// the member's village (when known) and filters the returned history
+  /// rows down to the one member via `householdMemberId`. The endpoint is
+  /// the only path that returns past visits, referral status, and the
+  /// `nextFollowUpDate` consistently — the legacy spice-service routes are
+  /// no longer reached from here.
+  ///
+  /// For local-only / test data with no village context the call returns an
+  /// empty list rather than throwing; callers can degrade gracefully.
   Future<List<MemberAssessment>> getMemberAssessments(
     String memberId, {
     String? villageId,
@@ -224,147 +260,71 @@ class MemberDetailRepository extends ApiRepository {
     String? patientGender,
     bool? isPregnant,
   }) async {
-    // ignore: avoid_print
-    print('[MemberDetailRepository] getMemberAssessments: memberId=$memberId, villageId=$villageId, age=$patientAge, gender=$patientGender, isPregnant=$isPregnant');
-    try {
-      List<dynamic> list = [];
-
-      // If we have a villageId, use the villageIds-based endpoint
-      if (villageId != null) {
-        final villageIdNum = int.tryParse(villageId);
-        if (villageIdNum != null) {
-          // ignore: avoid_print
-          print('[MemberDetailRepository] Using villageIds endpoint with villageId=$villageIdNum');
-          final body = await postOk(
-            Endpoints.patientMemberAssessmentHistory,
-            data: {
-              'villageIds': [villageIdNum],
-              'tenantId': api.tenantIdAsNum,
-              'skip': 0,
-              'limit': 100,
-            },
-            action: 'Member assessment history by village',
-          );
-          list = extractList(body);
-          // ignore: avoid_print
-          print('[MemberDetailRepository] Got ${list.length} assessments from villageId=$villageIdNum');
-          // Filter to only this member's assessments if memberId is a numeric ID
-          final isNumericId = int.tryParse(memberId) != null;
-          if (isNumericId) {
-            list = list
-                .where((item) =>
-                    item is Map<String, dynamic> &&
-                    (item['householdMemberId']?.toString() == memberId ||
-                     item['memberId']?.toString() == memberId))
-                .toList();
-            // ignore: avoid_print
-            print('[MemberDetailRepository] Filtered to ${list.length} assessments for memberId=$memberId');
-          } else {
-            // For non-numeric IDs (like UUIDs from local test data), filter by patient profile
-            // ignore: avoid_print
-            print('[MemberDetailRepository] Non-numeric memberId, filtering by patient profile');
-            list = _filterByPatientProfile(list, patientAge, patientGender, isPregnant);
-            // ignore: avoid_print
-            print('[MemberDetailRepository] After profile filter: ${list.length} assessments');
-            if (list.length > 5) list = list.sublist(0, 5);
-          }
-        }
-      }
-
-      // Fallback: try legacy memberId-based request
-      if (list.isEmpty) {
-        // ignore: avoid_print
-        print('[MemberDetailRepository] Trying legacy memberId endpoint...');
-        final body = await postOk(
-          Endpoints.patientMemberAssessmentHistory,
-          data: {
-            'memberId': memberId,
-            'tenantId': api.tenantIdAsNum,
-          },
-          action: 'Member assessment history',
-        );
-        list = extractList(body);
-        // ignore: avoid_print
-        print('[MemberDetailRepository] Legacy endpoint returned ${list.length} assessments');
-      }
-      
-      final assessments = <MemberAssessment>[];
-      // ignore: avoid_print
-      print('[MemberDetailRepository] Found ${list.length} assessments total');
-      for (final item in list) {
-        if (item is Map<String, dynamic>) {
-          final a = MemberAssessment.fromJson(item);
-          if (a != null) assessments.add(a);
-        }
-      }
-
-      // Sort by date descending (newest first)
-      assessments.sort((a, b) => b.date.compareTo(a.date));
-      return assessments;
-    } catch (e) {
-      // ignore: avoid_print
-      print('[MemberDetailRepository] Error fetching assessments: $e');
-      return [];
+    final sync = _offlineSync;
+    if (sync == null) {
+      debugPrint(
+          '[MemberDetailRepository] No OfflineSyncService wired — cannot fetch assessment history');
+      return const [];
     }
+
+    final scoped = await _resolveVillageScope(villageId);
+    final history = await sync.fetchAssessmentHistory(
+      villageIds: scoped,
+      memberId: int.tryParse(memberId) != null ? memberId : null,
+    );
+
+    final assessments = <MemberAssessment>[];
+    for (final item in _filterHistoryForMember(history, memberId)) {
+      final mapped = _historyToAssessment(item);
+      if (mapped != null) assessments.add(mapped);
+    }
+    assessments.sort((a, b) => b.date.compareTo(a.date));
+    return assessments;
   }
 
-  /// Filter assessments by patient profile for demo/test data.
-  /// - ANC for pregnant women or females of childbearing age (15-49)
-  /// - IMCI for children under 5
-  /// - NCD/TB for adults
-  List<dynamic> _filterByPatientProfile(
-    List<dynamic> list,
-    int? patientAge,
-    String? patientGender,
-    bool? isPregnant,
-  ) {
-    if (list.isEmpty) return list;
+  /// Build the village scope for an offline-sync call: prefer the caller's
+  /// hint when present, otherwise fall back to the logged-in user's full
+  /// assigned set.
+  Future<List<int>?> _resolveVillageScope(String? villageId) async {
+    if (villageId != null) {
+      final id = int.tryParse(villageId);
+      if (id != null) return [id];
+    }
+    final all = await _authRepo.villageIds();
+    return all.isEmpty ? null : all;
+  }
 
-    // Determine which assessment types are relevant
-    final relevantTypes = <String>{};
-    
-    final isFemale = patientGender?.toLowerCase() == 'female' || 
-                     patientGender?.toLowerCase() == 'f';
-    final isChild = patientAge != null && patientAge < 5;
-    final isChildUnder2 = patientAge != null && patientAge < 2;
-    final isChildBearingAge = isFemale && patientAge != null && patientAge >= 15 && patientAge <= 49;
-    
-    if (isPregnant == true || isChildBearingAge) {
-      relevantTypes.add('ANC');
-      relevantTypes.add('PNC');
-    }
-    
-    if (isChild || isChildUnder2) {
-      relevantTypes.add('IMCI');
-      relevantTypes.add('ICCM');
-      relevantTypes.add('UNDER_FIVE');
-      relevantTypes.add('UNDER_2');
-    }
-    
-    // Adults get NCD/TB
-    if (patientAge != null && patientAge >= 18) {
-      relevantTypes.add('NCD');
-      relevantTypes.add('TB');
-    }
-    
-    // If no specific types identified, show all
-    if (relevantTypes.isEmpty) {
-      return list;
-    }
-    
-    // Filter by encounter type
-    return list.where((item) {
-      if (item is! Map<String, dynamic>) return false;
-      final encounterType = item['encounterType']?.toString().toUpperCase() ?? '';
-      final serviceProvided = item['serviceProvided']?.toString().toUpperCase() ?? '';
-      
-      for (final type in relevantTypes) {
-        if (encounterType.contains(type) || serviceProvided.contains(type)) {
-          return true;
-        }
+  /// Pick only the rows that belong to [memberId]. For numeric ids we match
+  /// the bare value; for FHIR-style references we also accept
+  /// `RelatedPerson/{id}` and `Patient/{id}` shapes a server may store.
+  List<AssessmentHistoryItem> _filterHistoryForMember(
+    List<AssessmentHistoryItem> rows,
+    String memberId,
+  ) {
+    final acceptable = <String>{
+      memberId,
+      if (memberId.contains('/')) memberId.split('/').last,
+    };
+    return rows.where((row) {
+      if (acceptable.contains(row.householdMemberId)) return true;
+      if (row.householdMemberId.contains('/') &&
+          acceptable.contains(row.householdMemberId.split('/').last)) {
+        return true;
       }
       return false;
     }).toList();
+  }
+
+  MemberAssessment? _historyToAssessment(AssessmentHistoryItem item) {
+    return MemberAssessment(
+      id: item.encounterId,
+      type: MemberAssessment._normalizeType(
+          item.serviceProvided ?? 'Assessment'),
+      date: item.visitDate,
+      status: item.referralStatus,
+      notes: item.referralReason,
+      rawJson: item.rawJson,
+    );
   }
 
   /// Fetch member with their assessments.
@@ -460,466 +420,138 @@ class MemberDetailRepository extends ApiRepository {
     }
   }
 
-  /// Fetch recent patient visits from /spice-service/patientvisit/list.
-  /// Also tries /spice-service/medical-review/history as fallback.
-  /// Finally tries FHIR Encounter search by household Group if available.
-  /// Returns up to [limit] most recent visits.
+  /// Fetch recent visits for a patient.
+  ///
+  /// Sourced from the offline-sync `member-assessment-history` endpoint —
+  /// the single source of truth for past visits, referral status, and
+  /// service-status fields. Legacy spice-service routes
+  /// (`patientvisit/list`, `medical-review/history`, FHIR Encounter
+  /// fallbacks) are no longer called: every assessment row carries an
+  /// `encounterId` we can drill into via [getVisitDetails], so the cascade
+  /// is redundant.
+  ///
+  /// [memberReference] is honoured when the patient is linked to a
+  /// `RelatedPerson` (member) record; otherwise we scope by the user's
+  /// assigned villages.
   Future<List<PatientVisit>> getRecentVisits(
     String patientId, {
     String? memberReference,
     String? householdId,
     int limit = 5,
   }) async {
-    // ignore: avoid_print
-    print('[MemberDetailRepository] ========== getRecentVisits START ==========');
-    print('[MemberDetailRepository] patientId=$patientId, memberRef=$memberReference, limit=$limit');
-    final visits = <PatientVisit>[];
-
-    // Try patientvisit/list endpoint first
-    try {
-      // Build patient reference in FHIR format if not already
-      String patientRef = patientId;
-      if (!patientId.startsWith('Patient/')) {
-        patientRef = 'Patient/$patientId';
-      }
-
-      final requestData = {
-        'patientReference': patientRef,
-        if (memberReference != null) 'memberReference': memberReference,
-        'tenantId': api.tenantIdAsNum,
-        'skip': 0,
-        'limit': limit,
-      };
-      // ignore: avoid_print
-      print('[MemberDetailRepository] Calling ${Endpoints.patientVisitList}');
-      print('[MemberDetailRepository] Request: $requestData');
-
-      final body = await postOk(
-        Endpoints.patientVisitList,
-        data: requestData,
-        action: 'Patient visits list',
-      );
-
-      // ignore: avoid_print
-      print('[MemberDetailRepository] Response body type: ${body.runtimeType}');
-      print('[MemberDetailRepository] Response: $body');
-
-      final list = extractList(body);
-      // ignore: avoid_print
-      print('[MemberDetailRepository] patientVisitList returned ${list.length} visits');
-      for (final item in list) {
-        if (item is Map<String, dynamic>) {
-          // ignore: avoid_print
-          print('[MemberDetailRepository] Visit item: $item');
-          final visit = PatientVisit.fromJson(item);
-          if (visit != null) visits.add(visit);
-        }
-      }
-    } catch (e) {
-      // ignore: avoid_print
-      print('[MemberDetailRepository] patientVisitList failed: $e');
+    final sync = _offlineSync;
+    if (sync == null) {
+      debugPrint(
+          '[MemberDetailRepository] No OfflineSyncService wired — cannot fetch recent visits');
+      return const [];
     }
 
-    // Fallback: try medical-review/history endpoint
-    if (visits.isEmpty) {
-      // ignore: avoid_print
-      print('[MemberDetailRepository] No visits from patientVisitList, trying medicalReviewHistory...');
-      try {
-        String patientRef = patientId;
-        if (!patientId.startsWith('Patient/')) {
-          patientRef = 'Patient/$patientId';
-        }
+    final villageScope = await _resolveVillageScope(null);
+    final memberId = _memberIdHint(patientId, memberReference);
+    final history = await sync.fetchAssessmentHistory(
+      villageIds: villageScope,
+      memberId: memberId,
+    );
 
-        final requestData = {
-          'patientReference': patientRef,
-          'tenantId': api.tenantIdAsNum,
-          'skip': 0,
-          'limit': limit,
-        };
-        // ignore: avoid_print
-        print('[MemberDetailRepository] Calling ${Endpoints.medicalReviewHistory}');
-        print('[MemberDetailRepository] Request: $requestData');
-
-        final body = await postOk(
-          Endpoints.medicalReviewHistory,
-          data: requestData,
-          action: 'Medical review history',
-        );
-
-        // ignore: avoid_print
-        print('[MemberDetailRepository] Response body type: ${body.runtimeType}');
-        print('[MemberDetailRepository] Response: $body');
-
-        final list = extractList(body);
-        // ignore: avoid_print
-        print('[MemberDetailRepository] medicalReviewHistory returned ${list.length} reviews');
-        for (final item in list) {
-          if (item is Map<String, dynamic>) {
-            // ignore: avoid_print
-            print('[MemberDetailRepository] Review item: $item');
-            final visit = PatientVisit.fromMedicalReview(item);
-            if (visit != null) visits.add(visit);
-          }
-        }
-      } catch (e) {
-        // ignore: avoid_print
-        print('[MemberDetailRepository] medicalReviewHistory failed: $e');
+    final byEncounterId = <String, PatientVisit>{};
+    for (final row in history) {
+      if (memberId != null &&
+          row.householdMemberId != memberId &&
+          !row.householdMemberId.endsWith('/$memberId')) {
+        continue;
       }
+      byEncounterId[row.encounterId] = PatientVisit.fromAssessmentHistory(row);
     }
 
-    // Final fallback: try FHIR server for Encounters by household Group
-    if (visits.isEmpty && householdId != null) {
-      // ignore: avoid_print
-      print('[MemberDetailRepository] No visits from spice-service, trying FHIR Encounters...');
-      print('[MemberDetailRepository] householdId=$householdId');
-      try {
-        // FHIR encounters are linked to Groups (households)
-        // Build the FHIR search URL
-        final fhirUrl = '${Endpoints.fhirServerBase}/Encounter?subject=Group/$householdId&_count=$limit&_sort=-date';
-        // ignore: avoid_print
-        print('[MemberDetailRepository] Calling FHIR: $fhirUrl');
-
-        final body = await getOk(
-          fhirUrl,
-          action: 'FHIR Encounters',
-        );
-
-        // ignore: avoid_print
-        print('[MemberDetailRepository] FHIR response type: ${body.runtimeType}');
-
-        // FHIR returns a Bundle with entries
-        if (body is Map<String, dynamic>) {
-          final entries = body['entry'] as List?;
-          // ignore: avoid_print
-          print('[MemberDetailRepository] FHIR bundle has ${entries?.length ?? 0} entries');
-          if (entries != null) {
-            for (final entry in entries) {
-              if (entry is Map<String, dynamic>) {
-                final resource = entry['resource'] as Map<String, dynamic>?;
-                if (resource != null && resource['resourceType'] == 'Encounter') {
-                  // ignore: avoid_print
-                  print('[MemberDetailRepository] FHIR Encounter: ${resource['id']}');
-                  final visit = PatientVisit.fromFhirEncounter(resource);
-                  if (visit != null) visits.add(visit);
-                }
-              }
-            }
-          }
-        }
-        // ignore: avoid_print
-        print('[MemberDetailRepository] Got ${visits.length} visits from FHIR');
-      } catch (e) {
-        // ignore: avoid_print
-        print('[MemberDetailRepository] FHIR Encounters failed: $e');
-      }
-    }
-
-    // Also try FHIR by Patient reference if we have fewer visits than limit
-    if (visits.length < limit) {
-      // ignore: avoid_print
-      print('[MemberDetailRepository] Also trying FHIR Encounters by Patient...');
-      print('[MemberDetailRepository] patientId=$patientId');
-      try {
-        // Try to search by Patient ID
-        final fhirUrl = '${Endpoints.fhirServerBase}/Encounter?subject=Patient/$patientId&_count=$limit&_sort=-date';
-        // ignore: avoid_print
-        print('[MemberDetailRepository] Calling FHIR by Patient: $fhirUrl');
-
-        final body = await getOk(
-          fhirUrl,
-          action: 'FHIR Encounters by Patient',
-        );
-
-        if (body is Map<String, dynamic>) {
-          final entries = body['entry'] as List?;
-          // ignore: avoid_print
-          print('[MemberDetailRepository] FHIR Patient bundle has ${entries?.length ?? 0} entries');
-          if (entries != null) {
-            for (final entry in entries) {
-              if (entry is Map<String, dynamic>) {
-                final resource = entry['resource'] as Map<String, dynamic>?;
-                if (resource != null && resource['resourceType'] == 'Encounter') {
-                  final encounterId = resource['id']?.toString();
-                  // Check if we already have this encounter
-                  final alreadyHave = visits.any((v) => v.id == encounterId);
-                  if (!alreadyHave) {
-                    // ignore: avoid_print
-                    print('[MemberDetailRepository] FHIR Patient Encounter: $encounterId');
-                    final visit = PatientVisit.fromFhirEncounter(resource);
-                    if (visit != null) visits.add(visit);
-                  }
-                }
-              }
-            }
-          }
-        }
-        // ignore: avoid_print
-        print('[MemberDetailRepository] Total visits after Patient search: ${visits.length}');
-      } catch (e) {
-        // ignore: avoid_print
-        print('[MemberDetailRepository] FHIR Encounters by Patient failed: $e');
-      }
-    }
-
-    // ignore: avoid_print
-    print('[MemberDetailRepository] Final visits count: ${visits.length}');
-    print('[MemberDetailRepository] ========== getRecentVisits END ==========');
-
-    // Sort by date descending
-    visits.sort((a, b) => b.visitDate.compareTo(a.visitDate));
+    final visits = byEncounterId.values.toList()
+      ..sort((a, b) => b.visitDate.compareTo(a.visitDate));
     return visits.take(limit).toList();
   }
 
-  /// Fetch detailed visit information using medical-review/history endpoint.
-  /// This matches Android's approach of calling `/spice-service/medical-review/history`
-  /// with encounterId to get full review details including diagnosis, vitals, etc.
+  /// Best-effort numeric member id from either [patientId] or [memberReference].
+  /// Returns null when the caller has only an opaque FHIR id we cannot match
+  /// against the assessment-history rows.
+  String? _memberIdHint(String patientId, String? memberReference) {
+    if (memberReference != null) {
+      final last = memberReference.contains('/')
+          ? memberReference.split('/').last
+          : memberReference;
+      if (last.isNotEmpty) return last;
+    }
+    if (int.tryParse(patientId) != null) return patientId;
+    if (patientId.contains('/')) {
+      final last = patientId.split('/').last;
+      if (int.tryParse(last) != null) return last;
+    }
+    return null;
+  }
+
+  /// Fetch the FHIR Observation bundle for an encounter.
+  ///
+  /// This is the new authoritative path for any vitals / screening view —
+  /// callers that previously hit `bplog/list`, `glucoselog/list`, or
+  /// `medical-review/history` should use this method instead.
+  Future<FhirObservationBundle> getEncounterObservations(
+      String encounterId) async {
+    final obs = _observations;
+    if (obs == null) {
+      debugPrint(
+          '[MemberDetailRepository] No ObservationRepository wired — encounter observations unavailable');
+      return const FhirObservationBundle(observations: []);
+    }
+    return obs.forEncounter(encounterId);
+  }
+
+  /// Build a [VisitDetails] from the FHIR Observation bundle for the given
+  /// encounter.
+  ///
+  /// Engineering Design Standards: FHIR R4 on the wire — encounter-level
+  /// observations come from `GET /fhir-server/fhir/Observation?encounter=
+  /// Encounter/{id}`. The legacy spice-service `medical-review/history` +
+  /// type-specific detail endpoints (NCD/ANC/PNC/Mental Health/ICCM/Labour)
+  /// are no longer called: vitals, screening, and clinical observations all
+  /// live as `Observation` resources keyed by encounter.
+  ///
+  /// The [type] hint, when supplied, is propagated onto the returned model
+  /// so the UI can pick a programme-appropriate render template; otherwise
+  /// we leave it null and let the caller decide.
   Future<VisitDetails?> getVisitDetails(
     String encounterId, {
     String? patientReference,
     String? memberReference,
     String? type,
   }) async {
-    // ignore: avoid_print
-    print('[MemberDetailRepository] ========== getVisitDetails START ==========');
-    print('[MemberDetailRepository] encounterId=$encounterId, patientRef=$patientReference, memberRef=$memberReference, type=$type');
-
-    try {
-      final requestData = {
-        'encounterId': encounterId,
-        if (patientReference != null) 'patientReference': patientReference,
-        if (type != null) 'type': type,
-        'tenantId': api.tenantIdAsNum,
-      };
-      // ignore: avoid_print
-      print('[MemberDetailRepository] Calling ${Endpoints.medicalReviewHistory}');
-      print('[MemberDetailRepository] Request: $requestData');
-
-      final body = await postOk(
-        Endpoints.medicalReviewHistory,
-        data: requestData,
-        action: 'Medical review details',
+    final bundle = await getEncounterObservations(encounterId);
+    if (bundle.observations.isEmpty) {
+      debugPrint(
+          '[MemberDetailRepository] No observations for encounter $encounterId');
+      // Return an empty shell so the UI can still render the visit header
+      // (encounter id + caller-supplied programme hint) without surfacing
+      // the absence of observations as an error.
+      return VisitDetails.fromObservations(
+        encounterId: encounterId,
+        patientReference: patientReference,
+        type: type,
+        observations: const [],
       );
-
-      // ignore: avoid_print
-      print('[MemberDetailRepository] Response type: ${body.runtimeType}');
-      print('[MemberDetailRepository] Response: $body');
-
-      if (body is Map<String, dynamic>) {
-        // Extract entity from wrapped response
-        final entity = body['entity'] as Map<String, dynamic>? ?? body;
-        // ignore: avoid_print
-        print('[MemberDetailRepository] Entity: $entity');
-        print('[MemberDetailRepository] Entity reviewDetails: ${entity['reviewDetails']}');
-        print('[MemberDetailRepository] Entity history: ${entity['history']}');
-        
-        var details = VisitDetails.fromJson(entity);
-        // ignore: avoid_print
-        print('[MemberDetailRepository] Parsed visit details:');
-        print('  - id: ${details?.id}');
-        print('  - type: ${details?.type}');
-        print('  - dateOfReview: ${details?.dateOfReview}');
-        print('  - patientReference: ${details?.patientReference}');
-        print('  - visitNumber: ${details?.reviewDetails?.visitNumber}');
-        print('  - diagnosis: ${details?.reviewDetails?.diagnosis?.length ?? 0} items');
-        print('  - history: ${details?.history?.length ?? 0} items');
-        
-        // If history has only 1 item (current encounter), fetch full history using patientReference
-        if (details != null && 
-            details.patientReference != null && 
-            (details.history == null || details.history!.length <= 1)) {
-          print('[MemberDetailRepository] History has ${details.history?.length ?? 0} items, fetching full history...');
-          final fullHistory = await _fetchFullPatientHistory(details.patientReference!);
-          if (fullHistory != null && fullHistory.isNotEmpty) {
-            print('[MemberDetailRepository] Got ${fullHistory.length} items in full history');
-            details = VisitDetails(
-              id: details.id,
-              patientReference: details.patientReference,
-              dateOfReview: details.dateOfReview,
-              type: details.type,
-              reviewDetails: details.reviewDetails,
-              history: fullHistory,
-              typeSpecificDetails: details.typeSpecificDetails,
-              rawJson: details.rawJson,
-            );
-          }
-        }
-        
-        // Fetch type-specific details if we have a visit type
-        if (details != null && details.visitType != null) {
-          print('[MemberDetailRepository] Fetching type-specific details for type=${details.visitType}');
-          final typeDetails = await _fetchTypeSpecificDetails(
-            encounterId,
-            details.visitType!,
-            details.patientReference,
-            memberReference,
-          );
-          if (typeDetails != null && typeDetails.isNotEmpty) {
-            print('[MemberDetailRepository] Got type-specific details: ${typeDetails.keys}');
-            details = VisitDetails(
-              id: details.id,
-              patientReference: details.patientReference,
-              dateOfReview: details.dateOfReview,
-              type: details.type,
-              reviewDetails: details.reviewDetails,
-              history: details.history,
-              typeSpecificDetails: typeDetails,
-              rawJson: details.rawJson,
-            );
-          }
-        }
-        
-        print('[MemberDetailRepository] ========== getVisitDetails END ==========');
-        return details;
-      }
-      // ignore: avoid_print
-      print('[MemberDetailRepository] Response was not a Map');
-      print('[MemberDetailRepository] ========== getVisitDetails END ==========');
-      return null;
-    } catch (e) {
-      // ignore: avoid_print
-      print('[MemberDetailRepository] Error fetching visit details: $e');
-      print('[MemberDetailRepository] ========== getVisitDetails END ==========');
-      return null;
     }
-  }
-
-  /// Fetch full patient visit history using patientReference.
-  Future<List<Map<String, dynamic>>?> _fetchFullPatientHistory(String patientReference) async {
-    try {
-      final requestData = {
-        'patientReference': patientReference,
-        'tenantId': api.tenantIdAsNum,
-      };
-      // ignore: avoid_print
-      print('[MemberDetailRepository] Fetching full history with patientReference=$patientReference');
-
-      final body = await postOk(
-        Endpoints.medicalReviewHistory,
-        data: requestData,
-        action: 'Full patient history',
-      );
-
-      if (body is Map<String, dynamic>) {
-        final entity = body['entity'] as Map<String, dynamic>? ?? body;
-        final history = entity['history'] as List?;
-        if (history != null) {
-          return history.whereType<Map<String, dynamic>>().toList();
-        }
-      }
-      return null;
-    } catch (e) {
-      // ignore: avoid_print
-      print('[MemberDetailRepository] Error fetching full history: $e');
-      return null;
-    }
-  }
-
-  /// Fetch type-specific visit details based on visit type.
-  /// Different visit types use different detail endpoints (NCD, ANC, PNC, Mental Health, etc.)
-  Future<Map<String, dynamic>?> _fetchTypeSpecificDetails(
-    String encounterId,
-    String visitType,
-    String? patientReference,
-    String? memberReference,
-  ) async {
-    // Determine the endpoint based on visit type
-    late String endpoint;
-    bool isMentalHealth = false;
-    
-    switch (visitType.toUpperCase()) {
-      case 'NCD':
-        endpoint = Endpoints.medicalReviewNcdDetails;
-        break;
-      case 'CATARACT':
-      case 'EYE_CARE':
-      case 'MENTAL_HEALTH':
-        endpoint = Endpoints.mentalHealthDetails;
-        isMentalHealth = true;
-        break;
-      case 'ANC':
-      case 'ANC_PREGNANCY':
-        endpoint = Endpoints.medicalReviewAncDetails;
-        break;
-      case 'PNC':
-        endpoint = Endpoints.medicalReviewPncDetails;
-        break;
-      case 'ICCM':
-      case 'ICCM_GENERAL':
-        endpoint = Endpoints.medicalReviewIccmDetails;
-        break;
-      case 'ICCM_UNDER_2_MONTHS':
-        endpoint = Endpoints.medicalReviewIccmUnder2MonthsDetails;
-        break;
-      case 'ICCM_UNDER_5_YEARS':
-        endpoint = Endpoints.medicalReviewIccmUnder5YearsDetails;
-        break;
-      case 'LABOUR':
-      case 'DELIVERY':
-      case 'LABOUR_DELIVERY':
-        endpoint = Endpoints.medicalReviewLabourDetails;
-        break;
-      default:
-        // Try NCD as a fallback for unknown types
-        // ignore: avoid_print
-        print('[MemberDetailRepository] Unknown visit type: $visitType, trying NCD details');
-        endpoint = Endpoints.medicalReviewNcdDetails;
-    }
-
-    try {
-      Map<String, dynamic> requestData;
-      
-      if (isMentalHealth) {
-        // Mental health endpoints use memberReference and type (per Android NCDMentalHealthMedicalReviewDetails)
-        final memberRef = memberReference ?? patientReference;
-        if (memberRef == null) {
-          print('[MemberDetailRepository] No memberReference for mental health endpoint, skipping');
-          return null;
-        }
-        requestData = {
-          'memberReference': memberRef,
-          'type': visitType.toUpperCase(),
-        };
-      } else {
-        // NCD and other endpoints - match Postman collection format
-        // Uses both encounterId and encounterReference, plus latestRequired flag
-        requestData = {
-          'encounterId': encounterId.toString(),
-          'encounterReference': encounterId.toString(),
-          if (patientReference != null) 'patientReference': patientReference.toString(),
-          if (memberReference != null) 'memberReference': memberReference.toString(),
-          'patientVisitId': encounterId.toString(),
-          'latestRequired': false,
-        };
-      }
-      
-      // ignore: avoid_print
-      print('[MemberDetailRepository] Fetching $visitType details from $endpoint');
-      print('[MemberDetailRepository] Request: $requestData');
-
-      final body = await postOk(
-        endpoint,
-        data: requestData,
-        action: '$visitType details',
-      );
-
-      // ignore: avoid_print
-      print('[MemberDetailRepository] $visitType details response: $body');
-
-      if (body is Map<String, dynamic>) {
-        final entity = body['entity'] as Map<String, dynamic>? ?? body;
-        return entity;
-      }
-      return null;
-    } catch (e) {
-      // ignore: avoid_print
-      print('[MemberDetailRepository] Error fetching $visitType details: $e');
-      return null;
-    }
+    return VisitDetails.fromObservations(
+      encounterId: encounterId,
+      patientReference: patientReference,
+      type: type,
+      observations: bundle.observations,
+    );
   }
 }
 
-/// Detailed visit information from medical-review/history endpoint.
-/// Mirrors Android's MedicalReviewHistory model.
+/// Detailed visit information.
+///
+/// Authoritative data path: the FHIR Observation bundle returned by
+/// `GET /fhir-server/fhir/Observation?encounter=Encounter/{id}` —
+/// see [VisitDetails.fromObservations]. The legacy spice-service medical-
+/// review shape ([reviewDetails], [history], [typeSpecificDetails]) is kept
+/// for the JSON-decoding compatibility of older test fixtures only; live
+/// code populates [observations] instead.
 class VisitDetails {
   const VisitDetails({
     this.id,
@@ -929,8 +561,34 @@ class VisitDetails {
     this.reviewDetails,
     this.history,
     this.typeSpecificDetails,
+    this.observations = const [],
     this.rawJson = const {},
   });
+
+  /// Build a VisitDetails from an Observation bundle keyed by encounter.
+  /// `dateOfReview` defaults to the earliest observation's
+  /// `effectiveDateTime` so the visit-detail header has a date to render
+  /// even when the upstream history row is not in scope.
+  factory VisitDetails.fromObservations({
+    required String encounterId,
+    String? patientReference,
+    String? type,
+    required List<FhirObservation> observations,
+  }) {
+    DateTime? earliest;
+    for (final o in observations) {
+      final eff = o.effectiveDateTime;
+      if (eff == null) continue;
+      if (earliest == null || eff.isBefore(earliest)) earliest = eff;
+    }
+    return VisitDetails(
+      id: encounterId,
+      patientReference: patientReference,
+      dateOfReview: earliest?.toIso8601String(),
+      type: type,
+      observations: List<FhirObservation>.unmodifiable(observations),
+    );
+  }
 
   final String? id;
   final String? patientReference;
@@ -938,8 +596,16 @@ class VisitDetails {
   final String? type;
   final ReviewDetails? reviewDetails;
   final List<Map<String, dynamic>>? history;
-  /// Type-specific details from NCD, Mental Health, ANC, PNC, etc. endpoints
+
+  /// Legacy spice-service "type-specific details" map. Only ever populated
+  /// by [fromJson] for backwards-compatible deserialisation; live fetches
+  /// populate [observations] instead.
   final Map<String, dynamic>? typeSpecificDetails;
+
+  /// FHIR Observation resources captured during this encounter — vitals,
+  /// screening responses, programme observations. Authoritative for the
+  /// visit-detail view.
+  final List<FhirObservation> observations;
   final Map<String, dynamic> rawJson;
 
   /// Get the visit type - either from top level or from first history item
@@ -1307,6 +973,22 @@ class PatientVisit {
   final String? providerName;
   final String? notes;
   final Map<String, dynamic> rawJson;
+
+  /// Build a [PatientVisit] from an offline-sync assessment-history row.
+  /// This is the authoritative path: the offline-sync endpoint guarantees
+  /// `encounterId` + `visitDate` for every past visit, which is all the
+  /// Service-History timeline needs to render.
+  static PatientVisit fromAssessmentHistory(AssessmentHistoryItem item) {
+    return PatientVisit(
+      id: item.encounterId,
+      visitDate: item.visitDate,
+      encounterType: item.serviceProvided,
+      serviceProvided: item.serviceProvided,
+      status: item.referralStatus,
+      notes: item.referralReason,
+      rawJson: item.rawJson,
+    );
+  }
 
   static PatientVisit? fromJson(Map<String, dynamic> json) {
     final id = json['id']?.toString() ??

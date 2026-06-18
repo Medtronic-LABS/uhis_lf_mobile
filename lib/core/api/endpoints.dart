@@ -263,6 +263,13 @@ class Endpoints {
   static String fhirServiceRequestByVillage(String villageId) =>
       '/fhir-server/fhir/ServiceRequest?identifier=http://mdtlabs.com/village-id|$villageId&_count=100';
 
+  /// FHIR Observation search by encounter — returns a Bundle of every
+  /// observation captured for the visit (vitals, screening, programme
+  /// observations). Single source of truth for the encounter-detail view.
+  /// HAPI FHIR R4: `GET /fhir/Observation?encounter=Encounter/{id}&_count=200`.
+  static String fhirObservationByEncounter(String encounterId, {int count = 200}) =>
+      '/fhir-server/fhir/Observation?encounter=Encounter/$encounterId&_count=$count';
+
   // ── AI Scribe: voice → SOAP note ─────────────────────────────────────────
   static const String scribeTranscribe =
       '/ai-scribe-service/scribe/transcribe';

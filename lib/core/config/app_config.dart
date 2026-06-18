@@ -24,6 +24,29 @@ class AppConfig {
     defaultValue: 'mob',
   );
 
+  /// Human-readable app version (also sent as the `App-Version` header so the
+  /// offline-sync service can gate compatibility). Mirrors the version in
+  /// `pubspec.yaml` so a single bump propagates to the wire.
+  static const String appVersionName = String.fromEnvironment(
+    'APP_VERSION_NAME',
+    defaultValue: '1.0.0',
+  );
+
+  /// Numeric app version code (also sent as the `App-Version-Code` header).
+  /// Matches the Android reference contract for offline-sync request bodies.
+  static const int appVersionCode = int.fromEnvironment(
+    'APP_VERSION_CODE',
+    defaultValue: 1,
+  );
+
+  /// Application type sent in offline-sync request bodies. Mirrors the
+  /// Android reference `CommonUtils.isCommunityOrNot()` (`COMMUNITY` for SK
+  /// builds; `FO` for field-officer builds when that variant ships).
+  static const String appType = String.fromEnvironment(
+    'APP_TYPE',
+    defaultValue: 'COMMUNITY',
+  );
+
   /// HmacSHA512 key the React frontend (and now this app) uses to hash the
   /// password before posting to `/auth-service/session`. Empty in dev.
   static const String passwordHashKey = String.fromEnvironment(

@@ -83,6 +83,7 @@ class AuthRepository {
   static const _kSubVillageIds = 'subVillageIds';
   static const _kUserId = 'userId';
   static const _kDeviceId = 'deviceId';
+  static const _kOrganizationFhirId = 'organizationFhirId';
 
   Future<String?> currentTenantId() async {
     final cached = _api.tenantId;
@@ -214,15 +215,23 @@ class AuthRepository {
     await writeOrDelete(_kNidOrPhone, nidExtracted ?? phone);
 
     String? area;
+    String? orgFhirId;
     final orgs = entityMap['organizations'];
     if (orgs is List && orgs.isNotEmpty) {
       final first = orgs.first;
       if (first is Map) {
         final name = (first['name'] as String?)?.trim();
         if (name != null && name.isNotEmpty) area = name;
+        final fhir = (first['fhirId'] as String?)?.trim();
+        final numericId = first['id']?.toString().trim();
+        orgFhirId = (fhir != null && fhir.isNotEmpty)
+            ? fhir
+            : (numericId != null && numericId.isNotEmpty ? numericId : null);
       }
     }
     await writeOrDelete(_kArea, area);
+    await writeOrDelete(_kOrganizationFhirId, orgFhirId);
+    _api.setOrganizationFhirId(orgFhirId);
 
     String? ward;
     final villages = entityMap['villages'];
@@ -340,6 +349,7 @@ class AuthRepository {
     } catch (_) {}
     await _api.clearSession();
     await _storage.delete(key: _kTenantId);
+    await _storage.delete(key: _kOrganizationFhirId);
     await _clearReentrySession();
     await _storage.delete(key: _kBioEnabled);
     await _storage.delete(key: _kBioUsername);
@@ -549,7 +559,20 @@ class AuthRepository {
 
     _api.setTenantId(tenant);
     await _storage.write(key: _kTenantId, value: tenant);
+    final orgFhirId = await _storage.read(key: _kOrganizationFhirId);
+    _api.setOrganizationFhirId(orgFhirId);
     return true;
+  }
+
+  /// Returns the FHIR ID of the user's organization, persisted from the
+  /// `/user-service/user/profile` response. Used by sync orchestration when
+  /// the offline-sync request body wants the org id alongside the header.
+  Future<String?> organizationFhirId() async {
+    final cached = _api.organizationFhirId;
+    if (cached != null && cached.isNotEmpty) return cached;
+    final stored = await _storage.read(key: _kOrganizationFhirId);
+    if (stored != null && stored.isNotEmpty) _api.setOrganizationFhirId(stored);
+    return stored;
   }
 }
 

@@ -52,6 +52,7 @@ import 'features/search/patient_search_repository.dart';
 import 'features/visit/assessment_repository.dart';
 import 'features/visit/encounter_repository.dart';
 import 'features/visit/household_repository.dart';
+import 'features/visit/observation_repository.dart';
 import 'features/visit/visit_controller.dart';
 import 'features/worklist/worklist_repository.dart';
 
@@ -307,18 +308,31 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<LocalDashboardRepository>.value(value: _localDashboard),
         Provider<PatientProgrammesDao>.value(value: _progDao),
         Provider<PregnancySnapshotDao>.value(value: _pregnancySnapshotDao),
+        Provider<ObservationRepository>(
+            create: (_) => ObservationRepository(widget.api)),
         Provider<MemberDetailRepository>(
-            create: (_) => MemberDetailRepository(widget.api, widget.authRepo,
-                members: _memberDao)),
+            create: (ctx) => MemberDetailRepository(
+                  widget.api,
+                  widget.authRepo,
+                  members: _memberDao,
+                  offlineSync: _sync,
+                  observations: ctx.read<ObservationRepository>(),
+                )),
         // Visit flow providers
         Provider<EncounterDao>(
             create: (_) => EncounterDao(widget.appDb)),
         Provider<EncounterRepository>(
             create: (ctx) => EncounterRepository(
-                widget.api, ctx.read<EncounterDao>())),
+                  widget.api,
+                  ctx.read<EncounterDao>(),
+                  offlineSync: _sync,
+                )),
         Provider<VitalsRepository>(
             create: (ctx) => VitalsRepository(
-                widget.api, encounters: ctx.read<EncounterDao>())),
+                  widget.api,
+                  encounters: ctx.read<EncounterDao>(),
+                  observations: ctx.read<ObservationRepository>(),
+                )),
         Provider<FollowUpRepository>(
             create: (_) =>
                 FollowUpRepository(widget.api, dao: _followUpDao)),
