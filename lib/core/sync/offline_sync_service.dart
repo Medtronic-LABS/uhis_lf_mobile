@@ -940,7 +940,15 @@ class OfflineSyncService extends ChangeNotifier {
     for (final entry in programmes.entries) {
       await _programmes.replaceFor(entry.key, entry.value);
     }
-    await _followUps.upsertMany(followUps);
+    // Remap follow-up patientIds through the member→BRN translation built above
+    // so they match the IDs stored in the patients table.
+    final remappedFollowUps = followUps.map((row) {
+      final mapped = memberIdToPatientId[row.patientId];
+      return (mapped != null && mapped != row.patientId)
+          ? row.copyWith(patientId: mapped)
+          : row;
+    }).toList();
+    await _followUps.upsertMany(remappedFollowUps);
     await _immunisations.upsertMany(immunisations);
     await _assessments.upsertMany(assessments);
 

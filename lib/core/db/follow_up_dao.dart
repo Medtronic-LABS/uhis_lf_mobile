@@ -68,6 +68,20 @@ class FollowUpRow {
         'raw_json': rawJson,
       };
 
+  FollowUpRow copyWith({String? patientId}) => FollowUpRow(
+        id: id,
+        patientId: patientId ?? this.patientId,
+        kind: kind,
+        dueAt: dueAt,
+        completedAt: completedAt,
+        attempts: attempts,
+        unsuccessfulAttempts: unsuccessfulAttempts,
+        type: type,
+        referredSiteId: referredSiteId,
+        isLost: isLost,
+        rawJson: rawJson,
+      );
+
   static FollowUpRow fromDb(Map<String, Object?> row) => FollowUpRow(
         id: row['id'] as String,
         patientId: row['patient_id'] as String,

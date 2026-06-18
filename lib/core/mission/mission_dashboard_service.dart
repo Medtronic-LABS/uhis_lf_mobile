@@ -864,6 +864,32 @@ class MissionDashboardService {
     return score;
   }
 
+  /// Returns an inferred next-due date for a patient whose follow-up records
+  /// have no `dueAt` — derived from `lastVisitAt` + the programme's standard
+  /// recall interval. Returns null if there is no last-visit date or no
+  /// programme with a known interval.
+  DateTime? _inferDueAt(WorklistEntry entry) {
+    final last = entry.lastVisitAt;
+    if (last == null) return null;
+    int? intervalDays;
+    if (entry.programmes.contains(Programme.anc) ||
+        entry.programmes.contains(Programme.pnc)) {
+      intervalDays = 14;
+    } else if (entry.programmes.contains(Programme.tb)) {
+      intervalDays = 7;
+    } else if (entry.programmes.contains(Programme.imci)) {
+      intervalDays = 7;
+    } else if (entry.programmes.contains(Programme.ncd)) {
+      intervalDays = 30;
+    } else if (entry.programmes.contains(Programme.epi)) {
+      intervalDays = 30;
+    } else if (entry.programmes.contains(Programme.familyPlanning)) {
+      intervalDays = 90;
+    }
+    if (intervalDays == null) return null;
+    return last.add(Duration(days: intervalDays));
+  }
+
   /// Classify a candidate into a [DashboardTier] and return its driver tags.
   /// Returns `null` when hide rules apply (inactive / deceased / completed
   /// today) so the caller drops the candidate without counting it against
@@ -960,11 +986,15 @@ class MissionDashboardService {
 
     for (final entry in input.worklistEntries) {
       final age = entry.age ?? input.agesByPatientId[entry.patientId];
+      // Use explicit follow-up dueAt when available; fall back to programme-
+      // interval inference so patients without a follow-up record still surface
+      // in the correct tier instead of always landing in "upcoming".
+      final effectiveDueAt = entry.nextDueAt ?? _inferDueAt(entry);
       final classified = _classify(
         patientId: entry.patientId,
         age: age,
         band: entry.band,
-        dueAt: entry.nextDueAt,
+        dueAt: effectiveDueAt,
         input: input,
         now: now,
       );
@@ -972,15 +1002,24 @@ class MissionDashboardService {
       final score = _compositeScore(
         patientId: entry.patientId,
         age: age,
-        dueAt: entry.nextDueAt,
+        dueAt: effectiveDueAt,
         input: input,
         now: now,
       );
       final base = _worklistToQueueItem(entry, now, input);
+      // When nextDueAt was null but we inferred a due date, patch it into
+      // the queue item so the card shows the correct "due" / "overdue" label.
+      final inferredDueAt =
+          entry.nextDueAt == null ? effectiveDueAt : null;
+      final inferredDaysOverdue = inferredDueAt != null
+          ? now.difference(inferredDueAt).inDays.clamp(0, 999)
+          : null;
       candidates.add(base.copyWith(
         priorityScore: score,
         tier: classified.tier,
         drivers: classified.drivers,
+        dueAt: inferredDueAt,
+        daysOverdue: inferredDaysOverdue,
       ));
     }
 
