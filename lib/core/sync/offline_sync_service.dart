@@ -1529,14 +1529,18 @@ class OfflineSyncService extends ChangeNotifier {
     for (final entry in programmes.entries) {
       await _programmes.replaceFor(entry.key, entry.value);
     }
-    
+
+    // Fetch follow-ups via offline endpoints so next_due_at can be computed.
+    final followUpCount = await _fallbackSyncFollowUps(villageIds);
+
     // Also sync referrals in fallback mode
     final referralCount = await _syncReferrals(villageIds: villageIds);
-    
+
     final report = SyncReport(
       startedAt: started,
       finishedAt: DateTime.now(),
       patients: patients.length,
+      followUps: followUpCount,
       referrals: referralCount,
       wasFullSync: fullSync,
       errors: [
@@ -1549,6 +1553,38 @@ class OfflineSyncService extends ChangeNotifier {
       await _syncMeta.stampWarm(_entityKey, report.finishedAt);
     }
     return report;
+  }
+
+  /// Fetch follow-ups from the four offline endpoints and persist them.
+  /// Returns total rows persisted. Tolerates per-endpoint failures.
+  Future<int> _fallbackSyncFollowUps(List<int> villageIds) async {
+    final body = <String, dynamic>{
+      'villageIds': villageIds,
+      'tenantId': _api.tenantIdAsNum,
+      'currentSyncTime': DateTime.now().toUtc().toIso8601String(),
+    };
+    final endpoints = [
+      Endpoints.followUpOfflineLost,
+      Endpoints.followUpOfflineScreening,
+      Endpoints.followUpOfflineMedicalReview,
+      Endpoints.followUpOfflineAssessment,
+    ];
+    final rows = <FollowUpRow>[];
+    for (final ep in endpoints) {
+      try {
+        final resp = await _api.dio.post(ep, data: body);
+        for (final raw in _extractList(resp.data)) {
+          if (raw is! Map) continue;
+          final row = _followUpRowFrom(raw);
+          if (row != null) rows.add(row);
+        }
+      } catch (e) {
+        debugPrint('[OfflineSyncService] Follow-up fallback $ep failed: $e');
+      }
+    }
+    if (rows.isNotEmpty) await _followUps.upsertMany(rows);
+    debugPrint('[OfflineSyncService] Fallback follow-ups persisted: ${rows.length}');
+    return rows.length;
   }
 
   Future<List> _fetchPatientList(List<int> villageIds) async {
