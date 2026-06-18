@@ -74,6 +74,7 @@ class WorklistRepository {
       householdNo: p.householdId,
       householdName: null, // Could be populated from household cache
       villageId: p.villageId,
+      villageName: p.villageName,
       programmes: programmes,
       score: p.riskScore ?? 0,
       band: p.riskBand ?? RiskBand.low,

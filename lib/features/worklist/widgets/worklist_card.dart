@@ -569,6 +569,12 @@ class _ProgrammeChip extends StatelessWidget {
         return WorklistStrings.programmeEpi;
       case Programme.nutrition:
         return WorklistStrings.programmeNutrition;
+      case Programme.familyPlanning:
+        return WorklistStrings.programmeFamilyPlanning;
+      case Programme.cataract:
+        return WorklistStrings.programmeCataract;
+      case Programme.eyeCare:
+        return WorklistStrings.programmeEyeCare;
       case Programme.unknown:
         return WorklistStrings.programmeUnknown;
     }
@@ -641,6 +647,10 @@ class _MiniProgrammeChip extends StatelessWidget {
         return (scheme.primaryContainer, scheme.onPrimaryContainer);
       case Programme.tb:
         return (scheme.secondaryContainer, scheme.onSecondaryContainer);
+      case Programme.familyPlanning:
+        return (scheme.tertiaryContainer, scheme.onTertiaryContainer);
+      case Programme.cataract:
+      case Programme.eyeCare:
       case Programme.epi:
       case Programme.nutrition:
       case Programme.unknown:
@@ -664,6 +674,12 @@ class _MiniProgrammeChip extends StatelessWidget {
         return WorklistStrings.programmeEpi;
       case Programme.nutrition:
         return WorklistStrings.programmeNutrition;
+      case Programme.familyPlanning:
+        return WorklistStrings.programmeFamilyPlanning;
+      case Programme.cataract:
+        return WorklistStrings.programmeCataract;
+      case Programme.eyeCare:
+        return WorklistStrings.programmeEyeCare;
       case Programme.unknown:
         return WorklistStrings.programmeUnknown;
     }
@@ -769,6 +785,12 @@ class _ProgrammeTag extends StatelessWidget {
         return (scheme.surfaceContainerHighest, scheme.onSurface, Icons.vaccines);
       case Programme.nutrition:
         return (scheme.surfaceContainerHighest, scheme.onSurface, Icons.restaurant);
+      case Programme.familyPlanning:
+        return (scheme.tertiaryContainer, scheme.onTertiaryContainer, Icons.family_restroom);
+      case Programme.cataract:
+        return (scheme.surfaceContainerHighest, scheme.onSurface, Icons.visibility_outlined);
+      case Programme.eyeCare:
+        return (scheme.surfaceContainerHighest, scheme.onSurface, Icons.remove_red_eye_outlined);
       case Programme.unknown:
         return (scheme.surfaceContainerHighest, scheme.onSurface, Icons.person);
     }
@@ -790,6 +812,12 @@ class _ProgrammeTag extends StatelessWidget {
         return WorklistStrings.programmeEpi;
       case Programme.nutrition:
         return WorklistStrings.programmeNutrition;
+      case Programme.familyPlanning:
+        return WorklistStrings.programmeFamilyPlanning;
+      case Programme.cataract:
+        return WorklistStrings.programmeCataract;
+      case Programme.eyeCare:
+        return WorklistStrings.programmeEyeCare;
       case Programme.unknown:
         return WorklistStrings.programmeUnknown;
     }

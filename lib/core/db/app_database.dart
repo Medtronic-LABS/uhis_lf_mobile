@@ -16,7 +16,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 12;
+  static const int schemaVersion = 13;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -127,6 +127,7 @@ class AppDatabase {
         national_id TEXT,
         household_id TEXT,
         village_id TEXT,
+        village_name TEXT,
         is_active INTEGER,
         updated_at INTEGER,
         raw_json TEXT,
@@ -794,6 +795,18 @@ class AppDatabase {
       await addCol12('ALTER TABLE $tableMembers ADD COLUMN sub_village_name TEXT');
       await addCol12(
           'ALTER TABLE $tableMembers ADD COLUMN shasthya_shebika_id TEXT');
+    }
+    if (from < 13) {
+      // v13 — Add village_name to patients table so the sub-village text
+      // name (e.g. "NAMATARI-00") stored during member sync is available
+      // for display without a cross-namespace ID lookup via UserHierarchyService.
+      Future<void> addCol13(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* column already present */}
+      }
+      await addCol13(
+          'ALTER TABLE $tablePatients ADD COLUMN village_name TEXT');
     }
   }
 

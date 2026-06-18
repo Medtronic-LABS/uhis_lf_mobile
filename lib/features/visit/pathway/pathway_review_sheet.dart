@@ -99,6 +99,12 @@ class _PathwayReviewSheetState extends State<PathwayReviewSheet> {
         return PathwayStrings.programmeEpi;
       case Programme.nutrition:
         return PathwayStrings.programmeNutrition;
+      case Programme.familyPlanning:
+        return PathwayStrings.programmeFamilyPlanning;
+      case Programme.cataract:
+        return PathwayStrings.programmeCataract;
+      case Programme.eyeCare:
+        return PathwayStrings.programmeEyeCare;
       case Programme.unknown:
         return PathwayStrings.programmeUnknown;
     }
@@ -374,6 +380,12 @@ class _PathwayReviewSheetState extends State<PathwayReviewSheet> {
         return Icons.vaccines;
       case Programme.nutrition:
         return Icons.restaurant;
+      case Programme.familyPlanning:
+        return Icons.family_restroom;
+      case Programme.cataract:
+        return Icons.visibility_outlined;
+      case Programme.eyeCare:
+        return Icons.remove_red_eye_outlined;
       case Programme.unknown:
         return Icons.medical_services;
     }
@@ -452,6 +464,12 @@ class _ManualProgrammeSheet extends StatelessWidget {
         return PathwayStrings.programmeEpi;
       case Programme.nutrition:
         return PathwayStrings.programmeNutrition;
+      case Programme.familyPlanning:
+        return PathwayStrings.programmeFamilyPlanning;
+      case Programme.cataract:
+        return PathwayStrings.programmeCataract;
+      case Programme.eyeCare:
+        return PathwayStrings.programmeEyeCare;
       case Programme.unknown:
         return PathwayStrings.programmeUnknown;
     }
@@ -473,6 +491,12 @@ class _ManualProgrammeSheet extends StatelessWidget {
         return Icons.vaccines;
       case Programme.nutrition:
         return Icons.restaurant;
+      case Programme.familyPlanning:
+        return Icons.family_restroom;
+      case Programme.cataract:
+        return Icons.visibility_outlined;
+      case Programme.eyeCare:
+        return Icons.remove_red_eye_outlined;
       case Programme.unknown:
         return Icons.medical_services;
     }

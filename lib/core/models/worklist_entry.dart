@@ -13,6 +13,7 @@ class WorklistEntry {
     this.householdNo,
     this.householdName,
     this.villageId,
+    this.villageName,
     this.programmes = const <Programme>{},
     required this.score,
     required this.band,
@@ -28,6 +29,7 @@ class WorklistEntry {
   final String? householdNo;
   final String? householdName;
   final String? villageId;
+  final String? villageName;
   final Set<Programme> programmes;
   final int score;
   final RiskBand band;

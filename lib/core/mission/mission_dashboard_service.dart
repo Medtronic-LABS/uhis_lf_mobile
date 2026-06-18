@@ -572,10 +572,7 @@ class MissionDashboardService {
       householdId: entry.householdNo,
       householdNumber: data.householdNumbersById[entry.householdNo],
       age: entry.age,
-      village: entry.householdName ??
-          (entry.villageId != null
-              ? (data.villageNamesById[entry.villageId!] ?? entry.villageId)
-              : null),
+      village: entry.householdName ?? entry.villageName ?? entry.villageId,
       programmes: entry.programmes,
       reason: reason,
       daysOverdue: entry.nextDueAt != null

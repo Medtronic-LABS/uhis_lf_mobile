@@ -21,6 +21,7 @@ class Patient {
     this.nationalId,
     this.householdId,
     this.villageId,
+    this.villageName,
     this.isActive,
     this.updatedAt,
     required this.rawJson,
@@ -45,6 +46,7 @@ class Patient {
   final String? nationalId;
   final String? householdId;
   final String? villageId;
+  final String? villageName;
   final bool? isActive;
   final int? updatedAt;
   final String rawJson;
@@ -77,6 +79,8 @@ class Patient {
       householdId:
           JsonRead.firstString(json, const ['houseHoldId', 'householdId']),
       villageId: JsonRead.firstString(json, const ['villageId']),
+      villageName: JsonRead.firstString(
+          json, const ['subVillage', 'subVillageName', 'sub_village_name']),
       isActive: JsonRead.firstBool(json, const ['isActive', 'active']),
       updatedAt: JsonRead.epochMillis(json, const ['updatedAt', 'lastUpdated']),
       rawJson: JsonRead.encode(json),
@@ -97,6 +101,7 @@ class Patient {
         'national_id': nationalId,
         'household_id': householdId,
         'village_id': villageId,
+        'village_name': villageName,
         'is_active': isActive == null ? null : (isActive! ? 1 : 0),
         'updated_at': updatedAt,
         'raw_json': rawJson,
@@ -123,6 +128,7 @@ class Patient {
         nationalId: row['national_id'] as String?,
         householdId: row['household_id'] as String?,
         villageId: row['village_id'] as String?,
+        villageName: row['village_name'] as String?,
         isActive: row['is_active'] == null ? null : (row['is_active'] == 1),
         updatedAt: row['updated_at'] as int?,
         rawJson: row['raw_json'] as String? ?? '{}',

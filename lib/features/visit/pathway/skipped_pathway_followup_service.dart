@@ -34,6 +34,9 @@ abstract final class DeferredScreeningReason {
         return skippedTb;
       case Programme.epi:
       case Programme.nutrition:
+      case Programme.familyPlanning:
+      case Programme.cataract:
+      case Programme.eyeCare:
       case Programme.unknown:
         return deferredScreening;
     }
@@ -73,6 +76,9 @@ abstract final class DeferredScreeningInterval {
         return tbDays;
       case Programme.epi:
       case Programme.nutrition:
+      case Programme.familyPlanning:
+      case Programme.cataract:
+      case Programme.eyeCare:
       case Programme.unknown:
         return defaultDays;
     }

@@ -259,6 +259,17 @@ class OfflineSyncService extends ChangeNotifier {
         if (out.members == 0 && hhCount.members > 0) totalMembers = hhCount.members;
       }
       
+      // Step 3b: Always fetch follow-ups via the per-village offline endpoints.
+      // The bundle's own follow-up rows reference the bundle's internal patient
+      // IDs (which may differ from the BRN-format IDs stored by the household
+      // member sync). Fetching via villageIds guarantees the follow-up rows
+      // use patient IDs that match the patients table, so recomputeAllAfterSync
+      // can find them.
+      final fallbackFollowUps = await _fallbackSyncFollowUps(villageIds);
+      if (fallbackFollowUps > 0) {
+        out = out.copyWith(followUps: out.followUps + fallbackFollowUps);
+      }
+
       // Step 4: Sync referrals
       _emitProgress(SyncProgress(
         currentStep: SyncStep.fetchingReferrals,
@@ -1002,6 +1013,7 @@ class OfflineSyncService extends ChangeNotifier {
       nationalId: m.nationalId,
       householdId: m.householdId,
       villageId: m.villageId,
+      villageName: m.subVillageName ?? m.villageName,
       isActive: m.isActive,
       updatedAt: m.updatedAt,
       rawJson: m.rawJson ?? '{}',
