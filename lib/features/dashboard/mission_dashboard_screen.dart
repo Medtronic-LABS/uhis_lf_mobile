@@ -15,6 +15,7 @@ import '../../core/db/local_dashboard_repository.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/models/dashboard_tier.dart';
 import '../../core/models/mission_queue_item.dart';
+import '../../core/models/programme.dart';
 import '../../core/widgets/location_filter_sheet.dart';
 import '../referral/referral_repository.dart';
 import '../search/global_search_bar.dart';
@@ -22,6 +23,16 @@ import '../visit/visit_controller.dart';
 import '../visit/widgets/widgets.dart';
 import 'dashboard_repository.dart';
 import 'mission_dashboard_repository.dart';
+
+enum _NeedFilter {
+  highRisk,
+  ancMnch,
+  childImmunisation,
+  ncd,
+  eyeCare,
+  missedFollowUp,
+  pendingReferral,
+}
 
 /// AI Mission Dashboard — the operational command center for the SK.
 ///
@@ -64,6 +75,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _selectedVillageId;
   String? _selectedSubVillageId;
   String? _selectedShebikaId;
+
+  // Inline village chip + need filter
+  List<String> _inlineVillages = const [];
+  String? _selectedVillageChipName;
+  Set<_NeedFilter> _selectedNeeds = const {};
 
   @override
   void initState() {
@@ -213,7 +229,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (!mounted) return withoutCompleted;
     // ignore: use_build_context_synchronously
     final locationFiltered = await _applyLocationFilter(withoutCompleted, context);
-    return locationFiltered;
+
+    // Extract distinct village labels for inline chips (from un-completed queue)
+    final allVillageLabels = withoutCompleted
+        .map((i) => i.village?.trim())
+        .whereType<String>()
+        .where((v) => v.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    if (mounted) {
+      // ignore: use_build_context_synchronously
+      setState(() => _inlineVillages = allVillageLabels);
+    }
+
+    // Apply inline village chip filter
+    var result = locationFiltered;
+    final chipVillage = _selectedVillageChipName;
+    if (chipVillage != null) {
+      result = result.where((i) => i.village?.trim() == chipVillage).toList();
+    }
+
+    // Apply need filter (OR logic — item matches if it satisfies any selected need)
+    if (_selectedNeeds.isNotEmpty) {
+      result = result.where(_needMatches).toList();
+    }
+
+    return result;
   }
 
   Future<void> _refresh() async {
@@ -390,6 +432,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return null;
   }
 
+  bool _needMatches(MissionQueueItem item) {
+    final needs = _selectedNeeds;
+    if (needs.isEmpty) return true;
+    for (final need in needs) {
+      switch (need) {
+        case _NeedFilter.highRisk:
+          if (item.priority == MissionPriority.critical ||
+              item.priority == MissionPriority.high) { return true; }
+        case _NeedFilter.ancMnch:
+          if (item.programmes.contains(Programme.anc) ||
+              item.programmes.contains(Programme.pnc)) { return true; }
+        case _NeedFilter.childImmunisation:
+          if (item.programmes.contains(Programme.imci) ||
+              item.programmes.contains(Programme.epi)) { return true; }
+        case _NeedFilter.ncd:
+          if (item.programmes.contains(Programme.ncd)) { return true; }
+        case _NeedFilter.eyeCare:
+          if (item.programmes.contains(Programme.cataract) ||
+              item.programmes.contains(Programme.eyeCare)) { return true; }
+        case _NeedFilter.missedFollowUp:
+          if (item.daysOverdue != null && item.daysOverdue! > 0) { return true; }
+        case _NeedFilter.pendingReferral:
+          if (item.referralId != null) { return true; }
+      }
+    }
+    return false;
+  }
+
   void _clearAllFilters() {
     setState(() {
       _selectedVillageId = null;
@@ -513,6 +583,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       onTapReferrals: () => context.push('/referrals'),
                     ),
                     const SizedBox(height: 14),
+                    _VisitFilterPanel(
+                      villages: _inlineVillages,
+                      selectedVillage: _selectedVillageChipName,
+                      onVillageSelected: (name) {
+                        setState(() => _selectedVillageChipName = name);
+                        _loadMissionData();
+                      },
+                      selectedNeeds: _selectedNeeds,
+                      onNeedToggled: (need) {
+                        setState(() {
+                          final updated = Set<_NeedFilter>.from(_selectedNeeds);
+                          if (updated.contains(need)) {
+                            updated.remove(need);
+                          } else {
+                            updated.add(need);
+                          }
+                          _selectedNeeds = updated;
+                        });
+                        _loadMissionData();
+                      },
+                      onClearNeeds: () {
+                        setState(() => _selectedNeeds = const {});
+                        _loadMissionData();
+                      },
+                    ),
+                    const SizedBox(height: 4),
                     FutureBuilder<List<MissionQueueItem>>(
                       key: ValueKey('queue_$_refreshVersion'),
                       future: _queueFuture,
@@ -1376,6 +1472,234 @@ class _EmptyVisitsCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Two-row inline filter panel for the dashboard visit list.
+///
+/// Row 1 — village chips (single-select, from queue items)
+/// Row 2 — need chips (multi-select, programme/priority-based)
+class _VisitFilterPanel extends StatelessWidget {
+  const _VisitFilterPanel({
+    required this.villages,
+    required this.selectedVillage,
+    required this.onVillageSelected,
+    required this.selectedNeeds,
+    required this.onNeedToggled,
+    required this.onClearNeeds,
+  });
+
+  final List<String> villages;
+  final String? selectedVillage;
+  final void Function(String? name) onVillageSelected;
+  final Set<_NeedFilter> selectedNeeds;
+  final void Function(_NeedFilter need) onNeedToggled;
+  final VoidCallback onClearNeeds;
+
+  static const _pinkColor = Color(0xFFE8356D);
+  static const _pinkActiveBg = Color(0xFFFDF2F8);
+  static const _pinkActiveText = Color(0xFF9D174D);
+
+  String _needLabel(_NeedFilter need) {
+    switch (need) {
+      case _NeedFilter.highRisk:
+        return MissionDashboardStrings.needHighRisk;
+      case _NeedFilter.ancMnch:
+        return MissionDashboardStrings.needAncMnch;
+      case _NeedFilter.childImmunisation:
+        return MissionDashboardStrings.needChildImmunisation;
+      case _NeedFilter.ncd:
+        return MissionDashboardStrings.needNcd;
+      case _NeedFilter.eyeCare:
+        return MissionDashboardStrings.needEyeCare;
+      case _NeedFilter.missedFollowUp:
+        return MissionDashboardStrings.needMissedFollowUp;
+      case _NeedFilter.pendingReferral:
+        return MissionDashboardStrings.needPendingReferral;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.all(Radius.circular(14)),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x0A000000),
+            blurRadius: 4,
+            offset: Offset(0, 1),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Row 1: village chips ──────────────────────────────────────────
+          if (villages.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+              child: Text(
+                MissionDashboardStrings.whichVillageVisiting,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF374151),
+                ),
+              ),
+            ),
+            SizedBox(
+              height: 34,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                children: [
+                  _VillageChip(
+                    label: MissionDashboardStrings.allVillages,
+                    isActive: selectedVillage == null,
+                    onTap: () => onVillageSelected(null),
+                  ),
+                  ...villages.map((v) => _VillageChip(
+                    label: v,
+                    isActive: selectedVillage == v,
+                    onTap: () => onVillageSelected(selectedVillage == v ? null : v),
+                  )),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            Divider(height: 1, color: const Color(0xFFE5E7EB)),
+            const SizedBox(height: 8),
+          ],
+
+          // ── Row 2: need chips ─────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+            child: Row(
+              children: [
+                const Text(
+                  MissionDashboardStrings.filterByNeed,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF374151),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '(${MissionDashboardStrings.filterByNeedOptional})',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w400,
+                    color: Color(0xFF9CA3AF),
+                  ),
+                ),
+                const Spacer(),
+                if (selectedNeeds.isNotEmpty)
+                  GestureDetector(
+                    onTap: onClearNeeds,
+                    child: const Text(
+                      MissionDashboardStrings.clearNeedFilters,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: _pinkColor,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          SizedBox(
+            height: 34,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              children: _NeedFilter.values.map((need) {
+                final active = selectedNeeds.contains(need);
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: GestureDetector(
+                    onTap: () => onNeedToggled(need),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: active ? _pinkActiveBg : Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: active
+                              ? _pinkColor
+                              : const Color(0xFFD1D5DB),
+                          width: 1,
+                        ),
+                      ),
+                      child: Text(
+                        _needLabel(need),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight:
+                              active ? FontWeight.w800 : FontWeight.w500,
+                          color: active
+                              ? _pinkActiveText
+                              : const Color(0xFF374151),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 2),
+        ],
+      ),
+    );
+  }
+}
+
+class _VillageChip extends StatelessWidget {
+  const _VillageChip({
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  static const _navyColor = Color(0xFF1B2B5E);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: isActive ? _navyColor : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isActive ? _navyColor : const Color(0xFFD1D5DB),
+              width: 1,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: isActive ? Colors.white : const Color(0xFF374151),
+            ),
+          ),
+        ),
       ),
     );
   }

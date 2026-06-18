@@ -929,6 +929,20 @@ abstract final class MissionDashboardStrings {
     }
   }
 
+  // ── Inline Village + Need filter ─────────────────────────────────────────
+  static const String whichVillageVisiting = 'Which village are you visiting?';
+  static const String allVillages = 'All villages';
+  static const String filterByNeed = 'Filter by need';
+  static const String filterByNeedOptional = 'optional';
+  static const String needHighRisk = '⚠️ High-risk';
+  static const String needAncMnch = '🤰 ANC / MNCH';
+  static const String needChildImmunisation = '👶 Child / Immunisation';
+  static const String needNcd = '💊 NCD';
+  static const String needEyeCare = '👁️ Eye care';
+  static const String needMissedFollowUp = '⏰ Missed follow-up';
+  static const String needPendingReferral = '📋 Pending referral';
+  static const String clearNeedFilters = 'Clear';
+
   /// Human-readable rationale for a driver tag on `MissionQueueItem.drivers`.
   /// Unknown tags fall back to a generic phrase so the rationale sheet never
   /// shows a raw tag identifier to the SK.
