@@ -16,8 +16,13 @@ import '../scribe/scribe_session.dart';
 import '../scribe/widgets/scribe_banner.dart';
 import '../scribe/widgets/scribe_review_sheet.dart';
 import '../worklist/worklist_repository.dart';
+import '../../core/db/local_assessment_dao.dart';
 import 'assessment_repository.dart';
+import 'composer/sectioned_assessment_screen.dart';
 import 'forms/anc_assessment_form.dart';
+import 'pathway/pathway_engine.dart';
+import 'submission/unified_submission_orchestrator.dart';
+import 'triage/patient_context_builder.dart';
 import 'forms/iccm_assessment_form.dart';
 import 'forms/ncd_assessment_form.dart';
 import 'forms/tb_assessment_form.dart';
@@ -78,6 +83,10 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
   IccmAssessment? _iccmData;
 
   bool _isSubmitting = false;
+
+  /// Set by [_buildSectionedScreen]'s onReferNow callback when a CDS alert
+  /// fires a referral recommendation during sectioned assessment.
+  bool _sectionedReferralTriggered = false;
 
   /// Whether we're using the new pathway-driven flow.
   bool get _hasActivatedPathways =>
@@ -154,6 +163,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
   }
 
   bool get _referralRecommended {
+    if (_sectionedReferralTriggered) return true;
     final session = context.read<VisitController>().session;
     if (session == null) return false;
     switch (session.programme) {
@@ -202,6 +212,11 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
                 showScribeReviewSheet(ctx);
               }
             });
+          }
+
+          // ── Phase 2: Sectioned assessment for pathway-driven flow ──────────
+          if (_hasActivatedPathways) {
+            return _buildSectionedScreen(ctx, visitCtrl, session);
           }
 
           return Scaffold(
@@ -497,6 +512,127 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
       }
     }
     return Programme.unknown;
+  }
+
+  // ── Phase 2: Sectioned assessment helpers ───────────────────────────────
+
+  /// Reconstruct [ActivatedPathway] list from string programme names.
+  ///
+  /// Priority mirrors [PathwayRulesV1] order so section rendering is correct.
+  List<ActivatedPathway> _buildPathways() {
+    return widget.activatedPathways!
+        .map(Programme.fromString)
+        .where((p) => p != Programme.unknown)
+        .map((p) => ActivatedPathway(
+              programme: p,
+              priority: _programmePriority(p),
+              confidence: 1.0,
+              trigger: PathwayTrigger.manual,
+              rationaleKey: 'pathwayManualRationale',
+            ))
+        .toList();
+  }
+
+  int _programmePriority(Programme p) {
+    switch (p) {
+      case Programme.imci:
+        return 10;
+      case Programme.anc:
+        return 20;
+      case Programme.pnc:
+        return 25;
+      case Programme.tb:
+        return 30;
+      case Programme.ncd:
+        return 40;
+      default:
+        return 50;
+    }
+  }
+
+  /// Build a minimal [PatientContext] from the params available at this level.
+  ///
+  /// Sex is inferred: ANC in pathways → female. Pregnancy: ANC present → true.
+  PatientContext _buildPatientContext() {
+    final pathwayNames = widget.activatedPathways ?? const [];
+    final hasAnc = pathwayNames.contains(Programme.anc.name) ||
+        pathwayNames.contains(Programme.pnc.name);
+    return PatientContext(
+      patientId: widget.patientId ?? '',
+      ageMonths: (widget.patientAge ?? 0) * 12,
+      sex: hasAnc ? Sex.female : Sex.unknown,
+      isPregnant: pathwayNames.contains(Programme.anc.name),
+      gestationalWeeks: widget.gestationalWeeks,
+    );
+  }
+
+  /// Builds [SectionedAssessmentScreen] for the pathway-driven assessment flow.
+  Widget _buildSectionedScreen(
+    BuildContext ctx,
+    VisitController visitCtrl,
+    VisitSession session,
+  ) {
+    return SectionedAssessmentScreen(
+      pathways: _buildPathways(),
+      patientContext: _buildPatientContext(),
+      encounterId: widget.visitId,
+      patientId: widget.patientId ?? '',
+      householdMemberLocalId: widget.householdMemberLocalId ?? 0,
+      memberId: widget.memberId,
+      draftDao: ctx.read<AssessmentDraftDao>(),
+      onSubmit: () => _onSectionedSubmit(ctx, visitCtrl, session),
+      onReferNow: (_) {
+        setState(() => _sectionedReferralTriggered = true);
+      },
+    );
+  }
+
+  /// Fan-out submission handler for the sectioned assessment flow.
+  Future<void> _onSectionedSubmit(
+    BuildContext ctx,
+    VisitController visitCtrl,
+    VisitSession session,
+  ) async {
+    setState(() => _isSubmitting = true);
+    try {
+      final draftDao = ctx.read<AssessmentDraftDao>();
+      final orchestrator = ctx.read<UnifiedSubmissionOrchestrator>();
+
+      final draft = await draftDao.getDraft(widget.visitId);
+      if (draft != null) {
+        await orchestrator.submit(
+          draft,
+          householdMemberLocalId: widget.householdMemberLocalId ?? 0,
+          memberId: widget.memberId,
+          householdId: widget.householdId,
+          villageId: widget.villageId,
+        );
+      }
+
+      if (widget.patientId != null && ctx.mounted) {
+        final now = DateTime.now();
+        await ctx.read<PatientDao>().updateVisitSchedule(
+          patientId: widget.patientId!,
+          lastVisitAt: now.millisecondsSinceEpoch,
+          nextDueAt: _nextDueForProgramme(_getPrimaryProgramme(), now),
+          missedVisitCount: 0,
+        );
+        if (ctx.mounted) {
+          await ctx.read<WorklistRepository>().recomputeAllAfterSync();
+        }
+      }
+
+      if (mounted && ctx.mounted) _showCompletionDialog(ctx, session);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+          content: Text('Failed to save assessment: $e'),
+          backgroundColor: Theme.of(ctx).colorScheme.error,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
   }
 
   /// Save assessments for each activated pathway.

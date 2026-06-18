@@ -53,6 +53,7 @@ import 'features/visit/assessment_repository.dart';
 import 'features/visit/encounter_repository.dart';
 import 'features/visit/household_repository.dart';
 import 'features/visit/observation_repository.dart';
+import 'features/visit/submission/unified_submission_orchestrator.dart';
 import 'features/visit/visit_controller.dart';
 import 'features/worklist/worklist_repository.dart';
 
@@ -220,6 +221,9 @@ class _UhisNextAppState extends State<UhisNextApp>
     dao: _localAssessmentDao,
     api: widget.api,
   );
+  late final AssessmentDraftDao _draftDao = AssessmentDraftDao(widget.appDb);
+  late final UnifiedSubmissionOrchestrator _submissionOrchestrator =
+      UnifiedSubmissionOrchestrator(_assessmentRepo, _localAssessmentDao);
 
   @override
   void initState() {
@@ -348,6 +352,10 @@ class _UhisNextAppState extends State<UhisNextApp>
         // Assessment offline-first repository
         ChangeNotifierProvider<AssessmentRepository>.value(
             value: _assessmentRepo),
+        // Sectioned assessment draft persistence + fan-out orchestration
+        Provider<AssessmentDraftDao>.value(value: _draftDao),
+        Provider<UnifiedSubmissionOrchestrator>.value(
+            value: _submissionOrchestrator),
         // AI Scribe API service
         Provider<ScribeApiService>(
             create: (_) => ScribeApiService(widget.api)),
