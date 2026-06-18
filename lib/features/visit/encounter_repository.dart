@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/api/api_repository.dart';
 import '../../core/api/endpoints.dart';
+import '../../core/auth/auth_repository.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/models/assessment_history_item.dart';
 import '../../core/models/programme.dart';
@@ -67,11 +68,17 @@ class VisitSummary {
 /// the legacy spice-service `patient/member-assessment-history` route is
 /// no longer called here.
 class EncounterRepository extends ApiRepository {
-  EncounterRepository(super.api, this._dao, {OfflineSyncService? offlineSync})
-      : _offlineSync = offlineSync;
+  EncounterRepository(
+    super.api,
+    this._dao, {
+    OfflineSyncService? offlineSync,
+    AuthRepository? auth,
+  })  : _offlineSync = offlineSync,
+        _auth = auth;
 
   final EncounterDao _dao;
   final OfflineSyncService? _offlineSync;
+  final AuthRepository? _auth;
   static final _random = Random.secure();
 
   /// Generate a simple unique ID.
@@ -173,12 +180,21 @@ class EncounterRepository extends ApiRepository {
 
     // Optimistically POST to server
     try {
+      final orgId = api.organizationFhirId;
+      final userFhirId = await _auth?.userFhirId();
+      final spiceUserId = await _auth?.userId();
       final body = await postOk(
         Endpoints.patientVisitCreate,
         data: {
           'patientId': patientId,
           'programme': programme.name,
           'tenantId': api.tenantIdAsNum,
+          'provenance': {
+            if (orgId != null) 'organizationId': orgId,
+            if (userFhirId != null) 'userId': userFhirId,
+            if (spiceUserId != null) 'spiceUserId': spiceUserId,
+            'modifiedDate': DateTime.now().toUtc().toIso8601String(),
+          },
         },
         action: 'Create visit',
       );

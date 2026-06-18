@@ -701,7 +701,6 @@ class OfflineSyncService extends ChangeNotifier {
       final row = _followUpRowFrom(raw);
       if (row != null) followUps.add(row);
     }
-
     final immunisations = <ImmunisationRow>[];
     for (final raw in immunisationNodes) {
       if (raw is! Map) continue;

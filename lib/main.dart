@@ -214,6 +214,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     priorityScorer: _priorityScorer,
     pregnancySnapshot: _pregnancySnapshotDao,
     treatmentPresence: _treatmentPresenceDao,
+    assessments: _assessmentDao,
   );
 
   // ── Assessment Repository for offline-first assessment capture ──────────
@@ -330,6 +331,7 @@ class _UhisNextAppState extends State<UhisNextApp>
                   widget.api,
                   ctx.read<EncounterDao>(),
                   offlineSync: _sync,
+                  auth: widget.authRepo,
                 )),
         Provider<VitalsRepository>(
             create: (ctx) => VitalsRepository(

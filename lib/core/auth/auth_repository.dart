@@ -82,6 +82,7 @@ class AuthRepository {
   static const _kVillageIds = 'villageIds';
   static const _kSubVillageIds = 'subVillageIds';
   static const _kUserId = 'userId';
+  static const _kUserFhirId = 'userFhirId';
   static const _kDeviceId = 'deviceId';
   static const _kOrganizationFhirId = 'organizationFhirId';
 
@@ -102,6 +103,9 @@ class AuthRepository {
     final stored = await _storage.read(key: _kUserId);
     return stored != null ? int.tryParse(stored) : null;
   }
+
+  /// Returns the FHIR ID of the logged-in user (e.g. for provenance payloads).
+  Future<String?> userFhirId() => _storage.read(key: _kUserFhirId);
 
   /// Returns a stable device ID, generating one on first access.
   Future<String> deviceId() async {
@@ -196,6 +200,7 @@ class AuthRepository {
     // Store numeric user ID for sync requests
     await writeOrDelete(_kUserId, idVal);
     final fhirId = (entityMap['fhirId'] as String?)?.trim();
+    await writeOrDelete(_kUserFhirId, fhirId);
     final regionCode =
         (entityMap['country'] is Map ? entityMap['country']['regionCode'] : null)
                 ?.toString() ??
@@ -350,6 +355,7 @@ class AuthRepository {
     await _api.clearSession();
     await _storage.delete(key: _kTenantId);
     await _storage.delete(key: _kOrganizationFhirId);
+    await _storage.delete(key: _kUserFhirId);
     await _clearReentrySession();
     await _storage.delete(key: _kBioEnabled);
     await _storage.delete(key: _kBioUsername);

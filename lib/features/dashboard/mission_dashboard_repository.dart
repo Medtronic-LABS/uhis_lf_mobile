@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
 import '../../core/api/cql_api_service.dart';
+import '../../core/db/assessment_dao.dart';
 import '../../core/db/follow_up_dao.dart';
 import '../../core/db/household_dao.dart';
 import '../../core/db/patient_dao.dart';
@@ -41,6 +43,7 @@ class MissionDashboardRepository {
     PregnancySnapshotDao? pregnancySnapshot,
     TreatmentPresenceDao? treatmentPresence,
     CqlApiService? cqlService,
+    AssessmentDao? assessments,
     DateTime Function()? clock,
   })  : _worklist = worklist,
         _referrals = referrals,
@@ -53,6 +56,7 @@ class MissionDashboardRepository {
         _pregnancySnapshot = pregnancySnapshot,
         _treatmentPresence = treatmentPresence,
         _cqlService = cqlService,
+        _assessments = assessments,
         _clock = clock ?? DateTime.now,
         _service = const MissionDashboardService();
 
@@ -67,6 +71,7 @@ class MissionDashboardRepository {
   final PregnancySnapshotDao? _pregnancySnapshot;
   final TreatmentPresenceDao? _treatmentPresence;
   final CqlApiService? _cqlService;
+  final AssessmentDao? _assessments;
   final DateTime Function() _clock;
   final MissionDashboardService _service;
 
@@ -455,6 +460,7 @@ class MissionDashboardRepository {
     final lastUpdatedByPatientId = <String, int>{};
     final hiddenPatientIds = <String>{};
     final redFlagPatientIds = <String>{};
+    final ncdOverduePatientIds = <String>{};
     final neonatePatientIds = <String>{};
     final youngInfantPatientIds = <String>{};
 
@@ -466,6 +472,11 @@ class MissionDashboardRepository {
         if (p.isActive == false) hiddenPatientIds.add(pid);
         if (p.redFlag == true) redFlagPatientIds.add(pid);
         if (p.updatedAt != null) lastUpdatedByPatientId[pid] = p.updatedAt!;
+        final hintLevel = p.riskHintLevel?.toUpperCase();
+        final hintColor = p.riskHintColor?.toUpperCase();
+        if (hintLevel == 'HIGH' || hintColor == 'RED') {
+          ncdOverduePatientIds.add(pid);
+        }
         if (p.age != null && !agesByPatientId.containsKey(pid)) {
           agesByPatientId[pid] = p.age!;
         }
@@ -558,9 +569,46 @@ class MissionDashboardRepository {
             anyTbOverdue = true;
           }
         }
+        // NCD follow-up that is past due → NCD drift signal
+        if (r.kind == FollowUpKind.ncd || r.kind == FollowUpKind.assessment) {
+          final dueMs = r.dueAt;
+          if (dueMs != null && r.completedAt == null && !r.isLost &&
+              DateTime.fromMillisecondsSinceEpoch(dueMs).isBefore(today)) {
+            ncdOverduePatientIds.add(pid);
+          }
+        }
       }
       if (anyTb && (anyTbRisk || anyTbOverdue)) {
         tbAtRiskPatientIds.add(pid);
+      }
+    }
+
+    // Assessment customStatus → NCD drift signal (e.g. UNCONTROLLED_BP)
+    if (_assessments != null) {
+      const ncdAlertStatuses = {
+        'UNCONTROLLED_BP',
+        'UNCONTROLLED_BLOOD_SUGAR',
+        'UNCONTROLLED_CHOLESTEROL',
+        'IRREGULAR_MEDICATION',
+      };
+      final assessmentMap =
+          await _assessments.forMany(patientIdSet.toList());
+      for (final entry in assessmentMap.entries) {
+        for (final row in entry.value) {
+          try {
+            final decoded = jsonDecode(row.rawJson);
+            if (decoded is! Map) continue;
+            final statusRaw = decoded['customStatus'];
+            if (statusRaw is! List) continue;
+            for (final s in statusRaw) {
+              if (s is String &&
+                  ncdAlertStatuses.contains(s.toUpperCase())) {
+                ncdOverduePatientIds.add(entry.key);
+                break;
+              }
+            }
+          } on Object catch (_) {}
+        }
       }
     }
 
@@ -585,7 +633,7 @@ class MissionDashboardRepository {
       hiddenPatientIds: hiddenPatientIds,
       completedTodayPatientIds: completedTodayPatientIds,
       tbAtRiskPatientIds: tbAtRiskPatientIds,
-      ncdOverduePatientIds: const <String>{},
+      ncdOverduePatientIds: ncdOverduePatientIds,
       redFlagPatientIds: redFlagPatientIds,
       pregnantPatientIds: pregnantPatientIds,
       householdHeadPatientIds: householdHeadPatientIds,

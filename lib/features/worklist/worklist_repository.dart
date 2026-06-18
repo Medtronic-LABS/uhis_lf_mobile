@@ -97,7 +97,6 @@ class WorklistRepository {
     final progMap = await _programmes.programmesForMany(ids);
     final followMap = await _followUps.forMany(ids);
     final immMap = await _immunisations.forMany(ids);
-
     final now = DateTime.now();
     for (final p in patients) {
       final facts = _factsFor(
