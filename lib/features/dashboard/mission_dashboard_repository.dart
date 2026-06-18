@@ -10,6 +10,7 @@ import '../../core/db/household_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/pregnancy_snapshot_dao.dart';
 import '../../core/db/referral_dao.dart';
+import '../../core/auth/user_hierarchy_service.dart';
 import '../../core/db/treatment_presence_dao.dart';
 import '../../core/mission/mission_dashboard_service.dart';
 import '../../core/mission/mission_pregnancy_facts.dart';
@@ -44,6 +45,7 @@ class MissionDashboardRepository {
     TreatmentPresenceDao? treatmentPresence,
     CqlApiService? cqlService,
     AssessmentDao? assessments,
+    UserHierarchyService? hierarchy,
     DateTime Function()? clock,
   })  : _worklist = worklist,
         _referrals = referrals,
@@ -57,6 +59,7 @@ class MissionDashboardRepository {
         _treatmentPresence = treatmentPresence,
         _cqlService = cqlService,
         _assessments = assessments,
+        _hierarchy = hierarchy,
         _clock = clock ?? DateTime.now,
         _service = const MissionDashboardService();
 
@@ -72,6 +75,7 @@ class MissionDashboardRepository {
   final TreatmentPresenceDao? _treatmentPresence;
   final CqlApiService? _cqlService;
   final AssessmentDao? _assessments;
+  final UserHierarchyService? _hierarchy;
   final DateTime Function() _clock;
   final MissionDashboardService _service;
 
@@ -612,6 +616,17 @@ class MissionDashboardRepository {
       }
     }
 
+    // Build village id → name lookup from hierarchy cache (no network call).
+    final villageNamesById = <String, String>{};
+    if (_hierarchy != null) {
+      for (final v in _hierarchy.subVillages ?? const []) {
+        villageNamesById[v.id] = v.name;
+      }
+      for (final v in _hierarchy.villages ?? const []) {
+        villageNamesById.putIfAbsent(v.id, () => v.name);
+      }
+    }
+
     _cachedInput = MissionInputData(
       worklistEntries: worklistEntries,
       referrals: referrals,
@@ -640,6 +655,7 @@ class MissionDashboardRepository {
       neonatePatientIds: neonatePatientIds,
       youngInfantPatientIds: youngInfantPatientIds,
       referralArrivalPendingPatientIds: referralArrivalPendingPatientIds,
+      villageNamesById: villageNamesById,
     );
 
     return _cachedInput!;

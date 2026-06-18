@@ -215,6 +215,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     pregnancySnapshot: _pregnancySnapshotDao,
     treatmentPresence: _treatmentPresenceDao,
     assessments: _assessmentDao,
+    hierarchy: _userHierarchy,
   );
 
   // ── Assessment Repository for offline-first assessment capture ──────────
@@ -223,6 +224,8 @@ class _UhisNextAppState extends State<UhisNextApp>
     api: widget.api,
   );
   late final AssessmentDraftDao _draftDao = AssessmentDraftDao(widget.appDb);
+  late final UserHierarchyService _userHierarchy =
+      UserHierarchyService(widget.api, widget.authRepo);
   late final UnifiedSubmissionOrchestrator _submissionOrchestrator =
       UnifiedSubmissionOrchestrator(_localAssessmentDao);
 
@@ -362,8 +365,8 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<ScribeApiService>(
             create: (_) => ScribeApiService(widget.api)),
         // SK → SS → sub-village hierarchy (session cache, invalidated on logout)
-        ChangeNotifierProvider<UserHierarchyService>(
-            create: (_) => UserHierarchyService(widget.api, widget.authRepo)),
+        ChangeNotifierProvider<UserHierarchyService>.value(
+            value: _userHierarchy),
       ],
       child: Builder(
         builder: (context) {

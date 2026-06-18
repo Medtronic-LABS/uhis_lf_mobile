@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/theme.dart';
+import '../../core/auth/user_hierarchy_service.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/assessment_dao.dart';
 import '../../core/db/encounter_dao.dart';
@@ -17,6 +18,20 @@ import 'patient_actions_row.dart';
 import 'patient_repository.dart';
 import 'recent_vitals_section.dart';
 import 'visit_details_screen.dart';
+
+/// Resolves a village/sub-village numeric ID to its human-readable name using
+/// the [UserHierarchyService] from the widget tree. Falls back to the raw [id]
+/// if the service is absent or the ID is not in the cached list.
+String _resolveVillageName(BuildContext context, String id) {
+  final svc = context.read<UserHierarchyService>();
+  for (final v in svc.subVillages ?? const []) {
+    if (v.id == id) return v.name;
+  }
+  for (final v in svc.villages ?? const []) {
+    if (v.id == id) return v.name;
+  }
+  return id;
+}
 
 /// Combined data type that can hold either a local patient or remote member.
 class PatientOrMemberData {
@@ -569,7 +584,8 @@ class _HeaderCard extends StatelessWidget {
             if (p.householdId != null)
               _kvRow(context, PatientContextStrings.householdLabel, p.householdId!),
             if (p.villageId != null)
-              _kvRow(context, PatientContextStrings.villageLabel, p.villageId!),
+              _kvRow(context, PatientContextStrings.villageLabel,
+                  _resolveVillageName(context, p.villageId!)),
             if (p.riskScore != null && p.riskBand != null)
               _kvRow(
                 context,
@@ -830,7 +846,8 @@ class _HeaderCardV2 extends StatelessWidget {
             if (data.householdId != null)
               _kvRow(context, PatientContextStrings.householdLabel, data.householdId!),
             if (data.villageId != null)
-              _kvRow(context, PatientContextStrings.villageLabel, data.villageId!),
+              _kvRow(context, PatientContextStrings.villageLabel,
+                  _resolveVillageName(context, data.villageId!)),
             if (data.riskScore != null && data.riskBand != null)
               _kvRow(
                 context,

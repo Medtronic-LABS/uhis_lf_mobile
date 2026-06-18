@@ -53,6 +53,7 @@ class MissionInputData {
     this.neonatePatientIds = const {},
     this.youngInfantPatientIds = const {},
     this.referralArrivalPendingPatientIds = const {},
+    this.villageNamesById = const {},
   });
 
   /// All patients on the worklist.
@@ -171,6 +172,11 @@ class MissionInputData {
   /// SK sent to facility but who may have never made it (PPH / sepsis /
   /// TB-default risk window).
   final Set<String> referralArrivalPendingPatientIds;
+
+  /// Village / sub-village id → display name, pre-resolved from
+  /// [UserHierarchyService]. Used so queue items show a human-readable
+  /// location instead of the raw numeric ID.
+  final Map<String, String> villageNamesById;
 
   /// True if CQL results are available for scoring.
   bool get hasCqlResults => cqlResults.isNotEmpty;
@@ -566,7 +572,10 @@ class MissionDashboardService {
       householdId: entry.householdNo,
       householdNumber: data.householdNumbersById[entry.householdNo],
       age: entry.age,
-      village: entry.householdName ?? entry.villageId,
+      village: entry.householdName ??
+          (entry.villageId != null
+              ? (data.villageNamesById[entry.villageId!] ?? entry.villageId)
+              : null),
       programmes: entry.programmes,
       reason: reason,
       daysOverdue: entry.nextDueAt != null
@@ -628,7 +637,9 @@ class MissionDashboardService {
       referralId: referral.id,
       householdId: hhId,
       householdNumber: hhId != null ? data.householdNumbersById[hhId] : null,
-      village: referral.villageId,
+      village: referral.villageId != null
+          ? (data.villageNamesById[referral.villageId!] ?? referral.villageId)
+          : null,
       programmes: const {}, // Referrals don't have programme context here
       reason: referral.diagnosisLabel ?? 'Referral',
       daysOverdue: daysOverdue > 0 ? daysOverdue : null,
