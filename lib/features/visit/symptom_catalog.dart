@@ -84,6 +84,9 @@ class SymptomCatalog {
         return ancSymptoms; // Use ANC symptoms for PNC
       case Programme.epi:
       case Programme.nutrition:
+      case Programme.familyPlanning:
+      case Programme.cataract:
+      case Programme.eyeCare:
       case Programme.unknown:
         return []; // Generic/empty
     }
@@ -325,7 +328,11 @@ class VitalCatalog {
         break;
       case Programme.epi:
       case Programme.nutrition:
-        // EPI and NUTRITION use common vitals only (weight/MUAC already in common).
+      case Programme.familyPlanning:
+        break;
+      case Programme.cataract:
+      case Programme.eyeCare:
+        vitals.addAll(ncdVitals);
         break;
       case Programme.unknown:
         // Include basic BP for unknown/general

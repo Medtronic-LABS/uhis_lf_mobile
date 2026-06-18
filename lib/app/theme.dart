@@ -387,6 +387,9 @@ class ProgrammeColors extends ThemeExtension<ProgrammeColors> {
         return tb;
       case Programme.epi:
       case Programme.nutrition:
+      case Programme.familyPlanning:
+      case Programme.cataract:
+      case Programme.eyeCare:
       case Programme.unknown:
         return ncd;
     }
@@ -406,6 +409,9 @@ class ProgrammeColors extends ThemeExtension<ProgrammeColors> {
         return tbContainer;
       case Programme.epi:
       case Programme.nutrition:
+      case Programme.familyPlanning:
+      case Programme.cataract:
+      case Programme.eyeCare:
       case Programme.unknown:
         return ncdContainer;
     }

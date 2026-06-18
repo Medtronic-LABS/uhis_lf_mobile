@@ -393,6 +393,9 @@ abstract final class WorklistStrings {
   static const String programmeTb = 'TB';
   static const String programmeEpi = 'EPI';
   static const String programmeNutrition = 'Nutrition';
+  static const String programmeFamilyPlanning = 'Family Planning';
+  static const String programmeCataract = 'Cataract';
+  static const String programmeEyeCare = 'Eye Care';
   static const String programmeUnknown = 'General';
 
   // Chip filters.
