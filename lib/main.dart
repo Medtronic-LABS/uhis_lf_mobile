@@ -223,7 +223,7 @@ class _UhisNextAppState extends State<UhisNextApp>
   );
   late final AssessmentDraftDao _draftDao = AssessmentDraftDao(widget.appDb);
   late final UnifiedSubmissionOrchestrator _submissionOrchestrator =
-      UnifiedSubmissionOrchestrator(_assessmentRepo, _localAssessmentDao);
+      UnifiedSubmissionOrchestrator(_localAssessmentDao);
 
   @override
   void initState() {

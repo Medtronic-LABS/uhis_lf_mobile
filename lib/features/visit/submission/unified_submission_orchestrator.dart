@@ -9,10 +9,8 @@
 ///   - No I/O in [SubmissionLeg] (pure data).
 ///   - [UnifiedSubmissionOrchestrator] catches only [DatabaseException]; all
 ///     other errors propagate to the caller.
-///   - No string literals in this file — programme codes come from
-///     [Programme.wireTag].
-///   - Field projection is delegated to [SectionRegistry.projectionFor] —
-///     single responsibility.
+///   - No string literals in this file — programme codes come from [Programme.wireTag].
+///   - Field projection is delegated to [SectionRegistry.projectionFor].
 library;
 
 import 'dart:async' show unawaited;
@@ -24,7 +22,6 @@ import '../../../core/db/app_database.dart';
 import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/models/programme.dart';
 import '../composer/section_registry.dart';
-import '../assessment_repository.dart';
 import '../eval/shadow_log_service.dart';
 
 // ── Submission leg ─────────────────────────────────────────────────────────────
@@ -66,12 +63,10 @@ class SubmissionLeg {
 /// can correlate legs back to their shared encounter.
 class UnifiedSubmissionOrchestrator {
   UnifiedSubmissionOrchestrator(
-    this._assessmentRepository,
     this._localAssessmentDao, {
     ShadowLogService? shadowLog,
   }) : _shadowLog = shadowLog;
 
-  final AssessmentRepository _assessmentRepository;
   final LocalAssessmentDao _localAssessmentDao;
 
   /// Optional — injected only when Phase 6 shadow logging is active.
