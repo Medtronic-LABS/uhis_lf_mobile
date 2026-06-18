@@ -335,9 +335,9 @@ class UnifiedSymptomCatalog {
     UnifiedSymptomDef(
       code: 'blurred_vision',
       labelKey: 'symptomBlurredVision',
-      cluster: SymptomCluster.maternal,
+      cluster: SymptomCluster.ncdMetabolic,
       icon: 'visibility_off',
-      programmes: {Programme.anc, Programme.ncd},
+      programmes: {Programme.anc, Programme.ncd, Programme.cataract, Programme.eyeCare},
       snomedCode: '246636008',
     ),
     UnifiedSymptomDef(
@@ -374,6 +374,50 @@ class UnifiedSymptomCatalog {
       icon: 'child_care',
       programmes: {Programme.anc},
       snomedCode: '289530006',
+      requiresFemale: true,
+    ),
+
+    // ── Eye symptoms ─────────────────────────────────────────────────────────
+    UnifiedSymptomDef(
+      code: 'eye_pain',
+      labelKey: 'symptomEyePain',
+      cluster: SymptomCluster.ncdMetabolic,
+      icon: 'remove_red_eye',
+      programmes: {Programme.cataract, Programme.eyeCare},
+      snomedCode: '41652007',
+    ),
+    UnifiedSymptomDef(
+      code: 'gradual_vision_loss',
+      labelKey: 'symptomGradualVisionLoss',
+      cluster: SymptomCluster.ncdMetabolic,
+      icon: 'visibility',
+      programmes: {Programme.cataract},
+      snomedCode: '246638009',
+    ),
+    UnifiedSymptomDef(
+      code: 'reduced_vision',
+      labelKey: 'symptomReducedVision',
+      cluster: SymptomCluster.ncdMetabolic,
+      icon: 'visibility_off',
+      programmes: {Programme.eyeCare},
+      snomedCode: '397540003',
+    ),
+
+    // ── Family planning ───────────────────────────────────────────────────────
+    UnifiedSymptomDef(
+      code: 'no_family_planning',
+      labelKey: 'symptomNoFamilyPlanning',
+      cluster: SymptomCluster.maternal,
+      icon: 'family_restroom',
+      programmes: {Programme.familyPlanning},
+      requiresFemale: true,
+    ),
+    UnifiedSymptomDef(
+      code: 'wants_contraception',
+      labelKey: 'symptomWantsContraception',
+      cluster: SymptomCluster.maternal,
+      icon: 'favorite_border',
+      programmes: {Programme.familyPlanning},
       requiresFemale: true,
     ),
   ];

@@ -1608,12 +1608,69 @@ abstract final class ComposerStrings {
         return fieldChildReferral;
       case 'fieldChildReferralFacilityType':
         return fieldChildReferralFacilityType;
+      case 'fieldOnBpMedication':
+        return fieldOnBpMedication;
+      case 'fieldWaistCircumference':
+        return fieldWaistCircumference;
+      case 'fieldIsPhysicallyActive':
+        return fieldIsPhysicallyActive;
+      case 'fieldEatsDailyFruitVeg':
+        return fieldEatsDailyFruitVeg;
+      case 'fieldHadPreviousHighGlucose':
+        return fieldHadPreviousHighGlucose;
+      case 'fieldHasFamilyHistoryDm':
+        return fieldHasFamilyHistoryDm;
+      case 'fieldNumberOfLivingChildren':
+        return fieldNumberOfLivingChildren;
+      case 'fieldAgeOfLastChildMonths':
+        return fieldAgeOfLastChildMonths;
+      case 'fieldDesireForFutureChildren':
+        return fieldDesireForFutureChildren;
+      case 'fieldCurrentFpMethod':
+        return fieldCurrentFpMethod;
+      case 'fieldEyeDiseaseTypes':
+        return fieldEyeDiseaseTypes;
+      case 'fieldReferredForOperation':
+        return fieldReferredForOperation;
+      case 'fieldNcdServiceProvided':
+        return fieldNcdServiceProvided;
+      case 'fieldEyeTestOutcome':
+        return fieldEyeTestOutcome;
+      case 'fieldGlassPrescription':
+        return fieldGlassPrescription;
+      case 'fieldGlassesSold':
+        return fieldGlassesSold;
+      case 'fieldReferPlace':
+        return fieldReferPlace;
       default:
         return key;
     }
   }
 
   // ── Section title resolver ──────────────────────────────────────────────────
+
+  // ── FINDRISC / Framingham fields ────────────────────────────────────────────
+  static const String fieldOnBpMedication = 'On BP medication?';
+  static const String fieldWaistCircumference = 'Waist circumference (cm)';
+  static const String fieldIsPhysicallyActive = 'Physically active ≥ 30 min/day?';
+  static const String fieldEatsDailyFruitVeg = 'Eats fruit / vegetables daily?';
+  static const String fieldHadPreviousHighGlucose = 'Previous high blood glucose?';
+  static const String fieldHasFamilyHistoryDm = 'Family history of diabetes?';
+
+  // ── Family planning fields ───────────────────────────────────────────────────
+  static const String fieldNumberOfLivingChildren = 'Number of living children';
+  static const String fieldAgeOfLastChildMonths = 'Age of last child (months)';
+  static const String fieldDesireForFutureChildren = 'Desire for future children';
+  static const String fieldCurrentFpMethod = 'Current FP method';
+
+  // ── Eye / cataract fields ────────────────────────────────────────────────────
+  static const String fieldEyeDiseaseTypes = 'Eye disease type(s)';
+  static const String fieldReferredForOperation = 'Referred for operation?';
+  static const String fieldNcdServiceProvided = 'NCD service provided?';
+  static const String fieldEyeTestOutcome = 'Eye test outcome';
+  static const String fieldGlassPrescription = 'Glasses prescription';
+  static const String fieldGlassesSold = 'Glasses sold?';
+  static const String fieldReferPlace = 'Referral facility';
 
   // ── Programme group headers ─────────────────────────────────────────────────
   static const String groupGeneral = 'General checks';
@@ -1624,12 +1681,19 @@ abstract final class ComposerStrings {
   static const String groupImci = 'Child health checks';
   static const String groupEpi = 'Immunization';
   static const String groupNutrition = 'Nutrition';
+  static const String groupFamilyPlanning = 'Family planning';
+  static const String groupCataract = 'Cataract / eye disease';
+  static const String groupEyeCare = 'Eye care';
 
   // ── Section titles (ANC + NCD) ──────────────────────────────────────────────
   static const String sectionAncVitals = 'ANC Vitals';
   static const String sectionAncSpecific = 'ANC Assessment';
   static const String sectionNcdHtn = 'Hypertension';
   static const String sectionNcdDm = 'Diabetes';
+  static const String sectionNcdFindrisc = 'Diabetes Risk (FINDRISC)';
+  static const String sectionFamilyPlanning = 'Family Planning';
+  static const String sectionCataractExam = 'Cataract / Eye Disease';
+  static const String sectionEyeCareExam = 'Eye Care';
 
   // ── Section titles (EPI + NUTRITION + PNC) ─────────────────────────────────
   static const String sectionEpiReview = 'EPI / Immunization';
@@ -1733,6 +1797,14 @@ abstract final class ComposerStrings {
         return sectionPncNeonatal;
       case 'pnc-child':
         return sectionPncChild;
+      case 'ncd-findrisc':
+        return sectionNcdFindrisc;
+      case 'family-planning':
+        return sectionFamilyPlanning;
+      case 'cataract-exam':
+        return sectionCataractExam;
+      case 'eye-care-exam':
+        return sectionEyeCareExam;
       default:
         return sectionId;
     }
@@ -1822,6 +1894,58 @@ abstract final class CdsStrings {
   static const String rationaleWhoTb4Symptom =
       'WHO: cough ≥ 2 weeks is a TB indicator — screen urgently';
 
+  // ── CDSS algorithm rationales ────────────────────────────────────────────────
+  static const String rationaleFindriscModerate =
+      'FINDRISC score 12–14: moderate diabetes risk (1 in 6 chance over 10 years)';
+  static const String rationaleFindriscHigh =
+      'FINDRISC score 15–20: high diabetes risk (1 in 3 chance over 10 years)';
+  static const String rationaleFindriscVeryHigh =
+      'FINDRISC score ≥ 21: very high diabetes risk (1 in 2 chance over 10 years)';
+  static const String rationaleFraminghamTrigger =
+      'Framingham No-Lab: 10-year CVD risk ≥ 10% — NCD management indicated';
+  static const String rationaleFraminghamHigh =
+      'Framingham No-Lab: 10-year CVD risk ≥ 20% — high cardiovascular risk';
+  static const String rationaleBpTrendCusum =
+      'CUSUM: cumulative BP rise exceeds decision threshold (h = 40 mmHg)';
+  static const String rationaleBpTrendEwma =
+      'EWMA: smoothed BP trend has crossed the upper control limit';
+  static const String rationaleBpTrendSlope =
+      'Linear slope: BP increasing at > 4 mmHg per visit';
+  static const String rationaleMiniPiersHigh =
+      'miniPIERS: predicted adverse maternal outcome risk ≥ 25%';
+  static const String rationaleMiniPiersCritical =
+      'miniPIERS: predicted adverse maternal outcome risk ≥ 50% — refer now';
+  static const String rationaleCataractNcdCoenroll =
+      'NCD service provided during cataract visit — NCD enrolment recommended';
+  static const String rationaleEyeCareReferral =
+      'Eye test outcome requires specialist referral';
+
+  // ── CDSS algorithm alert messages ────────────────────────────────────────────
+  static const String findriscModerateMessage =
+      'Diabetes risk moderate (FINDRISC 12–14) — add NCD assessment';
+  static const String findriscHighMessage =
+      'Diabetes risk high (FINDRISC 15–20) — add NCD assessment';
+  static const String findriscVeryHighMessage =
+      'Diabetes risk very high (FINDRISC ≥ 21) — add NCD assessment';
+  static const String framinghamTriggerMessage =
+      'CVD risk ≥ 10% (Framingham) — NCD management indicated';
+  static const String framinghamHighMessage =
+      'CVD risk ≥ 20% (Framingham) — high cardiovascular risk';
+  static const String bpTrendCusumMessage =
+      'BP trend alert (CUSUM) — rising blood pressure pattern detected';
+  static const String bpTrendEwmaMessage =
+      'BP trend alert (EWMA) — blood pressure control worsening';
+  static const String bpTrendSlopeMessage =
+      'BP trend alert — increasing > 4 mmHg per visit';
+  static const String miniPiersHighMessage =
+      'High risk of adverse outcome (miniPIERS ≥ 25%) — close monitoring needed';
+  static const String miniPiersCriticalMessage =
+      'Critical risk of adverse outcome (miniPIERS ≥ 50%) — refer immediately';
+  static const String cataractNcdCoenrollMessage =
+      'NCD service provided — enrol patient in NCD programme';
+  static const String eyeCareReferralMessage =
+      'Patient requires eye care referral — document referral facility';
+
   /// Resolve a message string by its key (as stored in [CdsAlert.messageKey]).
   static String message(String key) {
     switch (key) {
@@ -1849,6 +1973,30 @@ abstract final class CdsStrings {
         return tbScreenAddMessage;
       case 'conflictReferralOverridesKey':
         return conflictReferralOverridesKey;
+      case 'findriscModerateMessage':
+        return findriscModerateMessage;
+      case 'findriscHighMessage':
+        return findriscHighMessage;
+      case 'findriscVeryHighMessage':
+        return findriscVeryHighMessage;
+      case 'framinghamTriggerMessage':
+        return framinghamTriggerMessage;
+      case 'framinghamHighMessage':
+        return framinghamHighMessage;
+      case 'bpTrendCusumMessage':
+        return bpTrendCusumMessage;
+      case 'bpTrendEwmaMessage':
+        return bpTrendEwmaMessage;
+      case 'bpTrendSlopeMessage':
+        return bpTrendSlopeMessage;
+      case 'miniPiersHighMessage':
+        return miniPiersHighMessage;
+      case 'miniPiersCriticalMessage':
+        return miniPiersCriticalMessage;
+      case 'cataractNcdCoenrollMessage':
+        return cataractNcdCoenrollMessage;
+      case 'eyeCareReferralMessage':
+        return eyeCareReferralMessage;
       default:
         return key;
     }
@@ -1879,6 +2027,30 @@ abstract final class CdsStrings {
         return rationaleWhoPenDm;
       case 'rationaleWhoTb4Symptom':
         return rationaleWhoTb4Symptom;
+      case 'rationaleFindriscModerate':
+        return rationaleFindriscModerate;
+      case 'rationaleFindriscHigh':
+        return rationaleFindriscHigh;
+      case 'rationaleFindriscVeryHigh':
+        return rationaleFindriscVeryHigh;
+      case 'rationaleFraminghamTrigger':
+        return rationaleFraminghamTrigger;
+      case 'rationaleFraminghamHigh':
+        return rationaleFraminghamHigh;
+      case 'rationaleBpTrendCusum':
+        return rationaleBpTrendCusum;
+      case 'rationaleBpTrendEwma':
+        return rationaleBpTrendEwma;
+      case 'rationaleBpTrendSlope':
+        return rationaleBpTrendSlope;
+      case 'rationaleMiniPiersHigh':
+        return rationaleMiniPiersHigh;
+      case 'rationaleMiniPiersCritical':
+        return rationaleMiniPiersCritical;
+      case 'rationaleCataractNcdCoenroll':
+        return rationaleCataractNcdCoenroll;
+      case 'rationaleEyeCareReferral':
+        return rationaleEyeCareReferral;
       default:
         return key;
     }
@@ -1913,6 +2085,12 @@ abstract final class PathwayStrings {
   static const String pathwayNutritionRationale = 'Nutrition assessment — malnutrition indicators';
   static const String pathwayEpiRationale = 'Immunization — vaccines overdue';
   static const String pathwayManualRationale = 'Manually added';
+  static const String pathwayFamilyPlanningRationale =
+      'Family planning — unmet need or counselling due';
+  static const String pathwayCataractRationale =
+      'Cataract / eye disease — visual symptoms or known diagnosis';
+  static const String pathwayEyeCareRationale =
+      'Eye care — visual symptoms requiring eye test';
 
   // ── Programme display names ──────────────────────────────────────────────
   static const String programmeImci = 'ICCM / Child Illness';
@@ -1923,6 +2101,9 @@ abstract final class PathwayStrings {
   static const String programmeEpi = 'EPI / Immunization';
   static const String programmeNeonate = 'Neonate Assessment';
   static const String programmeNutrition = 'Nutrition Assessment';
+  static const String programmeFamilyPlanning = 'Family Planning';
+  static const String programmeCataract = 'Cataract / Eye Disease';
+  static const String programmeEyeCare = 'Eye Care';
   static const String programmeUnknown = 'Assessment';
 
   // ── Progress indicator ───────────────────────────────────────────────────
@@ -1942,6 +2123,9 @@ abstract final class PathwayStrings {
       case 'pathwayNutritionRationale': return pathwayNutritionRationale;
       case 'pathwayEpiRationale': return pathwayEpiRationale;
       case 'pathwayManualRationale': return pathwayManualRationale;
+      case 'pathwayFamilyPlanningRationale': return pathwayFamilyPlanningRationale;
+      case 'pathwayCataractRationale': return pathwayCataractRationale;
+      case 'pathwayEyeCareRationale': return pathwayEyeCareRationale;
       default: return key;
     }
   }

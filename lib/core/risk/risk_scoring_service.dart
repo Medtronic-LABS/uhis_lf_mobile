@@ -88,6 +88,9 @@ class RiskScoringService {
           break;
         case Programme.epi:
         case Programme.nutrition:
+        case Programme.familyPlanning:
+        case Programme.cataract:
+        case Programme.eyeCare:
         case Programme.unknown:
           // No additional weight for these programmes.
           break;

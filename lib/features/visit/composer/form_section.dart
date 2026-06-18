@@ -27,15 +27,20 @@ enum FieldType {
 
 // ── Condition ─────────────────────────────────────────────────────────────────
 
-/// A simple equality condition used for field and section visibility gates.
+/// A simple equality/inequality condition used for field and section visibility gates.
 ///
-/// A condition is *true* when the field identified by [fieldId] currently
-/// holds a value that equals [equalsValue] (via `==`).
+/// Exactly one of [equalsValue] or [notEqualsValue] must be provided.
+/// The condition is *true* when the field identified by [fieldId] currently
+/// holds a value that equals [equalsValue], or does not equal [notEqualsValue].
 class Condition {
   const Condition({
     required this.fieldId,
-    required this.equalsValue,
-  });
+    this.equalsValue,
+    this.notEqualsValue,
+  }) : assert(
+          (equalsValue != null) != (notEqualsValue != null),
+          'Provide exactly one of equalsValue or notEqualsValue',
+        );
 
   /// The field whose current value is inspected.
   final String fieldId;
@@ -43,22 +48,30 @@ class Condition {
   /// The value [fieldId] must equal for the condition to be true.
   final dynamic equalsValue;
 
+  /// The value [fieldId] must NOT equal for the condition to be true.
+  final dynamic notEqualsValue;
+
   /// Evaluate against [fieldValues], a map of fieldId → current value.
   bool evaluate(Map<String, dynamic> fieldValues) {
-    return fieldValues[fieldId] == equalsValue;
+    final current = fieldValues[fieldId];
+    if (notEqualsValue != null) return current != notEqualsValue;
+    return current == equalsValue;
   }
 
   @override
-  String toString() => 'Condition($fieldId == $equalsValue)';
+  String toString() => notEqualsValue != null
+      ? 'Condition($fieldId != $notEqualsValue)'
+      : 'Condition($fieldId == $equalsValue)';
 
   @override
   bool operator ==(Object other) =>
       other is Condition &&
       other.fieldId == fieldId &&
-      other.equalsValue == equalsValue;
+      other.equalsValue == equalsValue &&
+      other.notEqualsValue == notEqualsValue;
 
   @override
-  int get hashCode => Object.hash(fieldId, equalsValue);
+  int get hashCode => Object.hash(fieldId, equalsValue, notEqualsValue);
 }
 
 // ── Field definition ─────────────────────────────────────────────────────────

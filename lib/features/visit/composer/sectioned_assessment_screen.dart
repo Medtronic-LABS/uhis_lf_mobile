@@ -64,6 +64,12 @@ String _programmeGroupLabel(Programme p) {
       return ComposerStrings.groupEpi;
     case Programme.nutrition:
       return ComposerStrings.groupNutrition;
+    case Programme.familyPlanning:
+      return ComposerStrings.groupFamilyPlanning;
+    case Programme.cataract:
+      return ComposerStrings.groupCataract;
+    case Programme.eyeCare:
+      return ComposerStrings.groupEyeCare;
     default:
       return ComposerStrings.groupGeneral;
   }

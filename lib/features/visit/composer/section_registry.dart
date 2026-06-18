@@ -653,6 +653,12 @@ class SectionRegistry {
           type: FieldType.booleanField,
           labelKey: 'fieldIsRegularSmoker',
         ),
+        FieldDef(
+          fieldId: 'onBpMedication',
+          type: FieldType.selectField,
+          labelKey: 'fieldOnBpMedication',
+          options: const ['yes', 'no'],
+        ),
       ],
     ),
 
@@ -683,6 +689,49 @@ class SectionRegistry {
           unit: '%',
           min: 3,
           max: 20,
+        ),
+      ],
+    ),
+
+    // ── NCD FINDRISC (priority 44) — NCD only ────────────────────────────────
+    // Provides the 5 FINDRISC inputs not derivable from vitals.
+    // Age and BMI are computed from patient profile; these 5 are self-reported.
+    FormSection(
+      sectionId: 'ncd-findrisc',
+      programmes: {Programme.ncd},
+      priority: 44,
+      fields: const [
+        FieldDef(
+          fieldId: 'waistCircumference',
+          type: FieldType.doubleField,
+          labelKey: 'fieldWaistCircumference',
+          unit: 'cm',
+          min: 40,
+          max: 200,
+        ),
+        FieldDef(
+          fieldId: 'isPhysicallyActive',
+          type: FieldType.selectField,
+          labelKey: 'fieldIsPhysicallyActive',
+          options: ['yes', 'no'],
+        ),
+        FieldDef(
+          fieldId: 'eatsDailyFruitVeg',
+          type: FieldType.selectField,
+          labelKey: 'fieldEatsDailyFruitVeg',
+          options: ['yes', 'no'],
+        ),
+        FieldDef(
+          fieldId: 'hadPreviousHighGlucose',
+          type: FieldType.selectField,
+          labelKey: 'fieldHadPreviousHighGlucose',
+          options: ['yes', 'no'],
+        ),
+        FieldDef(
+          fieldId: 'hasFamilyHistoryDm',
+          type: FieldType.selectField,
+          labelKey: 'fieldHasFamilyHistoryDm',
+          options: ['yes', 'no'],
         ),
       ],
     ),
@@ -1130,6 +1179,160 @@ class SectionRegistry {
             'communityClinic',
           ],
           visibleWhen: const Condition(fieldId: 'childReferral', equalsValue: 'yes'),
+        ),
+      ],
+    ),
+
+    // ── Family Planning (priority 80) ─────────────────────────────────────────
+    FormSection(
+      sectionId: 'family-planning',
+      programmes: {Programme.familyPlanning},
+      priority: 80,
+      fields: const [
+        FieldDef(
+          fieldId: 'numberOfLivingChildren',
+          type: FieldType.intField,
+          labelKey: 'fieldNumberOfLivingChildren',
+          min: 0,
+          max: 20,
+        ),
+        FieldDef(
+          fieldId: 'ageOfLastChildMonths',
+          type: FieldType.intField,
+          labelKey: 'fieldAgeOfLastChildMonths',
+          unit: 'months',
+          min: 0,
+          max: 600,
+        ),
+        FieldDef(
+          fieldId: 'desireForFutureChildren',
+          type: FieldType.selectField,
+          labelKey: 'fieldDesireForFutureChildren',
+          options: ['yes', 'no', 'undecided'],
+        ),
+        FieldDef(
+          fieldId: 'currentFpMethod',
+          type: FieldType.selectField,
+          labelKey: 'fieldCurrentFpMethod',
+          options: [
+            'none',
+            'pills',
+            'injection',
+            'condom',
+            'iud',
+            'implant',
+            'sterilization',
+            'natural',
+            'other',
+          ],
+        ),
+      ],
+    ),
+
+    // ── Cataract Exam (priority 85) ───────────────────────────────────────────
+    // BP and glucose fields are shared — ownership deferred to ncd-htn/anc-vitals
+    // if either is active in the same encounter.
+    FormSection(
+      sectionId: 'cataract-exam',
+      programmes: {Programme.cataract},
+      priority: 85,
+      sharedFieldIds: const {
+        'bloodPressureSystolic',
+        'bloodPressureDiastolic',
+        'glucoseType',
+        'glucoseValue',
+      },
+      fields: const [
+        FieldDef(
+          fieldId: 'eyeDiseaseTypes',
+          type: FieldType.multiSelectField,
+          labelKey: 'fieldEyeDiseaseTypes',
+          options: [
+            'cataract',
+            'glaucoma',
+            'angle_closure',
+            'refractive_error',
+            'diabetic_retinopathy',
+            'other',
+          ],
+        ),
+        FieldDef(
+          fieldId: 'referredForOperation',
+          type: FieldType.booleanField,
+          labelKey: 'fieldReferredForOperation',
+        ),
+        FieldDef(
+          fieldId: 'ncdServiceProvided',
+          type: FieldType.booleanField,
+          labelKey: 'fieldNcdServiceProvided',
+        ),
+        FieldDef(
+          fieldId: 'bloodPressureSystolic',
+          type: FieldType.intField,
+          labelKey: 'fieldBloodPressureSystolic',
+          unit: 'mmHg',
+          min: 50,
+          max: 250,
+        ),
+        FieldDef(
+          fieldId: 'bloodPressureDiastolic',
+          type: FieldType.intField,
+          labelKey: 'fieldBloodPressureDiastolic',
+          unit: 'mmHg',
+          min: 30,
+          max: 150,
+        ),
+        FieldDef(
+          fieldId: 'glucoseType',
+          type: FieldType.selectField,
+          labelKey: 'fieldGlucoseType',
+          options: ['fasting', 'random'],
+        ),
+        FieldDef(
+          fieldId: 'glucoseValue',
+          type: FieldType.doubleField,
+          labelKey: 'fieldGlucoseValue',
+          unit: 'mg/dL',
+          min: 30,
+          max: 600,
+        ),
+        FieldDef(
+          fieldId: 'referPlace',
+          type: FieldType.textField,
+          labelKey: 'fieldReferPlace',
+        ),
+      ],
+    ),
+
+    // ── Eye Care Exam (priority 90) ───────────────────────────────────────────
+    FormSection(
+      sectionId: 'eye-care-exam',
+      programmes: {Programme.eyeCare},
+      priority: 90,
+      fields: const [
+        FieldDef(
+          fieldId: 'eyeTestOutcome',
+          type: FieldType.selectField,
+          labelKey: 'fieldEyeTestOutcome',
+          options: ['normal', 'glasses_prescribed', 'referral_needed'],
+        ),
+        FieldDef(
+          fieldId: 'glassPrescription',
+          type: FieldType.textField,
+          labelKey: 'fieldGlassPrescription',
+          visibleWhen: const Condition(fieldId: 'eyeTestOutcome', notEqualsValue: 'normal'),
+        ),
+        FieldDef(
+          fieldId: 'glassesSold',
+          type: FieldType.booleanField,
+          labelKey: 'fieldGlassesSold',
+          visibleWhen: const Condition(fieldId: 'eyeTestOutcome', equalsValue: 'glasses_prescribed'),
+        ),
+        FieldDef(
+          fieldId: 'referPlace',
+          type: FieldType.textField,
+          labelKey: 'fieldReferPlace',
+          visibleWhen: const Condition(fieldId: 'eyeTestOutcome', equalsValue: 'referral_needed'),
         ),
       ],
     ),

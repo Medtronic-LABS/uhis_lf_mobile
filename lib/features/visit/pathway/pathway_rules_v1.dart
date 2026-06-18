@@ -396,6 +396,75 @@ abstract final class PathwayRulesV1 {
     ),
 
     // ═════════════════════════════════════════════════════════════════════════
+    // FAMILY PLANNING (Priority 60)
+    // Source: WHO Family Planning Guidelines 2022
+    // ═════════════════════════════════════════════════════════════════════════
+    PathwayRule(
+      programme: Programme.familyPlanning,
+      priority: 60,
+      anyOf: {
+        'no_family_planning',
+        'wants_contraception',
+      },
+      gate: DemographicGate(
+        sex: Sex.female,
+        minAgeMonths: 180,  // 15 years
+        maxAgeMonths: 588,  // 49 years
+      ),
+      historyTriggers: {
+        'FP_COUNSELLING_DUE',
+        'PPFP_WINDOW',
+        'UNMET_FP_NEED',
+      },
+      rationaleKey: 'pathwayFamilyPlanningRationale',
+    ),
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // CATARACT (Priority 70)
+    // Source: WHO VISION 2020
+    // ═════════════════════════════════════════════════════════════════════════
+    PathwayRule(
+      programme: Programme.cataract,
+      priority: 70,
+      anyOf: {
+        'blurred_vision',
+        'eye_pain',
+        'gradual_vision_loss',
+      },
+      gate: DemographicGate.any,
+      historyTriggers: {
+        'CATARACT',
+        'EYE_DISEASE',
+        'VISUAL_IMPAIRMENT',
+      },
+      rationaleKey: 'pathwayCataractRationale',
+    ),
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // EYE CARE (Priority 75)
+    // Source: WHO Primary Eye Care Guidelines
+    // Suppressed by Cataract when both would activate (cataract more specific).
+    // ═════════════════════════════════════════════════════════════════════════
+    PathwayRule(
+      programme: Programme.eyeCare,
+      priority: 75,
+      anyOf: {
+        'blurred_vision',
+        'reduced_vision',
+        'eye_pain',
+      },
+      gate: DemographicGate.any,
+      historyTriggers: {
+        'EYE_CARE',
+        'GLAUCOMA',
+        'REFRACTIVE_ERROR',
+        'POST_OP_EYE',
+      },
+      suppressedBy: Programme.cataract,
+      rationaleKey: 'pathwayEyeCareRationale',
+    ),
+
+    // ═════════════════════════════════════════════════════════════════════════
     // SCHEDULED: EPI (Priority 100)
     // Source: National Immunization Schedule
     // ═════════════════════════════════════════════════════════════════════════

@@ -12,6 +12,9 @@ enum Programme {
   tb,
   epi,
   nutrition,
+  familyPlanning,
+  cataract,
+  eyeCare,
   unknown;
 
   /// Case-insensitive tag mapper. Accepts the strings the spice service
@@ -57,6 +60,17 @@ enum Programme {
       case 'MAM':
       case 'MALNUTRITION':
         return Programme.nutrition;
+      case 'FAMILY_PLANNING':
+      case 'FP':
+      case 'FAMILYPLANNING':
+        return Programme.familyPlanning;
+      case 'CATARACT':
+      case 'EYE_CATARACT':
+        return Programme.cataract;
+      case 'EYE_CARE':
+      case 'EYE':
+      case 'EYECARE':
+        return Programme.eyeCare;
     }
     return null;
   }
@@ -79,6 +93,12 @@ enum Programme {
         return 'EPI';
       case Programme.nutrition:
         return 'NUTRITION';
+      case Programme.familyPlanning:
+        return 'FAMILY_PLANNING';
+      case Programme.cataract:
+        return 'CATARACT';
+      case Programme.eyeCare:
+        return 'EYE_CARE';
       case Programme.unknown:
         return 'UNKNOWN';
     }
@@ -101,6 +121,12 @@ enum Programme {
         return Programme.epi;
       case 'NUTRITION':
         return Programme.nutrition;
+      case 'FAMILY_PLANNING':
+        return Programme.familyPlanning;
+      case 'CATARACT':
+        return Programme.cataract;
+      case 'EYE_CARE':
+        return Programme.eyeCare;
     }
     return null;
   }

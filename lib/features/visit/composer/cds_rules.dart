@@ -11,6 +11,7 @@
 ///     treatAtCommunity alerts are suppressed and a note is added.
 library;
 
+import '../../../core/cdss/models/cdss_results.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/models/programme.dart';
 
@@ -120,8 +121,9 @@ class CdsRules {
   /// Pure function: no I/O, no clock, no side effects.
   static List<CdsAlert> evaluate(
     Map<String, dynamic> fieldValues,
-    Set<Programme> activePathways,
-  ) {
+    Set<Programme> activePathways, {
+    CdssEngineOutput? cdssOutput,
+  }) {
     final alerts = <CdsAlert>[];
 
     // ── BP rules (WHO HEARTS) ────────────────────────────────────────────────
@@ -286,6 +288,155 @@ class CdsRules {
         action: CdsAction.addPathway,
         addPathway: Programme.tb,
         rationaleKey: 'rationaleWhoTb4Symptom',
+      ));
+    }
+
+    // ── CDSS algorithm alerts ────────────────────────────────────────────────
+    if (cdssOutput != null) {
+      final ncdActive = activePathways.contains(Programme.ncd);
+      final ancActive = activePathways.contains(Programme.anc);
+
+      // FINDRISC
+      final fr = cdssOutput.findrisc;
+      if (fr != null) {
+        if (fr.score >= 21) {
+          alerts.add(CdsAlert(
+            alertId: 'findrisc_very_high',
+            severity: CdsSeverity.urgent,
+            messageKey: 'findriscVeryHighMessage',
+            action: ncdActive ? CdsAction.continueAssessment : CdsAction.addPathway,
+            addPathway: ncdActive ? null : Programme.ncd,
+            rationaleKey: 'rationaleFindriscVeryHigh',
+          ));
+        } else if (fr.score >= 15) {
+          alerts.add(CdsAlert(
+            alertId: 'findrisc_high',
+            severity: CdsSeverity.warning,
+            messageKey: 'findriscHighMessage',
+            action: ncdActive ? CdsAction.continueAssessment : CdsAction.addPathway,
+            addPathway: ncdActive ? null : Programme.ncd,
+            rationaleKey: 'rationaleFindriscHigh',
+          ));
+        } else if (fr.score >= 12) {
+          alerts.add(CdsAlert(
+            alertId: 'findrisc_moderate',
+            severity: CdsSeverity.warning,
+            messageKey: 'findriscModerateMessage',
+            action: ncdActive ? CdsAction.continueAssessment : CdsAction.addPathway,
+            addPathway: ncdActive ? null : Programme.ncd,
+            rationaleKey: 'rationaleFindriscModerate',
+          ));
+        }
+      }
+
+      // Framingham
+      final fram = cdssOutput.framingham;
+      if (fram != null && !fram.insufficientData) {
+        if (fram.riskPct >= 20) {
+          alerts.add(CdsAlert(
+            alertId: 'framingham_high',
+            severity: CdsSeverity.urgent,
+            messageKey: 'framinghamHighMessage',
+            action: ncdActive ? CdsAction.continueAssessment : CdsAction.addPathway,
+            addPathway: ncdActive ? null : Programme.ncd,
+            rationaleKey: 'rationaleFraminghamHigh',
+          ));
+        } else if (fram.riskPct >= 10) {
+          alerts.add(CdsAlert(
+            alertId: 'framingham_trigger',
+            severity: CdsSeverity.warning,
+            messageKey: 'framinghamTriggerMessage',
+            action: ncdActive ? CdsAction.continueAssessment : CdsAction.addPathway,
+            addPathway: ncdActive ? null : Programme.ncd,
+            rationaleKey: 'rationaleFraminghamTrigger',
+          ));
+        }
+      }
+
+      // BP trends
+      final cusum = cdssOutput.cusum;
+      if (cusum != null && !cusum.insufficientData && cusum.alert) {
+        alerts.add(const CdsAlert(
+          alertId: 'bp_trend_cusum',
+          severity: CdsSeverity.warning,
+          messageKey: 'bpTrendCusumMessage',
+          action: CdsAction.continueAssessment,
+          rationaleKey: 'rationaleBpTrendCusum',
+        ));
+      }
+
+      final ewma = cdssOutput.ewma;
+      if (ewma != null && !ewma.insufficientData && ewma.alert) {
+        alerts.add(const CdsAlert(
+          alertId: 'bp_trend_ewma',
+          severity: CdsSeverity.warning,
+          messageKey: 'bpTrendEwmaMessage',
+          action: CdsAction.continueAssessment,
+          rationaleKey: 'rationaleBpTrendEwma',
+        ));
+      }
+
+      final slope = cdssOutput.slope;
+      if (slope != null && !slope.insufficientData && slope.alert) {
+        alerts.add(const CdsAlert(
+          alertId: 'bp_trend_slope',
+          severity: CdsSeverity.warning,
+          messageKey: 'bpTrendSlopeMessage',
+          action: CdsAction.continueAssessment,
+          rationaleKey: 'rationaleBpTrendSlope',
+        ));
+      }
+
+      // miniPIERS
+      final mp = cdssOutput.miniPiers;
+      if (mp != null && !mp.insufficientData) {
+        if (mp.critical) {
+          alerts.add(CdsAlert(
+            alertId: 'mini_piers_critical',
+            severity: CdsSeverity.urgent,
+            messageKey: 'miniPiersCriticalMessage',
+            action: CdsAction.referNow,
+            addPathway: ancActive ? null : Programme.anc,
+            rationaleKey: 'rationaleMiniPiersCritical',
+          ));
+        } else if (mp.trigger) {
+          alerts.add(CdsAlert(
+            alertId: 'mini_piers_high',
+            severity: CdsSeverity.warning,
+            messageKey: 'miniPiersHighMessage',
+            action: ancActive ? CdsAction.continueAssessment : CdsAction.addPathway,
+            addPathway: ancActive ? null : Programme.anc,
+            rationaleKey: 'rationaleMiniPiersHigh',
+          ));
+        }
+      }
+    }
+
+    // ── Cataract NCD co-enrol ────────────────────────────────────────────────
+    final ncdServiceProvided = fieldValues['ncdServiceProvided'] as bool?;
+    if (ncdServiceProvided == true) {
+      final ncdActive = activePathways.contains(Programme.ncd);
+      if (!ncdActive) {
+        alerts.add(const CdsAlert(
+          alertId: 'cataract_ncd_coenroll',
+          severity: CdsSeverity.info,
+          messageKey: 'cataractNcdCoenrollMessage',
+          action: CdsAction.addPathway,
+          addPathway: Programme.ncd,
+          rationaleKey: 'rationaleCataractNcdCoenroll',
+        ));
+      }
+    }
+
+    // ── Eye care referral ────────────────────────────────────────────────────
+    final eyeTestOutcome = fieldValues['eyeTestOutcome'] as String?;
+    if (eyeTestOutcome == 'referral_needed') {
+      alerts.add(const CdsAlert(
+        alertId: 'eye_care_referral',
+        severity: CdsSeverity.warning,
+        messageKey: 'eyeCareReferralMessage',
+        action: CdsAction.referNow,
+        rationaleKey: 'rationaleEyeCareReferral',
       ));
     }
 
