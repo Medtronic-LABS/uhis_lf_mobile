@@ -470,6 +470,12 @@ abstract final class PatientContextStrings {
   static const String refreshDone = 'Patient refreshed';
   static const String refreshFailed = 'Refresh failed';
 
+  // ── Action buttons ───────────────────────────────────────────────────────
+  static const String actionsTitle = 'Actions';
+  static const String startVisit = 'Start Visit';
+  static const String callHousehold = 'Call';
+  static const String callComingSoon = 'Call household coming soon';
+
   // ── HTML detail composition ──────────────────────────────────────────────
   static const String backToWorklist = 'Back to worklist';
   static const String sayHelloFirst = ' Say hello first';
@@ -486,6 +492,32 @@ abstract final class PatientContextStrings {
 /// Spec: `leapfrog-setup/designs/referral-sla-engine.md` §11.
 abstract final class ReferralStrings {
   ReferralStrings._();
+
+  // ── Create referral sheet ────────────────────────────────────────────────
+  static const String createSheetTitle = 'Refer Patient';
+  static const String createReasonLabel = 'Reason for referral';
+  static const String createReasonHint = 'Select a reason';
+  static const String createTierLabel = 'Urgency level';
+  static const String createNotesLabel = 'Additional notes (optional)';
+  static const String createNotesHint = 'Enter any notes for the receiving facility';
+  static const String createSubmit = 'Submit Referral';
+  static const String createCancel = 'Cancel';
+  static const String createSuccess = 'Referral created';
+  static const String createFailed = 'Failed to create referral — please try again';
+  static const String createReasonRequired = 'Please select a reason';
+  static const String tierEmergencyLabel = 'Emergency (6h SLA)';
+  static const String tierUrgentLabel = 'Urgent (24h SLA)';
+  static const String tierRoutineLabel = 'Routine (72h SLA)';
+  static const List<String> defaultReferralReasons = [
+    'High blood pressure',
+    'High blood glucose',
+    'Danger signs in pregnancy',
+    'Severe malnutrition',
+    'Danger signs in child',
+    'TB symptoms',
+    'Post-referral follow-up',
+    'Other',
+  ];
 
   // ── Dashboard ────────────────────────────────────────────────────────────
   static const String dashboardTitle = 'Referrals';

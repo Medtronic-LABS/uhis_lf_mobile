@@ -267,14 +267,32 @@ class MemberDetailRepository extends ApiRepository {
       return const [];
     }
 
+    // The server sends householdMemberId = the member's FHIR UUID (the `id`
+    // field of HouseholdMemberEntity), but the caller passes Patient.id which
+    // is preferably the numeric patientId. Resolve all known IDs for this
+    // member so the filter can match whichever form the server sends.
+    final acceptableIds = <String>{memberId};
+    if (_memberDao != null) {
+      final entity = await _memberDao!.getById(memberId) ??
+          await _memberDao!.getByPatientId(memberId);
+      if (entity != null) {
+        if (entity.id.isNotEmpty) acceptableIds.add(entity.id);
+        if (entity.fhirId != null && entity.fhirId!.isNotEmpty) {
+          acceptableIds.add(entity.fhirId!);
+        }
+        if (entity.patientId != null && entity.patientId!.isNotEmpty) {
+          acceptableIds.add(entity.patientId!);
+        }
+      }
+    }
+
     final scoped = await _resolveVillageScope(villageId);
     final history = await sync.fetchAssessmentHistory(
       villageIds: scoped,
-      memberId: int.tryParse(memberId) != null ? memberId : null,
     );
 
     final assessments = <MemberAssessment>[];
-    for (final item in _filterHistoryForMember(history, memberId)) {
+    for (final item in _filterHistoryForMember(history, acceptableIds)) {
       final mapped = _historyToAssessment(item);
       if (mapped != null) assessments.add(mapped);
     }
@@ -294,21 +312,21 @@ class MemberDetailRepository extends ApiRepository {
     return all.isEmpty ? null : all;
   }
 
-  /// Pick only the rows that belong to [memberId]. For numeric ids we match
-  /// the bare value; for FHIR-style references we also accept
-  /// `RelatedPerson/{id}` and `Patient/{id}` shapes a server may store.
+  /// Pick only the rows that belong to any of the [acceptableIds]. Handles
+  /// both plain ID strings and FHIR-reference shapes like `Patient/123`.
   List<AssessmentHistoryItem> _filterHistoryForMember(
     List<AssessmentHistoryItem> rows,
-    String memberId,
+    Set<String> acceptableIds,
   ) {
-    final acceptable = <String>{
-      memberId,
-      if (memberId.contains('/')) memberId.split('/').last,
-    };
+    // Expand to include the bare segment of any FHIR references in the set.
+    final expanded = <String>{...acceptableIds};
+    for (final id in acceptableIds) {
+      if (id.contains('/')) expanded.add(id.split('/').last);
+    }
     return rows.where((row) {
-      if (acceptable.contains(row.householdMemberId)) return true;
-      if (row.householdMemberId.contains('/') &&
-          acceptable.contains(row.householdMemberId.split('/').last)) {
+      final hid = row.householdMemberId;
+      if (expanded.contains(hid)) return true;
+      if (hid.contains('/') && expanded.contains(hid.split('/').last)) {
         return true;
       }
       return false;

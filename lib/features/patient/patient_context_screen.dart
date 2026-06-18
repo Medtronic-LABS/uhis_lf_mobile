@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/theme.dart';
-import '../../core/auth/auth_repository.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/assessment_dao.dart';
 import '../../core/db/encounter_dao.dart';
@@ -220,27 +219,22 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
     print('[PatientContextScreen] _fetchData for patientId: ${widget.patientId}');
 
     final memberRepo = context.read<MemberDetailRepository>();
-    final authRepo = context.read<AuthRepository>();
-    
-    // Get user's assigned sub-village IDs for assessment queries
-    final subVillageIds = await authRepo.subVillageIds();
-    final userVillageId = subVillageIds.isNotEmpty ? subVillageIds.first.toString() : null;
-    // ignore: avoid_print
-    print('[PatientContextScreen] User subVillageIds: $subVillageIds, using: $userVillageId');
-    
+
     // First try local patient database
     final patientRepo = context.read<PatientRepository>();
     final localPatient = await patientRepo.byId(widget.patientId);
     if (localPatient != null) {
       // ignore: avoid_print
       print('[PatientContextScreen] Found local patient: ${localPatient.patient.name}');
-      
-      // Also fetch assessments from remote API using user's sub-village ID
+
+      // Scope history query to the patient's own village — falling back to all
+      // assigned villages when villageId is null. Previously used
+      // subVillageIds.first which silently excluded patients in other villages.
       // ignore: avoid_print
-      print('[PatientContextScreen] Fetching assessments from remote API with villageId: $userVillageId...');
+      print('[PatientContextScreen] Fetching assessments from remote API with villageId: ${localPatient.patient.villageId}...');
       final assessments = await memberRepo.getMemberAssessments(
         widget.patientId,
-        villageId: userVillageId,
+        villageId: localPatient.patient.villageId,
         patientAge: localPatient.patient.age,
         patientGender: localPatient.patient.gender,
       );
@@ -333,12 +327,13 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
       final isPregnant = data['isPregnant'] as bool? ?? false;
       final memberId = data['id']?.toString() ?? widget.patientId;
       
-      // Try to fetch assessments but don't fail if API is unavailable
+      // Try to fetch assessments but don't fail if API is unavailable.
+      // Pass villageId: null so the call falls back to all assigned villages
+      // rather than only the first one (which would miss patients in other villages).
       List<MemberAssessment> assessments = [];
       try {
         assessments = await memberRepo.getMemberAssessments(
           widget.patientId,
-          villageId: userVillageId,
           patientAge: age,
           patientGender: gender,
           isPregnant: isPregnant,
@@ -530,6 +525,7 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
                         patientAge: data.age,
                         patientGender: data.gender,
                         householdId: data.householdId,
+                        villageId: data.villageId,
                         programmes: data.programmes,
                         origin: widget.origin,
                       ),
