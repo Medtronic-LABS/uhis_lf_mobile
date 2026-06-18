@@ -30,7 +30,7 @@ class VisitStepHeader extends StatelessWidget implements PreferredSizeWidget {
 
   final VoidCallback? onBack;
 
-  static const Color _headerColor = Color(0xFF1E40AF); // Indigo-700
+  static const Color _headerColor = Color(0xFF1B2B5E); // Navy
 
   @override
   Size get preferredSize => const Size.fromHeight(104);

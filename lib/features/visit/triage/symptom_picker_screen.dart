@@ -255,6 +255,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     return ChangeNotifierProvider<TriageViewModel>.value(
       value: _viewModel!,
       child: Scaffold(
+        backgroundColor: const Color(0xFFF0F2F8),
         appBar: VisitStepHeader(
           step: VisitStep.symptomPicker,
           patientLabel: TriageStrings.pickerTitle,
@@ -418,7 +419,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
             crossAxisCount: 2,
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
-            childAspectRatio: 0.8,
+            childAspectRatio: 0.85,
           ),
           itemCount: symptoms.length,
           itemBuilder: (context, index) {
@@ -502,82 +503,102 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
               width: isSelected ? 2 : 1,
             ),
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Large icon
-              Stack(
-                alignment: Alignment.topRight,
-                children: [
-                  Icon(
-                    _getIconData(symptom.icon ?? 'help_outline'),
-                    size: 40,
-                    color: getIconColor(),
-                  ),
-                  // AI badge for scribe pre-ticked symptoms
-                  if (isScribePreTick && isSelected)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 1,
-                      ),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.tertiary,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        ComposerStrings.scribeAiBadge,
-                        style: theme.textTheme.labelSmall?.copyWith(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Emoji or fallback icon
+                Stack(
+                  alignment: Alignment.topRight,
+                  children: [
+                    symptom.emoji != null
+                        ? Text(
+                            symptom.emoji!,
+                            style: const TextStyle(fontSize: 32),
+                          )
+                        : Icon(
+                            _getIconData(symptom.icon ?? 'help_outline'),
+                            size: 36,
+                            color: getIconColor(),
+                          ),
+                    // AI badge for scribe pre-ticked symptoms
+                    if (isScribePreTick && isSelected)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.tertiary,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          ComposerStrings.scribeAiBadge,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.onTertiary,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      )
+                    // Standard pre-ticked indicator (patient context, not scribe)
+                    else if (isPreTicked && isSelected)
+                      Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.tertiary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.auto_awesome,
+                          size: 12,
                           color: theme.colorScheme.onTertiary,
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                    )
-                  // Standard pre-ticked indicator (patient context, not scribe)
-                  else if (isPreTicked && isSelected)
-                    Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.tertiary,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.auto_awesome,
-                        size: 12,
-                        color: theme.colorScheme.onTertiary,
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              // Label
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Text(
+                  ],
+                ),
+                const SizedBox(height: 6),
+                // English label
+                Text(
                   TriageStrings.symptomLabel(symptom.code),
                   textAlign: TextAlign.center,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.labelMedium?.copyWith(
                     color: getTextColor(),
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
                   ),
                 ),
-              ),
-              // Selection checkmark
-              if (isSelected)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Icon(
-                    Icons.check_circle,
-                    size: 18,
-                    color: isDanger
-                        ? theme.colorScheme.onError
-                        : theme.colorScheme.primary,
+                // Bangla sub-label
+                if (TriageStrings.symptomBangla(symptom.code) != null)
+                  Text(
+                    TriageStrings.symptomBangla(symptom.code)!,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: isSelected
+                          ? getTextColor().withValues(alpha: 0.85)
+                          : const Color(0xFF6B7280),
+                    ),
                   ),
-                ),
-            ],
+                // Selection checkmark
+                if (isSelected)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Icon(
+                      Icons.check_circle,
+                      size: 16,
+                      color: isDanger
+                          ? theme.colorScheme.onError
+                          : theme.colorScheme.primary,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -863,6 +884,15 @@ class _SkAsksCard extends StatelessWidget {
               fontSize: 15,
               fontWeight: FontWeight.w700,
               color: Color(0xFF1E3A8A),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            SymptomPickerStrings.skOpenerPhraseBn,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF3B4F9C),
             ),
           ),
         ],

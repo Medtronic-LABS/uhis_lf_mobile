@@ -112,6 +112,17 @@ class TriageResultScreen extends StatelessWidget {
           const _MeasureItem('🌡️', TriageResultStrings.measureTempLabel, TriageResultStrings.measureTempHint),
           const _MeasureItem('🫁', TriageResultStrings.measureBreathLabel, TriageResultStrings.measureBreathHint),
         ];
+      case Programme.familyPlanning:
+        return [
+          const _MeasureItem('⚖️', TriageResultStrings.measureWeightLabel, TriageResultStrings.measureWeightHint),
+          const _MeasureItem('💊', TriageResultStrings.measureBpLabel, TriageResultStrings.measureBpHint),
+        ];
+      case Programme.cataract:
+      case Programme.eyeCare:
+        return [
+          const _MeasureItem('👁️', 'Visual acuity', 'Test each eye separately'),
+          const _MeasureItem('💊', TriageResultStrings.measureBpLabel, TriageResultStrings.measureBpHint),
+        ];
       default:
         return [
           const _MeasureItem('💊', TriageResultStrings.measureBpLabel, TriageResultStrings.measureBpHint),
@@ -129,6 +140,9 @@ class TriageResultScreen extends StatelessWidget {
       case Programme.tb: return PathwayStrings.programmeTb;
       case Programme.epi: return PathwayStrings.programmeEpi;
       case Programme.nutrition: return PathwayStrings.programmeNutrition;
+      case Programme.familyPlanning: return PathwayStrings.programmeFamilyPlanning;
+      case Programme.cataract: return PathwayStrings.programmeCataract;
+      case Programme.eyeCare: return PathwayStrings.programmeEyeCare;
       default: return PathwayStrings.programmeUnknown;
     }
   }

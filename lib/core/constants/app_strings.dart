@@ -1167,6 +1167,133 @@ abstract final class TriageStrings {
   static const String symptomUmbilicusRed = 'Umbilicus red / discharge';
   static const String symptomJaundice = 'Jaundice (yellow skin / eyes)';
 
+  // ── Bangla symptom labels (shown as sub-label in tile) ───────────────────
+  // Danger signs
+  static const String symptomConvulsionsBn = 'খিঁচুনি';
+  static const String symptomUnconsciousBn = 'অজ্ঞান / সাড়া নেই';
+  static const String symptomLethargyBn = 'অস্বাভাবিক ঘুম ঘুম';
+  static const String symptomNotEatingBn = 'খাচ্ছে না';
+  static const String symptomChestIndrawingBn = 'বুক ঢুকে যাওয়া';
+  static const String symptomStridorBn = 'শব্দ করে শ্বাস';
+  static const String symptomVaginalBleedingBn = 'যোনিপথে রক্তপাত';
+  static const String symptomWaterBreakBn = 'পানি ভাঙা';
+  static const String symptomReducedFetalMovementBn = 'শিশুর নড়াচড়া কম';
+  static const String symptomChestPainBn = 'বুকে ব্যথা';
+  static const String symptomHemoptysisBn = 'কফে রক্ত';
+  // Fever & respiratory
+  static const String symptomFeverBn = 'জ্বর আছে?';
+  static const String symptomCoughBn = 'কাশি আছে?';
+  static const String symptomCoughOver2WeeksBn = '২ সপ্তাহ+ কাশি';
+  static const String symptomDifficultyBreathingBn = 'শ্বাস নিতে কষ্ট';
+  static const String symptomFastBreathingBn = 'দ্রুত শ্বাস';
+  static const String symptomShortnessBreathBn = 'শ্বাসকষ্ট';
+  // GI & nutrition
+  static const String symptomDiarrheaBn = 'পাতলা পায়খানা';
+  static const String symptomBloodyDiarrheaBn = 'রক্ত মিশ্রিত পায়খানা';
+  static const String symptomVomitingBn = 'বমি হচ্ছে';
+  static const String symptomLossAppetiteBn = 'খাওয়ার রুচি নেই';
+  static const String symptomMuacRedBn = 'MUAC লাল';
+  static const String symptomVisibleWastingBn = 'দেহ শীর্ণ';
+  static const String symptomEdemaBothFeetBn = 'দুই পা ফোলা';
+  static const String symptomWeightLossBn = 'ওজন কমে যাওয়া';
+  // Maternal
+  static const String symptomPregnantBn = 'গর্ভবতী';
+  static const String symptomHeadacheSevereBn = 'তীব্র মাথাব্যথা';
+  static const String symptomBlurredVisionBn = 'ঝাপসা দৃষ্টি';
+  static const String symptomAbdominalPainBn = 'পেটে ব্যথা';
+  static const String symptomSwellingFaceHandsBn = 'মুখ / হাত ফোলা';
+  static const String symptomHighBpKnownBn = 'উচ্চ রক্তচাপ';
+  static const String symptomLaborSignsBn = 'প্রসব লক্ষণ';
+  // Eye
+  static const String symptomEyePainBn = 'চোখে ব্যথা';
+  static const String symptomGradualVisionLossBn = 'ধীরে দৃষ্টি কমছে';
+  static const String symptomReducedVisionBn = 'দৃষ্টিশক্তি কমা';
+  // Family planning
+  static const String symptomNoFamilyPlanningBn = 'পরিবার পরিকল্পনা নেই';
+  static const String symptomWantsContraceptionBn = 'গর্ভনিরোধক চান';
+  // NCD / metabolic
+  static const String symptomDizzinessBn = 'মাথা ঘোরা';
+  static const String symptomNumbnessBn = 'অবশ / ঝিনঝিন';
+  static const String symptomPolyuriaBn = 'ঘন ঘন প্রস্রাব';
+  static const String symptomPolydipsiaBn = 'অতিরিক্ত তৃষ্ণা';
+  static const String symptomFootPainBn = 'পায়ে ব্যথা';
+  static const String symptomFootWoundBn = 'পায়ে ঘা';
+  // TB indicators
+  static const String symptomNightSweatsBn = 'রাতে ঘাম';
+  static const String symptomFatigueBn = 'ক্লান্তি';
+  static const String symptomTbContactBn = 'যক্ষ্মা রোগীর সংস্পর্শ';
+  // Mental health
+  static const String symptomFeelingSadBn = 'মন খারাপ / হতাশ';
+  static const String symptomAnxietyBn = 'উদ্বেগ / দুশ্চিন্তা';
+  static const String symptomSleepDifficultyBn = 'ঘুমের সমস্যা';
+  // Child health
+  static const String symptomEarProblemBn = 'কানের সমস্যা';
+  static const String symptomSkinRashBn = 'চামড়ায় দাগ';
+  static const String symptomEyeDischargeBn = 'চোখ দিয়ে পুঁজ';
+  static const String symptomUmbilicusRedBn = 'নাভি লাল / পুঁজ';
+  static const String symptomJaundiceBn = 'জন্ডিস (হলুদ ত্বক)';
+
+  /// Returns the Bangla sub-label for a symptom code, or null if not translated.
+  static String? symptomBangla(String code) {
+    switch (code) {
+      case 'convulsions': return symptomConvulsionsBn;
+      case 'unconscious': return symptomUnconsciousBn;
+      case 'lethargy': return symptomLethargyBn;
+      case 'not_eating': return symptomNotEatingBn;
+      case 'chest_indrawing': return symptomChestIndrawingBn;
+      case 'stridor': return symptomStridorBn;
+      case 'vaginal_bleeding': return symptomVaginalBleedingBn;
+      case 'water_break': return symptomWaterBreakBn;
+      case 'reduced_fetal_movement': return symptomReducedFetalMovementBn;
+      case 'chest_pain': return symptomChestPainBn;
+      case 'hemoptysis': return symptomHemoptysisBn;
+      case 'fever': return symptomFeverBn;
+      case 'cough': return symptomCoughBn;
+      case 'cough_over_2_weeks': return symptomCoughOver2WeeksBn;
+      case 'difficulty_breathing': return symptomDifficultyBreathingBn;
+      case 'fast_breathing': return symptomFastBreathingBn;
+      case 'shortness_breath': return symptomShortnessBreathBn;
+      case 'diarrhea': return symptomDiarrheaBn;
+      case 'bloody_diarrhea': return symptomBloodyDiarrheaBn;
+      case 'vomiting': return symptomVomitingBn;
+      case 'loss_appetite': return symptomLossAppetiteBn;
+      case 'muac_red': return symptomMuacRedBn;
+      case 'visible_wasting': return symptomVisibleWastingBn;
+      case 'edema_both_feet': return symptomEdemaBothFeetBn;
+      case 'weight_loss': return symptomWeightLossBn;
+      case 'pregnant': return symptomPregnantBn;
+      case 'headache_severe': return symptomHeadacheSevereBn;
+      case 'blurred_vision': return symptomBlurredVisionBn;
+      case 'abdominal_pain': return symptomAbdominalPainBn;
+      case 'swelling_face_hands': return symptomSwellingFaceHandsBn;
+      case 'high_bp_known': return symptomHighBpKnownBn;
+      case 'labor_signs': return symptomLaborSignsBn;
+      case 'eye_pain': return symptomEyePainBn;
+      case 'gradual_vision_loss': return symptomGradualVisionLossBn;
+      case 'reduced_vision': return symptomReducedVisionBn;
+      case 'no_family_planning': return symptomNoFamilyPlanningBn;
+      case 'wants_contraception': return symptomWantsContraceptionBn;
+      case 'dizziness': return symptomDizzinessBn;
+      case 'numbness': return symptomNumbnessBn;
+      case 'polyuria': return symptomPolyuriaBn;
+      case 'polydipsia': return symptomPolydipsiaBn;
+      case 'foot_pain': return symptomFootPainBn;
+      case 'foot_wound': return symptomFootWoundBn;
+      case 'night_sweats': return symptomNightSweatsBn;
+      case 'fatigue': return symptomFatigueBn;
+      case 'tb_contact': return symptomTbContactBn;
+      case 'feeling_sad': return symptomFeelingSadBn;
+      case 'anxiety': return symptomAnxietyBn;
+      case 'sleep_difficulty': return symptomSleepDifficultyBn;
+      case 'ear_problem': return symptomEarProblemBn;
+      case 'skin_rash': return symptomSkinRashBn;
+      case 'eye_discharge': return symptomEyeDischargeBn;
+      case 'umbilicus_red': return symptomUmbilicusRedBn;
+      case 'jaundice': return symptomJaundiceBn;
+      default: return null;
+    }
+  }
+
   /// Returns the localized label for a symptom code.
   static String symptomLabel(String code) {
     switch (code) {
@@ -2209,6 +2336,7 @@ abstract final class SymptomPickerStrings {
   static const String skAsksLabel = 'SK ASKS THE FAMILY 👋';
   static const String skOpenerPhrase =
       'How is the family? Who needs to be seen today?';
+  static const String skOpenerPhraseBn = 'আজকে কে কে অসুস্থ আছে?';
 
   // ── Duration picker ──────────────────────────────────────────────────────
   static const String durationTitle = 'How many days unwell?';
