@@ -274,6 +274,10 @@ class OfflineSyncService extends ChangeNotifier {
         out = out.copyWith(followUps: out.followUps + fallbackFollowUps);
       }
 
+      // Step 3c: Merge assessment history serviceProvided → patient_programmes.
+      // Runs after the member sync so the member→patientId map is fully built.
+      await _syncAssessmentHistoryProgrammes(villageIds);
+
       // Step 4: Sync referrals
       _emitProgress(SyncProgress(
         currentStep: SyncStep.fetchingReferrals,
@@ -1641,6 +1645,62 @@ class OfflineSyncService extends ChangeNotifier {
       if (body['data'] is List) return body['data'] as List;
     }
     return const [];
+  }
+
+  /// Fetches assessment history and merges `serviceProvided` values into the
+  /// local `patient_programmes` table. Called after `_fallbackSyncFollowUps`
+  /// so that the member→patient ID map is fully built before we do the lookup.
+  ///
+  /// This supplements the programme extraction done in `_persistBundle` (which
+  /// uses `pregnancyInfos`, `treatmentDetails`, and `followUps.encounterType`).
+  /// Assessment history provides the most up-to-date service type per member.
+  Future<void> _syncAssessmentHistoryProgrammes(List<int> villageIds) async {
+    if (_members == null) return;
+    try {
+      final items = await fetchAssessmentHistory(villageIds: villageIds);
+      if (items.isEmpty) return;
+
+      // Collect unique member IDs and bulk-resolve to patient IDs.
+      final memberIds = items
+          .map((i) => i.householdMemberId)
+          .toSet()
+          .toList(growable: false);
+      final memberToPatient =
+          await _members!.patientIdsByMemberIds(memberIds);
+
+      // Group programmes by resolved patientId (skip unknown/null).
+      final newProgrammes = <String, Set<Programme>>{};
+      for (final item in items) {
+        final programme = Programme.fromTag(item.serviceProvided);
+        if (programme == null || programme == Programme.unknown) continue;
+        final patientId = memberToPatient[item.householdMemberId];
+        if (patientId == null || patientId.isEmpty) continue;
+        newProgrammes
+            .putIfAbsent(patientId, () => <Programme>{})
+            .add(programme);
+      }
+
+      if (newProgrammes.isEmpty) return;
+
+      // Merge into patient_programmes — add to existing rows, never remove.
+      int updated = 0;
+      for (final entry in newProgrammes.entries) {
+        final existing = await _programmes.programmesFor(entry.key);
+        final merged = {...existing, ...entry.value};
+        if (merged.length > existing.length) {
+          await _programmes.replaceFor(entry.key, merged);
+          updated++;
+        }
+      }
+      debugPrint(
+        '[OfflineSyncService] assessment-history programmes: '
+        '${items.length} history rows → $updated patients updated',
+      );
+    } catch (e) {
+      debugPrint(
+        '[OfflineSyncService] assessment-history programme sync failed: $e',
+      );
+    }
   }
 
   /// Per-patient refresh — fan-out to the granular spice endpoints. Tolerates

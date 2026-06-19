@@ -26,6 +26,10 @@ import 'mission_dashboard_repository.dart';
 
 enum _NeedFilter {
   highRisk,
+  ancMnch,
+  childImmunisation,
+  ncd,
+  eyeCare,
   missedFollowUp,
   pendingReferral,
 }
@@ -76,6 +80,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<String> _inlineVillages = const [];
   String? _selectedVillageChipName;
   Set<_NeedFilter> _selectedNeeds = const {};
+  Set<_NeedFilter> _availableNeeds = const {};
   Set<Programme> _selectedProgrammes = const {};
   List<Programme> _availableProgrammes = const [];
 
@@ -245,11 +250,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .toList()
       ..sort((a, b) => a.name.compareTo(b.name));
 
+    final availableNeeds = _computeAvailableNeeds(withoutCompleted);
     if (mounted) {
       // ignore: use_build_context_synchronously
       setState(() {
         _inlineVillages = allVillageLabels;
         _availableProgrammes = allProgrammes;
+        _availableNeeds = availableNeeds;
       });
     }
 
@@ -449,6 +456,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return null;
   }
 
+  Set<_NeedFilter> _computeAvailableNeeds(List<MissionQueueItem> items) {
+    final available = <_NeedFilter>{};
+    for (final item in items) {
+      if (item.priority == MissionPriority.critical ||
+          item.priority == MissionPriority.high) {
+        available.add(_NeedFilter.highRisk);
+      }
+      if (item.programmes.any((p) => p == Programme.anc || p == Programme.pnc)) {
+        available.add(_NeedFilter.ancMnch);
+      }
+      if (item.programmes.any((p) => p == Programme.imci || p == Programme.epi)) {
+        available.add(_NeedFilter.childImmunisation);
+      }
+      if (item.programmes.contains(Programme.ncd)) {
+        available.add(_NeedFilter.ncd);
+      }
+      if (item.programmes.any((p) => p == Programme.eyeCare || p == Programme.cataract)) {
+        available.add(_NeedFilter.eyeCare);
+      }
+      if (item.daysOverdue != null && item.daysOverdue! > 0) {
+        available.add(_NeedFilter.missedFollowUp);
+      }
+      if (item.referralId != null) {
+        available.add(_NeedFilter.pendingReferral);
+      }
+    }
+    return available;
+  }
+
   bool _needMatches(MissionQueueItem item) {
     final needs = _selectedNeeds;
     if (needs.isEmpty) return true;
@@ -457,6 +493,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         case _NeedFilter.highRisk:
           if (item.priority == MissionPriority.critical ||
               item.priority == MissionPriority.high) { return true; }
+        case _NeedFilter.ancMnch:
+          if (item.programmes.any((p) => p == Programme.anc || p == Programme.pnc)) { return true; }
+        case _NeedFilter.childImmunisation:
+          if (item.programmes.any((p) => p == Programme.imci || p == Programme.epi)) { return true; }
+        case _NeedFilter.ncd:
+          if (item.programmes.contains(Programme.ncd)) { return true; }
+        case _NeedFilter.eyeCare:
+          if (item.programmes.any((p) => p == Programme.eyeCare || p == Programme.cataract)) { return true; }
         case _NeedFilter.missedFollowUp:
           if (item.daysOverdue != null && item.daysOverdue! > 0) { return true; }
         case _NeedFilter.pendingReferral:
@@ -471,6 +515,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _selectedVillageId = null;
       _selectedSubVillageId = null;
       _selectedShebikaId = null;
+      _selectedNeeds = const {};
       _selectedProgrammes = const {};
     });
     _loadMissionData();
@@ -597,6 +642,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         setState(() => _selectedVillageChipName = name);
                         _loadMissionData();
                       },
+                      availableNeeds: _availableNeeds,
                       selectedNeeds: _selectedNeeds,
                       onNeedToggled: (need) {
                         setState(() {
@@ -1510,6 +1556,7 @@ class _VisitFilterPanel extends StatelessWidget {
     required this.villages,
     required this.selectedVillage,
     required this.onVillageSelected,
+    required this.availableNeeds,
     required this.selectedNeeds,
     required this.onNeedToggled,
     required this.onClearNeeds,
@@ -1521,6 +1568,7 @@ class _VisitFilterPanel extends StatelessWidget {
   final List<String> villages;
   final String? selectedVillage;
   final void Function(String? name) onVillageSelected;
+  final Set<_NeedFilter> availableNeeds;
   final Set<_NeedFilter> selectedNeeds;
   final void Function(_NeedFilter need) onNeedToggled;
   final VoidCallback onClearNeeds;
@@ -1536,6 +1584,14 @@ class _VisitFilterPanel extends StatelessWidget {
     switch (need) {
       case _NeedFilter.highRisk:
         return MissionDashboardStrings.needHighRisk;
+      case _NeedFilter.ancMnch:
+        return MissionDashboardStrings.needAncMnch;
+      case _NeedFilter.childImmunisation:
+        return MissionDashboardStrings.needChildImmunisation;
+      case _NeedFilter.ncd:
+        return MissionDashboardStrings.needNcd;
+      case _NeedFilter.eyeCare:
+        return MissionDashboardStrings.needEyeCare;
       case _NeedFilter.missedFollowUp:
         return MissionDashboardStrings.needMissedFollowUp;
       case _NeedFilter.pendingReferral:
@@ -1718,47 +1774,50 @@ class _VisitFilterPanel extends StatelessWidget {
               ),
             ),
           ],
-          SizedBox(
-            height: 34,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              children: _NeedFilter.values.map((need) {
-                final active = selectedNeeds.contains(need);
-                return Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: GestureDetector(
-                    onTap: () => onNeedToggled(need),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: active ? _pinkActiveBg : Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: active
-                              ? _pinkColor
-                              : const Color(0xFFD1D5DB),
-                          width: 1,
+          if (availableNeeds.isNotEmpty)
+            SizedBox(
+              height: 34,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                children: _NeedFilter.values
+                    .where((need) => availableNeeds.contains(need))
+                    .map((need) {
+                  final active = selectedNeeds.contains(need);
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: GestureDetector(
+                      onTap: () => onNeedToggled(need),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: active ? _pinkActiveBg : Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: active
+                                ? _pinkColor
+                                : const Color(0xFFD1D5DB),
+                            width: 1,
+                          ),
                         ),
-                      ),
-                      child: Text(
-                        _needLabel(need),
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight:
-                              active ? FontWeight.w800 : FontWeight.w500,
-                          color: active
-                              ? _pinkActiveText
-                              : const Color(0xFF374151),
+                        child: Text(
+                          _needLabel(need),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight:
+                                active ? FontWeight.w800 : FontWeight.w500,
+                            color: active
+                                ? _pinkActiveText
+                                : const Color(0xFF374151),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              }).toList(),
+                  );
+                }).toList(),
+              ),
             ),
-          ),
           const SizedBox(height: 2),
         ],
       ),
