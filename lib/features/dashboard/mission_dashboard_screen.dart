@@ -1580,6 +1580,21 @@ class _VisitFilterPanel extends StatelessWidget {
   static const _pinkActiveBg = Color(0xFFFDF2F8);
   static const _pinkActiveText = Color(0xFF9D174D);
 
+  /// Meta-needs are computed from visit fields (risk band, overdue days,
+  /// referral presence) and are valid for any patient without programme data.
+  /// Programme-based needs (ancMnch, childImmunisation, ncd, eyeCare) require
+  /// programme enrolment records to exist before they should be shown.
+  static bool _isMetaNeed(_NeedFilter need) {
+    switch (need) {
+      case _NeedFilter.highRisk:
+      case _NeedFilter.missedFollowUp:
+      case _NeedFilter.pendingReferral:
+        return true;
+      default:
+        return false;
+    }
+  }
+
   String _needLabel(_NeedFilter need) {
     switch (need) {
       case _NeedFilter.highRisk:
@@ -1779,11 +1794,14 @@ class _VisitFilterPanel extends StatelessWidget {
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                // When availableNeeds is empty (data not yet loaded), show all
-                // chips so the filter row is never blank on first render.
+                // Meta chips (highRisk, missedFollowUp, pendingReferral) are
+                // always shown — they are valid for any patient. Programme-based
+                // chips (ancMnch, childImmunisation, ncd, eyeCare) are shown
+                // only once data has loaded and confirms matching patients exist,
+                // preventing empty-result taps on initial render.
                 children: _NeedFilter.values
                     .where((need) =>
-                        availableNeeds.isEmpty ||
+                        _isMetaNeed(need) ||
                         availableNeeds.contains(need))
                     .map((need) {
                   final active = selectedNeeds.contains(need);
