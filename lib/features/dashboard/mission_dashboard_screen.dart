@@ -1774,14 +1774,17 @@ class _VisitFilterPanel extends StatelessWidget {
               ),
             ),
           ],
-          if (availableNeeds.isNotEmpty)
-            SizedBox(
+          SizedBox(
               height: 34,
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
+                // When availableNeeds is empty (data not yet loaded), show all
+                // chips so the filter row is never blank on first render.
                 children: _NeedFilter.values
-                    .where((need) => availableNeeds.contains(need))
+                    .where((need) =>
+                        availableNeeds.isEmpty ||
+                        availableNeeds.contains(need))
                     .map((need) {
                   final active = selectedNeeds.contains(need);
                   return Padding(
