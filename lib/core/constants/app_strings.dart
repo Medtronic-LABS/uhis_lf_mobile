@@ -974,6 +974,7 @@ abstract final class MissionDashboardStrings {
   static const String needMissedFollowUp = '⏰ Missed follow-up';
   static const String needPendingReferral = '📋 Pending referral';
   static const String clearNeedFilters = 'Clear';
+  static const String filterByProgramme = 'Programme';
 
   /// Human-readable rationale for a driver tag on `MissionQueueItem.drivers`.
   /// Unknown tags fall back to a generic phrase so the rationale sheet never

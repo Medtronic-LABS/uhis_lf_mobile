@@ -26,10 +26,6 @@ import 'mission_dashboard_repository.dart';
 
 enum _NeedFilter {
   highRisk,
-  ancMnch,
-  childImmunisation,
-  ncd,
-  eyeCare,
   missedFollowUp,
   pendingReferral,
 }
@@ -80,6 +76,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<String> _inlineVillages = const [];
   String? _selectedVillageChipName;
   Set<_NeedFilter> _selectedNeeds = const {};
+  Set<Programme> _selectedProgrammes = const {};
+  List<Programme> _availableProgrammes = const [];
 
   @override
   void initState() {
@@ -238,9 +236,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .toSet()
         .toList()
       ..sort();
+
+    // Derive available programmes from the queue (for dynamic programme chips).
+    final allProgrammes = withoutCompleted
+        .expand((i) => i.programmes)
+        .where((p) => p != Programme.unknown)
+        .toSet()
+        .toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+
     if (mounted) {
       // ignore: use_build_context_synchronously
-      setState(() => _inlineVillages = allVillageLabels);
+      setState(() {
+        _inlineVillages = allVillageLabels;
+        _availableProgrammes = allProgrammes;
+      });
     }
 
     // Apply inline village chip filter
@@ -248,6 +258,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final chipVillage = _selectedVillageChipName;
     if (chipVillage != null) {
       result = result.where((i) => i.village?.trim() == chipVillage).toList();
+    }
+
+    // Apply programme filter (OR logic — item shown if it has any selected programme)
+    if (_selectedProgrammes.isNotEmpty) {
+      result = result
+          .where((i) => i.programmes.any(_selectedProgrammes.contains))
+          .toList();
     }
 
     // Apply need filter (OR logic — item matches if it satisfies any selected need)
@@ -440,17 +457,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         case _NeedFilter.highRisk:
           if (item.priority == MissionPriority.critical ||
               item.priority == MissionPriority.high) { return true; }
-        case _NeedFilter.ancMnch:
-          if (item.programmes.contains(Programme.anc) ||
-              item.programmes.contains(Programme.pnc)) { return true; }
-        case _NeedFilter.childImmunisation:
-          if (item.programmes.contains(Programme.imci) ||
-              item.programmes.contains(Programme.epi)) { return true; }
-        case _NeedFilter.ncd:
-          if (item.programmes.contains(Programme.ncd)) { return true; }
-        case _NeedFilter.eyeCare:
-          if (item.programmes.contains(Programme.cataract) ||
-              item.programmes.contains(Programme.eyeCare)) { return true; }
         case _NeedFilter.missedFollowUp:
           if (item.daysOverdue != null && item.daysOverdue! > 0) { return true; }
         case _NeedFilter.pendingReferral:
@@ -465,6 +471,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _selectedVillageId = null;
       _selectedSubVillageId = null;
       _selectedShebikaId = null;
+      _selectedProgrammes = const {};
     });
     _loadMissionData();
   }
@@ -604,7 +611,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         _loadMissionData();
                       },
                       onClearNeeds: () {
-                        setState(() => _selectedNeeds = const {});
+                        setState(() {
+                          _selectedNeeds = const {};
+                          _selectedProgrammes = const {};
+                        });
+                        _loadMissionData();
+                      },
+                      availableProgrammes: _availableProgrammes,
+                      selectedProgrammes: _selectedProgrammes,
+                      onProgrammeToggled: (prog) {
+                        setState(() {
+                          final updated = Set<Programme>.from(_selectedProgrammes);
+                          if (updated.contains(prog)) {
+                            updated.remove(prog);
+                          } else {
+                            updated.add(prog);
+                          }
+                          _selectedProgrammes = updated;
+                        });
                         _loadMissionData();
                       },
                     ),
@@ -1489,6 +1513,9 @@ class _VisitFilterPanel extends StatelessWidget {
     required this.selectedNeeds,
     required this.onNeedToggled,
     required this.onClearNeeds,
+    required this.availableProgrammes,
+    required this.selectedProgrammes,
+    required this.onProgrammeToggled,
   });
 
   final List<String> villages;
@@ -1497,6 +1524,9 @@ class _VisitFilterPanel extends StatelessWidget {
   final Set<_NeedFilter> selectedNeeds;
   final void Function(_NeedFilter need) onNeedToggled;
   final VoidCallback onClearNeeds;
+  final List<Programme> availableProgrammes;
+  final Set<Programme> selectedProgrammes;
+  final void Function(Programme prog) onProgrammeToggled;
 
   static const _pinkColor = Color(0xFFE8356D);
   static const _pinkActiveBg = Color(0xFFFDF2F8);
@@ -1506,18 +1536,37 @@ class _VisitFilterPanel extends StatelessWidget {
     switch (need) {
       case _NeedFilter.highRisk:
         return MissionDashboardStrings.needHighRisk;
-      case _NeedFilter.ancMnch:
-        return MissionDashboardStrings.needAncMnch;
-      case _NeedFilter.childImmunisation:
-        return MissionDashboardStrings.needChildImmunisation;
-      case _NeedFilter.ncd:
-        return MissionDashboardStrings.needNcd;
-      case _NeedFilter.eyeCare:
-        return MissionDashboardStrings.needEyeCare;
       case _NeedFilter.missedFollowUp:
         return MissionDashboardStrings.needMissedFollowUp;
       case _NeedFilter.pendingReferral:
         return MissionDashboardStrings.needPendingReferral;
+    }
+  }
+
+  String _programmeLabel(Programme programme) {
+    switch (programme) {
+      case Programme.imci:
+        return PathwayStrings.programmeImci;
+      case Programme.anc:
+        return PathwayStrings.programmeAnc;
+      case Programme.pnc:
+        return PathwayStrings.programmePnc;
+      case Programme.ncd:
+        return PathwayStrings.programmeNcd;
+      case Programme.tb:
+        return PathwayStrings.programmeTb;
+      case Programme.epi:
+        return PathwayStrings.programmeEpi;
+      case Programme.nutrition:
+        return PathwayStrings.programmeNutrition;
+      case Programme.familyPlanning:
+        return PathwayStrings.programmeFamilyPlanning;
+      case Programme.cataract:
+        return PathwayStrings.programmeCataract;
+      case Programme.eyeCare:
+        return PathwayStrings.programmeEyeCare;
+      case Programme.unknown:
+        return PathwayStrings.programmeUnknown;
     }
   }
 
@@ -1614,6 +1663,61 @@ class _VisitFilterPanel extends StatelessWidget {
               ],
             ),
           ),
+          // Programme chips — dynamic, derived from actual patient data
+          if (availableProgrammes.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+              child: Text(
+                MissionDashboardStrings.filterByProgramme,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF374151),
+                ),
+              ),
+            ),
+            SizedBox(
+              height: 34,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                children: availableProgrammes.map((prog) {
+                  final active = selectedProgrammes.contains(prog);
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: GestureDetector(
+                      onTap: () => onProgrammeToggled(prog),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: active ? _pinkActiveBg : Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: active
+                                ? _pinkColor
+                                : const Color(0xFFD1D5DB),
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          _programmeLabel(prog),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight:
+                                active ? FontWeight.w800 : FontWeight.w500,
+                            color: active
+                                ? _pinkActiveText
+                                : const Color(0xFF374151),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
           SizedBox(
             height: 34,
             child: ListView(
