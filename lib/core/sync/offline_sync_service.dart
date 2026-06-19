@@ -1375,12 +1375,13 @@ class OfflineSyncService extends ChangeNotifier {
     if (patientId == null) return null;
     final kind = JsonRead.firstString(raw, const ['type', 'followUpType']);
     final dueAt = JsonRead.epochMillis(raw, const [
+      'nextFollowUpDate',
       'dueDate',
       'nextVisitDate',
       'visitDate',
     ]);
-    final completedAt =
-        JsonRead.epochMillis(raw, const ['completedAt', 'visitDate']);
+    final completedAt = JsonRead.epochMillis(
+        raw, const ['completedAt', 'completedDate', 'visitDate']);
     final attempts = JsonRead.firstInt(raw, const ['attempts', 'visits']);
     final unsuccessful = JsonRead.firstInt(raw, const [
       'unsuccessfulAttempts',
