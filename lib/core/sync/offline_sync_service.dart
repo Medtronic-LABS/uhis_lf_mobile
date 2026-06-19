@@ -1669,33 +1669,70 @@ class OfflineSyncService extends ChangeNotifier {
       final memberToPatient =
           await _members!.patientIdsByMemberIds(memberIds);
 
-      // Group programmes by resolved patientId (skip unknown/null).
+      // Group programmes, latest visitDate, and nextFollowUpDate per patientId.
       final newProgrammes = <String, Set<Programme>>{};
+      final latestVisitMs = <String, int>{};   // patientId → ms of last visit
+      final nextFollowUpMs = <String, int>{};  // patientId → ms of next appt
+
       for (final item in items) {
-        final programme = Programme.fromTag(item.serviceProvided);
-        if (programme == null || programme == Programme.unknown) continue;
         final patientId = memberToPatient[item.householdMemberId];
         if (patientId == null || patientId.isEmpty) continue;
-        newProgrammes
-            .putIfAbsent(patientId, () => <Programme>{})
-            .add(programme);
+
+        final programme = Programme.fromTag(item.serviceProvided);
+        if (programme != null && programme != Programme.unknown) {
+          newProgrammes
+              .putIfAbsent(patientId, () => <Programme>{})
+              .add(programme);
+        }
+
+        // Track latest visit per patient (assessment history rows are not
+        // guaranteed to be in order — take the maximum visitDate).
+        final visitMs = item.visitDate.millisecondsSinceEpoch;
+        final prev = latestVisitMs[patientId];
+        if (prev == null || visitMs > prev) latestVisitMs[patientId] = visitMs;
+
+        // nextFollowUpDate wins over inferred interval — only overwrite if the
+        // new value is more recent than one we've already seen for this patient.
+        final nfd = item.nextFollowUpDate;
+        if (nfd != null) {
+          final nfdMs = nfd.millisecondsSinceEpoch;
+          final prevNfd = nextFollowUpMs[patientId];
+          if (prevNfd == null || nfdMs > prevNfd) {
+            nextFollowUpMs[patientId] = nfdMs;
+          }
+        }
       }
 
-      if (newProgrammes.isEmpty) return;
-
-      // Merge into patient_programmes — add to existing rows, never remove.
-      int updated = 0;
+      // Merge programmes into patient_programmes — add, never remove.
+      int progUpdated = 0;
       for (final entry in newProgrammes.entries) {
         final existing = await _programmes.programmesFor(entry.key);
         final merged = {...existing, ...entry.value};
         if (merged.length > existing.length) {
           await _programmes.replaceFor(entry.key, merged);
-          updated++;
+          progUpdated++;
         }
       }
+
+      // Seed last_visit_at (and next_due_at when available) from assessment
+      // history so _inferDueAt can compute overdue/dueToday tiers for patients
+      // whose bundle follow-up records have no nextVisitDate. Uses patchVisitTiming
+      // so only non-null values are written — the subsequent recomputeAllAfterSync
+      // pass will not erase these because updateRisk also guards with null-checks.
+      int schedUpdated = 0;
+      for (final pid in latestVisitMs.keys) {
+        await _patients.patchVisitTiming(
+          patientId: pid,
+          lastVisitAt: latestVisitMs[pid],
+          nextDueAt: nextFollowUpMs[pid], // null for most NCD patients
+        );
+        schedUpdated++;
+      }
+
       debugPrint(
-        '[OfflineSyncService] assessment-history programmes: '
-        '${items.length} history rows → $updated patients updated',
+        '[OfflineSyncService] assessment-history sync: '
+        '${items.length} rows → $progUpdated programme updates, '
+        '$schedUpdated visit-schedule updates',
       );
     } catch (e) {
       debugPrint(

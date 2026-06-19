@@ -181,6 +181,28 @@ class PatientDao {
     return updated;
   }
 
+  /// Update visit timing columns without touching risk or demographic columns.
+  /// Only non-null arguments are written; null arguments leave the column
+  /// unchanged. Used after assessment-history sync to seed last_visit_at /
+  /// next_due_at before the worklist recompute pass.
+  Future<void> patchVisitTiming({
+    required String patientId,
+    int? lastVisitAt,
+    int? nextDueAt,
+  }) async {
+    final values = <String, dynamic>{
+      if (lastVisitAt != null) 'last_visit_at': lastVisitAt,
+      if (nextDueAt != null) 'next_due_at': nextDueAt,
+    };
+    if (values.isEmpty) return;
+    await _db.db.update(
+      AppDatabase.tablePatients,
+      values,
+      where: 'id = ?',
+      whereArgs: [patientId],
+    );
+  }
+
   /// Clear all patients from the local database.
   /// Used before a fresh sync to remove stale data.
   Future<void> clearAll() async {
