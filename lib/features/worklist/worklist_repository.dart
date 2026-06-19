@@ -45,7 +45,7 @@ class WorklistRepository {
 
   Future<List<WorklistEntry>> load({
     Set<Programme> filter = const <Programme>{},
-    int limit = 200,
+    int limit = 500,
   }) async {
     final rows = await _patients.queryWorklist(
       programmeFilter: filter,

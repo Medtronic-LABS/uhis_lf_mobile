@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../models/patient.dart';
@@ -111,7 +112,7 @@ class PatientDao {
   /// row explosion from the JOIN).
   Future<List<Map<String, Object?>>> queryWorklist({
     Set<Programme> programmeFilter = const <Programme>{},
-    int limit = 200,
+    int limit = 500,
     int offset = 0,
   }) async {
     if (programmeFilter.isEmpty) {
@@ -144,6 +145,40 @@ class PatientDao {
     if (c is int) return c;
     if (c is num) return c.toInt();
     return 0;
+  }
+
+  /// Copies sub_village_name from the members table into patients.village_name
+  /// for every patient whose current village_name is null or looks like a raw
+  /// numeric ID (i.e., no alphabetic chars). Called after _syncHouseholdsAndMembers
+  /// so that the granular-sync sub-village text wins over the bundle's API-internal
+  /// numeric village_id that may have landed in village_name.
+  Future<int> propagateVillageNamesFromMembers() async {
+    final updated = await _db.db.rawUpdate('''
+      UPDATE ${AppDatabase.tablePatients}
+      SET village_name = (
+        SELECT m.sub_village_name
+        FROM ${AppDatabase.tableMembers} m
+        WHERE m.patient_id = ${AppDatabase.tablePatients}.id
+          AND m.sub_village_name IS NOT NULL
+          AND m.sub_village_name != ''
+        LIMIT 1
+      )
+      WHERE EXISTS (
+        SELECT 1 FROM ${AppDatabase.tableMembers} m2
+        WHERE m2.patient_id = ${AppDatabase.tablePatients}.id
+          AND m2.sub_village_name IS NOT NULL
+          AND m2.sub_village_name != ''
+      )
+      AND (
+        village_name IS NULL
+        OR village_name = ''
+        OR village_name GLOB '[0-9]*'
+      )
+    ''');
+    if (updated > 0) {
+      debugPrint('[PatientDao] propagateVillageNamesFromMembers: $updated patients updated');
+    }
+    return updated;
   }
 
   /// Clear all patients from the local database.

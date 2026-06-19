@@ -217,7 +217,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     // Load full queue
-    final queue = await missionRepo.loadQueue(limit: 200);
+    final queue = await missionRepo.loadQueue(limit: 500);
 
     // Filter out completed patients
     final withoutCompleted = queue.where((item) =>

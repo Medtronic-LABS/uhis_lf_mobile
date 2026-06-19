@@ -257,6 +257,10 @@ class OfflineSyncService extends ChangeNotifier {
         if (hhCount.households > 0) totalHouseholds = hhCount.households;
         // Only update members count if we didn't get any from the bundle
         if (out.members == 0 && hhCount.members > 0) totalMembers = hhCount.members;
+        // Propagate sub_village_name from members → patients so the
+        // dashboard village chips show correct sub-village text, not the
+        // API-internal numeric village_id that the bundle may have stored.
+        await _patients.propagateVillageNamesFromMembers();
       }
       
       // Step 3b: Always fetch follow-ups via the per-village offline endpoints.
