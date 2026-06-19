@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../core/models/programme.dart';
 
@@ -595,8 +594,8 @@ TextTheme _buildTextTheme(Brightness brightness) {
       ? Typography.material2021().black
       : Typography.material2021().white;
 
-  final heading = GoogleFonts.nunitoTextTheme(base);
-  final body = GoogleFonts.nunitoSansTextTheme(base);
+  final heading = base.apply(fontFamily: 'Nunito');
+  final body = base.apply(fontFamily: 'NunitoSans');
 
   return base.copyWith(
     displayLarge: heading.displayLarge?.copyWith(fontWeight: FontWeight.w800),
@@ -675,7 +674,7 @@ ThemeData buildAppTheme() {
       scrolledUnderElevation: 0,
       surfaceTintColor: Colors.transparent,
       centerTitle: false,
-      titleTextStyle: GoogleFonts.nunito(
+      titleTextStyle: TextStyle(fontFamily: 'Nunito', 
         fontSize: 18,
         fontWeight: FontWeight.w800,
         color: AppColors.textOnNavy,
@@ -700,7 +699,7 @@ ThemeData buildAppTheme() {
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: AppColors.cardSurface,
-      hintStyle: GoogleFonts.nunitoSans(
+      hintStyle: TextStyle(fontFamily: 'NunitoSans', 
         color: AppColors.textMuted,
         fontSize: 14,
       ),
@@ -733,7 +732,7 @@ ThemeData buildAppTheme() {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(LeapfrogColors.radiusMd),
         ),
-        textStyle: GoogleFonts.nunito(
+        textStyle: TextStyle(fontFamily: 'Nunito', 
           fontSize: 15,
           fontWeight: FontWeight.w800,
         ),
@@ -747,7 +746,7 @@ ThemeData buildAppTheme() {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(LeapfrogColors.radiusMd),
         ),
-        textStyle: GoogleFonts.nunito(
+        textStyle: TextStyle(fontFamily: 'Nunito', 
           fontSize: 15,
           fontWeight: FontWeight.w700,
         ),
@@ -761,7 +760,7 @@ ThemeData buildAppTheme() {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(LeapfrogColors.radiusMd),
         ),
-        textStyle: GoogleFonts.nunito(
+        textStyle: TextStyle(fontFamily: 'Nunito', 
           fontSize: 15,
           fontWeight: FontWeight.w700,
         ),
@@ -770,7 +769,7 @@ ThemeData buildAppTheme() {
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: AppColors.aiPurple,
-        textStyle: GoogleFonts.nunito(
+        textStyle: TextStyle(fontFamily: 'Nunito', 
           fontSize: 14,
           fontWeight: FontWeight.w700,
         ),
@@ -788,12 +787,12 @@ ThemeData buildAppTheme() {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
       ),
-      labelStyle: GoogleFonts.nunitoSans(
+      labelStyle: TextStyle(fontFamily: 'NunitoSans', 
         fontSize: 12,
         fontWeight: FontWeight.w600,
         color: AppColors.textPrimary,
       ),
-      secondaryLabelStyle: GoogleFonts.nunitoSans(
+      secondaryLabelStyle: TextStyle(fontFamily: 'NunitoSans', 
         fontSize: 12,
         fontWeight: FontWeight.w700,
         color: AppColors.textOnNavy,
@@ -808,7 +807,7 @@ ThemeData buildAppTheme() {
       height: 64,
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         final selected = states.contains(WidgetState.selected);
-        return GoogleFonts.nunitoSans(
+        return TextStyle(fontFamily: 'NunitoSans', 
           fontSize: 11,
           fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
           color: selected ? AppColors.navy : AppColors.textMuted,
@@ -835,7 +834,7 @@ ThemeData buildAppTheme() {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
       ),
-      titleTextStyle: GoogleFonts.nunito(
+      titleTextStyle: TextStyle(fontFamily: 'Nunito', 
         fontSize: 18,
         fontWeight: FontWeight.w800,
         color: AppColors.textPrimary,
@@ -852,7 +851,7 @@ ThemeData buildAppTheme() {
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: AppColors.navy,
-      contentTextStyle: GoogleFonts.nunitoSans(
+      contentTextStyle: TextStyle(fontFamily: 'NunitoSans', 
         color: AppColors.textOnNavy,
         fontWeight: FontWeight.w600,
       ),
@@ -924,7 +923,7 @@ ThemeData buildDarkTheme() {
       scrolledUnderElevation: 0,
       surfaceTintColor: Colors.transparent,
       centerTitle: false,
-      titleTextStyle: GoogleFonts.nunito(
+      titleTextStyle: TextStyle(fontFamily: 'Nunito', 
         fontSize: 18,
         fontWeight: FontWeight.w800,
         color: AppColors.textPrimaryDark,
@@ -949,7 +948,7 @@ ThemeData buildDarkTheme() {
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: AppColors.cardSurfaceDark,
-      hintStyle: GoogleFonts.nunitoSans(
+      hintStyle: TextStyle(fontFamily: 'NunitoSans', 
         color: AppColors.textMutedDark,
         fontSize: 14,
       ),
@@ -983,7 +982,7 @@ ThemeData buildDarkTheme() {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(LeapfrogColors.radiusMd),
         ),
-        textStyle: GoogleFonts.nunito(
+        textStyle: TextStyle(fontFamily: 'Nunito', 
           fontSize: 15,
           fontWeight: FontWeight.w800,
         ),
@@ -997,7 +996,7 @@ ThemeData buildDarkTheme() {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(LeapfrogColors.radiusMd),
         ),
-        textStyle: GoogleFonts.nunito(
+        textStyle: TextStyle(fontFamily: 'Nunito', 
           fontSize: 15,
           fontWeight: FontWeight.w700,
         ),
@@ -1011,7 +1010,7 @@ ThemeData buildDarkTheme() {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(LeapfrogColors.radiusMd),
         ),
-        textStyle: GoogleFonts.nunito(
+        textStyle: TextStyle(fontFamily: 'Nunito', 
           fontSize: 15,
           fontWeight: FontWeight.w700,
         ),
@@ -1020,7 +1019,7 @@ ThemeData buildDarkTheme() {
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: AppColors.aiPurpleLight,
-        textStyle: GoogleFonts.nunito(
+        textStyle: TextStyle(fontFamily: 'Nunito', 
           fontSize: 14,
           fontWeight: FontWeight.w700,
         ),
@@ -1038,12 +1037,12 @@ ThemeData buildDarkTheme() {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
       ),
-      labelStyle: GoogleFonts.nunitoSans(
+      labelStyle: TextStyle(fontFamily: 'NunitoSans', 
         fontSize: 12,
         fontWeight: FontWeight.w600,
         color: AppColors.textPrimaryDark,
       ),
-      secondaryLabelStyle: GoogleFonts.nunitoSans(
+      secondaryLabelStyle: TextStyle(fontFamily: 'NunitoSans', 
         fontSize: 12,
         fontWeight: FontWeight.w700,
         color: AppColors.textPrimaryDark,
@@ -1058,7 +1057,7 @@ ThemeData buildDarkTheme() {
       height: 64,
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         final selected = states.contains(WidgetState.selected);
-        return GoogleFonts.nunitoSans(
+        return TextStyle(fontFamily: 'NunitoSans', 
           fontSize: 11,
           fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
           color: selected ? AppColors.pinkLight : AppColors.textMutedDark,
@@ -1085,7 +1084,7 @@ ThemeData buildDarkTheme() {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
       ),
-      titleTextStyle: GoogleFonts.nunito(
+      titleTextStyle: TextStyle(fontFamily: 'Nunito', 
         fontSize: 18,
         fontWeight: FontWeight.w800,
         color: AppColors.textPrimaryDark,
@@ -1102,7 +1101,7 @@ ThemeData buildDarkTheme() {
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: AppColors.cardSurfaceMutedDark,
-      contentTextStyle: GoogleFonts.nunitoSans(
+      contentTextStyle: TextStyle(fontFamily: 'NunitoSans', 
         color: AppColors.textPrimaryDark,
         fontWeight: FontWeight.w600,
       ),

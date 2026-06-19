@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import 'app/router.dart';
@@ -80,6 +81,9 @@ Future<void> _clearSeededTestData(AppDatabase db) async {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SemanticsBinding.instance.ensureSemantics();
+  // Offline-first: never fetch fonts from the network. Falls back to bundled
+  // assets (if declared in pubspec fonts:) then to system fonts.
+  GoogleFonts.config.allowRuntimeFetching = false;
   final api = await ApiClient.create();
   final authRepo = AuthRepository(api);
   final biometric = BiometricService();

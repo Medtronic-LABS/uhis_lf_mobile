@@ -42,3 +42,12 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
+    - assets/fonts/
+
+  fonts:
+    - family: Nunito
+      fonts:
+        - asset: assets/fonts/Nunito-Variable.ttf
+    - family: NunitoSans
+      fonts:
+        - asset: assets/fonts/NunitoSans-Variable.ttf
