@@ -792,29 +792,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           }
                         }
 
-                        // Build widgets with inline tier headers
                         final widgets = <Widget>[];
-                        DashboardTier? currentTier;
-                        final tierCounts = <DashboardTier, int>{};
                         for (final item in visible) {
-                          tierCounts[item.tier] =
-                              (tierCounts[item.tier] ?? 0) + 1;
-                        }
-                        for (final item in visible) {
-                          if (item.tier != currentTier) {
-                            currentTier = item.tier;
-                            widgets.add(Padding(
-                              padding: EdgeInsets.only(
-                                top: widgets.isEmpty ? 0 : 10,
-                                bottom: 6,
-                              ),
-                              child: MissionTierHeader(
-                                tier: currentTier,
-                                count: tierCounts[currentTier] ?? 0,
-                                compact: true,
-                              ),
-                            ));
-                          }
                           widgets.add(Padding(
                             padding: const EdgeInsets.only(bottom: 8),
                             child: MissionQueueCard(
