@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/api/api_client.dart';
-import '../../../core/api/endpoints.dart';
 import '../../../core/db/follow_up_dao.dart';
 import '../../../core/models/programme.dart';
 import 'pathway_review_sheet.dart';
@@ -157,22 +156,13 @@ class SkippedPathwayFollowUpService {
       'createdAt': skipped.timestamp.toIso8601String(),
     };
 
-    // Try to sync immediately
-    try {
-      await _api.dio.post<Map<String, dynamic>>(
-        Endpoints.followUpCreate,
-        data: followUpDto,
-      );
-    } catch (e) {
-      // Queue for offline sync
-      debugPrint('Follow-up sync failed, queuing for offline: $e');
-      await _queueForOfflineSync(
-        patientId: patientId,
-        reason: reason,
-        nextVisitDate: nextVisitDate,
-        rawJson: followUpDto,
-      );
-    }
+    // Queue for offline sync — pushed via offline-sync/create on next sync
+    await _queueForOfflineSync(
+      patientId: patientId,
+      reason: reason,
+      nextVisitDate: nextVisitDate,
+      rawJson: followUpDto,
+    );
   }
 
   Future<void> _queueForOfflineSync({

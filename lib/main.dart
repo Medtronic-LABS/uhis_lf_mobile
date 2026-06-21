@@ -166,7 +166,6 @@ class _UhisNextAppState extends State<UhisNextApp>
     followUps: _followUpDao,
     immunisations: _immDao,
     assessments: _assessmentDao,
-    referrals: _referralDao,
     syncMeta: _syncMetaDao,
     households: _householdDao,
     members: _memberDao,
@@ -184,7 +183,6 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final PatientRepository _patientRepo = PatientRepository(
     patients: _patientDao,
     programmes: _progDao,
-    sync: _sync,
   );
 
   // ── Referral SLA Engine wiring (ReferralDao initialized above) ──────────

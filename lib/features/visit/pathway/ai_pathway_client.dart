@@ -16,16 +16,12 @@
 ///     critical-path UI render.
 library;
 
-import 'dart:async' show TimeoutException;
 import 'dart:convert';
-import 'dart:io' show SocketException;
 
-import 'package:dio/dio.dart' show DioException;
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../../../core/api/api_client.dart';
-import '../../../core/api/endpoints.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/models/programme.dart';
 import 'pathway_engine.dart';
@@ -196,58 +192,8 @@ class AiPathwayClient {
       return null;
     }
 
-    try {
-      final response = await client.dio
-          .post(
-            Endpoints.clinicalPathwaySuggest,
-            data: req.toJson(),
-          )
-          .timeout(Duration(milliseconds: AppConfig.aiPathwayTimeoutMs));
-
-      final statusCode = response.statusCode ?? 0;
-      if (statusCode < 200 || statusCode >= 300) {
-        debugPrint(
-          '[AiPathwayClient] fetchSuggestions: non-2xx status $statusCode',
-        );
-        return null;
-      }
-
-      final body = response.data;
-      if (body == null) return null;
-
-      final rawList = body is List
-          ? body
-          : (body is Map && body['suggestions'] is List)
-              ? body['suggestions'] as List
-              : const [];
-
-      final suggestions = rawList
-          .whereType<Map<String, dynamic>>()
-          .map(PathwaySuggestion.fromJson)
-          .where((s) => s.programme != Programme.unknown)
-          .toList();
-
-      final cache = PathwaySuggestionCache(
-        suggestions: suggestions,
-        fetchedAt: DateTime.now(),
-      );
-
-      await _upsertCache(req.memberId, cache);
-      debugPrint(
-        '[AiPathwayClient] Fetched ${suggestions.length} suggestions '
-        'for member=${req.memberId}',
-      );
-      return cache;
-    } on TimeoutException {
-      debugPrint('[AiPathwayClient] fetchSuggestions timed out for ${req.memberId}');
-      return null;
-    } on SocketException catch (e) {
-      debugPrint('[AiPathwayClient] fetchSuggestions offline: $e');
-      return null;
-    } on DioException catch (e) {
-      debugPrint('[AiPathwayClient] fetchSuggestions DioException: $e');
-      return null;
-    }
+    debugPrint('[AiPathwayClient] disabled — clinicalPathwaySuggest not in approved API set');
+    return null;
   }
 
   /// Return the cached suggestions for [memberId], or null if no cache row

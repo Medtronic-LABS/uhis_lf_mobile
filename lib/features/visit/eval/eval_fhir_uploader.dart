@@ -14,12 +14,8 @@
 /// Never blocks the assessment flow — errors are logged and retried.
 library;
 
-import 'dart:convert';
-
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-
-import '../../../core/api/endpoints.dart' show Endpoints;
-import '../../../core/config/app_config.dart';
 import 'eval_log_entry.dart';
 import 'shadow_log_service.dart';
 
@@ -52,60 +48,9 @@ class EvalFhirUploader {
   }
 
   Future<String> _uploadEntry(EvalLogEntry entry, String bearerToken) async {
-    final programmes = (jsonDecode(entry.activatedProgrammes) as List)
-        .cast<String>();
-
-    final docRef = {
-      'resourceType': 'DocumentReference',
-      'status': 'current',
-      'type': {
-        'coding': [
-          {'system': 'http://loinc.org', 'code': '11488-4', 'display': 'Consult note'}
-        ]
-      },
-      'meta': {
-        'tag': [
-          {'system': _kEvalTagSystem, 'code': _kEvalTagCode},
-          for (final prog in programmes)
-            {'system': _kProgrammeTagSystem, 'code': prog},
-        ]
-      },
-      'subject': {'reference': 'Patient/${entry.patientId}'},
-      'context': {
-        'encounter': [
-          {'reference': 'Encounter/${entry.encounterId}'}
-        ]
-      },
-      'date': entry.capturedAt.toUtc().toIso8601String(),
-      'content': [
-        {
-          'attachment': {
-            'contentType': 'application/json',
-            'data': base64Encode(utf8.encode(jsonEncode(entry.toDb()))),
-            'title': 'eval-shadow-hint',
-          }
-        }
-      ],
-    };
-
-    final url = '${AppConfig.apiBaseUrl}${Endpoints.fhirServerBase}/DocumentReference';
-    final response = await _httpClient
-        .post(
-          Uri.parse(url),
-          headers: {
-            'Content-Type': 'application/fhir+json',
-            'Authorization': 'Bearer $bearerToken',
-          },
-          body: jsonEncode(docRef),
-        )
-        .timeout(const Duration(seconds: 10));
-
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw http.ClientException(
-          'FHIR upload failed: ${response.statusCode}', Uri.parse(url));
-    }
-
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    return body['id'] as String? ?? entry.id;
+    // DocumentReference upload disabled — not in approved API set.
+    // Entries remain in pending state until this endpoint is approved.
+    debugPrint('[EvalFhirUploader] disabled — DocumentReference not in approved API set');
+    return entry.id;
   }
 }

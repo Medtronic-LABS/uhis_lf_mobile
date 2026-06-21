@@ -1,42 +1,26 @@
-import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
-import '../../core/api/api_client.dart';
 import '../../core/api/api_repository.dart';
-import '../../core/api/endpoints.dart';
 import '../../core/models/referral.dart';
 
-/// API service for referral-related backend operations.
-/// Handles communication with spice-service and fhir-mapper-service endpoints.
+/// Referral API service — all mutating endpoints removed from approved API set.
+/// Referral status is read-only, sourced from followUps[].referralStatus in
+/// the fetch-synced-data bundle. Creation/update will be re-added once
+/// offline-sync/create gains a referrals[] field.
 class ReferralApiService extends ApiRepository {
   ReferralApiService(super.api);
 
-  /// Fetch referral tickets for a patient from the server.
-  /// Returns list of referral data from fhir-mapper-service.
+  /// Referral data comes from the offline sync bundle (followUps[].referralStatus).
+  /// No network call — returns empty list.
   Future<List<Map<String, dynamic>>> fetchReferrals({
     required String patientId,
     int? limit,
     int? offset,
   }) async {
-    try {
-      final body = await postOk(
-        Endpoints.fhirReferralTicketList,
-        data: {
-          'patientId': patientId,
-          'tenantId': api.tenantIdAsNum,
-          if (limit != null) 'limit': limit,
-          if (offset != null) 'offset': offset,
-        },
-        action: 'Fetch referrals',
-      );
-      return List<Map<String, dynamic>>.from(extractList(body));
-    } catch (e) {
-      debugPrint('[ReferralApiService] fetchReferrals error: $e');
-      return [];
-    }
+    debugPrint('[ReferralApiService] disabled — not in approved API set');
+    return const [];
   }
 
-  /// Create a new referral ticket via fhir-mapper-service.
   Future<String?> createReferral({
     required String patientId,
     required String memberId,
@@ -46,32 +30,10 @@ class ReferralApiService extends ApiRepository {
     SlaTier? slaTier,
     String? notes,
   }) async {
-    try {
-      final body = await postOk(
-        Endpoints.fhirReferralTicketCreate,
-        data: {
-          'patientId': patientId,
-          'memberId': memberId,
-          'referredReason': referredReason,
-          'referredTo': referredTo,
-          'referredBy': referredBy ?? 'SK',
-          'tenantId': api.tenantIdAsNum,
-          if (slaTier != null) 'slaTier': slaTier.wireTag,
-          if (notes != null) 'notes': notes,
-        },
-        action: 'Create referral',
-      );
-      if (body is Map) {
-        return body['id']?.toString() ?? body['referralId']?.toString();
-      }
-      return null;
-    } catch (e) {
-      debugPrint('[ReferralApiService] createReferral error: $e');
-      rethrow;
-    }
+    debugPrint('[ReferralApiService] createReferral disabled');
+    return null;
   }
 
-  /// Update a referral ticket status via fhir-mapper-service.
   Future<bool> updateReferralStatus({
     required String referralId,
     required String memberId,
@@ -79,140 +41,42 @@ class ReferralApiService extends ApiRepository {
     String? reason,
     String? actor,
   }) async {
-    try {
-      await postOk(
-        Endpoints.fhirReferralTicketUpdate,
-        data: {
-          'referralId': referralId,
-          'memberId': memberId,
-          'patientStatus': _statusToWireTag(status),
-          'tenantId': api.tenantIdAsNum,
-          if (reason != null) 'reason': reason,
-          if (actor != null) 'updatedBy': actor,
-        },
-        action: 'Update referral status',
-      );
-      return true;
-    } catch (e) {
-      debugPrint('[ReferralApiService] updateReferralStatus error: $e');
-      return false;
-    }
+    debugPrint('[ReferralApiService] updateReferralStatus disabled');
+    return false;
   }
 
-  /// Escalate a referral to the next level.
   Future<bool> escalateReferral({
     required String referralId,
     required String memberId,
     required int currentLevel,
     String? reason,
   }) async {
-    try {
-      // Map escalation level to supervisor endpoint
-      final nextLevel = currentLevel + 1;
-      await postOk(
-        Endpoints.fhirReferralTicketUpdate,
-        data: {
-          'referralId': referralId,
-          'memberId': memberId,
-          'escalationLevel': nextLevel,
-          'escalationReason': reason ?? 'SLA breach - escalated by SK',
-          'tenantId': api.tenantIdAsNum,
-        },
-        action: 'Escalate referral',
-      );
-      return true;
-    } catch (e) {
-      debugPrint('[ReferralApiService] escalateReferral error: $e');
-      return false;
-    }
+    debugPrint('[ReferralApiService] escalateReferral disabled');
+    return false;
   }
 
-  /// Add a note/comment to a referral.
   Future<bool> addReferralNote({
     required String referralId,
     required String memberId,
     required String note,
     String? actor,
   }) async {
-    try {
-      await postOk(
-        Endpoints.fhirReferralTicketUpdate,
-        data: {
-          'referralId': referralId,
-          'memberId': memberId,
-          'notes': note,
-          'tenantId': api.tenantIdAsNum,
-          if (actor != null) 'updatedBy': actor,
-        },
-        action: 'Add referral note',
-      );
-      return true;
-    } catch (e) {
-      debugPrint('[ReferralApiService] addReferralNote error: $e');
-      return false;
-    }
+    debugPrint('[ReferralApiService] addReferralNote disabled');
+    return false;
   }
 
-  /// Fetch prescription/treatment details for a patient.
   Future<List<Map<String, dynamic>>> fetchPrescriptions({
     required String patientId,
-  }) async {
-    try {
-      final body = await postOk(
-        Endpoints.prescriptionPrescribedDetails,
-        data: {
-          'patientId': patientId,
-          'tenantId': api.tenantIdAsNum,
-        },
-        action: 'Fetch prescriptions',
-      );
-      final list = extractList(body);
-      return List<Map<String, dynamic>>.from(list);
-    } catch (e) {
-      debugPrint('[ReferralApiService] fetchPrescriptions error: $e');
-      return [];
-    }
-  }
+  }) async =>
+      const [];
 
-  /// Fetch facility details by ID.
-  Future<Map<String, dynamic>?> fetchFacility(int facilityId) async {
-    try {
-      final body = await getOk(
-        '/admin-service/facility/$facilityId',
-        action: 'Fetch facility',
-      );
-      if (body is Map<String, dynamic>) return body;
-      if (body is Map && body['entity'] is Map) {
-        return Map<String, dynamic>.from(body['entity'] as Map);
-      }
-      return null;
-    } catch (e) {
-      debugPrint('[ReferralApiService] fetchFacility error: $e');
-      return null;
-    }
-  }
+  Future<Map<String, dynamic>?> fetchFacility(int facilityId) async => null;
 
-  /// Bulk fetch multiple referrals by IDs.
   Future<List<Map<String, dynamic>>> fetchReferralsByIds({
     required List<String> referralIds,
-  }) async {
-    try {
-      final body = await postOk(
-        Endpoints.fhirReferralTicketList,
-        data: {
-          'referralIds': referralIds,
-          'tenantId': api.tenantIdAsNum,
-        },
-        action: 'Fetch referrals by IDs',
-      );
-      return List<Map<String, dynamic>>.from(extractList(body));
-    } catch (e) {
-      debugPrint('[ReferralApiService] fetchReferralsByIds error: $e');
-      return [];
-    }
-  }
+  }) async =>
+      const [];
 
-  /// Create a follow-up for a referral.
   Future<bool> createFollowUp({
     required String patientId,
     required String referralId,
@@ -220,44 +84,8 @@ class ReferralApiService extends ApiRepository {
     String? type,
     String? notes,
   }) async {
-    try {
-      // Use the follow-up endpoint to schedule
-      await postOk(
-        '/spice-service/follow-up/create',
-        data: {
-          'patientId': patientId,
-          'referralId': referralId,
-          'dueAt': dueAt.millisecondsSinceEpoch,
-          'type': type ?? 'referral_follow_up',
-          'tenantId': api.tenantIdAsNum,
-          if (notes != null) 'notes': notes,
-        },
-        action: 'Create follow-up',
-      );
-      return true;
-    } catch (e) {
-      debugPrint('[ReferralApiService] createFollowUp error: $e');
-      return false;
-    }
-  }
-
-  /// Map device-side status to server wire tag.
-  String _statusToWireTag(ReferralStatus status) {
-    switch (status) {
-      case ReferralStatus.created:
-        return 'Referred';
-      case ReferralStatus.treatmentStarted:
-      case ReferralStatus.arrived:
-      case ReferralStatus.inTransit:
-      case ReferralStatus.acknowledged:
-        return 'OnTreatment';
-      case ReferralStatus.closedRecovered:
-        return 'Recovered';
-      case ReferralStatus.closedDeceased:
-        return 'Died';
-      default:
-        return status.wireTag;
-    }
+    debugPrint('[ReferralApiService] createFollowUp disabled');
+    return false;
   }
 }
 

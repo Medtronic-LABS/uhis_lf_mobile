@@ -1,9 +1,7 @@
-import 'dart:math';
-
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/api/api_repository.dart';
-import '../../core/api/endpoints.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/models/assessment_history_item.dart';
@@ -79,14 +77,9 @@ class EncounterRepository extends ApiRepository {
   final EncounterDao _dao;
   final OfflineSyncService? _offlineSync;
   final AuthRepository? _auth;
-  static final _random = Random.secure();
 
-  /// Generate a simple unique ID.
-  static String _generateId() {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final rand = _random.nextInt(999999).toString().padLeft(6, '0');
-    return 'enc_${now}_$rand';
-  }
+  /// Generate a UUID v4 encounter reference ID.
+  static String _generateId() => const Uuid().v4();
 
   /// Get recent visits for a patient.
   ///
@@ -160,14 +153,15 @@ class EncounterRepository extends ApiRepository {
     return visits.isEmpty ? null : visits.first;
   }
 
-  /// Create a new visit (local draft + server POST).
-  /// 
-  /// Returns the local encounter ID. Server visitId is stored separately.
+  /// Create a new visit (local draft only).
+  ///
+  /// Returns a UUID v4 encounter ID. The encounter is persisted to SQLite with
+  /// status=draft and syncStatus=pending. It is pushed to the server via
+  /// `offline-sync/create` during the next sync cycle.
   Future<String> createVisit(String patientId, Programme programme) async {
     final id = _generateId();
     final now = DateTime.now().millisecondsSinceEpoch;
 
-    // Create local draft
     final row = EncounterRow(
       id: id,
       patientId: patientId,
@@ -177,40 +171,6 @@ class EncounterRepository extends ApiRepository {
       syncStatus: SyncStatus.pending,
     );
     await _dao.upsert(row);
-
-    // Optimistically POST to server
-    try {
-      final orgId = api.organizationFhirId;
-      final userFhirId = await _auth?.userFhirId();
-      final spiceUserId = await _auth?.userId();
-      final body = await postOk(
-        Endpoints.patientVisitCreate,
-        data: {
-          'patientId': patientId,
-          'programme': programme.name,
-          'tenantId': api.tenantIdAsNum,
-          'provenance': {
-            if (orgId != null) 'organizationId': orgId,
-            if (userFhirId != null) 'userId': userFhirId,
-            if (spiceUserId != null) 'spiceUserId': spiceUserId,
-            'modifiedDate': DateTime.now().toUtc().toIso8601String(),
-          },
-        },
-        action: 'Create visit',
-      );
-      final serverVisitId = body['entity']?['id']?.toString() ??
-          body['id']?.toString() ??
-          body['visitId']?.toString();
-      if (serverVisitId != null) {
-        await _dao.updateSyncStatus(id, SyncStatus.synced,
-            serverVisitId: serverVisitId);
-      }
-    } catch (e) {
-      // Offline — keep as pending, will sync later
-      // ignore: avoid_print
-      print('[EncounterRepository] Visit create failed, queued offline: $e');
-    }
-
     return id;
   }
 

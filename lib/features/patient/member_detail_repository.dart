@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 
 import '../../core/api/api_repository.dart';
-import '../../core/api/endpoints.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/models/assessment_history_item.dart';
@@ -392,50 +391,10 @@ class MemberDetailRepository extends ApiRepository {
     print('[MemberDetailRepository] ========== getPatientDetailsWithVitals START ==========');
     print('[MemberDetailRepository] patientId=$patientId, assessmentType=$assessmentType, origin=$origin');
 
-    try {
-      final requestData = {
-        'patientId': patientId,
-        'id': patientId,
-        if (assessmentType != null) 'assessmentType': assessmentType,
-        if (origin != null) 'type': origin,
-        'tenantId': api.tenantIdAsNum,
-      };
-      // ignore: avoid_print
-      print('[MemberDetailRepository] Calling ${Endpoints.patientDetails}');
-      print('[MemberDetailRepository] Request: $requestData');
-
-      final body = await postOk(
-        Endpoints.patientDetails,
-        data: requestData,
-        action: 'Patient details with vitals',
-      );
-
-      // ignore: avoid_print
-      print('[MemberDetailRepository] Response type: ${body.runtimeType}');
-
-      if (body is Map<String, dynamic>) {
-        final details = PatientDetailsWithVitals.fromJson(body);
-        // ignore: avoid_print
-        print('[MemberDetailRepository] Parsed details:');
-        print('  - avgBloodPressure: ${details?.avgBloodPressure}');
-        print('  - glucoseValue: ${details?.glucoseValue}');
-        print('  - height: ${details?.height}');
-        print('  - weight: ${details?.weight}');
-        print('  - ancVisitMedicalReview: ${details?.ancVisitMedicalReview}');
-        print('  - totalVisitCount: ${details?.totalVisitCount}');
-        print('[MemberDetailRepository] ========== getPatientDetailsWithVitals END ==========');
-        return details;
-      }
-      // ignore: avoid_print
-      print('[MemberDetailRepository] Response was not a Map: $body');
-      print('[MemberDetailRepository] ========== getPatientDetailsWithVitals END ==========');
-      return null;
-    } catch (e) {
-      // ignore: avoid_print
-      print('[MemberDetailRepository] Error fetching patient details: $e');
-      print('[MemberDetailRepository] ========== getPatientDetailsWithVitals END ==========');
-      return null;
-    }
+    // patientDetails not in approved API set — vitals come from FHIR Observation
+    // via assessment-history and offline-sync bundle.
+    debugPrint('[MemberDetailRepository] getPatientDetailsWithVitals disabled — not in approved API set');
+    return null;
   }
 
   /// Fetch recent visits for a patient.

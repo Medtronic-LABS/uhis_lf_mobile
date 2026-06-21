@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import '../../core/api/api_repository.dart';
-import '../../core/api/endpoints.dart';
 import '../../core/db/follow_up_dao.dart';
 
 /// Type of follow-up. `referred` and `householdVisit` mirror the wire
@@ -132,12 +131,7 @@ class FollowUpRepository extends ApiRepository {
   /// Remote endpoint only runs when the local set is empty (fresh install,
   /// patient never synced).
   Future<List<FollowUp>> openForPatient(String patientId) async {
-    final dao = _dao;
-    if (dao != null) {
-      final local = await openForPatientLocal(patientId);
-      if (local.isNotEmpty) return local;
-    }
-    return _openForPatientRemote(patientId);
+    return openForPatientLocal(patientId);
   }
 
   /// Local-only path. Reads [FollowUpDao.forPatient] and maps each
@@ -167,37 +161,6 @@ class FollowUpRepository extends ApiRepository {
   static String _stripFhirPrefix(String id) {
     final slash = id.lastIndexOf('/');
     return slash < 0 ? id : id.substring(slash + 1);
-  }
-
-  /// Remote-only path retained for the rare cache-miss case. No hard-coded
-  /// `type` filter — broader [Endpoints.followUpList] (vs the old NCD-only
-  /// endpoint) so REFERRED + HH_VISIT rows survive.
-  Future<List<FollowUp>> _openForPatientRemote(String patientId) async {
-    final followUps = <FollowUp>[];
-    try {
-      final body = await postOk(
-        Endpoints.followUpList,
-        data: {
-          'memberReference': patientId,
-          'patientId': patientId,
-          'skip': 0,
-          'limit': 50,
-        },
-        action: 'Open follow-ups',
-      );
-      final list = extractList(body);
-      for (final item in list) {
-        if (item is Map<String, dynamic>) {
-          final fu = FollowUp.fromJson(item);
-          if (fu != null && fu.isOpen) followUps.add(fu);
-        }
-      }
-    } on Object catch (e) {
-      // ignore: avoid_print
-      print('[FollowUpRepository] remote followUpList failed: $e');
-    }
-    followUps.sort((a, b) => a.dueDate.compareTo(b.dueDate));
-    return followUps;
   }
 
   /// Build a [FollowUp] from a [FollowUpRow]. Returns `null` if [FollowUpRow.dueAt]
@@ -263,70 +226,9 @@ class FollowUpRepository extends ApiRepository {
     }
   }
 
-  /// Get all follow-ups for a patient (open and closed).
-  Future<List<FollowUp>> allForPatient(String patientId) async {
-    final followUps = <FollowUp>[];
-
-    try {
-      final body = await postOk(
-        Endpoints.followUpNcdList,
-        data: {
-          'memberReference': patientId,
-          'skip': 0,
-          'limit': 50,
-        },
-        action: 'All follow-ups',
-      );
-
-      final list = extractList(body);
-      for (final item in list) {
-        if (item is Map<String, dynamic>) {
-          final fu = FollowUp.fromJson(item);
-          if (fu != null) followUps.add(fu);
-        }
-      }
-    } catch (e) {
-      // ignore: avoid_print
-      print('[FollowUpRepository] Failed to fetch follow-ups: $e');
-    }
-
-    // Sort by due date descending (most recent first)
-    followUps.sort((a, b) => b.dueDate.compareTo(a.dueDate));
-    return followUps;
-  }
-
   /// Get overdue follow-ups for a patient.
   Future<List<FollowUp>> overdueForPatient(String patientId) async {
     final all = await openForPatient(patientId);
     return all.where((fu) => fu.isOverdue).toList();
-  }
-
-  /// Get lost-to-follow-up patients in a village.
-  Future<List<FollowUp>> lostInVillage(List<int> villageIds) async {
-    final followUps = <FollowUp>[];
-
-    try {
-      final body = await postOk(
-        Endpoints.followUpOfflineLost,
-        data: {
-          'villageIds': villageIds,
-          'tenantId': api.tenantIdAsNum,
-        },
-        action: 'Lost to follow-up',
-      );
-
-      final list = extractList(body);
-      for (final item in list) {
-        if (item is Map<String, dynamic>) {
-          final fu = FollowUp.fromJson(item);
-          if (fu != null) followUps.add(fu);
-        }
-      }
-    } catch (e) {
-      // ignore: avoid_print
-      print('[FollowUpRepository] Failed to fetch lost follow-ups: $e');
-    }
-
-    return followUps;
   }
 }

@@ -157,7 +157,11 @@ class AuthRepository {
       throw AuthException('Invalid credentials');
     }
     await _storage.write(key: _kUsername, value: username);
-    await _loadProfile();
+    // Extract profile directly from login response — no separate profile call.
+    final loginData = resp.data;
+    if (loginData is Map) {
+      await _loadFromLoginResponse(loginData);
+    }
     if (await isReentryEnabled()) {
       // Best-effort: refresh the persisted re-entry session (biometric or PIN)
       // after a fresh login. A failure here must not block sign-in.
@@ -167,22 +171,19 @@ class AuthRepository {
     }
   }
 
-  Future<void> _loadProfile() async {
-    final resp = await _api.dio.post(Endpoints.profile);
-    if (resp.statusCode != 200) {
-      throw AuthException('Failed to load profile (${resp.statusCode})');
-    }
-    final data = resp.data;
-    final entity = (data is Map) ? data['entity'] : null;
-    final tenant = (entity is Map) ? entity['tenantId'] : null;
+  /// Extracts user fields from the login response body.
+  /// The `/auth-service/session` response contains tenantId, id, firstName,
+  /// lastName, fhirId, and organizationIds directly — no separate profile
+  /// call needed.
+  Future<void> _loadFromLoginResponse(Map data) async {
+    final tenant = data['tenantId'];
     if (tenant == null) {
-      throw AuthException('Profile missing tenantId');
+      throw AuthException('Login response missing tenantId');
     }
     final tenantStr = tenant.toString();
     _api.setTenantId(tenantStr);
     await _storage.write(key: _kTenantId, value: tenantStr);
 
-    final entityMap = entity as Map;
     Future<void> writeOrDelete(String key, String? v) async {
       if (v != null && v.isNotEmpty) {
         await _storage.write(key: key, value: v);
@@ -191,20 +192,20 @@ class AuthRepository {
       }
     }
 
-    final firstName = (entityMap['firstName'] as String?)?.trim();
+    final firstName = (data['firstName'] as String?)?.trim();
     await writeOrDelete(_kFirstName, firstName);
-    final lastName = (entityMap['lastName'] as String?)?.trim();
+    final lastName = (data['lastName'] as String?)?.trim();
     await writeOrDelete(_kLastName, lastName);
 
-    final idVal = entityMap['id']?.toString();
-    // Store numeric user ID for sync requests
+    final idVal = data['id']?.toString();
     await writeOrDelete(_kUserId, idVal);
-    final fhirId = (entityMap['fhirId'] as String?)?.trim();
+
+    final fhirId = (data['fhirId'] as String?)?.trim();
     await writeOrDelete(_kUserFhirId, fhirId);
-    final regionCode =
-        (entityMap['country'] is Map ? entityMap['country']['regionCode'] : null)
-                ?.toString() ??
-            'BD';
+
+    // Generate skId from numeric userId (region defaults to 'BD'; updated when
+    // user-data loads country context).
+    const regionCode = 'BD';
     String? skId;
     if (idVal != null && idVal.isNotEmpty) {
       final year = DateTime.now().year;
@@ -215,64 +216,15 @@ class AuthRepository {
     }
     await writeOrDelete(_kSkId, skId);
 
-    final phone = (entityMap['phoneNumber'] as String?)?.trim();
-    final nidExtracted = _extractNid(entityMap);
-    await writeOrDelete(_kNidOrPhone, nidExtracted ?? phone);
-
-    String? area;
+    // organizationIds[] carries numeric org IDs; store first as orgFhirId.
+    // Area/ward/upazila will be populated when user-data loads.
+    final orgIds = data['organizationIds'];
     String? orgFhirId;
-    final orgs = entityMap['organizations'];
-    if (orgs is List && orgs.isNotEmpty) {
-      final first = orgs.first;
-      if (first is Map) {
-        final name = (first['name'] as String?)?.trim();
-        if (name != null && name.isNotEmpty) area = name;
-        final fhir = (first['fhirId'] as String?)?.trim();
-        final numericId = first['id']?.toString().trim();
-        orgFhirId = (fhir != null && fhir.isNotEmpty)
-            ? fhir
-            : (numericId != null && numericId.isNotEmpty ? numericId : null);
-      }
+    if (orgIds is List && orgIds.isNotEmpty) {
+      orgFhirId = orgIds.first?.toString();
     }
-    await writeOrDelete(_kArea, area);
     await writeOrDelete(_kOrganizationFhirId, orgFhirId);
     _api.setOrganizationFhirId(orgFhirId);
-
-    String? ward;
-    final villages = entityMap['villages'];
-    final villageIdList = <int>[];
-    if (villages is List && villages.isNotEmpty) {
-      final first = villages.first;
-      if (first is Map) {
-        final name = (first['name'] as String?)?.trim();
-        if (name != null && name.isNotEmpty) ward = name;
-      }
-      // Extract all village IDs (union IDs) from the profile
-      for (final v in villages) {
-        if (v is Map) {
-          final id = v['id'];
-          if (id is int) villageIdList.add(id);
-          if (id is num) villageIdList.add(id.toInt());
-        }
-      }
-    }
-    await writeOrDelete(_kWard, ward);
-    // Store village IDs as comma-separated string.
-    // Only write when the profile carries villages — never delete, because
-    // UserHierarchyService may have already saved authoritative IDs from
-    // /spice-service/static-data/user-data and we must not clobber them.
-    if (villageIdList.isNotEmpty) {
-      await _storage.write(key: _kVillageIds, value: villageIdList.join(','));
-    }
-    final upazila = _deriveUpazila(area, entityMap);
-    await writeOrDelete(_kUpazila, upazila);
-
-    // Store village IDs as the sync scope — the offline-sync endpoint takes
-    // the user's assigned village (union) IDs directly. Sub-village resolution
-    // via admin-service APIs is not available on this platform.
-    if (villageIdList.isNotEmpty) {
-      await _storage.write(key: _kSubVillageIds, value: villageIdList.join(','));
-    }
   }
 
   /// Returns the user's assigned village IDs from the profile.
@@ -301,49 +253,6 @@ class AuthRepository {
     final joined = ids.join(',');
     await _storage.write(key: _kVillageIds, value: joined);
     await _storage.write(key: _kSubVillageIds, value: joined);
-  }
-
-  static String? _extractNid(Map entity) {
-    for (final k in const ['nid', 'nationalId', 'idCode', 'identifier']) {
-      final v = entity[k];
-      if (v is String && v.trim().isNotEmpty) return v.trim();
-    }
-    final ids = entity['identifiers'];
-    if (ids is List) {
-      for (final entry in ids) {
-        if (entry is Map) {
-          final v = entry['value'];
-          if (v is String && v.trim().isNotEmpty) return v.trim();
-        }
-      }
-    }
-    return null;
-  }
-
-  static String? _deriveUpazila(String? area, Map entity) {
-    if (area != null && area.isNotEmpty) {
-      const tail = ['Community Clinic', 'Health Facility', 'Clinic', 'Centre', 'Center'];
-      var t = area;
-      for (final suffix in tail) {
-        if (t.endsWith(suffix)) {
-          t = t.substring(0, t.length - suffix.length).trim();
-          break;
-        }
-      }
-      if (t.isNotEmpty && t != area) return t;
-    }
-    final country = entity['country'];
-    if (country is Map) {
-      final display = country['displayValues'];
-      if (display is Map) {
-        final chief = display['chiefdom'];
-        if (chief is Map) {
-          final label = chief['s'];
-          if (label is String && label.isNotEmpty) return label;
-        }
-      }
-    }
-    return null;
   }
 
   Future<void> logout() async {

@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/api/api_client.dart';
-import '../../core/api/endpoints.dart';
+import '../../core/api/endpoints.dart' show Endpoints;
 import '../../core/db/local_assessment_dao.dart';
 
 /// Repository for offline-first assessment management.
@@ -89,171 +89,16 @@ class AssessmentRepository extends ChangeNotifier {
       updatedAt: now,
     );
 
-    // Save locally first (offline-first)
+    // Save locally (offline-first). Sync happens via offline-sync/create.
     await _dao.insert(entity);
     await _refreshPendingCount();
-
-    // Attempt immediate sync
-    _attemptImmediateSync(entity, encounterId: encounterId);
 
     return id;
   }
 
-  /// Attempt to sync a single assessment immediately.
-  Future<void> _attemptImmediateSync(
-    LocalAssessmentEntity entity, {
-    String? encounterId,
-  }) async {
-    try {
-      // Check connectivity by making a lightweight request
-      final result = await _syncSingleAssessment(entity, encounterId: encounterId);
-      if (result) {
-        await _refreshPendingCount();
-        notifyListeners();
-      }
-    } catch (e) {
-      // Network error - assessment stays pending for batch sync
-      debugPrint('Immediate sync failed, will batch sync: $e');
-    }
-  }
-
-  /// Sync a single assessment to the API.
+  /// Batch sync all pending assessments via `offline-sync/create`.
   ///
-  /// Returns true if successful.
-  Future<bool> _syncSingleAssessment(
-    LocalAssessmentEntity entity, {
-    String? encounterId,
-  }) async {
-    try {
-      // Mark as in-progress
-      await _dao.updateSyncStatus([entity.id], AssessmentSyncStatus.inProgress);
-
-      final type = entity.assessmentType.toUpperCase();
-      final details = jsonDecode(entity.assessmentDetails);
-
-      // Extract encounterId from otherDetails if not provided
-      String? effectiveEncounterId = encounterId;
-      if (effectiveEncounterId == null && entity.otherDetails != null) {
-        try {
-          final other = jsonDecode(entity.otherDetails!);
-          effectiveEncounterId = other['encounterId'] as String?;
-        } catch (_) {}
-      }
-
-      // Route to appropriate endpoint based on assessment type
-      String endpoint;
-      Map<String, dynamic> requestBody;
-
-      if (type == 'NCD') {
-        // NCD uses /assessment/create or separate BP/Glucose endpoints
-        endpoint = Endpoints.assessmentCreate;
-        requestBody = _buildNcdRequest(entity, details, encounterId: effectiveEncounterId);
-      } else {
-        // Other types (TB, ANC, ICCM) use the generic create endpoint
-        endpoint = Endpoints.assessmentCreate;
-        requestBody = _buildApiRequest(entity, encounterId: effectiveEncounterId);
-      }
-
-      final response = await _api.dio.post<Map<String, dynamic>>(
-        endpoint,
-        data: requestBody,
-      );
-
-      final status = response.statusCode ?? 0;
-      if (status >= 200 && status < 300) {
-        // Extract FHIR ID from response
-        final data = response.data;
-        final fhirId = data?['id']?.toString() ??
-            data?['fhirId']?.toString() ??
-            data?['assessmentId']?.toString();
-
-        if (fhirId != null) {
-          await _dao.updateFhirId(entity.id, fhirId);
-        } else {
-          await _dao.updateSyncStatus(
-              [entity.id], AssessmentSyncStatus.success);
-        }
-        return true;
-      } else {
-        await _dao.updateSyncStatus([entity.id], AssessmentSyncStatus.failed);
-        return false;
-      }
-    } catch (e) {
-      await _dao.updateSyncStatus(
-          [entity.id], AssessmentSyncStatus.networkError);
-      rethrow;
-    }
-  }
-
-  /// Build NCD-specific request body.
-  Map<String, dynamic> _buildNcdRequest(
-    LocalAssessmentEntity entity,
-    Map<String, dynamic> details, {
-    String? encounterId,
-  }) {
-    return {
-      'assessmentType': 'NCD',
-      'patientId': entity.patientId,
-      'memberId': entity.memberId,
-      'villageId': entity.villageId,
-      if (details['bpLog'] != null) 'bpLog': details['bpLog'],
-      if (details['glucoseLog'] != null) 'glucoseLog': details['glucoseLog'],
-      if (details['cvdRiskLevel'] != null)
-        'cvdRiskLevel': details['cvdRiskLevel'],
-      if (details['cvdRiskScore'] != null)
-        'cvdRiskScore': details['cvdRiskScore'],
-      if (details['riskLevel'] != null) 'riskLevel': details['riskLevel'],
-      'encounter': {
-        'householdId': entity.householdId,
-        'memberId': entity.memberId,
-        'patientId': entity.patientId,
-        'referred': entity.isReferred,
-        'latitude': entity.latitude,
-        'longitude': entity.longitude,
-        'startTime': entity.createdAt?.toUtc().toIso8601String(),
-        'endTime': entity.updatedAt?.toUtc().toIso8601String(),
-        if (encounterId != null) 'encounterId': encounterId,
-      },
-      'assessmentTakenOn': entity.createdAt?.toUtc().toIso8601String(),
-    };
-  }
-
-  /// Build generic API request body with optional encounterId.
-  Map<String, dynamic> _buildApiRequest(
-    LocalAssessmentEntity entity, {
-    String? encounterId,
-  }) {
-    final details = jsonDecode(entity.assessmentDetails);
-    return {
-      'referenceId': entity.householdMemberLocalId,
-      'assessmentType': entity.assessmentType.toUpperCase(),
-      'assessmentDetails': details,
-      'villageId': entity.villageId,
-      'assessmentDate': entity.createdAt?.toUtc().toIso8601String(),
-      'patientStatus': entity.referralStatus ?? 'Recovered',
-      if (entity.referredReasons != null)
-        'referredReasons': entity.referredReasons,
-      if (entity.otherDetails != null)
-        'summary': jsonDecode(entity.otherDetails!),
-      'encounter': {
-        'householdId': entity.householdId,
-        'memberId': entity.memberId,
-        'referred': entity.isReferred,
-        'patientId': entity.patientId,
-        'latitude': entity.latitude,
-        'longitude': entity.longitude,
-        'startTime': entity.createdAt?.toUtc().toIso8601String(),
-        'endTime': entity.updatedAt?.toUtc().toIso8601String(),
-        if (encounterId != null) 'encounterId': encounterId,
-      },
-      if (entity.followUpId != null) 'followUpId': entity.followUpId,
-      'updatedAt': entity.updatedAt?.millisecondsSinceEpoch ?? 0,
-    };
-  }
-
-  /// Batch sync all pending assessments.
-  ///
-  /// Used by OfflineSyncService during scheduled sync.
+  /// This is the only write path — no direct assessment/create call.
   Future<int> syncPendingAssessments() async {
     if (_isSyncing) return 0;
 
@@ -264,25 +109,7 @@ class AssessmentRepository extends ChangeNotifier {
       final pending = await _dao.getUnsynced();
       if (pending.isEmpty) return 0;
 
-      int synced = 0;
-
-      // Try batch sync via offline-service first
-      try {
-        synced = await _batchSync(pending);
-      } catch (e) {
-        // Fall back to individual sync
-        debugPrint('Batch sync failed, trying individual: $e');
-        for (final entity in pending) {
-          try {
-            if (await _syncSingleAssessment(entity)) {
-              synced++;
-            }
-          } catch (_) {
-            // Continue with next
-          }
-        }
-      }
-
+      final synced = await _batchSync(pending);
       await _refreshPendingCount();
       return synced;
     } finally {

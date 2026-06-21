@@ -1,5 +1,4 @@
 import '../../core/api/api_repository.dart';
-import '../../core/api/endpoints.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/db/household_dao.dart';
 import '../../core/db/member_dao.dart';
@@ -22,25 +21,8 @@ class DashboardRepository extends ApiRepository {
 
   Future<int> householdCount() async => _households.count();
 
-  /// Enrolled patient count from server (not in local DB).
-  Future<int> patientCount() async {
-    final villageIds = await _authRepo.villageIds();
-    final data = await postOk(
-      Endpoints.patientList,
-      data: {
-        'skip': 0,
-        'limit': 1,
-        'tenantId': api.tenantIdAsNum,
-        if (villageIds.isNotEmpty) 'villageIds': villageIds,
-      },
-      action: 'Patient count',
-    );
-    final total = (data is Map) ? data['totalCount'] : null;
-    if (total is int) return total;
-    if (total is num) return total.toInt();
-    if (total is String) return int.tryParse(total) ?? 0;
-    return 0;
-  }
+  /// Member count from local SQLite (populated by offline sync).
+  Future<int> patientCount() => _members.count();
 
   /// All households from local SQLite.
   Future<List<Map<String, dynamic>>> getAllHouseholds() async {
