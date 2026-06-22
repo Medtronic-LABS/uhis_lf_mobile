@@ -70,6 +70,10 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
   String? _selectedSubVillageId;
   String? _selectedShebikaId;
 
+  // Inline village chip row (populated from local DB after data loads)
+  List<({String id, String name})> _inlineVillages = const [];
+  String? _selectedInlineVillageId;
+
   @override
   void initState() {
     super.initState();
@@ -114,6 +118,13 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
     final householdDao = context.read<HouseholdDao>();
     final memberDao = context.read<MemberDao>();
     final repo = context.read<DashboardRepository>();
+
+    // Load distinct villages for inline chip row
+    memberDao.getDistinctVillages().then((villages) {
+      if (mounted && villages.length > 1) {
+        setState(() => _inlineVillages = villages);
+      }
+    });
 
     setState(() {
       _future = _fetchHouseholds(
@@ -513,10 +524,19 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
 
   Widget _buildHouseholdsList(BuildContext context, List<_HouseholdItem> items) {
     final scheme = Theme.of(context).colorScheme;
-    final totalMembers = items.fold<int>(0, (sum, h) => sum + (h.memberCount ?? 0));
+
+    // Apply inline village filter to households tab
+    final filteredItems = _selectedInlineVillageId != null
+        ? items
+            .where((h) => h.members.any((m) => m.villageId == _selectedInlineVillageId))
+            .toList()
+        : items;
+
+    final totalMembers = filteredItems.fold<int>(0, (sum, h) => sum + (h.memberCount ?? 0));
 
     return Column(
       children: [
+        _buildInlineVillageChipRow(scheme),
         Container(
           padding: const EdgeInsets.all(16),
           color: scheme.surfaceContainerHighest.withValues(alpha: 0.3),
@@ -525,7 +545,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
               Expanded(
                 child: _SummaryChip(
                   icon: Icons.home_work_outlined,
-                  label: HouseholdListStrings.householdsCount(items.length),
+                  label: HouseholdListStrings.householdsCount(filteredItems.length),
                   color: scheme.tertiary,
                 ),
               ),
@@ -544,10 +564,10 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
           child: ListView.separated(
             controller: _scrollController,
             padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: items.length,
+            itemCount: filteredItems.length,
             separatorBuilder: (_, __) => const Divider(height: 1, indent: 72),
             itemBuilder: (context, index) {
-              final item = items[index];
+              final item = filteredItems[index];
               return _HouseholdTile(
                 item: item,
                 onTap: () => _navigateToDetail(context, item),
@@ -609,6 +629,12 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
         ? allMembers.where((m) => _myPatientIds.contains(m.id) || _myPatientIds.contains(m.patientId)).toList()
         : allMembers;
 
+    // Apply inline village chip filter
+    if (_selectedInlineVillageId != null) {
+      final selId = _selectedInlineVillageId!;
+      members = members.where((m) => m.villageId == selId).toList();
+    }
+
     // Apply tier filter if selected (5-tier model)
     if (_selectedTier != null && _patientTiers != null) {
       members = members.where((m) {
@@ -626,6 +652,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
         children: [
           if (widget.initialTier != null || _selectedTier != null)
             _buildTierChipRow(),
+          _buildInlineVillageChipRow(scheme),
           _buildFilterToggle(scheme),
           Expanded(
             child: ListView.separated(
@@ -650,6 +677,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
       children: [
         if (widget.initialTier != null || _selectedTier != null)
           _buildTierChipRow(),
+        _buildInlineVillageChipRow(scheme),
         _buildFilterToggle(scheme),
         Expanded(
           child: members.isEmpty
@@ -683,6 +711,55 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
                 ),
         ),
       ],
+    );
+  }
+
+  /// Inline village chip row — "Which village are you visiting?"
+  /// Mirrors the dashboard pattern. Hidden when ≤1 village in local data.
+  Widget _buildInlineVillageChipRow(ColorScheme scheme) {
+    if (_inlineVillages.isEmpty) return const SizedBox.shrink();
+    const navyColor = Color(0xFF1B2B5E);
+    return Container(
+      color: scheme.surface,
+      padding: const EdgeInsets.only(left: 12, right: 12, top: 8, bottom: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            MissionDashboardStrings.whichVillageVisiting,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 6),
+          SizedBox(
+            height: 32,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                _InlineVillageChip(
+                  label: MissionDashboardStrings.allVillages,
+                  isActive: _selectedInlineVillageId == null,
+                  navyColor: navyColor,
+                  onTap: () => setState(() => _selectedInlineVillageId = null),
+                ),
+                ..._inlineVillages.map((v) => _InlineVillageChip(
+                      label: v.name,
+                      isActive: _selectedInlineVillageId == v.id,
+                      navyColor: navyColor,
+                      onTap: () => setState(() {
+                        _selectedInlineVillageId =
+                            _selectedInlineVillageId == v.id ? null : v.id;
+                      }),
+                    )),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+        ],
+      ),
     );
   }
 
@@ -1338,6 +1415,7 @@ class _MemberInfo {
     this.householdId,
     this.householdName,
     this.householdNo,
+    this.villageId,
   });
 
   final String? id;
@@ -1352,6 +1430,7 @@ class _MemberInfo {
   final String? householdId;
   final String? householdName;
   final String? householdNo;
+  final String? villageId;
 
   /// Calculate age from date of birth if not directly provided.
   static int? _calculateAge(String? dateOfBirth) {
@@ -1384,6 +1463,49 @@ class _MemberInfo {
       householdId: member.householdId ?? household.id,
       householdName: household.name,
       householdNo: household.householdNo,
+      villageId: member.villageId,
+    );
+  }
+}
+
+class _InlineVillageChip extends StatelessWidget {
+  const _InlineVillageChip({
+    required this.label,
+    required this.isActive,
+    required this.navyColor,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool isActive;
+  final Color navyColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: isActive ? navyColor : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isActive ? navyColor : const Color(0xFFD1D5DB),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: isActive ? Colors.white : const Color(0xFF374151),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

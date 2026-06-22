@@ -66,7 +66,10 @@ class _ReferralListScreenState extends State<ReferralListScreen>
 
   // Visit tier filter
   DashboardTier? _visitTierFilter;
-  
+
+  // Inline village chip filter for Visits tab
+  String? _selectedVisitVillage;
+
   // Show only completed patients filter
   bool _showCompletedOnly = false;
 
@@ -547,18 +550,35 @@ class _ReferralListScreenState extends State<ReferralListScreen>
           );
         }
         final allQueue = snap.data ?? const <MissionQueueItem>[];
-        
-        // Apply filters
+
+        // Extract distinct village names for the inline chip row
+        final villageNames = allQueue
+            .map((i) => i.village?.trim())
+            .whereType<String>()
+            .where((v) => v.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+
+        // Apply inline village filter first
+        final villageFiltered = _selectedVisitVillage != null
+            ? allQueue
+                .where((item) => item.village?.trim() == _selectedVisitVillage)
+                .toList()
+            : allQueue;
+
+        // Apply tier / completed filters on top of village filter
         List<MissionQueueItem> queue;
         if (_showCompletedOnly) {
-          // Show only completed patients
-          queue = allQueue.where((item) => _completedPatientIds.contains(item.patientId)).toList();
+          queue = villageFiltered
+              .where((item) => _completedPatientIds.contains(item.patientId))
+              .toList();
         } else if (_visitTierFilter == null) {
-          // Show all (but completed items are sorted to bottom by _loadMissionQueue)
-          queue = allQueue;
+          queue = villageFiltered;
         } else {
-          // Filter by specific tier
-          queue = allQueue.where((item) => item.tier == _visitTierFilter).toList();
+          queue = villageFiltered
+              .where((item) => item.tier == _visitTierFilter)
+              .toList();
         }
 
         // Determine empty state message
@@ -581,8 +601,11 @@ class _ReferralListScreenState extends State<ReferralListScreen>
 
         return Column(
           children: [
+            // Village chip row (only shown when >1 village in the queue)
+            if (villageNames.length > 1)
+              _buildVisitVillageChipRow(villageNames),
             // Tier filter chip row
-            _buildVisitTierChipRow(allQueue),
+            _buildVisitTierChipRow(villageFiltered),
             // Main list
             Expanded(
               child: queue.isEmpty
@@ -611,6 +634,54 @@ class _ReferralListScreenState extends State<ReferralListScreen>
           ],
         );
       },
+    );
+  }
+
+  /// Village chip row — "Which village are you visiting?" — Visits tab.
+  Widget _buildVisitVillageChipRow(List<String> villageNames) {
+    final scheme = Theme.of(context).colorScheme;
+    const navyColor = Color(0xFF1B2B5E);
+    return Container(
+      color: scheme.surface,
+      padding: const EdgeInsets.only(left: 12, right: 12, top: 8, bottom: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            MissionDashboardStrings.whichVillageVisiting,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 6),
+          SizedBox(
+            height: 32,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                _VisitVillageChip(
+                  label: MissionDashboardStrings.allVillages,
+                  isActive: _selectedVisitVillage == null,
+                  navyColor: navyColor,
+                  onTap: () => setState(() => _selectedVisitVillage = null),
+                ),
+                ...villageNames.map((v) => _VisitVillageChip(
+                      label: v,
+                      isActive: _selectedVisitVillage == v,
+                      navyColor: navyColor,
+                      onTap: () => setState(() {
+                        _selectedVisitVillage =
+                            _selectedVisitVillage == v ? null : v;
+                      }),
+                    )),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+        ],
+      ),
     );
   }
 
@@ -2029,6 +2100,48 @@ class _CompletedTodayChip extends StatelessWidget {
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _VisitVillageChip extends StatelessWidget {
+  const _VisitVillageChip({
+    required this.label,
+    required this.isActive,
+    required this.navyColor,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool isActive;
+  final Color navyColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: isActive ? navyColor : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isActive ? navyColor : const Color(0xFFD1D5DB),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: isActive ? Colors.white : const Color(0xFF374151),
+            ),
+          ),
         ),
       ),
     );
