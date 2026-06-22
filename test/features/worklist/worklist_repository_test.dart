@@ -3,6 +3,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:uhis_next/core/db/app_database.dart';
 import 'package:uhis_next/core/db/follow_up_dao.dart';
 import 'package:uhis_next/core/db/immunisation_dao.dart';
+import 'package:uhis_next/core/db/local_assessment_dao.dart';
 import 'package:uhis_next/core/db/patient_dao.dart';
 import 'package:uhis_next/core/db/patient_programmes_dao.dart';
 import 'package:uhis_next/core/db/sync_meta_dao.dart';
@@ -22,6 +23,7 @@ void main() {
   late FollowUpDao followUps;
   late ImmunisationDao immunisations;
   late SyncMetaDao syncMeta;
+  late LocalAssessmentDao localAssessments;
   late WorklistRepository repo;
 
   setUp(() async {
@@ -38,6 +40,7 @@ void main() {
     followUps = FollowUpDao(appDb);
     immunisations = ImmunisationDao(appDb);
     syncMeta = SyncMetaDao(appDb);
+    localAssessments = LocalAssessmentDao(appDb);
     repo = WorklistRepository(
       patients: patients,
       programmes: programmes,
@@ -45,6 +48,7 @@ void main() {
       immunisations: immunisations,
       syncMeta: syncMeta,
       risk: const RiskScoringService(),
+      localAssessments: localAssessments,
     );
   });
 
