@@ -1206,8 +1206,10 @@ class _DashboardStatsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
         Expanded(
           child: FutureBuilder<List<MissionQueueItem>>(
             future: queueFuture,
@@ -1258,6 +1260,7 @@ class _DashboardStatsRow extends StatelessWidget {
           ),
         ),
       ],
+    ),
     );
   }
 }
