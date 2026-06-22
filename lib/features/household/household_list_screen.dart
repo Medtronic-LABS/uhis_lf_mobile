@@ -623,37 +623,42 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
         allMembers.add(_MemberInfo.fromMember(member, household));
       }
     }
-    
-    // Apply filter: show only my patients or all members
-    var members = _filter == MemberFilter.myPatients
-        ? allMembers.where((m) => _myPatientIds.contains(m.id) || _myPatientIds.contains(m.patientId)).toList()
+
+    // Apply village chip filter first so counts reflect the current location context.
+    var villageFiltered = _selectedInlineVillageId != null
+        ? allMembers.where((m) => m.villageId == _selectedInlineVillageId).toList()
         : allMembers;
 
-    // Apply inline village chip filter
-    if (_selectedInlineVillageId != null) {
-      final selId = _selectedInlineVillageId!;
-      members = members.where((m) => m.villageId == selId).toList();
-    }
-
-    // Apply tier filter if selected (5-tier model)
+    // Apply tier filter.
     if (_selectedTier != null && _patientTiers != null) {
-      members = members.where((m) {
+      villageFiltered = villageFiltered.where((m) {
         final tier = _patientTiers![m.id] ?? _patientTiers![m.patientId];
         return tier == _selectedTier;
       }).toList();
     }
 
+    // Counts derived AFTER location/tier filters so chips always match the list.
+    final allMembersCount = villageFiltered.length;
+    final myPatientsCount = villageFiltered
+        .where((m) => _myPatientIds.contains(m.id) || _myPatientIds.contains(m.patientId))
+        .length;
+
+    // Apply patient-type filter last.
+    final members = _filter == MemberFilter.myPatients
+        ? villageFiltered.where((m) => _myPatientIds.contains(m.id) || _myPatientIds.contains(m.patientId)).toList()
+        : villageFiltered;
+
     // Calculate total from noOfPeople if we don't have individual members
     final totalFromCount = items.fold<int>(0, (sum, h) => sum + (h.memberCount ?? 0));
 
-    // If we have no individual members but have a count, show households with counts
+    // If we have no individual members but have a count, show households with counts.
+    // Filter toggle is hidden here — it would show (0) for both options and confuse the user.
     if (allMembers.isEmpty && totalFromCount > 0) {
       return Column(
         children: [
           if (widget.initialTier != null || _selectedTier != null)
             _buildTierChipRow(),
           _buildInlineVillageChipRow(scheme),
-          _buildFilterToggle(scheme),
           Expanded(
             child: ListView.separated(
               controller: _scrollController,
@@ -678,7 +683,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
         if (widget.initialTier != null || _selectedTier != null)
           _buildTierChipRow(),
         _buildInlineVillageChipRow(scheme),
-        _buildFilterToggle(scheme),
+        _buildFilterToggle(scheme, allCount: allMembersCount, myCount: myPatientsCount),
         Expanded(
           child: members.isEmpty
               ? Center(
@@ -689,7 +694,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
                       const SizedBox(height: 16),
                       Text(
                         _filter == MemberFilter.myPatients
-                            ? 'No patients assigned to you'
+                            ? HouseholdListStrings.noPatientsAssigned
                             : HouseholdListStrings.noMembers,
                         style: Theme.of(context).textTheme.bodyLarge,
                       ),
@@ -764,7 +769,9 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
   }
 
   /// Builds the filter toggle chips (My Patients / All Members).
-  Widget _buildFilterToggle(ColorScheme scheme) {
+  /// [allCount] and [myCount] are post-filter counts so the labels always
+  /// match the list length the user sees.
+  Widget _buildFilterToggle(ColorScheme scheme, {required int allCount, required int myCount}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -774,13 +781,13 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
       child: Row(
         children: [
           _FilterChip(
-            label: HouseholdListStrings.myPatientsCount(_myPatientCount),
+            label: HouseholdListStrings.myPatientsCount(myCount),
             isSelected: _filter == MemberFilter.myPatients,
             onTap: () => setState(() => _filter = MemberFilter.myPatients),
           ),
           const SizedBox(width: 8),
           _FilterChip(
-            label: HouseholdListStrings.allMembersCount(_totalMemberCount),
+            label: HouseholdListStrings.allMembersCount(allCount),
             isSelected: _filter == MemberFilter.allMembers,
             onTap: () => setState(() => _filter = MemberFilter.allMembers),
           ),
