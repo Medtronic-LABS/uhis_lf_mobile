@@ -74,6 +74,14 @@ abstract final class LockStrings {
   static const String households = 'households';
 
   static String welcomeBackNamed(String name) => 'Welcome back, $name';
+
+  static const String signInToStartYourDay = 'Sign in to start your day';
+  static const String shasthyaKormi = 'SHASTHYA KORMI';
+  static const String verifyFingerprint = 'Verify fingerprint';
+  static const String tapToPlaceFinger = 'Tap to place your finger and sign in';
+  static const String communityHealth = 'Community Health';
+  static const String programName = 'Apon Sushashthya';
+  static String orUsePin(int len) => 'Or use $len-digit PIN';
 }
 
 /// Android `BiometricPrompt` copy + biometric unlock messages.
