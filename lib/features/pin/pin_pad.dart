@@ -39,47 +39,49 @@ class PinEntryView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          title,
-          style: Theme.of(context)
-              .textTheme
-              .headlineSmall
-              ?.copyWith(fontWeight: FontWeight.w700),
-          textAlign: TextAlign.center,
-        ),
-        if (subtitle != null) ...[
-          const SizedBox(height: 8),
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
           Text(
-            subtitle!,
+            title,
             style: Theme.of(context)
                 .textTheme
-                .bodyMedium
-                ?.copyWith(color: scheme.onSurfaceVariant),
+                .headlineSmall
+                ?.copyWith(fontWeight: FontWeight.w700),
             textAlign: TextAlign.center,
           ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              subtitle!,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: scheme.onSurfaceVariant),
+              textAlign: TextAlign.center,
+            ),
+          ],
+          const SizedBox(height: 28),
+          _Dots(length: length, filled: value.length, error: errorText != null),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 20,
+            child: errorText == null
+                ? null
+                : Text(
+                    errorText!,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: scheme.error,
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+          ),
+          const SizedBox(height: 16),
+          _Keypad(onDigit: _digit, onDelete: _delete, enabled: !busy),
         ],
-        const SizedBox(height: 28),
-        _Dots(length: length, filled: value.length, error: errorText != null),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 20,
-          child: errorText == null
-              ? null
-              : Text(
-                  errorText!,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: scheme.error,
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-        ),
-        const SizedBox(height: 16),
-        _Keypad(onDigit: _digit, onDelete: _delete, enabled: !busy),
-      ],
+      ),
     );
   }
 }

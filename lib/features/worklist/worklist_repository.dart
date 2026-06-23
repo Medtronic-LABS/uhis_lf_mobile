@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/db/follow_up_dao.dart';
 import '../../core/db/immunisation_dao.dart';
+import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
 import '../../core/db/sync_meta_dao.dart';
@@ -24,12 +25,14 @@ class WorklistRepository {
     required ImmunisationDao immunisations,
     required SyncMetaDao syncMeta,
     required RiskScoringService risk,
+    required LocalAssessmentDao localAssessments,
   })  : _patients = patients,
         _programmes = programmes,
         _followUps = followUps,
         _immunisations = immunisations,
         _syncMeta = syncMeta,
-        _risk = risk;
+        _risk = risk,
+        _localAssessments = localAssessments;
 
   final PatientDao _patients;
   final PatientProgrammesDao _programmes;
@@ -37,6 +40,7 @@ class WorklistRepository {
   final ImmunisationDao _immunisations;
   final SyncMetaDao _syncMeta;
   final RiskScoringService _risk;
+  final LocalAssessmentDao _localAssessments;
 
   final _changes = ValueNotifier<int>(0);
 
@@ -98,6 +102,7 @@ class WorklistRepository {
     final progMap = await _programmes.programmesForMany(ids);
     final followMap = await _followUps.forMany(ids);
     final immMap = await _immunisations.forMany(ids);
+    final vitalsMap = await _localAssessments.latestClinicalVitalsForMany(ids);
     final now = DateTime.now();
     for (final p in patients) {
       final facts = _factsFor(
@@ -105,6 +110,7 @@ class WorklistRepository {
         progMap[p.id] ?? const <Programme>{},
         followMap[p.id] ?? const <FollowUpRow>[],
         immMap[p.id] ?? const <ImmunisationRow>[],
+        vitalsMap[p.id],
         now,
       );
       final assessment = _risk.score(facts);
@@ -137,6 +143,7 @@ class WorklistRepository {
     Set<Programme> programmes,
     List<FollowUpRow> follows,
     List<ImmunisationRow> imms,
+    ClinicalVitals? vitals,
     DateTime now,
   ) {
     final cutoff = now.subtract(const Duration(days: 90)).millisecondsSinceEpoch;
@@ -173,6 +180,7 @@ class WorklistRepository {
       redFlag: p.redFlag ?? false,
       serverRiskLevel: p.riskHintLevel,
       serverRiskColor: p.riskHintColor,
+      vitals: vitals,
     );
   }
 

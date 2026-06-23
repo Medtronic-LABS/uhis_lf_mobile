@@ -312,6 +312,7 @@ abstract final class HouseholdListStrings {
   static const String loadError = 'Could not load data';
   static const String noHouseholds = 'No households found';
   static const String noMembers = 'No members found';
+  static const String noPatientsAssigned = 'No patients assigned to you';
   static const String unnamedHousehold = '(Unnamed household)';
   static const String unnamedMember = '(Unnamed)';
 

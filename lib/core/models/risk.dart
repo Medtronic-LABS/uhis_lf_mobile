@@ -80,6 +80,34 @@ class RiskRationale {
         return 'Patient flagged red by clinician';
       case 'no-programme':
         return 'No programme enrolment recorded';
+      case 'anc-danger-sign':
+        return 'ANC: danger sign present — immediate referral';
+      case 'anc-eclampsia':
+        return 'ANC: eclampsia / pre-eclampsia pattern';
+      case 'anc-high-bp':
+        return value != null ? 'ANC: high BP ($value)' : 'ANC: high blood pressure';
+      case 'anc-anaemia-severe':
+        return value != null ? 'ANC: severe anaemia (Hb $value g/dL)' : 'ANC: severe anaemia';
+      case 'anc-anaemia-moderate':
+        return value != null ? 'ANC: moderate anaemia (Hb $value g/dL)' : 'ANC: moderate anaemia';
+      case 'anc-missed-visit':
+        return value != null ? 'ANC: missed visit ($value overdue)' : 'ANC: missed visit';
+      case 'anc-primigravida':
+        return 'ANC: first pregnancy (primigravida)';
+      case 'ncd-htn-stage2':
+        return value != null ? 'NCD: stage 2 hypertension (BP $value)' : 'NCD: stage 2 hypertension';
+      case 'ncd-htn-stage1':
+        return value != null ? 'NCD: stage 1 hypertension (BP $value)' : 'NCD: stage 1 hypertension';
+      case 'ncd-elevated-bp':
+        return value != null ? 'NCD: elevated blood pressure ($value)' : 'NCD: elevated blood pressure';
+      case 'ncd-dm-poor-control':
+        return value != null ? 'NCD: poorly controlled diabetes (glucose $value mg/dL)' : 'NCD: poorly controlled diabetes';
+      case 'ncd-comorbid-htn-dm':
+        return 'NCD: hypertension + diabetes (compounded risk)';
+      case 'ncd-missed-followup':
+        return value != null ? 'NCD: missed follow-up ($value overdue)' : 'NCD: missed follow-up';
+      case 'ncd-elderly':
+        return value != null ? 'NCD: elderly patient (age $value)' : 'NCD: elderly patient';
       default:
         return driver; // Fallback: return raw driver
     }
@@ -155,6 +183,32 @@ enum RiskBand {
   }
 }
 
+/// Extracted clinical vitals from the most recent local assessment.
+/// All fields nullable — missing data is scored as zero.
+class ClinicalVitals {
+  const ClinicalVitals({
+    this.systolicBp,
+    this.diastolicBp,
+    this.hemoglobin,
+    this.fastingGlucoseMgDl,
+    this.hasDangerSign = false,
+    this.hasEclampsia = false,
+    this.parity,
+    this.hasDiabetes = false,
+    this.assessmentType,
+  });
+
+  final int? systolicBp;
+  final int? diastolicBp;
+  final double? hemoglobin;        // g/dL
+  final double? fastingGlucoseMgDl; // mg/dL
+  final bool hasDangerSign;
+  final bool hasEclampsia;
+  final int? parity;               // 0 = primigravida
+  final bool hasDiabetes;
+  final String? assessmentType;   // 'NCD' or 'ANC'
+}
+
 /// Inputs to [RiskScoringService.score]. Built by the worklist repository as a
 /// single join over the cached SQLite rows — never assembled from a network
 /// call directly (offline-first tenet).
@@ -171,6 +225,7 @@ class PatientFacts {
     this.serverRiskLevel,
     this.serverRiskColor,
     this.diagnosisCount = 0,
+    this.vitals,
   });
 
   final String patientId;
@@ -191,6 +246,10 @@ class PatientFacts {
 
   /// Number of recorded diagnoses on the patient (used as a tie-breaker).
   final int diagnosisCount;
+
+  /// Extracted clinical vitals from the most recent local ANC or NCD assessment.
+  /// Null when no assessment has been recorded locally.
+  final ClinicalVitals? vitals;
 }
 
 /// The risk-engine output. Persisted into the `patients` row so the worklist

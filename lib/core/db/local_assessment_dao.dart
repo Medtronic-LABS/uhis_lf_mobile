@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:sqflite/sqflite.dart';
 
+import '../models/risk.dart';
 import 'app_database.dart';
 
 /// Sync status for local assessments, matching Android's OfflineSyncStatus.
@@ -368,6 +369,136 @@ class LocalAssessmentDao {
       orderBy: 'created_at DESC',
     );
     return rows.map(LocalAssessmentEntity.fromDb).toList();
+  }
+
+  /// Returns the most recent extracted vitals per patient.
+  /// Queries the most recent NCD or ANC assessment per patient and parses the
+  /// assessmentDetails JSON. Returns an empty map if no assessments exist.
+  Future<Map<String, ClinicalVitals>> latestClinicalVitalsForMany(
+      List<String> patientIds) async {
+    if (patientIds.isEmpty) return const {};
+    final placeholders = List.filled(patientIds.length, '?').join(',');
+    // Get the most recent NCD or ANC assessment per patient
+    final rows = await _db.db.rawQuery(
+      '''
+    SELECT la.*
+    FROM $tableName la
+    INNER JOIN (
+      SELECT patient_id, MAX(created_at) AS max_at
+      FROM $tableName
+      WHERE patient_id IN ($placeholders)
+        AND assessment_type IN ('NCD', 'ANC', 'ncd', 'anc')
+        AND patient_id IS NOT NULL
+      GROUP BY patient_id
+    ) latest ON la.patient_id = latest.patient_id AND la.created_at = latest.max_at
+    ''',
+      patientIds,
+    );
+
+    final result = <String, ClinicalVitals>{};
+    for (final row in rows) {
+      final pid = row['patient_id'] as String?;
+      if (pid == null) continue;
+      final type = (row['assessment_type'] as String?)?.toUpperCase() ?? '';
+      final detailsJson = row['assessment_details'] as String?;
+      if (detailsJson == null) continue;
+      Map<String, dynamic> map;
+      try {
+        map = jsonDecode(detailsJson) as Map<String, dynamic>;
+      } catch (_) {
+        continue;
+      }
+
+      int? parseInt(String key) {
+        final v = map[key];
+        if (v is int) return v;
+        if (v is num) return v.toInt();
+        if (v is String) return int.tryParse(v);
+        return null;
+      }
+
+      double? parseDouble(String key) {
+        final v = map[key];
+        if (v is double) return v;
+        if (v is num) return v.toDouble();
+        if (v is String) return double.tryParse(v);
+        return null;
+      }
+
+      // BP — primary keys from SectionRegistry; fallback to API history shapes
+      int? sys = parseInt('bloodPressureSystolic') ??
+          parseInt('avgSystolic');
+      if (sys == null) {
+        // bpLogDetails array shape
+        final log = map['bpLogDetails'];
+        if (log is List && log.isNotEmpty) {
+          final first = log.first;
+          if (first is Map) {
+            sys = first['systolic'] is num
+                ? (first['systolic'] as num).toInt()
+                : null;
+          }
+        }
+      }
+      final dia = parseInt('bloodPressureDiastolic') ??
+          parseInt('avgDiastolic');
+
+      // Hb
+      final hb = parseDouble('hemoglobin');
+
+      // Glucose: convert to fasting mg/dL equivalent
+      double? fastingGlu;
+      final glucoseRaw = parseDouble('glucoseValue');
+      final glucoseType = (map['glucoseType'] as String?)?.toLowerCase();
+      if (glucoseRaw != null) {
+        // Store fasting glucose only; if random, skip (cannot reliably compare)
+        if (glucoseType == 'fasting' || glucoseType == null) {
+          fastingGlu = glucoseRaw;
+        }
+      }
+
+      // Danger signs — dangerSignsExperienced* are List<String> or bool
+      bool hasDanger = false;
+      for (final key in const [
+        'dangerSignsExperienced12',
+        'dangerSignsExperienced13To27',
+        'dangerSignsExperienced28To40',
+      ]) {
+        final v = map[key];
+        if (v == true || (v is List && v.isNotEmpty) || v == 'true') {
+          hasDanger = true;
+          break;
+        }
+      }
+
+      // Eclampsia
+      final eclampsiaRaw = map['eclampsia'];
+      final hasEclampsia = eclampsiaRaw == true ||
+          eclampsiaRaw == 'yes' ||
+          eclampsiaRaw == '1';
+
+      // Parity
+      final parity = parseInt('parity');
+
+      // Diabetes (check for explicit diabetes field or high fasting glucose)
+      final diabetesRaw = map['diabetes'] ?? map['hasDiabetes'];
+      final hasDiabetes = diabetesRaw == true ||
+          diabetesRaw == 'yes' ||
+          (fastingGlu != null && fastingGlu >= 126);
+
+      result[pid] = ClinicalVitals(
+        systolicBp: sys,
+        diastolicBp: dia,
+        hemoglobin: hb,
+        fastingGlucoseMgDl: fastingGlu,
+        hasDangerSign: hasDanger,
+        hasEclampsia: hasEclampsia,
+        parity: parity,
+        hasDiabetes: hasDiabetes,
+        assessmentType: type,
+      );
+    }
+    return result;
   }
 }
 

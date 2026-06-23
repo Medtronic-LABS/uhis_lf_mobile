@@ -58,8 +58,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
   // before patient-ID cross-reference is verified against the members table.
   MemberFilter _filter = MemberFilter.allMembers;
   Set<String> _myPatientIds = {};
-  int _totalMemberCount = 0;
-  int _myPatientCount = 0;
+
 
   // 5-tier filter state (null = All)
   DashboardTier? _selectedTier;
@@ -69,6 +68,10 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
   String? _selectedVillageId;
   String? _selectedSubVillageId;
   String? _selectedShebikaId;
+
+  // Inline village chip row (populated from local DB after data loads)
+  List<({String id, String name})> _inlineVillages = const [];
+  String? _selectedInlineVillageId;
 
   @override
   void initState() {
@@ -115,6 +118,13 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
     final memberDao = context.read<MemberDao>();
     final repo = context.read<DashboardRepository>();
 
+    // Load distinct villages for inline chip row
+    memberDao.getDistinctVillages().then((villages) {
+      if (mounted && villages.length > 1) {
+        setState(() => _inlineVillages = villages);
+      }
+    });
+
     setState(() {
       _future = _fetchHouseholds(
         householdDao,
@@ -127,20 +137,6 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
         final patientIds = await memberDao.getMyPatientIds();
         if (mounted) {
           _myPatientIds = patientIds;
-          var totalMembers = 0;
-          var myPatientMembers = 0;
-          for (final hh in households) {
-            for (final m in hh.members) {
-              totalMembers++;
-              if (patientIds.contains(m.id) ||
-                  (m.patientId != null &&
-                      patientIds.contains(m.patientId))) {
-                myPatientMembers++;
-              }
-            }
-          }
-          _myPatientCount = myPatientMembers;
-          _totalMemberCount = totalMembers;
         }
         return households;
       });
@@ -513,10 +509,19 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
 
   Widget _buildHouseholdsList(BuildContext context, List<_HouseholdItem> items) {
     final scheme = Theme.of(context).colorScheme;
-    final totalMembers = items.fold<int>(0, (sum, h) => sum + (h.memberCount ?? 0));
+
+    // Apply inline village filter to households tab
+    final filteredItems = _selectedInlineVillageId != null
+        ? items
+            .where((h) => h.members.any((m) => m.villageId == _selectedInlineVillageId))
+            .toList()
+        : items;
+
+    final totalMembers = filteredItems.fold<int>(0, (sum, h) => sum + (h.memberCount ?? 0));
 
     return Column(
       children: [
+        _buildInlineVillageChipRow(scheme),
         Container(
           padding: const EdgeInsets.all(16),
           color: scheme.surfaceContainerHighest.withValues(alpha: 0.3),
@@ -525,7 +530,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
               Expanded(
                 child: _SummaryChip(
                   icon: Icons.home_work_outlined,
-                  label: HouseholdListStrings.householdsCount(items.length),
+                  label: HouseholdListStrings.householdsCount(filteredItems.length),
                   color: scheme.tertiary,
                 ),
               ),
@@ -544,10 +549,10 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
           child: ListView.separated(
             controller: _scrollController,
             padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: items.length,
+            itemCount: filteredItems.length,
             separatorBuilder: (_, _) => const Divider(height: 1, indent: 72),
             itemBuilder: (context, index) {
-              final item = items[index];
+              final item = filteredItems[index];
               return _HouseholdTile(
                 item: item,
                 onTap: () => _navigateToDetail(context, item),
@@ -603,30 +608,42 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
         allMembers.add(_MemberInfo.fromMember(member, household));
       }
     }
-    
-    // Apply filter: show only my patients or all members
-    var members = _filter == MemberFilter.myPatients
-        ? allMembers.where((m) => _myPatientIds.contains(m.id) || _myPatientIds.contains(m.patientId)).toList()
+
+    // Apply village chip filter first so counts reflect the current location context.
+    var villageFiltered = _selectedInlineVillageId != null
+        ? allMembers.where((m) => m.villageId == _selectedInlineVillageId).toList()
         : allMembers;
 
-    // Apply tier filter if selected (5-tier model)
+    // Apply tier filter.
     if (_selectedTier != null && _patientTiers != null) {
-      members = members.where((m) {
+      villageFiltered = villageFiltered.where((m) {
         final tier = _patientTiers![m.id] ?? _patientTiers![m.patientId];
         return tier == _selectedTier;
       }).toList();
     }
 
+    // Counts derived AFTER location/tier filters so chips always match the list.
+    final allMembersCount = villageFiltered.length;
+    final myPatientsCount = villageFiltered
+        .where((m) => _myPatientIds.contains(m.id) || _myPatientIds.contains(m.patientId))
+        .length;
+
+    // Apply patient-type filter last.
+    final members = _filter == MemberFilter.myPatients
+        ? villageFiltered.where((m) => _myPatientIds.contains(m.id) || _myPatientIds.contains(m.patientId)).toList()
+        : villageFiltered;
+
     // Calculate total from noOfPeople if we don't have individual members
     final totalFromCount = items.fold<int>(0, (sum, h) => sum + (h.memberCount ?? 0));
 
-    // If we have no individual members but have a count, show households with counts
+    // If we have no individual members but have a count, show households with counts.
+    // Filter toggle is hidden here — it would show (0) for both options and confuse the user.
     if (allMembers.isEmpty && totalFromCount > 0) {
       return Column(
         children: [
           if (widget.initialTier != null || _selectedTier != null)
             _buildTierChipRow(),
-          _buildFilterToggle(scheme),
+          _buildInlineVillageChipRow(scheme),
           Expanded(
             child: ListView.separated(
               controller: _scrollController,
@@ -650,7 +667,8 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
       children: [
         if (widget.initialTier != null || _selectedTier != null)
           _buildTierChipRow(),
-        _buildFilterToggle(scheme),
+        _buildInlineVillageChipRow(scheme),
+        _buildFilterToggle(scheme, allCount: allMembersCount, myCount: myPatientsCount),
         Expanded(
           child: members.isEmpty
               ? Center(
@@ -661,7 +679,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
                       const SizedBox(height: 16),
                       Text(
                         _filter == MemberFilter.myPatients
-                            ? 'No patients assigned to you'
+                            ? HouseholdListStrings.noPatientsAssigned
                             : HouseholdListStrings.noMembers,
                         style: Theme.of(context).textTheme.bodyLarge,
                       ),
@@ -686,8 +704,59 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
     );
   }
 
+  /// Inline village chip row — "Which village are you visiting?"
+  /// Mirrors the dashboard pattern. Hidden when ≤1 village in local data.
+  Widget _buildInlineVillageChipRow(ColorScheme scheme) {
+    if (_inlineVillages.isEmpty) return const SizedBox.shrink();
+    const navyColor = Color(0xFF1B2B5E);
+    return Container(
+      color: scheme.surface,
+      padding: const EdgeInsets.only(left: 12, right: 12, top: 8, bottom: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            MissionDashboardStrings.whichVillageVisiting,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 6),
+          SizedBox(
+            height: 32,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                _InlineVillageChip(
+                  label: MissionDashboardStrings.allVillages,
+                  isActive: _selectedInlineVillageId == null,
+                  navyColor: navyColor,
+                  onTap: () => setState(() => _selectedInlineVillageId = null),
+                ),
+                ..._inlineVillages.map((v) => _InlineVillageChip(
+                      label: v.name,
+                      isActive: _selectedInlineVillageId == v.id,
+                      navyColor: navyColor,
+                      onTap: () => setState(() {
+                        _selectedInlineVillageId =
+                            _selectedInlineVillageId == v.id ? null : v.id;
+                      }),
+                    )),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+        ],
+      ),
+    );
+  }
+
   /// Builds the filter toggle chips (My Patients / All Members).
-  Widget _buildFilterToggle(ColorScheme scheme) {
+  /// [allCount] and [myCount] are post-filter counts so the labels always
+  /// match the list length the user sees.
+  Widget _buildFilterToggle(ColorScheme scheme, {required int allCount, required int myCount}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -697,13 +766,13 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
       child: Row(
         children: [
           _FilterChip(
-            label: HouseholdListStrings.myPatientsCount(_myPatientCount),
+            label: HouseholdListStrings.myPatientsCount(myCount),
             isSelected: _filter == MemberFilter.myPatients,
             onTap: () => setState(() => _filter = MemberFilter.myPatients),
           ),
           const SizedBox(width: 8),
           _FilterChip(
-            label: HouseholdListStrings.allMembersCount(_totalMemberCount),
+            label: HouseholdListStrings.allMembersCount(allCount),
             isSelected: _filter == MemberFilter.allMembers,
             onTap: () => setState(() => _filter = MemberFilter.allMembers),
           ),
@@ -1339,6 +1408,7 @@ class _MemberInfo {
     this.householdId,
     this.householdName,
     this.householdNo,
+    this.villageId,
   });
 
   final String? id;
@@ -1353,6 +1423,7 @@ class _MemberInfo {
   final String? householdId;
   final String? householdName;
   final String? householdNo;
+  final String? villageId;
 
   /// Calculate age from date of birth if not directly provided.
   static int? _calculateAge(String? dateOfBirth) {
@@ -1385,6 +1456,50 @@ class _MemberInfo {
       householdId: member.householdId ?? household.id,
       householdName: household.name,
       householdNo: household.householdNo,
+      villageId: member.villageId,
+    );
+  }
+}
+
+class _InlineVillageChip extends StatelessWidget {
+  const _InlineVillageChip({
+    required this.label,
+    required this.isActive,
+    required this.navyColor,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool isActive;
+  final Color navyColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: GestureDetector(
+        key: ValueKey('household_inline_village_$label'),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: isActive ? navyColor : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isActive ? navyColor : const Color(0xFFD1D5DB),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: isActive ? Colors.white : const Color(0xFF374151),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
