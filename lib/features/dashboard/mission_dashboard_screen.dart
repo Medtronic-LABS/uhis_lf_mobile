@@ -266,8 +266,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _refresh() async {
     final missionRepo = context.read<MissionDashboardRepository>();
     await missionRepo.refresh();
+    // refresh() fires _changes once → _onMissionChanges() → _loadMissionData().
+    // No explicit call here; that would double-load.
     _reloadStats();
-    _loadMissionData();
   }
 
   /// Called from menu when user wants to enable device unlock.
