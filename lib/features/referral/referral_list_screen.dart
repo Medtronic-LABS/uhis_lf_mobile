@@ -636,7 +636,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
     );
   }
 
-  /// Village chip row — "Which village are you visiting?" — Visits tab.
+  /// Village chip row — "WHICH VILLAGE ARE YOU VISITING?" — Visits tab.
   Widget _buildVisitVillageChipRow(List<String> villageNames) {
     final scheme = Theme.of(context).colorScheme;
     const navyColor = Color(0xFF1B2B5E);
