@@ -58,8 +58,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
   // before patient-ID cross-reference is verified against the members table.
   MemberFilter _filter = MemberFilter.allMembers;
   Set<String> _myPatientIds = {};
-  int _totalMemberCount = 0;
-  int _myPatientCount = 0;
+
 
   // 5-tier filter state (null = All)
   DashboardTier? _selectedTier;
@@ -138,20 +137,6 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
         final patientIds = await memberDao.getMyPatientIds();
         if (mounted) {
           _myPatientIds = patientIds;
-          var totalMembers = 0;
-          var myPatientMembers = 0;
-          for (final hh in households) {
-            for (final m in hh.members) {
-              totalMembers++;
-              if (patientIds.contains(m.id) ||
-                  (m.patientId != null &&
-                      patientIds.contains(m.patientId))) {
-                myPatientMembers++;
-              }
-            }
-          }
-          _myPatientCount = myPatientMembers;
-          _totalMemberCount = totalMembers;
         }
         return households;
       });
@@ -800,7 +785,6 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
   /// Renders when navigating from dashboard with `?tier=...` or when
   /// the user toggles into tier-filter mode.
   Widget _buildTierChipRow() {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     final scheme = Theme.of(context).colorScheme;
     final tiers = [null, ...DashboardTier.values];
     return Container(
@@ -1276,10 +1260,10 @@ class _HouseholdItem {
     double? lat, lng;
     final latVal = json['latitude'];
     final lngVal = json['longitude'];
-    if (latVal is double) lat = latVal;
-    else if (latVal is num) lat = latVal.toDouble();
-    if (lngVal is double) lng = lngVal;
-    else if (lngVal is num) lng = lngVal.toDouble();
+    if (latVal is double) { lat = latVal; }
+    else if (latVal is num) { lat = latVal.toDouble(); }
+    if (lngVal is double) { lng = lngVal; }
+    else if (lngVal is num) { lng = lngVal.toDouble(); }
 
     final memberList = <_HouseholdMember>[];
     if (json['householdMembers'] is List) {
