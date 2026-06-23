@@ -155,21 +155,28 @@ class MissionDashboardRepository {
   }
 
   /// Force refresh all data.
+  /// Invalidates the cache silently, pre-loads new data, then fires exactly
+  /// one change notification — avoiding the two extra reloads that would
+  /// occur if clearCache() (which notifies) was called here first.
   Future<void> refresh() async {
-    clearCache();
+    _invalidateCache();
     await _loadInputData();
     _changes.value++;
   }
 
-  /// Clear cached data.
-  /// Also notifies listeners so dependent widgets can reload.
+  /// Clear cached data and notify listeners so dependent widgets reload.
+  /// Call this after external mutations (e.g. visit completion) to drive
+  /// an immediate queue refresh.
   void clearCache() {
+    _invalidateCache();
+    _changes.value++;
+  }
+
+  /// Wipes cached state without firing a change notification.
+  void _invalidateCache() {
     _cachedInput = null;
     _cachedCqlResults = null;
-    // Cancel any in-flight load so new requests start fresh
     _loadingCompleter = null;
-    // Notify listeners to trigger reload in dependent widgets
-    _changes.value++;
   }
 
   /// Fetch CQL risk results for a batch of patient IDs.
