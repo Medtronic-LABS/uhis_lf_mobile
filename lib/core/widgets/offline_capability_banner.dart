@@ -16,6 +16,7 @@ class OfflineCapabilityBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
+    final theme = Theme.of(context);
     if (compact) {
       return Row(
         mainAxisSize: MainAxisSize.min,
@@ -28,9 +29,8 @@ class OfflineCapabilityBanner extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             'Works offline',
-            style: TextStyle(
+            style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
-              fontSize: 12,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -70,18 +70,16 @@ class OfflineCapabilityBanner extends StatelessWidget {
               children: [
                 Text(
                   'Works offline',
-                  style: TextStyle(
+                  style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurface,
-                    fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   'On-device model · No internet needed',
-                  style: TextStyle(
+                  style: theme.textTheme.labelSmall?.copyWith(
                     color: scheme.onSurfaceVariant,
-                    fontSize: 11,
                   ),
                 ),
               ],
@@ -99,7 +97,8 @@ class OfflineCapabilityIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -118,9 +117,8 @@ class OfflineCapabilityIndicator extends StatelessWidget {
           const SizedBox(width: 4),
           Text(
             'Offline ready',
-            style: TextStyle(
+            style: theme.textTheme.labelSmall?.copyWith(
               color: scheme.primary,
-              fontSize: 10,
               fontWeight: FontWeight.w600,
             ),
           ),

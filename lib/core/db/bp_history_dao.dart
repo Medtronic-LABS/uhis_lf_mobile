@@ -7,6 +7,8 @@ library;
 
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show debugPrint;
+
 import '../cdss/models/cdss_inputs.dart';
 import 'app_database.dart';
 
@@ -77,7 +79,8 @@ class BpHistoryDao {
       if (flat is num) return flat.round();
 
       return null;
-    } catch (_) {
+    } on FormatException catch (e) {
+      debugPrint('[bp_history_dao] corrupt detailsJson: $e');
       return null;
     }
   }

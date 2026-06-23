@@ -221,7 +221,7 @@ class LocationFilterDropdown<T> extends StatelessWidget {
                 ?.copyWith(color: scheme.onSurfaceVariant)),
         const SizedBox(height: 4),
         DropdownButtonFormField<T>(
-          value: value,
+          initialValue: value,
           items: items,
           onChanged: onChanged,
           isExpanded: true,

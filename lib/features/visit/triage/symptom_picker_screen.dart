@@ -489,6 +489,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       color: getBackgroundColor(),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
+        key: const Key('triage_symptom_chip_tap'),
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
@@ -749,6 +750,7 @@ class _BeforeYouKnockCardState extends State<_BeforeYouKnockCard> {
         children: [
           // Header row — always visible
           InkWell(
+            key: const Key('triage_body_system_expand_tap'),
             onTap: () => setState(() => _expanded = !_expanded),
             borderRadius: BorderRadius.circular(14),
             child: Padding(
@@ -1010,6 +1012,7 @@ class _DurationButton extends StatelessWidget {
         : const Color(0xFF1B2B5E);
 
     return GestureDetector(
+      key: const Key('triage_answer_option_tap'),
       onTap: () => onTap(value),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),

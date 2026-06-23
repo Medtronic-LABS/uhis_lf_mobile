@@ -16,6 +16,14 @@ export default defineConfig({
     viewport: { width: 412, height: 915 },
   },
   projects: [
-    { name: 'flutter-web', use: { ...devices['Desktop Chrome'] } },
+    {
+      name: 'flutter-web',
+      use: {
+        ...devices['Desktop Chrome'],
+        // CORS: the backend allows only production origins. Tests run against
+        // localhost:5050 so we disable the same-origin check for the browser.
+        launchOptions: { args: ['--disable-web-security', '--disable-site-isolation-trials'] },
+      },
+    },
   ],
 });

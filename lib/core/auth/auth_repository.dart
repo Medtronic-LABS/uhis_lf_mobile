@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../api/api_client.dart';
@@ -158,7 +159,12 @@ class AuthRepository {
     }
     await _storage.write(key: _kUsername, value: username);
     // Extract profile directly from login response — no separate profile call.
-    final loginData = resp.data;
+    // On web, Dio's BrowserHttpClientAdapter returns raw JSON text (String)
+    // rather than a decoded Map; decode manually when needed.
+    dynamic loginData = resp.data;
+    if (loginData is String && loginData.isNotEmpty) {
+      try { loginData = jsonDecode(loginData); } catch (_) {} // intentional: web Dio returns String instead of Map
+    }
     if (loginData is Map) {
       await _loadFromLoginResponse(loginData);
     }
@@ -167,7 +173,9 @@ class AuthRepository {
       // after a fresh login. A failure here must not block sign-in.
       try {
         await _persistReentrySession();
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[auth] re-entry session refresh failed: $e');
+      }
     }
   }
 
@@ -260,7 +268,11 @@ class AuthRepository {
     // logged-out device has no silent re-entry (biometric or PIN).
     try {
       await _api.dio.get(Endpoints.logout);
-    } catch (_) {}
+    } on DioException catch (e) {
+      debugPrint('[auth] server logout failed (network): ${e.type}');
+    } catch (e) {
+      debugPrint('[auth] server logout failed: $e');
+    }
     await _api.clearSession();
     await _storage.delete(key: _kTenantId);
     await _storage.delete(key: _kOrganizationFhirId);

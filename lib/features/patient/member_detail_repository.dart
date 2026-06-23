@@ -196,8 +196,8 @@ class MemberDetailRepository extends ApiRepository {
     print('[MemberDetailRepository] getMemberById: $memberId');
     try {
       if (_memberDao != null) {
-        HouseholdMemberEntity? entity = await _memberDao!.getById(memberId);
-        entity ??= await _memberDao!.getByPatientId(memberId);
+        HouseholdMemberEntity? entity = await _memberDao.getById(memberId);
+        entity ??= await _memberDao.getByPatientId(memberId);
         if (entity != null) {
           // ignore: avoid_print
           print('[MemberDetailRepository] Found in local DB: ${entity.name}');
@@ -272,8 +272,8 @@ class MemberDetailRepository extends ApiRepository {
     // member so the filter can match whichever form the server sends.
     final acceptableIds = <String>{memberId};
     if (_memberDao != null) {
-      final entity = await _memberDao!.getById(memberId) ??
-          await _memberDao!.getByPatientId(memberId);
+      final entity = await _memberDao.getById(memberId) ??
+          await _memberDao.getByPatientId(memberId);
       if (entity != null) {
         if (entity.id.isNotEmpty) acceptableIds.add(entity.id);
         if (entity.fhirId != null && entity.fhirId!.isNotEmpty) {
@@ -387,9 +387,8 @@ class MemberDetailRepository extends ApiRepository {
     String? assessmentType,
     String? origin,
   }) async {
-    // ignore: avoid_print
-    print('[MemberDetailRepository] ========== getPatientDetailsWithVitals START ==========');
-    print('[MemberDetailRepository] patientId=$patientId, assessmentType=$assessmentType, origin=$origin');
+    debugPrint('[MemberDetailRepository] ========== getPatientDetailsWithVitals START ==========');
+    debugPrint('[MemberDetailRepository] patientId=$patientId, assessmentType=$assessmentType, origin=$origin');
 
     // patientDetails not in approved API set — vitals come from FHIR Observation
     // via assessment-history and offline-sync bundle.

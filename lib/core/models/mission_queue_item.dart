@@ -299,7 +299,7 @@ class MissionQueueItem {
     // then patient name for stable sort
     final scoreCmp = b.priorityScore.compareTo(a.priorityScore);
     if (scoreCmp != 0) return scoreCmp;
-    return (a.patientName ?? '').compareTo(b.patientName ?? '');
+    return a.patientName.compareTo(b.patientName);
   }
 
   /// Whether this is a critical item requiring immediate attention.

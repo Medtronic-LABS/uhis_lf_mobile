@@ -26,6 +26,7 @@ class VisitTierChip extends StatelessWidget {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     final color = _tierColor(tier, tokens);
     return GestureDetector(
+      key: const Key('visit_tier_chip_tap'),
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

@@ -328,12 +328,6 @@ class _SearchViewState extends State<_SearchView> {
     context.push('/household/${hit.id}', extra: detailData);
   }
 
-  VoidCallback _closeWith(String snack) {
-    return () {
-      widget.onClose();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(snack)));
-    };
-  }
 }
 
 class _SectionHeader extends StatelessWidget {

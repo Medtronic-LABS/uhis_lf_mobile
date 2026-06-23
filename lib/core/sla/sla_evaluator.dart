@@ -44,9 +44,7 @@ class SlaEvaluator {
     final treatmentWindow = _treatmentWindowFor(f.slaTier);
 
     final dueArrival = created.add(arrivalWindow);
-    final dueTreatment = f.arrivalConfirmedAt == null
-        ? null
-        : f.arrivalConfirmedAt!.add(treatmentWindow);
+    final dueTreatment = f.arrivalConfirmedAt?.add(treatmentWindow);
 
     final elapsed = now.difference(created);
 

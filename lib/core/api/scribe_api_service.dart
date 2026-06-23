@@ -314,14 +314,14 @@ class ScribeApiService extends ApiRepository {
       'mode': mode.name == 'formPrefill' ? 'form_prefill' : mode.name,
       'language': language,
       'transcriptionModel': AppConfig.scribeTranscriptionModel,
-      if (patientId != null) 'patientId': patientId,
-      if (encounterId != null) 'encounterId': encounterId,
+      'patientId': ?patientId,
+      'encounterId': ?encounterId,
       if (programmes.isNotEmpty) 'programmes': programmes,
       'removeNoise': true,
       'removeSilence': true,
       if (formSchema != null)
         'formSchema': formSchema.map((f) => f.toJson()).toList(),
-      if (symptomCatalog != null) 'symptomCatalog': symptomCatalog,
+      'symptomCatalog': ?symptomCatalog,
     };
   }
 
@@ -458,7 +458,8 @@ class ScribeApiService extends ApiRepository {
       return ScribeJobResult.fromJson(body as Map<String, dynamic>);
     } on ApiException {
       rethrow;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[scribe] pollResult failed, caller will retry: $e');
       return null;
     }
   }

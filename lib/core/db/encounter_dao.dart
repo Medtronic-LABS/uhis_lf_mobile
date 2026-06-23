@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:sqflite/sqflite.dart';
 
 import 'app_database.dart';
@@ -97,7 +98,8 @@ class EncounterRow {
     if (triageJson == null || triageJson!.isEmpty) return null;
     try {
       return jsonDecode(triageJson!) as Map<String, dynamic>;
-    } catch (_) {
+    } on FormatException catch (e) {
+      debugPrint('[encounter_dao] corrupt triageJson for $id: $e');
       return null;
     }
   }
@@ -107,7 +109,8 @@ class EncounterRow {
     if (vitalsJson == null || vitalsJson!.isEmpty) return null;
     try {
       return jsonDecode(vitalsJson!) as Map<String, dynamic>;
-    } catch (_) {
+    } on FormatException catch (e) {
+      debugPrint('[encounter_dao] corrupt vitalsJson for $id: $e');
       return null;
     }
   }
@@ -117,7 +120,8 @@ class EncounterRow {
     if (assessmentJson == null || assessmentJson!.isEmpty) return null;
     try {
       return jsonDecode(assessmentJson!) as Map<String, dynamic>;
-    } catch (_) {
+    } on FormatException catch (e) {
+      debugPrint('[encounter_dao] corrupt assessmentJson for $id: $e');
       return null;
     }
   }

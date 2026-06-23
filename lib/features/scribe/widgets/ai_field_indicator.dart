@@ -25,9 +25,9 @@ class ConfidenceBadge extends StatelessWidget {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.15),
+          color: color.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: color.withOpacity(0.3)),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -52,7 +52,7 @@ class ConfidenceBadge extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: color.withOpacity(0.2),
+        color: color.withValues(alpha: 0.2),
         border: Border.all(color: color, width: 1.5),
       ),
       child: Icon(
@@ -215,11 +215,11 @@ class AIFieldWrapper extends StatelessWidget {
     if (isPending) {
       borderColor = _colorForConfidence(field.confidence);
     } else if (isAccepted) {
-      borderColor = const Color(0xFF2E7D32).withOpacity(0.5);
+      borderColor = const Color(0xFF2E7D32).withValues(alpha: 0.5);
     } else if (isModified) {
-      borderColor = const Color(0xFF1565C0).withOpacity(0.5);
+      borderColor = const Color(0xFF1565C0).withValues(alpha: 0.5);
     } else if (isRejected) {
-      borderColor = Colors.grey.withOpacity(0.3);
+      borderColor = Colors.grey.withValues(alpha: 0.3);
     } else {
       borderColor = Colors.transparent;
     }
@@ -240,7 +240,7 @@ class AIFieldWrapper extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: borderColor.withOpacity(0.1),
+                color: borderColor.withValues(alpha: 0.1),
                 borderRadius: const BorderRadius.only(
                   bottomLeft: Radius.circular(6),
                   bottomRight: Radius.circular(6),
@@ -314,7 +314,7 @@ class _StatusChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Row(

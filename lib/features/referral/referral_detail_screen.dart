@@ -6,7 +6,6 @@ import '../../core/constants/app_strings.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/models/patient.dart';
 import '../../core/models/referral.dart';
-import '../../core/models/sla.dart';
 import 'referral_api_service.dart';
 import 'referral_repository.dart';
 import 'widgets/notes_panel.dart';
@@ -220,7 +219,6 @@ class _ReferralDetailScreenState extends State<ReferralDetailScreen>
   }
 
   Widget _buildQuickActions(Referral r) {
-    final scheme = Theme.of(context).colorScheme;
     final isOpen = !r.state.isClosed;
 
     return Row(

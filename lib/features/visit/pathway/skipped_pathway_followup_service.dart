@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../../core/api/api_client.dart';
 import '../../../core/db/follow_up_dao.dart';
 import '../../../core/models/programme.dart';
 import 'pathway_review_sheet.dart';
@@ -93,12 +92,9 @@ abstract final class DeferredScreeningInterval {
 /// This ensures the pathway surfaces in the next visit.
 class SkippedPathwayFollowUpService {
   SkippedPathwayFollowUpService({
-    required ApiClient api,
     FollowUpDao? followUpDao,
-  })  : _api = api,
-        _followUpDao = followUpDao;
+  }) : _followUpDao = followUpDao;
 
-  final ApiClient _api;
   final FollowUpDao? _followUpDao;
 
   /// Create follow-ups for skipped pathways.

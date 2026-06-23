@@ -45,6 +45,7 @@ class ScribeBanner extends StatelessWidget {
             state == ScribeState.error;
 
         return GestureDetector(
+          key: const Key('scribe_banner_tap'),
           onTap: tappable ? () => _handleTap(state, ctrl) : null,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 300),
@@ -197,6 +198,7 @@ class _AcceptAllButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
+      key: const Key('scribe_accept_all_tap'),
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -637,7 +639,7 @@ class _WaveBarsState extends State<_WaveBars> with TickerProviderStateMixin {
           padding: const EdgeInsets.symmetric(horizontal: 1.5),
           child: AnimatedBuilder(
             animation: _heights[i],
-            builder: (_, __) => Container(
+            builder: (_, _) => Container(
               width: 3,
               height: _heights[i].value,
               decoration: BoxDecoration(

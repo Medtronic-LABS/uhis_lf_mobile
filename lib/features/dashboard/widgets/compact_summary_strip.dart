@@ -24,6 +24,7 @@ class CompactSummaryStrip extends StatelessWidget {
     final accentColor = hasCritical ? scheme.error : scheme.primary;
 
     return GestureDetector(
+      key: const Key('compact_summary_strip_tap'),
       onTap: onTap,
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),

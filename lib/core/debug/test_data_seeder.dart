@@ -34,7 +34,6 @@ class TestDataSeeder {
     int householdCount = 40,
     int membersPerHousehold = 4,
   }) async {
-    final patientCount = householdCount * membersPerHousehold;
     final now = DateTime.now();
     int insertedPatients = 0;
     int insertedProgrammes = 0;

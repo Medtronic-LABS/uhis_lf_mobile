@@ -207,7 +207,7 @@ class AIDropdownFormField<T> extends StatelessWidget {
             : value;
 
         final dropdown = DropdownButtonFormField<T>(
-          value: effectiveValue,
+          initialValue: effectiveValue,
           items: items,
           onChanged: (newValue) {
             // If user manually changes an AI field, mark it as modified

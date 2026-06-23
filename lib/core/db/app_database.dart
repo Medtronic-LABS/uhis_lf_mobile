@@ -1,5 +1,8 @@
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_sqlcipher/sqflite.dart' as sqlcipher;
+
+import 'key_store.dart';
 
 /// Local SQLite store for the offline cache (households, members, patients)
 /// plus per-entity sync bookkeeping. Schema v2 added the AI Worklist tables
@@ -38,15 +41,29 @@ class AppDatabase {
   static const String tableAiSuggestions = 'ai_suggestions';
   static const String tableEvalLog = 'eval_log';
 
-  /// Opens (creating if needed) the on-device database.
+  /// Opens (creating if needed) the on-device database, encrypted with
+  /// a per-device key stored in Android EncryptedSharedPreferences.
   static Future<AppDatabase> open() async {
     final dir = await getDatabasesPath();
     final path = p.join(dir, _fileName);
-    final db = await openDatabase(
+    final key = await KeyStore.getKey();
+    final db = await sqlcipher.openDatabase(
       path,
+      password: key,
       version: schemaVersion,
       onCreate: createSchema,
       onUpgrade: _onUpgrade,
+    );
+    return AppDatabase._(db);
+  }
+
+  /// Opens an in-memory database — used for web e2e testing where the file
+  /// system is unavailable. Data does not persist across page reloads.
+  static Future<AppDatabase> openInMemory() async {
+    final db = await openDatabase(
+      inMemoryDatabasePath,
+      version: schemaVersion,
+      onCreate: createSchema,
     );
     return AppDatabase._(db);
   }

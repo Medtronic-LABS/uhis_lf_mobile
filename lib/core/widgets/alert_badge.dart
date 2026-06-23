@@ -25,7 +25,8 @@ class AlertBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final color = isUrgent ? scheme.error : scheme.primary;
     final bgColor = isUrgent
         ? scheme.errorContainer.withValues(alpha: 0.5)
@@ -54,11 +55,10 @@ class AlertBadge extends StatelessWidget {
               reason,
               maxLines: maxLines,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: color,
-                fontSize: compact ? 11 : 13,
-                fontWeight: FontWeight.w600,
-              ),
+              style: (compact
+                      ? theme.textTheme.labelSmall
+                      : theme.textTheme.bodySmall)
+                  ?.copyWith(color: color, fontWeight: FontWeight.w600),
             ),
           ),
         ],
@@ -80,7 +80,8 @@ class AlertIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final color = isUrgent ? scheme.error : scheme.onSurfaceVariant;
 
     return Row(
@@ -97,9 +98,8 @@ class AlertIndicator extends StatelessWidget {
             reason,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
+            style: theme.textTheme.bodySmall?.copyWith(
               color: color,
-              fontSize: 12,
               fontWeight: FontWeight.w500,
             ),
           ),

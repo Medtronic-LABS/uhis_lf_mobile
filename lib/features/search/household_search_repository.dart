@@ -38,8 +38,8 @@ class HouseholdHit {
 
     int? members;
     final m = json['noOfPeople'] ?? json['memberCount'];
-    if (m is int) members = m;
-    else if (m is num) members = m.toInt();
+    if (m is int) { members = m; }
+    else if (m is num) { members = m.toInt(); }
     if (members == null && json['householdMembers'] is List) {
       members = (json['householdMembers'] as List).length;
     }

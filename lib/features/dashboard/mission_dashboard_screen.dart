@@ -58,9 +58,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<List<MissionQueueItem>>? _queueFuture;
   Future<ReferralSummary>? _referralSummaryFuture;
   
-  // Completed patient IDs (visited today) - these are excluded from the queue
-  Set<String> _completedPatientIds = {};
-
   // Cached reference to mission repository for change listening.
   MissionDashboardRepository? _missionRepo;
   bool _missionListenerAdded = false;
@@ -215,9 +212,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   ) async {
     // Load completed patient IDs first
     final completedIds = await encounterDao.completedTodayPatientIds();
-    if (mounted) {
-      setState(() => _completedPatientIds = completedIds);
-    }
 
     // Load full queue
     final queue = await missionRepo.loadQueue(limit: 500);
@@ -990,7 +984,7 @@ class _SettingsMenu extends StatelessWidget {
           PopupMenuItem(
             value: 'toggle_dark',
             child: Consumer<ThemeProvider>(
-              builder: (_, theme, __) => ListTile(
+              builder: (_, theme, _) => ListTile(
                 leading: Icon(
                   theme.isDark ? Icons.light_mode : Icons.dark_mode,
                 ),
@@ -1295,6 +1289,7 @@ class _DashboardStatCard extends StatelessWidget {
       color: tokens.cardSurface,
       borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
       child: InkWell(
+        key: const Key('dashboard_stat_card_tap'),
         onTap: isLoading ? null : onTap,
         borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
         child: Padding(
@@ -1468,6 +1463,7 @@ class _MoreVisitsLink extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: InkWell(
+        key: const Key('dashboard_more_visits_tap'),
         onTap: onTap,
         borderRadius: BorderRadius.circular(LeapfrogColors.radiusMd),
         child: Container(
@@ -1685,6 +1681,7 @@ class _VisitFilterPanel extends StatelessWidget {
                 const Spacer(),
                 if (selectedNeeds.isNotEmpty)
                   GestureDetector(
+                    key: const Key('dashboard_filter_clear_needs_tap'),
                     onTap: onClearNeeds,
                     child: const Text(
                       MissionDashboardStrings.clearNeedFilters,
@@ -1721,6 +1718,7 @@ class _VisitFilterPanel extends StatelessWidget {
                   return Padding(
                     padding: const EdgeInsets.only(right: 6),
                     child: GestureDetector(
+                      key: ValueKey('dashboard_prog_filter_${prog.name}'),
                       onTap: () => onProgrammeToggled(prog),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
@@ -1766,6 +1764,7 @@ class _VisitFilterPanel extends StatelessWidget {
                   return Padding(
                     padding: const EdgeInsets.only(right: 6),
                     child: GestureDetector(
+                      key: ValueKey('dashboard_need_filter_${need.name}'),
                       onTap: () => onNeedToggled(need),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
@@ -1822,6 +1821,7 @@ class _VillageChip extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(right: 6),
       child: GestureDetector(
+        key: const Key('dashboard_filter_chip_tap'),
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

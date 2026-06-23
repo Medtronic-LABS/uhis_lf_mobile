@@ -45,6 +45,7 @@ class MissionQueueCard extends StatelessWidget {
           color: tokens.cardSurface,
           borderRadius: BorderRadius.circular(compact ? LeapfrogColors.radiusLg : 12),
           child: InkWell(
+            key: const Key('visit_queue_card_tap'),
             onTap: onTap,
             borderRadius: BorderRadius.circular(compact ? LeapfrogColors.radiusLg : 12),
             child: Container(
@@ -163,6 +164,7 @@ class MissionQueueCard extends StatelessWidget {
                       color: actionBg,
                       borderRadius: BorderRadius.circular(20),
                       child: InkWell(
+                        key: const Key('visit_queue_card_action_tap'),
                         borderRadius: BorderRadius.circular(20),
                         onTap: onAction,
                         child: Padding(

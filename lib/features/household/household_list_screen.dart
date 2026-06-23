@@ -545,7 +545,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
             controller: _scrollController,
             padding: const EdgeInsets.symmetric(vertical: 8),
             itemCount: items.length,
-            separatorBuilder: (_, __) => const Divider(height: 1, indent: 72),
+            separatorBuilder: (_, _) => const Divider(height: 1, indent: 72),
             itemBuilder: (context, index) {
               final item = items[index];
               return _HouseholdTile(
@@ -632,7 +632,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
               controller: _scrollController,
               padding: const EdgeInsets.symmetric(vertical: 8),
               itemCount: items.length,
-              separatorBuilder: (_, __) => const Divider(height: 1, indent: 72),
+              separatorBuilder: (_, _) => const Divider(height: 1, indent: 72),
               itemBuilder: (context, index) {
                 final item = items[index];
                 return _HouseholdWithMemberCountTile(
@@ -672,7 +672,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
                   controller: _scrollController,
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   itemCount: members.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1, indent: 72),
+                  separatorBuilder: (_, _) => const Divider(height: 1, indent: 72),
                   itemBuilder: (context, index) {
                     final member = members[index];
                     return _MemberTile(
@@ -716,7 +716,6 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
   /// Renders when navigating from dashboard with `?tier=...` or when
   /// the user toggles into tier-filter mode.
   Widget _buildTierChipRow() {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     final scheme = Theme.of(context).colorScheme;
     final tiers = [null, ...DashboardTier.values];
     return Container(
@@ -771,6 +770,7 @@ class _TierFilterChip extends StatelessWidget {
     final urgency = Theme.of(context).extension<UrgencyTheme>()!;
     final color = _tierColor(tier, urgency, tokens);
     return GestureDetector(
+      key: const Key('household_tier_filter_tap'),
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -866,6 +866,7 @@ class _FilterChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return GestureDetector(
+      key: const Key('household_programme_filter_tap'),
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
@@ -1190,10 +1191,10 @@ class _HouseholdItem {
     double? lat, lng;
     final latVal = json['latitude'];
     final lngVal = json['longitude'];
-    if (latVal is double) lat = latVal;
-    else if (latVal is num) lat = latVal.toDouble();
-    if (lngVal is double) lng = lngVal;
-    else if (lngVal is num) lng = lngVal.toDouble();
+    if (latVal is double) { lat = latVal; }
+    else if (latVal is num) { lat = latVal.toDouble(); }
+    if (lngVal is double) { lng = lngVal; }
+    else if (lngVal is num) { lng = lngVal.toDouble(); }
 
     final memberList = <_HouseholdMember>[];
     if (json['householdMembers'] is List) {

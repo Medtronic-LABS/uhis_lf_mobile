@@ -18,7 +18,6 @@ import 'dart:convert';
 
 import 'package:uuid/uuid.dart';
 
-import '../../../core/db/app_database.dart';
 import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/models/programme.dart';
 import '../composer/section_registry.dart';

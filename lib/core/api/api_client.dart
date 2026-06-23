@@ -1,8 +1,6 @@
-import 'dart:io' show Cookie;
-
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 
 import '../config/app_config.dart';
 import 'browser_adapter_stub.dart'
@@ -43,6 +41,28 @@ class ApiClient {
     final client = ApiClient._(dio, cookieJar);
     if (kIsWeb) {
       configureWebCredentials(dio);
+      // On web the browser manages cookies via withCredentials.  The Bearer
+      // token in the Authorization response header is NOT forwarded by XHR
+      // automatically — capture it on login and replay it on every subsequent
+      // request (mirrors the native interceptor below).
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            final token = client._authToken;
+            if (token != null && token.isNotEmpty) {
+              options.headers['Authorization'] = token;
+            }
+            handler.next(options);
+          },
+          onResponse: (response, handler) {
+            final authz = response.headers.value('authorization');
+            if (authz != null && authz.isNotEmpty) {
+              client._authToken = authz;
+            }
+            handler.next(response);
+          },
+        ),
+      );
     } else {
       dio.interceptors.add(
         InterceptorsWrapper(
@@ -90,7 +110,9 @@ class ApiClient {
                     if (c.name == _sessionCookieName) {
                       client._cachedJsession = c.value;
                     }
-                  } catch (_) {}
+                  } catch (e) {
+                    debugPrint('[api_client] malformed Set-Cookie, skipping: $e');
+                  }
                 }
               }
               if (stored.isNotEmpty) {

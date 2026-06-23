@@ -75,7 +75,7 @@ GoRouter buildRouter(AuthState auth) {
       // ─────────────────────────────────────────────────────────────────────
       GoRoute(
         path: '/',
-        builder: (_, __) => const _SplashScreen(),
+        builder: (_, _) => const _SplashScreen(),
       ),
       GoRoute(
         path: '/login',
@@ -85,23 +85,23 @@ GoRouter buildRouter(AuthState auth) {
       ),
       GoRoute(
         path: '/lock',
-        builder: (_, __) => const LockScreen(),
+        builder: (_, _) => const LockScreen(),
       ),
       GoRoute(
         path: '/onboarding',
-        builder: (_, __) => const OnboardingScreen(),
+        builder: (_, _) => const OnboardingScreen(),
       ),
       GoRoute(
         path: '/sync',
-        builder: (_, __) => const SyncProgressScreen(),
+        builder: (_, _) => const SyncProgressScreen(),
       ),
       GoRoute(
         path: '/pin-setup',
-        builder: (_, __) => const PinSetupScreen(),
+        builder: (_, _) => const PinSetupScreen(),
       ),
       GoRoute(
         path: '/pin-unlock',
-        builder: (_, __) => const PinUnlockScreen(),
+        builder: (_, _) => const PinUnlockScreen(),
       ),
 
       // ─────────────────────────────────────────────────────────────────────
@@ -118,7 +118,7 @@ GoRouter buildRouter(AuthState auth) {
             routes: [
               GoRoute(
                 path: '/home',
-                builder: (_, __) => const DashboardScreen(),
+                builder: (_, _) => const DashboardScreen(),
               ),
             ],
           ),
@@ -150,7 +150,7 @@ GoRouter buildRouter(AuthState auth) {
                   // Households view (same tab, different mode)
                   GoRoute(
                     path: 'households',
-                    builder: (_, __) => const HouseholdListScreen(
+                    builder: (_, _) => const HouseholdListScreen(
                       mode: HouseholdListMode.households,
                     ),
                   ),
@@ -356,11 +356,11 @@ GoRouter buildRouter(AuthState auth) {
       // ─────────────────────────────────────────────────────────────────────
       GoRoute(
         path: '/dashboard',
-        redirect: (_, __) => '/home',
+        redirect: (_, _) => '/home',
       ),
       GoRoute(
         path: '/households',
-        redirect: (_, __) => '/patients/households',
+        redirect: (_, _) => '/patients/households',
       ),
       GoRoute(
         path: '/households/:id',
@@ -368,11 +368,11 @@ GoRouter buildRouter(AuthState auth) {
       ),
       GoRoute(
         path: '/members',
-        redirect: (_, __) => '/patients',
+        redirect: (_, _) => '/patients',
       ),
       GoRoute(
         path: '/referrals',
-        redirect: (_, __) => '/tasks',
+        redirect: (_, _) => '/tasks',
       ),
       GoRoute(
         path: '/patient/:id',

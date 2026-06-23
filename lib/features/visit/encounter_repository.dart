@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/api/api_repository.dart';
-import '../../core/auth/auth_repository.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/models/assessment_history_item.dart';
 import '../../core/models/programme.dart';
@@ -70,13 +69,10 @@ class EncounterRepository extends ApiRepository {
     super.api,
     this._dao, {
     OfflineSyncService? offlineSync,
-    AuthRepository? auth,
-  })  : _offlineSync = offlineSync,
-        _auth = auth;
+  }) : _offlineSync = offlineSync;
 
   final EncounterDao _dao;
   final OfflineSyncService? _offlineSync;
-  final AuthRepository? _auth;
 
   /// Generate a UUID v4 encounter reference ID.
   static String _generateId() => const Uuid().v4();

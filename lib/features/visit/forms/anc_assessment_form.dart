@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../app/theme.dart';
 import '../../scribe/models/ai_extracted_field.dart';
 import '../../scribe/scribe_controller.dart';
 import '../../scribe/scribe_session.dart';
@@ -822,10 +823,10 @@ class _AncAssessmentFormState extends State<AncAssessmentForm> {
   }
 
   Color _getAnemiaColor(double hb) {
-    if (hb >= 11) return Colors.green.shade100;
-    if (hb >= 10) return Colors.yellow.shade100;
-    if (hb >= 7) return Colors.orange.shade100;
-    return Colors.red.shade100;
+    if (hb >= 11) return AppColors.statusSuccessSurface;
+    if (hb >= 10) return AppColors.statusWarningSurface;
+    if (hb >= 7) return AppColors.statusWarningSurface;
+    return AppColors.statusCriticalSurface;
   }
 
   List<Widget> _buildBirthPrepSection() {
@@ -984,7 +985,7 @@ class _DropdownField extends StatelessWidget {
         labelText: label,
         border: const OutlineInputBorder(),
       ),
-      value: value,
+      initialValue: value,
       items: options
           .map((o) => DropdownMenuItem(value: o, child: Text(o)))
           .toList(),

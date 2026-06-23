@@ -50,7 +50,6 @@ class AuthState extends ChangeNotifier {
   bool get locked => _locked;
 
   Future<void> bootstrap() async {
-    final t = await _repo.currentTenantId();
     _username = await _repo.lastUsername();
     _biometricEnabled = await _repo.isBiometricEnabled();
     _pinEnabled = await _repo.isPinSet();

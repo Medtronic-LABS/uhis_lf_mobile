@@ -232,23 +232,4 @@ class AiPathwayClient {
     }
   }
 
-  // ── Private helpers ────────────────────────────────────────────────────────
-
-  Future<void> _upsertCache(
-    String memberId,
-    PathwaySuggestionCache cache,
-  ) async {
-    final suggestionsJson = jsonEncode({
-      'suggestions': cache.suggestions.map((s) => s.toJson()).toList(),
-    });
-    await _db.insert(
-      _table,
-      {
-        'member_id': memberId,
-        'suggestions_json': suggestionsJson,
-        'fetched_at': cache.fetchedAt.millisecondsSinceEpoch,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-  }
 }

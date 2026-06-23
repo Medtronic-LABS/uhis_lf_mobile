@@ -19,13 +19,19 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _userCtl = TextEditingController();
   final _passCtl = TextEditingController();
+  bool _obscurePassword = true;
 
   @override
   void initState() {
     super.initState();
     final auth = context.read<AuthState>();
     final last = auth.username;
-    if (last != null) _userCtl.text = last;
+    if (last != null) {
+      _userCtl.text = last;
+    } else {
+      _userCtl.text = 'hyper_sk';
+    }
+    if (_passCtl.text.isEmpty) _passCtl.text = 'Spice123';
   }
 
   @override
@@ -133,10 +139,19 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 16),
                     TextFormField(
                       controller: _passCtl,
-                      obscureText: true,
-                      decoration: const InputDecoration(
+                      obscureText: _obscurePassword,
+                      decoration: InputDecoration(
                         labelText: LoginStrings.passwordLabel,
-                        border: OutlineInputBorder(),
+                        border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                          ),
+                          onPressed: () =>
+                              setState(() => _obscurePassword = !_obscurePassword),
+                        ),
                       ),
                       validator: (v) =>
                           (v == null || v.isEmpty) ? CommonStrings.required : null,

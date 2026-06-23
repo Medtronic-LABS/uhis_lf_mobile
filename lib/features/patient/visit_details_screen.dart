@@ -411,7 +411,7 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: scheme.secondaryContainer.withOpacity(0.3),
+            color: scheme.secondaryContainer.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: scheme.secondaryContainer),
           ),
@@ -520,7 +520,7 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: scheme.tertiaryContainer.withOpacity(0.3),
+            color: scheme.tertiaryContainer.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: scheme.tertiaryContainer),
           ),
@@ -576,7 +576,7 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: scheme.primaryContainer.withOpacity(0.3),
+        color: scheme.primaryContainer.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: scheme.primaryContainer),
       ),
@@ -732,7 +732,7 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
           end: Alignment.bottomRight,
           colors: [
             scheme.primary,
-            scheme.primary.withOpacity(0.8),
+            scheme.primary.withValues(alpha: 0.8),
           ],
         ),
       ),
@@ -754,7 +754,7 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: scheme.onPrimary.withOpacity(0.2),
+                  color: scheme.onPrimary.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
@@ -779,7 +779,7 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
                     Text(
                       dateFormat.format(widget.visit.visitDate),
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: scheme.onPrimary.withOpacity(0.9),
+                            color: scheme.onPrimary.withValues(alpha: 0.9),
                           ),
                     ),
                   ],
@@ -792,7 +792,7 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: scheme.onPrimary.withOpacity(0.2),
+                    color: scheme.onPrimary.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Text(

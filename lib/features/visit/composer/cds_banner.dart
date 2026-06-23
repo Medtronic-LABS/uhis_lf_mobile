@@ -77,7 +77,7 @@ class CdsBanner extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: iconColor.withOpacity(0.4)),
+        side: BorderSide(color: iconColor.withValues(alpha: 0.4)),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -107,7 +107,7 @@ class CdsBanner extends StatelessWidget {
                     Text(
                       CdsStrings.rationale(alert.rationaleKey!),
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: iconColor.withOpacity(0.8),
+                        color: iconColor.withValues(alpha: 0.8),
                       ),
                     ),
                   ],
@@ -149,7 +149,7 @@ class CdsBanner extends StatelessWidget {
                       if (onDismiss != null)
                         TextButton(
                           style: TextButton.styleFrom(
-                            foregroundColor: iconColor.withOpacity(0.7),
+                            foregroundColor: iconColor.withValues(alpha: 0.7),
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 6),
                             visualDensity: VisualDensity.compact,

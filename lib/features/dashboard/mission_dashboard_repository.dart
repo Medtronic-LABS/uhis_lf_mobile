@@ -21,7 +21,6 @@ import '../../core/models/sla.dart';
 import '../../core/sla/priority_scorer.dart';
 import '../../core/sla/sla_evaluator.dart';
 import '../worklist/worklist_repository.dart';
-import '../referral/referral_repository.dart' as referral_repo;
 
 /// Repository for the AI Mission Dashboard.
 ///
@@ -33,38 +32,23 @@ import '../referral/referral_repository.dart' as referral_repo;
 /// [PriorityScorer] when offline or when CQL service fails.
 class MissionDashboardRepository {
   MissionDashboardRepository({
-    required WorklistRepository worklist,
-    required referral_repo.ReferralRepository referrals,
-    required PatientDao patients,
-    required ReferralDao referralDao,
-    required FollowUpDao followUps,
-    required HouseholdDao households,
-    required SlaEvaluator slaEvaluator,
-    required PriorityScorer priorityScorer,
-    PregnancySnapshotDao? pregnancySnapshot,
-    TreatmentPresenceDao? treatmentPresence,
-    CqlApiService? cqlService,
-    AssessmentDao? assessments,
-    UserHierarchyService? hierarchy,
+    required this._worklist,
+    required this._patients,
+    required this._referralDao,
+    required this._followUps,
+    required this._households,
+    required this._slaEvaluator,
+    required this._priorityScorer,
+    this._pregnancySnapshot,
+    this._treatmentPresence,
+    this._cqlService,
+    this._assessments,
+    this._hierarchy,
     DateTime Function()? clock,
-  })  : _worklist = worklist,
-        _referrals = referrals,
-        _patients = patients,
-        _referralDao = referralDao,
-        _followUps = followUps,
-        _households = households,
-        _slaEvaluator = slaEvaluator,
-        _priorityScorer = priorityScorer,
-        _pregnancySnapshot = pregnancySnapshot,
-        _treatmentPresence = treatmentPresence,
-        _cqlService = cqlService,
-        _assessments = assessments,
-        _hierarchy = hierarchy,
-        _clock = clock ?? DateTime.now,
+  })  : _clock = clock ?? DateTime.now,
         _service = const MissionDashboardService();
 
   final WorklistRepository _worklist;
-  final referral_repo.ReferralRepository _referrals;
   final PatientDao _patients;
   final ReferralDao _referralDao;
   final FollowUpDao _followUps;

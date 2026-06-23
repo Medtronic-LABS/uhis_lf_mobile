@@ -25,7 +25,6 @@ import 'widgets/bulk_actions.dart';
 import 'widgets/critical_banner.dart';
 import 'widgets/follow_up_scheduler.dart';
 import 'widgets/loading_skeleton.dart';
-import 'widgets/notes_panel.dart';
 import 'widgets/prescription_viewer.dart';
 import 'widgets/priority_chip_row.dart';
 import 'widgets/search_filter_bar.dart';
@@ -86,7 +85,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
 
   // Offline state
   bool _isOffline = false;
-  int _pendingActions = 0;
+  final int _pendingActions = 0;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   // Loading state
@@ -1806,61 +1805,6 @@ class _ReferralListScreenState extends State<ReferralListScreen>
     }
   }
 
-  void _showRationaleSheet(BuildContext context, Referral r, Patient? p) {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) {
-        final scheme = Theme.of(ctx).colorScheme;
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 10, 24, 28),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(ReferralStrings.rationaleSheetTitle,
-                    style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        )),
-                const SizedBox(height: 10),
-                if (p?.name != null)
-                  Text(p!.name!,
-                      style: Theme.of(ctx).textTheme.bodyLarge?.copyWith(
-                            color: scheme.onSurface.withValues(alpha: 0.8),
-                          )),
-                const SizedBox(height: 16),
-                for (final d in r.priorityDrivers)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      children: [
-                        Icon(Icons.bolt, size: 20, color: scheme.tertiary),
-                        const SizedBox(width: 10),
-                        Expanded(
-                            child: Text(
-                          ReferralStrings.formatDriver(d),
-                          style: Theme.of(ctx).textTheme.bodyLarge,
-                        )),
-                      ],
-                    ),
-                  ),
-                const SizedBox(height: 16),
-                Text(
-                  '${ReferralStrings.modelVersionLabel}: '
-                  'on-device-priority-rule-v1',
-                  style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
-                        color: scheme.onSurface.withValues(alpha: 0.7),
-                        fontFamily: 'monospace',
-                      ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 }
 
 class _DashboardData {
@@ -1881,39 +1825,6 @@ class _DashboardData {
   final int criticalCount;
   final int activeCount;
   final DateTime? lastSyncedAt;
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.all(40),
-      child: Column(
-        children: [
-          Icon(Icons.assignment_outlined, size: 80, color: scheme.onSurface.withValues(alpha: 0.6)),
-          const SizedBox(height: 20),
-          Text(
-            ReferralStrings.emptyTitle,
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            ReferralStrings.emptyBody,
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: scheme.onSurface.withValues(alpha: 0.75),
-                ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _ErrorState extends StatelessWidget {
@@ -1979,9 +1890,11 @@ class _CompletedTodayChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    final theme = Theme.of(context);
+    final tokens = theme.extension<LeapfrogColors>()!;
     final color = tokens.statusSuccess;
     return GestureDetector(
+      key: const Key('referral_status_filter_tap'),
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -2004,8 +1917,7 @@ class _CompletedTodayChip extends StatelessWidget {
             const SizedBox(width: 6),
             Text(
               'Completed',
-              style: TextStyle(
-                fontSize: 12,
+              style: theme.textTheme.bodySmall?.copyWith(
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                 color: isSelected ? color : tokens.textMuted,
               ),
@@ -2020,8 +1932,7 @@ class _CompletedTodayChip extends StatelessWidget {
                 ),
                 child: Text(
                   '$count',
-                  style: TextStyle(
-                    fontSize: 10,
+                  style: theme.textTheme.labelSmall?.copyWith(
                     fontWeight: FontWeight.w700,
                     color: isSelected ? Colors.white : tokens.textMuted,
                   ),

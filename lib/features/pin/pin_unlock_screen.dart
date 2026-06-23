@@ -50,7 +50,6 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
     // Use select to only rebuild on specific field changes
     final biometricEnabled = context.select<AuthState, bool>((a) => a.biometricEnabled);
     final biometricAvailable = context.select<AuthState, bool>((a) => a.biometricAvailable);
-    final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
@@ -103,10 +102,11 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
                           onPressed: _busy
                               ? null
                               : () async {
+                                  final router = GoRouter.of(context);
                                   final auth = context.read<AuthState>();
                                   final ok = await auth.biometricUnlock();
                                   if (!mounted) return;
-                                  if (ok) context.go('/dashboard');
+                                  if (ok) router.go('/dashboard');
                                 },
                           icon: const Icon(Icons.lock_open),
                           label: const Text(

@@ -244,23 +244,27 @@ class _VitalRow extends StatelessWidget {
 
   Color _classificationColor(String c, ThemeData theme) {
     final lower = c.toLowerCase();
-    if (lower.contains('normal')) return Colors.green.shade100;
-    if (lower.contains('high') || lower.contains('elevated'))
+    if (lower.contains('normal')) { return Colors.green.shade100; }
+    if (lower.contains('high') || lower.contains('elevated')) {
       return Colors.orange.shade100;
-    if (lower.contains('low')) return Colors.orange.shade100;
-    if (lower.contains('critical') || lower.contains('severe'))
+    }
+    if (lower.contains('low')) { return Colors.orange.shade100; }
+    if (lower.contains('critical') || lower.contains('severe')) {
       return theme.colorScheme.errorContainer;
+    }
     return theme.colorScheme.surfaceContainerHighest;
   }
 
   Color _classificationTextColor(String c, ThemeData theme) {
     final lower = c.toLowerCase();
-    if (lower.contains('normal')) return Colors.green.shade800;
-    if (lower.contains('high') || lower.contains('elevated'))
+    if (lower.contains('normal')) { return Colors.green.shade800; }
+    if (lower.contains('high') || lower.contains('elevated')) {
       return Colors.orange.shade800;
-    if (lower.contains('low')) return Colors.orange.shade800;
-    if (lower.contains('critical') || lower.contains('severe'))
+    }
+    if (lower.contains('low')) { return Colors.orange.shade800; }
+    if (lower.contains('critical') || lower.contains('severe')) {
       return theme.colorScheme.error;
+    }
     return theme.colorScheme.onSurface;
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../app/theme.dart';
 import '../../scribe/models/ai_extracted_field.dart';
 import '../../scribe/scribe_controller.dart';
 import '../../scribe/scribe_session.dart';
@@ -224,17 +225,17 @@ class _NcdAssessmentFormState extends State<NcdAssessmentForm> {
     
     switch (source) {
       case FieldSource.aiPending:
-        color = const Color(0xFF7C3AED);
+        color = AppColors.aiPurple;
         label = 'AI';
         icon = Icons.auto_awesome;
         break;
       case FieldSource.aiAccepted:
-        color = const Color(0xFF059669);
+        color = AppColors.statusSuccess;
         label = 'AI ✓';
         icon = Icons.check;
         break;
       case FieldSource.aiModified:
-        color = const Color(0xFF2563EB);
+        color = AppColors.statusInfo;
         label = 'Edited';
         icon = Icons.edit;
         break;
@@ -256,8 +257,7 @@ class _NcdAssessmentFormState extends State<NcdAssessmentForm> {
           const SizedBox(width: 3),
           Text(
             label,
-            style: TextStyle(
-              fontSize: 10,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
               fontWeight: FontWeight.w600,
               color: color,
             ),
@@ -671,22 +671,22 @@ class _NcdAssessmentFormState extends State<NcdAssessmentForm> {
   }
 
   Color _getBmiColor(double bmi) {
-    if (bmi < 18.5) return Colors.blue.shade100;
-    if (bmi < 25) return Colors.green.shade100;
-    if (bmi < 30) return Colors.orange.shade100;
-    return Colors.red.shade100;
+    if (bmi < 18.5) return AppColors.statusInfoSurface;
+    if (bmi < 25) return AppColors.statusSuccessSurface;
+    if (bmi < 30) return AppColors.statusWarningSurface;
+    return AppColors.statusCriticalSurface;
   }
 
   Color _getGlucoseStatusColor(String status) {
     switch (status) {
       case 'Normal':
-        return Colors.green.shade100;
+        return AppColors.statusSuccessSurface;
       case 'Prediabetes':
-        return Colors.orange.shade100;
+        return AppColors.statusWarningSurface;
       case 'Diabetes':
-        return Colors.red.shade100;
+        return AppColors.statusCriticalSurface;
       default:
-        return Colors.grey.shade100;
+        return AppColors.cardSurfaceMuted;
     }
   }
 }

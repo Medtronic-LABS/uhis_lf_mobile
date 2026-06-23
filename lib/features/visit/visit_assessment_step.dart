@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../app/theme.dart';
 import '../../core/api/scribe_api_service.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/db/patient_dao.dart';
@@ -355,6 +356,7 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
       debugPrint('Referral recommended: $_referralRecommended');
 
       // Mark the encounter as completed so it shows in Tasks completed section
+      if (!mounted) return;
       final encounterDao = context.read<EncounterDao>();
       await encounterDao.updateAssessment(widget.visitId, assessmentData);
       debugPrint('Encounter ${widget.visitId} marked as completed');
@@ -364,6 +366,7 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
       // - next_due_at = now + interval (based on programme)
       // - missed_visit_count = 0 (reset since visit completed)
       if (widget.patientId != null) {
+        if (!mounted) return;
         final patientDao = context.read<PatientDao>();
         final now = DateTime.now();
         final nowMs = now.millisecondsSinceEpoch;
@@ -378,6 +381,7 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
         debugPrint('Updated patient ${widget.patientId} schedule: lastVisit=$nowMs, nextDue=$nextDueMs');
 
         // Recompute worklist priorities so patient moves out of Overdue
+        if (!mounted) return;
         final worklistRepo = context.read<WorklistRepository>();
         await worklistRepo.recomputeAllAfterSync();
         debugPrint('Worklist recomputed after assessment');
@@ -416,7 +420,7 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
               _referralRecommended ? Icons.warning : Icons.check_circle,
               color: _referralRecommended
                   ? theme.colorScheme.error
-                  : Colors.green,
+                  : AppColors.statusSuccess,
             ),
             const SizedBox(width: 12),
             const Text('Assessment Complete'),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/theme.dart';
 import '../../../core/models/referral.dart';
-import '../../../core/models/sla.dart';
 
 /// Search and filter bar for referral list.
 /// Provides text search, status filters, date range, and sort options.
@@ -260,27 +260,27 @@ enum ReferralStatusFilter {
   overdue(
     'Overdue',
     Icons.warning_amber_rounded,
-    Colors.red,
+    AppColors.statusCritical,
   ),
   newReferral(
     'New',
     Icons.fiber_new_rounded,
-    Colors.blue,
+    AppColors.statusInfo,
   ),
   inTreatment(
     'In Treatment',
     Icons.medical_services_rounded,
-    Colors.orange,
+    AppColors.statusWarning,
   ),
   completed(
     'Completed',
     Icons.check_circle_rounded,
-    Colors.green,
+    AppColors.statusSuccess,
   ),
   escalated(
     'Escalated',
     Icons.trending_up_rounded,
-    Colors.purple,
+    AppColors.aiPurple,
   );
 
   const ReferralStatusFilter(this.label, this.icon, this.color);

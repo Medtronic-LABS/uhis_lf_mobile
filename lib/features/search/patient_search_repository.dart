@@ -1,5 +1,4 @@
 import '../../core/api/api_repository.dart';
-import '../../core/auth/auth_repository.dart';
 import '../../core/db/member_dao.dart';
 
 enum PatientSearchField { name, phone, nid }
@@ -35,10 +34,8 @@ class PatientHit {
 /// All search is performed against the locally-synced member table populated
 /// by offline-sync/fetch-synced-data. No remote search calls are made.
 class PatientSearchRepository extends ApiRepository {
-  PatientSearchRepository(super.api, this._authRepo, {MemberDao? memberDao})
-      : _memberDao = memberDao;
+  PatientSearchRepository(super.api, {this._memberDao});
 
-  final AuthRepository _authRepo;
   final MemberDao? _memberDao;
 
   Future<List<PatientHit>> search({

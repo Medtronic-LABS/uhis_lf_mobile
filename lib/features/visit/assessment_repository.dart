@@ -62,7 +62,7 @@ class AssessmentRepository extends ChangeNotifier {
     // Include encounterId in otherDetails for persistence and API request
     final enrichedOtherDetails = <String, dynamic>{
       ...?otherDetails,
-      if (encounterId != null) 'encounterId': encounterId,
+      'encounterId': ?encounterId,
     };
 
     final entity = LocalAssessmentEntity(

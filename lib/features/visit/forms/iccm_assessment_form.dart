@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../app/theme.dart';
 import '../../scribe/models/ai_extracted_field.dart';
 import '../../scribe/scribe_controller.dart';
 import '../../scribe/scribe_session.dart';
@@ -1043,16 +1044,16 @@ class _MuacIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final bgColor = switch (colorCode) {
-      'red' => Colors.red.shade100,
-      'yellow' => Colors.yellow.shade100,
-      'green' => Colors.green.shade100,
-      _ => Colors.grey.shade100,
+      'red' => AppColors.statusCriticalSurface,
+      'yellow' => AppColors.statusWarningSurface,
+      'green' => AppColors.statusSuccessSurface,
+      _ => AppColors.cardSurfaceMuted,
     };
     final fgColor = switch (colorCode) {
-      'red' => Colors.red.shade900,
-      'yellow' => Colors.orange.shade900,
-      'green' => Colors.green.shade900,
-      _ => Colors.grey.shade900,
+      'red' => AppColors.imciText,
+      'yellow' => AppColors.ncdText,
+      'green' => AppColors.tbText,
+      _ => AppColors.textPrimary,
     };
 
     return Container(
@@ -1068,10 +1069,10 @@ class _MuacIndicator extends StatelessWidget {
             height: 24,
             decoration: BoxDecoration(
               color: switch (colorCode) {
-                'red' => Colors.red,
-                'yellow' => Colors.yellow,
-                'green' => Colors.green,
-                _ => Colors.grey,
+                'red' => AppColors.statusCritical,
+                'yellow' => AppColors.statusWarning,
+                'green' => AppColors.statusSuccess,
+                _ => AppColors.textMuted,
               },
               shape: BoxShape.circle,
               border: Border.all(color: Colors.black26),
@@ -1091,13 +1092,13 @@ class _MuacIndicator extends StatelessWidget {
                 ),
                 Text(
                   status,
-                  style: TextStyle(color: fgColor, fontSize: 12),
+                  style: theme.textTheme.bodySmall?.copyWith(color: fgColor),
                 ),
               ],
             ),
           ),
           if (colorCode == 'red')
-            Icon(Icons.warning, color: Colors.red.shade700),
+            Icon(Icons.warning, color: AppColors.statusCritical),
         ],
       ),
     );

@@ -15,6 +15,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/theme.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/models/programme.dart';
 import '../pathway/pathway_engine.dart';
@@ -65,15 +66,15 @@ class TriageResultScreen extends StatelessWidget {
   }
 
   Color get _urgencyColor {
-    if (pathways.isEmpty) return const Color(0xFF1E40AF);
-    if (_isUrgent) return const Color(0xFFDC2626); // red-600
-    return const Color(0xFFD97706); // amber-600
+    if (pathways.isEmpty) return AppColors.statusInfo;
+    if (_isUrgent) return AppColors.statusCritical;
+    return AppColors.statusWarning;
   }
 
   Color get _urgencyBgColor {
-    if (pathways.isEmpty) return const Color(0xFFEFF6FF);
-    if (_isUrgent) return const Color(0xFFFEF2F2);
-    return const Color(0xFFFFFBEB);
+    if (pathways.isEmpty) return AppColors.statusInfoSurface;
+    if (_isUrgent) return AppColors.statusCriticalSurface;
+    return AppColors.statusWarningSurface;
   }
 
   String get _urgencySummary {
@@ -168,7 +169,7 @@ class TriageResultScreen extends StatelessWidget {
     final programmes = pathways.map((p) => p.programme).toSet();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F2F8),
+      backgroundColor: AppColors.canvas,
       appBar: VisitStepHeader(
         step: VisitStep.triageResult,
         patientLabel: patientLabel,
@@ -189,12 +190,11 @@ class TriageResultScreen extends StatelessWidget {
 
           // ── Measurements section ────────────────────────────────────────────
           if (measures.isNotEmpty) ...[
-            const Text(
+            Text(
               TriageResultStrings.measureSectionLabel,
-              style: TextStyle(
-                fontSize: 11,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF6B7280),
+                color: AppColors.textMuted,
                 letterSpacing: 0.6,
               ),
             ),
@@ -225,10 +225,10 @@ class TriageResultScreen extends StatelessWidget {
                 primary != null
                     ? TriageResultStrings.ctaOpenChecklist
                     : TriageResultStrings.ctaNoPathways,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
               ),
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFE8356D),
+                backgroundColor: AppColors.pink,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
@@ -260,6 +260,7 @@ class _UrgencyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -289,10 +290,8 @@ class _UrgencyCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title,
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        color: color)),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w800, color: color)),
                 const SizedBox(height: 6),
                 Container(
                   padding: const EdgeInsets.all(10),
@@ -301,10 +300,8 @@ class _UrgencyCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(summary,
-                      style: TextStyle(
-                          fontSize: 12,
-                          color: color,
-                          height: 1.6)),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                          color: color, height: 1.6)),
                 ),
               ],
             ),
@@ -326,12 +323,13 @@ class _MeasureCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: AppColors.border),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -346,7 +344,7 @@ class _MeasureCard extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: const Color(0xFFF3F4F6),
+              color: AppColors.cardSurfaceMuted,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Center(
@@ -359,12 +357,12 @@ class _MeasureCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(item.label,
-                    style: const TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w700)),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w700)),
                 const SizedBox(height: 2),
                 Text(item.hint,
-                    style: const TextStyle(
-                        fontSize: 11, color: Color(0xFF6B7280))),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                        color: AppColors.textMuted)),
               ],
             ),
           ),
@@ -384,21 +382,22 @@ class _ProgrammeBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final names = programmes.map(nameOf).join(' + ');
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFFEEF0FF), Color(0xFFE8EAFF)],
+          colors: [AppColors.aiSurfaceStart, AppColors.aiSurfaceEnd],
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
         ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFD4D8FF)),
+        border: Border.all(color: AppColors.aiBorder),
       ),
       child: Row(
         children: [
-          const Icon(Icons.auto_awesome, color: Color(0xFF6B63D4), size: 20),
+          const Icon(Icons.auto_awesome, color: AppColors.aiPurple, size: 20),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -406,16 +405,15 @@ class _ProgrammeBanner extends StatelessWidget {
               children: [
                 Text(
                   '${TriageResultStrings.programmeBannerPrefix}$names${TriageResultStrings.programmeBannerSuffix}',
-                  style: const TextStyle(
-                      fontSize: 12,
+                  style: theme.textTheme.bodySmall?.copyWith(
                       fontWeight: FontWeight.w800,
-                      color: Color(0xFF3D3599)),
+                      color: AppColors.aiPurpleDark),
                 ),
                 const SizedBox(height: 2),
-                const Text(
+                Text(
                   TriageResultStrings.programmeBannerCta,
-                  style: TextStyle(
-                      fontSize: 11, color: Color(0xFF6B63D4)),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                      color: AppColors.aiPurple),
                 ),
               ],
             ),

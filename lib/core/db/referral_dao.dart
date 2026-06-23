@@ -166,7 +166,7 @@ class ReferralDao {
         'due_treatment_at': dueTreatmentAt,
         'escalation_level': escalationLevel,
         'updated_at': updatedAt ?? DateTime.now().millisecondsSinceEpoch,
-        if (closedAt != null) 'closed_at': closedAt,
+        'closed_at': ?closedAt,
       },
       where: 'id = ?',
       whereArgs: [referralId],

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/models/referral.dart';
-import '../../../core/models/sla.dart';
 
 /// Bottom action bar for bulk operations on selected referrals.
 class BulkActionsBar extends StatelessWidget {
@@ -172,12 +171,11 @@ class _BulkActionButtonState extends State<_BulkActionButton> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
     return Material(
       color: widget.color.withValues(alpha: 0.15),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
+        key: const Key('referral_bulk_action_tap'),
         onTap: _isLoading ? null : _handlePress,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
@@ -252,6 +250,7 @@ class SelectableReferralCard extends StatelessWidget {
             duration: const Duration(milliseconds: 200),
             opacity: isSelected ? 0.95 : 1,
             child: GestureDetector(
+              key: const Key('referral_card_long_press'),
               onLongPress: onToggleSelection,
               child: child,
             ),
@@ -264,6 +263,7 @@ class SelectableReferralCard extends StatelessWidget {
             top: 8,
             right: 8,
             child: GestureDetector(
+              key: const Key('referral_card_select_tap'),
               onTap: onToggleSelection,
               child: Container(
                 width: 28,

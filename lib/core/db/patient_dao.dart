@@ -48,10 +48,9 @@ class PatientDao {
         'risk_score': score,
         'risk_band': bandWireTag,
         'risk_reasons': reasonsJson,
-        if (nextDueAt != null) 'next_due_at': nextDueAt,
-        if (lastVisitAt != null) 'last_visit_at': lastVisitAt,
-        if (missedVisitCount != null)
-          'missed_visit_count': missedVisitCount,
+        'next_due_at': ?nextDueAt,
+        'last_visit_at': ?lastVisitAt,
+        'missed_visit_count': ?missedVisitCount,
         if (redFlag != null) 'red_flag': redFlag ? 1 : 0,
       },
       where: 'id = ?',
@@ -72,7 +71,7 @@ class PatientDao {
       {
         'last_visit_at': lastVisitAt,
         'next_due_at': nextDueAt,
-        if (missedVisitCount != null) 'missed_visit_count': missedVisitCount,
+        'missed_visit_count': ?missedVisitCount,
       },
       where: 'id = ?',
       whereArgs: [patientId],
@@ -191,8 +190,8 @@ class PatientDao {
     int? nextDueAt,
   }) async {
     final values = <String, dynamic>{
-      if (lastVisitAt != null) 'last_visit_at': lastVisitAt,
-      if (nextDueAt != null) 'next_due_at': nextDueAt,
+      'last_visit_at': ?lastVisitAt,
+      'next_due_at': ?nextDueAt,
     };
     if (values.isEmpty) return;
     await _db.db.update(

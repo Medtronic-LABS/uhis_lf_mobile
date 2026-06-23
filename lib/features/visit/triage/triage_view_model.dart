@@ -154,7 +154,7 @@ class TriageViewModel extends ChangeNotifier {
         notifyListeners();
         debugPrint(
           '[Triage] Loaded ${_aiSuggestions.length} AI suggestions from cache '
-          '(stale=${_aiCacheIsStale})',
+          '(stale=$_aiCacheIsStale)',
         );
       }
     });

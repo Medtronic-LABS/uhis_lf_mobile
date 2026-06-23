@@ -189,7 +189,7 @@ class OfflineSyncService extends ChangeNotifier {
       // member row belongs to that village — stamp it unconditionally so filters
       // using static-data IDs find the rows.
       if (villageIds.length == 1 && _members != null) {
-        await _members!.setVillageIdForAll(villageIds.first.toString());
+        await _members.setVillageIdForAll(villageIds.first.toString());
       }
 
       final int totalHouseholds = out.households;
@@ -246,7 +246,7 @@ class OfflineSyncService extends ChangeNotifier {
       'villageIds': villageIds, // integers, not strings
       if (since != null)
         'lastSyncTime': since.toUtc().toIso8601String(),
-      if (userId != null) 'userId': userId,
+      'userId': ?userId,
       'appVersionName': AppConfig.appVersionName,
       'appVersionCode': AppConfig.appVersionCode,
       if (deviceId.isNotEmpty) 'deviceId': deviceId,
@@ -587,16 +587,16 @@ class OfflineSyncService extends ChangeNotifier {
 
     // Persist households and members if found in bundle and DAOs are available
     if (households.isNotEmpty && _households != null) {
-      await _households!.upsertMany(households);
+      await _households.upsertMany(households);
     }
     if (members.isNotEmpty && _members != null) {
-      await _members!.upsertMany(members);
+      await _members.upsertMany(members);
     }
 
     // Back-propagate village data via in-memory map (handles rows saved by
     // earlier syncs without enrichment). Idempotent — already-set rows skipped.
     if (_members != null && hhRefToVillage.isNotEmpty) {
-      await _members!.propagateVillageFromHouseholds(
+      await _members.propagateVillageFromHouseholds(
         hhRefToVillage,
         hhRefToSubVillage: hhRefToSubVillage,
       );
@@ -605,21 +605,21 @@ class OfflineSyncService extends ChangeNotifier {
     // SQL JOIN fallback: use households.village_id to fill any remaining
     // member rows with null village_id.
     if (_members != null) {
-      await _members!.propagateVillageFromHouseholdTable();
+      await _members.propagateVillageFromHouseholdTable();
     }
 
     // Mission Dashboard side tables (schema v8). Replace-then-write so a
     // re-sync drops stale per-patient flags.
     if (_pregnancySnapshot != null) {
-      await _pregnancySnapshot!.clearAll();
+      await _pregnancySnapshot.clearAll();
       if (pregnancyRows.isNotEmpty) {
-        await _pregnancySnapshot!.upsertMany(pregnancyRows);
+        await _pregnancySnapshot.upsertMany(pregnancyRows);
       }
     }
     if (_treatmentPresence != null) {
-      await _treatmentPresence!.clearAll();
+      await _treatmentPresence.clearAll();
       if (treatmentPatientIds.isNotEmpty) {
-        await _treatmentPresence!
+        await _treatmentPresence
             .upsertAll(treatmentPatientIds, updatedAt: nowMs);
       }
     }
@@ -871,15 +871,6 @@ class OfflineSyncService extends ChangeNotifier {
     );
   }
 
-  static List _extractList(dynamic body) {
-    if (body is List) return body;
-    if (body is Map) {
-      if (body['entityList'] is List) return body['entityList'] as List;
-      if (body['data'] is List) return body['data'] as List;
-    }
-    return const [];
-  }
-
   /// Fetches assessment history and merges `serviceProvided` values into the
   /// local `patient_programmes` table. Called after `_persistBundle` so that
   /// the member→patient ID map is fully built before we do the lookup.
@@ -899,7 +890,7 @@ class OfflineSyncService extends ChangeNotifier {
           .toSet()
           .toList(growable: false);
       final memberToPatient =
-          await _members!.patientIdsByMemberIds(memberIds);
+          await _members.patientIdsByMemberIds(memberIds);
 
       // Group programmes, latest visitDate, and nextFollowUpDate per patientId.
       final newProgrammes = <String, Set<Programme>>{};
@@ -973,7 +964,6 @@ class OfflineSyncService extends ChangeNotifier {
     }
   }
 
-  @override
   /// Calls `POST /spice-service/static-data/user-data`, extracts village IDs,
   /// persists them via [AuthRepository.saveLinkedVillageIds], and returns the
   /// list. Returns an empty list if the endpoint fails or returns no villages.
@@ -1054,7 +1044,7 @@ class OfflineSyncService extends ChangeNotifier {
       'appType': AppConfig.appType,
       'villageIds': scope,
       if (since != null) 'lastSyncTime': since.toUtc().toIso8601String(),
-      if (userId != null) 'userId': userId,
+      'userId': ?userId,
       'appVersionName': AppConfig.appVersionName,
       'appVersionCode': AppConfig.appVersionCode,
       if (deviceId.isNotEmpty) 'deviceId': deviceId,
@@ -1106,6 +1096,7 @@ class OfflineSyncService extends ChangeNotifier {
     return const [];
   }
 
+  @override
   void dispose() {
     _progressController.close();
     super.dispose();

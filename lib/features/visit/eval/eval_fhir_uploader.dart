@@ -19,17 +19,9 @@ import 'package:http/http.dart' as http;
 import 'eval_log_entry.dart';
 import 'shadow_log_service.dart';
 
-/// FHIR programme tag system — same as fhir-mapper convention (D7).
-const String _kProgrammeTagSystem = 'https://uhis.gov.bd/program';
-
-/// Eval dataset tag — used by clinical board queries.
-const String _kEvalTagSystem = 'https://uhis.gov.bd/eval';
-const String _kEvalTagCode = 'shadow-hint';
-
 class EvalFhirUploader {
-  EvalFhirUploader(this._httpClient, this._shadowLog);
+  EvalFhirUploader(this._shadowLog);
 
-  final http.Client _httpClient;
   final ShadowLogService _shadowLog;
 
   /// Upload all pending entries. Called by offline sync worker on reconnect.

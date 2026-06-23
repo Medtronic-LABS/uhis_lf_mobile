@@ -29,7 +29,6 @@ class _TbAssessmentFormState extends State<TbAssessmentForm> {
   String? _otherRelationship;
 
   // AI field tracking
-  final Map<String, FieldSource> _fieldSources = {};
   ScribeController? _scribeCtrl;
   bool _listeningToScribe = false;
 
@@ -362,21 +361,25 @@ class _TbAssessmentFormState extends State<TbAssessmentForm> {
                   style: theme.textTheme.titleSmall,
                 ),
                 const SizedBox(height: 8),
-                ...TbSleepLocationOptions.values.map((option) {
-                  return RadioListTile<String>(
-                    title: Text(option),
-                    value: option,
-                    groupValue: _contactTracing.sleepLocation,
-                    onChanged: (value) {
-                      setState(() {
-                        _contactTracing =
-                            _contactTracing.copyWith(sleepLocation: value);
-                      });
-                      _updateData();
-                    },
-                    contentPadding: EdgeInsets.zero,
-                  );
-                }),
+                RadioGroup<String>(
+                  groupValue: _contactTracing.sleepLocation,
+                  onChanged: (value) {
+                    setState(() {
+                      _contactTracing =
+                          _contactTracing.copyWith(sleepLocation: value);
+                    });
+                    _updateData();
+                  },
+                  child: Column(
+                    children: TbSleepLocationOptions.values.map((option) {
+                      return RadioListTile<String>(
+                        title: Text(option),
+                        value: option,
+                        contentPadding: EdgeInsets.zero,
+                      );
+                    }).toList(),
+                  ),
+                ),
                 const SizedBox(height: 8),
                 SwitchListTile(
                   title: const Text('Previously treated for TB'),

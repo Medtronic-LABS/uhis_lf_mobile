@@ -16,9 +16,15 @@ export async function loginViaUi(
 ) {
   await page.goto('/');
   await waitForFlutterReady(page);
-  await expect(page.getByText(/UHIS Next/).first()).toBeVisible({ timeout: 30_000 });
-  await page.getByLabel(/username/i).fill(user);
-  await page.getByLabel(/password/i).fill(pass);
+  await expect(page.getByLabel(/username/i)).toBeVisible({ timeout: 30_000 });
+  // Flutter web reads keyboard input from the page-level focused element, not
+  // from the semantics <input> directly. Click to focus, then keyboard.type().
+  await page.getByLabel(/username/i).click();
+  await page.waitForTimeout(300);
+  await page.keyboard.type(user, { delay: 100 });
+  await page.getByLabel(/password/i).click();
+  await page.waitForTimeout(500); // longer wait so Flutter fully registers focus before Shift+key
+  await page.keyboard.type(pass, { delay: 100 });
   await page.getByRole('button', { name: /sign in/i }).click();
   // First dashboard load shows the "Use device unlock?" biometric offer as a
   // modal barrier; dismiss it like a real user so the dashboard is reachable.

@@ -206,10 +206,10 @@ class HouseholdDetailData {
     double? lat, lng;
     final latVal = json['latitude'];
     final lngVal = json['longitude'];
-    if (latVal is double) lat = latVal;
-    else if (latVal is num) lat = latVal.toDouble();
-    if (lngVal is double) lng = lngVal;
-    else if (lngVal is num) lng = lngVal.toDouble();
+    if (latVal is double) { lat = latVal; }
+    else if (latVal is num) { lat = latVal.toDouble(); }
+    if (lngVal is double) { lng = lngVal; }
+    else if (lngVal is num) { lng = lngVal.toDouble(); }
 
     final memberList = <HouseholdMemberData>[];
     if (json['householdMembers'] is List) {
@@ -334,6 +334,7 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
       final assessmentDao = context.read<AssessmentDao>();
       final patientDao = context.read<PatientDao>();
       final hierarchy = context.read<UserHierarchyService>();
+      final repo = context.read<DashboardRepository>();
       await hierarchy.prefetch();
 
       final localMembers = await memberDao.getByHouseholdId(householdId);
@@ -370,7 +371,6 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
       }
 
       // Fall back to API only if local cache is empty
-      final repo = context.read<DashboardRepository>();
       final householdData = await repo.getHouseholdById(householdId);
 
       if (householdData != null && mounted) {
@@ -780,6 +780,7 @@ class _MemberCard extends StatelessWidget {
         color: scheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
+          key: const Key('household_member_card_tap'),
           onTap: onTap,
           borderRadius: BorderRadius.circular(12),
           child: Padding(

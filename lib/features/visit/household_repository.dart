@@ -87,7 +87,7 @@ class HouseholdRepository extends ApiRepository {
     if (householdId == null || householdId.isEmpty) return memberFlags;
     if (_members == null) return memberFlags;
 
-    final members = await _members!.getByHouseholdId(householdId);
+    final members = await _members.getByHouseholdId(householdId);
     final now = DateTime.now();
 
     for (final m in members) {
@@ -101,7 +101,7 @@ class HouseholdRepository extends ApiRepository {
       // Check open follow-ups from local DB
       if (_followUps != null) {
         try {
-          final fus = await _followUps!.forPatient(memberPatientId);
+          final fus = await _followUps.forPatient(memberPatientId);
           for (final fu in fus) {
             if (fu.completedAt != null) continue;
             if (fu.dueAt == null) continue;
@@ -123,7 +123,7 @@ class HouseholdRepository extends ApiRepository {
       final ageYears = dob != null ? now.year - dob.year : null;
       if (ageYears != null && ageYears < 5 && _immunisations != null) {
         try {
-          final immMap = await _immunisations!.forMany([memberPatientId]);
+          final immMap = await _immunisations.forMany([memberPatientId]);
           final imms = immMap[memberPatientId] ?? [];
           for (final imm in imms) {
             if (imm.givenAt == null) {

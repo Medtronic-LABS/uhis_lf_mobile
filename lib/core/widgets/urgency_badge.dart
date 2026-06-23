@@ -70,7 +70,8 @@ class UrgencyBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final urgency = Theme.of(context).extension<UrgencyTheme>()!;
+    final theme = Theme.of(context);
+    final urgency = theme.extension<UrgencyTheme>()!;
     final (foreground, background) = _colors(urgency);
 
     if (compact) {
@@ -82,9 +83,8 @@ class UrgencyBadge extends StatelessWidget {
         ),
         child: Text(
           _label,
-          style: TextStyle(
+          style: theme.textTheme.labelSmall?.copyWith(
             color: foreground,
-            fontSize: 11,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -111,9 +111,8 @@ class UrgencyBadge extends StatelessWidget {
           const SizedBox(width: 5),
           Text(
             _label,
-            style: TextStyle(
+            style: theme.textTheme.bodySmall?.copyWith(
               color: foreground,
-              fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
           ),

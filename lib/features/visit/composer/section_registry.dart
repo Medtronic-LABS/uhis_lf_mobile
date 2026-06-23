@@ -10,7 +10,7 @@
 library;
 
 import '../../../core/models/programme.dart';
-import '../../scribe/form_field_schema_builder.dart' as _scribe
+import '../../scribe/form_field_schema_builder.dart' as scribe
     show FormFieldSchema, FieldType;
 import 'form_section.dart';
 
@@ -1320,19 +1320,19 @@ class SectionRegistry {
           fieldId: 'glassPrescription',
           type: FieldType.textField,
           labelKey: 'fieldGlassPrescription',
-          visibleWhen: const Condition(fieldId: 'eyeTestOutcome', notEqualsValue: 'normal'),
+          visibleWhen: Condition(fieldId: 'eyeTestOutcome', notEqualsValue: 'normal'),
         ),
         FieldDef(
           fieldId: 'glassesSold',
           type: FieldType.booleanField,
           labelKey: 'fieldGlassesSold',
-          visibleWhen: const Condition(fieldId: 'eyeTestOutcome', equalsValue: 'glasses_prescribed'),
+          visibleWhen: Condition(fieldId: 'eyeTestOutcome', equalsValue: 'glasses_prescribed'),
         ),
         FieldDef(
           fieldId: 'referPlace',
           type: FieldType.textField,
           labelKey: 'fieldReferPlace',
-          visibleWhen: const Condition(fieldId: 'eyeTestOutcome', equalsValue: 'referral_needed'),
+          visibleWhen: Condition(fieldId: 'eyeTestOutcome', equalsValue: 'referral_needed'),
         ),
       ],
     ),
@@ -1410,11 +1410,11 @@ class SectionRegistry {
   ///   [FieldType.textField]        → [ScribeFieldType.string]
   ///   [FieldType.selectField]      → [ScribeFieldType.enumType]
   ///   [FieldType.multiSelectField] → [ScribeFieldType.enumType]
-  static List<_scribe.FormFieldSchema> toScribeSchema(
+  static List<scribe.FormFieldSchema> toScribeSchema(
     List<FormSection> sections,
   ) {
     final seen = <String>{};
-    final result = <_scribe.FormFieldSchema>[];
+    final result = <scribe.FormFieldSchema>[];
 
     for (final section in sections) {
       for (final field in section.fields) {
@@ -1422,7 +1422,7 @@ class SectionRegistry {
         seen.add(field.fieldId);
 
         final scribeType = _toScribeFieldType(field.type);
-        result.add(_scribe.FormFieldSchema(
+        result.add(scribe.FormFieldSchema(
           fieldId: field.fieldId,
           type: scribeType,
           label: field.fieldId, // label resolved by ComposerStrings at runtime
@@ -1436,19 +1436,19 @@ class SectionRegistry {
     return result;
   }
 
-  static _scribe.FieldType _toScribeFieldType(FieldType composerType) {
+  static scribe.FieldType _toScribeFieldType(FieldType composerType) {
     switch (composerType) {
       case FieldType.booleanField:
-        return _scribe.FieldType.boolean;
+        return scribe.FieldType.boolean;
       case FieldType.intField:
-        return _scribe.FieldType.integer;
+        return scribe.FieldType.integer;
       case FieldType.doubleField:
-        return _scribe.FieldType.decimal;
+        return scribe.FieldType.decimal;
       case FieldType.textField:
-        return _scribe.FieldType.string;
+        return scribe.FieldType.string;
       case FieldType.selectField:
       case FieldType.multiSelectField:
-        return _scribe.FieldType.enumType;
+        return scribe.FieldType.enumType;
     }
   }
 

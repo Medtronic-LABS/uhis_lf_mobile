@@ -233,7 +233,7 @@ class _ReferralCreateSheetState extends State<_ReferralCreateSheet> {
           ),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
-            value: _selectedReason,
+            initialValue: _selectedReason,
             hint: const Text(ReferralStrings.createReasonHint),
             decoration: const InputDecoration(border: OutlineInputBorder()),
             items: ReferralStrings.defaultReferralReasons

@@ -1,7 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
+import 'package:sqflite_common/sqflite.dart' show databaseFactoryOrNull;
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -81,6 +84,9 @@ Future<void> _clearSeededTestData(AppDatabase db) async {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SemanticsBinding.instance.ensureSemantics();
+  if (kIsWeb) {
+    databaseFactoryOrNull = databaseFactoryFfiWebNoWebWorker;
+  }
   // Offline-first: never fetch fonts from the network. Falls back to bundled
   // assets (if declared in pubspec fonts:) then to system fonts.
   GoogleFonts.config.allowRuntimeFetching = false;
@@ -89,7 +95,13 @@ Future<void> main() async {
   final biometric = BiometricService();
   final authState = AuthState(authRepo, biometric);
   await authState.bootstrap();
-  final appDb = await AppDatabase.open();
+  final appDb = await AppDatabase.open().onError((e, st) async {
+    if (kIsWeb) {
+      debugPrint('[main] Web DB open failed ($e) — retrying with in-memory path');
+      return AppDatabase.openInMemory();
+    }
+    throw e!;
+  });
   // Clear any legacy seeded test data (PAT-SEED-* entries)
   await _clearSeededTestData(appDb);
   final bioEnabled = await authRepo.isBiometricEnabled();
@@ -207,7 +219,6 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final MissionDashboardRepository _missionDashboard =
       MissionDashboardRepository(
     worklist: _worklist,
-    referrals: _referrals,
     patients: _patientDao,
     referralDao: _referralDao,
     followUps: _followUpDao,
@@ -288,15 +299,15 @@ class _UhisNextAppState extends State<UhisNextApp>
             create: (_) => DashboardRepository(
                 widget.api, widget.authRepo, _householdDao, _memberDao)),
         Provider<PatientSearchRepository>(
-            create: (_) => PatientSearchRepository(widget.api, widget.authRepo)),
+            create: (_) => PatientSearchRepository(widget.api)),
         Provider<MemberSearchRepository>(
             create: (_) =>
-                MemberSearchRepository(widget.api, widget.authRepo, _memberDao)),
+                MemberSearchRepository(widget.api, _memberDao)),
         Provider<HouseholdSearchRepository>(
             create: (_) => HouseholdSearchRepository(_householdDao)),
         ProxyProvider2<MemberSearchRepository, HouseholdSearchRepository,
             GlobalSearchRepository>(
-          update: (_, m, h, __) => GlobalSearchRepository(m, h),
+          update: (_, m, h, _) => GlobalSearchRepository(m, h),
         ),
         Provider<RiskScoringService>.value(value: _risk),
         ChangeNotifierProvider<OfflineSyncService>.value(value: _sync),
@@ -336,7 +347,6 @@ class _UhisNextAppState extends State<UhisNextApp>
                   widget.api,
                   ctx.read<EncounterDao>(),
                   offlineSync: _sync,
-                  auth: widget.authRepo,
                 )),
         Provider<VitalsRepository>(
             create: (ctx) => VitalsRepository(
