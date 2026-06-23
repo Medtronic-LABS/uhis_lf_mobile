@@ -7,16 +7,13 @@ import '../../app/theme.dart';
 import '../../app/theme_provider.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
-import '../../core/auth/user_hierarchy_service.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/db/household_dao.dart';
 import '../../core/db/local_dashboard_repository.dart';
-import '../../core/db/member_dao.dart';
 import '../../core/models/dashboard_tier.dart';
 import '../../core/models/mission_queue_item.dart';
 import '../../core/models/programme.dart';
-import '../../core/widgets/location_filter_sheet.dart';
 import '../referral/referral_repository.dart';
 import '../search/global_search_bar.dart';
 import '../visit/visit_controller.dart';
@@ -58,6 +55,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<List<MissionQueueItem>>? _queueFuture;
   Future<ReferralSummary>? _referralSummaryFuture;
   
+
   // Cached reference to mission repository for change listening.
   MissionDashboardRepository? _missionRepo;
   bool _missionListenerAdded = false;
@@ -67,11 +65,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // Version counter for forcing FutureBuilder rebuilds.
   int _refreshVersion = 0;
-
-  // Location / SS filter state
-  String? _selectedVillageId;
-  String? _selectedSubVillageId;
-  String? _selectedShebikaId;
 
   // Inline village chip + need filter
   List<String> _inlineVillages = const [];
@@ -221,12 +214,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       item.patientId == null || !completedIds.contains(item.patientId)
     ).toList();
 
-    // Apply location filter
-    // ignore: use_build_context_synchronously
-    if (!mounted) return withoutCompleted;
-    // ignore: use_build_context_synchronously
-    final locationFiltered = await _applyLocationFilter(withoutCompleted, context);
-
     // Extract distinct village labels for inline chips (from un-completed queue)
     final allVillageLabels = withoutCompleted
         .map((i) => i.village?.trim())
@@ -255,7 +242,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     // Apply inline village chip filter
-    var result = locationFiltered;
+    var result = withoutCompleted;
     final chipVillage = _selectedVillageChipName;
     if (chipVillage != null) {
       result = result.where((i) => i.village?.trim() == chipVillage).toList();
@@ -422,34 +409,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (mounted) context.push('/tasks');
   }
 
-  /// Resolved display label for the most-specific active filter, or null.
-  /// Priority: sub-village > SS > village.
-  String? _activeFilterLabel() {
-    final hierarchy = context.read<UserHierarchyService>();
-    if (_selectedSubVillageId != null) {
-      return hierarchy.subVillages
-              ?.where((sv) => sv.id == _selectedSubVillageId)
-              .firstOrNull
-              ?.name ??
-          _selectedSubVillageId;
-    }
-    if (_selectedShebikaId != null) {
-      return hierarchy.ssWorkers
-              ?.where((ss) => ss.id == _selectedShebikaId)
-              .firstOrNull
-              ?.name ??
-          _selectedShebikaId;
-    }
-    if (_selectedVillageId != null) {
-      return hierarchy.villages
-              ?.where((v) => v.id == _selectedVillageId)
-              .firstOrNull
-              ?.name ??
-          _selectedVillageId;
-    }
-    return null;
-  }
-
   Set<_NeedFilter> _computeAvailableNeeds(List<MissionQueueItem> items) {
     final available = <_NeedFilter>{};
     for (final item in items) {
@@ -502,98 +461,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     }
     return false;
-  }
-
-  void _clearAllFilters() {
-    setState(() {
-      _selectedVillageId = null;
-      _selectedSubVillageId = null;
-      _selectedShebikaId = null;
-      _selectedNeeds = const {};
-      _selectedProgrammes = const {};
-    });
-    _loadMissionData();
-  }
-
-  /// Opens the location/SS filter bottom sheet backed by the API hierarchy.
-  Future<void> _openFilterSheet() async {
-    final hierarchySvc = context.read<UserHierarchyService>();
-    await hierarchySvc.prefetch();
-    if (!mounted) return;
-    final villages = hierarchySvc.villages ?? const [];
-    final allSubVillages = hierarchySvc.subVillages ?? const [];
-    final ssWorkers = hierarchySvc.ssWorkers ?? const [];
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => LocationFilterSheet(
-        villages: villages.map((v) => (id: v.id, name: v.name)).toList(),
-        allSubVillages: allSubVillages,
-        ssWorkers: ssWorkers,
-        selectedVillageId: _selectedVillageId,
-        selectedSubVillageId: _selectedSubVillageId,
-        selectedShebikaId: _selectedShebikaId,
-        onApply: (v, sv, ss) {
-          setState(() {
-            _selectedVillageId = v;
-            _selectedSubVillageId = sv;
-            _selectedShebikaId = ss;
-          });
-          _loadMissionData();
-        },
-      ),
-    );
-  }
-
-  /// Applies the active location filter to a list of [MissionQueueItem].
-  /// Returns the original list unchanged when no filter is active.
-  Future<List<MissionQueueItem>> _applyLocationFilter(
-    List<MissionQueueItem> items,
-    BuildContext context,
-  ) async {
-    if (_selectedVillageId == null &&
-        _selectedSubVillageId == null &&
-        _selectedShebikaId == null) {
-      return items;
-    }
-
-    // Resolve SS → sub-village IDs before any async gap.
-    List<String>? ssSubVillageIds;
-    if (_selectedShebikaId != null) {
-      final hierarchySvc = context.read<UserHierarchyService>();
-      final ss = (hierarchySvc.ssWorkers ?? const [])
-          .where((s) => s.id == _selectedShebikaId)
-          .firstOrNull;
-      if (ss != null && ss.subVillages.isNotEmpty) {
-        ssSubVillageIds = ss.subVillages.map((sv) => sv.id).toList();
-      }
-    }
-
-    // Village filter on queue items directly (item.village = villageId after sync fix).
-    var filtered = items;
-    if (_selectedVillageId != null) {
-      filtered = filtered
-          .where((i) => i.village == _selectedVillageId)
-          .toList();
-    }
-
-    // Sub-village / SS filter via members table.
-    final subVillageIds = ssSubVillageIds ??
-        (_selectedSubVillageId != null ? [_selectedSubVillageId!] : null);
-    if (subVillageIds != null) {
-      final memberDao = context.read<MemberDao>();
-      final matchingIds =
-          await memberDao.getPatientIdsBySubVillages(subVillageIds);
-      filtered = filtered
-          .where((i) =>
-              i.patientId != null && matchingIds.contains(i.patientId))
-          .toList();
-    }
-
-    return filtered;
   }
 
   @override
@@ -681,11 +548,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              _TodaysVisitsHeader(
-                                onFilter: _openFilterSheet,
-                                activeFilterLabel: _activeFilterLabel(),
-                                onClearFilter: _clearAllFilters,
-                              ),
+                              const _TodaysVisitsHeader(),
                               const SizedBox(height: 8),
                               const Padding(
                                 padding: EdgeInsets.symmetric(vertical: 32),
@@ -700,11 +563,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              _TodaysVisitsHeader(
-                                onFilter: _openFilterSheet,
-                                activeFilterLabel: _activeFilterLabel(),
-                                onClearFilter: _clearAllFilters,
-                              ),
+                              const _TodaysVisitsHeader(),
                               const SizedBox(height: 8),
                               _EmptyVisitsCard(),
                             ],
@@ -809,11 +668,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            _TodaysVisitsHeader(
-                                onFilter: _openFilterSheet,
-                                activeFilterLabel: _activeFilterLabel(),
-                                onClearFilter: _clearAllFilters,
-                              ),
+                            const _TodaysVisitsHeader(),
                             const SizedBox(height: 8),
                             ...widgets,
                             if (overflow > 0)
@@ -1166,18 +1021,7 @@ class _DashboardHeader extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          // Search bar with QR-scan affordance
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: tokens.cardSurface,
-              borderRadius:
-                  BorderRadius.circular(LeapfrogColors.radiusMd),
-            ),
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 4),
-              child: GlobalSearchBar(),
-            ),
-          ),
+          const GlobalSearchBar(),
         ],
       ),
     );
@@ -1200,8 +1044,10 @@ class _DashboardStatsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
         Expanded(
           child: FutureBuilder<List<MissionQueueItem>>(
             future: queueFuture,
@@ -1252,6 +1098,7 @@ class _DashboardStatsRow extends StatelessWidget {
           ),
         ),
       ],
+    ),
     );
   }
 }
@@ -1380,25 +1227,12 @@ class _DashboardStatCard extends StatelessWidget {
 }
 
 class _TodaysVisitsHeader extends StatelessWidget {
-  const _TodaysVisitsHeader({
-    required this.onFilter,
-    this.activeFilterLabel,
-    this.onClearFilter,
-  });
-
-  final VoidCallback onFilter;
-
-  /// Resolved display label when a filter is active (e.g. "Dinajpur").
-  /// Null when no filter is selected — shows the placeholder chip instead.
-  final String? activeFilterLabel;
-  final VoidCallback? onClearFilter;
+  const _TodaysVisitsHeader();
 
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
-    final scheme = Theme.of(context).colorScheme;
     final dateLabel = DateFormat('EEE d MMM').format(DateTime.now());
-    final isFiltered = activeFilterLabel != null;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -1413,30 +1247,21 @@ class _TodaysVisitsHeader extends StatelessWidget {
               ),
             ),
           ),
-          if (isFiltered)
-            InputChip(
-              label: Text(activeFilterLabel!,
-                  style: const TextStyle(fontSize: 11)),
-              onDeleted: onClearFilter,
-              onPressed: onFilter,
-              deleteIconColor: scheme.onSecondaryContainer,
-              backgroundColor: scheme.secondaryContainer,
-              labelStyle: TextStyle(color: scheme.onSecondaryContainer),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              visualDensity: VisualDensity.compact,
-            )
-          else
-            ActionChip(
-              avatar: Icon(Icons.filter_list_rounded,
-                  size: 14, color: scheme.onSurfaceVariant),
-              label: Text(MissionDashboardStrings.filterByLocation,
-                  style: TextStyle(
-                      fontSize: 11, color: scheme.onSurfaceVariant)),
-              onPressed: onFilter,
-              backgroundColor: scheme.surfaceContainerHighest,
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              visualDensity: VisualDensity.compact,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: tokens.aiSurfaceStart,
+              borderRadius: BorderRadius.circular(8),
             ),
+            child: Text(
+              MissionDashboardStrings.aiSortedBadge,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: tokens.aiPurple,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -1603,202 +1428,175 @@ class _VisitFilterPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.all(Radius.circular(14)),
-        boxShadow: [
-          BoxShadow(
-            color: Color(0x0A000000),
-            blurRadius: 4,
-            offset: Offset(0, 1),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Row 1: village chips ──────────────────────────────────────────
+        if (villages.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.only(bottom: 6),
+            child: Text(
+              MissionDashboardStrings.whichVillageVisiting,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF374151),
+              ),
+            ),
           ),
-        ],
-      ),
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Row 1: village chips ──────────────────────────────────────────
-          if (villages.isNotEmpty) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-              child: Text(
-                MissionDashboardStrings.whichVillageVisiting,
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF374151),
-                ),
-              ),
-            ),
-            SizedBox(
-              height: 34,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                children: [
-                  _VillageChip(
-                    label: MissionDashboardStrings.allVillages,
-                    isActive: selectedVillage == null,
-                    onTap: () => onVillageSelected(null),
-                  ),
-                  ...villages.map((v) => _VillageChip(
-                    label: v,
-                    isActive: selectedVillage == v,
-                    onTap: () => onVillageSelected(selectedVillage == v ? null : v),
-                  )),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            Divider(height: 1, color: const Color(0xFFE5E7EB)),
-            const SizedBox(height: 8),
-          ],
-
-          // ── Row 2: need chips ─────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-            child: Row(
+          SizedBox(
+            height: 34,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: EdgeInsets.zero,
               children: [
-                const Text(
-                  MissionDashboardStrings.filterByNeed,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF374151),
-                  ),
+                _VillageChip(
+                  label: MissionDashboardStrings.allVillages,
+                  isActive: selectedVillage == null,
+                  onTap: () => onVillageSelected(null),
                 ),
-                const SizedBox(width: 4),
-                Text(
-                  '(${MissionDashboardStrings.filterByNeedOptional})',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w400,
-                    color: Color(0xFF9CA3AF),
-                  ),
-                ),
-                const Spacer(),
-                if (selectedNeeds.isNotEmpty)
-                  GestureDetector(
-                    key: const Key('dashboard_filter_clear_needs_tap'),
-                    onTap: onClearNeeds,
-                    child: const Text(
-                      MissionDashboardStrings.clearNeedFilters,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: _pinkColor,
-                      ),
-                    ),
-                  ),
+                ...villages.map((v) => _VillageChip(
+                  label: v,
+                  isActive: selectedVillage == v,
+                  onTap: () => onVillageSelected(selectedVillage == v ? null : v),
+                )),
               ],
             ),
           ),
-          // Programme chips — dynamic, derived from actual patient data
-          if (availableProgrammes.isNotEmpty) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-              child: Text(
-                MissionDashboardStrings.filterByProgramme,
-                style: const TextStyle(
+          const SizedBox(height: 10),
+          const Divider(height: 1, color: Color(0xFFE5E7EB)),
+          const SizedBox(height: 8),
+        ],
+
+        // ── Row 2: need chips ─────────────────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Row(
+            children: [
+              const Text(
+                MissionDashboardStrings.filterByNeed,
+                style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                   color: Color(0xFF374151),
                 ),
               ),
-            ),
-            SizedBox(
-              height: 34,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                children: availableProgrammes.map((prog) {
-                  final active = selectedProgrammes.contains(prog);
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: GestureDetector(
-                      key: ValueKey('dashboard_prog_filter_${prog.name}'),
-                      onTap: () => onProgrammeToggled(prog),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: active ? _pinkActiveBg : Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: active
-                                ? _pinkColor
-                                : const Color(0xFFD1D5DB),
-                            width: 1,
-                          ),
-                        ),
-                        child: Text(
-                          _programmeLabel(prog),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight:
-                                active ? FontWeight.w800 : FontWeight.w500,
-                            color: active
-                                ? _pinkActiveText
-                                : const Color(0xFF374151),
-                          ),
-                        ),
-                      ),
+              const SizedBox(width: 4),
+              const Text(
+                '(${MissionDashboardStrings.filterByNeedOptional})',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w400,
+                  color: Color(0xFF9CA3AF),
+                ),
+              ),
+              const Spacer(),
+              if (selectedNeeds.isNotEmpty)
+                GestureDetector(
+                  key: const Key('dashboard_filter_clear_needs_tap'),
+                  onTap: onClearNeeds,
+                  child: const Text(
+                    MissionDashboardStrings.clearNeedFilters,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: _pinkColor,
                     ),
-                  );
-                }).toList(),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        // Programme chips — dynamic, derived from actual patient data
+        if (availableProgrammes.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.only(top: 4, bottom: 4),
+            child: Text(
+              MissionDashboardStrings.filterByProgramme,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF374151),
               ),
             ),
-          ],
+          ),
           SizedBox(
-              height: 34,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                // Meta chips (highRisk, missedFollowUp, pendingReferral) are
-                // always shown — they are valid for any patient. Programme-based
-                // chips (ancMnch, childImmunisation, ncd, eyeCare) are shown
-                children: _NeedFilter.values.map((need) {
-                  final active = selectedNeeds.contains(need);
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: GestureDetector(
-                      key: ValueKey('dashboard_need_filter_${need.name}'),
-                      onTap: () => onNeedToggled(need),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: active ? _pinkActiveBg : Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: active
-                                ? _pinkColor
-                                : const Color(0xFFD1D5DB),
-                            width: 1,
-                          ),
+            height: 34,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: EdgeInsets.zero,
+              children: availableProgrammes.map((prog) {
+                final active = selectedProgrammes.contains(prog);
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: GestureDetector(
+                    key: ValueKey('dashboard_prog_filter_${prog.name}'),
+                    onTap: () => onProgrammeToggled(prog),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: active ? _pinkActiveBg : Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: active ? _pinkColor : const Color(0xFFD1D5DB),
+                          width: 1,
                         ),
-                        child: Text(
-                          _needLabel(need),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight:
-                                active ? FontWeight.w800 : FontWeight.w500,
-                            color: active
-                                ? _pinkActiveText
-                                : const Color(0xFF374151),
-                          ),
+                      ),
+                      child: Text(
+                        _programmeLabel(prog),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: active ? FontWeight.w800 : FontWeight.w500,
+                          color: active ? _pinkActiveText : const Color(0xFF374151),
                         ),
                       ),
                     ),
-                  );
-                }).toList(),
-              ),
+                  ),
+                );
+              }).toList(),
             ),
-          const SizedBox(height: 2),
+          ),
+          const SizedBox(height: 6),
         ],
-      ),
+        SizedBox(
+          height: 34,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.zero,
+            children: _NeedFilter.values.map((need) {
+              final active = selectedNeeds.contains(need);
+              return Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: GestureDetector(
+                  key: ValueKey('dashboard_need_filter_${need.name}'),
+                  onTap: () => onNeedToggled(need),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: active ? _pinkActiveBg : Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: active ? _pinkColor : const Color(0xFFD1D5DB),
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      _needLabel(need),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: active ? FontWeight.w800 : FontWeight.w500,
+                        color: active ? _pinkActiveText : const Color(0xFF374151),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
     );
   }
 }

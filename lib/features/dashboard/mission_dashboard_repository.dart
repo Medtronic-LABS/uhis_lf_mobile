@@ -20,6 +20,7 @@ import '../../core/models/referral.dart';
 import '../../core/models/sla.dart';
 import '../../core/sla/priority_scorer.dart';
 import '../../core/sla/sla_evaluator.dart';
+import '../../core/models/programme.dart';
 import '../worklist/worklist_repository.dart';
 
 /// Repository for the AI Mission Dashboard.
@@ -272,7 +273,6 @@ class MissionDashboardRepository {
 
     // Load worklist entries
     final worklistEntries = await _worklist.load();
-    debugPrint('[MissionDashboardRepository] Loaded ${worklistEntries.length} worklist entries');
 
     // Load referrals using queryDashboard (excludes closed by default)
     final referrals = await _referralDao.queryDashboard(limit: 200);
@@ -487,11 +487,18 @@ class MissionDashboardRepository {
       }
     }
 
-    // pregnant proxy: any patient with a stored pregnancy snapshot is
-    // currently pregnant (or recently was — postpartum window is also a
-    // CRITICAL driver via the snapshot). Phase 6 can swap to Member.isPregnant
-    // once MemberDao is wired through this constructor.
-    final pregnantPatientIds = pregnancyByPatientId.keys.toSet();
+    // pregnant proxy: snapshot-backed patients + any ANC/PNC-enrolled patient
+    // from the worklist. Snapshot-only gave +0 composite bonus to ANC patients
+    // without a PregnancySnapshot row (e.g. first-sync or sparse server data),
+    // causing them to sort identically to low-risk patients in the same tier.
+    final pregnantPatientIds = <String>{
+      ...pregnancyByPatientId.keys,
+      ...worklistEntries
+          .where((e) =>
+              e.programmes.contains(Programme.anc) ||
+              e.programmes.contains(Programme.pnc))
+          .map((e) => e.patientId),
+    };
     final householdHeadPatientIds = <String>{};
 
     // Follow-up-row-derived signals: LTFU set, attempts max, ever-referred,
