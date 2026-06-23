@@ -761,7 +761,7 @@ abstract final class MissionDashboardStrings {
   static String todaysVisits(String date) => "Today's visits · $date";
   static const String filterByLocation = 'Village · SS · Area';
   static const String upcomingWorkHeader = 'Upcoming work — earliest first';
-  static const String aiSortedBadge = 'AI sorted';
+  static const String aiSortedBadge = '✦ AI sorted';
   static const String actionVisitNow = 'Visit now';
   static const String actionVisitToday = 'Visit today';
   static const String actionThisWeek = 'This week';
@@ -963,9 +963,9 @@ abstract final class MissionDashboardStrings {
   }
 
   // ── Inline Village + Need filter ─────────────────────────────────────────
-  static const String whichVillageVisiting = 'Which village are you visiting?';
+  static const String whichVillageVisiting = 'WHICH VILLAGE ARE YOU VISITING?';
   static const String allVillages = 'All villages';
-  static const String filterByNeed = 'Filter by need';
+  static const String filterByNeed = 'FILTER BY NEED';
   static const String filterByNeedOptional = 'optional';
   static const String needHighRisk = '⚠️ High-risk';
   static const String needAncMnch = '🤰 ANC / MNCH';

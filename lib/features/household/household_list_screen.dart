@@ -719,7 +719,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
     );
   }
 
-  /// Inline village chip row — "Which village are you visiting?"
+  /// Inline village chip row — "WHICH VILLAGE ARE YOU VISITING?"
   /// Mirrors the dashboard pattern. Hidden when ≤1 village in local data.
   Widget _buildInlineVillageChipRow(ColorScheme scheme) {
     if (_inlineVillages.isEmpty) return const SizedBox.shrink();
