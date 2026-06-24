@@ -68,20 +68,32 @@ abstract final class LockStrings {
 
   // Profile detail row labels.
   static const String skIdLabel = 'SK ID';
-  static const String upazilaLabel = 'Upazila';
+  static const String upazilaLabel = 'UPAZILA';
   static const String nidLabel = 'NID';
   static const String wardLabel = 'Ward';
   static const String households = 'households';
 
   static String welcomeBackNamed(String name) => 'Welcome back, $name';
+
+  static const String signInToStartYourDay = 'Sign in to start your day';
+  static const String shasthyaKormi = 'SHASTHYA KORMI';
+  static const String verifyFingerprint = 'Verify fingerprint';
+  static const String tapToPlaceFinger = 'Touch sensor to begin';
+  static const String tapToPlaceFingerSubtitle = 'Tap to place your finger and sign in';
+  static const String readingFingerprint = 'Reading fingerprint…';
+  static const String fingerprintVerified = 'Verified!';
+  static const String communityHealth = 'Community Health';
+  static const String programName = 'Apon Sushashthya';
+  static const String programSubtitle = 'আপন সুস্বাস্থ্য · Community Health';
+  static String orUsePin(int len) => 'Or use $len-digit PIN';
 }
 
 /// Android `BiometricPrompt` copy + biometric unlock messages.
 abstract final class BiometricStrings {
   BiometricStrings._();
 
-  static const String promptTitle = AppStrings.appName;
-  static const String promptHint = 'Verify your identity';
+  static const String promptTitle = 'Fingerprint verification';
+  static const String promptHint = 'Place your finger on the sensor';
   static const String cancelButton = CommonStrings.usePassword;
 }
 

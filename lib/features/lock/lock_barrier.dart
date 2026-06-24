@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../app/theme.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
+import '../../core/constants/app_strings.dart';
+import 'lock_header.dart';
 import 'lock_screen.dart' show LockContent;
 
 /// Mid-session lock overlay. Sits on top of the live widget tree so the
@@ -81,31 +84,36 @@ class _LockBarrierState extends State<LockBarrier> {
     final biometricAvailable = context.select<AuthState, bool>((a) => a.biometricAvailable);
     final pinEnabled = context.select<AuthState, bool>((a) => a.pinEnabled);
     
+    final programTitle = _summary?.area ?? LockStrings.programName;
+
     return PopScope(
       canPop: false,
       child: Material(
-        color: Theme.of(context).colorScheme.surface,
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 480),
-                child: LockContent(
-                  summary: _summary,
-                  busy: busy,
-                  failed: _failed,
-                  // Show biometric button only if user enabled it AND device has biometric enrolled
-                  biometricEnabled: biometricEnabled && biometricAvailable,
-                  pinEnabled: pinEnabled,
-                  isOnline: _isOnline,
-                  onUnlock: _trigger,
-                  onPinUnlock: () => context.read<GoRouter>().go('/pin-unlock'),
-                  onPassword: _usePassword,
+        color: AppColors.cardSurface,
+        child: Column(
+          children: [
+            LockProgramHeader(title: programTitle, pageCount: 8),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 480),
+                    child: LockContent(
+                      summary: _summary,
+                      busy: busy,
+                      failed: _failed,
+                      biometricEnabled: biometricEnabled && biometricAvailable,
+                      pinEnabled: pinEnabled,
+                      isOnline: _isOnline,
+                      onUnlock: _trigger,
+                      onPinUnlock: () => context.read<GoRouter>().go('/pin-unlock'),
+                      onPassword: _usePassword,
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
+          ],
         ),
       ),
     );

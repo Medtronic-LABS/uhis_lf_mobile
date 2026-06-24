@@ -422,10 +422,11 @@ class _LockBarrierOverlay extends StatefulWidget {
 
 class _LockBarrierOverlayState extends State<_LockBarrierOverlay> {
   AuthState? _authState;
+  GoRouter? _router;
   bool _showBarrier = false;
   bool _updateScheduled = false;
 
-  void _onAuthChanged() {
+  void _onAuthOrRouteChanged() {
     // Defer setState to the next frame to avoid conflicting with GoRouter's
     // rebuild triggered by the same notifyListeners() call.
     if (_updateScheduled) return;
@@ -440,8 +441,14 @@ class _LockBarrierOverlayState extends State<_LockBarrierOverlay> {
   void _updateBarrierState() {
     final auth = _authState;
     if (auth == null) return;
+    // Suppress barrier when the user navigated to the PIN entry screen —
+    // the barrier would otherwise sit on top of PinUnlockScreen, blocking it.
+    final loc = _router?.routerDelegate.currentConfiguration.uri.path ?? '';
     final shouldShow =
-        auth.status == AuthStatus.signedIn && auth.locked && auth.reentryEnabled;
+        auth.status == AuthStatus.signedIn &&
+        auth.locked &&
+        auth.reentryEnabled &&
+        loc != '/pin-unlock';
     if (shouldShow != _showBarrier) {
       setState(() => _showBarrier = shouldShow);
     }
@@ -452,18 +459,25 @@ class _LockBarrierOverlayState extends State<_LockBarrierOverlay> {
     super.didChangeDependencies();
     final newAuth = context.read<AuthState>();
     if (_authState != newAuth) {
-      _authState?.removeListener(_onAuthChanged);
+      _authState?.removeListener(_onAuthOrRouteChanged);
       _authState = newAuth;
-      _authState!.addListener(_onAuthChanged);
+      _authState!.addListener(_onAuthOrRouteChanged);
       // Defer initial state check to avoid build scope conflicts when
       // GoRouter's refreshListenable triggers simultaneously.
-      _onAuthChanged();
+      _onAuthOrRouteChanged();
+    }
+    final newRouter = context.read<GoRouter>();
+    if (_router != newRouter) {
+      _router?.routerDelegate.removeListener(_onAuthOrRouteChanged);
+      _router = newRouter;
+      _router!.routerDelegate.addListener(_onAuthOrRouteChanged);
     }
   }
 
   @override
   void dispose() {
-    _authState?.removeListener(_onAuthChanged);
+    _authState?.removeListener(_onAuthOrRouteChanged);
+    _router?.routerDelegate.removeListener(_onAuthOrRouteChanged);
     super.dispose();
   }
 

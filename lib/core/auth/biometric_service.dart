@@ -69,7 +69,6 @@ class BiometricService {
         authMessages: const [
           AndroidAuthMessages(
             signInTitle: BiometricStrings.promptTitle,
-            biometricHint: BiometricStrings.promptHint,
             cancelButton: BiometricStrings.cancelButton,
           ),
         ],

@@ -33,7 +33,9 @@ String _newPinSalt() {
 }
 
 class AuthRepository {
-  AuthRepository(this._api) : _storage = const FlutterSecureStorage() {
+  AuthRepository(this._api) : _storage = const FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  ) {
     _api.onAuthCookieRotated = (cookie, expiry) async {
       if (await isReentryEnabled()) {
         await _storage.write(key: _kBioAuthCookie, value: cookie);
@@ -119,13 +121,19 @@ class AuthRepository {
   }
 
   Future<UserProfileSummary> userProfileSummary() async {
+    final firstName = await _storage.read(key: _kFirstName);
+    final lastName  = await _storage.read(key: _kLastName);
+    final nid       = await _storage.read(key: _kNidOrPhone);
+    final upazila   = await _storage.read(key: _kUpazila);
+    // ignore: avoid_print
+    print('[userProfileSummary] firstName=$firstName lastName=$lastName nid=$nid upazila=$upazila');
     return UserProfileSummary(
-      firstName: await _storage.read(key: _kFirstName),
-      lastName: await _storage.read(key: _kLastName),
+      firstName: firstName,
+      lastName: lastName,
       skId: await _storage.read(key: _kSkId),
-      nidOrPhone: await _storage.read(key: _kNidOrPhone),
+      nidOrPhone: nid,
       ward: await _storage.read(key: _kWard),
-      upazila: await _storage.read(key: _kUpazila),
+      upazila: upazila,
       area: await _storage.read(key: _kArea),
       householdCount: int.tryParse(
           await _storage.read(key: _kHouseholdCountCache) ?? ''),
@@ -205,6 +213,9 @@ class AuthRepository {
     final lastName = (data['lastName'] as String?)?.trim();
     await writeOrDelete(_kLastName, lastName);
 
+    // ignore: avoid_print
+    print('[Auth] profile → firstName=$firstName lastName=$lastName');
+
     final idVal = data['id']?.toString();
     await writeOrDelete(_kUserId, idVal);
 
@@ -224,8 +235,14 @@ class AuthRepository {
     }
     await writeOrDelete(_kSkId, skId);
 
+    // NID/phone: session response carries phoneNumber directly.
+    final phoneNumber = (data['phoneNumber'] as String?)?.trim();
+    await writeOrDelete(_kNidOrPhone, phoneNumber);
+    // ignore: avoid_print
+    print('[Auth] profile → phoneNumber=$phoneNumber');
+
     // organizationIds[] carries numeric org IDs; store first as orgFhirId.
-    // Area/ward/upazila will be populated when user-data loads.
+    // Upazila is populated when user-data loads (chiefdoms[0].name).
     final orgIds = data['organizationIds'];
     String? orgFhirId;
     if (orgIds is List && orgIds.isNotEmpty) {
@@ -261,6 +278,14 @@ class AuthRepository {
     final joined = ids.join(',');
     await _storage.write(key: _kVillageIds, value: joined);
     await _storage.write(key: _kSubVillageIds, value: joined);
+  }
+
+  Future<void> saveUpazila(String? name) async {
+    if (name != null && name.isNotEmpty) {
+      await _storage.write(key: _kUpazila, value: name);
+    } else {
+      await _storage.delete(key: _kUpazila);
+    }
   }
 
   Future<void> logout() async {
