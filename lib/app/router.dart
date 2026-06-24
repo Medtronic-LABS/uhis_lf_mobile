@@ -1,7 +1,11 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/auth/auth_state.dart';
+import '../core/constants/app_strings.dart';
+import '../core/theme/app_theme.dart';
 import '../core/models/dashboard_tier.dart';
 import '../features/dashboard/mission_dashboard_screen.dart';
 import '../features/household/household_detail_screen.dart';
@@ -65,6 +69,14 @@ GoRouter buildRouter(AuthState auth) {
               return '/onboarding';
             }
             return '/home';
+          }
+          // Safety net: first-run guard for any in-app route (e.g. /home after sync).
+          if (!auth.onboardingComplete &&
+              !auth.pinEnabled &&
+              loc != '/onboarding' &&
+              loc != '/pin-setup' &&
+              loc != '/sync') {
+            return '/onboarding';
           }
           return null;
       }
@@ -390,24 +402,132 @@ GoRouter buildRouter(AuthState auth) {
   );
 }
 
-class _SplashScreen extends StatelessWidget {
+class _SplashScreen extends StatefulWidget {
   const _SplashScreen();
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        body: Center(
+  State<_SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<_SplashScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _dotsCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _dotsCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _dotsCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF1B2B5E),
+      body: SafeArea(
+        child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Image.asset(
-                'assets/images/app-logo-name.png',
-                height: 64,
-                fit: BoxFit.contain,
+              // Pink gradient logo box
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [AppColors.pink, AppColors.pinkDark],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(22),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.pink.withValues(alpha: 0.45),
+                      blurRadius: 40,
+                      offset: const Offset(0, 12),
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: Image.asset(
+                    'assets/images/app-logo-name.png',
+                    height: 44,
+                    fit: BoxFit.contain,
+                  ),
+                ),
               ),
-              const SizedBox(height: 32),
-              const CircularProgressIndicator(),
+              const SizedBox(height: 20),
+              const Text(
+                'UHIS Next',
+                style: TextStyle(
+                  fontFamily: 'Nunito',
+                  fontSize: 26,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                LockStrings.programSubtitle,
+                style: TextStyle(
+                  fontFamily: 'NunitoSans',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.white.withValues(alpha: 0.50),
+                ),
+              ),
+              const SizedBox(height: 40),
+              _AnimatedDots(controller: _dotsCtrl),
             ],
           ),
         ),
-      );
+      ),
+    );
+  }
+}
+
+class _AnimatedDots extends StatelessWidget {
+  const _AnimatedDots({required this.controller});
+  final AnimationController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(3, (n) {
+        return Padding(
+          padding: EdgeInsets.only(left: n == 0 ? 0 : 8),
+          child: AnimatedBuilder(
+            animation: controller,
+            builder: (context, _) {
+              final phase = (controller.value + n * 0.333) % 1.0;
+              final t = sin(phase * pi).clamp(0.0, 1.0);
+              final color = Color.lerp(
+                Colors.white.withValues(alpha: 0.25),
+                AppColors.pink,
+                t,
+              )!;
+              return Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                ),
+              );
+            },
+          ),
+        );
+      }),
+    );
+  }
 }

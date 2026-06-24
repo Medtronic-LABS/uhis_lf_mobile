@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
+import '../../core/constants/app_strings.dart';
 
 class LockProgramHeader extends StatelessWidget {
   const LockProgramHeader({
     super.key,
     required this.title,
-    this.subtitle = 'Community Health',
+    this.subtitle = LockStrings.programSubtitle,
     this.pageCount = 1,
     this.currentPage = 0,
   });
@@ -19,11 +20,12 @@ class LockProgramHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
       color: AppColors.navy,
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -31,22 +33,22 @@ class LockProgramHeader extends StatelessWidget {
                 title,
                 style: const TextStyle(
                   fontFamily: 'Nunito',
-                  fontSize: 22,
+                  fontSize: 20,
                   fontWeight: FontWeight.w800,
                   color: Colors.white,
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Text(
                 subtitle,
                 style: TextStyle(
                   fontFamily: 'NunitoSans',
-                  fontSize: 13,
+                  fontSize: 12,
                   fontWeight: FontWeight.w400,
-                  color: Colors.white.withValues(alpha: 0.70),
+                  color: Colors.white.withValues(alpha: 0.60),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               LockPageDots(count: pageCount, current: currentPage),
             ],
           ),

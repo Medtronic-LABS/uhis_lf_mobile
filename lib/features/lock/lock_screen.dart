@@ -80,7 +80,7 @@ class _LockScreenState extends State<LockScreen> {
       backgroundColor: AppColors.cardSurface,
       body: Column(
         children: [
-          LockProgramHeader(title: programTitle),
+          LockProgramHeader(title: programTitle, pageCount: 8),
           Expanded(
             child: SingleChildScrollView(
               child: Center(
@@ -107,7 +107,7 @@ class _LockScreenState extends State<LockScreen> {
   }
 }
 
-class LockContent extends StatelessWidget {
+class LockContent extends StatefulWidget {
   const LockContent({
     super.key,
     required this.summary,
@@ -131,6 +131,58 @@ class LockContent extends StatelessWidget {
   final VoidCallback onPinUnlock;
   final VoidCallback onPassword;
 
+  @override
+  State<LockContent> createState() => _LockContentState();
+}
+
+class _LockContentState extends State<LockContent>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _entranceCtrl;
+  late final List<Animation<double>> _slots;
+
+  @override
+  void initState() {
+    super.initState();
+    _entranceCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    )..forward();
+    // 6 slots: stagger step = 60 ms, each slot animates for 200 ms.
+    // Total window = 5 × 60 + 200 = 500 ms.
+    _slots = List.generate(
+      6,
+      (i) => CurvedAnimation(
+        parent: _entranceCtrl,
+        curve: Interval(
+          (i * 60) / 500,
+          ((i * 60) + 200) / 500,
+          curve: AppAnimations.standard,
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _entranceCtrl.dispose();
+    super.dispose();
+  }
+
+  Widget _enter(int index, Widget child) {
+    final anim = _slots[index];
+    return AnimatedBuilder(
+      animation: anim,
+      child: child,
+      builder: (_, c) => Opacity(
+        opacity: anim.value,
+        child: Transform.translate(
+          offset: Offset(0, 6 * (1 - anim.value)),
+          child: c,
+        ),
+      ),
+    );
+  }
+
   void _showOfflineMessage(BuildContext context) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -140,47 +192,42 @@ class LockContent extends StatelessWidget {
     );
   }
 
-  String _displayName() {
-    final s = summary;
-    if (s == null) return '';
-    final f = s.firstName?.trim() ?? '';
-    final l = s.lastName?.trim() ?? '';
-    return [f, l].where((e) => e.isNotEmpty).join(' ');
-  }
-
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final s = summary;
-    final name = _displayName();
-
+    final s = widget.summary;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const _UserAvatar(),
-          const SizedBox(height: 20),
-          Text(
-            name.isEmpty ? LockStrings.welcomeBack : LockStrings.welcomeBackNamed(name),
-            style: Theme.of(context)
-                .textTheme
-                .headlineSmall
-                ?.copyWith(fontWeight: FontWeight.w800),
-            textAlign: TextAlign.center,
+          _enter(0, const _UserAvatar()),
+          const SizedBox(height: 18),
+          _enter(
+            1,
+            Text(
+              LockStrings.welcomeBack,
+              style: Theme.of(context)
+                  .textTheme
+                  .headlineLarge
+                  ?.copyWith(fontWeight: FontWeight.w900, color: AppColors.navy),
+              textAlign: TextAlign.center,
+            ),
           ),
           const SizedBox(height: 4),
-          Text(
-            LockStrings.signInToStartYourDay,
-            style: Theme.of(context)
-                .textTheme
-                .bodyMedium
-                ?.copyWith(color: scheme.onSurfaceVariant),
-            textAlign: TextAlign.center,
+          _enter(
+            2,
+            Text(
+              LockStrings.signInToStartYourDay,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyLarge
+                  ?.copyWith(color: AppColors.textMuted),
+              textAlign: TextAlign.center,
+            ),
           ),
-          const SizedBox(height: 24),
-          if (s != null && s.hasAnyDetail) ...[
-            _UserProfileCard(summary: s),
+          const SizedBox(height: 20),
+          if (s != null) ...[
+            _enter(3, _UserProfileCard(summary: s)),
             const SizedBox(height: 16),
           ],
           ..._actionWidgets(context),
@@ -191,9 +238,8 @@ class LockContent extends StatelessWidget {
   }
 
   List<Widget> _actionWidgets(BuildContext context) {
-    if (busy) return const [Center(child: CircularProgressIndicator())];
     return [
-      if (failed) ...[
+      if (widget.failed) ...[
         Center(
           child: Text(
             LockStrings.biometricCancelled,
@@ -202,29 +248,48 @@ class LockContent extends StatelessWidget {
         ),
         const SizedBox(height: 8),
       ],
-      if (biometricEnabled) _FingerprintCard(onTap: onUnlock),
-      if (pinEnabled) ...[
+      _enter(
+        4,
+        _FingerprintCard(
+          onTap: widget.busy ? () {} : widget.onUnlock,
+          busy: widget.busy,
+          failed: widget.failed,
+        ),
+      ),
+      if (widget.pinEnabled && !widget.busy) ...[
         const SizedBox(height: 12),
         Center(
           child: TextButton(
-            onPressed: onPinUnlock,
+            onPressed: widget.onPinUnlock,
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.textMuted,
+              textStyle: const TextStyle(
+                fontFamily: 'NunitoSans',
+                fontSize: 12,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
             child: Text(LockStrings.orUsePin(AppConfig.pinLength)),
           ),
         ),
       ],
-      const SizedBox(height: 4),
-      Center(
-        child: TextButton.icon(
-          onPressed: isOnline ? onPassword : () => _showOfflineMessage(context),
-          icon: const Icon(Icons.lock_outline, size: 16),
-          label: Text(CommonStrings.usePassword),
-          style: TextButton.styleFrom(
-            foregroundColor: isOnline
-                ? Theme.of(context).colorScheme.onSurfaceVariant
-                : Theme.of(context).disabledColor,
+      if (!widget.busy) ...[
+        const SizedBox(height: 4),
+        Center(
+          child: TextButton.icon(
+            onPressed: widget.isOnline
+                ? widget.onPassword
+                : () => _showOfflineMessage(context),
+            icon: const Icon(Icons.lock_outline, size: 16),
+            label: Text(CommonStrings.usePassword),
+            style: TextButton.styleFrom(
+              foregroundColor: widget.isOnline
+                  ? Theme.of(context).colorScheme.onSurfaceVariant
+                  : Theme.of(context).disabledColor,
+            ),
           ),
         ),
-      ),
+      ],
     ];
   }
 }
@@ -234,10 +299,15 @@ class _UserAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const CircleAvatar(
-      radius: 36,
-      backgroundColor: AppColors.pink,
-      child: Icon(Icons.person_rounded, color: Colors.white, size: 36),
+    return Container(
+      width: 64,
+      height: 64,
+      decoration: BoxDecoration(
+        color: AppColors.pink,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: AppShadows.pinkIcon,
+      ),
+      child: const Icon(Icons.person_rounded, color: Colors.white, size: 34),
     );
   }
 }
@@ -271,66 +341,115 @@ class _UserProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // ignore: avoid_print
+    print('[ProfileCard] firstName=${summary.firstName} lastName=${summary.lastName} '
+        'fullName=${_fullName()} nidOrPhone=${summary.nidOrPhone} '
+        'upazila=${summary.upazila} skId=${summary.skId}');
     return Container(
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.navy,
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.navy, AppColors.navyMid],
+        ),
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      clipBehavior: Clip.hardEdge,
+      child: Stack(
         children: [
-          Text(
-            LockStrings.shasthyaKormi,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: Colors.white.withValues(alpha: 0.70),
-                  letterSpacing: 1.2,
-                ),
+          // Decorative ghost circles
+          Positioned(
+            right: -20,
+            top: -20,
+            child: Container(
+              width: 80,
+              height: 80,
+              decoration: const BoxDecoration(
+                color: Color(0x0DFFFFFF),
+                shape: BoxShape.circle,
+              ),
+            ),
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _InitialsAvatar(initials: _initials()),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          Positioned(
+            right: 10,
+            bottom: -10,
+            child: Container(
+              width: 50,
+              height: 50,
+              decoration: const BoxDecoration(
+                color: Color(0x0AFFFFFF),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+          // Card content
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  LockStrings.shasthyaKormi,
+                  style: const TextStyle(
+                    fontFamily: 'NunitoSans',
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0x80FFFFFF),
+                    letterSpacing: 0.80,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
                   children: [
-                    Text(
-                      _fullName().isNotEmpty ? _fullName() : LockStrings.profileLoading,
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                          ),
-                    ),
-                    if (_idLine().isNotEmpty)
-                      Text(
-                        _idLine(),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Colors.white.withValues(alpha: 0.60),
+                    _InitialsAvatar(initials: _initials()),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _fullName().isNotEmpty ? _fullName() : LockStrings.profileLoading,
+                            style: const TextStyle(
+                              fontFamily: 'Nunito',
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
                             ),
+                          ),
+                          if (_idLine().isNotEmpty)
+                            Text(
+                              _idLine(),
+                              style: TextStyle(
+                                fontFamily: 'NunitoSans',
+                                fontSize: 11,
+                                color: Colors.white.withValues(alpha: 0.60),
+                              ),
+                            ),
+                        ],
                       ),
+                    ),
                   ],
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _InfoCol(
-                  label: LockStrings.nidLabel,
-                  value: summary.nidOrPhone ?? '—',
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _InfoPanel(
+                        label: LockStrings.nidLabel,
+                        value: summary.nidOrPhone ?? '—',
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: _InfoPanel(
+                        label: LockStrings.upazilaLabel,
+                        value: summary.upazila?.toUpperCase() ?? '—',
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              Expanded(
-                child: _InfoCol(
-                  label: LockStrings.upazilaLabel,
-                  value: summary.upazila ?? '—',
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
@@ -346,111 +465,271 @@ class _InitialsAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 40,
-      height: 40,
-      decoration: BoxDecoration(
-        color: AppColors.navyOnDark,
-        borderRadius: BorderRadius.circular(20),
+      width: 44,
+      height: 44,
+      decoration: const BoxDecoration(
+        color: Color(0x26FFFFFF), // rgba(255,255,255,0.15)
+        shape: BoxShape.circle,
       ),
       alignment: Alignment.center,
       child: Text(
         initials,
-        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
+        style: const TextStyle(
+          fontFamily: 'Nunito',
+          fontSize: 16,
+          fontWeight: FontWeight.w800,
+          color: Colors.white,
+        ),
       ),
     );
   }
 }
 
-class _InfoCol extends StatelessWidget {
-  const _InfoCol({required this.label, required this.value});
+class _InfoPanel extends StatelessWidget {
+  const _InfoPanel({required this.label, required this.value});
 
   final String label;
   final String value;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: Colors.white.withValues(alpha: 0.50),
-                letterSpacing: 0.8,
-              ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-              ),
-        ),
-      ],
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0x1AFFFFFF), // rgba(255,255,255,0.10)
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontFamily: 'NunitoSans',
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              color: Color(0x80FFFFFF),
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 1),
+          Text(
+            value,
+            style: const TextStyle(
+              fontFamily: 'NunitoSans',
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _FingerprintCard extends StatelessWidget {
-  const _FingerprintCard({required this.onTap});
+class _FingerprintCard extends StatefulWidget {
+  const _FingerprintCard({
+    required this.onTap,
+    this.busy = false,
+    this.failed = false,
+  });
 
   final VoidCallback onTap;
+  final bool busy;
+  final bool failed;
+
+  @override
+  State<_FingerprintCard> createState() => _FingerprintCardState();
+}
+
+class _FingerprintCardState extends State<_FingerprintCard>
+    with TickerProviderStateMixin {
+  late final AnimationController _glowCtrl;
+  late final AnimationController _scanCtrl;
+  late final AnimationController _verifyCtrl;
+  late final Animation<double> _springAnim;
+  bool _isPressed = false;
+  bool _verified = false;
+
+  static const _navy = AppColors.navy;
+  static const _iconBoxIdle   = Color(0x1FFFFFFF); // white 12%
+  static const _iconBoxScan   = Color(0x33E8356D); // pink 20%
+  static const _iconBoxVerify = Color(0x3310B981); // green 20%
+  static const _verifyGreen   = Color(0xFF10B981);
+
+  @override
+  void initState() {
+    super.initState();
+    _glowCtrl = AnimationController(vsync: this, duration: AppAnimations.idleGlow)
+      ..repeat(reverse: true);
+    _scanCtrl  = AnimationController(vsync: this, duration: AppAnimations.scanPulse);
+    _verifyCtrl = AnimationController(vsync: this, duration: AppAnimations.verifyBounce);
+    _springAnim = CurvedAnimation(parent: _verifyCtrl, curve: AppAnimations.spring);
+  }
+
+  @override
+  void didUpdateWidget(_FingerprintCard old) {
+    super.didUpdateWidget(old);
+    if (widget.busy && !old.busy) {
+      _verified = false;
+      _glowCtrl.stop();
+      _scanCtrl.repeat(reverse: true);
+    }
+    if (!widget.busy && old.busy) {
+      _scanCtrl.stop();
+      _scanCtrl.animateTo(0);
+      if (!widget.failed) {
+        _verified = true;
+        _verifyCtrl.forward(from: 0);
+        Future.delayed(AppAnimations.verifyBounce, () {
+          if (mounted) _glowCtrl.repeat(reverse: true);
+        });
+      } else {
+        _glowCtrl.repeat(reverse: true);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _glowCtrl.dispose();
+    _scanCtrl.dispose();
+    _verifyCtrl.dispose();
+    super.dispose();
+  }
+
+  Widget _buildIconBox() {
+    return AnimatedBuilder(
+      animation: Listenable.merge([_glowCtrl, _scanCtrl]),
+      builder: (context, _) {
+        final Color boxColor = _verified
+            ? _iconBoxVerify
+            : widget.busy
+                ? _iconBoxScan
+                : _iconBoxIdle;
+        final Color iconColor = _verified
+            ? _verifyGreen
+            : Colors.white;
+        final double glowSpread = widget.busy
+            ? 4 * _scanCtrl.value
+            : 3 * _glowCtrl.value;
+        final Color glowColor = widget.busy
+            ? AppColors.pink.withValues(alpha: 0.35 * _scanCtrl.value)
+            : Colors.white.withValues(alpha: 0.15 * _glowCtrl.value);
+
+        return AnimatedBuilder(
+          animation: _springAnim,
+          builder: (_, child) => Transform.scale(
+            scale: 1.0 + 0.08 * _springAnim.value,
+            child: child,
+          ),
+          child: Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: boxColor,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: glowColor,
+                  blurRadius: 12,
+                  spreadRadius: glowSpread,
+                ),
+              ],
+            ),
+            child: Icon(Icons.fingerprint, size: 26, color: iconColor),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLabels() {
+    return AnimatedBuilder(
+      animation: _scanCtrl,
+      builder: (context, _) {
+        final String title = _verified
+            ? LockStrings.fingerprintVerified
+            : widget.busy
+                ? LockStrings.readingFingerprint
+                : LockStrings.verifyFingerprint;
+        final String subtitle = _verified
+            ? ''
+            : widget.busy
+                ? LockStrings.tapToPlaceFinger
+                : LockStrings.tapToPlaceFingerSubtitle;
+        final double opacity = widget.busy ? 0.5 + 0.5 * _scanCtrl.value : 1.0;
+        return Opacity(
+          opacity: opacity,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontFamily: 'Nunito',
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                ),
+              ),
+              if (subtitle.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.white.withValues(alpha: 0.6),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.navyDark,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: AppColors.navyOnDark,
-                borderRadius: BorderRadius.circular(12),
+    return AnimatedScale(
+      scale: _isPressed ? 0.97 : 1.0,
+      duration: AppAnimations.pressFeedback,
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _isPressed = true),
+        onTapUp: (_) {
+          setState(() => _isPressed = false);
+          if (!widget.busy) widget.onTap();
+        },
+        onTapCancel: () => setState(() => _isPressed = false),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+          decoration: BoxDecoration(
+            color: _navy,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: _navy.withValues(alpha: 0.25),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
               ),
-              child: const Icon(
-                Icons.fingerprint,
-                color: Colors.white,
-                size: 28,
+            ],
+          ),
+          child: Row(
+            children: [
+              _buildIconBox(),
+              const SizedBox(width: 14),
+              Expanded(child: _buildLabels()),
+              Icon(
+                Icons.chevron_right,
+                size: 20,
+                color: Colors.white.withValues(alpha: 0.5),
               ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    LockStrings.verifyFingerprint,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
-                  ),
-                  Text(
-                    LockStrings.tapToPlaceFinger,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.white.withValues(alpha: 0.60),
-                        ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              Icons.chevron_right_rounded,
-              color: Colors.white.withValues(alpha: 0.60),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

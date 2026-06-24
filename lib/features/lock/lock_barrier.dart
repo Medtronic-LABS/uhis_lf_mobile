@@ -92,7 +92,7 @@ class _LockBarrierState extends State<LockBarrier> {
         color: AppColors.cardSurface,
         child: Column(
           children: [
-            LockProgramHeader(title: programTitle),
+            LockProgramHeader(title: programTitle, pageCount: 8),
             Expanded(
               child: SingleChildScrollView(
                 child: Center(

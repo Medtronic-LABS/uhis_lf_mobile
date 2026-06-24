@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/auth/auth_state.dart';
+import '../../core/auth/user_hierarchy_service.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
 
@@ -47,6 +48,9 @@ class _LoginScreenState extends State<LoginScreen> {
     final ok = await auth.login(_userCtl.text.trim(), _passCtl.text);
     if (!mounted) return;
     if (ok) {
+      // Prefetch user hierarchy (saves upazila from chiefdoms[0].name) so the
+      // lock screen profile card shows correct data on next background lock.
+      context.read<UserHierarchyService>().prefetch().ignore();
       // Go to sync screen to download data before showing dashboard
       context.go('/sync');
     } else {
@@ -109,7 +113,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         if (showBio) const SizedBox(height: 8),
                         OutlinedButton.icon(
                           onPressed:
-                              busy ? null : () => context.go('/lock'),
+                              busy ? null : () => context.go('/pin-unlock'),
                           icon: const Icon(Icons.pin_outlined),
                           label: Text(PinStrings.usePin(AppConfig.pinLength)),
                         ),
@@ -180,7 +184,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 8),
                         Image.asset(
                           'assets/images/medtronic-labs-logo.png',
-                          height: 40,
+                          height: 32,
                           fit: BoxFit.contain,
                         ),
                       ],

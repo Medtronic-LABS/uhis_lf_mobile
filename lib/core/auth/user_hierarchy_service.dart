@@ -329,6 +329,20 @@ class UserHierarchyService extends ChangeNotifier {
             HealthFacilityRef.fromJson(Map<String, dynamic>.from(facRaw));
       }
 
+      // ── Upazila — chiefdoms[0].name ──────────────────────────────────────
+      String? upazilaName;
+      final chiefsRaw = entity['chiefdoms'];
+      debugPrint('[UserHierarchyService] chiefdoms raw: $chiefsRaw');
+      if (chiefsRaw is List && chiefsRaw.isNotEmpty) {
+        final first = chiefsRaw.first;
+        if (first is Map) {
+          final v = first['name'];
+          if (v != null) upazilaName = v.toString().trim();
+        }
+      }
+      debugPrint('[UserHierarchyService] upazila → $upazilaName');
+      await _auth.saveUpazila(upazilaName);
+
       // ── Persist LINKED_VILLAGE_IDS for offline sync ──────────────────────
       // These override the profile-derived village IDs so subsequent syncs
       // use exactly the villages from this endpoint (matches Android behaviour).

@@ -64,7 +64,7 @@ class AppConfig {
   /// Localized reason shown by Android `BiometricPrompt`.
   static const String biometricReason = String.fromEnvironment(
     'BIOMETRIC_REASON',
-    defaultValue: 'Unlock UHIS Next',
+    defaultValue: 'Place your registered finger on the sensor below',
   );
 
   /// Dev-only autologin. Leave blank in any non-dev build.
