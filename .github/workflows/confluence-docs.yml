@@ -1,0 +1,45 @@
+name: Publish Docs to Confluence
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'lib/**'
+      - 'pubspec.yaml'
+      - 'scripts/publish_confluence.py'
+      - '.github/workflows/confluence-docs.yml'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 50
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install atlassian-python-api
+
+      - name: Publish to Confluence
+        env:
+          CONFLUENCE_BASE_URL: ${{ secrets.CONFLUENCE_BASE_URL }}
+          CONFLUENCE_EMAIL: ${{ secrets.CONFLUENCE_EMAIL }}
+          CONFLUENCE_API_TOKEN: ${{ secrets.CONFLUENCE_API_TOKEN }}
+          CONFLUENCE_SPACE_KEY: ${{ vars.CONFLUENCE_SPACE_KEY }}
+          CONFLUENCE_PARENT_PAGE_ID: ${{ vars.CONFLUENCE_PARENT_PAGE_ID }}
+        run: python scripts/publish_confluence.py
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "## ✓ Confluence Docs Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Space: \`${{ vars.CONFLUENCE_SPACE_KEY }}\` · Parent: \`${{ vars.CONFLUENCE_PARENT_PAGE_ID }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Pages: Developer Setup · Architecture · Screens · Offline Sync · Database · Assessment &amp; CDS · API Reference · Changelog" >> $GITHUB_STEP_SUMMARY
