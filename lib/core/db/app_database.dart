@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_sqlcipher/sqflite.dart' as sqlcipher;
@@ -11,9 +13,8 @@ import 'key_store.dart';
 /// referral_status_events, notification_log) — see
 /// `leapfrog-setup/designs/referral-sla-engine.md`.
 ///
-/// ⚠️ Plain SQLite — the data is NOT encrypted at rest (a pilot-phase choice,
-/// see the plan's risk note). Migrate to SQLCipher before non-pilot
-/// deployment; the schema + DAO layer are unchanged by that swap.
+/// The database is encrypted at rest with SQLCipher using a per-device key
+/// from Android EncryptedSharedPreferences (backed by the Android Keystore).
 class AppDatabase {
   AppDatabase._(this.db);
 
@@ -43,18 +44,42 @@ class AppDatabase {
 
   /// Opens (creating if needed) the on-device database, encrypted with
   /// a per-device key stored in Android EncryptedSharedPreferences.
+  ///
+  /// If a stale plain-SQLite file is found (e.g. from a pre-encryption build),
+  /// SQLCipher raises SQLITE_NOTADB (code 26). We delete the corrupt/stale file
+  /// and recreate a fresh encrypted DB — data is recovered via the next sync.
   static Future<AppDatabase> open() async {
     final dir = await getDatabasesPath();
     final path = p.join(dir, _fileName);
     final key = await KeyStore.getKey();
-    final db = await sqlcipher.openDatabase(
-      path,
-      password: key,
-      version: schemaVersion,
-      onCreate: createSchema,
-      onUpgrade: _onUpgrade,
-    );
-    return AppDatabase._(db);
+    try {
+      final db = await sqlcipher.openDatabase(
+        path,
+        password: key,
+        version: schemaVersion,
+        onCreate: createSchema,
+        onUpgrade: _onUpgrade,
+      );
+      return AppDatabase._(db);
+    } on DatabaseException catch (e) {
+      // SQLITE_NOTADB (26) or SQLITE_CANTOPEN (14) — stale unencrypted file
+      // or corrupted DB. Wipe and recreate; data re-syncs from server.
+      if (e.isOpenFailedError() ||
+          e.toString().contains('not a database') ||
+          e.toString().contains('open_failed')) {
+        final file = File(path);
+        if (await file.exists()) await file.delete();
+        final db = await sqlcipher.openDatabase(
+          path,
+          password: key,
+          version: schemaVersion,
+          onCreate: createSchema,
+          onUpgrade: _onUpgrade,
+        );
+        return AppDatabase._(db);
+      }
+      rethrow;
+    }
   }
 
   /// Opens an in-memory database — used for web e2e testing where the file
