@@ -143,6 +143,24 @@ abstract final class AppColors {
   static const Color waBorder      = Color(0xFFA7D9A2); // .wa-box border
   static const Color sukheeStart   = Color(0xFF00BFA5);
   static const Color sukheeEnd     = Color(0xFF0288D1);
+
+  // ─── Programme screen header colours (v10) ─────────────────
+  // Dark background for programme-specific visit screen headers.
+  static const Color ancHeader    = Color(0xFF831843); // s11/s13/s14/s18 ANC visit headers
+  static const Color ncdHeader    = Color(0xFF854F0B); // s10/s12/s15 NCD visit headers
+  static const Color imciHeader   = Color(0xFF991B1B); // s4/s5/s16 IMCI/Child visit headers
+  static const Color tbHeader     = Color(0xFF085041); // TB visit completion headers
+  static const Color sukheeHeader = Color(0xFF0F766E); // s17 Sukhee teleconsult header
+  static const Color waHeader     = Color(0xFF064E3B); // s7/s18 WhatsApp counselling header
+
+  // ─── SLA status text ───────────────────────────────────────
+  // Surfaces reuse existing status tokens:
+  //   overdue surface  = statusCriticalSurface (0xFEE2E2)
+  //   dueSoon surface  = statusWarningSurface  (0xFEF3C7)
+  //   onTrack surface  = tbSurface             (0xF0FDF4)
+  //   onTrack text     = tbText                (0x065F46)
+  static const Color slaOverdueText = Color(0xFFDC2626); // brighter than statusCritical
+  static const Color slaDueSoonText = Color(0xFFD97706); // matches amber-700
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -176,6 +194,7 @@ abstract final class AppRadius {
   AppRadius._();
 
   static const double flag     =  5.0;  // .vital-flag, .diag-conf
+  static const double sm       =  6.0;  // programme_tag pill, urgency_badge compact
   static const double rxIcon   =  8.0;  // .rx-icon, NID/upazila inner panels
   static const double field    = 10.0;  // .bio-field, .chat-input, .outline-field
   static const double button   = 12.0;  // .pink-btn, .navy-btn, .outline-btn, .search-bar

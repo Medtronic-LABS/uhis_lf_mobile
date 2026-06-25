@@ -17,7 +17,6 @@ import 'core/api/scribe_api_service.dart';
 import 'core/auth/auth_repository.dart';
 import 'core/auth/auth_state.dart';
 import 'core/auth/biometric_service.dart';
-import 'core/config/app_config.dart';
 import 'core/constants/app_strings.dart';
 import 'core/db/app_database.dart';
 import 'core/db/assessment_dao.dart';
@@ -94,7 +93,7 @@ Future<void> main() async {
   final authRepo = AuthRepository(api);
   final biometric = BiometricService();
   final authState = AuthState(authRepo, biometric);
-  await authState.bootstrap();
+  authState.bootstrap(); // fire-and-forget — splash shows while bootstrap runs async
   final appDb = await AppDatabase.open().onError((e, st) async {
     if (kIsWeb) {
       debugPrint('[main] Web DB open failed ($e) — retrying with in-memory path');
@@ -104,16 +103,6 @@ Future<void> main() async {
   });
   // Clear any legacy seeded test data (PAT-SEED-* entries)
   await _clearSeededTestData(appDb);
-  final bioEnabled = await authRepo.isBiometricEnabled();
-  if (AppConfig.hasDevCredentials &&
-      !bioEnabled &&
-      authState.status == AuthStatus.signedOut) {
-    // ignore: avoid_print
-    print('[DEV-AUTOLOGIN] attempting ${AppConfig.devUser}');
-    final ok = await authState.login(AppConfig.devUser, AppConfig.devPass);
-    // ignore: avoid_print
-    print('[DEV-AUTOLOGIN] result=$ok error=${authState.error}');
-  }
   runApp(UhisNextApp(
     api: api,
     authRepo: authRepo,
@@ -268,16 +257,31 @@ class _UhisNextAppState extends State<UhisNextApp>
 
   @override
   void dispose() {
+    _lockDebounce?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
+
+  Timer? _lockDebounce;
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
+      _lockDebounce?.cancel();
+      _lockDebounce = null;
       widget.authState.lock();
+    } else if (state == AppLifecycleState.inactive) {
+      // Lock after a short delay — catches platforms where `paused` is
+      // unreliable. Cancelled immediately if the app resumes (e.g. notification
+      // shade pulled down and released).
+      _lockDebounce ??= Timer(const Duration(milliseconds: 600), () {
+        _lockDebounce = null;
+        widget.authState.lock();
+      });
     } else if (state == AppLifecycleState.resumed) {
+      _lockDebounce?.cancel();
+      _lockDebounce = null;
       // SLA states drift while the device sleeps; refresh on every resume.
       // Fire-and-forget — UI listens to ReferralRepository.changes.
       unawaited(_referrals
@@ -484,9 +488,11 @@ class _LockBarrierOverlayState extends State<_LockBarrierOverlay> {
   @override
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
-    final theme = themeProvider.mode == ThemeMode.dark
-        ? buildDarkTheme()
-        : buildAppTheme();
+    final brightness = MediaQuery.platformBrightnessOf(context);
+    final isDark = themeProvider.mode == ThemeMode.dark ||
+        (themeProvider.mode == ThemeMode.system &&
+            brightness == Brightness.dark);
+    final theme = isDark ? buildDarkTheme() : buildAppTheme();
     return Stack(
       children: [
         widget.child ?? const SizedBox.shrink(),

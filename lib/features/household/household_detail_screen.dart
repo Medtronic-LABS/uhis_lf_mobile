@@ -477,6 +477,7 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
+          tooltip: 'Back',
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
         ),
@@ -779,80 +780,84 @@ class _MemberCard extends StatelessWidget {
       child: Material(
         color: scheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          key: const Key('household_member_card_tap'),
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CircleAvatar(
-                  backgroundColor: scheme.secondaryContainer,
-                  child: Icon(
-                    Icons.person_outline,
-                    color: scheme.onSecondaryContainer,
-                    size: 20,
+        child: Semantics(
+          label: 'View health details for ${member.name ?? 'member'}',
+          button: true,
+          child: InkWell(
+            key: const Key('household_member_card_tap'),
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    backgroundColor: scheme.secondaryContainer,
+                    child: Icon(
+                      Icons.person_outline,
+                      color: scheme.onSecondaryContainer,
+                      size: 20,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        member.name ?? HouseholdDetailStrings.unnamed,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: scheme.onSurface,
-                        ),
-                      ),
-                      if (ageParts.isNotEmpty) ...[
-                        const SizedBox(height: 2),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Text(
-                          ageParts.join(' · '),
+                          member.name ?? HouseholdDetailStrings.unnamed,
                           style: TextStyle(
-                            color: scheme.onSurfaceVariant,
-                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: scheme.onSurface,
                           ),
                         ),
-                      ],
-                      if (member.recentService != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          '${HouseholdDetailStrings.recentService}: ${member.recentService!}',
-                          style: TextStyle(
-                            color: scheme.onSurfaceVariant,
-                            fontSize: 12,
+                        if (ageParts.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            ageParts.join(' · '),
+                            style: TextStyle(
+                              color: scheme.onSurfaceVariant,
+                              fontSize: 12,
+                            ),
                           ),
-                        ),
-                      ],
-                      if (serviceDate != null) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          '${HouseholdDetailStrings.recentServiceDate}: $serviceDate',
-                          style: TextStyle(
-                            color: scheme.onSurfaceVariant,
-                            fontSize: 12,
+                        ],
+                        if (member.recentService != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            '${HouseholdDetailStrings.recentService}: ${member.recentService!}',
+                            style: TextStyle(
+                              color: scheme.onSurfaceVariant,
+                              fontSize: 12,
+                            ),
                           ),
-                        ),
-                      ],
-                      if (member.patientId != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          '${HouseholdDetailStrings.patientId}: ${member.patientId!}',
-                          style: TextStyle(
-                            color: scheme.outline,
-                            fontSize: 11,
+                        ],
+                        if (serviceDate != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            '${HouseholdDetailStrings.recentServiceDate}: $serviceDate',
+                            style: TextStyle(
+                              color: scheme.onSurfaceVariant,
+                              fontSize: 12,
+                            ),
                           ),
-                        ),
+                        ],
+                        if (member.patientId != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            '${HouseholdDetailStrings.patientId}: ${member.patientId!}',
+                            style: TextStyle(
+                              color: scheme.outline,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-                Icon(Icons.chevron_right, color: scheme.outline),
-              ],
+                  Icon(Icons.chevron_right, color: scheme.outline),
+                ],
+              ),
             ),
           ),
         ),

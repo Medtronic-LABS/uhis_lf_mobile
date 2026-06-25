@@ -183,7 +183,12 @@ class _ReferralSearchFilterBarState extends State<ReferralSearchFilterBar> {
                     Icon(Icons.date_range, size: 18, color: scheme.outline),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: InkWell(
+                      child: Semantics(
+                        label: widget.dateRange != null
+                            ? 'Date range filter: ${_formatDate(widget.dateRange!.start)} to ${_formatDate(widget.dateRange!.end)}'
+                            : 'Filter by date range',
+                        button: true,
+                        child: InkWell(
                         onTap: () => _selectDateRange(context),
                         borderRadius: BorderRadius.circular(8),
                         child: Container(
@@ -206,10 +211,12 @@ class _ReferralSearchFilterBarState extends State<ReferralSearchFilterBar> {
                             ),
                           ),
                         ),
+                        ),
                       ),
                     ),
                     if (widget.dateRange != null)
                       IconButton(
+                        tooltip: 'Clear date filter',
                         icon: const Icon(Icons.clear, size: 18),
                         onPressed: () =>
                             widget.onDateRangeChanged?.call(null),

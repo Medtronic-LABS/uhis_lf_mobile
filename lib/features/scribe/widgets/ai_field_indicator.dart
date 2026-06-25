@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../models/ai_extracted_field.dart';
 
 /// A small badge showing the confidence level of an AI-extracted field.
@@ -66,11 +67,11 @@ class ConfidenceBadge extends StatelessWidget {
   Color _colorForLevel(AIConfidenceLevel level) {
     switch (level) {
       case AIConfidenceLevel.high:
-        return const Color(0xFF2E7D32); // Green
+        return AppColors.statusSuccessText;
       case AIConfidenceLevel.medium:
-        return const Color(0xFFF57C00); // Orange
+        return AppColors.statusWarningText;
       case AIConfidenceLevel.low:
-        return const Color(0xFFC62828); // Red
+        return AppColors.statusCriticalText;
     }
   }
 
@@ -108,7 +109,7 @@ class SourceSegmentTooltip extends StatelessWidget {
         fontStyle: FontStyle.italic,
       ),
       decoration: BoxDecoration(
-        color: Colors.grey[800],
+        color: AppColors.textStrong,
         borderRadius: BorderRadius.circular(8),
       ),
       child: child,
@@ -140,7 +141,7 @@ class AIFieldControls extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         IconButton(
-          icon: Icon(Icons.check_circle, color: Colors.green[600]),
+          icon: const Icon(Icons.check_circle, color: AppColors.statusSuccessAction),
           iconSize: iconSize,
           padding: EdgeInsets.all(spacing / 2),
           constraints: BoxConstraints(
@@ -152,7 +153,7 @@ class AIFieldControls extends StatelessWidget {
         ),
         if (onEdit != null)
           IconButton(
-            icon: Icon(Icons.edit, color: Colors.blue[600]),
+            icon: const Icon(Icons.edit, color: AppColors.tagBlueText),
             iconSize: iconSize,
             padding: EdgeInsets.all(spacing / 2),
             constraints: BoxConstraints(
@@ -163,7 +164,7 @@ class AIFieldControls extends StatelessWidget {
             onPressed: onEdit,
           ),
         IconButton(
-          icon: Icon(Icons.cancel, color: Colors.red[600]),
+          icon: const Icon(Icons.cancel, color: AppColors.statusCritical),
           iconSize: iconSize,
           padding: EdgeInsets.all(spacing / 2),
           constraints: BoxConstraints(
@@ -215,11 +216,11 @@ class AIFieldWrapper extends StatelessWidget {
     if (isPending) {
       borderColor = _colorForConfidence(field.confidence);
     } else if (isAccepted) {
-      borderColor = const Color(0xFF2E7D32).withValues(alpha: 0.5);
+      borderColor = AppColors.statusSuccessText.withValues(alpha: 0.5);
     } else if (isModified) {
-      borderColor = const Color(0xFF1565C0).withValues(alpha: 0.5);
+      borderColor = AppColors.tagBlueText.withValues(alpha: 0.5);
     } else if (isRejected) {
-      borderColor = Colors.grey.withValues(alpha: 0.3);
+      borderColor = AppColors.textMuted.withValues(alpha: 0.3);
     } else {
       borderColor = Colors.transparent;
     }
@@ -261,16 +262,16 @@ class AIFieldWrapper extends StatelessWidget {
                       compact: true,
                     )
                   else if (isAccepted)
-                    _StatusChip(
+                    const _StatusChip(
                       label: 'Accepted',
                       icon: Icons.check,
-                      color: const Color(0xFF2E7D32),
+                      color: AppColors.statusSuccessText,
                     )
                   else if (isModified)
-                    _StatusChip(
+                    const _StatusChip(
                       label: 'Modified',
                       icon: Icons.edit,
-                      color: const Color(0xFF1565C0),
+                      color: AppColors.tagBlueText,
                     ),
                 ],
               ),
@@ -292,9 +293,9 @@ class AIFieldWrapper extends StatelessWidget {
 
   Color _colorForConfidence(double confidence) =>
       switch (AIConfidenceLevel.fromScore(confidence)) {
-        AIConfidenceLevel.high => const Color(0xFF2E7D32),
-        AIConfidenceLevel.medium => const Color(0xFFF57C00),
-        AIConfidenceLevel.low => const Color(0xFFC62828),
+        AIConfidenceLevel.high => AppColors.statusSuccessText,
+        AIConfidenceLevel.medium => AppColors.statusWarningText,
+        AIConfidenceLevel.low => AppColors.statusCriticalText,
       };
 }
 
@@ -359,7 +360,7 @@ class AIScribeFloatingButton extends StatelessWidget {
         FloatingActionButton.extended(
           onPressed: isProcessing ? null : onPressed,
           backgroundColor:
-              isRecording ? Colors.red : Theme.of(context).primaryColor,
+              isRecording ? AppColors.statusCritical : Theme.of(context).primaryColor,
           icon: isProcessing
               ? const SizedBox(
                   width: 20,
@@ -389,7 +390,7 @@ class AIScribeFloatingButton extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.all(6),
               decoration: const BoxDecoration(
-                color: Colors.orange,
+                color: AppColors.statusWarning,
                 shape: BoxShape.circle,
               ),
               child: Text(
@@ -428,14 +429,11 @@ class AIPreFillBanner extends StatelessWidget {
       margin: const EdgeInsets.all(8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Colors.blue[50]!,
-            Colors.purple[50]!,
-          ],
+        gradient: const LinearGradient(
+          colors: [AppColors.aiSurfaceStart, AppColors.aiSurfaceEnd],
         ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blue[200]!),
+        border: Border.all(color: AppColors.aiBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -444,14 +442,14 @@ class AIPreFillBanner extends StatelessWidget {
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.blue[100],
+                decoration: const BoxDecoration(
+                  color: AppColors.tagBlueSurface,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.auto_awesome,
                   size: 20,
-                  color: Colors.blue[700],
+                  color: AppColors.tagBlueText,
                 ),
               ),
               const SizedBox(width: 12),
@@ -468,9 +466,9 @@ class AIPreFillBanner extends StatelessWidget {
                     ),
                     Text(
                       '$fieldCount fields extracted from recording',
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 12,
-                        color: Colors.grey[700],
+                        color: AppColors.textMuted,
                       ),
                     ),
                   ],
@@ -493,8 +491,8 @@ class AIPreFillBanner extends StatelessWidget {
                   icon: const Icon(Icons.visibility, size: 18),
                   label: const Text('Review All'),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.blue[700],
-                    side: BorderSide(color: Colors.blue[300]!),
+                    foregroundColor: AppColors.tagBlueText,
+                    side: const BorderSide(color: AppColors.aiBorder),
                   ),
                 ),
               ),
@@ -505,7 +503,7 @@ class AIPreFillBanner extends StatelessWidget {
                   icon: const Icon(Icons.check_circle, size: 18),
                   label: const Text('Accept All'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green[600],
+                    backgroundColor: AppColors.statusSuccessAction,
                     foregroundColor: Colors.white,
                   ),
                 ),

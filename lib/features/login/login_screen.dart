@@ -21,6 +21,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _userCtl = TextEditingController();
   final _passCtl = TextEditingController();
   bool _obscurePassword = true;
+  String? _bannerMessage;
 
   @override
   void initState() {
@@ -33,6 +34,13 @@ class _LoginScreenState extends State<LoginScreen> {
       _userCtl.text = 'hyper_sk';
     }
     if (_passCtl.text.isEmpty) _passCtl.text = 'Spice123';
+    // Capture and clear any pending auth error (e.g. session expired) so it
+    // shows as a persistent banner rather than a dismissible snackbar.
+    final pending = auth.error;
+    if (pending != null) {
+      _bannerMessage = pending;
+      auth.clearError();
+    }
   }
 
   @override
@@ -83,8 +91,41 @@ class _LoginScreenState extends State<LoginScreen> {
                       'assets/images/app-logo-name.png',
                       height: 56,
                       fit: BoxFit.contain,
+                      semanticLabel: 'UHIS logo',
                     ),
                     const SizedBox(height: 32),
+                    if (_bannerMessage != null)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .errorContainer
+                              .withValues(alpha: 0.85),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              size: 18,
+                              color: Theme.of(context).colorScheme.onErrorContainer,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _bannerMessage!,
+                                style: TextStyle(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onErrorContainer,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     if (widget.fromLock)
                       Container(
                         margin: const EdgeInsets.only(bottom: 16),
@@ -148,6 +189,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         labelText: LoginStrings.passwordLabel,
                         border: const OutlineInputBorder(),
                         suffixIcon: IconButton(
+                          tooltip: _obscurePassword
+                              ? 'Show password'
+                              : 'Hide password',
                           icon: Icon(
                             _obscurePassword
                                 ? Icons.visibility_outlined
@@ -186,6 +230,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           'assets/images/medtronic-labs-logo.png',
                           height: 32,
                           fit: BoxFit.contain,
+                          semanticLabel: 'Medtronic Labs logo',
                         ),
                       ],
                     ),

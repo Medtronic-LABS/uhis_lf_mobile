@@ -28,7 +28,10 @@ class ReferralCard extends StatelessWidget {
     final tierLabel = _tierLabel(referral.slaTier);
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: InkWell(
+      child: Semantics(
+        label: 'View referral for $patientLabel',
+        button: true,
+        child: InkWell(
         key: const Key('referral_card_tap'),
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
@@ -125,6 +128,7 @@ class ReferralCard extends StatelessWidget {
               ),
             ],
           ),
+        ),
         ),
       ),
     );

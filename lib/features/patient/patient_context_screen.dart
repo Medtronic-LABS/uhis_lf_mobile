@@ -696,7 +696,10 @@ class _AssessmentTile extends StatelessWidget {
         typeIcon = Icons.assignment;
     }
 
-    return InkWell(
+    return Semantics(
+      label: 'View ${assessment.type} assessment on ${dateFormat.format(assessment.date)}',
+      button: true,
+      child: InkWell(
       key: const Key('patient_assessment_row_tap'),
       onTap: () => _showAssessmentDetail(context),
       borderRadius: BorderRadius.circular(8),
@@ -758,6 +761,7 @@ class _AssessmentTile extends StatelessWidget {
             Icon(Icons.chevron_right, color: scheme.outline),
           ],
         ),
+      ),
       ),
     );
   }
@@ -875,13 +879,13 @@ class _AssessmentDetailSheet extends StatelessWidget {
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: Colors.green.withValues(alpha: 0.15),
+                                    color: AppColors.statusSuccess.withValues(alpha: 0.15),
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: const Text(
                                     'Latest',
                                     style: TextStyle(
-                                      color: Colors.green,
+                                      color: AppColors.statusSuccess,
                                       fontWeight: FontWeight.w600,
                                       fontSize: 10,
                                     ),
@@ -901,6 +905,7 @@ class _AssessmentDetailSheet extends StatelessWidget {
                       ),
                     ),
                     IconButton(
+                      tooltip: 'Close',
                       icon: const Icon(Icons.close),
                       onPressed: () => Navigator.pop(context),
                     ),
@@ -925,7 +930,7 @@ class _AssessmentDetailSheet extends StatelessWidget {
                       _DetailRow(
                         label: 'Referral Status',
                         value: referralStatus,
-                        valueColor: referralStatus.toLowerCase() == 'referred' ? Colors.orange : null,
+                        valueColor: referralStatus.toLowerCase() == 'referred' ? AppColors.statusWarning : null,
                       ),
                     if (referralReason != null && referralReason.isNotEmpty)
                       _DetailRow(label: 'Referral Reason', value: referralReason),
@@ -1504,7 +1509,10 @@ class _SameHouseholdStrip extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Make header tappable to navigate to household detail
-              GestureDetector(
+              Semantics(
+                label: 'View household details',
+                button: true,
+                child: GestureDetector(
                 key: const Key('patient_household_header_tap'),
                 onTap: () {
                   context.push('/patients/household/$householdId');
@@ -1551,6 +1559,7 @@ class _SameHouseholdStrip extends StatelessWidget {
                       color: tokens.brandNavy,
                     ),
                   ],
+                ),
                 ),
               ),
               const SizedBox(height: 6),
@@ -1621,7 +1630,10 @@ class _HouseholdMemberChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     final ageText = age != null ? ' · ${age}y' : '';
-    return GestureDetector(
+    return Semantics(
+      label: 'View patient $name${age != null ? ', age $age' : ''}',
+      button: true,
+      child: GestureDetector(
       key: const Key('patient_member_chip_tap'),
       onTap: onTap,
       child: Container(
@@ -1665,6 +1677,7 @@ class _HouseholdMemberChip extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/api/scribe_api_service.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/models/programme.dart';
@@ -311,7 +312,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
               _referralRecommended ? Icons.warning : Icons.check_circle,
               color: _referralRecommended
                   ? theme.colorScheme.error
-                  : Colors.green,
+                  : AppColors.statusSuccess,
             ),
             const SizedBox(width: 12),
             const Text('Assessment Complete'),

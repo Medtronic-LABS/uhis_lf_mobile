@@ -23,8 +23,15 @@ class AuthState extends ChangeNotifier {
   bool _locked = false;
   bool _onboardingComplete = false;
   bool _notifyScheduled = false;
+  bool _splashReady = false;
 
   AuthStatus get status => _status;
+  bool get splashReady => _splashReady;
+
+  void setSplashReady() {
+    _splashReady = true;
+    _scheduleNotify();
+  }
 
   /// Schedule notifyListeners for the next frame to avoid build scope conflicts
   /// when GoRouter's refreshListenable triggers during an existing build.
@@ -258,15 +265,23 @@ class AuthState extends ChangeNotifier {
     await _repo.handleSessionExpired();
     _status = AuthStatus.signedOut;
     _locked = false;
+    _biometricEnabled = false;
+    _pinEnabled = false;
     _error = AuthStrings.sessionExpired;
     // Defer to avoid build scope conflicts
     _scheduleNotify();
+  }
+
+  void clearError() {
+    _error = null;
   }
 
   Future<void> logout() async {
     await _repo.logout();
     _status = AuthStatus.signedOut;
     _locked = false;
+    _biometricEnabled = false;
+    _pinEnabled = false;
     // Defer to avoid build scope conflicts
     _scheduleNotify();
   }

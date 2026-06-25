@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../constants/app_strings.dart';
 import '../models/programme.dart';
+import '../theme/app_theme.dart';
 
 /// A compact programme pill with icon and Material 3 surface color coding.
 /// Used in worklist cards, patient context screens, and referral rows.
@@ -15,56 +16,55 @@ class ProgrammeTag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final (bg, fg, icon) = _styleFor(programme, scheme);
+    final (bg, fg, icon) = _styleFor(programme);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.xs,
+      ),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 12, color: fg),
-          const SizedBox(width: 4),
+          const SizedBox(width: AppSpacing.xs),
           Text(
             _labelFor(programme),
-            style: TextStyle(
-              color: fg,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
+            style: AppTextStyles.chip.copyWith(color: fg, fontSize: 11),
           ),
         ],
       ),
     );
   }
 
-  (Color bg, Color fg, IconData icon) _styleFor(Programme p, ColorScheme scheme) {
+  static (Color bg, Color fg, IconData icon) _styleFor(Programme p) {
     switch (p) {
       case Programme.imci:
-        return (scheme.errorContainer, scheme.onErrorContainer, Icons.child_care);
+        return (AppColors.imciSurface, AppColors.imciText, Icons.child_care);
       case Programme.anc:
+        return (AppColors.ancSurface, AppColors.ancText, Icons.pregnant_woman);
       case Programme.pnc:
-        return (scheme.tertiaryContainer, scheme.onTertiaryContainer, Icons.pregnant_woman);
+        return (AppColors.pncSurface, AppColors.pncText, Icons.pregnant_woman);
       case Programme.ncd:
-        return (scheme.primaryContainer, scheme.onPrimaryContainer, Icons.monitor_heart_outlined);
+        return (AppColors.ncdSurface, AppColors.ncdText, Icons.monitor_heart_outlined);
       case Programme.tb:
-        return (scheme.secondaryContainer, scheme.onSecondaryContainer, Icons.sick_outlined);
+        return (AppColors.tbSurface, AppColors.tbText, Icons.sick_outlined);
       case Programme.epi:
-        return (scheme.surfaceContainerHighest, scheme.onSurface, Icons.vaccines);
+        return (AppColors.canvas, AppColors.textMuted, Icons.vaccines);
       case Programme.nutrition:
-        return (scheme.surfaceContainerHighest, scheme.onSurface, Icons.restaurant);
+        return (AppColors.canvas, AppColors.textMuted, Icons.restaurant);
       case Programme.familyPlanning:
-        return (scheme.tertiaryContainer, scheme.onTertiaryContainer, Icons.family_restroom);
+        return (AppColors.pncSurface, AppColors.pncText, Icons.family_restroom);
       case Programme.cataract:
-        return (scheme.surfaceContainerHighest, scheme.onSurface, Icons.visibility_outlined);
+        return (AppColors.canvas, AppColors.textMuted, Icons.visibility_outlined);
       case Programme.eyeCare:
-        return (scheme.surfaceContainerHighest, scheme.onSurface, Icons.remove_red_eye_outlined);
+        return (AppColors.canvas, AppColors.textMuted, Icons.remove_red_eye_outlined);
       case Programme.unknown:
-        return (scheme.surfaceContainerHighest, scheme.onSurface, Icons.person);
+        return (AppColors.canvas, AppColors.textMuted, Icons.person);
     }
   }
 

@@ -23,7 +23,10 @@ class CompactSummaryStrip extends StatelessWidget {
     final hasCritical = brief.hasCriticalItems;
     final accentColor = hasCritical ? scheme.error : scheme.primary;
 
-    return GestureDetector(
+    return Semantics(
+      label: hasCritical ? 'Open AI brief — critical items today' : 'Open AI brief',
+      button: true,
+      child: GestureDetector(
       key: const Key('compact_summary_strip_tap'),
       onTap: onTap,
       child: Container(
@@ -105,6 +108,7 @@ class CompactSummaryStrip extends StatelessWidget {
           ],
         ),
       ),
+    ),
     );
   }
 }

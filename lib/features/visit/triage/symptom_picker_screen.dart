@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/db/encounter_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/db/patient_programmes_dao.dart';
@@ -255,7 +256,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     return ChangeNotifierProvider<TriageViewModel>.value(
       value: _viewModel!,
       child: Scaffold(
-        backgroundColor: const Color(0xFFF0F2F8),
+        backgroundColor: AppColors.canvas,
         appBar: VisitStepHeader(
           step: VisitStep.symptomPicker,
           patientLabel: TriageStrings.pickerTitle,
@@ -354,7 +355,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                       child: FilledButton(
                         onPressed: _onContinue,
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFFE8356D),
+                          backgroundColor: AppColors.pink,
                           foregroundColor: Colors.white,
                         ),
                         child: Text(
@@ -485,7 +486,13 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           : theme.colorScheme.onSurface;
     }
 
-    return Material(
+    return Semantics(
+      label: isSelected
+          ? 'Deselect symptom: ${TriageStrings.symptomLabel(symptom.code)}'
+          : 'Select symptom: ${TriageStrings.symptomLabel(symptom.code)}',
+      button: true,
+      selected: isSelected,
+      child: Material(
       color: getBackgroundColor(),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
@@ -583,7 +590,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                       fontSize: 10,
                       color: isSelected
                           ? getTextColor().withValues(alpha: 0.85)
-                          : const Color(0xFF6B7280),
+                          : AppColors.textMuted,
                     ),
                   ),
                 // Selection checkmark
@@ -603,6 +610,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           ),
         ),
       ),
+    ),
     );
   }
 
@@ -699,42 +707,42 @@ class _BeforeYouKnockCardState extends State<_BeforeYouKnockCard> {
     if (ctx.isPregnant) {
       chips.add(_ContextChip(
         label: SymptomPickerStrings.chipPregnant,
-        color: const Color(0xFFF59E0B),
+        color: AppColors.statusWarning,
         textColor: Colors.white,
       ));
     }
     if (ctx.hasKnownHypertension) {
       chips.add(_ContextChip(
         label: SymptomPickerStrings.chipHtn,
-        color: const Color(0xFFEF4444),
+        color: AppColors.statusCritical,
         textColor: Colors.white,
       ));
     }
     if (ctx.hasKnownDiabetes) {
       chips.add(_ContextChip(
         label: SymptomPickerStrings.chipDm,
-        color: const Color(0xFF3B82F6),
+        color: AppColors.statusInfo,
         textColor: Colors.white,
       ));
     }
     if (ctx.isTbScreenDue) {
       chips.add(_ContextChip(
         label: SymptomPickerStrings.chipTbDue,
-        color: const Color(0xFF22C55E),
+        color: AppColors.statusSuccess,
         textColor: Colors.white,
       ));
     }
     if (ctx.isUnder5) {
       chips.add(_ContextChip(
         label: SymptomPickerStrings.chipUnder5,
-        color: const Color(0xFF14B8A6),
+        color: AppColors.statusInfo,
         textColor: Colors.white,
       ));
     }
     if (chips.isEmpty) {
       chips.add(_ContextChip(
         label: SymptomPickerStrings.chipRoutine,
-        color: const Color(0xFF9CA3AF),
+        color: AppColors.textMuted,
         textColor: Colors.white,
       ));
     }
@@ -743,13 +751,16 @@ class _BeforeYouKnockCardState extends State<_BeforeYouKnockCard> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: AppColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header row — always visible
-          InkWell(
+          Semantics(
+            label: _expanded ? 'Collapse patient brief' : 'Expand patient brief',
+            button: true,
+            child: InkWell(
             key: const Key('triage_body_system_expand_tap'),
             onTap: () => setState(() => _expanded = !_expanded),
             borderRadius: BorderRadius.circular(14),
@@ -762,7 +773,7 @@ class _BeforeYouKnockCardState extends State<_BeforeYouKnockCard> {
                     width: 28,
                     height: 28,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1B2B5E),
+                      color: AppColors.navy,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: const Icon(
@@ -778,7 +789,7 @@ class _BeforeYouKnockCardState extends State<_BeforeYouKnockCard> {
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
-                        color: Color(0xFF1B2B5E),
+                        color: AppColors.navy,
                       ),
                     ),
                   ),
@@ -786,11 +797,12 @@ class _BeforeYouKnockCardState extends State<_BeforeYouKnockCard> {
                     _expanded
                         ? Icons.expand_less_rounded
                         : Icons.expand_more_rounded,
-                    color: const Color(0xFF6B7280),
+                    color: AppColors.textMuted,
                   ),
                 ],
               ),
             ),
+          ),
           ),
 
           // Expanded content — chips
@@ -861,10 +873,10 @@ class _SkAsksCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFFEFF6FF), Color(0xFFDBEAFE)],
+          colors: [AppColors.tagBlueSurface, AppColors.tagBlueSurface],
         ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF93C5FD)),
+        border: Border.all(color: AppColors.tagBlueSurface),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       child: Column(
@@ -875,7 +887,7 @@ class _SkAsksCard extends StatelessWidget {
             style: const TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF1E40AF),
+              color: AppColors.tagBlueText,
               letterSpacing: 0.06,
             ),
           ),
@@ -885,7 +897,7 @@ class _SkAsksCard extends StatelessWidget {
             style: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF1E3A8A),
+              color: AppColors.tagBlueText,
             ),
           ),
           const SizedBox(height: 2),
@@ -894,7 +906,7 @@ class _SkAsksCard extends StatelessWidget {
             style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF3B4F9C),
+              color: AppColors.navy,
             ),
           ),
         ],
@@ -921,7 +933,7 @@ class _DurationPicker extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x0D000000),
+            color: Color(0x0D000000), // TODO: add AppColors token
             blurRadius: 8,
             offset: Offset(0, 2),
           ),
@@ -936,7 +948,7 @@ class _DurationPicker extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF1B2B5E),
+              color: AppColors.navy,
             ),
           ),
           const SizedBox(height: 10),
@@ -1002,16 +1014,20 @@ class _DurationButton extends StatelessWidget {
     final isHighRisk = value == SymptomPickerStrings.durationValue4plus;
 
     final bgColor = isSelected
-        ? (isHighRisk ? const Color(0xFFFEE2E2) : const Color(0xFF1B2B5E))
+        ? (isHighRisk ? AppColors.statusCriticalSurface : AppColors.navy)
         : Colors.white;
     final borderColor = isSelected
-        ? (isHighRisk ? const Color(0xFFEF4444) : const Color(0xFF1B2B5E))
-        : const Color(0xFFE5E7EB);
+        ? (isHighRisk ? AppColors.statusCritical : AppColors.navy)
+        : AppColors.border;
     final textColor = isSelected
-        ? (isHighRisk ? const Color(0xFF991B1B) : Colors.white)
-        : const Color(0xFF1B2B5E);
+        ? (isHighRisk ? AppColors.statusCriticalText : Colors.white)
+        : AppColors.navy;
 
-    return GestureDetector(
+    return Semantics(
+      label: 'Select duration: $label',
+      button: true,
+      selected: isSelected,
+      child: GestureDetector(
       key: const Key('triage_answer_option_tap'),
       onTap: () => onTap(value),
       child: Container(
@@ -1031,6 +1047,7 @@ class _DurationButton extends StatelessWidget {
           ),
         ),
       ),
+    ),
     );
   }
 }

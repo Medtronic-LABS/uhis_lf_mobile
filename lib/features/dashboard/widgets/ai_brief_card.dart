@@ -235,7 +235,10 @@ class _AIBriefCardState extends State<AIBriefCard> {
                 // Expandable risk factors
                 if (brief.riskFactors.isNotEmpty) ...[
                   const SizedBox(height: 16),
-                  InkWell(
+                  Semantics(
+                    label: _expanded ? 'Collapse risk factors' : 'Expand risk factors',
+                    button: true,
+                    child: InkWell(
                     onTap: () => setState(() => _expanded = !_expanded),
                     borderRadius: BorderRadius.circular(8),
                     child: Padding(
@@ -261,6 +264,7 @@ class _AIBriefCardState extends State<AIBriefCard> {
                         ],
                       ),
                     ),
+                  ),
                   ),
                   AnimatedCrossFade(
                     firstChild: const SizedBox.shrink(),

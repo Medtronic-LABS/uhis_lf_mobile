@@ -171,10 +171,11 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
               children: [
                 // Logo
                 Image.asset(
-                'assets/images/app-logo-name.png',
-                height: 64,
-                fit: BoxFit.contain,
-              ),
+                  'assets/images/app-logo-name.png',
+                  height: 64,
+                  fit: BoxFit.contain,
+                  semanticLabel: 'UHIS logo',
+                ),
               
               const SizedBox(height: 48),
               

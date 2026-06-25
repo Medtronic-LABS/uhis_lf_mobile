@@ -49,7 +49,10 @@ class CriticalAlertBanner extends StatelessWidget {
           ),
         ],
       ),
-      child: Material(
+      child: Semantics(
+        label: 'Open critical case: ${topAlert.patientName}',
+        button: true,
+        child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: onOpenCase != null ? () => onOpenCase!(topAlert) : null,
@@ -102,6 +105,7 @@ class CriticalAlertBanner extends StatelessWidget {
                     ),
                     if (onDismiss != null)
                       IconButton(
+                        tooltip: 'Dismiss alert',
                         onPressed: onDismiss,
                         icon: Icon(
                           Icons.close,
@@ -235,6 +239,7 @@ class CriticalAlertBanner extends StatelessWidget {
               ],
             ),
           ),
+        ),
         ),
       ),
     );

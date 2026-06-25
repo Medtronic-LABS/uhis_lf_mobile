@@ -41,7 +41,10 @@ class MissionQueueCard extends StatelessWidget {
         padding: compact
             ? EdgeInsets.zero
             : const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        child: Material(
+        child: Semantics(
+          label: 'View patient ${item.patientName}',
+          button: true,
+          child: Material(
           color: tokens.cardSurface,
           borderRadius: BorderRadius.circular(compact ? LeapfrogColors.radiusLg : 12),
           child: InkWell(
@@ -160,7 +163,10 @@ class MissionQueueCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   if (!isCompleted && showActionButton)
-                    Material(
+                    Semantics(
+                      label: 'Start visit for ${item.patientName}',
+                      button: true,
+                      child: Material(
                       color: actionBg,
                       borderRadius: BorderRadius.circular(20),
                       child: InkWell(
@@ -180,6 +186,7 @@ class MissionQueueCard extends StatelessWidget {
                           ),
                         ),
                       ),
+                    ),
                     )
                   else if (isCompleted)
                     Icon(
@@ -190,6 +197,7 @@ class MissionQueueCard extends StatelessWidget {
                 ],
               ),
             ),
+          ),
           ),
         ),
       ),

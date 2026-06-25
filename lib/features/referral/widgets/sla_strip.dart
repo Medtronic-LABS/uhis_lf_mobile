@@ -23,7 +23,13 @@ class SlaStrip extends StatelessWidget {
     final relative = _relative(lastSyncedAt);
     final ageColor = _ageColor(lastSyncedAt, scheme);
     final breachColor = breachCount > 0 ? scheme.error : scheme.onSurfaceVariant;
-    return InkWell(
+    final slaStatus = breachCount > 0
+        ? 'SLA status: $breachCount breach${breachCount == 1 ? '' : 'es'}'
+        : 'SLA status: no breaches';
+    return Semantics(
+      label: onSyncNow != null ? '$slaStatus, tap to sync now' : slaStatus,
+      button: onSyncNow != null,
+      child: InkWell(
       onTap: onSyncNow,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -73,6 +79,7 @@ class SlaStrip extends StatelessWidget {
               Icon(Icons.refresh, size: 20, color: scheme.primary),
           ],
         ),
+      ),
       ),
     );
   }

@@ -21,6 +21,7 @@ import 'package:sqflite/sqflite.dart' show DatabaseException;
 
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/models/programme.dart';
 import '../../scribe/models/ai_extracted_field.dart';
@@ -598,14 +599,14 @@ class _ProgrammeGroupHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      color: const Color(0xFF1E40AF).withValues(alpha: 0.08),
+      color: AppColors.tagBlueText.withValues(alpha: 0.08),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
           const Icon(
             Icons.medical_services_outlined,
             size: 14,
-            color: Color(0xFF1E40AF),
+            color: AppColors.tagBlueText,
           ),
           const SizedBox(width: 8),
           Text(
@@ -614,7 +615,7 @@ class _ProgrammeGroupHeader extends StatelessWidget {
               fontSize: 11,
               fontWeight: FontWeight.bold,
               letterSpacing: 0.8,
-              color: Color(0xFF1E40AF),
+              color: AppColors.tagBlueText,
             ),
           ),
         ],
@@ -899,7 +900,7 @@ class _SubmitButton extends StatelessWidget {
       width: double.infinity,
       child: FilledButton(
         style: FilledButton.styleFrom(
-          backgroundColor: const Color(0xFFE8356D),
+          backgroundColor: AppColors.pink,
         ),
         onPressed: onPressed,
         child: isSaving

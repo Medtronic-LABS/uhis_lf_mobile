@@ -80,6 +80,9 @@ abstract final class LockStrings {
   static const String verifyFingerprint = 'Verify fingerprint';
   static const String tapToPlaceFinger = 'Touch sensor to begin';
   static const String tapToPlaceFingerSubtitle = 'Tap to place your finger and sign in';
+  static const String aponSushashthya = 'Apon Sushashthya';
+  static const String aponSushashthyaBn = 'আপন সুস্বাস্থ্য';
+  static const String splashTagline = 'AI-powered community health for every household in Bangladesh';
   static const String readingFingerprint = 'Reading fingerprint…';
   static const String fingerprintVerified = 'Verified!';
   static const String communityHealth = 'Community Health';
@@ -175,6 +178,7 @@ abstract final class SettingsStrings {
 
   static const String darkMode = 'Dark Mode';
   static const String lightMode = 'Light Mode';
+  static const String systemMode = 'System Mode';
   static const String appearance = 'Appearance';
 }
 
@@ -1126,19 +1130,19 @@ abstract final class ScribeBannerStrings {
   static const String error = 'Upload failed — tap to retry';
 }
 
-/// Bottom-nav tab labels + the Map placeholder copy.
+/// Bottom-nav tab labels + placeholder copy.
 abstract final class BottomNavStrings {
   BottomNavStrings._();
 
   static const String home = 'Home';
   static const String patients = 'Patients';
   static const String tasks = 'Tasks';
-  static const String map = 'Map';
+  static const String assistant = 'Assistant';
 
-  // Map placeholder screen
-  static const String mapTitle = 'Map';
-  static const String mapPlaceholderHeading = 'Map View';
-  static const String mapPlaceholderSubheading = 'Coming soon';
+  // Assistant placeholder screen
+  static const String assistantTitle = 'Assistant';
+  static const String assistantPlaceholderHeading = 'AI Assistant';
+  static const String assistantPlaceholderSubheading = 'Coming soon';
 }
 
 /// Symptom triage picker screen strings.

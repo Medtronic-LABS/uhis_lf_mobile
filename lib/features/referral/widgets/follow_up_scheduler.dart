@@ -119,6 +119,7 @@ class _FollowUpSchedulerState extends State<FollowUpScheduler> {
                     ),
                   ),
                   IconButton(
+                    tooltip: 'Close',
                     icon: const Icon(Icons.close),
                     onPressed: () => Navigator.pop(context, false),
                   ),
@@ -129,7 +130,10 @@ class _FollowUpSchedulerState extends State<FollowUpScheduler> {
               // Date picker
               _buildSectionTitle(context, 'Date'),
               const SizedBox(height: 8),
-              InkWell(
+              Semantics(
+                label: 'Select follow-up date: ${DateFormat.yMMMMEEEEd().format(_selectedDate)}',
+                button: true,
+                child: InkWell(
                 onTap: _selectDate,
                 borderRadius: BorderRadius.circular(12),
                 child: Container(
@@ -171,6 +175,7 @@ class _FollowUpSchedulerState extends State<FollowUpScheduler> {
                       ),
                     ],
                   ),
+                ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -227,7 +232,12 @@ class _FollowUpSchedulerState extends State<FollowUpScheduler> {
               // Time picker (optional)
               _buildSectionTitle(context, 'Time (Optional)'),
               const SizedBox(height: 8),
-              InkWell(
+              Semantics(
+                label: _selectedTime != null
+                    ? 'Follow-up time: ${_selectedTime!.format(context)}, tap to change'
+                    : 'Add follow-up time',
+                button: true,
+                child: InkWell(
                 onTap: _selectTime,
                 borderRadius: BorderRadius.circular(12),
                 child: Container(
@@ -260,6 +270,7 @@ class _FollowUpSchedulerState extends State<FollowUpScheduler> {
                       const Spacer(),
                       if (_selectedTime != null)
                         IconButton(
+                          tooltip: 'Clear time',
                           icon: const Icon(Icons.clear, size: 18),
                           onPressed: () =>
                               setState(() => _selectedTime = null),
@@ -267,6 +278,7 @@ class _FollowUpSchedulerState extends State<FollowUpScheduler> {
                         ),
                     ],
                   ),
+                ),
                 ),
               ),
               const SizedBox(height: 20),
@@ -449,24 +461,28 @@ class _QuickDateChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? scheme.primaryContainer : scheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isSelected ? scheme.primary : scheme.outlineVariant,
+    return Semantics(
+      label: isSelected ? 'Quick date: $label, selected' : 'Set follow-up to $label',
+      button: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: isSelected ? scheme.primaryContainer : scheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isSelected ? scheme.primary : scheme.outlineVariant,
+            ),
           ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? scheme.onPrimaryContainer : scheme.onSurface,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-            fontSize: 12,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isSelected ? scheme.onPrimaryContainer : scheme.onSurface,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              fontSize: 12,
+            ),
           ),
         ),
       ),

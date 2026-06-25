@@ -117,6 +117,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         'assets/images/app-logo-name.png',
                         height: isCompact ? 48 : 64,
                         fit: BoxFit.contain,
+                        semanticLabel: 'UHIS logo',
                       ),
                       SizedBox(height: isCompact ? 24 : 40),
                       Icon(

@@ -39,6 +39,7 @@ class ScribeFab extends StatelessWidget {
         if (session.state == ScribeState.error) {
           return FloatingActionButton.extended(
             onPressed: onRetry,
+            tooltip: 'Retry AI Scribe',
             backgroundColor: Colors.orange,
             icon: const Icon(Icons.refresh, color: Colors.white),
             label: const Text('Retry', style: TextStyle(color: Colors.white)),
@@ -49,6 +50,7 @@ class ScribeFab extends StatelessWidget {
         if (session.state == ScribeState.recording) {
           return FloatingActionButton.extended(
             onPressed: onStopRecording,
+            tooltip: 'Stop recording',
             backgroundColor: Colors.red,
             icon: const Icon(Icons.stop, color: Colors.white),
             label: Text(
@@ -62,6 +64,7 @@ class ScribeFab extends StatelessWidget {
         if (session.state == ScribeState.uploading) {
           return FloatingActionButton.extended(
             onPressed: null,
+            tooltip: 'Uploading audio',
             backgroundColor: Colors.grey,
             icon: const SizedBox(
               width: 20,
@@ -78,6 +81,7 @@ class ScribeFab extends StatelessWidget {
         // Default: show record button
         return FloatingActionButton.extended(
           onPressed: onStartRecording,
+          tooltip: 'Start AI Scribe recording',
           backgroundColor: Theme.of(context).primaryColor,
           icon: const Icon(Icons.mic, color: Colors.white),
           label: const Text('AI Scribe', style: TextStyle(color: Colors.white)),
@@ -129,6 +133,7 @@ class ScribePill extends StatelessWidget {
             icon = Icons.mic;
             label = 'Recording ${_formatDuration(session.elapsedSeconds)}';
             trailing = IconButton(
+              tooltip: 'Stop recording',
               icon: const Icon(Icons.stop, color: Colors.white, size: 20),
               onPressed: onStop,
               padding: EdgeInsets.zero,

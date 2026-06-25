@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_strings.dart';
+import '../../../core/theme/app_theme.dart';
 import '../scribe_controller.dart';
 import '../scribe_session.dart';
 
@@ -44,64 +45,75 @@ class ScribeBanner extends StatelessWidget {
             state == ScribeState.fieldsPopulated ||
             state == ScribeState.error;
 
-        return GestureDetector(
-          key: const Key('scribe_banner_tap'),
-          onTap: tappable ? () => _handleTap(state, ctrl) : null,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            margin: const EdgeInsets.only(bottom: 14),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              gradient: _gradient(state, session.fieldsJustPopulated),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: _shadowColor(state),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    _MicIconBox(state: state, fieldsJustPopulated: session.fieldsJustPopulated),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _BannerText(state: state, session: session),
-                    ),
-                    if (state == ScribeState.recording) const _WaveBars(),
-                    if (state == ScribeState.uploading || state == ScribeState.processing)
-                      const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      ),
-                    if (state == ScribeState.fieldsPopulated && session.pendingFieldCount > 0) ...[
-                      _AcceptAllButton(onTap: onAcceptAll),
-                    ],
-                  ],
-                ),
-                // Show live transcript during recording
-                if (state == ScribeState.recording && session.liveTranscript != null) ...[
-                  const SizedBox(height: 10),
-                  _LiveTranscriptBox(transcript: session.liveTranscript!),
-                ],
-                // Show transcript preview after processing
-                if (state == ScribeState.fieldsPopulated && session.transcriptText != null) ...[
-                  const SizedBox(height: 10),
-                  _TranscriptPreview(
-                    transcript: session.transcriptText!,
-                    fieldCount: session.pendingFieldCount + session.acceptedFieldCount,
+        final bannerLabel = state == ScribeState.recording
+            ? 'Stop recording'
+            : state == ScribeState.reviewReady || state == ScribeState.fieldsPopulated
+                ? 'Accept AI note'
+                : state == ScribeState.error
+                    ? 'Retry AI Scribe'
+                    : 'Start AI Scribe recording';
+        return Semantics(
+          label: bannerLabel,
+          button: tappable,
+          child: GestureDetector(
+            key: const Key('scribe_banner_tap'),
+            onTap: tappable ? () => _handleTap(state, ctrl) : null,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              margin: const EdgeInsets.only(bottom: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                gradient: _gradient(state, session.fieldsJustPopulated),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: _shadowColor(state),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
                   ),
                 ],
-              ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      _MicIconBox(state: state, fieldsJustPopulated: session.fieldsJustPopulated),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _BannerText(state: state, session: session),
+                      ),
+                      if (state == ScribeState.recording) const _WaveBars(),
+                      if (state == ScribeState.uploading || state == ScribeState.processing)
+                        const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        ),
+                      if (state == ScribeState.fieldsPopulated && session.pendingFieldCount > 0) ...[
+                        _AcceptAllButton(onTap: onAcceptAll),
+                      ],
+                    ],
+                  ),
+                  // Show live transcript during recording
+                  if (state == ScribeState.recording && session.liveTranscript != null) ...[
+                    const SizedBox(height: 10),
+                    _LiveTranscriptBox(transcript: session.liveTranscript!),
+                  ],
+                  // Show transcript preview after processing
+                  if (state == ScribeState.fieldsPopulated && session.transcriptText != null) ...[
+                    const SizedBox(height: 10),
+                    _TranscriptPreview(
+                      transcript: session.transcriptText!,
+                      fieldCount: session.pendingFieldCount + session.acceptedFieldCount,
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         );
@@ -115,10 +127,10 @@ class ScribeBanner extends StatelessWidget {
       return const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [Color(0xFF059669), Color(0xFF34D399)],
+        colors: [AppColors.statusSuccessAction, AppColors.statusSuccessDark],
       );
     }
-    
+
     switch (state) {
       case ScribeState.fieldsPopulated:
       case ScribeState.reviewReady:
@@ -126,25 +138,25 @@ class ScribeBanner extends StatelessWidget {
         return const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF065F46), Color(0xFF10B981)],
+          colors: [AppColors.statusSuccessText, AppColors.statusSuccess],
         );
       case ScribeState.recording:
         return const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF991B1B), Color(0xFFDC2626)],
+          colors: [AppColors.statusCriticalText, AppColors.slaOverdueText],
         );
       case ScribeState.error:
         return const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF991B1B), Color(0xFFEF4444)],
+          colors: [AppColors.statusCriticalText, AppColors.statusCritical],
         );
       default:
         return const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF3D3599), Color(0xFF6B63D4)],
+          colors: [AppColors.aiPurpleDark, AppColors.aiPurple],
         );
     }
   }
@@ -154,13 +166,13 @@ class ScribeBanner extends StatelessWidget {
       case ScribeState.fieldsPopulated:
       case ScribeState.reviewReady:
       case ScribeState.accepted:
-        return const Color(0xFF10B981).withValues(alpha: 0.3);
+        return AppColors.statusSuccess.withValues(alpha: 0.3);
       case ScribeState.recording:
-        return const Color(0xFFDC2626).withValues(alpha: 0.3);
+        return AppColors.slaOverdueText.withValues(alpha: 0.3);
       case ScribeState.error:
-        return const Color(0xFFEF4444).withValues(alpha: 0.3);
+        return AppColors.statusCritical.withValues(alpha: 0.3);
       default:
-        return const Color(0xFF6B63D4).withValues(alpha: 0.3);
+        return AppColors.aiPurple.withValues(alpha: 0.3);
     }
   }
 
@@ -197,29 +209,33 @@ class _AcceptAllButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      key: const Key('scribe_accept_all_tap'),
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.2),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.check_circle, color: Colors.white, size: 16),
-            const SizedBox(width: 4),
-            const Text(
-              'Accept All',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+    return Semantics(
+      label: 'Accept AI note',
+      button: true,
+      child: GestureDetector(
+        key: const Key('scribe_accept_all_tap'),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.2),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white, size: 16),
+              const SizedBox(width: 4),
+              const Text(
+                'Accept All',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -426,9 +442,9 @@ class _SuccessCheckmark extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         shape: BoxShape.circle,
-        border: Border.all(color: const Color(0xFF10B981), width: 2),
+        border: Border.all(color: AppColors.statusSuccess, width: 2),
       ),
-      child: const Icon(Icons.check, color: Color(0xFF10B981), size: 12),
+      child: const Icon(Icons.check, color: AppColors.statusSuccess, size: 12),
     );
   }
 }
@@ -544,9 +560,9 @@ class _LiveDotState extends State<_LiveDot>
         width: 12,
         height: 12,
         decoration: BoxDecoration(
-          color: const Color(0xFFEF4444),
+          color: AppColors.statusCritical,
           shape: BoxShape.circle,
-          border: Border.all(color: const Color(0xFF6B63D4), width: 2),
+          border: Border.all(color: AppColors.aiPurple, width: 2),
         ),
       ),
     );

@@ -109,21 +109,23 @@ class _ScribeReviewSheetState extends State<_ScribeReviewSheet> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFEF3C7),
+                    color: AppColors.statusWarningSurface,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFFDE68A)),
+                    border: Border.all(
+                      color: AppColors.statusWarning.withValues(alpha: 0.35),
+                    ),
                   ),
                   child: Row(
                     children: const [
                       Icon(Icons.info_outline,
-                          size: 14, color: Color(0xFF92400E)),
+                          size: 14, color: AppColors.statusWarningText),
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Please review all sections before accepting.',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Color(0xFF92400E),
+                            color: AppColors.statusWarningText,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -194,8 +196,8 @@ class _ScribeReviewSheetState extends State<_ScribeReviewSheet> {
                               : () => _reject(context, ctrl),
                           style: OutlinedButton.styleFrom(
                             minimumSize: const Size.fromHeight(48),
-                            side: const BorderSide(color: Color(0xFF9CA3AF)),
-                            foregroundColor: const Color(0xFF6B7280),
+                            side: const BorderSide(color: AppColors.textMuted),
+                            foregroundColor: AppColors.textMuted,
                           ),
                           child: const Text('Reject'),
                         ),
@@ -294,11 +296,11 @@ class _SheetHeader extends StatelessWidget {
           width: 36,
           height: 36,
           decoration: BoxDecoration(
-            color: const Color(0xFFEEF0FF),
+            color: AppColors.aiSurfaceStart,
             borderRadius: BorderRadius.circular(10),
           ),
           child: const Icon(Icons.auto_awesome,
-              color: Color(0xFF6B63D4), size: 18),
+              color: AppColors.aiPurple, size: 18),
         ),
         const SizedBox(width: 10),
         Expanded(
@@ -310,14 +312,14 @@ class _SheetHeader extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w800,
-                  color: Color(0xFF1B2B5E),
+                  color: AppColors.navy,
                 ),
               ),
               Text(
                 '$confidencePct% confidence · $model',
                 style: const TextStyle(
                   fontSize: 11,
-                  color: Color(0xFF6B7280),
+                  color: AppColors.textMuted,
                 ),
               ),
             ],
@@ -328,16 +330,18 @@ class _SheetHeader extends StatelessWidget {
             padding:
                 const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFFFEF3C7),
+              color: AppColors.statusWarningSurface,
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: const Color(0xFFFDE68A)),
+              border: Border.all(
+                color: AppColors.statusWarning.withValues(alpha: 0.35),
+              ),
             ),
             child: const Text(
               'Review required',
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w800,
-                color: Color(0xFF92400E),
+                color: AppColors.statusWarningText,
               ),
             ),
           ),
@@ -362,9 +366,9 @@ class _TranscriptCardState extends State<_TranscriptCard> {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFF0F4FF),
+        color: AppColors.aiSurfaceStart,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFD1D9F0)),
+        border: Border.all(color: AppColors.aiBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -376,7 +380,7 @@ class _TranscriptCardState extends State<_TranscriptCard> {
               padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
               child: Row(
                 children: [
-                  const Icon(Icons.mic, size: 16, color: Color(0xFF3D3599)),
+                  const Icon(Icons.mic, size: 16, color: AppColors.aiPurpleDark),
                   const SizedBox(width: 8),
                   const Expanded(
                     child: Text(
@@ -384,14 +388,14 @@ class _TranscriptCardState extends State<_TranscriptCard> {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFF1B2B5E),
+                        color: AppColors.navy,
                       ),
                     ),
                   ),
                   Icon(
                     _expanded ? Icons.expand_less : Icons.expand_more,
                     size: 18,
-                    color: const Color(0xFF6B7280),
+                    color: AppColors.textMuted,
                   ),
                 ],
               ),
@@ -404,7 +408,7 @@ class _TranscriptCardState extends State<_TranscriptCard> {
                 widget.text,
                 style: const TextStyle(
                   fontSize: 12,
-                  color: Color(0xFF374151),
+                  color: AppColors.textStrong,
                   height: 1.6,
                   fontStyle: FontStyle.italic,
                 ),
@@ -496,7 +500,7 @@ class _SoapSectionState extends State<_SoapSection> {
                     width: 26,
                     height: 26,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEEF0FF),
+                      color: AppColors.aiSurfaceStart,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Center(
@@ -505,7 +509,7 @@ class _SoapSectionState extends State<_SoapSection> {
                         style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w900,
-                          color: Color(0xFF3D3599),
+                          color: AppColors.aiPurpleDark,
                         ),
                       ),
                     ),
@@ -520,14 +524,14 @@ class _SoapSectionState extends State<_SoapSection> {
                           style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w800,
-                            color: Color(0xFF1B2B5E),
+                            color: AppColors.navy,
                           ),
                         ),
                         Text(
                           widget.subtitle,
                           style: const TextStyle(
                             fontSize: 10,
-                            color: Color(0xFF6B7280),
+                            color: AppColors.textMuted,
                           ),
                         ),
                       ],
@@ -537,7 +541,7 @@ class _SoapSectionState extends State<_SoapSection> {
                     icon: Icon(
                       _editing ? Icons.check : Icons.edit_outlined,
                       size: 18,
-                      color: const Color(0xFF6B63D4),
+                      color: AppColors.aiPurple,
                     ),
                     onPressed: () {
                       if (_editing) {
@@ -560,16 +564,16 @@ class _SoapSectionState extends State<_SoapSection> {
                       style: const TextStyle(fontSize: 13, height: 1.6),
                       decoration: InputDecoration(
                         filled: true,
-                        fillColor: const Color(0xFFF9FAFB),
+                        fillColor: AppColors.chatBg,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                           borderSide:
-                              const BorderSide(color: Color(0xFFE5E7EB)),
+                              const BorderSide(color: AppColors.border),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                           borderSide:
-                              const BorderSide(color: Color(0xFF6B63D4)),
+                              const BorderSide(color: AppColors.aiPurple),
                         ),
                         contentPadding: const EdgeInsets.all(10),
                       ),
@@ -579,7 +583,7 @@ class _SoapSectionState extends State<_SoapSection> {
                       widget.text.isEmpty ? '—' : widget.text,
                       style: const TextStyle(
                         fontSize: 13,
-                        color: Color(0xFF374151),
+                        color: AppColors.textStrong,
                         height: 1.6,
                       ),
                     ),
