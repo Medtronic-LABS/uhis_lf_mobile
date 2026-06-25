@@ -54,6 +54,7 @@ class VisitStepHeader extends StatelessWidget implements PreferredSizeWidget {
                 children: [
                   if (onBack != null)
                     IconButton(
+                      tooltip: 'Go back',
                       icon: const Icon(Icons.arrow_back, color: Colors.white),
                       onPressed: onBack,
                     )

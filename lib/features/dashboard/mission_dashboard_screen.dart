@@ -714,7 +714,7 @@ class _SettingsMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<AuthState>(
       builder: (ctx, auth, _) => PopupMenuButton<String>(
-        icon: const Icon(Icons.settings),
+        icon: const Icon(Icons.settings, color: Colors.white),
         onSelected: (v) async {
           switch (v) {
             case 'enable_bio':
@@ -840,16 +840,21 @@ class _SettingsMenu extends StatelessWidget {
           PopupMenuItem(
             value: 'toggle_dark',
             child: Consumer<ThemeProvider>(
-              builder: (_, theme, _) => ListTile(
-                leading: Icon(
-                  theme.isDark ? Icons.light_mode : Icons.dark_mode,
-                ),
-                title: Text(
-                  theme.isDark
-                      ? SettingsStrings.lightMode
-                      : SettingsStrings.darkMode,
-                ),
-              ),
+              builder: (_, theme, _) {
+                final IconData icon;
+                final String label;
+                if (theme.isSystem) {
+                  icon = Icons.dark_mode;
+                  label = SettingsStrings.darkMode;
+                } else if (theme.isLight) {
+                  icon = Icons.settings_brightness;
+                  label = SettingsStrings.systemMode;
+                } else {
+                  icon = Icons.light_mode;
+                  label = SettingsStrings.lightMode;
+                }
+                return ListTile(leading: Icon(icon), title: Text(label));
+              },
             ),
           ),
           const PopupMenuItem(
@@ -941,7 +946,7 @@ class _ReferralNotificationButtonState
               hasUrgent
                   ? Icons.notification_important
                   : Icons.notifications_outlined,
-              color: hasUrgent ? scheme.error : null,
+              color: Colors.white,
             ),
           ),
         );
@@ -1133,7 +1138,10 @@ class _DashboardStatCard extends StatelessWidget {
     final accent = accentVariant == _DashboardStatVariant.pink
         ? tokens.brandPink
         : tokens.brandNavy;
-    return Material(
+    return Semantics(
+      label: '$label: $value',
+      button: true,
+      child: Material(
       color: tokens.cardSurface,
       borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
       child: InkWell(
@@ -1223,6 +1231,7 @@ class _DashboardStatCard extends StatelessWidget {
           ),
         ),
       ),
+      ),
     );
   }
 }
@@ -1288,7 +1297,10 @@ class _MoreVisitsLink extends StatelessWidget {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
-      child: InkWell(
+      child: Semantics(
+        label: 'View $count more visits',
+        button: true,
+        child: InkWell(
         key: const Key('dashboard_more_visits_tap'),
         onTap: onTap,
         borderRadius: BorderRadius.circular(LeapfrogColors.radiusMd),
@@ -1304,6 +1316,7 @@ class _MoreVisitsLink extends StatelessWidget {
               color: tokens.brandNavy,
             ),
           ),
+        ),
         ),
       ),
     );
@@ -1377,9 +1390,6 @@ class _VisitFilterPanel extends StatelessWidget {
   final Set<Programme> selectedProgrammes;
   final void Function(Programme prog) onProgrammeToggled;
 
-  static const _pinkColor = Color(0xFFE8356D);
-  static const _pinkActiveBg = Color(0xFFFDF2F8);
-  static const _pinkActiveText = Color(0xFF9D174D);
 
   String _needLabel(_NeedFilter need) {
     switch (need) {
@@ -1441,7 +1451,7 @@ class _VisitFilterPanel extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF374151),
+                color: AppColors.textStrong,
               ),
             ),
           ),
@@ -1465,7 +1475,7 @@ class _VisitFilterPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          const Divider(height: 1, color: Color(0xFFE5E7EB)),
+          const Divider(height: 1, color: AppColors.border),
           const SizedBox(height: 8),
         ],
 
@@ -1479,7 +1489,7 @@ class _VisitFilterPanel extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF374151),
+                  color: AppColors.textStrong,
                 ),
               ),
               const SizedBox(width: 4),
@@ -1488,12 +1498,15 @@ class _VisitFilterPanel extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w400,
-                  color: Color(0xFF9CA3AF),
+                  color: AppColors.textMuted,
                 ),
               ),
               const Spacer(),
               if (selectedNeeds.isNotEmpty)
-                GestureDetector(
+                Semantics(
+                  label: 'Clear all filters',
+                  button: true,
+                  child: GestureDetector(
                   key: const Key('dashboard_filter_clear_needs_tap'),
                   onTap: onClearNeeds,
                   child: const Text(
@@ -1501,8 +1514,9 @@ class _VisitFilterPanel extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
-                      color: _pinkColor,
+                      color: AppColors.pink,
                     ),
+                  ),
                   ),
                 ),
             ],
@@ -1517,7 +1531,7 @@ class _VisitFilterPanel extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF374151),
+                color: AppColors.textStrong,
               ),
             ),
           ),
@@ -1530,17 +1544,22 @@ class _VisitFilterPanel extends StatelessWidget {
                 final active = selectedProgrammes.contains(prog);
                 return Padding(
                   padding: const EdgeInsets.only(right: 6),
-                  child: GestureDetector(
+                  child: Semantics(
+                    label: active
+                        ? 'Filter by programme: ${_programmeLabel(prog)}, selected'
+                        : 'Filter by programme: ${_programmeLabel(prog)}',
+                    button: true,
+                    child: GestureDetector(
                     key: ValueKey('dashboard_prog_filter_${prog.name}'),
                     onTap: () => onProgrammeToggled(prog),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
-                        color: active ? _pinkActiveBg : Colors.white,
+                        color: active ? AppColors.ancSurface : Colors.white,
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: active ? _pinkColor : const Color(0xFFD1D5DB),
+                          color: active ? AppColors.pink : AppColors.border,
                           width: 1,
                         ),
                       ),
@@ -1549,9 +1568,10 @@ class _VisitFilterPanel extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: active ? FontWeight.w800 : FontWeight.w500,
-                          color: active ? _pinkActiveText : const Color(0xFF374151),
+                          color: active ? AppColors.ancText : AppColors.textStrong,
                         ),
                       ),
+                    ),
                     ),
                   ),
                 );
@@ -1569,17 +1589,22 @@ class _VisitFilterPanel extends StatelessWidget {
               final active = selectedNeeds.contains(need);
               return Padding(
                 padding: const EdgeInsets.only(right: 6),
-                child: GestureDetector(
+                child: Semantics(
+                  label: active
+                      ? 'Filter by need: ${_needLabel(need)}, selected'
+                      : 'Filter by need: ${_needLabel(need)}',
+                  button: true,
+                  child: GestureDetector(
                   key: ValueKey('dashboard_need_filter_${need.name}'),
                   onTap: () => onNeedToggled(need),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
-                      color: active ? _pinkActiveBg : Colors.white,
+                      color: active ? AppColors.ancSurface : Colors.white,
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: active ? _pinkColor : const Color(0xFFD1D5DB),
+                        color: active ? AppColors.pink : AppColors.border,
                         width: 1,
                       ),
                     ),
@@ -1588,9 +1613,10 @@ class _VisitFilterPanel extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: active ? FontWeight.w800 : FontWeight.w500,
-                        color: active ? _pinkActiveText : const Color(0xFF374151),
+                        color: active ? AppColors.ancText : AppColors.textStrong,
                       ),
                     ),
+                  ),
                   ),
                 ),
               );
@@ -1613,31 +1639,33 @@ class _VillageChip extends StatelessWidget {
   final bool isActive;
   final VoidCallback onTap;
 
-  static const _navyColor = Color(0xFF1B2B5E);
-
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(right: 6),
-      child: GestureDetector(
-        key: const Key('dashboard_filter_chip_tap'),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: isActive ? _navyColor : Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isActive ? _navyColor : const Color(0xFFD1D5DB),
-              width: 1,
+      child: Semantics(
+        label: isActive ? 'Village filter: $label, selected' : 'Filter by village: $label',
+        button: true,
+        child: GestureDetector(
+          key: const Key('dashboard_filter_chip_tap'),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: isActive ? AppColors.navy : Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isActive ? AppColors.navy : AppColors.border,
+                width: 1,
+              ),
             ),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: isActive ? Colors.white : const Color(0xFF374151),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isActive ? Colors.white : AppColors.textStrong,
+              ),
             ),
           ),
         ),

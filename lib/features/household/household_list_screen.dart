@@ -319,6 +319,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
             ],
           ),
           IconButton(
+            tooltip: 'Refresh',
             icon: const Icon(Icons.refresh),
             onPressed: () => setState(_loadData),
           ),
@@ -708,7 +709,6 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
   /// Mirrors the dashboard pattern. Hidden when ≤1 village in local data.
   Widget _buildInlineVillageChipRow(ColorScheme scheme) {
     if (_inlineVillages.isEmpty) return const SizedBox.shrink();
-    const navyColor = Color(0xFF1B2B5E);
     return Container(
       color: scheme.surface,
       padding: const EdgeInsets.only(left: 12, right: 12, top: 8, bottom: 4),
@@ -732,13 +732,13 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
                 _InlineVillageChip(
                   label: MissionDashboardStrings.allVillages,
                   isActive: _selectedInlineVillageId == null,
-                  navyColor: navyColor,
+                  navyColor: AppColors.navy,
                   onTap: () => setState(() => _selectedInlineVillageId = null),
                 ),
                 ..._inlineVillages.map((v) => _InlineVillageChip(
                       label: v.name,
                       isActive: _selectedInlineVillageId == v.id,
-                      navyColor: navyColor,
+                      navyColor: AppColors.navy,
                       onTap: () => setState(() {
                         _selectedInlineVillageId =
                             _selectedInlineVillageId == v.id ? null : v.id;
@@ -838,25 +838,30 @@ class _TierFilterChip extends StatelessWidget {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     final urgency = Theme.of(context).extension<UrgencyTheme>()!;
     final color = _tierColor(tier, urgency, tokens);
-    return GestureDetector(
-      key: const Key('household_tier_filter_tap'),
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? color.withValues(alpha: 0.2) : Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isSelected ? color : tokens.textMuted.withValues(alpha: 0.3),
-            width: isSelected ? 2 : 1,
+    return Semantics(
+      label: 'Filter by $label',
+      button: true,
+      selected: isSelected,
+      child: GestureDetector(
+        key: const Key('household_tier_filter_tap'),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: isSelected ? color.withValues(alpha: 0.2) : Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isSelected ? color : tokens.textMuted.withValues(alpha: 0.3),
+              width: isSelected ? 2 : 1,
+            ),
           ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-            color: isSelected ? color : tokens.textPrimary,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+              color: isSelected ? color : tokens.textPrimary,
+            ),
           ),
         ),
       ),
@@ -934,24 +939,29 @@ class _FilterChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return GestureDetector(
-      key: const Key('household_programme_filter_tap'),
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: isSelected ? scheme.primary : scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? scheme.primary : scheme.outline.withValues(alpha: 0.3),
+    return Semantics(
+      label: label,
+      button: true,
+      selected: isSelected,
+      child: GestureDetector(
+        key: const Key('household_programme_filter_tap'),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: isSelected ? scheme.primary : scheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isSelected ? scheme.primary : scheme.outline.withValues(alpha: 0.3),
+            ),
           ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? scheme.onPrimary : scheme.onSurface,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isSelected ? scheme.onPrimary : scheme.onSurface,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+            ),
           ),
         ),
       ),
@@ -1478,24 +1488,29 @@ class _InlineVillageChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(right: 6),
-      child: GestureDetector(
-        key: ValueKey('household_inline_village_$label'),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: isActive ? navyColor : Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isActive ? navyColor : const Color(0xFFD1D5DB),
+      child: Semantics(
+        label: 'Filter by village: $label',
+        button: true,
+        selected: isActive,
+        child: GestureDetector(
+          key: ValueKey('household_inline_village_$label'),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: isActive ? navyColor : Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isActive ? navyColor : AppColors.border,
+              ),
             ),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: isActive ? Colors.white : const Color(0xFF374151),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isActive ? Colors.white : AppColors.textStrong,
+              ),
             ),
           ),
         ),

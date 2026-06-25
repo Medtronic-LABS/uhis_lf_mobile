@@ -86,7 +86,10 @@ class TriageReferralCard extends StatelessWidget {
           width: isBreached ? 2 : 1,
         ),
       ),
-      child: InkWell(
+      child: Semantics(
+        label: 'View referral for ${patient?.name ?? referral.patientId}',
+        button: true,
+        child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Column(
@@ -165,6 +168,7 @@ class TriageReferralCard extends StatelessWidget {
               onCloseCase: onCloseCase,
             ),
           ],
+        ),
         ),
       ),
     );

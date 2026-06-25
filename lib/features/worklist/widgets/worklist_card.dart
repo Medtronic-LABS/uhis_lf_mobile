@@ -88,130 +88,138 @@ class WorklistCard extends StatelessWidget {
             ? BorderSide(color: accent.withValues(alpha: 0.5), width: 1.5)
             : BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.3)),
       ),
-      child: InkWell(
-        key: const Key('worklist_card_tap'),
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Avatar with initials
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: scheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Center(
-                  child: Text(
-                    initials,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: scheme.onPrimaryContainer,
+      child: Semantics(
+        label: 'Open visit for ${entry.displayName}, ${entry.programmes.isNotEmpty ? entry.programmes.first.name : ''} programme',
+        button: true,
+        child: InkWell(
+          key: const Key('worklist_card_tap'),
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Avatar with initials
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: scheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Center(
+                    child: Text(
+                      initials,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: scheme.onPrimaryContainer,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              
-              // Main content
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Row 1: Name + Urgency badge
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            entry.displayName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  color: scheme.onSurface,
-                                ),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        UrgencyBadge(level: _urgencyLevel(), compact: true),
-                      ],
-                    ),
-                    
-                    // Row 2: Alert badge with reason
-                    if (alertText.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      AlertIndicator(
-                        reason: alertText,
-                        isUrgent: entry.isUrgent,
-                      ),
-                    ],
-                    
-                    // Row 3: Demographics + Programme chips inline
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        if (demographics.isNotEmpty)
-                          Flexible(
+                const SizedBox(width: 10),
+
+                // Main content
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Row 1: Name + Urgency badge
+                      Row(
+                        children: [
+                          Expanded(
                             child: Text(
-                              demographics.join(' · '),
+                              entry.displayName,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                    color: scheme.onSurface.withValues(alpha: 0.6),
+                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    color: scheme.onSurface,
                                   ),
                             ),
                           ),
-                        if (demographics.isNotEmpty && entry.programmes.isNotEmpty)
-                          Text(
-                            ' · ',
-                            style: TextStyle(
-                              color: scheme.onSurface.withValues(alpha: 0.4),
-                              fontSize: 11,
-                            ),
-                          ),
-                        // Programme chips inline
-                        ...entry.programmes.take(2).map((p) => Padding(
-                          padding: const EdgeInsets.only(right: 4),
-                          child: ProgrammeTag(programme: p),
-                        )),
-                        if (entry.rationale != null || entry.reasons.length > 1)
-                          GestureDetector(
-                            key: const Key('worklist_rationale_tap'),
-                            onTap: () => _showRationaleSheet(context),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: scheme.surfaceContainerHighest,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.help_outline, size: 10, color: scheme.onSurfaceVariant),
-                                  const SizedBox(width: 2),
-                                  Text(
-                                    'Why?',
-                                    style: TextStyle(
-                                      color: scheme.onSurfaceVariant,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
+                          const SizedBox(width: 6),
+                          UrgencyBadge(level: _urgencyLevel(), compact: true),
+                        ],
+                      ),
+
+                      // Row 2: Alert badge with reason
+                      if (alertText.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        AlertIndicator(
+                          reason: alertText,
+                          isUrgent: entry.isUrgent,
+                        ),
                       ],
-                    ),
-                  ],
+
+                      // Row 3: Demographics + Programme chips inline
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          if (demographics.isNotEmpty)
+                            Flexible(
+                              child: Text(
+                                demographics.join(' · '),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                      color: scheme.onSurface.withValues(alpha: 0.6),
+                                    ),
+                              ),
+                            ),
+                          if (demographics.isNotEmpty && entry.programmes.isNotEmpty)
+                            Text(
+                              ' · ',
+                              style: TextStyle(
+                                color: scheme.onSurface.withValues(alpha: 0.4),
+                                fontSize: 11,
+                              ),
+                            ),
+                          // Programme chips inline
+                          ...entry.programmes.take(2).map((p) => Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: ProgrammeTag(programme: p),
+                          )),
+                          if (entry.rationale != null || entry.reasons.length > 1)
+                            Semantics(
+                              label: 'Show AI rationale for ${entry.displayName}',
+                              button: true,
+                              child: GestureDetector(
+                                key: const Key('worklist_rationale_tap'),
+                                onTap: () => _showRationaleSheet(context),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: scheme.surfaceContainerHighest,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.help_outline, size: 10, color: scheme.onSurfaceVariant),
+                                      const SizedBox(width: 2),
+                                      Text(
+                                        'Why?',
+                                        style: TextStyle(
+                                          color: scheme.onSurfaceVariant,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

@@ -486,6 +486,7 @@ class _NcdAssessmentFormState extends State<NcdAssessmentForm> {
                             ? Text('Pulse: ${reading.pulse} bpm')
                             : null,
                         trailing: IconButton(
+                          tooltip: 'Delete BP reading ${idx + 1}',
                           icon: const Icon(Icons.delete_outline),
                           onPressed: () {
                             final updated = List<BpLogDetails>.from(bpReadings);

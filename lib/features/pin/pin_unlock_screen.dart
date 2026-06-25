@@ -54,6 +54,7 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
+          tooltip: 'Back',
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/lock'),
         ),
@@ -82,6 +83,7 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
                           'assets/images/app-logo-name.png',
                           height: 48,
                           fit: BoxFit.contain,
+                          semanticLabel: 'UHIS logo',
                         ),
                         const SizedBox(height: 24),
                       ],

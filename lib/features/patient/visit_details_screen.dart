@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../core/theme/app_theme.dart';
 import 'member_detail_repository.dart';
 
 /// Screen to display detailed information about a patient visit.
@@ -1008,11 +1009,11 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
   Color _getStatusColor(String status, ColorScheme scheme) {
     final statusLower = status.toLowerCase();
     if (statusLower.contains('complete') || statusLower.contains('finished')) {
-      return Colors.green;
+      return AppColors.statusSuccess;
     } else if (statusLower.contains('pending') || statusLower.contains('in-progress')) {
-      return Colors.orange;
+      return AppColors.statusWarning;
     } else if (statusLower.contains('cancel') || statusLower.contains('rejected')) {
-      return Colors.red;
+      return AppColors.statusCritical;
     }
     return scheme.onSurface;
   }

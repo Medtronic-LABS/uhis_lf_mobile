@@ -25,7 +25,11 @@ class VisitTierChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     final color = _tierColor(tier, tokens);
-    return GestureDetector(
+    return Semantics(
+      label: isSelected ? 'Remove filter: $label' : 'Filter by $label',
+      button: true,
+      selected: isSelected,
+      child: GestureDetector(
       key: const Key('visit_tier_chip_tap'),
       onTap: onTap,
       child: Container(
@@ -70,6 +74,7 @@ class VisitTierChip extends StatelessWidget {
           ],
         ),
       ),
+    ),
     );
   }
 

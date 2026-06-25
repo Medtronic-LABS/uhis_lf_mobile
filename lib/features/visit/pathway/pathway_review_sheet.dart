@@ -337,6 +337,7 @@ class _PathwayReviewSheetState extends State<PathwayReviewSheet> {
         ),
         trailing: isManual || !isRuleBased
             ? IconButton(
+                tooltip: 'Remove pathway',
                 icon: const Icon(Icons.close),
                 onPressed: () {
                   setState(() {
@@ -345,6 +346,7 @@ class _PathwayReviewSheetState extends State<PathwayReviewSheet> {
                 },
               )
             : IconButton(
+                tooltip: 'Skip pathway',
                 icon: const Icon(Icons.remove_circle_outline),
                 color: theme.colorScheme.error,
                 onPressed: () => _showSkipDialog(pathway),

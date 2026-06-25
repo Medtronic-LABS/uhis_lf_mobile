@@ -78,6 +78,7 @@ class _RecentVitalsSectionState extends State<RecentVitalsSection> {
                   leading: const Icon(Icons.error_outline),
                   title: const Text('Failed to load vitals'),
                   trailing: IconButton(
+                    tooltip: 'Retry loading vitals',
                     icon: const Icon(Icons.refresh),
                     onPressed: _load,
                   ),

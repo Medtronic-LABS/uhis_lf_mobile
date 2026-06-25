@@ -10,7 +10,7 @@ class ThemeProvider extends ChangeNotifier {
   static const _key = 'theme_mode';
   static const _storage = FlutterSecureStorage();
 
-  ThemeMode _mode = ThemeMode.light;
+  ThemeMode _mode = ThemeMode.system;
 
   ThemeMode get mode => _mode;
 
@@ -26,7 +26,7 @@ class ThemeProvider extends ChangeNotifier {
       } else if (stored == 'light') {
         _mode = ThemeMode.light;
       } else {
-        _mode = ThemeMode.light;
+        _mode = ThemeMode.system;
       }
       notifyListeners();
     } catch (_) {
@@ -55,7 +55,21 @@ class ThemeProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> toggleDarkMode() async {
-    await setMode(isDark ? ThemeMode.light : ThemeMode.dark);
+  /// Cycles system → light → dark → system.
+  Future<void> cycleThemeMode() async {
+    switch (_mode) {
+      case ThemeMode.system:
+        await setMode(ThemeMode.light);
+        break;
+      case ThemeMode.light:
+        await setMode(ThemeMode.dark);
+        break;
+      case ThemeMode.dark:
+        await setMode(ThemeMode.system);
+        break;
+    }
   }
+
+  /// Legacy toggle kept for call-sites not yet updated; cycles the same way.
+  Future<void> toggleDarkMode() => cycleThemeMode();
 }

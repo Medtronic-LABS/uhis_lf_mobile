@@ -41,7 +41,10 @@ class ReferralOperationsWidget extends StatelessWidget {
               : scheme.outlineVariant.withValues(alpha: 0.3),
         ),
       ),
-      child: InkWell(
+      child: Semantics(
+        label: 'View referral status',
+        button: true,
+        child: InkWell(
         onTap: onOpenReferrals,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
@@ -126,6 +129,7 @@ class ReferralOperationsWidget extends StatelessWidget {
               ],
             ],
           ),
+        ),
         ),
       ),
     );

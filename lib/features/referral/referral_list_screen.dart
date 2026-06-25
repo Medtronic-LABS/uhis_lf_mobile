@@ -639,7 +639,6 @@ class _ReferralListScreenState extends State<ReferralListScreen>
   /// Village chip row — "WHICH VILLAGE ARE YOU VISITING?" — Visits tab.
   Widget _buildVisitVillageChipRow(List<String> villageNames) {
     final scheme = Theme.of(context).colorScheme;
-    const navyColor = Color(0xFF1B2B5E);
     return Container(
       color: scheme.surface,
       padding: const EdgeInsets.only(left: 12, right: 12, top: 8, bottom: 4),
@@ -663,13 +662,13 @@ class _ReferralListScreenState extends State<ReferralListScreen>
                 _VisitVillageChip(
                   label: MissionDashboardStrings.allVillages,
                   isActive: _selectedVisitVillage == null,
-                  navyColor: navyColor,
+                  navyColor: AppColors.navy,
                   onTap: () => setState(() => _selectedVisitVillage = null),
                 ),
                 ...villageNames.map((v) => _VisitVillageChip(
                       label: v,
                       isActive: _selectedVisitVillage == v,
-                      navyColor: navyColor,
+                      navyColor: AppColors.navy,
                       onTap: () => setState(() {
                         _selectedVisitVillage =
                             _selectedVisitVillage == v ? null : v;
@@ -1964,7 +1963,10 @@ class _CompletedTodayChip extends StatelessWidget {
     final theme = Theme.of(context);
     final tokens = theme.extension<LeapfrogColors>()!;
     final color = tokens.statusSuccess;
-    return GestureDetector(
+    return Semantics(
+      label: isSelected ? 'Show completed visits, selected' : 'Show completed visits',
+      button: true,
+      child: GestureDetector(
       key: const Key('referral_status_filter_tap'),
       onTap: onTap,
       child: Container(
@@ -2013,6 +2015,7 @@ class _CompletedTodayChip extends StatelessWidget {
           ],
         ),
       ),
+      ),
     );
   }
 }
@@ -2034,23 +2037,27 @@ class _VisitVillageChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(right: 6),
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: isActive ? navyColor : Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isActive ? navyColor : const Color(0xFFD1D5DB),
+      child: Semantics(
+        label: isActive ? 'Village filter: $label, selected' : 'Filter by village: $label',
+        button: true,
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: isActive ? navyColor : Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isActive ? navyColor : AppColors.border,
+              ),
             ),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: isActive ? Colors.white : const Color(0xFF374151),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isActive ? Colors.white : AppColors.textStrong,
+              ),
             ),
           ),
         ),

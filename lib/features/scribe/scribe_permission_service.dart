@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../core/theme/app_theme.dart';
+
 /// Wraps runtime RECORD_AUDIO permission request with rationale dialog.
 class ScribePermissionService {
   /// Returns true if mic permission is granted (or already was).
@@ -94,10 +96,10 @@ class _RationaleSheet extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEEF0FF),
+                  color: AppColors.aiSurfaceStart,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.mic, color: Color(0xFF6B63D4), size: 22),
+                child: const Icon(Icons.mic, color: AppColors.aiPurple, size: 22),
               ),
               const SizedBox(width: 12),
               Column(
@@ -173,7 +175,7 @@ class _BulletItem extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: const Color(0xFF6B63D4)),
+          Icon(icon, size: 18, color: AppColors.aiPurple),
           const SizedBox(width: 10),
           Expanded(
             child: Text(

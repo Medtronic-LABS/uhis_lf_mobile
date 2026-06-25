@@ -556,7 +556,6 @@ class _FingerprintCardState extends State<_FingerprintCard>
   static const _iconBoxIdle   = Color(0x1FFFFFFF); // white 12%
   static const _iconBoxScan   = Color(0x33E8356D); // pink 20%
   static const _iconBoxVerify = Color(0x3310B981); // green 20%
-  static const _verifyGreen   = Color(0xFF10B981);
 
   @override
   void initState() {
@@ -609,7 +608,7 @@ class _FingerprintCardState extends State<_FingerprintCard>
                 ? _iconBoxScan
                 : _iconBoxIdle;
         final Color iconColor = _verified
-            ? _verifyGreen
+            ? AppColors.statusSuccess
             : Colors.white;
         final double glowSpread = widget.busy
             ? 4 * _scanCtrl.value
@@ -697,14 +696,17 @@ class _FingerprintCardState extends State<_FingerprintCard>
     return AnimatedScale(
       scale: _isPressed ? 0.97 : 1.0,
       duration: AppAnimations.pressFeedback,
-      child: GestureDetector(
-        onTapDown: (_) => setState(() => _isPressed = true),
-        onTapUp: (_) {
-          setState(() => _isPressed = false);
-          if (!widget.busy) widget.onTap();
-        },
-        onTapCancel: () => setState(() => _isPressed = false),
-        child: Container(
+      child: Semantics(
+        label: 'Authenticate with fingerprint',
+        button: true,
+        child: GestureDetector(
+          onTapDown: (_) => setState(() => _isPressed = true),
+          onTapUp: (_) {
+            setState(() => _isPressed = false);
+            if (!widget.busy) widget.onTap();
+          },
+          onTapCancel: () => setState(() => _isPressed = false),
+          child: Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
           decoration: BoxDecoration(
@@ -731,6 +733,7 @@ class _FingerprintCardState extends State<_FingerprintCard>
             ],
           ),
         ),
+      ),
       ),
     );
   }

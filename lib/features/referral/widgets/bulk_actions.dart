@@ -171,7 +171,10 @@ class _BulkActionButtonState extends State<_BulkActionButton> {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
+    return Semantics(
+      label: '${widget.label} selected referrals',
+      button: true,
+      child: Material(
       color: widget.color.withValues(alpha: 0.15),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
@@ -209,6 +212,7 @@ class _BulkActionButtonState extends State<_BulkActionButton> {
             ],
           ),
         ),
+      ),
       ),
     );
   }
@@ -249,10 +253,13 @@ class SelectableReferralCard extends StatelessWidget {
           child: AnimatedOpacity(
             duration: const Duration(milliseconds: 200),
             opacity: isSelected ? 0.95 : 1,
-            child: GestureDetector(
-              key: const Key('referral_card_long_press'),
-              onLongPress: onToggleSelection,
-              child: child,
+            child: Semantics(
+              label: isSelected ? 'Deselect referral' : 'Long press to select referral',
+              child: GestureDetector(
+                key: const Key('referral_card_long_press'),
+                onLongPress: onToggleSelection,
+                child: child,
+              ),
             ),
           ),
         ),
@@ -262,7 +269,10 @@ class SelectableReferralCard extends StatelessWidget {
           Positioned(
             top: 8,
             right: 8,
-            child: GestureDetector(
+            child: Semantics(
+              label: isSelected ? 'Deselect referral' : 'Select referral',
+              button: true,
+              child: GestureDetector(
               key: const Key('referral_card_select_tap'),
               onTap: onToggleSelection,
               child: Container(
@@ -291,6 +301,7 @@ class SelectableReferralCard extends StatelessWidget {
                         color: scheme.onPrimary,
                       )
                     : null,
+              ),
               ),
             ),
           ),

@@ -75,6 +75,7 @@ class _OpenFollowupsSectionState extends State<OpenFollowupsSection> {
                   leading: const Icon(Icons.error_outline),
                   title: const Text('Failed to load follow-ups'),
                   trailing: IconButton(
+                    tooltip: 'Retry loading follow-ups',
                     icon: const Icon(Icons.refresh),
                     onPressed: _load,
                   ),

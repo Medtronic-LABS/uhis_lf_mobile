@@ -45,9 +45,9 @@ class BottomNavShell extends StatelessWidget {
               label: BottomNavStrings.tasks,
             ),
             NavigationDestination(
-              icon: Icon(Icons.map_outlined),
-              selectedIcon: Icon(Icons.map),
-              label: BottomNavStrings.map,
+              icon: Icon(Icons.chat_outlined),
+              selectedIcon: Icon(Icons.chat),
+              label: BottomNavStrings.assistant,
             ),
           ],
         ),
@@ -64,9 +64,9 @@ class BottomNavShell extends StatelessWidget {
   }
 }
 
-/// Placeholder widget for the Map tab (empty state).
-class MapPlaceholderScreen extends StatelessWidget {
-  const MapPlaceholderScreen({super.key});
+/// Placeholder widget for the Assistant tab (empty state).
+class AssistantPlaceholderScreen extends StatelessWidget {
+  const AssistantPlaceholderScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -75,7 +75,7 @@ class MapPlaceholderScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(BottomNavStrings.mapTitle),
+        title: const Text(BottomNavStrings.assistantTitle),
         centerTitle: true,
       ),
       body: Center(
@@ -83,13 +83,13 @@ class MapPlaceholderScreen extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.map_outlined,
+              Icons.chat_outlined,
               size: 80,
               color: tokens.textMuted.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 16),
             Text(
-              BottomNavStrings.mapPlaceholderHeading,
+              BottomNavStrings.assistantPlaceholderHeading,
               style: textTheme.headlineSmall?.copyWith(
                 color: tokens.textMuted,
                 fontWeight: FontWeight.w800,
@@ -97,7 +97,7 @@ class MapPlaceholderScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              BottomNavStrings.mapPlaceholderSubheading,
+              BottomNavStrings.assistantPlaceholderSubheading,
               style: textTheme.bodyLarge?.copyWith(
                 color: tokens.textMuted.withValues(alpha: 0.7),
               ),

@@ -162,6 +162,7 @@ class _NotesPanelState extends State<NotesPanel> {
                   ),
                   const SizedBox(width: 8),
                   IconButton.filled(
+                    tooltip: 'Submit note',
                     onPressed: _isSubmitting || _controller.text.isEmpty
                         ? null
                         : _submitNote,

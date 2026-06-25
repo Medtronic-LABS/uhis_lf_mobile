@@ -1,11 +1,11 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/auth/auth_state.dart';
 import '../core/constants/app_strings.dart';
-import '../core/theme/app_theme.dart';
 import '../core/models/dashboard_tier.dart';
 import '../features/dashboard/mission_dashboard_screen.dart';
 import '../features/household/household_detail_screen.dart';
@@ -31,7 +31,7 @@ final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 final _homeNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'home');
 final _patientsNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'patients');
 final _tasksNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'tasks');
-final _mapNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'map');
+final _mapNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'assistant');
 
 GoRouter buildRouter(AuthState auth) {
   return GoRouter(
@@ -44,6 +44,7 @@ GoRouter buildRouter(AuthState auth) {
         case AuthStatus.unknown:
           return loc == '/' ? null : '/';
         case AuthStatus.signedOut:
+          if (!auth.splashReady && loc == '/') return null;
           if (auth.reentryEnabled) {
             // Cold-start or post-expiry with biometric or PIN still enrolled.
             // Bounce login attempts back through /lock unless user explicitly
@@ -58,6 +59,7 @@ GoRouter buildRouter(AuthState auth) {
           if (loc.startsWith('/login')) return null;
           return '/login';
         case AuthStatus.signedIn:
+          if (!auth.splashReady && loc == '/') return null;
           // Mid-session lock is overlaid by LockBarrier — no route swap, so
           // route stays where the user was. Cold-start /lock is still
           // reachable via signedOut + reentryEnabled below.
@@ -346,7 +348,7 @@ GoRouter buildRouter(AuthState auth) {
             ],
           ),
 
-          // Tab 3: Map
+          // Tab 3: Assistant
           StatefulShellBranch(
             navigatorKey: _mapNavigatorKey,
             routes: [
@@ -354,8 +356,8 @@ GoRouter buildRouter(AuthState auth) {
                 path: '/map',
                 name: 'map',
                 pageBuilder: (context, state) => const MaterialPage(
-                  key: ValueKey('map-page'),
-                  child: MapPlaceholderScreen(),
+                  key: ValueKey('assistant-page'),
+                  child: AssistantPlaceholderScreen(),
                 ),
               ),
             ],
@@ -410,22 +412,161 @@ class _SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<_SplashScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
+  late final AnimationController _enterCtrl;
   late final AnimationController _dotsCtrl;
+
+  // Entry animations (driven by _enterCtrl, 2500 ms total)
+  late final Animation<double> _logoScale;
+  late final Animation<double> _logoTy;
+  late final Animation<double> _titleFade;
+  late final Animation<Offset> _titleSlide;
+  late final Animation<double> _bnFade;
+  late final Animation<Offset> _bnSlide;
+  late final Animation<double> _taglineFade;
+  late final Animation<Offset> _taglineSlide;
+  late final Animation<double> _badgesFade;
+  late final Animation<Offset> _badgesSlide;
+  late final Animation<double> _dotsFade;
+
+  static const _slideOffset = Offset(0, 0.08);
+  static const _badges = [
+    'AI Triage', 'On-device CDSS', 'Teleconsult', 'Offline-first', 'WhatsApp',
+  ];
 
   @override
   void initState() {
     super.initState();
+
+    _enterCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2500),
+    )..forward();
+
     _dotsCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     )..repeat();
+
+    // Logo: spring bounce, 300–920 ms
+    final logoInterval = CurvedAnimation(
+      parent: _enterCtrl,
+      curve: const Interval(0.12, 0.37, curve: Curves.elasticOut),
+    );
+    _logoScale = Tween<double>(begin: 0.4, end: 1.0).animate(logoInterval);
+    _logoTy    = Tween<double>(begin: 30.0, end: 0.0).animate(
+      CurvedAnimation(parent: _enterCtrl, curve: const Interval(0.12, 0.37, curve: Curves.easeOut)),
+    );
+
+    // Title: 800–1300 ms
+    final titleAnim = CurvedAnimation(parent: _enterCtrl, curve: const Interval(0.32, 0.52, curve: Curves.easeOut));
+    _titleFade  = Tween<double>(begin: 0.0, end: 1.0).animate(titleAnim);
+    _titleSlide = Tween<Offset>(begin: _slideOffset, end: Offset.zero).animate(titleAnim);
+
+    // Bengali: 1000–1500 ms
+    final bnAnim = CurvedAnimation(parent: _enterCtrl, curve: const Interval(0.40, 0.60, curve: Curves.easeOut));
+    _bnFade  = Tween<double>(begin: 0.0, end: 1.0).animate(bnAnim);
+    _bnSlide = Tween<Offset>(begin: _slideOffset, end: Offset.zero).animate(bnAnim);
+
+    // Tagline: 1200–1700 ms
+    final taglineAnim = CurvedAnimation(parent: _enterCtrl, curve: const Interval(0.48, 0.68, curve: Curves.easeOut));
+    _taglineFade  = Tween<double>(begin: 0.0, end: 1.0).animate(taglineAnim);
+    _taglineSlide = Tween<Offset>(begin: _slideOffset, end: Offset.zero).animate(taglineAnim);
+
+    // Badges: 1400–1900 ms
+    final badgesAnim = CurvedAnimation(parent: _enterCtrl, curve: const Interval(0.56, 0.76, curve: Curves.easeOut));
+    _badgesFade  = Tween<double>(begin: 0.0, end: 1.0).animate(badgesAnim);
+    _badgesSlide = Tween<Offset>(begin: _slideOffset, end: Offset.zero).animate(badgesAnim);
+
+    // Dots container: 1500–1900 ms
+    _dotsFade = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _enterCtrl, curve: const Interval(0.60, 0.76, curve: Curves.easeOut)),
+    );
+
+    // Trigger router transition after 2.5 s
+    Future.delayed(const Duration(milliseconds: 2500), () {
+      if (mounted) context.read<AuthState>().setSplashReady();
+    });
   }
 
   @override
   void dispose() {
+    _enterCtrl.dispose();
     _dotsCtrl.dispose();
     super.dispose();
+  }
+
+  Widget _buildLogoBox() {
+    return AnimatedBuilder(
+      animation: _enterCtrl,
+      builder: (_, child) => Transform.translate(
+        offset: Offset(0, _logoTy.value),
+        child: Transform.scale(
+          scale: _logoScale.value,
+          child: Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFE8356D), Color(0xFFb01f52)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(22),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFE8356D).withValues(alpha: 0.45),
+                  blurRadius: 40,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: CustomPaint(
+              painter: _SplashIconPainter(),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _fade({required Animation<double> fade, required Animation<Offset> slide, required Widget child}) {
+    return FadeTransition(
+      opacity: fade,
+      child: SlideTransition(position: slide, child: child),
+    );
+  }
+
+  Widget _buildBadges() {
+    return FadeTransition(
+      opacity: _badgesFade,
+      child: SlideTransition(
+        position: _badgesSlide,
+        child: SizedBox(
+          width: 280,
+          child: Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            runSpacing: 6,
+            children: _badges.map((label) => Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white.withValues(alpha: 0.80),
+                ),
+              ),
+            )).toList(),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -437,62 +578,103 @@ class _SplashScreenState extends State<_SplashScreen>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Pink gradient logo box
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [AppColors.pink, AppColors.pinkDark],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(22),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.pink.withValues(alpha: 0.45),
-                      blurRadius: 40,
-                      offset: const Offset(0, 12),
-                    ),
-                  ],
-                ),
-                child: Center(
-                  child: Image.asset(
-                    'assets/images/app-logo-name.png',
-                    height: 44,
-                    fit: BoxFit.contain,
-                  ),
-                ),
-              ),
+              _buildLogoBox(),
               const SizedBox(height: 20),
-              const Text(
-                'UHIS Next',
-                style: TextStyle(
-                  fontFamily: 'Nunito',
-                  fontSize: 26,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                  letterSpacing: -0.3,
+              _fade(
+                fade: _titleFade, slide: _titleSlide,
+                child: const Text(
+                  LockStrings.aponSushashthya,
+                  style: TextStyle(
+                    fontFamily: 'Nunito',
+                    fontSize: 26,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: -0.3,
+                  ),
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
-                LockStrings.programSubtitle,
-                style: TextStyle(
-                  fontFamily: 'NunitoSans',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w400,
-                  color: Colors.white.withValues(alpha: 0.50),
+              _fade(
+                fade: _bnFade, slide: _bnSlide,
+                child: Text(
+                  LockStrings.aponSushashthyaBn,
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: Colors.white.withValues(alpha: 0.50),
+                  ),
                 ),
               ),
+              const SizedBox(height: 16),
+              _fade(
+                fade: _taglineFade, slide: _taglineSlide,
+                child: SizedBox(
+                  width: 240,
+                  child: Text(
+                    LockStrings.splashTagline,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.white.withValues(alpha: 0.65),
+                      height: 1.6,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              _buildBadges(),
               const SizedBox(height: 40),
-              _AnimatedDots(controller: _dotsCtrl),
+              FadeTransition(
+                opacity: _dotsFade,
+                child: _AnimatedDots(controller: _dotsCtrl),
+              ),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+// Person silhouette + community health pulse arc — from prototype SVG paths
+class _SplashIconPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round;
+
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+    final s = size.width / 80; // scale factor relative to 80dp box
+
+    // Person head
+    canvas.drawCircle(Offset(cx, cy - 10 * s), 5 * s, paint);
+    // Shoulders arc
+    final shoulderPath = Path()
+      ..moveTo(cx - 10 * s, cy + 12 * s)
+      ..quadraticBezierTo(cx, cy + 5 * s, cx + 10 * s, cy + 12 * s);
+    canvas.drawPath(shoulderPath, paint);
+    // Outer pulse arc
+    final arcPaint = Paint()
+      ..color = Colors.white.withAlpha(0x99)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(
+      Rect.fromCenter(center: Offset(cx, cy - 10 * s), width: 22 * s, height: 22 * s),
+      pi * 1.1, pi * 0.8, false, arcPaint,
+    );
+    canvas.drawArc(
+      Rect.fromCenter(center: Offset(cx, cy - 10 * s), width: 34 * s, height: 34 * s),
+      pi * 1.15, pi * 0.7, false,
+      arcPaint..color = Colors.white.withAlpha(0x55),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter old) => false;
 }
 
 class _AnimatedDots extends StatelessWidget {
@@ -513,16 +695,13 @@ class _AnimatedDots extends StatelessWidget {
               final t = sin(phase * pi).clamp(0.0, 1.0);
               final color = Color.lerp(
                 Colors.white.withValues(alpha: 0.25),
-                AppColors.pink,
+                const Color(0xFFE8356D),
                 t,
               )!;
               return Container(
                 width: 8,
                 height: 8,
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                ),
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
               );
             },
           ),
