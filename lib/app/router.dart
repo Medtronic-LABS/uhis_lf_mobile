@@ -21,6 +21,10 @@ import '../features/referral/referral_list_screen.dart';
 import '../features/sync/sync_progress_screen.dart';
 import '../features/visit/pathway/pathway_engine.dart';
 import '../features/visit/triage/triage_result_screen.dart';
+import '../features/counselling/counselling_screen.dart';
+import '../features/teleconsult/teleconsult_screen.dart';
+import '../features/training/training_screen.dart';
+import '../features/visit/visit_complete_screen.dart';
 import '../features/visit/visit_form_screen.dart';
 import '../features/visit/visit_landing_screen.dart';
 import '../features/visit/triage/symptom_picker_screen.dart';
@@ -289,7 +293,7 @@ GoRouter buildRouter(AuthState auth) {
                         extra = Map<String, dynamic>.from(state.extra as Map);
                       }
                       final origin = state.uri.queryParameters['origin'];
-                      
+
                       // Parse activatedPathways from extra data
                       List<String>? pathways;
                       if (extra?['activatedPathways'] is List) {
@@ -297,7 +301,7 @@ GoRouter buildRouter(AuthState auth) {
                             .map((e) => e.toString())
                             .toList();
                       }
-                      
+
                       return MaterialPage(
                         key: ValueKey('visit-form-${state.pathParameters['visitId']}'),
                         child: VisitFormScreen(
@@ -312,6 +316,34 @@ GoRouter buildRouter(AuthState auth) {
                           gestationalWeeks: extra?['gestationalWeeks'] as int?,
                           activatedPathways: pathways,
                           origin: origin,
+                        ),
+                      );
+                    },
+                  ),
+                  GoRoute(
+                    path: 'visit/:visitId/complete',
+                    name: 'visit-complete',
+                    pageBuilder: (context, state) {
+                      final extra = state.extra is Map<String, dynamic>
+                          ? state.extra as Map<String, dynamic>
+                          : state.extra is Map
+                              ? Map<String, dynamic>.from(
+                                  state.extra as Map)
+                              : <String, dynamic>{};
+                      return MaterialPage(
+                        key: ValueKey(
+                            'visit-complete-${state.pathParameters['visitId']}'),
+                        child: VisitCompleteScreen(
+                          visitId: state.pathParameters['visitId']!,
+                          patientLabel:
+                              extra['patientLabel'] as String? ?? 'Patient',
+                          primaryProgramme:
+                              extra['primaryProgramme'] as String? ?? '',
+                          referralRecommended:
+                              extra['referralRecommended'] as bool? ?? false,
+                          memberId: extra['memberId'] as String?,
+                          householdId: extra['householdId'] as String?,
+                          origin: extra['origin'] as String? ?? 'patients',
                         ),
                       );
                     },
@@ -363,6 +395,50 @@ GoRouter buildRouter(AuthState auth) {
             ],
           ),
         ],
+      ),
+
+      // ─────────────────────────────────────────────────────────────────────
+      // Standalone feature routes (full-screen, outside the shell)
+      // ─────────────────────────────────────────────────────────────────────
+      GoRoute(
+        path: '/teleconsult',
+        name: 'teleconsult',
+        pageBuilder: (context, state) {
+          final extra = state.extra is Map<String, dynamic>
+              ? state.extra as Map<String, dynamic>
+              : <String, dynamic>{};
+          return MaterialPage(
+            key: const ValueKey('teleconsult-page'),
+            child: TeleconsultScreen(
+              patientLabel: extra['patientLabel'] as String? ?? '',
+              patientId: extra['patientId'] as String? ?? '',
+            ),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/counselling',
+        name: 'counselling',
+        pageBuilder: (context, state) {
+          final extra = state.extra is Map<String, dynamic>
+              ? state.extra as Map<String, dynamic>
+              : <String, dynamic>{};
+          return MaterialPage(
+            key: const ValueKey('counselling-page'),
+            child: CounsellingScreen(
+              patientLabel: extra['patientLabel'] as String? ?? '',
+              patientId: extra['patientId'] as String? ?? '',
+            ),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/training',
+        name: 'training',
+        pageBuilder: (context, state) => const MaterialPage(
+          key: ValueKey('training-page'),
+          child: TrainingScreen(),
+        ),
       ),
 
       // ─────────────────────────────────────────────────────────────────────

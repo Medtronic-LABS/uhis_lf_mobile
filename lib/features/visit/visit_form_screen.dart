@@ -278,7 +278,19 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         }
       }
 
-      if (mounted && ctx.mounted) _showCompletionDialog(ctx);
+      if (mounted && ctx.mounted) {
+        ctx.go(
+          '/patients/visit/${widget.visitId}/complete',
+          extra: {
+            'patientLabel': widget.patientId ?? 'Patient',
+            'primaryProgramme': _getPrimaryProgramme().name,
+            'referralRecommended': _referralRecommended,
+            'memberId': widget.memberId,
+            'householdId': widget.householdId,
+            'origin': widget.origin ?? 'patients',
+          },
+        );
+      }
     } catch (e) {
       if (!ctx.mounted) return;
       ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
@@ -289,7 +301,10 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
   }
 
   // ── Dialogs ────────────────────────────────────────────────────────────────
+  // Kept for non-sectioned fallback mode; sectioned visits navigate to
+  // VisitCompleteScreen instead.
 
+  // ignore: unused_element
   void _showCompletionDialog(BuildContext ctx) {
     final theme = Theme.of(ctx);
     final programmes = widget.activatedPathways ?? [];

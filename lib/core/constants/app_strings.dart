@@ -2420,3 +2420,62 @@ abstract final class SymptomPickerStrings {
   static const String ctaWithPathways = 'AI is checking — see what to do next →';
   static const String ctaRoutine = 'Continue (routine visit)';
 }
+
+/// Visit completion screen strings.
+/// Used by [VisitCompleteScreen].
+abstract final class VisitCompleteStrings {
+  VisitCompleteStrings._();
+
+  static const String title = 'Visit Complete';
+  static const String saved = 'Assessment saved';
+  static const String referralWarning =
+      'Referral recommended based on clinical findings';
+  static const String bookTeleconsult = 'Book Teleconsult';
+  static const String createReferral = 'Create Referral';
+  static const String backToHome = 'Back to Home';
+}
+
+/// Teleconsult placeholder screen strings.
+/// Used by [TeleconsultScreen].
+abstract final class TeleconsultStrings {
+  TeleconsultStrings._();
+
+  static const String title = 'Teleconsult';
+  static const String comingSoon = 'Coming soon';
+  static const String placeholder =
+      'Video consultation with a doctor will be available here.\n'
+      'The SK can initiate a call directly from a completed visit.';
+  static const String callAction = 'Start Video Call';
+  static const String smsAction = 'Send SMS to Doctor';
+}
+
+/// Counselling messages placeholder screen strings.
+/// Used by [CounsellingScreen].
+abstract final class CounsellingStrings {
+  CounsellingStrings._();
+
+  static const String title = 'Counselling Messages';
+  static const String subtitle = 'AI-generated health counselling';
+  static const String comingSoon = 'AI messages coming soon';
+  static const String typeMessage = 'Type a message...';
+  static const String messagePlaceholder1 =
+      'Remember to take your iron + folic acid tablet every day with food.';
+  static const String messagePlaceholder2 =
+      'Your next ANC visit is in 4 weeks. Please attend even if you feel well.';
+  static const String messagePlaceholder3 =
+      'Drink at least 8 glasses of water daily and rest when you feel tired.';
+}
+
+/// Training Hub placeholder screen strings.
+/// Used by [TrainingScreen].
+abstract final class TrainingStrings {
+  TrainingStrings._();
+
+  static const String title = 'Training Hub';
+  static const String subtitle =
+      'Clinical training modules for frontline health workers';
+  static const String comingSoon = 'Coming soon';
+  static const String certificatesTitle = 'Certificates';
+  static const String certificatesSubtitle =
+      'Complete modules to earn programme certificates';
+}
