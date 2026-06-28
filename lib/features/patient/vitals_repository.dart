@@ -99,7 +99,10 @@ class RecentVitals {
       latestBp == null &&
       latestGlucose == null &&
       latestWeight == null &&
-      latestTemperature == null;
+      latestTemperature == null &&
+      latestSpO2 == null &&
+      latestRr == null &&
+      latestBmi == null;
 }
 
 /// Repository for fetching patient vitals history.

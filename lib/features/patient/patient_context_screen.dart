@@ -970,132 +970,203 @@ class _AssessmentDetailSheet extends StatelessWidget {
   }
 
   Widget _buildTypeSpecificInfo(BuildContext context, Color typeColor) {
-    final scheme = Theme.of(context).colorScheme;
-    
-    switch (assessment.type) {
-      case 'ANC':
-        return Card(
-          color: typeColor.withValues(alpha: 0.05),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.pregnant_woman, color: typeColor),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Antenatal Care Visit',
-                      style: TextStyle(
-                        color: typeColor,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'This visit included routine prenatal checkups, fetal monitoring, and maternal health assessment.',
-                  style: TextStyle(color: scheme.onSurfaceVariant),
-                ),
-              ],
-            ),
-          ),
-        );
-      case 'IMCI':
-        return Card(
-          color: typeColor.withValues(alpha: 0.05),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.child_care, color: typeColor),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Child Health Visit',
-                      style: TextStyle(
-                        color: typeColor,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Integrated Management of Childhood Illness assessment including growth monitoring, immunization status, and illness screening.',
-                  style: TextStyle(color: scheme.onSurfaceVariant),
-                ),
-              ],
-            ),
-          ),
-        );
-      case 'NCD':
-        return Card(
-          color: typeColor.withValues(alpha: 0.05),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.monitor_heart_outlined, color: typeColor),
-                    const SizedBox(width: 8),
-                    Text(
-                      'NCD Screening',
-                      style: TextStyle(
-                        color: typeColor,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Non-communicable disease screening including blood pressure, glucose levels, and cardiovascular risk assessment.',
-                  style: TextStyle(color: scheme.onSurfaceVariant),
-                ),
-              ],
-            ),
-          ),
-        );
-      case 'TB':
-        return Card(
-          color: typeColor.withValues(alpha: 0.05),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.healing, color: typeColor),
-                    const SizedBox(width: 8),
-                    Text(
-                      'TB Screening',
-                      style: TextStyle(
-                        color: typeColor,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Tuberculosis screening including symptom assessment, contact tracing, and treatment monitoring.',
-                  style: TextStyle(color: scheme.onSurfaceVariant),
-                ),
-              ],
-            ),
-          ),
-        );
-      default:
-        return const SizedBox.shrink();
+    final raw = assessment.rawJson;
+    // assessmentDetails is the nested clinical object from member-assessment-history
+    final details = raw['assessmentDetails'] is Map<String, dynamic>
+        ? raw['assessmentDetails'] as Map<String, dynamic>
+        : <String, dynamic>{};
+
+    // Helper: extract a numeric value from details or rawJson
+    double? num_(String key) {
+      Object? v = details[key] ?? raw[key];
+      if (v is num) return v.toDouble();
+      if (v is String) return double.tryParse(v);
+      return null;
     }
+
+    String? str_(String key) {
+      final v = details[key] ?? raw[key];
+      if (v == null) return null;
+      final s = v.toString().trim();
+      return s.isEmpty || s == 'null' ? null : s;
+    }
+
+    bool? bool_(String key) {
+      final v = details[key] ?? raw[key];
+      if (v is bool) return v;
+      if (v == true || v == 1 || v == 'true' || v == 'YES') return true;
+      if (v == false || v == 0 || v == 'false' || v == 'NO') return false;
+      return null;
+    }
+
+    final fields = <_ClinicalField>[];
+
+    switch (assessment.type) {
+      case 'NCD':
+        final sys = num_('avgSystolic') ?? num_('systolicBp') ?? num_('systolic');
+        final dia = num_('avgDiastolic') ?? num_('diastolicBp') ?? num_('diastolic');
+        if (sys != null && dia != null) {
+          fields.add(_ClinicalField('Blood Pressure', '${sys.toInt()}/${dia.toInt()} mmHg',
+              icon: Icons.favorite, urgent: sys >= 140 || dia >= 90));
+        }
+        final glucose = num_('glucoseValue') ?? num_('bloodGlucose');
+        final glucoseType = str_('glucoseType');
+        if (glucose != null) {
+          final label = glucoseType != null ? 'Glucose (${glucoseType.toLowerCase()})' : 'Glucose';
+          fields.add(_ClinicalField(label, '${glucose.toStringAsFixed(1)} mg/dL',
+              icon: Icons.bloodtype, urgent: glucose > 200));
+        }
+        final height = num_('height'); final weight = num_('weight'); final bmi = num_('bmi');
+        if (height != null) fields.add(_ClinicalField('Height', '${height.toInt()} cm', icon: Icons.straighten));
+        if (weight != null) fields.add(_ClinicalField('Weight', '${weight.toStringAsFixed(1)} kg', icon: Icons.monitor_weight));
+        if (bmi != null) fields.add(_ClinicalField('BMI', bmi.toStringAsFixed(1), icon: Icons.calculate));
+        final smoker = bool_('isRegularSmoker') ?? bool_('isSmoking');
+        if (smoker != null) fields.add(_ClinicalField('Smoking', smoker ? 'Yes' : 'No', icon: Icons.smoking_rooms));
+        final alcohol = bool_('isDrinkingAlcohol') ?? bool_('alcoholConsumption');
+        if (alcohol != null) fields.add(_ClinicalField('Alcohol', alcohol ? 'Yes' : 'No', icon: Icons.local_bar));
+
+      case 'ANC':
+        final ga = num_('gestationalAge') ?? num_('gestationAge');
+        if (ga != null) fields.add(_ClinicalField('Gestational Age', '${ga.toInt()} weeks', icon: Icons.calendar_month));
+        final fetuses = num_('noOfFetus') ?? num_('numberOfFetus');
+        if (fetuses != null && fetuses > 1) fields.add(_ClinicalField('Fetuses', fetuses.toInt().toString(), icon: Icons.group));
+        final fh = num_('fundalHeight');
+        if (fh != null) fields.add(_ClinicalField('Fundal Height', '${fh.toStringAsFixed(1)} cm', icon: Icons.height));
+        final sys = num_('avgSystolic') ?? num_('systolicBp');
+        final dia = num_('avgDiastolic') ?? num_('diastolicBp');
+        if (sys != null && dia != null) {
+          fields.add(_ClinicalField('Blood Pressure', '${sys.toInt()}/${dia.toInt()} mmHg',
+              icon: Icons.favorite, urgent: sys >= 140 || dia >= 90));
+        }
+        final weight = num_('weight');
+        if (weight != null) fields.add(_ClinicalField('Weight', '${weight.toStringAsFixed(1)} kg', icon: Icons.monitor_weight));
+        final fetalMovement = bool_('fetalMovement') ?? bool_('isFetalMovementNormal');
+        if (fetalMovement != null) {
+          fields.add(_ClinicalField('Fetal Movement', fetalMovement ? 'Normal' : 'Abnormal',
+              icon: Icons.waves, urgent: fetalMovement == false));
+        }
+
+      case 'PNC':
+        final sys = num_('avgSystolic') ?? num_('systolicBp');
+        final dia = num_('avgDiastolic') ?? num_('diastolicBp');
+        if (sys != null && dia != null) {
+          fields.add(_ClinicalField('Blood Pressure', '${sys.toInt()}/${dia.toInt()} mmHg',
+              icon: Icons.favorite, urgent: sys >= 140 || dia >= 90));
+        }
+        final weight = num_('weight');
+        if (weight != null) fields.add(_ClinicalField('Weight', '${weight.toStringAsFixed(1)} kg', icon: Icons.monitor_weight));
+        final breastfeeding = bool_('isBreastfeeding') ?? bool_('breastfeeding');
+        if (breastfeeding != null) fields.add(_ClinicalField('Breastfeeding', breastfeeding ? 'Yes' : 'No', icon: Icons.child_friendly));
+
+      case 'IMCI':
+        final height = num_('height'); final weight = num_('weight'); final muac = num_('muac');
+        if (height != null) fields.add(_ClinicalField('Height', '${height.toInt()} cm', icon: Icons.straighten));
+        if (weight != null) fields.add(_ClinicalField('Weight', '${weight.toStringAsFixed(1)} kg', icon: Icons.monitor_weight));
+        if (muac != null) {
+          fields.add(_ClinicalField('MUAC', '${muac.toStringAsFixed(1)} cm', icon: Icons.straighten,
+              urgent: muac < 12.5));
+        }
+        final temp = num_('temperature') ?? num_('temp');
+        if (temp != null) {
+          fields.add(_ClinicalField('Temperature', '${temp.toStringAsFixed(1)} °C', icon: Icons.thermostat,
+              urgent: temp >= 38.5));
+        }
+        final diagnosis = str_('childDiagnosis') ?? str_('diagnosis') ?? str_('classification');
+        if (diagnosis != null) fields.add(_ClinicalField('Diagnosis', diagnosis, icon: Icons.medical_information));
+
+      case 'TB':
+        final cough = num_('coughDuration') ?? num_('durationOfCough');
+        if (cough != null) fields.add(_ClinicalField('Cough Duration', '${cough.toInt()} days', icon: Icons.air));
+        final diabetic = bool_('isDiabetic') ?? bool_('hasDiabetes');
+        if (diabetic != null) fields.add(_ClinicalField('Diabetes', diabetic ? 'Yes' : 'No', icon: Icons.bloodtype));
+        final smoking = bool_('isSmoking') ?? bool_('isRegularSmoker');
+        if (smoking != null) fields.add(_ClinicalField('Smoking', smoking ? 'Yes' : 'No', icon: Icons.smoking_rooms));
+        final contact = bool_('hasTbContact') ?? bool_('tbContact');
+        if (contact != null) {
+          fields.add(_ClinicalField('TB Contact', contact ? 'Yes' : 'No', icon: Icons.people,
+              urgent: contact == true));
+        }
+    }
+
+    if (fields.isEmpty) return const SizedBox.shrink();
+
+    final (label, icon) = switch (assessment.type) {
+      'NCD'  => ('NCD Screening Findings', Icons.monitor_heart_outlined),
+      'ANC'  => ('Antenatal Care Findings', Icons.pregnant_woman),
+      'PNC'  => ('Postnatal Care Findings', Icons.child_friendly),
+      'IMCI' => ('Child Health Findings', Icons.child_care),
+      'TB'   => ('TB Screening Findings', Icons.air),
+      _      => ('Clinical Findings', Icons.assignment),
+    };
+
+    return Card(
+      color: typeColor.withValues(alpha: 0.05),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Icon(icon, color: typeColor, size: 18),
+              const SizedBox(width: 8),
+              Text(label, style: TextStyle(color: typeColor, fontWeight: FontWeight.w600)),
+            ]),
+            const SizedBox(height: 12),
+            const Divider(height: 1),
+            const SizedBox(height: 8),
+            ...fields.map((f) => _ClinicalFieldRow(field: f)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ClinicalField {
+  const _ClinicalField(this.label, this.value, {this.icon, this.urgent = false});
+  final String label;
+  final String value;
+  final IconData? icon;
+  final bool urgent;
+}
+
+class _ClinicalFieldRow extends StatelessWidget {
+  const _ClinicalFieldRow({required this.field});
+  final _ClinicalField field;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final color = field.urgent ? scheme.error : scheme.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          if (field.icon != null)
+            Icon(field.icon, size: 16, color: color.withValues(alpha: 0.7))
+          else
+            const SizedBox(width: 16),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 130,
+            child: Text(field.label,
+                style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
+          ),
+          Expanded(
+            child: Text(
+              field.value,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: field.urgent ? scheme.error : null,
+              ),
+            ),
+          ),
+          if (field.urgent)
+            const Icon(Icons.warning_amber_rounded, size: 14, color: Colors.orange),
+        ],
+      ),
+    );
   }
 }
 
