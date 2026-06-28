@@ -11,9 +11,6 @@ class Endpoints {
   /// Returns user hierarchy: villages, subVillages, workflowIds, facilities.
   static const String staticUserData = '/spice-service/static-data/user-data';
 
-  /// Returns form JSON schemas per workflowId.
-  static const String staticFormData = '/spice-service/static-data/form-data';
-
   // ── Offline-service: bulk sync ────────────────────────────────────────────
   /// Bulk pull — households, members, followUps, householdMemberLinks.
   static const String offlineSyncFetch =
