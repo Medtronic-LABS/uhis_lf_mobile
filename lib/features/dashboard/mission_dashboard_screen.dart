@@ -504,6 +504,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(14, 12, 14, 100),
                   children: [
+                    _AiSortedInfoCard(
+                      key: ValueKey('ai_sorted_$_refreshVersion'),
+                      queueFuture: _queueFuture,
+                    ),
+                    const SizedBox(height: 10),
                     _DashboardStatsRow(
                       key: ValueKey('stats_$_refreshVersion'),
                       queueFuture: _queueFuture,
@@ -700,9 +705,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             const _TodaysVisitsHeader(),
-                            const SizedBox(height: 6),
-                            _AiSortedInfoCard(visitCount: queue.length),
-                            const SizedBox(height: 2),
+                            const SizedBox(height: 8),
                             ...widgets,
                             if (overflow > 0)
                               _MoreVisitsLink(
@@ -1393,75 +1396,77 @@ class _EmptyVisitsCard extends StatelessWidget {
   }
 }
 
-/// AI sorted info banner shown at the top of the visit list.
-/// Displays the overnight sort message + 3 read-only method tags.
+/// AI sorted info banner — sits above the stats strip.
+/// Navy gradient matching the app header; shows overnight sort count + 3 tags.
 class _AiSortedInfoCard extends StatelessWidget {
-  const _AiSortedInfoCard({required this.visitCount});
+  const _AiSortedInfoCard({super.key, required this.queueFuture});
 
-  final int visitCount;
+  final Future<List<MissionQueueItem>>? queueFuture;
 
   @override
   Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
-    const tags = [
-      MissionDashboardStrings.aiSortedTagRisk,
-      MissionDashboardStrings.aiSortedTagOverdue,
-      MissionDashboardStrings.aiSortedTagCce,
-    ];
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: tokens.aiSurfaceStart,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: tokens.aiPurple.withValues(alpha: 0.25),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return FutureBuilder<List<MissionQueueItem>>(
+      future: queueFuture,
+      builder: (context, snap) {
+        final count = snap.data?.length ?? 0;
+        final isLoading = snap.connectionState == ConnectionState.waiting;
+        const tags = [
+          MissionDashboardStrings.aiSortedTagRisk,
+          MissionDashboardStrings.aiSortedTagOverdue,
+          MissionDashboardStrings.aiSortedTagCce,
+        ];
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [AppColors.navy, AppColors.navyMid],
+            ),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
             children: [
-              Icon(Icons.auto_awesome, size: 14, color: tokens.aiPurple),
-              const SizedBox(width: 6),
+              const Icon(Icons.auto_awesome, size: 14, color: Colors.white70),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  MissionDashboardStrings.aiSortedVisits(visitCount),
-                  style: TextStyle(
-                    fontSize: 11,
+                  isLoading
+                      ? 'AI sorted your visits overnight'
+                      : MissionDashboardStrings.aiSortedVisits(count),
+                  style: const TextStyle(
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: tokens.aiPurple,
+                    color: Colors.white,
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
+              Wrap(
+                spacing: 4,
+                children: tags
+                    .map(
+                      (tag) => Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          tag,
+                          style: const TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
             ],
           ),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 6,
-            children: tags
-                .map(
-                  (tag) => Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 7, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: tokens.aiPurple.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      tag,
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: tokens.aiPurple,
-                      ),
-                    ),
-                  ),
-                )
-                .toList(),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -1642,7 +1647,7 @@ class _VisitFilterPanel extends StatelessWidget {
           const SizedBox(height: 8),
         ],
 
-        // ── Row 2: need chips ─────────────────────────────────────────────
+        // ── Row 2: filter label + clear ───────────────────────────────────
         Padding(
           padding: const EdgeInsets.only(bottom: 6),
           child: Row(
@@ -1665,45 +1670,76 @@ class _VisitFilterPanel extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              if (selectedNeeds.isNotEmpty)
+              if (selectedNeeds.isNotEmpty || selectedProgrammes.isNotEmpty)
                 Semantics(
                   label: 'Clear all filters',
                   button: true,
                   child: GestureDetector(
-                  key: const Key('dashboard_filter_clear_needs_tap'),
-                  onTap: onClearNeeds,
-                  child: const Text(
-                    MissionDashboardStrings.clearNeedFilters,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.pink,
+                    key: const Key('dashboard_filter_clear_needs_tap'),
+                    onTap: onClearNeeds,
+                    child: const Text(
+                      MissionDashboardStrings.clearNeedFilters,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.navy,
+                      ),
                     ),
-                  ),
                   ),
                 ),
             ],
           ),
         ),
-        // Programme chips — dynamic, derived from actual patient data
-        if (availableProgrammes.isNotEmpty) ...[
-          const Padding(
-            padding: EdgeInsets.only(top: 4, bottom: 4),
-            child: Text(
-              MissionDashboardStrings.filterByProgramme,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textStrong,
-              ),
-            ),
-          ),
-          SizedBox(
-            height: 34,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: EdgeInsets.zero,
-              children: availableProgrammes.map((prog) {
+        // ── Row 3: single scrollable row — need chips then programme chips ──
+        SizedBox(
+          height: 34,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.zero,
+            children: [
+              ..._NeedFilter.values
+                  .where((n) => availableNeeds.contains(n))
+                  .map((need) {
+                final active = selectedNeeds.contains(need);
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: Semantics(
+                    label: active
+                        ? 'Filter by need: ${_needLabel(need)}, selected'
+                        : 'Filter by need: ${_needLabel(need)}',
+                    button: true,
+                    child: GestureDetector(
+                      key: ValueKey('dashboard_need_filter_${need.name}'),
+                      onTap: () => onNeedToggled(need),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: active ? AppColors.aiPurple : Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: active
+                                ? AppColors.aiPurple
+                                : AppColors.border,
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          _needLabel(need),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight:
+                                active ? FontWeight.w800 : FontWeight.w500,
+                            color:
+                                active ? Colors.white : AppColors.textStrong,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+              ...availableProgrammes.map((prog) {
                 final active = selectedProgrammes.contains(prog);
                 return Padding(
                   padding: const EdgeInsets.only(right: 6),
@@ -1713,83 +1749,37 @@ class _VisitFilterPanel extends StatelessWidget {
                         : 'Filter by programme: ${_programmeLabel(prog)}',
                     button: true,
                     child: GestureDetector(
-                    key: ValueKey('dashboard_prog_filter_${prog.name}'),
-                    onTap: () => onProgrammeToggled(prog),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: active
-                            ? AppColors.aiPurple
-                            : Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: active
-                              ? AppColors.aiPurple
-                              : AppColors.border,
-                          width: 1,
+                      key: ValueKey('dashboard_prog_filter_${prog.name}'),
+                      onTap: () => onProgrammeToggled(prog),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: active ? AppColors.aiPurple : Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: active
+                                ? AppColors.aiPurple
+                                : AppColors.border,
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          _programmeLabel(prog),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight:
+                                active ? FontWeight.w800 : FontWeight.w500,
+                            color:
+                                active ? Colors.white : AppColors.textStrong,
+                          ),
                         ),
                       ),
-                      child: Text(
-                        _programmeLabel(prog),
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: active ? FontWeight.w800 : FontWeight.w500,
-                          color: active ? Colors.white : AppColors.textStrong,
-                        ),
-                      ),
-                    ),
                     ),
                   ),
                 );
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: 6),
-        ],
-        SizedBox(
-          height: 34,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: EdgeInsets.zero,
-            children: _NeedFilter.values.map((need) {
-              final active = selectedNeeds.contains(need);
-              return Padding(
-                padding: const EdgeInsets.only(right: 6),
-                child: Semantics(
-                  label: active
-                      ? 'Filter by need: ${_needLabel(need)}, selected'
-                      : 'Filter by need: ${_needLabel(need)}',
-                  button: true,
-                  child: GestureDetector(
-                  key: ValueKey('dashboard_need_filter_${need.name}'),
-                  onTap: () => onNeedToggled(need),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: active ? AppColors.aiPurple : Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: active
-                            ? AppColors.aiPurple
-                            : AppColors.border,
-                        width: 1,
-                      ),
-                    ),
-                    child: Text(
-                      _needLabel(need),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: active ? FontWeight.w800 : FontWeight.w500,
-                        color: active ? Colors.white : AppColors.textStrong,
-                      ),
-                    ),
-                  ),
-                  ),
-                ),
-              );
-            }).toList(),
+              }),
+            ],
           ),
         ),
       ],
