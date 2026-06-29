@@ -889,9 +889,10 @@ class _ReferralListScreenState extends State<ReferralListScreen>
       if (!mounted) return;
       if (encounterId != null) {
         context.push(
-          '/patients/visit/$encounterId/triage?origin=tasks',
+          '/patients/visit/$encounterId/flow?origin=tasks',
           extra: {
             'patientId': item.patientId,
+            'patientName': item.patientName,
             'householdId': item.householdId,
             'patientAge': item.age,
           },

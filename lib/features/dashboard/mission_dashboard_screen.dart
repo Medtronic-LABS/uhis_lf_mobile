@@ -389,9 +389,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (encounterId != null) {
       debugPrint('[Dashboard] Starting visit, navigating with origin=dashboard');
       context.go(
-        '/patients/visit/$encounterId/triage?origin=dashboard',
+        '/patients/visit/$encounterId/flow?origin=dashboard',
         extra: {
           'patientId': patientId,
+          'patientName': item.patientName,
           'householdId': item.householdId,
           'patientAge': item.age,
         },

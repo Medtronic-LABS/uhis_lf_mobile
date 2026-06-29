@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../app/theme.dart';
+import '../../../core/constants/app_strings.dart';
 import '../../scribe/models/ai_extracted_field.dart';
 import '../../scribe/scribe_controller.dart';
 import '../../scribe/scribe_session.dart';
@@ -42,6 +43,14 @@ class _NcdAssessmentFormState extends State<NcdAssessmentForm> {
 
   String _glucoseType = 'fasting';
   bool _isRegularSmoker = false;
+
+  // Spec §5.2.2 HTN screening toggles. Nullable so AI Scribe can populate
+  // them and the SK can leave a question unanswered without forcing a "No".
+  bool? _morningHeadaches;
+  bool? _chestTightnessOrSob;
+  bool? _highSaltIntake;
+  bool? _familyHistoryHtn;
+  bool? _oneSidedWeakness;
 
   // AI field tracking
   final Map<String, FieldSource> _fieldSources = {};
@@ -167,6 +176,34 @@ class _NcdAssessmentFormState extends State<NcdAssessmentForm> {
             debugPrint('[NcdForm] AI filled smoker: $boolValue');
           }
           break;
+        case 'morningHeadaches':
+        case 'chestTightnessOrSob':
+        case 'highSaltIntake':
+        case 'familyHistoryHtn':
+        case 'oneSidedWeakness':
+          final boolValue = _coerceBool(value);
+          if (boolValue != null) {
+            switch (field.fieldId) {
+              case 'morningHeadaches':
+                _morningHeadaches = boolValue;
+                break;
+              case 'chestTightnessOrSob':
+                _chestTightnessOrSob = boolValue;
+                break;
+              case 'highSaltIntake':
+                _highSaltIntake = boolValue;
+                break;
+              case 'familyHistoryHtn':
+                _familyHistoryHtn = boolValue;
+                break;
+              case 'oneSidedWeakness':
+                _oneSidedWeakness = boolValue;
+                break;
+            }
+            _fieldSources[field.fieldId] = FieldSource.aiPending;
+            debugPrint('[NcdForm] AI filled ${field.fieldId}: $boolValue');
+          }
+          break;
         default:
           debugPrint('[NcdForm] Unhandled field: ${field.fieldId} = $value');
       }
@@ -192,6 +229,15 @@ class _NcdAssessmentFormState extends State<NcdAssessmentForm> {
       _glucoseController.text = glucose.glucoseValue?.toString() ?? '';
       _hba1cController.text = glucose.hba1c?.toString() ?? '';
       _glucoseType = glucose.glucoseType ?? 'fasting';
+    }
+
+    final screening = _data.htnScreening;
+    if (screening != null) {
+      _morningHeadaches = screening.morningHeadaches;
+      _chestTightnessOrSob = screening.chestTightnessOrSob;
+      _highSaltIntake = screening.highSaltIntake;
+      _familyHistoryHtn = screening.familyHistoryHtn;
+      _oneSidedWeakness = screening.oneSidedWeakness;
     }
   }
 
@@ -309,12 +355,33 @@ class _NcdAssessmentFormState extends State<NcdAssessmentForm> {
       bgTakenOn: DateTime.now(),
     );
 
+    final screening = HtnScreening(
+      morningHeadaches: _morningHeadaches,
+      chestTightnessOrSob: _chestTightnessOrSob,
+      highSaltIntake: _highSaltIntake,
+      familyHistoryHtn: _familyHistoryHtn,
+      oneSidedWeakness: _oneSidedWeakness,
+    );
+
     _data = _data.copyWith(
       bpLog: bpLog,
       glucoseLog: glucoseLog,
+      htnScreening: screening.hasAnswered ? screening : null,
     );
 
     widget.onChanged?.call(_data);
+  }
+
+  /// Coerce a JSON-ish scribe value (bool / string / int) into bool.
+  bool? _coerceBool(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) {
+      final lower = value.toLowerCase().trim();
+      if (lower == 'true' || lower == 'yes' || lower == '1') return true;
+      if (lower == 'false' || lower == 'no' || lower == '0') return false;
+    }
+    return null;
   }
 
   String? _getBmiCategory(double? bmi) {
@@ -645,6 +712,105 @@ class _NcdAssessmentFormState extends State<NcdAssessmentForm> {
 
           const SizedBox(height: 24),
 
+          // Spec §5.2.2 Hypertension screening — 4 Yes/No + stroke-sign
+          // escalation. Stroke sign sits at top with a red icon so the SK
+          // never misses it.
+          _SectionHeader(
+            title: NcdScreeningStrings.sectionTitle,
+            icon: Icons.psychology_outlined,
+            subtitle: NcdScreeningStrings.sectionSubtitle,
+          ),
+          Card(
+            child: Column(
+              children: [
+                _wrapWithAIIndicator(
+                  'oneSidedWeakness',
+                  _NullableYesNoTile(
+                    title: NcdScreeningStrings.strokeSignTitle,
+                    bnLabel: NcdScreeningStrings.strokeSignBn,
+                    subtitle: NcdScreeningStrings.strokeSignSubtitle,
+                    icon: Icons.bolt,
+                    iconColor: theme.colorScheme.error,
+                    value: _oneSidedWeakness,
+                    onChanged: (v) {
+                      setState(() {
+                        _oneSidedWeakness = v;
+                        _onFieldEdited('oneSidedWeakness');
+                      });
+                      _updateData();
+                    },
+                  ),
+                ),
+                const Divider(height: 0),
+                _wrapWithAIIndicator(
+                  'morningHeadaches',
+                  _NullableYesNoTile(
+                    title: NcdScreeningStrings.morningHeadachesTitle,
+                    bnLabel: NcdScreeningStrings.morningHeadachesBn,
+                    value: _morningHeadaches,
+                    onChanged: (v) {
+                      setState(() {
+                        _morningHeadaches = v;
+                        _onFieldEdited('morningHeadaches');
+                      });
+                      _updateData();
+                    },
+                  ),
+                ),
+                const Divider(height: 0),
+                _wrapWithAIIndicator(
+                  'chestTightnessOrSob',
+                  _NullableYesNoTile(
+                    title: NcdScreeningStrings.chestTightnessTitle,
+                    bnLabel: NcdScreeningStrings.chestTightnessBn,
+                    value: _chestTightnessOrSob,
+                    onChanged: (v) {
+                      setState(() {
+                        _chestTightnessOrSob = v;
+                        _onFieldEdited('chestTightnessOrSob');
+                      });
+                      _updateData();
+                    },
+                  ),
+                ),
+                const Divider(height: 0),
+                _wrapWithAIIndicator(
+                  'highSaltIntake',
+                  _NullableYesNoTile(
+                    title: NcdScreeningStrings.highSaltTitle,
+                    bnLabel: NcdScreeningStrings.highSaltBn,
+                    value: _highSaltIntake,
+                    onChanged: (v) {
+                      setState(() {
+                        _highSaltIntake = v;
+                        _onFieldEdited('highSaltIntake');
+                      });
+                      _updateData();
+                    },
+                  ),
+                ),
+                const Divider(height: 0),
+                _wrapWithAIIndicator(
+                  'familyHistoryHtn',
+                  _NullableYesNoTile(
+                    title: NcdScreeningStrings.familyHistoryTitle,
+                    bnLabel: NcdScreeningStrings.familyHistoryBn,
+                    value: _familyHistoryHtn,
+                    onChanged: (v) {
+                      setState(() {
+                        _familyHistoryHtn = v;
+                        _onFieldEdited('familyHistoryHtn');
+                      });
+                      _updateData();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
           // Risk factors section
           _SectionHeader(title: 'Risk Factors', icon: Icons.warning_amber),
           _wrapWithAIIndicator(
@@ -693,25 +859,131 @@ class _NcdAssessmentFormState extends State<NcdAssessmentForm> {
 }
 
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title, required this.icon});
+  const _SectionHeader({
+    required this.title,
+    required this.icon,
+    this.subtitle,
+  });
 
   final String title;
   final IconData icon;
+  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 20, color: theme.colorScheme.primary),
-          const SizedBox(width: 8),
-          Text(
-            title,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
+          Row(
+            children: [
+              Icon(icon, size: 20, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.only(left: 28),
+              child: Text(
+                subtitle!,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
             ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Tri-state Yes/No row with optional Bengali secondary label.
+///
+/// `null` value = unanswered (default). The SK selects Yes or No explicitly;
+/// the row is unanswered until they do so. Stroke sign uses [iconColor] to
+/// signal the band 1 escalation visually.
+class _NullableYesNoTile extends StatelessWidget {
+  const _NullableYesNoTile({
+    required this.title,
+    required this.bnLabel,
+    required this.value,
+    required this.onChanged,
+    this.subtitle,
+    this.icon,
+    this.iconColor,
+  });
+
+  final String title;
+  final String bnLabel;
+  final bool? value;
+  final ValueChanged<bool?> onChanged;
+  final String? subtitle;
+  final IconData? icon;
+  final Color? iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, color: iconColor ?? theme.colorScheme.primary, size: 22),
+            const SizedBox(width: 12),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  bnLabel,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle!,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          SegmentedButton<bool?>(
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(value: true, label: Text('Yes')),
+              ButtonSegment(value: false, label: Text('No')),
+            ],
+            selected: value == null ? <bool?>{} : <bool?>{value},
+            emptySelectionAllowed: true,
+            onSelectionChanged: (selection) {
+              onChanged(selection.isEmpty ? null : selection.first);
+            },
           ),
         ],
       ),

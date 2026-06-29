@@ -363,6 +363,7 @@ class SectionedAssessmentScreen extends StatefulWidget {
     required this.draftDao,
     this.onSubmit,
     this.onReferNow,
+    this.embedded = false,
   });
 
   final List<ActivatedPathway> pathways;
@@ -382,6 +383,10 @@ class SectionedAssessmentScreen extends StatefulWidget {
   /// The caller is responsible for opening the referral flow and pre-filling
   /// the reason from the alert.
   final void Function(String alertId)? onReferNow;
+
+  /// True when hosted inside [VisitFlowScreen] — suppresses the inner
+  /// `VisitStepHeader` because the wrapper owns the patient + step header.
+  final bool embedded;
 
   @override
   State<SectionedAssessmentScreen> createState() =>
@@ -419,6 +424,7 @@ class _SectionedAssessmentScreenState
         viewModel: _viewModel,
         onSubmit: widget.onSubmit,
         onReferNow: widget.onReferNow,
+        embedded: widget.embedded,
       ),
     );
   }
@@ -430,20 +436,24 @@ class _SectionedAssessmentView extends StatelessWidget {
     required this.viewModel,
     this.onSubmit,
     this.onReferNow,
+    this.embedded = false,
   });
 
   final SectionedAssessmentViewModel viewModel;
   final VoidCallback? onSubmit;
   final void Function(String alertId)? onReferNow;
+  final bool embedded;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: VisitStepHeader(
-        step: VisitStep.detailedForm,
-        patientLabel: 'Assessment',
-        onBack: () => Navigator.of(context).maybePop(),
-      ),
+      appBar: embedded
+          ? null
+          : VisitStepHeader(
+              step: VisitStep.detailedForm,
+              patientLabel: 'Assessment',
+              onBack: () => Navigator.of(context).maybePop(),
+            ),
       body: Column(
         children: [
           // ── TB added banner ────────────────────────────────────────────────

@@ -488,6 +488,19 @@ class LocalAssessmentDao {
           diabetesRaw == 'yes' ||
           (fastingGluMmolL != null && fastingGluMmolL >= 7.0);
 
+      // Spec §5.2.2 HTN screening + §2.8.2 stroke-sign Band 1 short-circuit.
+      // Accepts either flat fields (legacy form-prefill shape) or a nested
+      // `htnScreening` map (current NcdAssessment.toJson shape).
+      bool readBoolFlag(String key) {
+        dynamic v = map[key];
+        if (v == null && map['htnScreening'] is Map) {
+          v = (map['htnScreening'] as Map)[key];
+        }
+        return v == true || v == 'true' || v == 'yes' || v == 1;
+      }
+
+      final hasStrokeSign = readBoolFlag('oneSidedWeakness');
+
       result[pid] = ClinicalVitals(
         systolicBp: sys,
         diastolicBp: dia,
@@ -495,6 +508,7 @@ class LocalAssessmentDao {
         fastingGlucoseMmolL: fastingGluMmolL,
         hasDangerSign: hasDanger,
         hasEclampsia: hasEclampsia,
+        hasStrokeSign: hasStrokeSign,
         parity: parity,
         hasDiabetes: hasDiabetes,
         assessmentType: type,

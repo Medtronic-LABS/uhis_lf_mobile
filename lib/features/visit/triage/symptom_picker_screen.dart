@@ -40,6 +40,7 @@ class SymptomPickerScreen extends StatefulWidget {
     this.patientName,
     this.patientGender,
     this.origin,
+    this.onAdvance,
   });
 
   final String encounterId;
@@ -50,6 +51,11 @@ class SymptomPickerScreen extends StatefulWidget {
   final String? patientName;
   final String? patientGender;
   final String? origin;
+
+  /// When non-null, the screen calls this on the "Continue" CTA instead of
+  /// pushing the next route. Used by [VisitFlowScreen] to host the picker
+  /// inside a single-route 3-step flow.
+  final ValueChanged<List<ActivatedPathway>>? onAdvance;
 
   @override
   State<SymptomPickerScreen> createState() => _SymptomPickerScreenState();
@@ -259,8 +265,17 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
 
     debugPrint('[SymptomPicker] Continue tapped — ${vm.activatedPathways.length} pathways: ${vm.activatedPathways.map((p) => p.programme.name).join(', ')}');
 
+    // In-flow host (VisitFlowScreen) intercepts via callback; spec §3.1
+    // collapses old "/triage-result" preview into Step 2's header so the SK
+    // does not see a separate landing page between symptoms and form.
+    final onAdvance = widget.onAdvance;
+    if (onAdvance != null) {
+      onAdvance(vm.activatedPathways);
+      return;
+    }
+
     if (vm.activatedPathways.isEmpty) {
-      // No pathways — go straight to form (routine visit).
+      // Legacy direct-route entry: no pathways → go straight to form.
       _navigateToForm([]);
       return;
     }
@@ -281,7 +296,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   void _navigateToForm(List<ActivatedPathway> pathways) {
     final origin = widget.origin;
     final originParam = origin != null ? '?origin=$origin' : '';
-    
+
     context.go(
       '/patients/visit/${widget.encounterId}/form$originParam',
       extra: {
@@ -361,15 +376,22 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       );
     }
 
+    // When hosted by VisitFlowScreen (onAdvance set) the wrapper owns the
+    // patient + step header, so we drop our own AppBar to avoid two stacked
+    // headers. Standalone route entry keeps the navy 3-step header.
+    final bool embedded = widget.onAdvance != null;
+
     return ChangeNotifierProvider<TriageViewModel>.value(
       value: _viewModel!,
       child: Scaffold(
         backgroundColor: AppColors.canvas,
-        appBar: VisitStepHeader(
-          step: VisitStep.symptomPicker,
-          patientLabel: widget.patientName ?? TriageStrings.pickerTitle,
-          onBack: () => context.pop(),
-        ),
+        appBar: embedded
+            ? null
+            : VisitStepHeader(
+                step: VisitStep.symptomPicker,
+                patientLabel: widget.patientName ?? TriageStrings.pickerTitle,
+                onBack: () => context.pop(),
+              ),
         floatingActionButton: AppConfig.scribeEnabled
             ? _ScribeTriageFab(
                 encounterId: widget.encounterId,

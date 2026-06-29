@@ -1869,12 +1869,31 @@ abstract final class ComposerStrings {
         return fieldGlassesSold;
       case 'fieldReferPlace':
         return fieldReferPlace;
+      case 'fieldMorningHeadaches':
+        return fieldMorningHeadaches;
+      case 'fieldChestTightnessOrSob':
+        return fieldChestTightnessOrSob;
+      case 'fieldHighSaltIntake':
+        return fieldHighSaltIntake;
+      case 'fieldFamilyHistoryHtn':
+        return fieldFamilyHistoryHtn;
+      case 'fieldOneSidedWeakness':
+        return fieldOneSidedWeakness;
       default:
         return key;
     }
   }
 
   // ── Section title resolver ──────────────────────────────────────────────────
+
+  // ── NCD HTN screening fields (spec §5.2.2) ──────────────────────────────────
+  static const String fieldMorningHeadaches = 'Morning headaches?';
+  static const String fieldChestTightnessOrSob =
+      'Chest tightness or shortness of breath?';
+  static const String fieldHighSaltIntake = 'High salt in daily food?';
+  static const String fieldFamilyHistoryHtn = 'Family history of high BP?';
+  static const String fieldOneSidedWeakness =
+      'One-sided weakness or stroke signs?';
 
   // ── FINDRISC / Framingham fields ────────────────────────────────────────────
   static const String fieldOnBpMedication = 'On BP medication?';
@@ -2477,6 +2496,34 @@ abstract final class VisitCompleteStrings {
   static const String backToHome = 'Back to Home';
 }
 
+/// Strings for the unified 3-step visit flow (spec §3.1).
+///
+/// One `VisitFlowScreen` hosts: Step 1 Symptom check → Step 2 Vitals + form →
+/// Step 3 AI Recommendation. Progress header shows step labels.
+abstract final class VisitFlowStrings {
+  VisitFlowStrings._();
+
+  static const String step1Label = 'Symptoms';
+  static const String step2Label = 'Vitals & form';
+  static const String step3Label = 'AI recommends';
+
+  // Step-pill titles inside the navy flow header.
+  // Step 2 = "{programme} form" — programme name is computed at runtime.
+  static const String step1Title = 'How are you?';
+  static const String step2TitleSuffix = 'form';
+  static const String step3Title = 'Summary';
+
+  static const String stepIndicator = 'Step %1 of 3';
+  static String stepIndicatorFor(int oneBased) =>
+      stepIndicator.replaceFirst('%1', oneBased.toString());
+
+  static const String backToVisits = 'Back to visits';
+  static const String discardConfirm =
+      'Leave this visit? Unsaved details will be lost.';
+  static const String discardCancel = 'Stay';
+  static const String discardConfirmCta = 'Leave';
+}
+
 /// Teleconsult placeholder screen strings.
 /// Used by [TeleconsultScreen].
 abstract final class TeleconsultStrings {
@@ -2520,4 +2567,34 @@ abstract final class TrainingStrings {
   static const String certificatesTitle = 'Certificates';
   static const String certificatesSubtitle =
       'Complete modules to earn programme certificates';
+}
+
+/// NCD assessment form copy — spec §5.2.2 Hypertension Screening section.
+///
+/// Bengali secondary labels mirror the spec wording so the SK can match the
+/// printed flow charts during home visits.
+abstract final class NcdScreeningStrings {
+  NcdScreeningStrings._();
+
+  static const String sectionTitle = 'Hypertension screening';
+  static const String sectionSubtitle =
+      'Yes / No — strengthens AI clinical decision support.';
+
+  // Stroke sign — band 1 short-circuit (§2.8.2).
+  static const String strokeSignTitle = 'One-sided weakness or stroke signs?';
+  static const String strokeSignBn = 'এক পাশে দুর্বলতা / স্ট্রোকের লক্ষণ?';
+  static const String strokeSignSubtitle =
+      'Sudden numbness or weakness on one side — immediate emergency referral.';
+
+  static const String morningHeadachesTitle = 'Morning headaches?';
+  static const String morningHeadachesBn = 'সকালে মাথা ব্যথা?';
+
+  static const String chestTightnessTitle = 'Chest tightness or shortness of breath?';
+  static const String chestTightnessBn = 'বুকে চাপ বা শ্বাসকষ্ট?';
+
+  static const String highSaltTitle = 'High salt in daily food?';
+  static const String highSaltBn = 'খাবারে অতিরিক্ত লবণ?';
+
+  static const String familyHistoryTitle = 'Family history of high BP?';
+  static const String familyHistoryBn = 'বাবা-মায়ের / পরিবারে উচ্চ রক্তচাপ?';
 }
