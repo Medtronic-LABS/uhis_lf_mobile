@@ -471,7 +471,11 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
         future: _future,
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
-            return const SafeArea(child: SkeletonPatientDetail());
+            return SafeArea(
+              child: SkeletonPatientDetail(
+                name: widget.memberData?['name'] as String?,
+              ),
+            );
           }
           final data = snap.data;
           if (data == null || !data.hasData) {

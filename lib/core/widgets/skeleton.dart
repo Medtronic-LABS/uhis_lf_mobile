@@ -206,8 +206,14 @@ class _PatientCardSkeleton extends StatelessWidget {
 }
 
 /// Skeleton matching [PatientContextScreen] — header card + vitals row + assessments.
+///
+/// Pass [name] when it is already known at navigation time so the header shows
+/// the real patient name instead of a shimmer box.
 class SkeletonPatientDetail extends StatelessWidget {
-  const SkeletonPatientDetail({super.key});
+  const SkeletonPatientDetail({super.key, this.name});
+
+  /// Pre-known patient name — shown as real text; skeletons the rest.
+  final String? name;
 
   @override
   Widget build(BuildContext context) => SkeletonAnimation(
@@ -227,7 +233,16 @@ class SkeletonPatientDetail extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          SkeletonBox(shimmerValue: v, width: 160, height: 20, delay: 0.05),
+                          if (name != null)
+                            Text(
+                              name!,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            )
+                          else
+                            SkeletonBox(shimmerValue: v, width: 160, height: 20, delay: 0.05),
                           const SizedBox(height: 8),
                           Row(children: [
                             SkeletonBox(shimmerValue: v, width: 64, height: 22, borderRadius: 11, delay: 0.08),

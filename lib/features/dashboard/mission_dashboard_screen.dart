@@ -681,7 +681,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 final pid = item.patientId;
                                 if (pid != null && pid.isNotEmpty &&
                                     pid != 'household' && pid != 'households') {
-                                  context.go('/patients/$pid');
+                                  context.go('/patients/$pid',
+                                      extra: {'name': item.patientName});
                                 } else if (item.referralId != null) {
                                   context.push('/referral/${item.referralId}');
                                 }
