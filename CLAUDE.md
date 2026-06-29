@@ -1,9 +1,54 @@
 # uhis_lf_mobile — Flutter SK App
 
-Offline-first community health worker app for UHIS Leapfrog.
+**Apon Sushashthya (আপন সুস্বাস্থ্য)** — Offline-first community health worker app for UHIS Leapfrog / Leap Well Project.
 Flutter 3.x · Provider · GoRouter · SQLCipher · Dart SDK ^3.12
 
-Parent context: `../CLAUDE.md` (leapfrog-setup) and `../../CLAUDE.md` (platform-setup).
+Parent context: `../CLAUDE.md` (leapfrog-setup) and `../../CLAUDE.md` (platform-setup).  
+**Canonical product spec:** `../design/apon-sushashthya-v1.md` — read before implementing any worklist, visit flow, risk scoring, or CDSS feature.
+
+## Visit Architecture
+
+All visits follow a 3-step progressive disclosure model:
+
+| Step | Screen | AI Component |
+|---|---|---|
+| Step 1 | Symptom check ("How are you?") | AI Scribe — voice → animated symptom cards |
+| Step 2 | Vitals + full clinical form | AI Scribe — single banner fills all fields in sequence |
+| Step 3 | AI Recommendation | CDSS finding cards + counselling accordion + WhatsApp draft |
+
+## AI Worklist — Band + Modifier Risk Model
+
+Dashboard sort order is driven by **band + modifier** (not a composite score). The worst single clinical finding sets the band; modifiers rank within the band.
+
+| Band | Label | Status Pill | Border |
+|---|---|---|---|
+| 1 | Severe | NOW (pulsing) | Red — only when CCE alert or danger sign present |
+| 2 | Moderate | TODAY | Amber |
+| 3 | Mild | TODAY / THIS WEEK | Navy |
+| 4 | Routine | ROUTINE | Grey (`#E5E7EB`) |
+
+**Modifiers:** `a` = additional risk (comorbidity, first pregnancy, age ≥ 60, GA ≥ 36 wks) — ranks higher within band. `b` = overdue — longer overdue = higher within band, but below `a`. Sort sequence: `1a → 1b → 1 → 2a → 2b → 2 → 3a → 3b → 3 → 4`. Pregnant patients always rank above non-pregnant in the same band.
+
+**Band and modifier are never shown to the SK** — they only drive sort order.
+
+## Key Clinical Thresholds
+
+**ANC:**
+- BP ≥ 160/110 → Band 1 (urgent referral)
+- BP + weight + urine protein all rising across 3 visits → Band 2 (pre-eclampsia pattern)
+- BP ≥ 140/90 single reading → Band 2
+- Hb < 7 g/dL → Band 1; 7.0–9.9 → Band 2; 10.0–10.9 → Band 3
+- Any danger sign → Band 1 immediately (no pattern wait)
+- Fasting glucose ≥ 5.1 mmol/L → GDM referral (Band 2)
+- GA ≥ 36 weeks → Modifier a applied (Band 3)
+
+**NCD:**
+- One-sided weakness (stroke sign) → Band 1 regardless of BP
+- BP ≥ 180/110 → Band 1; 160–179/100–109 → Band 2; 140–159/90–99 → Band 3; 130–139/85–89 → Band 4
+- Fasting glucose ≥ 18 mmol/L → Band 1; 10.0–17.9 → Band 2; 7.0–9.9 → Band 3; 6.1–6.9 → Band 4
+- Comorbid HTN + DM → Modifier a applied; age ≥ 60 → Modifier a applied
+
+**Note:** Device Bluetooth integration (BP monitor, scale) is out of scope for V1 — all vitals entered manually via AI Scribe voice fill or keyboard.
 
 ## Tech stack
 
