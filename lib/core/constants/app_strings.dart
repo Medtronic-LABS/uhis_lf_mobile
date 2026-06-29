@@ -1286,6 +1286,32 @@ abstract final class TriageStrings {
   static const String symptomUmbilicusRed = 'Umbilicus red / discharge';
   static const String symptomJaundice = 'Jaundice (yellow skin / eyes)';
 
+  // ── AI Scribe vocab — codes present in [AiScribeTriageVocab.codes] that
+  // don't have a [UnifiedSymptomCatalog] entry. Vocab is the Step 1 source of
+  // truth; these labels render in the Step 1 chips + "Add symptom" sheet.
+  static const String symptomHeavyBleeding = 'Heavy bleeding';
+  static const String symptomFoulSmellingVaginalDischarge =
+      'Foul-smelling vaginal discharge';
+  static const String symptomEpigastricPain = 'Epigastric pain';
+  static const String symptomHeadache = 'Headache';
+  static const String symptomEdema = 'Edema';
+  static const String symptomBreastPain = 'Breast pain';
+  static const String symptomBreastSwelling = 'Breast swelling';
+  static const String symptomPerinealWoundDischarge =
+      'Perineal wound discharge';
+  static const String symptomPainfulUrination = 'Painful urination';
+  static const String symptomBreathlessness = 'Breathlessness';
+  static const String symptomLeakingFluidVagina = 'Leaking fluid from vagina';
+  static const String symptomPainfulUterineContractions =
+      'Painful uterine contractions';
+  static const String symptomOneSidedWeakness = 'One-sided weakness';
+  static const String symptomSwellingBothFeet = 'Swelling of both feet';
+  static const String symptomPalpitations = 'Palpitations';
+  static const String symptomSwellingOneLeg = 'Swelling of one leg';
+  static const String symptomExcessiveThirst = 'Excessive thirst';
+  static const String symptomFootNumbness = 'Foot numbness';
+  static const String symptomWeakness = 'Weakness';
+
   // ── Bangla symptom labels (shown as sub-label in tile) ───────────────────
   // Danger signs
   static const String symptomConvulsionsBn = 'খিঁচুনি';
@@ -1577,6 +1603,45 @@ abstract final class TriageStrings {
         return symptomUmbilicusRed;
       case 'jaundice':
         return symptomJaundice;
+      // AI Scribe triage vocab — codes not in the cluster catalog
+      case 'heavy_bleeding':
+        return symptomHeavyBleeding;
+      case 'foul_smelling_vaginal_discharge':
+        return symptomFoulSmellingVaginalDischarge;
+      case 'epigastric_pain':
+        return symptomEpigastricPain;
+      case 'headache':
+        return symptomHeadache;
+      case 'edema':
+        return symptomEdema;
+      case 'breast_pain':
+        return symptomBreastPain;
+      case 'breast_swelling':
+        return symptomBreastSwelling;
+      case 'perineal_wound_discharge':
+        return symptomPerinealWoundDischarge;
+      case 'painful_urination':
+        return symptomPainfulUrination;
+      case 'breathlessness':
+        return symptomBreathlessness;
+      case 'leaking_fluid_vagina':
+        return symptomLeakingFluidVagina;
+      case 'painful_uterine_contractions':
+        return symptomPainfulUterineContractions;
+      case 'one_sided_weakness':
+        return symptomOneSidedWeakness;
+      case 'swelling_both_feet':
+        return symptomSwellingBothFeet;
+      case 'palpitations':
+        return symptomPalpitations;
+      case 'swelling_one_leg':
+        return symptomSwellingOneLeg;
+      case 'excessive_thirst':
+        return symptomExcessiveThirst;
+      case 'foot_numbness':
+        return symptomFootNumbness;
+      case 'weakness':
+        return symptomWeakness;
       default:
         return code;
     }
@@ -2668,6 +2733,22 @@ abstract final class SymptomPickerStrings {
   static const String otherSymptomsLabel = 'Other symptoms';
   static const String otherSymptomsHint =
       'Describe any other symptoms not listed above…';
+
+  // ── AI-driven symptom list (replaces the hardcoded cluster grid) ─────────
+  static const String detectedSymptomsTitle = 'Symptoms detected by AI';
+  static const String detectedSymptomsSubtitleEmpty =
+      'Tap the mic above to record the patient. AI-detected symptoms will appear here for you to review.';
+  static const String detectedSymptomsSubtitleFilled =
+      'Review each symptom. Tap × to remove anything incorrect, or add what is missing.';
+  static const String addSymptomCta = '+ Add symptom';
+  static const String addSymptomSheetTitle = 'Add symptoms';
+  static const String addSymptomSheetSubtitle =
+      'Tap to add or remove. AI-detected symptoms are already ticked — press Done when finished.';
+  static const String addSymptomSheetEmpty = 'All symptoms already added.';
+  static const String addSymptomSheetDone = 'Done';
+  static String addSymptomSheetCounter(int added) =>
+      added == 0 ? 'No symptoms selected' : '$added selected';
+  static const String removeSymptomSemanticPrefix = 'Remove symptom';
 }
 
 /// Visit completion screen strings.

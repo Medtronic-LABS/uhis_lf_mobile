@@ -228,13 +228,14 @@ void main() {
 
     // Test 6 ─────────────────────────────────────────────────────────────────
     test('Test 6 — applyScribeTriageResult pre-ticks codes ≥ confidence floor '
-        'and skips below-floor codes', () {
+        'when the code is in the AI Scribe vocab; skips below-floor codes and '
+        'codes outside the vocab', () {
       vm.applyScribeTriageResult(
         _triageResult({
-          'fever': 0.85, // valid vocab + catalog code
-          'abdominal_pain': 0.90, // valid vocab + catalog code
-          'cough': 0.95, // in catalog but NOT in AI triage vocab → skip
-          'heavy_bleeding': 0.95, // in vocab but NOT in symptom catalog → skip
+          'fever': 0.85, // in vocab → kept
+          'abdominal_pain': 0.90, // in vocab → kept
+          'heavy_bleeding': 0.95, // in vocab → kept (vocab is source of truth)
+          'cough': 0.95, // NOT in AI triage vocab → skip
           'diarrhea': 0.50, // below floor → skip
         }),
       );
@@ -250,18 +251,19 @@ void main() {
       expect(vm.isSelected('abdominal_pain'), isTrue);
 
       expect(
+        vm.isScribePreTick('heavy_bleeding'),
+        isTrue,
+        reason: 'heavy_bleeding is in AiScribeTriageVocab — Step 1 source of '
+            'truth — and must be surfaced as a chip',
+      );
+      expect(vm.isSelected('heavy_bleeding'), isTrue);
+
+      expect(
         vm.isScribePreTick('cough'),
         isFalse,
         reason: 'Cough is outside the constrained 32-code scribe vocabulary',
       );
       expect(vm.isSelected('cough'), isFalse);
-
-      expect(
-        vm.isScribePreTick('heavy_bleeding'),
-        isFalse,
-        reason: 'Codes not present in the symptom picker catalog are ignored',
-      );
-      expect(vm.isSelected('heavy_bleeding'), isFalse);
 
       expect(
         vm.isScribePreTick('diarrhea'),

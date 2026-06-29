@@ -6,7 +6,12 @@ import 'package:uhis_next/features/visit/triage/unified_symptom_catalog.dart';
 
 void main() {
   group('TriageViewModel Pre-Tick Scenarios', () {
-    test('Known Hypertension → pre-ticks high_bp_known', () {
+    // Step 1 is now AI-driven (spec — symptoms populated dynamically from the
+    // AI Scribe response). The patient-context auto-pre-tick has been removed:
+    // the chip list starts empty and only the AI / SK fills it. These tests
+    // pin the new contract — no symptom is selected at construction time.
+
+    test('Known Hypertension → does NOT pre-tick high_bp_known', () {
       final ctx = PatientContext(
         patientId: 'test-1',
         ageMonths: 480, // 40 years
@@ -18,11 +23,12 @@ void main() {
 
       final vm = TriageViewModel(patientContext: ctx);
 
-      expect(vm.isPreTicked('high_bp_known'), isTrue);
-      expect(vm.isSelected('high_bp_known'), isTrue);
+      expect(vm.isPreTicked('high_bp_known'), isFalse);
+      expect(vm.isSelected('high_bp_known'), isFalse);
+      expect(vm.selectedSymptoms, isEmpty);
     });
 
-    test('Known Diabetes → pre-ticks polyuria and polydipsia', () {
+    test('Known Diabetes → does NOT pre-tick polyuria / polydipsia', () {
       final ctx = PatientContext(
         patientId: 'test-2',
         ageMonths: 600, // 50 years
@@ -34,13 +40,12 @@ void main() {
 
       final vm = TriageViewModel(patientContext: ctx);
 
-      expect(vm.isPreTicked('polyuria'), isTrue);
-      expect(vm.isPreTicked('polydipsia'), isTrue);
-      expect(vm.isSelected('polyuria'), isTrue);
-      expect(vm.isSelected('polydipsia'), isTrue);
+      expect(vm.isSelected('polyuria'), isFalse);
+      expect(vm.isSelected('polydipsia'), isFalse);
+      expect(vm.selectedSymptoms, isEmpty);
     });
 
-    test('Pregnant → pre-ticks pregnant', () {
+    test('Pregnant → does NOT pre-tick pregnant', () {
       final ctx = PatientContext(
         patientId: 'test-3',
         ageMonths: 300, // 25 years
@@ -52,26 +57,26 @@ void main() {
 
       final vm = TriageViewModel(patientContext: ctx);
 
-      expect(vm.isPreTicked('pregnant'), isTrue);
-      expect(vm.isSelected('pregnant'), isTrue);
+      expect(vm.isPreTicked('pregnant'), isFalse);
+      expect(vm.isSelected('pregnant'), isFalse);
     });
 
-    test('ANC enrolled → pre-ticks pregnant', () {
+    test('ANC enrolled → does NOT pre-tick pregnant', () {
       final ctx = PatientContext(
         patientId: 'test-4',
         ageMonths: 336, // 28 years
         sex: Sex.female,
-        isPregnant: false, // Even if not marked pregnant
+        isPregnant: false,
         knownConditions: {},
         activeProgrammes: {Programme.anc},
       );
 
       final vm = TriageViewModel(patientContext: ctx);
 
-      expect(vm.isPreTicked('pregnant'), isTrue);
+      expect(vm.isPreTicked('pregnant'), isFalse);
     });
 
-    test('NCD enrolled + HTN → pre-ticks high_bp_known', () {
+    test('NCD enrolled + HTN → does NOT pre-tick high_bp_known', () {
       final ctx = PatientContext(
         patientId: 'test-5',
         ageMonths: 540, // 45 years
@@ -83,7 +88,7 @@ void main() {
 
       final vm = TriageViewModel(patientContext: ctx);
 
-      expect(vm.isPreTicked('high_bp_known'), isTrue);
+      expect(vm.isPreTicked('high_bp_known'), isFalse);
     });
 
     test('TB screen due → does NOT pre-tick but expands cluster', () {
