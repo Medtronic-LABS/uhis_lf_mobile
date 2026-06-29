@@ -177,6 +177,27 @@ class VisitCompleteScreen extends StatelessWidget {
                     const SizedBox(height: AppSpacing.xl),
                   ],
 
+                  // AI Counselling — for EPI (immunisation) and IMCI (child health)
+                  if (programme == Programme.epi || programme == Programme.imci) ...[
+                    FilledButton.icon(
+                      onPressed: () => context.push(
+                        '/counselling',
+                        extra: {
+                          'patientLabel': patientLabel,
+                          'patientId': memberId ?? '',
+                        },
+                      ),
+                      icon: const Icon(Icons.health_and_safety_rounded),
+                      label: const Text(VisitCompleteStrings.sendCounsellingMessage),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: headerColor,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xl),
+                  ],
+
                   // Create referral — only when referral is recommended
                   if (referralRecommended) ...[
                     OutlinedButton(

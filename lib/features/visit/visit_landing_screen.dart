@@ -63,7 +63,14 @@ class _VisitLandingScreenState extends State<VisitLandingScreen> {
     final householdRepo = context.read<HouseholdRepository>();
 
     _lastVisitFuture = encounterRepo.lastEncounterSummary(widget.patientId);
-    
+
+    // First-time patients skip the landing screen — go straight to triage.
+    _lastVisitFuture!.then((lastVisit) {
+      if (lastVisit == null && mounted) {
+        _startVisit();
+      }
+    });
+
     if (widget.data?.householdId != null) {
       _coFlagsFuture = householdRepo.coFlagsFor(
         widget.patientId,
@@ -219,44 +226,6 @@ class _VisitLandingScreenState extends State<VisitLandingScreen> {
 
           const SizedBox(height: 16),
 
-          // Greeting prompt
-          Card(
-            color: theme.colorScheme.primaryContainer,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.emoji_people,
-                        color: theme.colorScheme.onPrimaryContainer,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Say hello first',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.onPrimaryContainer,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _getGreeting(data?.patientName, data?.programme),
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onPrimaryContainer,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
           // Household co-flags
           if (_coFlagsFuture != null)
             FutureBuilder<List<HouseholdMemberFlag>>(
@@ -326,22 +295,4 @@ class _VisitLandingScreenState extends State<VisitLandingScreen> {
     );
   }
 
-  String _getGreeting(String? name, Programme? programme) {
-    final firstName = name?.split(' ').first ?? 'the patient';
-    
-    switch (programme) {
-      case Programme.anc:
-        return 'Ask $firstName how she\'s feeling today and if she has any concerns about her pregnancy.';
-      case Programme.pnc:
-        return 'Ask $firstName how she and the baby are doing. Check on feeding and rest.';
-      case Programme.imci:
-        return 'Ask the caregiver how $firstName is doing today. Ask about any symptoms.';
-      case Programme.ncd:
-        return 'Ask $firstName about medication adherence and any new symptoms since last visit.';
-      case Programme.tb:
-        return 'Ask $firstName about cough, fever, and medication adherence.';
-      default:
-        return 'Greet $firstName warmly and ask how they\'re feeling today.';
-    }
-  }
 }

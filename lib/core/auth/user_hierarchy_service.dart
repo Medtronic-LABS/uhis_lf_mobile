@@ -344,12 +344,17 @@ class UserHierarchyService extends ChangeNotifier {
       await _auth.saveUpazila(upazilaName);
 
       // ── Persist LINKED_VILLAGE_IDS for offline sync ──────────────────────
-      // These override the profile-derived village IDs so subsequent syncs
-      // use exactly the villages from this endpoint (matches Android behaviour).
-      final linkedIds = _villages!
+      // fetch-synced-data filters at sub-village granularity — use sub-village
+      // IDs when available; fall back to village IDs otherwise.
+      final subIds = _subVillages!
+          .map((sv) => int.tryParse(sv.id))
+          .whereType<int>()
+          .toList();
+      final villageOnlyIds = _villages!
           .map((v) => v.idAsInt)
           .whereType<int>()
           .toList();
+      final linkedIds = subIds.isNotEmpty ? subIds : villageOnlyIds;
       if (linkedIds.isNotEmpty) {
         await _auth.saveLinkedVillageIds(linkedIds);
       }

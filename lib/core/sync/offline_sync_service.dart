@@ -11,6 +11,7 @@ import '../auth/auth_repository.dart';
 import '../config/app_config.dart';
 import '../models/assessment_history_item.dart';
 import '../db/assessment_dao.dart';
+import '../db/encounter_dao.dart';
 import '../db/follow_up_dao.dart';
 import '../db/household_dao.dart';
 import '../db/immunisation_dao.dart';
@@ -47,6 +48,7 @@ class OfflineSyncService extends ChangeNotifier {
     MemberDao? members,
     PregnancySnapshotDao? pregnancySnapshot,
     TreatmentPresenceDao? treatmentPresence,
+    EncounterDao? encounterDao,
   })  : _api = api,
         _auth = auth,
         _patients = patients,
@@ -58,7 +60,8 @@ class OfflineSyncService extends ChangeNotifier {
         _households = households,
         _members = members,
         _pregnancySnapshot = pregnancySnapshot,
-        _treatmentPresence = treatmentPresence;
+        _treatmentPresence = treatmentPresence,
+        _encounterDao = encounterDao;
 
   static const String _entityKey = 'worklist';
 
@@ -74,6 +77,7 @@ class OfflineSyncService extends ChangeNotifier {
   final SyncMetaDao _syncMeta;
   final PregnancySnapshotDao? _pregnancySnapshot;
   final TreatmentPresenceDao? _treatmentPresence;
+  final EncounterDao? _encounterDao;
 
   bool _running = false;
 
@@ -823,6 +827,70 @@ class OfflineSyncService extends ChangeNotifier {
     }
   }
 
+  /// Extracts a normalised vitals map from an assessment-history raw JSON row.
+  /// The server places clinical values in `observations` (e.g. weight, height,
+  /// bp "110/80", bg) which are merged with the top-level row and normalised to
+  /// the keys [VitalsRepository.latestFromLocal] reads (`systolic`, `diastolic`,
+  /// `weight`, `height`, `bmi`, `temperature`, `glucoseValue`, `spO2`,
+  /// `respiratoryRate`). Returns null when no recognisable vital is found.
+  static Map<String, dynamic>? _vitalsFromAssessmentRaw(
+      Map<String, dynamic> raw) {
+    final src = <String, dynamic>{};
+    // Primary key used by the assessment-history endpoint.
+    for (final key in const ['observations', 'assessmentDetails']) {
+      final details = raw[key];
+      if (details is Map) {
+        for (final e in details.entries) {
+          src.putIfAbsent(e.key.toString(), () => e.value);
+        }
+      }
+    }
+    // Merge top-level fields as fallback (some backends inline vitals directly).
+    for (final e in raw.entries) {
+      src.putIfAbsent(e.key, () => e.value);
+    }
+
+    double? num_(String key) {
+      final v = src[key];
+      if (v is num) return v.toDouble();
+      if (v is String) return double.tryParse(v);
+      return null;
+    }
+
+    final vitals = <String, dynamic>{};
+
+    // BP — `bp` arrives as "110/80" slash-string; also handle avgSystolic/avgDiastolic forms.
+    final bpStr = src['bp'];
+    if (bpStr is String && bpStr.contains('/')) {
+      final parts = bpStr.split('/');
+      if (parts.length == 2) {
+        final s = double.tryParse(parts[0].trim());
+        final d = double.tryParse(parts[1].trim());
+        if (s != null) src.putIfAbsent('systolic', () => s);
+        if (d != null) src.putIfAbsent('diastolic', () => d);
+      }
+    }
+    final sys = num_('avgSystolic') ?? num_('systolicBp') ?? num_('systolic');
+    final dia = num_('avgDiastolic') ?? num_('diastolicBp') ?? num_('diastolic');
+    if (sys != null) vitals['systolic'] = sys;
+    if (dia != null) vitals['diastolic'] = dia;
+
+    // Direct-key matches for VitalsRepository field names.
+    for (final key in const [
+      'weight', 'height', 'bmi', 'temperature', 'spO2', 'respiratoryRate', 'muac',
+    ]) {
+      final v = num_(key);
+      if (v != null) vitals[key] = v;
+    }
+
+    // Glucose — `bg` is the observations field; also handle longer names.
+    final glucose =
+        num_('bg') ?? num_('glucoseValue') ?? num_('glucose') ?? num_('bloodGlucose');
+    if (glucose != null) vitals['glucoseValue'] = glucose;
+
+    return vitals.isEmpty ? null : vitals;
+  }
+
   static String _normaliseFollowUpKind(String? wire) {
     if (wire == null) return FollowUpKind.generic;
     final w = wire.toLowerCase();
@@ -952,10 +1020,36 @@ class OfflineSyncService extends ChangeNotifier {
         schedUpdated++;
       }
 
+      // Write encounter rows with extracted vitals so VitalsRepository can
+      // render Recent Vitals without a new network call. Only rows that carry
+      // clinical assessmentDetails (NCD/ANC/PNC have BP/weight etc.) get an
+      // encounter row; rows with no vitals content are skipped.
+      int vitalsWritten = 0;
+      if (_encounterDao != null) {
+        for (final item in items) {
+          final patientId = memberToPatient[item.householdMemberId];
+          if (patientId == null || patientId.isEmpty) continue;
+          final vitals = _vitalsFromAssessmentRaw(item.rawJson);
+          if (vitals == null) continue;
+          final enc = EncounterRow(
+            id: item.encounterId,
+            patientId: patientId,
+            programme: (item.serviceProvided ?? 'assessment').toLowerCase(),
+            startedAt: item.visitDate.millisecondsSinceEpoch,
+            completedAt: item.visitDate.millisecondsSinceEpoch,
+            status: EncounterStatus.synced,
+            syncStatus: SyncStatus.synced,
+            vitalsJson: jsonEncode(vitals),
+          );
+          await _encounterDao.upsert(enc);
+          vitalsWritten++;
+        }
+      }
+
       debugPrint(
         '[OfflineSyncService] assessment-history sync: '
         '${items.length} rows → $progUpdated programme updates, '
-        '$schedUpdated visit-schedule updates',
+        '$schedUpdated visit-schedule updates, $vitalsWritten encounter rows with vitals',
       );
     } catch (e) {
       debugPrint(
