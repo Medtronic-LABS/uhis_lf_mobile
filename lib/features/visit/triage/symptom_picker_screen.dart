@@ -829,6 +829,9 @@ class _AiBriefingSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Pronoun resolution — spec §4.1 ANC greeting "আপু" (her),
+    // §5.1 NCD "কাকা" (him). Defaults to him when sex is unknown.
+    final isFemale = patientContext.sex == Sex.female;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -840,25 +843,16 @@ class _AiBriefingSection extends StatelessWidget {
           child: briefingLoading
               ? const _BriefingLoadingSkeleton(lines: 3)
               : briefingData == null
-                  ? _BriefingFallbackContent(patientContext: patientContext)
-                  : _BriefingCard1Content(data: briefingData!),
-        ),
-        const SizedBox(height: 8),
-        _BriefingCard(
-          icon: Icons.priority_high_rounded,
-          iconColor: const Color(0xFFE65100),
-          title: SymptomPickerStrings.briefCard2Title,
-          child: briefingLoading
-              ? const _BriefingLoadingSkeleton(lines: 3)
-              : briefingData == null
-                  ? const _BriefingUnavailable()
-                  : _BriefingCard2Content(data: briefingData!),
+                  ? _BriefingFallbackContent(
+                      patientContext: patientContext, isFemale: isFemale)
+                  : _BriefingCard1Content(
+                      data: briefingData!, isFemale: isFemale),
         ),
         const SizedBox(height: 8),
         _BriefingCard(
           icon: Icons.chat_bubble_outline,
           iconColor: Colors.teal,
-          title: SymptomPickerStrings.briefCard3Title,
+          title: SymptomPickerStrings.briefCard3TitleFor(isFemale: isFemale),
           child: briefingLoading
               ? const _BriefingLoadingSkeleton(lines: 4)
               : briefingData == null
@@ -973,103 +967,77 @@ class _BriefingCardState extends State<_BriefingCard> {
 }
 
 // ── Card 1 content: Before You Knock ─────────────────────────────────────────
+//
+// Spec §4.1.1 / §5.1.1: open the card with a navy "sit with him/her — greet
+// them" instructional strip, then the AI-generated brief in the brand pink
+// (#9D174D). Body hard-capped at 2 lines total (headline + 1 follow-up bullet)
+// so the SK can absorb it in one glance.
 
 class _BriefingCard1Content extends StatelessWidget {
-  const _BriefingCard1Content({required this.data});
+  const _BriefingCard1Content({required this.data, required this.isFemale});
   final VisitBriefingResponse data;
+  final bool isFemale;
+
+  static const Color _aiTextColor = Color(0xFF9D174D);
+  static const Color _greetBgColor = Color(0xFF1B2B5E);
 
   @override
   Widget build(BuildContext context) {
+    final headline = data.briefingCard.headline.trim();
+    final firstPoint = data.briefingCard.points.isEmpty
+        ? null
+        : data.briefingCard.points.first.trim();
+    // Spec mandates a 2-line hard stop: headline (line 1) + one point (line 2).
+    final aiBody = firstPoint != null && firstPoint.isNotEmpty
+        ? '$headline\n$firstPoint'
+        : headline;
+
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          data.briefingCard.headline,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: AppColors.navy,
+        // Navy greet strip — instructional, never AI-generated.
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: _greetBgColor,
+            borderRadius: BorderRadius.circular(6),
           ),
-        ),
-        const SizedBox(height: 6),
-        ...data.briefingCard.points.take(3).map((p) => Padding(
-              padding: const EdgeInsets.only(bottom: 3),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('• ',
-                      style: TextStyle(
-                          fontSize: 11, color: AppColors.textMuted)),
-                  Expanded(
-                    child: Text(
-                      p,
-                      style: const TextStyle(
-                          fontSize: 11, color: AppColors.textPrimary),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            )),
-      ],
-    );
-  }
-}
-
-// ── Card 2 content: Today's Priorities ───────────────────────────────────────
-
-class _BriefingCard2Content extends StatelessWidget {
-  const _BriefingCard2Content({required this.data});
-  final VisitBriefingResponse data;
-
-  @override
-  Widget build(BuildContext context) {
-    final priorities = data.todaysPriorities;
-    if (priorities.isEmpty) return const _BriefingUnavailable();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: priorities.asMap().entries.map((e) {
-        final idx = e.key;
-        final text = e.value;
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 6),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 18,
-                height: 18,
-                margin: const EdgeInsets.only(top: 1, right: 8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE65100).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Center(
-                  child: Text(
-                    '${idx + 1}',
-                    style: const TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFFE65100),
-                    ),
-                  ),
-                ),
-              ),
+              const Icon(Icons.waving_hand,
+                  size: 14, color: Colors.white),
+              const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  text,
+                  SymptomPickerStrings.beforeYouKnockGreetingFor(
+                      isFemale: isFemale),
                   style: const TextStyle(
                     fontSize: 11,
-                    color: AppColors.textPrimary,
-                    height: 1.4,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
-        );
-      }).toList(),
+        ),
+        const SizedBox(height: 8),
+        // AI-generated body — pink, 2-line hard stop.
+        Text(
+          aiBody,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            height: 1.35,
+            color: _aiTextColor,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
     );
   }
 }
@@ -1201,10 +1169,16 @@ class _BriefingUnavailable extends StatelessWidget {
   }
 }
 
-/// Fallback for card 1 when AI is unavailable — shows rule-based context chips.
+/// Fallback for card 1 when AI is unavailable — shows the navy greet strip
+/// followed by rule-based context chips. Same shape as the AI variant so the
+/// SK sees a consistent card layout whether or not the upstream call worked.
 class _BriefingFallbackContent extends StatelessWidget {
-  const _BriefingFallbackContent({required this.patientContext});
+  const _BriefingFallbackContent({
+    required this.patientContext,
+    required this.isFemale,
+  });
   final PatientContext patientContext;
+  final bool isFemale;
 
   @override
   Widget build(BuildContext context) {
@@ -1220,6 +1194,34 @@ class _BriefingFallbackContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1B2B5E),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.waving_hand,
+                  size: 14, color: Colors.white),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  SymptomPickerStrings.beforeYouKnockGreetingFor(
+                      isFemale: isFemale),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
         const Row(
           children: [
             Icon(Icons.wifi_off, size: 12, color: AppColors.textMuted),

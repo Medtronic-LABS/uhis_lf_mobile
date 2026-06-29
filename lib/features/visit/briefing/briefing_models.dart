@@ -60,13 +60,11 @@ class SuggestedDiscussionPoints {
 class VisitBriefingResponse {
   const VisitBriefingResponse({
     required this.briefingCard,
-    required this.todaysPriorities,
     required this.suggestedDiscussionPoints,
     required this.transitionPrompt,
   });
 
   final BriefingCardContent briefingCard;
-  final List<String> todaysPriorities;
   final SuggestedDiscussionPoints suggestedDiscussionPoints;
   final String transitionPrompt;
 
@@ -74,10 +72,6 @@ class VisitBriefingResponse {
       VisitBriefingResponse(
         briefingCard: BriefingCardContent.fromJson(
             json['briefingCard'] as Map<String, dynamic>? ?? {}),
-        todaysPriorities: (json['todaysPriorities'] as List<dynamic>?)
-                ?.map((e) => e.toString())
-                .toList() ??
-            [],
         suggestedDiscussionPoints: SuggestedDiscussionPoints.fromJson(
             json['suggestedDiscussionPoints'] as Map<String, dynamic>? ?? {}),
         transitionPrompt: json['transitionPrompt'] as String? ?? '',

@@ -2443,8 +2443,16 @@ abstract final class SymptomPickerStrings {
   // ── AI briefing cards ────────────────────────────────────────────────────
   static const String briefCardTitle = 'Before you knock · AI brief';
   static const String briefCard1Title = 'Before You Knock';
-  static const String briefCard2Title = "Today's Priorities";
-  static const String briefCard3Title = 'Suggested Discussion Points';
+
+  /// Card 3 title — gendered. Spec §4.1 / §5.1: greet the patient before
+  /// opening the symptom screen. Pronoun resolved from patient profile.
+  static String briefCard3TitleFor({required bool isFemale}) =>
+      'How is ${isFemale ? 'she' : 'he'} feeling today?';
+
+  // ── Before You Knock instructional leading line ──────────────────────────
+  /// Shown on the navy strip at the top of Card 1.
+  static String beforeYouKnockGreetingFor({required bool isFemale}) =>
+      'Sit with ${isFemale ? 'her' : 'him'} — greet them.';
 
   // ── Patient context chips ────────────────────────────────────────────────
   static const String chipPregnant = 'Pregnant · ANC';
