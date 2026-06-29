@@ -823,22 +823,22 @@ class _AiBriefingSection extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         _BriefingCard(
-          icon: Icons.chat_bubble_outline,
-          iconColor: Colors.teal,
+          icon: Icons.priority_high_rounded,
+          iconColor: const Color(0xFFE65100),
           title: SymptomPickerStrings.briefCard2Title,
           child: briefingLoading
-              ? const _BriefingLoadingSkeleton(lines: 4)
+              ? const _BriefingLoadingSkeleton(lines: 3)
               : briefingData == null
                   ? const _BriefingUnavailable()
                   : _BriefingCard2Content(data: briefingData!),
         ),
         const SizedBox(height: 8),
         _BriefingCard(
-          icon: Icons.mic_none,
-          iconColor: Colors.deepPurple,
+          icon: Icons.chat_bubble_outline,
+          iconColor: Colors.teal,
           title: SymptomPickerStrings.briefCard3Title,
           child: briefingLoading
-              ? const _BriefingLoadingSkeleton(lines: 2)
+              ? const _BriefingLoadingSkeleton(lines: 4)
               : briefingData == null
                   ? const _BriefingUnavailable()
                   : _BriefingCard3Content(data: briefingData!),
@@ -995,7 +995,7 @@ class _BriefingCard1Content extends StatelessWidget {
   }
 }
 
-// ── Card 2 content: Conversation Guide ───────────────────────────────────────
+// ── Card 2 content: Today's Priorities ───────────────────────────────────────
 
 class _BriefingCard2Content extends StatelessWidget {
   const _BriefingCard2Content({required this.data});
@@ -1003,7 +1003,64 @@ class _BriefingCard2Content extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final guide = data.conversationGuide;
+    final priorities = data.todaysPriorities;
+    if (priorities.isEmpty) return const _BriefingUnavailable();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: priorities.asMap().entries.map((e) {
+        final idx = e.key;
+        final text = e.value;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 18,
+                height: 18,
+                margin: const EdgeInsets.only(top: 1, right: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE65100).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Center(
+                  child: Text(
+                    '${idx + 1}',
+                    style: const TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFFE65100),
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  text,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textPrimary,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+// ── Card 3 content: Suggested Discussion Points ───────────────────────────────
+
+class _BriefingCard3Content extends StatelessWidget {
+  const _BriefingCard3Content({required this.data});
+  final VisitBriefingResponse data;
+
+  @override
+  Widget build(BuildContext context) {
+    final sdp = data.suggestedDiscussionPoints;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1016,12 +1073,11 @@ class _BriefingCard2Content extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.waving_hand,
-                  size: 13, color: AppColors.tagBlueText),
+              const Icon(Icons.waving_hand, size: 13, color: AppColors.tagBlueText),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  guide.openingLine,
+                  sdp.openingLine,
                   style: const TextStyle(
                     fontSize: 11,
                     fontStyle: FontStyle.italic,
@@ -1035,20 +1091,20 @@ class _BriefingCard2Content extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 6),
-        ...guide.sections.take(3).map((s) => Padding(
+        ...sdp.sections.take(4).map((s) => Padding(
               padding: const EdgeInsets.only(bottom: 3),
               child: Row(
                 children: [
-                  Icon(_iconFor(s.icon),
-                      size: 12, color: AppColors.aiPurple),
+                  Icon(_iconFor(s.icon), size: 12, color: AppColors.aiPurple),
                   const SizedBox(width: 5),
                   Expanded(
                     child: Text(
                       s.topic,
                       style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.navy),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.navy,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -1070,79 +1126,6 @@ class _BriefingCard2Content extends StatelessWidget {
       case 'home': return Icons.home_outlined;
       default: return Icons.checklist_outlined;
     }
-  }
-}
-
-// ── Card 3 content: Begin Consultation ────────────────────────────────────────
-
-class _BriefingCard3Content extends StatelessWidget {
-  const _BriefingCard3Content({required this.data});
-  final VisitBriefingResponse data;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: AppColors.aiSurfaceStart,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.aiBorder),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(Icons.lightbulb_outline,
-                  size: 13, color: AppColors.aiPurple),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  data.transitionPrompt,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontStyle: FontStyle.italic,
-                    color: AppColors.navy,
-                  ),
-                  maxLines: 4,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppColors.aiSurfaceEnd,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.aiBorder),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.mic, size: 11, color: AppColors.aiPurple),
-                  SizedBox(width: 4),
-                  Text(
-                    'AI Scribe ready',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.aiPurple,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
   }
 }
 
