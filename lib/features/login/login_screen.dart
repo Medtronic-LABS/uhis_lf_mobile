@@ -71,7 +71,9 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     // Use select to only rebuild on specific field changes
-    final showBio = context.select<AuthState, bool>((a) => a.biometricEnabled);
+    final showBio = context.select<AuthState, bool>(
+      (a) => a.biometricEnabled && a.biometricAvailable,
+    );
     final showPin = context.select<AuthState, bool>((a) => a.pinEnabled);
     final busy = context.select<AuthState, bool>((a) => a.busy);
     return Scaffold(
@@ -99,10 +101,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         margin: const EdgeInsets.only(bottom: 16),
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .errorContainer
-                              .withValues(alpha: 0.85),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.errorContainer.withValues(alpha: 0.85),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
@@ -110,16 +111,18 @@ class _LoginScreenState extends State<LoginScreen> {
                             Icon(
                               Icons.info_outline,
                               size: 18,
-                              color: Theme.of(context).colorScheme.onErrorContainer,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onErrorContainer,
                             ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 _bannerMessage!,
                                 style: TextStyle(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onErrorContainer,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onErrorContainer,
                                 ),
                               ),
                             ),
@@ -145,29 +148,31 @@ class _LoginScreenState extends State<LoginScreen> {
                     if (showBio || showPin) ...[
                       if (showBio)
                         OutlinedButton.icon(
-                          onPressed:
-                              busy ? null : () => context.go('/lock'),
+                          onPressed: busy ? null : () => context.go('/lock'),
                           icon: const Icon(Icons.fingerprint),
                           label: const Text(LoginStrings.useDeviceUnlock),
                         ),
                       if (showPin) ...[
                         if (showBio) const SizedBox(height: 8),
                         OutlinedButton.icon(
-                          onPressed:
-                              busy ? null : () => context.go('/pin-unlock'),
+                          onPressed: busy
+                              ? null
+                              : () => context.go('/pin-unlock'),
                           icon: const Icon(Icons.pin_outlined),
                           label: Text(PinStrings.usePin(AppConfig.pinLength)),
                         ),
                       ],
                       const SizedBox(height: 16),
-                      const Row(children: [
-                        Expanded(child: Divider()),
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 8),
-                          child: Text(CommonStrings.or),
-                        ),
-                        Expanded(child: Divider()),
-                      ]),
+                      const Row(
+                        children: [
+                          Expanded(child: Divider()),
+                          Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 8),
+                            child: Text(CommonStrings.or),
+                          ),
+                          Expanded(child: Divider()),
+                        ],
+                      ),
                       const SizedBox(height: 16),
                     ],
                     TextFormField(
@@ -178,8 +183,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         labelText: LoginStrings.usernameLabel,
                         border: OutlineInputBorder(),
                       ),
-                      validator: (v) =>
-                          (v == null || v.trim().isEmpty) ? CommonStrings.required : null,
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? CommonStrings.required
+                          : null,
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -197,12 +203,14 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ? Icons.visibility_outlined
                                 : Icons.visibility_off_outlined,
                           ),
-                          onPressed: () =>
-                              setState(() => _obscurePassword = !_obscurePassword),
+                          onPressed: () => setState(
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
                         ),
                       ),
-                      validator: (v) =>
-                          (v == null || v.isEmpty) ? CommonStrings.required : null,
+                      validator: (v) => (v == null || v.isEmpty)
+                          ? CommonStrings.required
+                          : null,
                     ),
                     const SizedBox(height: 24),
                     FilledButton(
@@ -220,8 +228,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       children: [
                         Text(
                           AppStrings.poweredBy,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
                               ),
                           textAlign: TextAlign.center,
                         ),

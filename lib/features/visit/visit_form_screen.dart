@@ -13,7 +13,9 @@ import '../scribe/scribe_permission_service.dart';
 import '../scribe/scribe_session.dart';
 import '../scribe/widgets/scribe_review_sheet.dart';
 import '../worklist/worklist_repository.dart';
+import '../../core/config/app_config.dart';
 import 'composer/sectioned_assessment_screen.dart';
+import '../../uhis_form/dynamic_assessment_screen.dart';
 import 'pathway/pathway_engine.dart';
 import 'submission/unified_submission_orchestrator.dart';
 import 'triage/patient_context_builder.dart';
@@ -230,6 +232,20 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
   ) {
     debugPrint(
         '[VisitForm] Sectioned mode — programmes: ${widget.activatedPathways?.join(', ')}');
+
+    if (AppConfig.useDynamicForms) {
+      final primaryPathway = _getPrimaryProgramme();
+      return DynamicAssessmentScreen(
+        formType: primaryPathway.name.toLowerCase(),
+        encounterId: widget.visitId,
+        patientId: widget.patientId ?? '',
+        memberId: widget.memberId,
+        draftDao: ctx.read<AssessmentDraftDao>(),
+        onSubmit: () => _onSectionedSubmit(ctx, visitCtrl, session),
+        onReferNow: () => setState(() => _sectionedReferralTriggered = true),
+      );
+    }
+
     return SectionedAssessmentScreen(
       pathways: _buildPathways(),
       patientContext: _buildPatientContext(),

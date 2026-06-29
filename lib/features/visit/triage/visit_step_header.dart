@@ -42,6 +42,7 @@ class VisitStepHeader extends StatelessWidget implements PreferredSizeWidget {
     return Material(
       color: _headerColor,
       child: SafeArea(
+        top: false,
         bottom: false,
         child: Column(
           mainAxisSize: MainAxisSize.min,

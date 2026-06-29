@@ -1410,33 +1410,6 @@ class _VisitFilterPanel extends StatelessWidget {
     }
   }
 
-  String _programmeLabel(Programme programme) {
-    switch (programme) {
-      case Programme.imci:
-        return PathwayStrings.programmeImci;
-      case Programme.anc:
-        return PathwayStrings.programmeAnc;
-      case Programme.pnc:
-        return PathwayStrings.programmePnc;
-      case Programme.ncd:
-        return PathwayStrings.programmeNcd;
-      case Programme.tb:
-        return PathwayStrings.programmeTb;
-      case Programme.epi:
-        return PathwayStrings.programmeEpi;
-      case Programme.nutrition:
-        return PathwayStrings.programmeNutrition;
-      case Programme.familyPlanning:
-        return PathwayStrings.programmeFamilyPlanning;
-      case Programme.cataract:
-        return PathwayStrings.programmeCataract;
-      case Programme.eyeCare:
-        return PathwayStrings.programmeEyeCare;
-      case Programme.unknown:
-        return PathwayStrings.programmeUnknown;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -1479,7 +1452,7 @@ class _VisitFilterPanel extends StatelessWidget {
           const SizedBox(height: 8),
         ],
 
-        // ── Row 2: need chips ─────────────────────────────────────────────
+        // ── Need chips ─────────────────────────────────────────────────────
         Padding(
           padding: const EdgeInsets.only(bottom: 6),
           child: Row(
@@ -1522,36 +1495,26 @@ class _VisitFilterPanel extends StatelessWidget {
             ],
           ),
         ),
-        // Programme chips — dynamic, derived from actual patient data
-        if (availableProgrammes.isNotEmpty) ...[
-          const Padding(
-            padding: EdgeInsets.only(top: 4, bottom: 4),
-            child: Text(
-              MissionDashboardStrings.filterByProgramme,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textStrong,
-              ),
-            ),
-          ),
+        if (availableNeeds.isNotEmpty)
           SizedBox(
             height: 34,
             child: ListView(
               scrollDirection: Axis.horizontal,
               padding: EdgeInsets.zero,
-              children: availableProgrammes.map((prog) {
-                final active = selectedProgrammes.contains(prog);
+              children: _NeedFilter.values
+                  .where((need) => availableNeeds.contains(need))
+                  .map((need) {
+                final active = selectedNeeds.contains(need);
                 return Padding(
                   padding: const EdgeInsets.only(right: 6),
                   child: Semantics(
                     label: active
-                        ? 'Filter by programme: ${_programmeLabel(prog)}, selected'
-                        : 'Filter by programme: ${_programmeLabel(prog)}',
+                        ? 'Filter by need: ${_needLabel(need)}, selected'
+                        : 'Filter by need: ${_needLabel(need)}',
                     button: true,
                     child: GestureDetector(
-                    key: ValueKey('dashboard_prog_filter_${prog.name}'),
-                    onTap: () => onProgrammeToggled(prog),
+                    key: ValueKey('dashboard_need_filter_${need.name}'),
+                    onTap: () => onNeedToggled(need),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 6),
@@ -1564,7 +1527,7 @@ class _VisitFilterPanel extends StatelessWidget {
                         ),
                       ),
                       child: Text(
-                        _programmeLabel(prog),
+                        _needLabel(need),
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: active ? FontWeight.w800 : FontWeight.w500,
@@ -1577,52 +1540,15 @@ class _VisitFilterPanel extends StatelessWidget {
                 );
               }).toList(),
             ),
+          )
+        else
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              MissionDashboardStrings.noNeedsInQueue,
+              style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+            ),
           ),
-          const SizedBox(height: 6),
-        ],
-        SizedBox(
-          height: 34,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: EdgeInsets.zero,
-            children: _NeedFilter.values.map((need) {
-              final active = selectedNeeds.contains(need);
-              return Padding(
-                padding: const EdgeInsets.only(right: 6),
-                child: Semantics(
-                  label: active
-                      ? 'Filter by need: ${_needLabel(need)}, selected'
-                      : 'Filter by need: ${_needLabel(need)}',
-                  button: true,
-                  child: GestureDetector(
-                  key: ValueKey('dashboard_need_filter_${need.name}'),
-                  onTap: () => onNeedToggled(need),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: active ? AppColors.ancSurface : Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: active ? AppColors.pink : AppColors.border,
-                        width: 1,
-                      ),
-                    ),
-                    child: Text(
-                      _needLabel(need),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: active ? FontWeight.w800 : FontWeight.w500,
-                        color: active ? AppColors.ancText : AppColors.textStrong,
-                      ),
-                    ),
-                  ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ),
       ],
     );
   }

@@ -1448,7 +1448,19 @@ class SectionRegistry {
         return scribe.FieldType.string;
       case FieldType.selectField:
       case FieldType.multiSelectField:
+      case FieldType.radioField:
+      case FieldType.dialogMultiSelectField:
         return scribe.FieldType.enumType;
+      case FieldType.dateField:
+      case FieldType.ageOrDobField:
+        return scribe.FieldType.string;
+      case FieldType.bpField:
+      case FieldType.ageYmdField:
+        return scribe.FieldType.string;
+      // Display-only fields — scribe does not extract these.
+      case FieldType.infoLabelField:
+      case FieldType.textLabelField:
+        return scribe.FieldType.string;
     }
   }
 

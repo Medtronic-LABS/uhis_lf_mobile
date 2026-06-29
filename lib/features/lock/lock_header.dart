@@ -49,7 +49,7 @@ class LockProgramHeader extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 14),
-              LockPageDots(count: pageCount, current: currentPage),
+              Center(child: LockPageDots(count: pageCount, current: currentPage)),
             ],
           ),
         ),
@@ -72,14 +72,16 @@ class LockPageDots extends StatelessWidget {
         final active = i == current;
         return Padding(
           padding: EdgeInsets.only(right: i < count - 1 ? 6 : 0),
-          child: Container(
+          child: SizedBox(
             width: 8,
             height: 8,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: active
-                  ? Colors.white
-                  : Colors.white.withValues(alpha: 0.30),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(4),
+                color: active
+                    ? Colors.white
+                    : Colors.white.withValues(alpha: 0.30),
+              ),
             ),
           ),
         );

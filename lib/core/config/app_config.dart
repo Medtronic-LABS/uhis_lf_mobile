@@ -191,4 +191,11 @@ class AppConfig {
   // it is a per-user runtime preference, not a compile-time build flag.
   // It must be read from SharedPreferences / SecureStorage and managed by
   // a dedicated ConsentRepository (TODO: wire in a future sprint).
+
+  /// Feature flag: use the uhis_form JSON-driven renderer instead of the
+  /// hardcoded [SectionRegistry]. Set via `--dart-define=USE_DYNAMIC_FORMS=true`.
+  static const bool useDynamicForms = bool.fromEnvironment(
+    'USE_DYNAMIC_FORMS',
+    defaultValue: true,
+  );
 }
