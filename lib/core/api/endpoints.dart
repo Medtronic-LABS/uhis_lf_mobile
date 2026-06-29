@@ -45,6 +45,8 @@ class Endpoints {
   // ── AI Visit Briefing: pre-visit guidance cards ───────────────────────────
   static const String visitBriefingGenerate =
       '/ai-visit-briefing-service/briefing/generate';
+  static const String visitBriefingSummary =
+      '/ai-visit-briefing-service/briefing/summary';
 
   // Chunked upload — for audio files ≥ 1 MB (rural 2G path)
   static const String scribeUploadInit = '/ai-scribe-service/upload/init';

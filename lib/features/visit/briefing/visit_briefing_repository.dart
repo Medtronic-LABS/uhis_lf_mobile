@@ -13,7 +13,15 @@ class VisitBriefingRepository {
       Endpoints.visitBriefingGenerate,
       data: patientContext,
     );
-    return VisitBriefingResponse.fromJson(
-        response.data ?? {});
+    return VisitBriefingResponse.fromJson(response.data ?? {});
+  }
+
+  /// Short 2-3 sentence summary for the patient context screen header.
+  Future<String> summary(Map<String, dynamic> patientContext) async {
+    final response = await _client.dio.post<Map<String, dynamic>>(
+      Endpoints.visitBriefingSummary,
+      data: patientContext,
+    );
+    return (response.data?['summary'] as String?) ?? '';
   }
 }

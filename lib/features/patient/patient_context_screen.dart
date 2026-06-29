@@ -17,6 +17,9 @@ import 'open_followups_section.dart';
 import 'patient_actions_row.dart';
 import 'patient_repository.dart';
 import 'recent_vitals_section.dart';
+import 'vitals_repository.dart';
+import '../visit/briefing/visit_briefing_repository.dart';
+import 'followup_repository.dart';
 
 /// Combined data type that can hold either a local patient or remote member.
 class PatientOrMemberData {
@@ -525,13 +528,15 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(14, 14, 14, 110),
                     children: [
-                      if (data.riskReasons.isNotEmpty)
-                        _AiSummaryCard(
-                          name: data.name ?? PatientContextStrings.fallbackTitle,
-                          reasons: data.riskReasons,
-                        ),
-                      if (data.riskReasons.isNotEmpty)
-                        const SizedBox(height: 10),
+                      _GeminiSummaryBanner(
+                        patientId: data.patientId ?? widget.patientId,
+                        patientName: data.name,
+                        ageYears: data.age,
+                        gender: data.gender,
+                        programmes: data.programmes,
+                        fallbackReasons: data.riskReasons,
+                      ),
+                      const SizedBox(height: 10),
                       _AssessmentsSection(assessments: data.assessments),
                       const SizedBox(height: 10),
                       RecentVitalsSection(
@@ -1389,6 +1394,240 @@ class _PatientDetailHeader extends StatelessWidget {
     if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
     return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
         .toUpperCase();
+  }
+}
+
+/// Gemini-powered 2-3 sentence patient summary shown at the top of the
+/// patient context screen. Falls back to rule-based risk chips if the
+/// AI service is unreachable.
+class _GeminiSummaryBanner extends StatefulWidget {
+  const _GeminiSummaryBanner({
+    required this.patientId,
+    this.patientName,
+    this.ageYears,
+    this.gender,
+    this.programmes = const {},
+    this.fallbackReasons = const [],
+  });
+
+  final String patientId;
+  final String? patientName;
+  final int? ageYears;
+  final String? gender;
+  final Set<Programme> programmes;
+  final List<String> fallbackReasons;
+
+  @override
+  State<_GeminiSummaryBanner> createState() => _GeminiSummaryBannerState();
+}
+
+class _GeminiSummaryBannerState extends State<_GeminiSummaryBanner> {
+  Future<String?>? _summaryFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _summaryFuture = _fetchSummary();
+  }
+
+  Future<String?> _fetchSummary() async {
+    try {
+      final vitalsRepo = context.read<VitalsRepository>();
+      final followUpRepo = context.read<FollowUpRepository>();
+      final briefingRepo = context.read<VisitBriefingRepository>();
+
+      final visitsByVisit =
+          await vitalsRepo.recentByVisit(widget.patientId, limit: 3);
+      final followUps =
+          await followUpRepo.openForPatientLocal(widget.patientId);
+
+      Map<String, dynamic>? vitalsMap;
+      if (visitsByVisit.isNotEmpty) {
+        final latest = visitsByVisit.first;
+        final bp = latest.readings
+            .where((r) => r.type == VitalType.bloodPressure)
+            .firstOrNull;
+        final weight = latest.readings
+            .where((r) => r.type == VitalType.weight)
+            .firstOrNull;
+        final glucose = latest.readings
+            .where((r) => r.type == VitalType.glucose)
+            .firstOrNull;
+        final spo2 = latest.readings
+            .where((r) => r.type == VitalType.spO2)
+            .firstOrNull;
+        vitalsMap = {
+          if (bp?.systolic != null)
+            'bloodPressureSystolic': bp!.systolic!.toInt(),
+          if (bp?.diastolic != null)
+            'bloodPressureDiastolic': bp!.diastolic!.toInt(),
+          if (weight?.value != null) 'weight': weight!.value,
+          if (glucose?.value != null) 'glucose': glucose!.value,
+          if (spo2?.value != null) 'spO2': spo2!.value!.toInt(),
+        };
+      }
+
+      final overdue = followUps.where((f) => f.isOverdue).length;
+      final risks = <String>[
+        if (overdue > 0) 'missed_followup',
+        if (visitsByVisit.isNotEmpty) ...() {
+          final bp = visitsByVisit.first.readings
+              .where((r) => r.type == VitalType.bloodPressure)
+              .firstOrNull;
+          return bp?.systolic != null && bp!.systolic! >= 140
+              ? ['elevated_bp']
+              : <String>[];
+        }(),
+      ];
+
+      final request = <String, dynamic>{
+        'patientId': widget.patientId,
+        if (widget.patientName != null) 'patientName': widget.patientName,
+        if (widget.ageYears != null) 'ageYears': widget.ageYears,
+        if (widget.gender != null) 'gender': widget.gender,
+        'activeProgrammes': widget.programmes.map((p) => p.name).toList(),
+        'visitCount': visitsByVisit.length,
+        if (vitalsMap != null && vitalsMap.isNotEmpty) 'recentVitals': vitalsMap,
+        'openFollowUps': followUps
+            .map((f) => {
+                  'type': f.type.name,
+                  if (f.isOverdue)
+                    'daysOverdue':
+                        DateTime.now().difference(f.dueDate).inDays,
+                  if (f.reason != null) 'reason': f.reason,
+                })
+            .toList(),
+        'riskIndicators': risks,
+      };
+
+      return await briefingRepo.summary(request);
+    } on Object {
+      return null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+
+    return FutureBuilder<String?>(
+      future: _summaryFuture,
+      builder: (context, snap) {
+        // Loading skeleton
+        if (snap.connectionState == ConnectionState.waiting) {
+          return Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [tokens.aiSurfaceStart, tokens.aiSurfaceEnd],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius:
+                  BorderRadius.circular(LeapfrogColors.radiusLg),
+              border: Border.all(color: tokens.aiBorder),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 120,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    color: tokens.aiPurple,
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                for (int i = 0; i < 3; i++) ...[
+                  Container(
+                    height: 12,
+                    width: i == 2 ? 180 : double.infinity,
+                    margin: const EdgeInsets.only(bottom: 6),
+                    decoration: BoxDecoration(
+                      color: tokens.aiPurple.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          );
+        }
+
+        final summary = snap.data;
+
+        // AI service unavailable — fall back to rule-based card
+        if (summary == null || summary.isEmpty) {
+          if (widget.fallbackReasons.isEmpty) return const SizedBox.shrink();
+          return _AiSummaryCard(
+            name: widget.patientName ?? PatientContextStrings.fallbackTitle,
+            reasons: widget.fallbackReasons,
+          );
+        }
+
+        // Gemini summary
+        return Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [tokens.aiSurfaceStart, tokens.aiSurfaceEnd],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
+            border: Border.all(color: tokens.aiBorder),
+          ),
+          child: Stack(
+            children: [
+              Positioned(
+                top: -2,
+                right: -2,
+                child: Text(
+                  '✦',
+                  style: TextStyle(
+                    fontSize: 32,
+                    color: tokens.aiPurple.withValues(alpha: 0.18),
+                  ),
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: tokens.aiPurple,
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    child: const Text(
+                      '✦ AI SUMMARY',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    summary,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: tokens.brandNavy,
+                      height: 1.55,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 
