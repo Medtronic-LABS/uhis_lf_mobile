@@ -44,18 +44,31 @@ class WorklistCard extends StatelessWidget {
     return name.substring(0, name.length >= 2 ? 2 : 1).toUpperCase();
   }
 
-  /// Map risk band to urgency level.
+  /// Map spec §2.8.3 band to the SK-facing urgency pill. Modifier is *not*
+  /// surfaced — it influences sort order only.
   UrgencyLevel _urgencyLevel() {
     switch (entry.band) {
-      case RiskBand.urgent:
+      case Band.band1:
         return UrgencyLevel.visitNow;
-      case RiskBand.high:
+      case Band.band2:
         return UrgencyLevel.today;
-      case RiskBand.moderate:
+      case Band.band3:
         return UrgencyLevel.thisWeek;
-      case RiskBand.low:
+      case Band.band4:
         return UrgencyLevel.routine;
     }
+  }
+
+  /// Spec §2.6 card border rule: red border only when a Band 1 patient *also*
+  /// has a danger sign (or other CCE-style escalation). All other cards use
+  /// neutral grey. CCE alert input is deferred — keyed off rationale drivers
+  /// for now.
+  bool _hasDangerSign() {
+    final drivers = entry.rationale?.drivers ?? const <String>[];
+    return drivers.any((d) =>
+        d == 'anc-danger-sign' ||
+        d == 'ncd-stroke-sign' ||
+        d == 'clinician-red-flag');
   }
 
   @override
@@ -84,8 +97,9 @@ class WorklistCard extends StatelessWidget {
       color: scheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: entry.isUrgent 
-            ? BorderSide(color: accent.withValues(alpha: 0.5), width: 1.5)
+        // Spec §2.6: red border only when band1 + danger sign present.
+        side: entry.isUrgent && _hasDangerSign()
+            ? BorderSide(color: accent.withValues(alpha: 0.6), width: 1.5)
             : BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.3)),
       ),
       child: Semantics(
@@ -241,15 +255,15 @@ class WorklistCard extends StatelessWidget {
     return 'Review needed';
   }
 
-  Color _accentFor(RiskBand band, ColorScheme scheme) {
+  Color _accentFor(Band band, ColorScheme scheme) {
     switch (band) {
-      case RiskBand.urgent:
+      case Band.band1:
         return scheme.error;
-      case RiskBand.high:
-        return scheme.primary;
-      case RiskBand.moderate:
+      case Band.band2:
         return scheme.tertiary;
-      case RiskBand.low:
+      case Band.band3:
+        return scheme.primary;
+      case Band.band4:
         return scheme.onSurfaceVariant;
     }
   }
@@ -310,7 +324,7 @@ class _RationaleSheet extends StatelessWidget {
                     ),
                   ),
                   child: Text(
-                    WorklistStrings.riskScoreLabel(entry.score),
+                    _urgencyLabel(entry.band),
                     style: TextStyle(
                       color: _bandColor(entry.band, scheme),
                       fontWeight: FontWeight.w700,
@@ -414,16 +428,29 @@ class _RationaleSheet extends StatelessWidget {
     );
   }
 
-  Color _bandColor(RiskBand band, ColorScheme scheme) {
+  Color _bandColor(Band band, ColorScheme scheme) {
     switch (band) {
-      case RiskBand.urgent:
+      case Band.band1:
         return scheme.error;
-      case RiskBand.high:
-        return scheme.primary;
-      case RiskBand.moderate:
+      case Band.band2:
         return scheme.tertiary;
-      case RiskBand.low:
+      case Band.band3:
+        return scheme.primary;
+      case Band.band4:
         return scheme.onSurfaceVariant;
+    }
+  }
+
+  String _urgencyLabel(Band band) {
+    switch (band) {
+      case Band.band1:
+        return WorklistStrings.urgencyNow;
+      case Band.band2:
+        return WorklistStrings.urgencyToday;
+      case Band.band3:
+        return WorklistStrings.urgencyThisWeek;
+      case Band.band4:
+        return WorklistStrings.urgencyRoutine;
     }
   }
 

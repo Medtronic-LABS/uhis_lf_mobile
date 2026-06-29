@@ -65,7 +65,8 @@ class PatientOrMemberData {
   int? get age => localPatient?.patient.age ?? remoteMember?.age;
   bool get isPregnant => remoteMember?.isPregnant ?? false;
   int? get riskScore => localPatient?.patient.riskScore;
-  RiskBand? get riskBand => localPatient?.patient.riskBand;
+  Band? get riskBand => localPatient?.patient.riskBand;
+  Modifier? get riskModifier => localPatient?.patient.riskModifier;
   List<String> get riskReasons => localPatient?.patient.riskReasons ?? [];
   /// Merged Recent Visits feed — locally-cached first (always available
   /// even offline), then remote-only rows the device hasn't synced yet.
@@ -508,8 +509,11 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
               ),
             );
           }
-          final isUrgent = data.riskBand == RiskBand.urgent ||
-              data.riskBand == RiskBand.high;
+          // Spec §2.8.3: Band 1 (Severe) and Band 2 (Moderate) are "urgent"
+          // for context-screen styling purposes — both push the patient to
+          // the same-day visit list.
+          final isUrgent = data.riskBand == Band.band1 ||
+              data.riskBand == Band.band2;
           return SafeArea(
             bottom: false,
             child: Column(

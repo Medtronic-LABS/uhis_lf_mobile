@@ -50,6 +50,7 @@ class WorklistRepository {
   Future<List<WorklistEntry>> load({
     Set<Programme> filter = const <Programme>{},
     int limit = 500,
+    String? selectedVillageId,
   }) async {
     final rows = await _patients.queryWorklist(
       programmeFilter: filter,
@@ -66,6 +67,7 @@ class WorklistRepository {
       final p = Patient.fromDb(r);
       out.add(_toEntry(p, progMap[p.id] ?? const <Programme>{}));
     }
+    _applySpecSort(out, selectedVillageId: selectedVillageId);
     return out;
   }
 
@@ -80,8 +82,8 @@ class WorklistRepository {
       villageId: p.villageId,
       villageName: p.villageName,
       programmes: programmes,
-      score: p.riskScore ?? 0,
-      band: p.riskBand ?? RiskBand.low,
+      band: p.riskBand ?? Band.band4,
+      modifier: p.riskModifier ?? Modifier.none,
       reasons: p.riskReasons,
       nextDueAt: p.nextDueAt == null
           ? null
@@ -90,6 +92,51 @@ class WorklistRepository {
           ? null
           : DateTime.fromMillisecondsSinceEpoch(p.lastVisitAt!),
     );
+  }
+
+  /// Apply spec §2.8 + §2.8.4 sort order:
+  ///   1. Band ascending (band1 first)
+  ///   2. Pregnant > non-pregnant within band
+  ///   3. Modifier within (a > b > none)
+  ///   4. Village match (when SK has selected a village)
+  ///   5. Earlier scheduled `nextDueAt` first
+  ///   6. Display name (stable tiebreaker)
+  ///
+  /// CCE alert and open-referral tie-breaks (§2.8.4 #1–2) are deferred until
+  /// the CCE pipeline lands (TODO).
+  static void _applySpecSort(
+    List<WorklistEntry> entries, {
+    String? selectedVillageId,
+  }) {
+    int bandRank(Band b) => switch (b) {
+          Band.band1 => 1,
+          Band.band2 => 2,
+          Band.band3 => 3,
+          Band.band4 => 4,
+        };
+    int modRank(Modifier m) => switch (m) {
+          Modifier.a => 0,
+          Modifier.b => 1,
+          Modifier.none => 2,
+        };
+    entries.sort((a, b) {
+      final byBand = bandRank(a.band).compareTo(bandRank(b.band));
+      if (byBand != 0) return byBand;
+      final byPreg = (a.isPregnant ? 0 : 1).compareTo(b.isPregnant ? 0 : 1);
+      if (byPreg != 0) return byPreg;
+      final byMod = modRank(a.modifier).compareTo(modRank(b.modifier));
+      if (byMod != 0) return byMod;
+      if (selectedVillageId != null && selectedVillageId.isNotEmpty) {
+        final byVillage = (a.villageId == selectedVillageId ? 0 : 1)
+            .compareTo(b.villageId == selectedVillageId ? 0 : 1);
+        if (byVillage != 0) return byVillage;
+      }
+      final aDue = a.nextDueAt?.millisecondsSinceEpoch ?? 1 << 62;
+      final bDue = b.nextDueAt?.millisecondsSinceEpoch ?? 1 << 62;
+      final byDue = aDue.compareTo(bDue);
+      if (byDue != 0) return byDue;
+      return a.displayName.compareTo(b.displayName);
+    });
   }
 
   /// Iterate cached patients, derive [PatientFacts] from joined follow-ups +
@@ -124,8 +171,9 @@ class WorklistRepository {
       );
       await _patients.updateRisk(
         patientId: p.id,
-        score: assessment.score,
+        sortRank: assessment.sortRank,
         bandWireTag: assessment.band.wireTag,
+        modifierWireTag: assessment.modifier.wireTag,
         reasonsJson: jsonEncode(assessment.reasons),
         nextDueAt: nextDue,
         lastVisitAt: lastVisit,

@@ -20,7 +20,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 13;
+  static const int schemaVersion = 14;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -176,6 +176,7 @@ class AppDatabase {
         age INTEGER,
         risk_score INTEGER,
         risk_band TEXT,
+        risk_modifier TEXT,
         risk_reasons TEXT,
         risk_hint_level TEXT,
         risk_hint_color TEXT,
@@ -849,6 +850,24 @@ class AppDatabase {
       }
       await addCol13(
           'ALTER TABLE $tablePatients ADD COLUMN village_name TEXT');
+    }
+    if (from < 14) {
+      // v14 — Spec §2.8 band+modifier risk model. risk_band column repurposed
+      // to carry `band1`/`band2`/`band3`/`band4`; risk_modifier added for the
+      // `a`/`b`/`none` letter modifier. risk_score column retained as the
+      // numeric sort rank (sortRankFor(band, modifier)) — DESC ORDER BY still
+      // yields the spec sort sequence 1a → 1b → 1 → 2a → 2b → 2 → 3a → 3b → 3 → 4.
+      Future<void> addCol14(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* column already present */}
+      }
+      await addCol14(
+          'ALTER TABLE $tablePatients ADD COLUMN risk_modifier TEXT');
+      // Stale rows: clear the legacy 0–100 score + old wire tags so the
+      // first post-upgrade recompute pass fills them with the new shape.
+      await db.execute(
+          'UPDATE $tablePatients SET risk_score = NULL, risk_band = NULL, risk_modifier = NULL');
     }
   }
 

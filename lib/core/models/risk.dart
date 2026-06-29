@@ -4,8 +4,8 @@ import 'programme.dart';
 ///
 /// Every AI output carries this shape so the SK can understand *why* a patient
 /// scored high. The `drivers` list contains machine-readable tags (e.g.
-/// 'under-5', 'missed-visits:3') which the UI localises into human-readable
-/// `reasons` via [formattedReasons].
+/// 'anc-danger-sign', 'ncd-htn-stage2:160/100') which the UI localises into
+/// human-readable `reasons` via [formattedReasons].
 class RiskRationale {
   const RiskRationale({
     required this.drivers,
@@ -17,38 +17,19 @@ class RiskRationale {
     this.sourceObservationIds = const <String>[],
   });
 
-  /// Machine-readable risk drivers, e.g. ['under-5', 'pregnancy', 'missed-visits:3'].
-  /// The structured source of truth; UI derives display text from these.
   final List<String> drivers;
-
-  /// Model or rule-engine version, e.g. 'on-device-rule-v1'.
   final String modelVersion;
-
-  /// When this score was computed.
   final DateTime computedAt;
-
-  /// Null for rule-based scoring; populated when ML model lands.
   final double? confidence;
-
-  /// True when band == urgent; prompts the SK to review immediately.
   final bool humanReviewRequired;
-
-  /// Future: WHO PEN, IMCI guideline codes that triggered this score.
   final List<String> guidelineIds;
-
-  /// FHIR Observation IDs that fed this assessment (for audit trail).
   final List<String> sourceObservationIds;
 
-  /// Convert structured drivers to user-facing reasons.
-  /// Localisation seam: when multi-language lands, this method reads from
-  /// a locale-aware formatter.
   List<String> get formattedReasons {
     return drivers.map(_formatDriver).toList(growable: false);
   }
 
   static String _formatDriver(String driver) {
-    // Parse structured drivers into human-readable text.
-    // Format: 'key' or 'key:value'
     final parts = driver.split(':');
     final key = parts[0];
     final value = parts.length > 1 ? parts[1] : null;
@@ -84,32 +65,52 @@ class RiskRationale {
         return 'ANC: danger sign present — immediate referral';
       case 'anc-eclampsia':
         return 'ANC: eclampsia / pre-eclampsia pattern';
-      case 'anc-high-bp':
-        return value != null ? 'ANC: high BP ($value)' : 'ANC: high blood pressure';
+      case 'anc-bp-severe':
+        return value != null ? 'ANC: severe hypertension ($value)' : 'ANC: severe hypertension';
+      case 'anc-bp-elevated':
+        return value != null ? 'ANC: elevated BP ($value)' : 'ANC: elevated BP';
       case 'anc-anaemia-severe':
         return value != null ? 'ANC: severe anaemia (Hb $value g/dL)' : 'ANC: severe anaemia';
       case 'anc-anaemia-moderate':
         return value != null ? 'ANC: moderate anaemia (Hb $value g/dL)' : 'ANC: moderate anaemia';
-      case 'anc-missed-visit':
-        return value != null ? 'ANC: missed visit ($value overdue)' : 'ANC: missed visit';
+      case 'anc-anaemia-mild':
+        return value != null ? 'ANC: mild anaemia (Hb $value g/dL)' : 'ANC: mild anaemia';
+      case 'anc-urine-abnormal':
+        return value != null ? 'ANC: abnormal urine ($value)' : 'ANC: abnormal urine';
+      case 'anc-gdm-risk':
+        return value != null ? 'ANC: GDM risk (fasting $value mmol/L)' : 'ANC: GDM risk';
+      case 'anc-late-term':
+        return value != null ? 'ANC: ≥ 36 weeks ($value wks)' : 'ANC: ≥ 36 weeks';
       case 'anc-primigravida':
         return 'ANC: first pregnancy (primigravida)';
+      case 'anc-missed-visit':
+        return value != null ? 'ANC: missed visit ($value overdue)' : 'ANC: missed visit';
+      case 'ncd-stroke-sign':
+        return 'NCD: one-sided weakness — stroke warning';
+      case 'ncd-htn-crisis':
+        return value != null ? 'NCD: hypertensive crisis (BP $value)' : 'NCD: hypertensive crisis';
       case 'ncd-htn-stage2':
         return value != null ? 'NCD: stage 2 hypertension (BP $value)' : 'NCD: stage 2 hypertension';
       case 'ncd-htn-stage1':
         return value != null ? 'NCD: stage 1 hypertension (BP $value)' : 'NCD: stage 1 hypertension';
-      case 'ncd-elevated-bp':
-        return value != null ? 'NCD: elevated blood pressure ($value)' : 'NCD: elevated blood pressure';
+      case 'ncd-prehtn':
+        return value != null ? 'NCD: pre-hypertension ($value)' : 'NCD: pre-hypertension';
+      case 'ncd-dm-crisis':
+        return value != null ? 'NCD: diabetic crisis (fasting $value mmol/L)' : 'NCD: diabetic crisis';
       case 'ncd-dm-poor-control':
-        return value != null ? 'NCD: poorly controlled diabetes (glucose $value mg/dL)' : 'NCD: poorly controlled diabetes';
+        return value != null ? 'NCD: poorly controlled diabetes (fasting $value mmol/L)' : 'NCD: poorly controlled diabetes';
+      case 'ncd-dm-elevated':
+        return value != null ? 'NCD: elevated glucose (fasting $value mmol/L)' : 'NCD: elevated glucose';
+      case 'ncd-prediabetes':
+        return value != null ? 'NCD: pre-diabetes (fasting $value mmol/L)' : 'NCD: pre-diabetes';
       case 'ncd-comorbid-htn-dm':
         return 'NCD: hypertension + diabetes (compounded risk)';
-      case 'ncd-missed-followup':
-        return value != null ? 'NCD: missed follow-up ($value overdue)' : 'NCD: missed follow-up';
       case 'ncd-elderly':
         return value != null ? 'NCD: elderly patient (age $value)' : 'NCD: elderly patient';
+      case 'ncd-missed-followup':
+        return value != null ? 'NCD: missed follow-up ($value overdue)' : 'NCD: missed follow-up';
       default:
-        return driver; // Fallback: return raw driver
+        return driver;
     }
   }
 
@@ -145,54 +146,123 @@ class RiskRationale {
       );
 }
 
-/// Severity band derived from the normalised 0–100 risk score.
+/// Severity band — spec §2.8.3.
 ///
-/// Bands are an enum (not free strings) so list ordering, color mapping, and
-/// chip filtering can be exhaustive — `switch` on this enum becomes a
-/// compile-time gate when a new band is added.
-enum RiskBand {
-  urgent,
-  high,
-  moderate,
-  low;
+/// The worst single clinical finding sets the band. No composite score.
+/// Band 1 is the most severe. Bands are an enum (not free strings) so list
+/// ordering, color mapping, and chip filtering can be exhaustive — `switch`
+/// on this enum becomes a compile-time gate when a new band is added.
+enum Band {
+  band1, // Severe   — Red, NOW
+  band2, // Moderate — Amber, TODAY
+  band3, // Mild     — Navy, TODAY / THIS WEEK
+  band4; // Routine  — Grey, ROUTINE
 
   String get wireTag {
     switch (this) {
-      case RiskBand.urgent:
-        return 'urgent';
-      case RiskBand.high:
-        return 'high';
-      case RiskBand.moderate:
-        return 'moderate';
-      case RiskBand.low:
-        return 'low';
+      case Band.band1:
+        return 'band1';
+      case Band.band2:
+        return 'band2';
+      case Band.band3:
+        return 'band3';
+      case Band.band4:
+        return 'band4';
     }
   }
 
-  static RiskBand fromWireTag(String? tag) {
+  static Band fromWireTag(String? tag) {
     switch ((tag ?? '').toLowerCase()) {
-      case 'urgent':
-        return RiskBand.urgent;
-      case 'high':
-        return RiskBand.high;
-      case 'moderate':
-        return RiskBand.moderate;
+      case 'band1':
+        return Band.band1;
+      case 'band2':
+        return Band.band2;
+      case 'band3':
+        return Band.band3;
       default:
-        return RiskBand.low;
+        return Band.band4;
     }
   }
 }
 
+/// Within-band modifier — spec §2.8.1 / §2.8.2.
+///
+/// `a` = additional risk (comorbidity, first pregnancy, GA ≥ 36 weeks, age ≥ 60).
+/// `b` = overdue (longer past scheduled visit ranks higher within b, but below a).
+/// `none` = no modifier — base position within band.
+///
+/// Spec sort: 1a → 1b → 1 → 2a → 2b → 2 → 3a → 3b → 3 → 4.
+enum Modifier {
+  a,
+  b,
+  none;
+
+  String get wireTag {
+    switch (this) {
+      case Modifier.a:
+        return 'a';
+      case Modifier.b:
+        return 'b';
+      case Modifier.none:
+        return 'none';
+    }
+  }
+
+  static Modifier fromWireTag(String? tag) {
+    switch ((tag ?? '').toLowerCase()) {
+      case 'a':
+        return Modifier.a;
+      case 'b':
+        return Modifier.b;
+      default:
+        return Modifier.none;
+    }
+  }
+}
+
+/// Numeric sort key for SQL `ORDER BY ... DESC`.
+///
+/// Higher value = higher priority on the worklist.
+///
+/// Scheme (10-point gaps so future tie-break bumps fit cleanly):
+///   Band base: band1=1000, band2=700, band3=400, band4=100
+///   Modifier offset within band: a=+30, b=+20, none=+10
+///
+/// Spec §2.8 sort emerges naturally: 1a (1030) → 1b (1020) → 1 (1010)
+///   → 2a (730) → 2b (720) → 2 (710) → 3a (430) → 3b (420) → 3 (410) → 4 (110).
+///
+/// Pregnancy is *not* baked into the sort key — it is a secondary sort
+/// applied in the repository, since pregnancy boost must apply within band
+/// regardless of modifier.
+int sortRankFor(Band band, Modifier modifier) {
+  final base = switch (band) {
+    Band.band1 => 1000,
+    Band.band2 => 700,
+    Band.band3 => 400,
+    Band.band4 => 100,
+  };
+  final mod = switch (modifier) {
+    Modifier.a => 30,
+    Modifier.b => 20,
+    Modifier.none => 10,
+  };
+  return base + mod;
+}
+
 /// Extracted clinical vitals from the most recent local assessment.
-/// All fields nullable — missing data is scored as zero.
+/// All fields nullable — missing data is treated as "not present", which
+/// is conservative for the worst-finding rule (we never *infer* severity).
 class ClinicalVitals {
   const ClinicalVitals({
     this.systolicBp,
     this.diastolicBp,
     this.hemoglobin,
-    this.fastingGlucoseMgDl,
+    this.fastingGlucoseMmolL,
     this.hasDangerSign = false,
     this.hasEclampsia = false,
+    this.hasStrokeSign = false,
+    this.hasAbnormalUrine = false,
+    this.gestationalAgeWeeks,
     this.parity,
     this.hasDiabetes = false,
     this.assessmentType,
@@ -200,13 +270,16 @@ class ClinicalVitals {
 
   final int? systolicBp;
   final int? diastolicBp;
-  final double? hemoglobin;        // g/dL
-  final double? fastingGlucoseMgDl; // mg/dL
-  final bool hasDangerSign;
-  final bool hasEclampsia;
-  final int? parity;               // 0 = primigravida
-  final bool hasDiabetes;
-  final String? assessmentType;   // 'NCD' or 'ANC'
+  final double? hemoglobin;             // g/dL
+  final double? fastingGlucoseMmolL;    // mmol/L (spec §2.8 uses mmol/L)
+  final bool hasDangerSign;             // any ANC danger sign present
+  final bool hasEclampsia;              // ANC pre-eclampsia pattern (3-visit trend)
+  final bool hasStrokeSign;             // NCD one-sided weakness / stroke warning
+  final bool hasAbnormalUrine;          // ANC abnormal urine (protein/glucose/infection)
+  final int? gestationalAgeWeeks;       // ANC GA in weeks
+  final int? parity;                    // 0 = primigravida
+  final bool hasDiabetes;               // patient is on DM register
+  final String? assessmentType;         // 'NCD' or 'ANC'
 }
 
 /// Inputs to [RiskScoringService.score]. Built by the worklist repository as a
@@ -236,49 +309,40 @@ class PatientFacts {
   final DateTime? nextDueAt;
   final bool lostToFollowUp;
   final bool redFlag;
-
-  /// Server-side hint from `PatientDetailsDTO.riskLevel` (`HIGH|MEDIUM|LOW`).
-  /// Treated as a *signal*, never the final score.
   final String? serverRiskLevel;
-
-  /// Server-side hint from `PatientDetailsDTO.riskColorCode` (`RED|YELLOW|GREEN`).
   final String? serverRiskColor;
-
-  /// Number of recorded diagnoses on the patient (used as a tie-breaker).
   final int diagnosisCount;
-
-  /// Extracted clinical vitals from the most recent local ANC or NCD assessment.
-  /// Null when no assessment has been recorded locally.
   final ClinicalVitals? vitals;
+
+  bool get isPregnant => programmes.contains(Programme.anc);
 }
 
 /// The risk-engine output. Persisted into the `patients` row so the worklist
-/// query is a simple `ORDER BY risk_score DESC`.
+/// query is a simple `ORDER BY risk_score DESC` — where `risk_score` is now
+/// the [sortRank] of the (band, modifier) pair.
 class RiskAssessment {
   const RiskAssessment({
-    required this.score,
     required this.band,
+    required this.modifier,
     required this.programmes,
     required this.reasons,
     this.rationale,
   });
 
-  /// 0–100 normalised.
-  final int score;
-  final RiskBand band;
+  final Band band;
+  final Modifier modifier;
   final Set<Programme> programmes;
 
-  /// Short human-readable rationale lines (Leapfrog Tenet 6: Explainable).
-  /// Derived from [rationale.drivers] when structured rationale is available;
-  /// persisted as a JSON array in `patients.risk_reasons` so the worklist
-  /// card tooltip and the future Context Screen rationale list read from the
-  /// same source.
+  /// Short human-readable rationale lines (Tenet 6: Explainable).
+  /// Derived from [rationale.drivers] when structured rationale is available.
   final List<String> reasons;
 
   /// Structured rationale payload (architecture.md §3.4 contract).
-  /// Contains machine-readable drivers, model version, and audit metadata.
-  /// Null for legacy assessments created before structured rationale shipped.
   final RiskRationale? rationale;
 
-  bool get isUrgent => band == RiskBand.urgent;
+  /// Sort key persisted into `patients.risk_score` so SQL ORDER BY DESC
+  /// produces the spec sequence (1a → 1b → 1 → 2a → 2b → 2 → 3a → 3b → 3 → 4).
+  int get sortRank => sortRankFor(band, modifier);
+
+  bool get isUrgent => band == Band.band1;
 }

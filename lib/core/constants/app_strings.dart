@@ -457,7 +457,10 @@ abstract final class WorklistStrings {
 
   // Rationale bottom sheet.
   static const String whyThisScore = 'Why this score?';
-  static String riskScoreLabel(int score) => 'Risk score: $score';
+  static const String urgencyNow = 'Now';
+  static const String urgencyToday = 'Today';
+  static const String urgencyThisWeek = 'This week';
+  static const String urgencyRoutine = 'Routine';
   static const String riskDriversHeader = 'Risk drivers';
   static const String modelVersionLabel = 'Model version';
   static const String computedAtLabel = 'Computed';
