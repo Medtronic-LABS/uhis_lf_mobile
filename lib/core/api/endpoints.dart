@@ -11,9 +11,6 @@ class Endpoints {
   /// Returns user hierarchy: villages, subVillages, workflowIds, facilities.
   static const String staticUserData = '/spice-service/static-data/user-data';
 
-  /// Returns form JSON schemas per workflowId.
-  static const String staticFormData = '/spice-service/static-data/form-data';
-
   // ── Offline-service: bulk sync ────────────────────────────────────────────
   /// Bulk pull — households, members, followUps, householdMemberLinks.
   static const String offlineSyncFetch =
@@ -44,6 +41,12 @@ class Endpoints {
       '/ai-scribe-service/scribe/notes/$noteId/accept';
   static String scribeReject(String noteId) =>
       '/ai-scribe-service/scribe/notes/$noteId/reject';
+
+  // ── AI Visit Briefing: pre-visit guidance cards ───────────────────────────
+  static const String visitBriefingGenerate =
+      '/ai-visit-briefing-service/briefing/generate';
+  static const String visitBriefingSummary =
+      '/ai-visit-briefing-service/briefing/summary';
 
   // Chunked upload — for audio files ≥ 1 MB (rural 2G path)
   static const String scribeUploadInit = '/ai-scribe-service/upload/init';

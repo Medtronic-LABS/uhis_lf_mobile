@@ -29,6 +29,8 @@ enum _NeedFilter {
   eyeCare,
   missedFollowUp,
   pendingReferral,
+  homeVisit,
+  facilityReferral,
 }
 
 /// AI Mission Dashboard — the operational command center for the SK.
@@ -435,6 +437,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (item.referralId != null) {
         available.add(_NeedFilter.pendingReferral);
       }
+      if (item.type == MissionItemType.patientVisit ||
+          item.type == MissionItemType.householdOpportunity) {
+        available.add(_NeedFilter.homeVisit);
+      }
+      if (item.type == MissionItemType.referral || item.referralId != null) {
+        available.add(_NeedFilter.facilityReferral);
+      }
     }
     return available;
   }
@@ -459,6 +468,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (item.daysOverdue != null && item.daysOverdue! > 0) { return true; }
         case _NeedFilter.pendingReferral:
           if (item.referralId != null) { return true; }
+        case _NeedFilter.homeVisit:
+          if (item.type == MissionItemType.patientVisit ||
+              item.type == MissionItemType.householdOpportunity) { return true; }
+        case _NeedFilter.facilityReferral:
+          if (item.type == MissionItemType.referral ||
+              item.referralId != null) { return true; }
       }
     }
     return false;
@@ -489,6 +504,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(14, 12, 14, 100),
                   children: [
+                    _AiSortedInfoCard(
+                      key: ValueKey('ai_sorted_$_refreshVersion'),
+                      queueFuture: _queueFuture,
+                    ),
+                    const SizedBox(height: 10),
                     _DashboardStatsRow(
                       key: ValueKey('stats_$_refreshVersion'),
                       queueFuture: _queueFuture,
@@ -561,12 +581,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         }
                         final queue = snap.data ?? const [];
                         if (queue.isEmpty) {
+                          final hasFilters = _selectedNeeds.isNotEmpty ||
+                              _selectedProgrammes.isNotEmpty ||
+                              _selectedVillageChipName != null;
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               const _TodaysVisitsHeader(),
                               const SizedBox(height: 8),
-                              _EmptyVisitsCard(),
+                              if (hasFilters)
+                                _FilterEmptyCard(
+                                  onClearFilters: () {
+                                    setState(() {
+                                      _selectedNeeds = const {};
+                                      _selectedProgrammes = const {};
+                                      _selectedVillageChipName = null;
+                                    });
+                                    _loadMissionData();
+                                  },
+                                )
+                              else
+                                _EmptyVisitsCard(),
                             ],
                           );
                         }
@@ -657,7 +692,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 final pid = item.patientId;
                                 if (pid != null && pid.isNotEmpty &&
                                     pid != 'household' && pid != 'households') {
-                                  context.push('/patient/$pid?origin=dashboard');
+                                  context.go('/patients/$pid');
                                 } else if (item.referralId != null) {
                                   context.push('/referral/${item.referralId}');
                                 }
@@ -1361,6 +1396,135 @@ class _EmptyVisitsCard extends StatelessWidget {
   }
 }
 
+/// AI sorted info banner — sits above the stats strip.
+/// Navy gradient matching the app header; shows overnight sort count + 3 tags.
+class _AiSortedInfoCard extends StatelessWidget {
+  const _AiSortedInfoCard({super.key, required this.queueFuture});
+
+  final Future<List<MissionQueueItem>>? queueFuture;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<MissionQueueItem>>(
+      future: queueFuture,
+      builder: (context, snap) {
+        final count = snap.data?.length ?? 0;
+        final isLoading = snap.connectionState == ConnectionState.waiting;
+        const tags = [
+          MissionDashboardStrings.aiSortedTagRisk,
+          MissionDashboardStrings.aiSortedTagOverdue,
+          MissionDashboardStrings.aiSortedTagCce,
+        ];
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [AppColors.navy, AppColors.navyMid],
+            ),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.auto_awesome, size: 14, color: Colors.white70),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  isLoading
+                      ? 'AI sorted your visits overnight'
+                      : MissionDashboardStrings.aiSortedVisits(count),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Wrap(
+                spacing: 4,
+                children: tags
+                    .map(
+                      (tag) => Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          tag,
+                          style: const TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Empty state shown when filters are active but no items match.
+class _FilterEmptyCard extends StatelessWidget {
+  const _FilterEmptyCard({required this.onClearFilters});
+
+  final VoidCallback onClearFilters;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: tokens.cardSurface,
+        borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
+      ),
+      child: Column(
+        children: [
+          const Text('🔍', style: TextStyle(fontSize: 28)),
+          const SizedBox(height: 8),
+          Text(
+            MissionDashboardStrings.noVisitsMatchFilters,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: tokens.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            MissionDashboardStrings.noVisitsMatchFiltersHint,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: tokens.textMuted,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: onClearFilters,
+            child: Text(
+              MissionDashboardStrings.clearNeedFilters,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: tokens.aiPurple,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Two-row inline filter panel for the dashboard visit list.
 ///
 /// Row 1 — village chips (single-select, from queue items)
@@ -1407,6 +1571,10 @@ class _VisitFilterPanel extends StatelessWidget {
         return MissionDashboardStrings.needMissedFollowUp;
       case _NeedFilter.pendingReferral:
         return MissionDashboardStrings.needPendingReferral;
+      case _NeedFilter.homeVisit:
+        return MissionDashboardStrings.needHomeVisit;
+      case _NeedFilter.facilityReferral:
+        return MissionDashboardStrings.needFacilityReferral;
     }
   }
 
@@ -1479,7 +1647,7 @@ class _VisitFilterPanel extends StatelessWidget {
           const SizedBox(height: 8),
         ],
 
-        // ── Row 2: need chips ─────────────────────────────────────────────
+        // ── Row 2: filter label + clear ───────────────────────────────────
         Padding(
           padding: const EdgeInsets.only(bottom: 6),
           child: Row(
@@ -1502,45 +1670,76 @@ class _VisitFilterPanel extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              if (selectedNeeds.isNotEmpty)
+              if (selectedNeeds.isNotEmpty || selectedProgrammes.isNotEmpty)
                 Semantics(
                   label: 'Clear all filters',
                   button: true,
                   child: GestureDetector(
-                  key: const Key('dashboard_filter_clear_needs_tap'),
-                  onTap: onClearNeeds,
-                  child: const Text(
-                    MissionDashboardStrings.clearNeedFilters,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.pink,
+                    key: const Key('dashboard_filter_clear_needs_tap'),
+                    onTap: onClearNeeds,
+                    child: const Text(
+                      MissionDashboardStrings.clearNeedFilters,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.navy,
+                      ),
                     ),
-                  ),
                   ),
                 ),
             ],
           ),
         ),
-        // Programme chips — dynamic, derived from actual patient data
-        if (availableProgrammes.isNotEmpty) ...[
-          const Padding(
-            padding: EdgeInsets.only(top: 4, bottom: 4),
-            child: Text(
-              MissionDashboardStrings.filterByProgramme,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textStrong,
-              ),
-            ),
-          ),
-          SizedBox(
-            height: 34,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: EdgeInsets.zero,
-              children: availableProgrammes.map((prog) {
+        // ── Row 3: single scrollable row — need chips then programme chips ──
+        SizedBox(
+          height: 34,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.zero,
+            children: [
+              ..._NeedFilter.values
+                  .where((n) => availableNeeds.contains(n))
+                  .map((need) {
+                final active = selectedNeeds.contains(need);
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: Semantics(
+                    label: active
+                        ? 'Filter by need: ${_needLabel(need)}, selected'
+                        : 'Filter by need: ${_needLabel(need)}',
+                    button: true,
+                    child: GestureDetector(
+                      key: ValueKey('dashboard_need_filter_${need.name}'),
+                      onTap: () => onNeedToggled(need),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: active ? AppColors.aiPurple : Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: active
+                                ? AppColors.aiPurple
+                                : AppColors.border,
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          _needLabel(need),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight:
+                                active ? FontWeight.w800 : FontWeight.w500,
+                            color:
+                                active ? Colors.white : AppColors.textStrong,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+              ...availableProgrammes.map((prog) {
                 final active = selectedProgrammes.contains(prog);
                 return Padding(
                   padding: const EdgeInsets.only(right: 6),
@@ -1550,77 +1749,37 @@ class _VisitFilterPanel extends StatelessWidget {
                         : 'Filter by programme: ${_programmeLabel(prog)}',
                     button: true,
                     child: GestureDetector(
-                    key: ValueKey('dashboard_prog_filter_${prog.name}'),
-                    onTap: () => onProgrammeToggled(prog),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: active ? AppColors.ancSurface : Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: active ? AppColors.pink : AppColors.border,
-                          width: 1,
+                      key: ValueKey('dashboard_prog_filter_${prog.name}'),
+                      onTap: () => onProgrammeToggled(prog),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: active ? AppColors.aiPurple : Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: active
+                                ? AppColors.aiPurple
+                                : AppColors.border,
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          _programmeLabel(prog),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight:
+                                active ? FontWeight.w800 : FontWeight.w500,
+                            color:
+                                active ? Colors.white : AppColors.textStrong,
+                          ),
                         ),
                       ),
-                      child: Text(
-                        _programmeLabel(prog),
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: active ? FontWeight.w800 : FontWeight.w500,
-                          color: active ? AppColors.ancText : AppColors.textStrong,
-                        ),
-                      ),
-                    ),
                     ),
                   ),
                 );
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: 6),
-        ],
-        SizedBox(
-          height: 34,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: EdgeInsets.zero,
-            children: _NeedFilter.values.map((need) {
-              final active = selectedNeeds.contains(need);
-              return Padding(
-                padding: const EdgeInsets.only(right: 6),
-                child: Semantics(
-                  label: active
-                      ? 'Filter by need: ${_needLabel(need)}, selected'
-                      : 'Filter by need: ${_needLabel(need)}',
-                  button: true,
-                  child: GestureDetector(
-                  key: ValueKey('dashboard_need_filter_${need.name}'),
-                  onTap: () => onNeedToggled(need),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: active ? AppColors.ancSurface : Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: active ? AppColors.pink : AppColors.border,
-                        width: 1,
-                      ),
-                    ),
-                    child: Text(
-                      _needLabel(need),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: active ? FontWeight.w800 : FontWeight.w500,
-                        color: active ? AppColors.ancText : AppColors.textStrong,
-                      ),
-                    ),
-                  ),
-                  ),
-                ),
-              );
-            }).toList(),
+              }),
+            ],
           ),
         ),
       ],

@@ -27,9 +27,11 @@ class FollowUp {
     required this.dueDate,
     this.completedAt,
     this.attempts = 0,
+    this.unsuccessfulAttempts = 0,
     this.isLost = false,
     this.reason,
     this.programme,
+    this.referredSiteId,
     this.rawJson = const {},
   });
 
@@ -39,9 +41,11 @@ class FollowUp {
   final DateTime dueDate;
   final DateTime? completedAt;
   final int attempts;
+  final int unsuccessfulAttempts;
   final bool isLost;
   final String? reason;
   final String? programme;
+  final String? referredSiteId;
   final Map<String, dynamic> rawJson;
 
   bool get isOpen => completedAt == null && !isLost;
@@ -191,12 +195,14 @@ class FollowUpRepository extends ApiRepository {
           ? null
           : DateTime.fromMillisecondsSinceEpoch(r.completedAt!),
       attempts: r.attempts ?? 0,
+      unsuccessfulAttempts: r.unsuccessfulAttempts ?? 0,
       isLost: r.isLost,
       reason: raw['reason']?.toString() ??
           raw['referralReason']?.toString() ??
           raw['encounterName']?.toString(),
       programme: raw['encounterType']?.toString() ??
           raw['programme']?.toString(),
+      referredSiteId: r.referredSiteId,
       rawJson: raw,
     );
   }

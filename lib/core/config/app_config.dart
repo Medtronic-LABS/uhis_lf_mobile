@@ -117,6 +117,15 @@ class AppConfig {
     defaultValue: 'http://10.0.2.2:8095/',
   );
 
+  /// Base URL for the AI Visit Briefing service.
+  /// Empty = route through the nginx gateway (production path).
+  /// Set to e.g. http://10.0.2.2:8096 to hit a locally-running service
+  /// while keeping BASE_URL pointed at the remote backend.
+  static const String aiServiceBaseUrl = String.fromEnvironment(
+    'AI_SERVICE_URL',
+    defaultValue: '',
+  );
+
   /// Transcription model for AI Scribe.
   /// Options: 'gpt-4o-mini-transcribe', 'whisper-1', 'gemini-2.5-flash'
   static const String scribeTranscriptionModel = String.fromEnvironment(

@@ -502,6 +502,8 @@ abstract final class PatientContextStrings {
       'How is everyone? How is the patient today?';
   static String aiSummaryLead(String name) =>
       '$name has the following risk drivers worth addressing today.';
+
+  static const String allAssessmentsTitle = 'All assessments';
 }
 
 
@@ -990,8 +992,36 @@ abstract final class MissionDashboardStrings {
   static const String needEyeCare = '👁️ Eye care';
   static const String needMissedFollowUp = '⏰ Missed follow-up';
   static const String needPendingReferral = '📋 Pending referral';
+  static const String needHomeVisit = '🏠 Home visit';
+  static const String needFacilityReferral = '🏥 Facility referral';
   static const String clearNeedFilters = 'Clear';
   static const String filterByProgramme = 'Programme';
+  static const String noVisitsMatchFilters = 'No visits match these filters';
+  static const String noVisitsMatchFiltersHint =
+      'Try another village or clear the filters';
+  static String completedVisitToast(String name) =>
+      "$name's visit already done today ✓";
+
+  // ── AI sorted info card tags ──────────────────────────────────────────────
+  static const String aiSortedTagRisk = 'Risk scoring';
+  static const String aiSortedTagOverdue = 'Overdue flags';
+  static const String aiSortedTagCce = 'CCE alerts';
+
+  // ── Status pills (compact tier label shown in the card right-side pill) ───
+  static String statusPillForTier(DashboardTier tier) {
+    switch (tier) {
+      case DashboardTier.critical:
+        return 'Now';
+      case DashboardTier.overdue:
+        return 'Today';
+      case DashboardTier.dueToday:
+        return 'Today';
+      case DashboardTier.thisWeek:
+        return 'This week';
+      case DashboardTier.upcoming:
+        return 'Routine';
+    }
+  }
 
   /// Human-readable rationale for a driver tag on `MissionQueueItem.drivers`.
   /// Unknown tags fall back to a generic phrase so the rationale sheet never
@@ -2333,9 +2363,9 @@ abstract final class TriageResultStrings {
   TriageResultStrings._();
 
   // ── Step bar ────────────────────────────────────────────────────────────────
-  static const String step1Label = 'How are you feeling?';
-  static const String step2Label = 'AI triage';
-  static const String step3Label = 'Detailed check';
+  static const String step1Label = 'Step 1 · Symptoms';
+  static const String step2Label = 'Step 2 · Triage';
+  static const String step3Label = 'Step 3 · Assessment';
 
   static String stepSubtitle(int stepIndex) {
     switch (stepIndex) {
@@ -2388,8 +2418,11 @@ abstract final class TriageResultStrings {
 abstract final class SymptomPickerStrings {
   SymptomPickerStrings._();
 
-  // ── Before-you-knock card ────────────────────────────────────────────────
+  // ── AI briefing cards ────────────────────────────────────────────────────
   static const String briefCardTitle = 'Before you knock · AI brief';
+  static const String briefCard1Title = 'Before You Knock';
+  static const String briefCard2Title = "Today's Priorities";
+  static const String briefCard3Title = 'Suggested Discussion Points';
 
   // ── Patient context chips ────────────────────────────────────────────────
   static const String chipPregnant = 'Pregnant · ANC';
@@ -2419,4 +2452,69 @@ abstract final class SymptomPickerStrings {
   // ── CTA button ───────────────────────────────────────────────────────────
   static const String ctaWithPathways = 'AI is checking — see what to do next →';
   static const String ctaRoutine = 'Continue (routine visit)';
+
+  // ── Other symptoms free-text ─────────────────────────────────────────────
+  static const String otherSymptomsLabel = 'Other symptoms';
+  static const String otherSymptomsHint =
+      'Describe any other symptoms not listed above…';
+}
+
+/// Visit completion screen strings.
+/// Used by [VisitCompleteScreen].
+abstract final class VisitCompleteStrings {
+  VisitCompleteStrings._();
+
+  static const String title = 'Visit Complete';
+  static const String saved = 'Assessment saved';
+  static const String referralWarning =
+      'Referral recommended based on clinical findings';
+  static const String bookTeleconsult = 'Book Teleconsult';
+  static const String sendCounsellingMessage = 'Send Counselling Message';
+  static const String createReferral = 'Create Referral';
+  static const String backToHome = 'Back to Home';
+}
+
+/// Teleconsult placeholder screen strings.
+/// Used by [TeleconsultScreen].
+abstract final class TeleconsultStrings {
+  TeleconsultStrings._();
+
+  static const String title = 'Teleconsult';
+  static const String comingSoon = 'Coming soon';
+  static const String placeholder =
+      'Video consultation with a doctor will be available here.\n'
+      'The SK can initiate a call directly from a completed visit.';
+  static const String callAction = 'Start Video Call';
+  static const String smsAction = 'Send SMS to Doctor';
+}
+
+/// Counselling messages placeholder screen strings.
+/// Used by [CounsellingScreen].
+abstract final class CounsellingStrings {
+  CounsellingStrings._();
+
+  static const String title = 'Counselling Messages';
+  static const String subtitle = 'AI-generated health counselling';
+  static const String comingSoon = 'AI messages coming soon';
+  static const String typeMessage = 'Type a message...';
+  static const String messagePlaceholder1 =
+      'Remember to take your iron + folic acid tablet every day with food.';
+  static const String messagePlaceholder2 =
+      'Your next ANC visit is in 4 weeks. Please attend even if you feel well.';
+  static const String messagePlaceholder3 =
+      'Drink at least 8 glasses of water daily and rest when you feel tired.';
+}
+
+/// Training Hub placeholder screen strings.
+/// Used by [TrainingScreen].
+abstract final class TrainingStrings {
+  TrainingStrings._();
+
+  static const String title = 'Training Hub';
+  static const String subtitle =
+      'Clinical training modules for frontline health workers';
+  static const String comingSoon = 'Coming soon';
+  static const String certificatesTitle = 'Certificates';
+  static const String certificatesSubtitle =
+      'Complete modules to earn programme certificates';
 }
