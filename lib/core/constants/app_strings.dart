@@ -990,8 +990,36 @@ abstract final class MissionDashboardStrings {
   static const String needEyeCare = '👁️ Eye care';
   static const String needMissedFollowUp = '⏰ Missed follow-up';
   static const String needPendingReferral = '📋 Pending referral';
+  static const String needHomeVisit = '🏠 Home visit';
+  static const String needFacilityReferral = '🏥 Facility referral';
   static const String clearNeedFilters = 'Clear';
   static const String filterByProgramme = 'Programme';
+  static const String noVisitsMatchFilters = 'No visits match these filters';
+  static const String noVisitsMatchFiltersHint =
+      'Try another village or clear the filters';
+  static String completedVisitToast(String name) =>
+      "$name's visit already done today ✓";
+
+  // ── AI sorted info card tags ──────────────────────────────────────────────
+  static const String aiSortedTagRisk = 'Risk scoring';
+  static const String aiSortedTagOverdue = 'Overdue flags';
+  static const String aiSortedTagCce = 'CCE alerts';
+
+  // ── Status pills (compact tier label shown in the card right-side pill) ───
+  static String statusPillForTier(DashboardTier tier) {
+    switch (tier) {
+      case DashboardTier.critical:
+        return 'Now';
+      case DashboardTier.overdue:
+        return 'Today';
+      case DashboardTier.dueToday:
+        return 'Today';
+      case DashboardTier.thisWeek:
+        return 'This week';
+      case DashboardTier.upcoming:
+        return 'Routine';
+    }
+  }
 
   /// Human-readable rationale for a driver tag on `MissionQueueItem.drivers`.
   /// Unknown tags fall back to a generic phrase so the rationale sheet never
@@ -2391,8 +2419,8 @@ abstract final class SymptomPickerStrings {
   // ── AI briefing cards ────────────────────────────────────────────────────
   static const String briefCardTitle = 'Before you knock · AI brief';
   static const String briefCard1Title = 'Before You Knock';
-  static const String briefCard2Title = 'Conversation Guide';
-  static const String briefCard3Title = 'Begin Consultation';
+  static const String briefCard2Title = "Today's Priorities";
+  static const String briefCard3Title = 'Suggested Discussion Points';
 
   // ── Patient context chips ────────────────────────────────────────────────
   static const String chipPregnant = 'Pregnant · ANC';

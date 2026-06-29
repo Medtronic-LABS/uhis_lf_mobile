@@ -29,6 +29,8 @@ enum _NeedFilter {
   eyeCare,
   missedFollowUp,
   pendingReferral,
+  homeVisit,
+  facilityReferral,
 }
 
 /// AI Mission Dashboard — the operational command center for the SK.
@@ -435,6 +437,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (item.referralId != null) {
         available.add(_NeedFilter.pendingReferral);
       }
+      if (item.type == MissionItemType.patientVisit ||
+          item.type == MissionItemType.householdOpportunity) {
+        available.add(_NeedFilter.homeVisit);
+      }
+      if (item.type == MissionItemType.referral || item.referralId != null) {
+        available.add(_NeedFilter.facilityReferral);
+      }
     }
     return available;
   }
@@ -459,6 +468,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (item.daysOverdue != null && item.daysOverdue! > 0) { return true; }
         case _NeedFilter.pendingReferral:
           if (item.referralId != null) { return true; }
+        case _NeedFilter.homeVisit:
+          if (item.type == MissionItemType.patientVisit ||
+              item.type == MissionItemType.householdOpportunity) { return true; }
+        case _NeedFilter.facilityReferral:
+          if (item.type == MissionItemType.referral ||
+              item.referralId != null) { return true; }
       }
     }
     return false;
@@ -561,12 +576,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         }
                         final queue = snap.data ?? const [];
                         if (queue.isEmpty) {
+                          final hasFilters = _selectedNeeds.isNotEmpty ||
+                              _selectedProgrammes.isNotEmpty ||
+                              _selectedVillageChipName != null;
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               const _TodaysVisitsHeader(),
                               const SizedBox(height: 8),
-                              _EmptyVisitsCard(),
+                              if (hasFilters)
+                                _FilterEmptyCard(
+                                  onClearFilters: () {
+                                    setState(() {
+                                      _selectedNeeds = const {};
+                                      _selectedProgrammes = const {};
+                                      _selectedVillageChipName = null;
+                                    });
+                                    _loadMissionData();
+                                  },
+                                )
+                              else
+                                _EmptyVisitsCard(),
                             ],
                           );
                         }
@@ -670,7 +700,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             const _TodaysVisitsHeader(),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 6),
+                            _AiSortedInfoCard(visitCount: queue.length),
+                            const SizedBox(height: 2),
                             ...widgets,
                             if (overflow > 0)
                               _MoreVisitsLink(
@@ -1361,6 +1393,133 @@ class _EmptyVisitsCard extends StatelessWidget {
   }
 }
 
+/// AI sorted info banner shown at the top of the visit list.
+/// Displays the overnight sort message + 3 read-only method tags.
+class _AiSortedInfoCard extends StatelessWidget {
+  const _AiSortedInfoCard({required this.visitCount});
+
+  final int visitCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    const tags = [
+      MissionDashboardStrings.aiSortedTagRisk,
+      MissionDashboardStrings.aiSortedTagOverdue,
+      MissionDashboardStrings.aiSortedTagCce,
+    ];
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: tokens.aiSurfaceStart,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: tokens.aiPurple.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.auto_awesome, size: 14, color: tokens.aiPurple),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  MissionDashboardStrings.aiSortedVisits(visitCount),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: tokens.aiPurple,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            children: tags
+                .map(
+                  (tag) => Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: tokens.aiPurple.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      tag,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: tokens.aiPurple,
+                      ),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Empty state shown when filters are active but no items match.
+class _FilterEmptyCard extends StatelessWidget {
+  const _FilterEmptyCard({required this.onClearFilters});
+
+  final VoidCallback onClearFilters;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: tokens.cardSurface,
+        borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
+      ),
+      child: Column(
+        children: [
+          const Text('🔍', style: TextStyle(fontSize: 28)),
+          const SizedBox(height: 8),
+          Text(
+            MissionDashboardStrings.noVisitsMatchFilters,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: tokens.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            MissionDashboardStrings.noVisitsMatchFiltersHint,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: tokens.textMuted,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: onClearFilters,
+            child: Text(
+              MissionDashboardStrings.clearNeedFilters,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: tokens.aiPurple,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Two-row inline filter panel for the dashboard visit list.
 ///
 /// Row 1 — village chips (single-select, from queue items)
@@ -1407,6 +1566,10 @@ class _VisitFilterPanel extends StatelessWidget {
         return MissionDashboardStrings.needMissedFollowUp;
       case _NeedFilter.pendingReferral:
         return MissionDashboardStrings.needPendingReferral;
+      case _NeedFilter.homeVisit:
+        return MissionDashboardStrings.needHomeVisit;
+      case _NeedFilter.facilityReferral:
+        return MissionDashboardStrings.needFacilityReferral;
     }
   }
 
@@ -1556,10 +1719,14 @@ class _VisitFilterPanel extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
-                        color: active ? AppColors.ancSurface : Colors.white,
+                        color: active
+                            ? AppColors.aiPurple
+                            : Colors.white,
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: active ? AppColors.pink : AppColors.border,
+                          color: active
+                              ? AppColors.aiPurple
+                              : AppColors.border,
                           width: 1,
                         ),
                       ),
@@ -1568,7 +1735,7 @@ class _VisitFilterPanel extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: active ? FontWeight.w800 : FontWeight.w500,
-                          color: active ? AppColors.ancText : AppColors.textStrong,
+                          color: active ? Colors.white : AppColors.textStrong,
                         ),
                       ),
                     ),
@@ -1601,10 +1768,12 @@ class _VisitFilterPanel extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
-                      color: active ? AppColors.ancSurface : Colors.white,
+                      color: active ? AppColors.aiPurple : Colors.white,
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: active ? AppColors.pink : AppColors.border,
+                        color: active
+                            ? AppColors.aiPurple
+                            : AppColors.border,
                         width: 1,
                       ),
                     ),
@@ -1613,7 +1782,7 @@ class _VisitFilterPanel extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: active ? FontWeight.w800 : FontWeight.w500,
-                        color: active ? AppColors.ancText : AppColors.textStrong,
+                        color: active ? Colors.white : AppColors.textStrong,
                       ),
                     ),
                   ),

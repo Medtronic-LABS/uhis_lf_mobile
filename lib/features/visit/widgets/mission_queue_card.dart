@@ -4,6 +4,7 @@ import '../../../app/theme.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/models/dashboard_tier.dart';
 import '../../../core/models/mission_queue_item.dart';
+import '../../../core/models/programme.dart';
 
 /// Shared patient card widget for mission queue items.
 /// Used by both Dashboard (home) and Tasks screens.
@@ -31,9 +32,10 @@ class MissionQueueCard extends StatelessWidget {
     final borderColor = isCompleted
         ? tokens.statusSuccess
         : _borderColorForTier(item.tier, tokens);
+    final avatarColor = _avatarColorForProgramme(item, tokens);
     final (actionLabel, actionBg, actionFg) = isCompleted
         ? ('Done', tokens.statusSuccess.withValues(alpha: 0.15), tokens.statusSuccess)
-        : _actionStyleForTier(item.tier, tokens);
+        : _statusPillStyle(item.tier, tokens);
 
     return Opacity(
       opacity: isCompleted ? 0.6 : 1.0,
@@ -49,7 +51,17 @@ class MissionQueueCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(compact ? LeapfrogColors.radiusLg : 12),
           child: InkWell(
             key: const Key('visit_queue_card_tap'),
-            onTap: onTap,
+            onTap: isCompleted
+                ? () => ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          MissionDashboardStrings.completedVisitToast(
+                              item.patientName),
+                        ),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    )
+                : onTap,
             borderRadius: BorderRadius.circular(compact ? LeapfrogColors.radiusLg : 12),
             child: Container(
               decoration: BoxDecoration(
@@ -61,10 +73,12 @@ class MissionQueueCard extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
               child: Row(
                 children: [
-                  // Avatar with checkmark overlay for completed
+                  // Avatar colour-coded by programme (pink=ANC, yellow=NCD)
                   CircleAvatar(
                     radius: 22,
-                    backgroundColor: borderColor.withValues(alpha: 0.18),
+                    backgroundColor: isCompleted
+                        ? tokens.statusSuccess.withValues(alpha: 0.18)
+                        : avatarColor.withValues(alpha: 0.15),
                     child: isCompleted
                         ? Icon(
                             Icons.check,
@@ -74,7 +88,9 @@ class MissionQueueCard extends StatelessWidget {
                         : Text(
                             _initials(item.patientName),
                             style: TextStyle(
-                              color: borderColor,
+                              color: isCompleted
+                                  ? tokens.statusSuccess
+                                  : avatarColor,
                               fontWeight: FontWeight.w800,
                               fontSize: 14,
                             ),
@@ -216,70 +232,79 @@ class MissionQueueCard extends StatelessWidget {
     if (item.age != null) parts.add(WorklistStrings.ageFmt(item.age!));
     final house = item.householdDisplay;
     if (house.isNotEmpty) parts.add(house);
-    if (house.isEmpty && item.village != null && item.village!.isNotEmpty) {
+    if (item.village != null && item.village!.isNotEmpty) {
       parts.add(item.village!);
     }
-    final dueLabel = _dueLabel(item.dueAt);
-    if (dueLabel != null) parts.add(dueLabel);
+    final diagnosis = item.diagnosisLabel;
+    if (diagnosis != null && diagnosis.isNotEmpty) {
+      parts.add('${item.programmeEmoji} $diagnosis');
+    } else if (item.programmes.isNotEmpty &&
+        !item.programmes.every((p) => p == Programme.unknown)) {
+      parts.add(item.programmeEmoji);
+    }
     if (parts.isEmpty) return item.reason;
     return parts.join(' · ');
   }
 
-  /// Render `Due today` / `Due in 3d` / `Overdue 2d` from a due timestamp.
-  static String? _dueLabel(DateTime? dueAt) {
-    if (dueAt == null) return null;
-    final now = DateTime.now();
-    final start = DateTime(now.year, now.month, now.day);
-    final due = DateTime(dueAt.year, dueAt.month, dueAt.day);
-    final days = due.difference(start).inDays;
-    if (days == 0) return 'Due today';
-    if (days > 0) return 'Due in ${days}d';
-    return 'Overdue ${-days}d';
-  }
-
+  /// Border: red only for critical (Band 1 danger sign); grey otherwise per spec.
   Color _borderColorForTier(DashboardTier tier, LeapfrogColors tokens) {
-    switch (tier) {
-      case DashboardTier.critical:
-        return tokens.statusCritical;
-      case DashboardTier.overdue:
-        return tokens.statusWarning;
-      case DashboardTier.dueToday:
-        return tokens.statusInfo;
-      case DashboardTier.thisWeek:
-        return tokens.brandNavy;
-      case DashboardTier.upcoming:
-        return tokens.textMuted;
-    }
+    if (tier == DashboardTier.critical) return tokens.statusCritical;
+    return const Color(0xFFE5E7EB);
   }
 
-  /// CTA pill style: (label, background, foreground) keyed by tier.
-  (String, Color, Color) _actionStyleForTier(
+  /// Programme-coded avatar colour.
+  static Color _avatarColorForProgramme(
+      MissionQueueItem item, LeapfrogColors tokens) {
+    if (item.programmes.contains(Programme.anc) ||
+        item.programmes.contains(Programme.pnc)) {
+      return tokens.brandPink;
+    }
+    if (item.programmes.contains(Programme.ncd)) {
+      return AppColors.statusWarning;
+    }
+    if (item.programmes.contains(Programme.imci) ||
+        item.programmes.contains(Programme.epi)) {
+      return AppColors.statusInfo;
+    }
+    if (item.programmes.contains(Programme.tb)) {
+      return AppColors.aiPurple;
+    }
+    return tokens.textMuted;
+  }
+
+  /// Status pill style: (label, background, foreground) keyed by tier.
+  (String, Color, Color) _statusPillStyle(
     DashboardTier tier,
     LeapfrogColors tokens,
   ) {
     switch (tier) {
       case DashboardTier.critical:
+        return (
+          MissionDashboardStrings.statusPillForTier(tier),
+          tokens.statusCritical,
+          Colors.white,
+        );
       case DashboardTier.overdue:
         return (
-          MissionDashboardStrings.ctaForTier(tier),
-          tokens.statusCritical,
+          MissionDashboardStrings.statusPillForTier(tier),
+          AppColors.statusWarning,
           Colors.white,
         );
       case DashboardTier.dueToday:
         return (
-          MissionDashboardStrings.ctaForTier(tier),
+          MissionDashboardStrings.statusPillForTier(tier),
           tokens.brandNavy,
           Colors.white,
         );
       case DashboardTier.thisWeek:
         return (
-          MissionDashboardStrings.ctaForTier(tier),
+          MissionDashboardStrings.statusPillForTier(tier),
           tokens.cardSurfaceMuted,
           tokens.brandNavy,
         );
       case DashboardTier.upcoming:
         return (
-          MissionDashboardStrings.ctaForTier(tier),
+          MissionDashboardStrings.statusPillForTier(tier),
           tokens.cardSurfaceMuted,
           tokens.textMuted,
         );
