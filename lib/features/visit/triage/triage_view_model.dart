@@ -50,6 +50,15 @@ class TriageViewModel extends ChangeNotifier {
   Set<String> get scribePreTickedSymptoms =>
       Set.unmodifiable(_scribePreTicked);
 
+  /// Free-text symptom description entered manually by the SK.
+  String? _customSymptomText;
+  String? get customSymptomText => _customSymptomText;
+
+  void setCustomSymptomText(String? text) {
+    _customSymptomText = text?.trim().isEmpty == true ? null : text?.trim();
+    notifyListeners();
+  }
+
   /// Rule-activated pathways based on current selection.
   List<ActivatedPathway> _activatedPathways = [];
 

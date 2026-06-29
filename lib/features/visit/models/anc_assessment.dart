@@ -165,6 +165,7 @@ class MedicalHistoryPhysicalExamination {
     this.presentation,
     this.oedema,
     this.pallor,
+    this.urineProtein,
   });
 
   final int? bloodPressureSystolic;
@@ -180,6 +181,9 @@ class MedicalHistoryPhysicalExamination {
   final String? oedema;
   final String? pallor;
 
+  /// Urine protein result (Absent / Trace / Present).
+  final String? urineProtein;
+
   MedicalHistoryPhysicalExamination copyWith({
     int? bloodPressureSystolic,
     int? bloodPressureDiastolic,
@@ -193,6 +197,7 @@ class MedicalHistoryPhysicalExamination {
     String? presentation,
     String? oedema,
     String? pallor,
+    String? urineProtein,
   }) =>
       MedicalHistoryPhysicalExamination(
         bloodPressureSystolic:
@@ -209,6 +214,7 @@ class MedicalHistoryPhysicalExamination {
         presentation: presentation ?? this.presentation,
         oedema: oedema ?? this.oedema,
         pallor: pallor ?? this.pallor,
+        urineProtein: urineProtein ?? this.urineProtein,
       );
 
   Map<String, dynamic> toJson() => {
@@ -226,7 +232,26 @@ class MedicalHistoryPhysicalExamination {
         if (presentation != null) 'presentation': presentation,
         if (oedema != null) 'oedema': oedema,
         if (pallor != null) 'pallor': pallor,
+        if (urineProtein != null) 'urineProtein': urineProtein,
       };
+
+  factory MedicalHistoryPhysicalExamination.fromJson(
+          Map<String, dynamic> json) =>
+      MedicalHistoryPhysicalExamination(
+        bloodPressureSystolic: json['bloodPressureSystolic'] as int?,
+        bloodPressureDiastolic: json['bloodPressureDiastolic'] as int?,
+        weight: (json['weight'] as num?)?.toDouble(),
+        height: (json['height'] as num?)?.toDouble(),
+        bmi: (json['bmi'] as num?)?.toDouble(),
+        bmiCategory: json['bmiCategory'] as String?,
+        fundalHeight: (json['fundalHeight'] as num?)?.toDouble(),
+        fetalHeartRate: json['fetalHeartRate'] as int?,
+        fetalMovement: json['fetalMovement'] as String?,
+        presentation: json['presentation'] as String?,
+        oedema: json['oedema'] as String?,
+        pallor: json['pallor'] as String?,
+        urineProtein: json['urineProtein'] as String?,
+      );
 }
 
 /// Point of care investigations matching PointOfCareInvestigationsDTO.
