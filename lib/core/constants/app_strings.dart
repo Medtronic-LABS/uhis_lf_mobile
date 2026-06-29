@@ -2751,6 +2751,67 @@ abstract final class SymptomPickerStrings {
   static const String removeSymptomSemanticPrefix = 'Remove symptom';
 }
 
+/// Strings for the AI Programme Selection step (Step 2 of the visit flow).
+///
+/// Surfaces the AI's programme recommendations grounded in BRAC + Bangladesh
+/// national clinical guidelines and lets the SK accept / reject before the
+/// screening form loads.
+abstract final class ProgrammeSelectionStrings {
+  ProgrammeSelectionStrings._();
+
+  static const String stepLabel = 'Programmes';
+  static const String stepTitle = 'AI recommended programmes';
+
+  // Loading / empty states
+  static const String loadingTitle = 'AI is reviewing the symptoms…';
+  static const String loadingSubtitle =
+      'Checking BRAC protocols and Bangladesh national clinical guidelines';
+  static const String failedTitle = 'Unable to load AI recommendations';
+  static const String failedSubtitle =
+      'Continue with the current enrolment or add a programme manually.';
+  static const String retry = 'Retry';
+
+  // Current Programme widget
+  static const String currentProgrammeTitle = 'Current Programme';
+  static const String currentProgrammeNone =
+      'Patient is not enrolled in any programme yet.';
+  static const String consistencyConsistent =
+      'Selected symptoms are consistent with this programme.';
+  static const String consistencyInconsistent =
+      'Selected symptoms do not strongly match this programme.';
+
+  // AI Recommended Programmes widget
+  static const String aiRecommendedTitle = 'AI Recommended Programmes';
+  static String confidenceChip(int pct) => '$pct% confidence';
+  static const String currentBadge = 'Current';
+  static const String acceptCta = 'Add';
+  static const String rejectCta = 'Skip';
+
+  // Cross-program notice callout
+  static const String crossNoticeTitle = 'Cross-programme alert';
+
+  // Add programme sheet
+  static const String addProgrammeCta = '+ Add another programme';
+  static const String addProgrammeSheetTitle = 'Add a programme';
+  static const String addProgrammeSheetSubtitle =
+      'Tap to select. Already-recommended programmes are hidden.';
+  static const String addProgrammeSheetEmpty =
+      'All programmes already selected.';
+
+  // Continue
+  static String continueCta(int count) => count <= 1
+      ? 'Continue with $count programme'
+      : 'Continue with $count programmes';
+  static const String continueCtaEmpty = 'Continue (no programme)';
+
+  // Rationale source labels — match RationaleSource.displayLabel but as
+  // string constants so widgets can show them inline.
+  static const String sourceBrac = 'BRAC';
+  static const String sourceBdNational = 'BD national';
+  static const String sourcePatientContext = 'Context';
+  static const String sourceSymptom = 'Symptom';
+}
+
 /// Visit completion screen strings.
 /// Used by [VisitCompleteScreen].
 abstract final class VisitCompleteStrings {
@@ -2774,16 +2835,18 @@ abstract final class VisitFlowStrings {
   VisitFlowStrings._();
 
   static const String step1Label = 'Symptoms';
-  static const String step2Label = 'Vitals & form';
-  static const String step3Label = 'AI recommends';
+  static const String step2Label = 'Programmes';
+  static const String step3Label = 'Vitals & form';
+  static const String step4Label = 'AI recommends';
 
   // Step-pill titles inside the navy flow header.
-  // Step 2 = "{programme} form" — programme name is computed at runtime.
+  // Step 3 (form) = "{programme} form" — programme name is computed at runtime.
   static const String step1Title = 'How are you?';
+  static const String step2ProgrammeTitle = 'Programmes';
   static const String step2TitleSuffix = 'form';
   static const String step3Title = 'Summary';
 
-  static const String stepIndicator = 'Step %1 of 3';
+  static const String stepIndicator = 'Step %1 of 4';
   static String stepIndicatorFor(int oneBased) =>
       stepIndicator.replaceFirst('%1', oneBased.toString());
 

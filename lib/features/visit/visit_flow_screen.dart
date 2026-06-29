@@ -1,4 +1,4 @@
-/// Unified 3-step visit flow — spec §3.1 (`Apon Sushashthya V1`).
+/// Unified 4-step visit flow — spec §3.1 (`Apon Sushashthya V1`).
 ///
 /// One [VisitFlowScreen] owns step state; the SK never leaves this route
 /// while the visit is in progress. Hosted via the route
@@ -6,8 +6,9 @@
 ///
 /// Steps (driven by [_VisitFlowState._step]):
 ///   0 → Step 1: symptom check (AI Scribe) — wraps [SymptomPickerScreen]
-///   1 → Step 2: vitals + full form (single AI Scribe) — wraps [VisitFormScreen]
-///   2 → Step 3: AI recommendation — folded into [_Step3AiReco] here
+///   1 → Step 2: AI programme recommendation — wraps [ProgrammeSelectionScreen]
+///   2 → Step 3: vitals + full form — wraps [VisitFormScreen]
+///   3 → Step 4: AI recommendation — folded into [_Step3AiReco] here
 ///
 /// Engineering Design Standards:
 ///   - Single-responsibility step widgets, composed by the wrapper.
@@ -22,11 +23,13 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/api/scribe_api_service.dart';
 import '../../core/db/patient_dao.dart';
+import '../../core/db/patient_programmes_dao.dart';
 import '../../core/models/programme.dart';
 import '../../core/theme/app_theme.dart';
 import 'pathway/pathway_engine.dart';
 import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
+import 'programme_selection/programme_selection_screen.dart';
 import 'triage/symptom_picker_screen.dart';
 import 'visit_form_screen.dart';
 
@@ -71,8 +74,13 @@ class VisitFlowScreen extends StatefulWidget {
 }
 
 class _VisitFlowState extends State<VisitFlowScreen> {
-  /// Current step index — 0, 1, or 2.
-  late int _step = widget.debugInitialStep?.clamp(0, 2) ?? 0;
+  /// Total number of steps in the flow. Single source of truth for the
+  /// progress header + clamps + bounds checks.
+  static const int _totalSteps = 4;
+
+  /// Current step index — 0..3.
+  late int _step =
+      widget.debugInitialStep?.clamp(0, _totalSteps - 1) ?? 0;
 
   /// Patient name resolved from constructor or, as a fallback, looked up
   /// from the local DB via [PatientDao]. The constructor value wins —
@@ -105,10 +113,25 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     }
   }
 
-  /// Pathways activated in Step 1, consumed by Step 2 to compose the form.
+  /// Pathways activated in Step 1 (rule engine), passed through to Step 3 if
+  /// the SK accepts the AI's programme set verbatim. Kept for back-compat
+  /// with the existing form composer.
   List<ActivatedPathway> _pathways = const <ActivatedPathway>[];
 
-  /// Set when Step 2 completes — handed to Step 3 for the recommendation card.
+  /// Symptoms the SK confirmed in Step 1. Used to build the Step 2
+  /// programme-recommendation request payload.
+  Set<String> _confirmedSymptoms = const <String>{};
+
+  /// Sickness duration the SK picked in Step 1 ('1', '2-3', '4+').
+  String? _sicknessDuration;
+
+  /// Free-text "other symptoms" the SK typed in Step 1.
+  String? _otherSymptoms;
+
+  /// Programmes the SK confirmed in Step 2 — drives Step 3 form composition.
+  Set<Programme> _confirmedProgrammes = const <Programme>{};
+
+  /// Set when Step 3 completes — handed to Step 4 for the recommendation card.
   Programme _primaryProgramme = Programme.unknown;
   bool _referralRecommended = false;
 
@@ -175,16 +198,45 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           patientName: widget.patientName,
           patientGender: widget.patientGender,
           origin: widget.origin,
+          onSymptomsConfirmed: (symptoms, duration, other) {
+            // Captured before onAdvance fires (see SymptomPickerScreen).
+            _confirmedSymptoms = symptoms;
+            _sicknessDuration = duration;
+            _otherSymptoms = other;
+          },
           onAdvance: (pathways) {
             setState(() {
               _pathways = pathways;
+              // Seed Step 2 selection with the rule-engine pathways so the SK
+              // sees something even before the AI service responds.
+              _confirmedProgrammes =
+                  pathways.map((p) => p.programme).toSet();
               _step = 1;
             });
           },
         );
       case 1:
-        return _Step2VitalsForm(
+        return _ProgrammeSelectionStepHost(
           key: ValueKey('flow-step2-${widget.visitId}'),
+          patientId: widget.patientId,
+          patientName: widget.patientName,
+          patientAge: widget.patientAge,
+          patientGender: widget.patientGender,
+          gestationalWeeks: widget.gestationalWeeks,
+          confirmedSymptoms: _confirmedSymptoms,
+          sicknessDuration: _sicknessDuration,
+          otherSymptoms: _otherSymptoms,
+          rulePathways: _pathways,
+          onContinue: (programmes) {
+            setState(() {
+              _confirmedProgrammes = programmes;
+              _step = 2;
+            });
+          },
+        );
+      case 2:
+        return _Step2VitalsForm(
+          key: ValueKey('flow-step3-${widget.visitId}'),
           visitId: widget.visitId,
           patientId: widget.patientId,
           memberId: widget.memberId,
@@ -193,20 +245,25 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           householdMemberLocalId: widget.householdMemberLocalId,
           patientAge: widget.patientAge,
           gestationalWeeks: widget.gestationalWeeks,
-          pathwayNames: _pathways.map((p) => p.programme.name).toList(),
+          // The form composer reads pathway names; the SK-confirmed
+          // programme set from Step 2 is authoritative.
+          pathwayNames: _confirmedProgrammes
+              .where((p) => p != Programme.unknown)
+              .map((p) => p.name)
+              .toList(),
           origin: widget.origin,
           onAdvance: (programme, referral) {
             setState(() {
               _primaryProgramme = programme;
               _referralRecommended = referral;
-              _step = 2;
+              _step = 3;
             });
           },
         );
-      case 2:
+      case 3:
       default:
         return _Step3AiReco(
-          key: ValueKey('flow-step3-${widget.visitId}'),
+          key: ValueKey('flow-step4-${widget.visitId}'),
           visitId: widget.visitId,
           patientLabel: widget.patientName ?? widget.patientId,
           primaryProgramme: _primaryProgramme,
@@ -293,8 +350,9 @@ class _VisitFlowHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final stepLabels = <String>[
       '1. ${VisitFlowStrings.step1Title}',
-      '2. $_programmeLabel ${VisitFlowStrings.step2TitleSuffix}',
-      '3. ${VisitFlowStrings.step3Title}',
+      '2. ${VisitFlowStrings.step2ProgrammeTitle}',
+      '3. $_programmeLabel ${VisitFlowStrings.step2TitleSuffix}',
+      '4. ${VisitFlowStrings.step3Title}',
     ];
 
     return Material(
@@ -475,6 +533,7 @@ class _Step1Symptoms extends StatelessWidget {
     required this.encounterId,
     required this.patientId,
     required this.onAdvance,
+    required this.onSymptomsConfirmed,
     this.memberId,
     this.householdId,
     this.patientAge,
@@ -492,6 +551,11 @@ class _Step1Symptoms extends StatelessWidget {
   final String? patientGender;
   final String? origin;
   final ValueChanged<List<ActivatedPathway>> onAdvance;
+  final void Function(
+    Set<String> symptoms,
+    String? sicknessDuration,
+    String? otherSymptoms,
+  ) onSymptomsConfirmed;
 
   @override
   Widget build(BuildContext context) {
@@ -510,6 +574,7 @@ class _Step1Symptoms extends StatelessWidget {
         patientGender: patientGender,
         origin: origin,
         onAdvance: onAdvance,
+        onSymptomsConfirmed: onSymptomsConfirmed,
       ),
     );
   }
@@ -561,6 +626,112 @@ class _Step2VitalsForm extends StatelessWidget {
       activatedPathways: pathwayNames,
       origin: origin,
       onAdvance: onAdvance,
+    );
+  }
+}
+
+/// Step 2 — AI Programme Recommendation.
+///
+/// Builds the request payload from the SK-confirmed symptoms (carried over
+/// from Step 1) plus the patient's currentProgrammes (read from the local
+/// [PatientProgrammesDao]) and hands it to [ProgrammeSelectionScreen]. On
+/// continue, the SK-confirmed programme set advances to Step 3.
+class _ProgrammeSelectionStepHost extends StatefulWidget {
+  const _ProgrammeSelectionStepHost({
+    super.key,
+    required this.patientId,
+    required this.confirmedSymptoms,
+    required this.sicknessDuration,
+    required this.otherSymptoms,
+    required this.rulePathways,
+    required this.onContinue,
+    this.patientName,
+    this.patientAge,
+    this.patientGender,
+    this.gestationalWeeks,
+  });
+
+  final String patientId;
+  final String? patientName;
+  final int? patientAge;
+  final String? patientGender;
+  final int? gestationalWeeks;
+  final Set<String> confirmedSymptoms;
+  final String? sicknessDuration;
+  final String? otherSymptoms;
+  final List<ActivatedPathway> rulePathways;
+  final ValueChanged<Set<Programme>> onContinue;
+
+  @override
+  State<_ProgrammeSelectionStepHost> createState() =>
+      _ProgrammeSelectionStepHostState();
+}
+
+class _ProgrammeSelectionStepHostState
+    extends State<_ProgrammeSelectionStepHost> {
+  Set<Programme> _currentProgrammes = const <Programme>{};
+  Map<String, dynamic> _request = const <String, dynamic>{};
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _hydrate());
+  }
+
+  Future<void> _hydrate() async {
+    final dao = context.read<PatientProgrammesDao>();
+    try {
+      final progs = await dao.programmesFor(widget.patientId);
+      if (!mounted) return;
+      setState(() {
+        _currentProgrammes = progs;
+        _request = _buildRequest(progs);
+        _ready = true;
+      });
+    } catch (e) {
+      debugPrint('[Step2] currentProgrammes lookup failed: $e');
+      if (!mounted) return;
+      setState(() {
+        _currentProgrammes = const <Programme>{};
+        _request = _buildRequest(const <Programme>{});
+        _ready = true;
+      });
+    }
+  }
+
+  Map<String, dynamic> _buildRequest(Set<Programme> currentProgrammes) {
+    return <String, dynamic>{
+      'patientId': widget.patientId,
+      if (widget.patientName != null) 'patientName': widget.patientName,
+      if (widget.patientAge != null) 'ageYears': widget.patientAge,
+      if (widget.patientAge != null)
+        'ageMonths': (widget.patientAge ?? 0) * 12,
+      if (widget.patientGender != null) 'gender': widget.patientGender,
+      'isPregnant': widget.gestationalWeeks != null,
+      if (widget.gestationalWeeks != null)
+        'gestationalWeeks': widget.gestationalWeeks,
+      'selectedSymptoms': widget.confirmedSymptoms.toList(),
+      if (widget.sicknessDuration != null)
+        'sicknessDuration': widget.sicknessDuration,
+      if (widget.otherSymptoms != null && widget.otherSymptoms!.isNotEmpty)
+        'otherSymptoms': widget.otherSymptoms,
+      'currentProgrammes': currentProgrammes
+          .where((p) => p != Programme.unknown)
+          .map((p) => p.wireTag)
+          .toList(),
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_ready) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return ProgrammeSelectionScreen(
+      request: _request,
+      currentProgrammes: _currentProgrammes,
+      onContinue: widget.onContinue,
     );
   }
 }

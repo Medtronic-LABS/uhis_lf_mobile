@@ -48,6 +48,13 @@ class Endpoints {
   static const String visitBriefingSummary =
       '/ai-visit-briefing-service/briefing/summary';
 
+  // ── AI Programme Recommendation: Step-2 programme picker ─────────────────
+  /// POST /programme-recommendation/recommend on the unified
+  /// leapfrog-ai-services. Routed through nginx in prod; direct via
+  /// AppConfig.aiServiceBaseUrl override in dev (see ProgrammeRecommendationRepository).
+  static const String programmeRecommendation =
+      '/leapfrog-ai-services/programme-recommendation/recommend';
+
   // Chunked upload — for audio files ≥ 1 MB (rural 2G path)
   static const String scribeUploadInit = '/ai-scribe-service/upload/init';
   static String scribeUploadChunk(String uploadId, int chunk) =>

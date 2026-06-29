@@ -42,6 +42,7 @@ class SymptomPickerScreen extends StatefulWidget {
     this.patientGender,
     this.origin,
     this.onAdvance,
+    this.onSymptomsConfirmed,
   });
 
   final String encounterId;
@@ -55,8 +56,18 @@ class SymptomPickerScreen extends StatefulWidget {
 
   /// When non-null, the screen calls this on the "Continue" CTA instead of
   /// pushing the next route. Used by [VisitFlowScreen] to host the picker
-  /// inside a single-route 3-step flow.
+  /// inside a single-route multi-step flow.
   final ValueChanged<List<ActivatedPathway>>? onAdvance;
+
+  /// Optional secondary callback fired alongside [onAdvance] carrying the
+  /// finalised symptom selection + sickness duration. Used by the host to
+  /// build the AI Programme Recommendation request — kept separate from
+  /// [onAdvance] so existing pathway-only callers don't break.
+  final void Function(
+    Set<String> symptoms,
+    String? sicknessDuration,
+    String? otherSymptoms,
+  )? onSymptomsConfirmed;
 
   @override
   State<SymptomPickerScreen> createState() => _SymptomPickerScreenState();
@@ -280,11 +291,17 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       '[SymptomPicker] Continue tapped — ${vm.activatedPathways.length} pathways: ${vm.activatedPathways.map((p) => p.programme.name).join(', ')}',
     );
 
-    // In-flow host (VisitFlowScreen) intercepts via callback; spec §3.1
-    // collapses old "/triage-result" preview into Step 2's header so the SK
-    // does not see a separate landing page between symptoms and form.
+    // In-flow host (VisitFlowScreen) intercepts via callback. The host also
+    // needs the SK-confirmed symptom set to build the Step-2 AI programme
+    // recommendation request payload — surface it via the optional
+    // onSymptomsConfirmed callback before advancing.
     final onAdvance = widget.onAdvance;
     if (onAdvance != null) {
+      widget.onSymptomsConfirmed?.call(
+        vm.selectedSymptoms,
+        vm.sicknessDuration,
+        vm.customSymptomText,
+      );
       onAdvance(vm.activatedPathways);
       return;
     }
