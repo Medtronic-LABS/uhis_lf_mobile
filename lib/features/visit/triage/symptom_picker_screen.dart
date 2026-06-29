@@ -1709,8 +1709,10 @@ class _AddSymptomSheet extends StatelessWidget {
       animation: vm,
       builder: (context, _) {
         final selected = vm.selectedSymptoms;
+        final applicableCodes = vm.applicableVocabCodes;
+        final applicableCodesSet = applicableCodes.toSet();
         final addedCount = selected
-            .where(AiScribeTriageVocab.codes.contains)
+            .where(applicableCodesSet.contains)
             .length;
 
         return SafeArea(
@@ -1746,28 +1748,41 @@ class _AddSymptomSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Flexible(
-                  child: SingleChildScrollView(
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: AiScribeTriageVocab.codes
-                          .map(
-                            (code) => _AddSymptomTile(
-                              code: code,
-                              isSelected: selected.contains(code),
-                              isAi: vm.isScribePreTick(code),
-                              onTap: () {
-                                if (selected.contains(code)) {
-                                  vm.removeSymptom(code);
-                                } else {
-                                  vm.addSymptom(code);
-                                }
-                              },
+                  child: applicableCodes.isEmpty
+                      ? const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: Center(
+                            child: Text(
+                              SymptomPickerStrings.addSymptomSheetEmpty,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: AppColors.textMuted,
+                              ),
                             ),
-                          )
-                          .toList(),
-                    ),
-                  ),
+                          ),
+                        )
+                      : SingleChildScrollView(
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: applicableCodes
+                                .map(
+                                  (code) => _AddSymptomTile(
+                                    code: code,
+                                    isSelected: selected.contains(code),
+                                    isAi: vm.isScribePreTick(code),
+                                    onTap: () {
+                                      if (selected.contains(code)) {
+                                        vm.removeSymptom(code);
+                                      } else {
+                                        vm.addSymptom(code);
+                                      }
+                                    },
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        ),
                 ),
                 const SizedBox(height: 12),
                 Row(

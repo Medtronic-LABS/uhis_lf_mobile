@@ -27,6 +27,11 @@ import 'package:uhis_next/features/visit/triage/triage_view_model.dart';
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /// Minimal patient context with no pre-ticks (blank slate for scribe tests).
+///
+/// Adult female (30 yrs) so the demographic gate keeps every vocab category
+/// in play — maternal codes apply (female + reproductive age) and NCD codes
+/// apply (adult). Tests that need a different demographic should build their
+/// own [PatientContext].
 PatientContext _blankContext({String patientId = 'test-patient'}) =>
     PatientContext(
       patientId: patientId,
@@ -286,6 +291,107 @@ void main() {
           isFalse,
           reason: 'SK untick must be respected with no guard or alert',
         );
+      },
+    );
+
+    test(
+      'Test 6c — male patient drops AI-detected maternal codes via the '
+      'demographic pre-screen, keeps general + NCD codes',
+      () {
+        final maleAdult = PatientContext(
+          patientId: 'p-male',
+          ageMonths: 480, // 40 yrs
+          sex: Sex.male,
+          isPregnant: false,
+          knownConditions: {},
+          activeProgrammes: {},
+        );
+        final maleVm = TriageViewModel(patientContext: maleAdult);
+        addTearDown(maleVm.dispose);
+
+        maleVm.applyScribeTriageResult(
+          _triageResult({
+            'fever': 0.9, // general → kept
+            'chest_pain': 0.9, // ncd → kept (adult)
+            'vaginal_bleeding': 0.95, // maternal → dropped (male)
+            'breast_pain': 0.9, // maternal → dropped (male)
+          }),
+        );
+
+        expect(maleVm.isSelected('fever'), isTrue);
+        expect(maleVm.isSelected('chest_pain'), isTrue);
+        expect(
+          maleVm.isSelected('vaginal_bleeding'),
+          isFalse,
+          reason: 'maternal code must not apply to a male patient',
+        );
+        expect(maleVm.isSelected('breast_pain'), isFalse);
+        expect(
+          maleVm.applicableVocabCodes.contains('vaginal_bleeding'),
+          isFalse,
+        );
+      },
+    );
+
+    test(
+      'Test 6d — paediatric patient drops AI-detected NCD codes via the '
+      'demographic pre-screen',
+      () {
+        final toddler = PatientContext(
+          patientId: 'p-kid',
+          ageMonths: 36, // 3 yrs
+          sex: Sex.male,
+          isPregnant: false,
+          knownConditions: {},
+          activeProgrammes: {},
+        );
+        final kidVm = TriageViewModel(patientContext: toddler);
+        addTearDown(kidVm.dispose);
+
+        kidVm.applyScribeTriageResult(
+          _triageResult({
+            'fever': 0.9, // general → kept
+            'chest_pain': 0.9, // ncd → dropped (under 18)
+            'foot_wound': 0.9, // ncd → dropped (under 18)
+          }),
+        );
+
+        expect(kidVm.isSelected('fever'), isTrue);
+        expect(
+          kidVm.isSelected('chest_pain'),
+          isFalse,
+          reason: 'ncd code must not apply to a paediatric patient',
+        );
+        expect(kidVm.isSelected('foot_wound'), isFalse);
+        expect(kidVm.applicableVocabCodes.contains('chest_pain'), isFalse);
+      },
+    );
+
+    test(
+      'Test 6e — adult female keeps both maternal and NCD codes',
+      () {
+        final adultFemale = PatientContext(
+          patientId: 'p-f',
+          ageMonths: 360, // 30 yrs
+          sex: Sex.female,
+          isPregnant: false,
+          knownConditions: {},
+          activeProgrammes: {},
+        );
+        final vm = TriageViewModel(patientContext: adultFemale);
+        addTearDown(vm.dispose);
+
+        vm.applyScribeTriageResult(
+          _triageResult({
+            'vaginal_bleeding': 0.9,
+            'chest_pain': 0.9,
+            'fever': 0.9,
+          }),
+        );
+
+        expect(vm.isSelected('vaginal_bleeding'), isTrue);
+        expect(vm.isSelected('chest_pain'), isTrue);
+        expect(vm.isSelected('fever'), isTrue);
       },
     );
   });

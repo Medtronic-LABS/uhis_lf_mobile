@@ -329,22 +329,35 @@ class TriageViewModel extends ChangeNotifier {
     if (!AppConfig.scribeEnabled) return;
 
     final floor = AppConfig.scribeSymptomConfidenceFloor;
-    final validCodes = AiScribeTriageVocab.codes.toSet();
+    final validCodes = AiScribeTriageVocab
+        .applicableCodes(_patientContext)
+        .toSet();
 
     var appliedCount = 0;
+    var demographicSkipped = 0;
     for (final extracted in result.symptomCodes) {
       if (extracted.confidence < floor) continue;
-      if (!validCodes.contains(extracted.fieldId)) continue;
+      if (!AiScribeTriageVocab.codes.contains(extracted.fieldId)) continue;
+      if (!validCodes.contains(extracted.fieldId)) {
+        demographicSkipped++;
+        continue;
+      }
       _scribePreTicked.add(extracted.fieldId);
       _addPreTick(extracted.fieldId);
       appliedCount++;
     }
     debugPrint(
-      '[Triage] Scribe applied $appliedCount valid pre-ticks from result',
+      '[Triage] Scribe applied $appliedCount pre-ticks; '
+      'dropped $demographicSkipped demographic-ineligible codes',
     );
     _updateActivatedPathways();
     notifyListeners();
   }
+
+  /// Vocab codes applicable to the current patient. The picker sheet uses
+  /// this so the SK only sees demographic-relevant options.
+  List<String> get applicableVocabCodes =>
+      AiScribeTriageVocab.applicableCodes(_patientContext);
 
   /// Get the patient context.
   PatientContext get patientContext => _patientContext;
