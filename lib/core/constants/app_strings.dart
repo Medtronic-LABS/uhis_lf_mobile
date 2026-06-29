@@ -1013,6 +1013,7 @@ abstract final class MissionDashboardStrings {
   static const String needFacilityReferral = '🏥 Facility referral';
   static const String clearNeedFilters = 'Clear';
   static const String filterByProgramme = 'Programme';
+  static const String noNeedsInQueue = 'No priority needs in today\'s list';
   static const String noVisitsMatchFilters = 'No visits match these filters';
   static const String noVisitsMatchFiltersHint =
       'Try another village or clear the filters';
@@ -2287,6 +2288,22 @@ abstract final class ComposerStrings {
   static const String discardButton = 'Discard';
   static const String nextButton = 'Next';
   static const String dismissOkButton = 'OK';
+
+  // ── Extended field widget strings ───────────────────────────────────────────
+  static const String selectDateHint = 'Select date';
+  static const String bpSystolicHint = 'SYS';
+  static const String bpDiastolicHint = 'DIA';
+  static const String bpUnit = 'mmHg';
+  static const String bpValidationError = 'Enter a valid reading';
+  static const String ageLabel = 'Age';
+  static const String dobLabel = 'Date of Birth';
+  static const String yearsShort = 'Y';
+  static const String monthsShort = 'M';
+  static const String daysShort = 'D';
+  static const String noneSelected = 'None selected';
+  static const String tapToSelect = 'Tap to select';
+  static const String doneLabel = 'Done';
+  static String nSelected(int n) => '$n selected';
 }
 
 /// CDS (Clinical Decision Support) alert strings.

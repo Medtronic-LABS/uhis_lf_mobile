@@ -1,0 +1,165 @@
+/// Blood glucose composite widget — [FieldKind.bloodGlucose].
+///
+/// Type selector (Fasting / Random / Post-prandial) + numeric value + unit.
+/// Value shape: `{"type": "fasting", "value": 6.2, "unit": "mmol/L"}`.
+library;
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../../../core/theme/app_theme.dart';
+import '../../models/field_schema.dart';
+
+class BloodGlucoseWidget extends StatefulWidget {
+  const BloodGlucoseWidget({
+    super.key,
+    required this.schema,
+    required this.onChanged,
+    this.value,
+    this.readOnly = false,
+  });
+
+  final FieldSchema schema;
+
+  /// Map with keys: type (String), value (double), unit (String).
+  final Map<String, dynamic>? value;
+  final ValueChanged<Map<String, dynamic>> onChanged;
+  final bool readOnly;
+
+  @override
+  State<BloodGlucoseWidget> createState() => _BloodGlucoseWidgetState();
+}
+
+class _BloodGlucoseWidgetState extends State<BloodGlucoseWidget> {
+  static const _types = ['Fasting', 'Random', 'Post-prandial'];
+  static const _unit = 'mmol/L';
+
+  late String _selectedType;
+  late final TextEditingController _valueCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedType = widget.value?['type']?.toString() ?? 'Fasting';
+    _valueCtrl = TextEditingController(
+        text: widget.value?['value']?.toString() ?? '');
+  }
+
+  @override
+  void dispose() {
+    _valueCtrl.dispose();
+    super.dispose();
+  }
+
+  void _emit() {
+    final v = double.tryParse(_valueCtrl.text);
+    if (v != null) {
+      widget.onChanged({
+        'type': _selectedType.toLowerCase(),
+        'value': v,
+        'unit': _unit,
+      });
+    }
+  }
+
+  double? get _normalMax {
+    return switch (_selectedType) {
+      'Fasting' => 7.0,
+      'Random'  => 11.1,
+      _         => 7.8,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final parsed = double.tryParse(_valueCtrl.text);
+    final max = _normalMax;
+    final inRange = parsed != null && max != null && parsed < max;
+    final outRange = parsed != null && max != null && parsed >= max;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          widget.schema.label.isEmpty ? 'Blood Glucose' : widget.schema.label,
+          style: theme.textTheme.labelLarge
+              ?.copyWith(color: AppColors.textMuted),
+        ),
+        const SizedBox(height: 8),
+        // Type selector
+        Wrap(
+          spacing: 8,
+          children: _types.map((t) {
+            final selected = t == _selectedType;
+            return GestureDetector(
+              onTap: widget.readOnly ? null : () => setState(() {
+                _selectedType = t;
+                _emit();
+              }),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 120),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                decoration: BoxDecoration(
+                  color: selected ? AppColors.navy : AppColors.cardSurface,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: selected ? AppColors.navy : AppColors.border,
+                    width: 1.5,
+                  ),
+                ),
+                child: Text(
+                  t,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: selected
+                        ? AppColors.textOnNavy
+                        : AppColors.textMuted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 10),
+        // Value input
+        TextFormField(
+          controller: _valueCtrl,
+          readOnly: widget.readOnly,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+          ],
+          decoration: InputDecoration(
+            suffixText: _unit,
+            border: const OutlineInputBorder(),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          ),
+          onChanged: (_) => _emit(),
+        ),
+        if (inRange) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Within normal range (${_selectedType.toLowerCase()} < $max mmol/L)',
+            style: const TextStyle(
+              fontSize: 12,
+              color: Color(0xFF16A34A),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ] else if (outRange) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Above normal range — consider referral',
+            style: const TextStyle(
+              fontSize: 12,
+              color: Color(0xFFDC2626),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}

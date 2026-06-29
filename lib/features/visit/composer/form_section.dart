@@ -23,6 +23,23 @@ enum FieldType {
   textField,
   selectField,
   multiSelectField,
+  // ── Extended types (maps to API viewType values) ──────────────────────────
+  /// API: RadioGroup — horizontal pill buttons for single selection.
+  radioField,
+  /// API: DialogCheckbox — chip summary + bottom-sheet multi-select.
+  dialogMultiSelectField,
+  /// API: DatePicker — tap-to-pick date, formatted display.
+  dateField,
+  /// API: BP — paired systolic / diastolic numeric inputs.
+  bpField,
+  /// API: AgeOrDob — segmented Age number or DOB date picker.
+  ageOrDobField,
+  /// API: AgeYMD — three-field Years / Months / Days row.
+  ageYmdField,
+  /// API: InformationLabel — read-only computed value display (e.g. BMI).
+  infoLabelField,
+  /// API: TextLabel / Instruction — static display text; no input.
+  textLabelField,
 }
 
 // ── Condition ─────────────────────────────────────────────────────────────────
@@ -91,6 +108,8 @@ class FieldDef {
     this.max,
     this.options,
     this.required = false,
+    this.hint,
+    this.isInstruction = false,
   });
 
   /// Stable, unique identifier for this field (e.g. `'temperature'`).
@@ -123,6 +142,14 @@ class FieldDef {
 
   /// Whether a value is required before the section can be marked done.
   final bool required;
+
+  /// Optional placeholder / helper text for fields that display a hint
+  /// when empty (e.g. DatePicker, BP inputs).
+  final String? hint;
+
+  /// When true, a [FieldType.textLabelField] renders as an instruction block
+  /// with a left border accent, rather than plain inline text.
+  final bool isInstruction;
 
   @override
   String toString() => 'FieldDef($fieldId, $type)';

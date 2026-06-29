@@ -41,10 +41,13 @@ class VisitStepHeader extends StatelessWidget implements PreferredSizeWidget {
 
     return Material(
       color: _headerColor,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             // Back button + title row
             Padding(
               padding: const EdgeInsets.fromLTRB(4, 4, 16, 0),
@@ -116,6 +119,7 @@ class VisitStepHeader extends StatelessWidget implements PreferredSizeWidget {
             ),
           ],
         ),
+      ),
     );
   }
 

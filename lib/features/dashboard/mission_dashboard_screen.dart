@@ -1692,33 +1692,6 @@ class _VisitFilterPanel extends StatelessWidget {
     }
   }
 
-  String _programmeLabel(Programme programme) {
-    switch (programme) {
-      case Programme.imci:
-        return PathwayStrings.programmeImci;
-      case Programme.anc:
-        return PathwayStrings.programmeAnc;
-      case Programme.pnc:
-        return PathwayStrings.programmePnc;
-      case Programme.ncd:
-        return PathwayStrings.programmeNcd;
-      case Programme.tb:
-        return PathwayStrings.programmeTb;
-      case Programme.epi:
-        return PathwayStrings.programmeEpi;
-      case Programme.nutrition:
-        return PathwayStrings.programmeNutrition;
-      case Programme.familyPlanning:
-        return PathwayStrings.programmeFamilyPlanning;
-      case Programme.cataract:
-        return PathwayStrings.programmeCataract;
-      case Programme.eyeCare:
-        return PathwayStrings.programmeEyeCare;
-      case Programme.unknown:
-        return PathwayStrings.programmeUnknown;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Column(

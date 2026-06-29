@@ -25,6 +25,14 @@ import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../scribe/scribe_controller.dart';
+import '../widgets/form_fields/age_or_dob_field.dart';
+import '../widgets/form_fields/age_ymd_field.dart';
+import '../widgets/form_fields/bp_form_field.dart';
+import '../widgets/form_fields/date_form_field.dart';
+import '../widgets/form_fields/dialog_multi_select_field.dart';
+import '../widgets/form_fields/info_label_field.dart';
+import '../widgets/form_fields/radio_form_field.dart';
+import '../widgets/form_fields/text_label_field.dart';
 import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/models/programme.dart';
 import '../../scribe/models/ai_extracted_field.dart';
@@ -974,6 +982,64 @@ class _FieldWidget extends StatelessWidget {
           ),
           initialValue: currentValue as String?,
           onChanged: onChanged,
+        );
+
+      case FieldType.radioField:
+        return RadioFormField(
+          labelText: _label,
+          options: field.options ?? const [],
+          currentValue: currentValue as String?,
+          onChanged: (v) => onChanged(v),
+        );
+
+      case FieldType.dialogMultiSelectField:
+        return DialogMultiSelectField(
+          labelText: _label,
+          options: field.options ?? const [],
+          currentValue:
+              (currentValue as List<dynamic>?)?.cast<String>() ?? const [],
+          onChanged: (v) => onChanged(v),
+        );
+
+      case FieldType.dateField:
+        return DateFormField(
+          labelText: _label,
+          currentValue: currentValue as String?,
+          hint: field.hint,
+          onChanged: (v) => onChanged(v),
+        );
+
+      case FieldType.bpField:
+        return BpFormField(
+          labelText: _label,
+          currentValue: currentValue as String?,
+          onChanged: (v) => onChanged(v),
+        );
+
+      case FieldType.ageOrDobField:
+        return AgeOrDobField(
+          labelText: _label,
+          currentValue: currentValue as String?,
+          onChanged: (v) => onChanged(v),
+        );
+
+      case FieldType.ageYmdField:
+        return AgeYmdField(
+          labelText: _label,
+          currentValue: currentValue as String?,
+          onChanged: (v) => onChanged(v),
+        );
+
+      case FieldType.infoLabelField:
+        return InfoLabelField(
+          labelText: _label,
+          currentValue: currentValue?.toString(),
+        );
+
+      case FieldType.textLabelField:
+        return TextLabelField(
+          text: _label,
+          isInstruction: field.isInstruction,
         );
     }
   }
