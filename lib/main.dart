@@ -57,6 +57,7 @@ import 'features/visit/encounter_repository.dart';
 import 'features/visit/household_repository.dart';
 import 'features/visit/observation_repository.dart';
 import 'features/visit/submission/unified_submission_orchestrator.dart';
+import 'features/visit/briefing/visit_briefing_repository.dart';
 import 'features/visit/visit_controller.dart';
 import 'features/worklist/worklist_repository.dart';
 
@@ -150,6 +151,7 @@ class _UhisNextAppState extends State<UhisNextApp>
       PregnancySnapshotDao(widget.appDb);
   late final TreatmentPresenceDao _treatmentPresenceDao =
       TreatmentPresenceDao(widget.appDb);
+  late final EncounterDao _encounterDao = EncounterDao(widget.appDb);
   late final LocalDashboardRepository _localDashboard = LocalDashboardRepository(
     households: _householdDao,
     members: _memberDao,
@@ -172,6 +174,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     members: _memberDao,
     pregnancySnapshot: _pregnancySnapshotDao,
     treatmentPresence: _treatmentPresenceDao,
+    encounterDao: _encounterDao,
   );
   late final WorklistRepository _worklist = WorklistRepository(
     patients: _patientDao,
@@ -345,8 +348,7 @@ class _UhisNextAppState extends State<UhisNextApp>
                   observations: ctx.read<ObservationRepository>(),
                 )),
         // Visit flow providers
-        Provider<EncounterDao>(
-            create: (_) => EncounterDao(widget.appDb)),
+        Provider<EncounterDao>.value(value: _encounterDao),
         Provider<EncounterRepository>(
             create: (ctx) => EncounterRepository(
                   widget.api,
@@ -378,6 +380,9 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<AssessmentDraftDao>.value(value: _draftDao),
         Provider<UnifiedSubmissionOrchestrator>.value(
             value: _submissionOrchestrator),
+        // AI Visit Briefing service
+        Provider<VisitBriefingRepository>(
+            create: (_) => VisitBriefingRepository(widget.api)),
         // AI Scribe API service
         Provider<ScribeApiService>(
             create: (_) => ScribeApiService(widget.api)),

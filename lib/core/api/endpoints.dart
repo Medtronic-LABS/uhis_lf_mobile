@@ -42,6 +42,10 @@ class Endpoints {
   static String scribeReject(String noteId) =>
       '/ai-scribe-service/scribe/notes/$noteId/reject';
 
+  // ── AI Visit Briefing: pre-visit guidance cards ───────────────────────────
+  static const String visitBriefingGenerate =
+      '/ai-visit-briefing-service/briefing/generate';
+
   // Chunked upload — for audio files ≥ 1 MB (rural 2G path)
   static const String scribeUploadInit = '/ai-scribe-service/upload/init';
   static String scribeUploadChunk(String uploadId, int chunk) =>

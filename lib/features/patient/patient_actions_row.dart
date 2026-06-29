@@ -59,12 +59,15 @@ class _PatientActionsRowState extends State<PatientActionsRow> {
     if (encounterId != null) {
       final originParam = widget.origin != null ? '?origin=${widget.origin}' : '';
       context.go(
-        '/patients/visit/$encounterId/triage$originParam',
+        '/patients/visit/$encounterId/briefing$originParam',
         extra: {
           'patientId': widget.patientId,
-          'memberId': null,
-          'householdId': widget.householdId,
+          'patientName': widget.patientName,
           'patientAge': widget.patientAge,
+          'patientGender': widget.patientGender,
+          'householdId': widget.householdId,
+          'memberId': null,
+          'programmes': widget.programmes.map((p) => p.name).toList(),
         },
       );
     } else {

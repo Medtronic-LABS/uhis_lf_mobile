@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/auth/auth_state.dart';
+import '../core/models/programme.dart';
 import '../core/constants/app_strings.dart';
 import '../core/models/dashboard_tier.dart';
 import '../features/dashboard/mission_dashboard_screen.dart';
@@ -27,6 +28,7 @@ import '../features/training/training_screen.dart';
 import '../features/visit/visit_complete_screen.dart';
 import '../features/visit/visit_form_screen.dart';
 import '../features/visit/triage/symptom_picker_screen.dart';
+import '../features/visit/briefing/visit_briefing_screen.dart';
 import 'bottom_nav.dart';
 
 /// Navigation keys for each tab's navigator.
@@ -215,6 +217,40 @@ GoRouter buildRouter(AuthState auth) {
                     },
                   ),
                   // Visit flow routes
+                  GoRoute(
+                    path: 'visit/:visitId/briefing',
+                    name: 'visit-briefing',
+                    pageBuilder: (context, state) {
+                      Map<String, dynamic>? extra;
+                      if (state.extra is Map<String, dynamic>) {
+                        extra = state.extra as Map<String, dynamic>;
+                      } else if (state.extra is Map) {
+                        extra = Map<String, dynamic>.from(state.extra as Map);
+                      }
+                      final origin = state.uri.queryParameters['origin'];
+                      final rawProgrammes =
+                          extra?['programmes'] as List<dynamic>?;
+                      final programmes = rawProgrammes
+                              ?.map((e) => Programme.fromString(e.toString()))
+                              .toSet() ??
+                          <Programme>{};
+                      return MaterialPage(
+                        key: ValueKey(
+                            'visit-briefing-${state.pathParameters['visitId']}'),
+                        child: VisitBriefingScreen(
+                          encounterId: state.pathParameters['visitId']!,
+                          patientId: extra?['patientId'] as String? ?? '',
+                          patientName: extra?['patientName'] as String?,
+                          patientAge: extra?['patientAge'] as int?,
+                          patientGender: extra?['patientGender'] as String?,
+                          householdId: extra?['householdId'] as String?,
+                          memberId: extra?['memberId'] as String?,
+                          programmes: programmes,
+                          origin: origin,
+                        ),
+                      );
+                    },
+                  ),
                   GoRoute(
                     path: 'visit/:visitId/triage',
                     name: 'visit-triage',
