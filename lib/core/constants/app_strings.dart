@@ -2333,9 +2333,9 @@ abstract final class TriageResultStrings {
   TriageResultStrings._();
 
   // ── Step bar ────────────────────────────────────────────────────────────────
-  static const String step1Label = 'How are you feeling?';
-  static const String step2Label = 'AI triage';
-  static const String step3Label = 'Detailed check';
+  static const String step1Label = 'Step 1 · Symptoms';
+  static const String step2Label = 'Step 2 · Triage';
+  static const String step3Label = 'Step 3 · Assessment';
 
   static String stepSubtitle(int stepIndex) {
     switch (stepIndex) {

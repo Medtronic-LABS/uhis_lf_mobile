@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/semantics.dart';
 import 'package:sqflite_common/sqflite.dart' show databaseFactoryOrNull;
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
@@ -84,6 +85,11 @@ Future<void> _clearSeededTestData(AppDatabase db) async {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SemanticsBinding.instance.ensureSemantics();
+  // Prevent app from drawing behind the status bar and system nav bar.
+  SystemChrome.setEnabledSystemUIMode(
+    SystemUiMode.manual,
+    overlays: [SystemUiOverlay.top, SystemUiOverlay.bottom],
+  );
   if (kIsWeb) {
     databaseFactoryOrNull = databaseFactoryFfiWebNoWebWorker;
   }

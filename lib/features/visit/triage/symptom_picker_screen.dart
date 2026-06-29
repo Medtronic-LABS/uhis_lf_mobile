@@ -367,7 +367,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         backgroundColor: AppColors.canvas,
         appBar: VisitStepHeader(
           step: VisitStep.symptomPicker,
-          patientLabel: TriageStrings.pickerTitle,
+          patientLabel: widget.patientName ?? TriageStrings.pickerTitle,
           onBack: () => context.pop(),
         ),
         floatingActionButton: AppConfig.scribeEnabled
@@ -848,8 +848,8 @@ class _AiBriefingSection extends StatelessWidget {
   }
 }
 
-/// Outer shell shared by all 3 briefing cards.
-class _BriefingCard extends StatelessWidget {
+/// Collapsible outer shell shared by all 3 briefing cards.
+class _BriefingCard extends StatefulWidget {
   const _BriefingCard({
     required this.icon,
     required this.iconColor,
@@ -863,6 +863,13 @@ class _BriefingCard extends StatelessWidget {
   final Widget child;
 
   @override
+  State<_BriefingCard> createState() => _BriefingCardState();
+}
+
+class _BriefingCardState extends State<_BriefingCard> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
@@ -874,58 +881,69 @@ class _BriefingCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-            child: Row(
-              children: [
-                Container(
-                  width: 26,
-                  height: 26,
-                  decoration: BoxDecoration(
-                    color: iconColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(6),
+          // Tappable header row
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            borderRadius: BorderRadius.circular(14),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              child: Row(
+                children: [
+                  Container(
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      color: widget.iconColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Icon(widget.icon, size: 15, color: widget.iconColor),
                   ),
-                  child: Icon(icon, size: 15, color: iconColor),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                      color: AppColors.navy,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      widget.title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        color: AppColors.navy,
+                      ),
                     ),
                   ),
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.aiSurfaceStart,
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: AppColors.aiBorder),
-                  ),
-                  child: const Text(
-                    '✦ AI',
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.aiPurple,
-                      letterSpacing: 0.5,
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.aiSurfaceStart,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: AppColors.aiBorder),
+                    ),
+                    child: const Text(
+                      '✦ AI',
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.aiPurple,
+                        letterSpacing: 0.5,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 6),
+                  Icon(
+                    _expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                    size: 18,
+                    color: AppColors.textMuted,
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 6),
-          const Divider(height: 1, thickness: 0.5),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-            child: child,
-          ),
+          // Expandable content
+          if (_expanded) ...[
+            const Divider(height: 1, thickness: 0.5),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+              child: widget.child,
+            ),
+          ],
         ],
       ),
     );
