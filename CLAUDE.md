@@ -164,6 +164,39 @@ Async flow:
 4. `SoapFieldExtractor.extract(soapText)` — maps SOAP sections to assessment form field values
 5. User reviews the proposal → `scribeAccept` or `scribeReject`; rationale snapshot logged on accept
 
+## AI Visit Briefing — `lib/features/visit/briefing/`
+
+Pre-visit briefing cards shown inside `SymptomPickerScreen` (the "What symptoms does the patient have?" screen). Cards are fetched asynchronously while the SK reviews symptoms; they collapse/expand on tap.
+
+**Three cards (in order):**
+
+| Card | Icon | Content |
+|---|---|---|
+| Before You Knock | `psychology_outlined` (navy) | AI headline + 3-5 clinical bullet points summarising the patient's most important concerns |
+| Today's Priorities | `priority_high_rounded` (orange) | Numbered list of 3-5 specific, actionable priorities for this visit (e.g. "Check BP: last reading 155/95") |
+| Suggested Discussion Points | `chat_bubble_outline` (teal) | Culturally appropriate opening line + topic sections (heart/baby/nutrition/medication/lungs/home/checkup icons) with 2-3 open-ended questions each |
+
+**Data flow:**
+1. `SymptomPickerScreen._loadPatientContext()` builds `PatientContext` from local DB
+2. `_startBriefingFetch(ctx)` fires immediately after — constructs `BriefingRequest` from `PatientContext`, `VitalsRepository.recentByVisit()`, and `FollowUpRepository.openForPatientLocal()`
+3. `VisitBriefingRepository.generate(req)` calls the AI visit briefing service
+4. Cards update when `_briefingData` arrives; loading skeleton shown during fetch
+5. **Graceful degradation**: Card 1 falls back to local rule-based context chips; Cards 2/3 show "AI unavailable" message
+
+**Service routing:**
+- Gateway path: `/ai-visit-briefing-service/briefing/generate` (routed through nginx)
+- Direct local path: `/briefing/generate` (when `AI_SERVICE_URL` dart-define is set)
+- `AppConfig.aiServiceBaseUrl` (`--dart-define=AI_SERVICE_URL=http://10.0.2.2:8096`) — causes `VisitBriefingRepository` to use a separate Dio instance pointed at the local service
+- Local AI service: `leapfrog-setup/ai-visit-briefing-service/` (FastAPI, port 8096, Gemini `gemini-2.5-flash`)
+
+**Key models — `lib/features/visit/briefing/briefing_models.dart`:**
+- `VisitBriefingResponse` — `briefingCard`, `todaysPriorities`, `suggestedDiscussionPoints`, `transitionPrompt`
+- `BriefingCardContent` — `headline: String`, `points: List<String>`
+- `SuggestedDiscussionPoints` — `openingLine: String`, `sections: List<ConversationSection>`
+- `ConversationSection` — `topic`, `icon` (one of: heart/baby/nutrition/medication/lungs/home/checkup), `questions`
+
+**Strings:** `TriageStrings.briefCard1Title/briefCard2Title/briefCard3Title` in `app_strings.dart`
+
 ## Visit composer — `lib/features/visit/composer/`
 
 - `SectionRegistry` — maps active `Programme` set → ordered `FormSection` list with `FieldDef` entries
