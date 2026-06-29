@@ -37,8 +37,8 @@ class ConversationSection {
       );
 }
 
-class ConversationGuide {
-  const ConversationGuide({
+class SuggestedDiscussionPoints {
+  const SuggestedDiscussionPoints({
     required this.openingLine,
     required this.sections,
   });
@@ -46,8 +46,8 @@ class ConversationGuide {
   final String openingLine;
   final List<ConversationSection> sections;
 
-  factory ConversationGuide.fromJson(Map<String, dynamic> json) =>
-      ConversationGuide(
+  factory SuggestedDiscussionPoints.fromJson(Map<String, dynamic> json) =>
+      SuggestedDiscussionPoints(
         openingLine: json['openingLine'] as String? ?? '',
         sections: (json['sections'] as List<dynamic>?)
                 ?.map((e) =>
@@ -60,20 +60,26 @@ class ConversationGuide {
 class VisitBriefingResponse {
   const VisitBriefingResponse({
     required this.briefingCard,
-    required this.conversationGuide,
+    required this.todaysPriorities,
+    required this.suggestedDiscussionPoints,
     required this.transitionPrompt,
   });
 
   final BriefingCardContent briefingCard;
-  final ConversationGuide conversationGuide;
+  final List<String> todaysPriorities;
+  final SuggestedDiscussionPoints suggestedDiscussionPoints;
   final String transitionPrompt;
 
   factory VisitBriefingResponse.fromJson(Map<String, dynamic> json) =>
       VisitBriefingResponse(
         briefingCard: BriefingCardContent.fromJson(
             json['briefingCard'] as Map<String, dynamic>? ?? {}),
-        conversationGuide: ConversationGuide.fromJson(
-            json['conversationGuide'] as Map<String, dynamic>? ?? {}),
+        todaysPriorities: (json['todaysPriorities'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            [],
+        suggestedDiscussionPoints: SuggestedDiscussionPoints.fromJson(
+            json['suggestedDiscussionPoints'] as Map<String, dynamic>? ?? {}),
         transitionPrompt: json['transitionPrompt'] as String? ?? '',
       );
 }

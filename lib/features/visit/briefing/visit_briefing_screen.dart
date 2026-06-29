@@ -301,7 +301,7 @@ class _ConversationGuideCard extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        snap.data!.conversationGuide.openingLine,
+                        snap.data!.suggestedDiscussionPoints.openingLine,
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.onPrimaryContainer,
                           fontStyle: FontStyle.italic,
@@ -313,7 +313,7 @@ class _ConversationGuideCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            ...snap.data!.conversationGuide.sections
+            ...snap.data!.suggestedDiscussionPoints.sections
                 .map((s) => _ConversationSectionTile(section: s)),
           ],
         ],
