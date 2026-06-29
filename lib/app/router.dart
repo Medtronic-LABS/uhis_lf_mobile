@@ -26,7 +26,6 @@ import '../features/teleconsult/teleconsult_screen.dart';
 import '../features/training/training_screen.dart';
 import '../features/visit/visit_complete_screen.dart';
 import '../features/visit/visit_form_screen.dart';
-import '../features/visit/visit_landing_screen.dart';
 import '../features/visit/triage/symptom_picker_screen.dart';
 import 'bottom_nav.dart';
 
@@ -216,17 +215,6 @@ GoRouter buildRouter(AuthState auth) {
                     },
                   ),
                   // Visit flow routes
-                  GoRoute(
-                    path: 'visit/:patientId/start',
-                    name: 'visit-start',
-                    pageBuilder: (context, state) => MaterialPage(
-                      key: ValueKey('visit-start-${state.pathParameters['patientId']}'),
-                      child: VisitLandingScreen(
-                        patientId: state.pathParameters['patientId']!,
-                        data: state.extra as VisitLandingData?,
-                      ),
-                    ),
-                  ),
                   GoRoute(
                     path: 'visit/:visitId/triage',
                     name: 'visit-triage',

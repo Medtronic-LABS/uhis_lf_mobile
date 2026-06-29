@@ -6,10 +6,10 @@ import '../../core/constants/app_strings.dart';
 import '../../core/models/programme.dart';
 import '../../core/models/referral.dart';
 import '../referral/referral_repository.dart';
-import '../visit/visit_landing_screen.dart';
+import '../visit/visit_controller.dart';
 
 /// Row of action buttons for patient context screen.
-class PatientActionsRow extends StatelessWidget {
+class PatientActionsRow extends StatefulWidget {
   const PatientActionsRow({
     super.key,
     required this.patientId,
@@ -33,23 +33,51 @@ class PatientActionsRow extends StatelessWidget {
   /// Origin screen for return navigation ('dashboard' or 'tasks').
   final String? origin;
 
-  void _startVisit(BuildContext context) {
-    final data = VisitLandingData(
-      patientId: patientId,
-      patientName: patientName,
-      patientAge: patientAge,
-      patientGender: patientGender,
-      householdId: householdId,
+  @override
+  State<PatientActionsRow> createState() => _PatientActionsRowState();
+}
+
+class _PatientActionsRowState extends State<PatientActionsRow> {
+  bool _starting = false;
+
+  Future<void> _startVisit() async {
+    if (_starting) return;
+    setState(() => _starting = true);
+
+    final controller = context.read<VisitController>();
+    final encounterId = await controller.startVisit(
+      patientId: widget.patientId,
       programme: Programme.unknown,
-      origin: origin,
+      patientName: widget.patientName,
+      patientAge: widget.patientAge,
+      patientGender: widget.patientGender,
+      householdId: widget.householdId,
     );
-    context.push(
-      '/patients/visit/$patientId/start',
-      extra: data,
-    );
+
+    if (!mounted) return;
+
+    if (encounterId != null) {
+      final originParam = widget.origin != null ? '?origin=${widget.origin}' : '';
+      context.go(
+        '/patients/visit/$encounterId/triage$originParam',
+        extra: {
+          'patientId': widget.patientId,
+          'memberId': null,
+          'householdId': widget.householdId,
+          'patientAge': widget.patientAge,
+        },
+      );
+    } else {
+      setState(() => _starting = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(controller.error ?? 'Failed to start visit')),
+        );
+      }
+    }
   }
 
-  Future<void> _openReferralSheet(BuildContext context) async {
+  Future<void> _openReferralSheet() async {
     final referrals = context.read<ReferralRepository>();
     final result = await showModalBottomSheet<_ReferralFormResult>(
       context: context,
@@ -57,24 +85,24 @@ class PatientActionsRow extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => _ReferralCreateSheet(patientName: patientName),
+      builder: (_) => _ReferralCreateSheet(patientName: widget.patientName),
     );
-    if (result == null || !context.mounted) return;
+    if (result == null || !mounted) return;
     try {
       await referrals.create(
-        patientId: patientId,
+        patientId: widget.patientId,
         slaTier: result.slaTier,
-        householdId: householdId,
-        villageId: villageId,
+        householdId: widget.householdId,
+        villageId: widget.villageId,
         diagnosisLabel: result.reason,
       );
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text(ReferralStrings.createSuccess)),
         );
       }
     } catch (_) {
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text(ReferralStrings.createFailed)),
         );
@@ -100,9 +128,15 @@ class PatientActionsRow extends StatelessWidget {
           children: [
             Expanded(
               child: FilledButton.icon(
-                onPressed: () => _startVisit(context),
-                icon: const Icon(Icons.play_arrow),
-                label: const Text(PatientContextStrings.startVisit),
+                onPressed: _starting ? null : _startVisit,
+                icon: _starting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.play_arrow),
+                label: Text(_starting ? 'Starting...' : PatientContextStrings.startVisit),
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(48),
                 ),
@@ -115,7 +149,7 @@ class PatientActionsRow extends StatelessWidget {
           children: [
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: () => _openReferralSheet(context),
+                onPressed: _openReferralSheet,
                 icon: const Icon(Icons.send),
                 label: const Text(ReferralStrings.actionOpenReferral),
                 style: OutlinedButton.styleFrom(
