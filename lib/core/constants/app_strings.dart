@@ -2388,8 +2388,11 @@ abstract final class TriageResultStrings {
 abstract final class SymptomPickerStrings {
   SymptomPickerStrings._();
 
-  // ── Before-you-knock card ────────────────────────────────────────────────
+  // ── AI briefing cards ────────────────────────────────────────────────────
   static const String briefCardTitle = 'Before you knock · AI brief';
+  static const String briefCard1Title = 'Before You Knock';
+  static const String briefCard2Title = 'Conversation Guide';
+  static const String briefCard3Title = 'Begin Consultation';
 
   // ── Patient context chips ────────────────────────────────────────────────
   static const String chipPregnant = 'Pregnant · ANC';
@@ -2419,6 +2422,11 @@ abstract final class SymptomPickerStrings {
   // ── CTA button ───────────────────────────────────────────────────────────
   static const String ctaWithPathways = 'AI is checking — see what to do next →';
   static const String ctaRoutine = 'Continue (routine visit)';
+
+  // ── Other symptoms free-text ─────────────────────────────────────────────
+  static const String otherSymptomsLabel = 'Other symptoms';
+  static const String otherSymptomsHint =
+      'Describe any other symptoms not listed above…';
 }
 
 /// Visit completion screen strings.
@@ -2431,6 +2439,7 @@ abstract final class VisitCompleteStrings {
   static const String referralWarning =
       'Referral recommended based on clinical findings';
   static const String bookTeleconsult = 'Book Teleconsult';
+  static const String sendCounsellingMessage = 'Send Counselling Message';
   static const String createReferral = 'Create Referral';
   static const String backToHome = 'Back to Home';
 }

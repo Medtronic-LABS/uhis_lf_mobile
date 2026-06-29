@@ -270,6 +270,8 @@ GoRouter buildRouter(AuthState auth) {
                           memberId: extra?['memberId'] as String?,
                           householdId: extra?['householdId'] as String?,
                           patientAge: extra?['patientAge'] as int?,
+                          patientName: extra?['patientName'] as String?,
+                          patientGender: extra?['patientGender'] as String?,
                           origin: origin,
                         ),
                       );

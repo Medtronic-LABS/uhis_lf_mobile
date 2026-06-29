@@ -10,8 +10,12 @@ import '../../../core/db/patient_dao.dart';
 import '../../../core/db/patient_programmes_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
 import '../../../core/api/scribe_api_service.dart' show ScribeMode;
+import '../../patient/followup_repository.dart';
+import '../../patient/vitals_repository.dart';
 import '../../scribe/scribe_controller.dart';
 import '../../scribe/scribe_session.dart';
+import '../briefing/briefing_models.dart';
+import '../briefing/visit_briefing_repository.dart';
 import '../pathway/pathway_engine.dart';
 import 'patient_context_builder.dart';
 import 'visit_step_header.dart';
@@ -33,6 +37,8 @@ class SymptomPickerScreen extends StatefulWidget {
     this.memberId,
     this.householdId,
     this.patientAge,
+    this.patientName,
+    this.patientGender,
     this.origin,
   });
 
@@ -41,6 +47,8 @@ class SymptomPickerScreen extends StatefulWidget {
   final String? memberId;
   final String? householdId;
   final int? patientAge;
+  final String? patientName;
+  final String? patientGender;
   final String? origin;
 
   @override
@@ -52,6 +60,9 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   PatientContext? _patientContext;
   bool _isLoading = true;
   String? _error;
+
+  VisitBriefingResponse? _briefingData;
+  bool _briefingLoading = true;
 
   @override
   void initState() {
@@ -128,6 +139,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         _isLoading = false;
       });
       debugPrint('[SymptomPicker] Load complete');
+      _startBriefingFetch(ctx);
     } catch (e, stack) {
       debugPrint('[SymptomPicker] ERROR: $e');
       debugPrint('[SymptomPicker] Stack: $stack');
@@ -136,6 +148,102 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         _error = 'Error loading patient: ${e.toString()}';
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _startBriefingFetch(PatientContext patientCtx) async {
+    if (!mounted) return;
+    try {
+      final vitalsRepo = context.read<VitalsRepository>();
+      final followUpRepo = context.read<FollowUpRepository>();
+      final briefingRepo = context.read<VisitBriefingRepository>();
+
+      final visitsByVisit =
+          await vitalsRepo.recentByVisit(widget.patientId, limit: 5);
+      final followUps =
+          await followUpRepo.openForPatientLocal(widget.patientId);
+
+      Map<String, dynamic>? vitalsMap;
+      if (visitsByVisit.isNotEmpty) {
+        final latest = visitsByVisit.first;
+        final bp = latest.readings
+            .where((r) => r.type == VitalType.bloodPressure)
+            .firstOrNull;
+        final weight = latest.readings
+            .where((r) => r.type == VitalType.weight)
+            .firstOrNull;
+        final glucose = latest.readings
+            .where((r) => r.type == VitalType.glucose)
+            .firstOrNull;
+        final spo2 =
+            latest.readings.where((r) => r.type == VitalType.spO2).firstOrNull;
+        final bmi =
+            latest.readings.where((r) => r.type == VitalType.bmi).firstOrNull;
+        vitalsMap = {
+          if (bp?.systolic != null)
+            'bloodPressureSystolic': bp!.systolic!.toInt(),
+          if (bp?.diastolic != null)
+            'bloodPressureDiastolic': bp!.diastolic!.toInt(),
+          if (weight?.value != null) 'weight': weight!.value,
+          if (glucose?.value != null) 'glucose': glucose!.value,
+          if (spo2?.value != null) 'spO2': spo2!.value!.toInt(),
+          if (bmi?.value != null) 'bmi': bmi!.value,
+        };
+      }
+
+      final followUpSummaries = followUps.map((f) {
+        final daysOverdue =
+            f.isOverdue ? DateTime.now().difference(f.dueDate).inDays : null;
+        return {
+          'type': f.type.name,
+          'daysOverdue': daysOverdue,
+          'reason': f.reason,
+        };
+      }).toList();
+
+      final risks = <String>[];
+      if (followUps.any((f) => f.isOverdue)) risks.add('missed_followup');
+      final latestBp = visitsByVisit.isNotEmpty
+          ? visitsByVisit.first.readings
+              .where((r) => r.type == VitalType.bloodPressure)
+              .firstOrNull
+          : null;
+      if (latestBp?.systolic != null && latestBp!.systolic! >= 140) {
+        risks.add('elevated_bp');
+      }
+      if (visitsByVisit.length >= 3) risks.add('returning_patient');
+
+      final lastVisit = visitsByVisit.isNotEmpty ? visitsByVisit.first : null;
+
+      final request = <String, dynamic>{
+        'patientId': widget.patientId,
+        if (widget.patientName != null) 'patientName': widget.patientName,
+        if (widget.patientAge != null) 'ageYears': widget.patientAge,
+        if (widget.patientGender != null) 'gender': widget.patientGender,
+        'activeProgrammes':
+            patientCtx.activeProgrammes.map((p) => p.name).toList(),
+        'visitCount': visitsByVisit.length,
+        if (lastVisit != null)
+          'lastVisitDate':
+              lastVisit.date.toIso8601String().split('T').first,
+        if (lastVisit != null) 'lastVisitProgramme': lastVisit.programme,
+        if (vitalsMap != null && vitalsMap.isNotEmpty)
+          'recentVitals': vitalsMap,
+        'openFollowUps': followUpSummaries,
+        'riskIndicators': risks,
+        if (patientCtx.gestationalWeeks != null)
+          'gestationalWeeks': patientCtx.gestationalWeeks,
+      };
+
+      final data = await briefingRepo.generate(request);
+      if (mounted) {
+        setState(() {
+          _briefingData = data;
+          _briefingLoading = false;
+        });
+      }
+    } on Object {
+      if (mounted) setState(() => _briefingLoading = false);
     }
   }
 
@@ -287,21 +395,15 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                   ),
                 ),
 
-                // Gap 1 — Before you knock · AI brief (collapsible)
+                // AI briefing cards — Before You Knock / Conversation Guide / Begin Consultation
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                    child: _BeforeYouKnockCard(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                    child: _AiBriefingSection(
+                      briefingLoading: _briefingLoading,
+                      briefingData: _briefingData,
                       patientContext: _patientContext!,
                     ),
-                  ),
-                ),
-
-                // Gap 2 — SK asks the family opener card
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                    child: const _SkAsksCard(),
                   ),
                 ),
 
@@ -325,6 +427,14 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                     child: _DurationPicker(vm: vm),
+                  ),
+                ),
+
+                // Gap 4 — Other symptoms free-text input
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                    child: _OtherSymptomsField(vm: vm),
                   ),
                 ),
               ],
@@ -682,235 +792,437 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   }
 }
 
-// ── Gap 1: Before you knock · AI brief card ───────────────────────────────────
+// ── AI Briefing Section: 3 stacked cards ─────────────────────────────────────
 
-/// Collapsible card showing contextual patient brief derived from
-/// [PatientContext]. Starts collapsed; tapping the header toggles expansion.
-class _BeforeYouKnockCard extends StatefulWidget {
-  const _BeforeYouKnockCard({required this.patientContext});
+class _AiBriefingSection extends StatelessWidget {
+  const _AiBriefingSection({
+    required this.briefingLoading,
+    required this.briefingData,
+    required this.patientContext,
+  });
 
+  final bool briefingLoading;
+  final VisitBriefingResponse? briefingData;
   final PatientContext patientContext;
 
   @override
-  State<_BeforeYouKnockCard> createState() => _BeforeYouKnockCardState();
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _BriefingCard(
+          icon: Icons.psychology_outlined,
+          iconColor: AppColors.navy,
+          title: SymptomPickerStrings.briefCard1Title,
+          child: briefingLoading
+              ? const _BriefingLoadingSkeleton(lines: 3)
+              : briefingData == null
+                  ? _BriefingFallbackContent(patientContext: patientContext)
+                  : _BriefingCard1Content(data: briefingData!),
+        ),
+        const SizedBox(height: 8),
+        _BriefingCard(
+          icon: Icons.chat_bubble_outline,
+          iconColor: Colors.teal,
+          title: SymptomPickerStrings.briefCard2Title,
+          child: briefingLoading
+              ? const _BriefingLoadingSkeleton(lines: 4)
+              : briefingData == null
+                  ? const _BriefingUnavailable()
+                  : _BriefingCard2Content(data: briefingData!),
+        ),
+        const SizedBox(height: 8),
+        _BriefingCard(
+          icon: Icons.mic_none,
+          iconColor: Colors.deepPurple,
+          title: SymptomPickerStrings.briefCard3Title,
+          child: briefingLoading
+              ? const _BriefingLoadingSkeleton(lines: 2)
+              : briefingData == null
+                  ? const _BriefingUnavailable()
+                  : _BriefingCard3Content(data: briefingData!),
+        ),
+      ],
+    );
+  }
 }
 
-class _BeforeYouKnockCardState extends State<_BeforeYouKnockCard> {
-  bool _expanded = false;
+/// Outer shell shared by all 3 briefing cards.
+class _BriefingCard extends StatelessWidget {
+  const _BriefingCard({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.child,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    final ctx = widget.patientContext;
-
-    // Build chips from patient context flags
-    final chips = <_ContextChip>[];
-    if (ctx.isPregnant) {
-      chips.add(_ContextChip(
-        label: SymptomPickerStrings.chipPregnant,
-        color: AppColors.statusWarning,
-        textColor: Colors.white,
-      ));
-    }
-    if (ctx.hasKnownHypertension) {
-      chips.add(_ContextChip(
-        label: SymptomPickerStrings.chipHtn,
-        color: AppColors.statusCritical,
-        textColor: Colors.white,
-      ));
-    }
-    if (ctx.hasKnownDiabetes) {
-      chips.add(_ContextChip(
-        label: SymptomPickerStrings.chipDm,
-        color: AppColors.statusInfo,
-        textColor: Colors.white,
-      ));
-    }
-    if (ctx.isTbScreenDue) {
-      chips.add(_ContextChip(
-        label: SymptomPickerStrings.chipTbDue,
-        color: AppColors.statusSuccess,
-        textColor: Colors.white,
-      ));
-    }
-    if (ctx.isUnder5) {
-      chips.add(_ContextChip(
-        label: SymptomPickerStrings.chipUnder5,
-        color: AppColors.statusInfo,
-        textColor: Colors.white,
-      ));
-    }
-    if (chips.isEmpty) {
-      chips.add(_ContextChip(
-        label: SymptomPickerStrings.chipRoutine,
-        color: AppColors.textMuted,
-        textColor: Colors.white,
-      ));
-    }
-
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: AppColors.aiBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // Header row — always visible
-          Semantics(
-            label: _expanded ? 'Collapse patient brief' : 'Expand patient brief',
-            button: true,
-            child: InkWell(
-            key: const Key('triage_body_system_expand_tap'),
-            onTap: () => setState(() => _expanded = !_expanded),
-            borderRadius: BorderRadius.circular(14),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              child: Row(
-                children: [
-                  // Navy rounded icon box
-                  Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+            child: Row(
+              children: [
+                Container(
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    color: iconColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(icon, size: 15, color: iconColor),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
                       color: AppColors.navy,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Icon(
-                      Icons.auto_awesome,
-                      size: 16,
-                      color: Colors.white,
                     ),
                   ),
-                  const SizedBox(width: 10),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.aiSurfaceStart,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: AppColors.aiBorder),
+                  ),
+                  child: const Text(
+                    '✦ AI',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.aiPurple,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Divider(height: 1, thickness: 0.5),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+            child: child,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Card 1 content: Before You Knock ─────────────────────────────────────────
+
+class _BriefingCard1Content extends StatelessWidget {
+  const _BriefingCard1Content({required this.data});
+  final VisitBriefingResponse data;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          data.briefingCard.headline,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: AppColors.navy,
+          ),
+        ),
+        const SizedBox(height: 6),
+        ...data.briefingCard.points.take(3).map((p) => Padding(
+              padding: const EdgeInsets.only(bottom: 3),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('• ',
+                      style: TextStyle(
+                          fontSize: 11, color: AppColors.textMuted)),
                   Expanded(
                     child: Text(
-                      SymptomPickerStrings.briefCardTitle,
+                      p,
                       style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                        color: AppColors.navy,
-                      ),
+                          fontSize: 11, color: AppColors.textPrimary),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  Icon(
-                    _expanded
-                        ? Icons.expand_less_rounded
-                        : Icons.expand_more_rounded,
-                    color: AppColors.textMuted,
+                ],
+              ),
+            )),
+      ],
+    );
+  }
+}
+
+// ── Card 2 content: Conversation Guide ───────────────────────────────────────
+
+class _BriefingCard2Content extends StatelessWidget {
+  const _BriefingCard2Content({required this.data});
+  final VisitBriefingResponse data;
+
+  @override
+  Widget build(BuildContext context) {
+    final guide = data.conversationGuide;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            color: AppColors.tagBlueSurface,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.waving_hand,
+                  size: 13, color: AppColors.tagBlueText),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  guide.openingLine,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontStyle: FontStyle.italic,
+                    color: AppColors.tagBlueText,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
+        ...guide.sections.take(3).map((s) => Padding(
+              padding: const EdgeInsets.only(bottom: 3),
+              child: Row(
+                children: [
+                  Icon(_iconFor(s.icon),
+                      size: 12, color: AppColors.aiPurple),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      s.topic,
+                      style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.navy),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            )),
+      ],
+    );
+  }
+
+  IconData _iconFor(String icon) {
+    switch (icon) {
+      case 'heart': return Icons.favorite_outline;
+      case 'baby': return Icons.child_care;
+      case 'nutrition': return Icons.restaurant;
+      case 'medication': return Icons.medication_outlined;
+      case 'lungs': return Icons.air;
+      case 'home': return Icons.home_outlined;
+      default: return Icons.checklist_outlined;
+    }
+  }
+}
+
+// ── Card 3 content: Begin Consultation ────────────────────────────────────────
+
+class _BriefingCard3Content extends StatelessWidget {
+  const _BriefingCard3Content({required this.data});
+  final VisitBriefingResponse data;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: AppColors.aiSurfaceStart,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppColors.aiBorder),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.lightbulb_outline,
+                  size: 13, color: AppColors.aiPurple),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  data.transitionPrompt,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontStyle: FontStyle.italic,
+                    color: AppColors.navy,
+                  ),
+                  maxLines: 4,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.aiSurfaceEnd,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.aiBorder),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.mic, size: 11, color: AppColors.aiPurple),
+                  SizedBox(width: 4),
+                  Text(
+                    'AI Scribe ready',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.aiPurple,
+                    ),
                   ),
                 ],
               ),
             ),
-          ),
-          ),
-
-          // Expanded content — chips
-          if (_expanded)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: chips
-                    .map((c) => _ContextChipWidget(chip: c))
-                    .toList(),
-              ),
-            ),
-        ],
-      ),
+          ],
+        ),
+      ],
     );
   }
 }
 
-/// Data holder for a patient-context chip.
-class _ContextChip {
-  const _ContextChip({
-    required this.label,
-    required this.color,
-    required this.textColor,
-  });
+// ── Shared skeleton + unavailable states ─────────────────────────────────────
 
-  final String label;
-  final Color color;
-  final Color textColor;
-}
+class _BriefingLoadingSkeleton extends StatelessWidget {
+  const _BriefingLoadingSkeleton({required this.lines});
+  final int lines;
 
-/// Renders a single patient-context chip.
-class _ContextChipWidget extends StatelessWidget {
-  const _ContextChipWidget({required this.chip});
-
-  final _ContextChip chip;
+  static const _fractions = [0.9, 0.75, 0.85, 0.6];
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: chip.color,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        chip.label,
-        style: TextStyle(
-          color: chip.textColor,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxW = constraints.maxWidth;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: List.generate(lines, (i) => Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            height: 10,
+            width: maxW * _fractions[i % _fractions.length],
+            decoration: BoxDecoration(
+              color: AppColors.border,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          )),
+        );
+      },
     );
   }
 }
 
-// ── Gap 2: SK asks the family opener card ─────────────────────────────────────
-
-/// Always-visible gradient card with the SK opener phrase.
-class _SkAsksCard extends StatelessWidget {
-  const _SkAsksCard();
+class _BriefingUnavailable extends StatelessWidget {
+  const _BriefingUnavailable();
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.tagBlueSurface, AppColors.tagBlueSurface],
+    return const Row(
+      children: [
+        Icon(Icons.wifi_off, size: 14, color: AppColors.textMuted),
+        SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            'AI unavailable — continue with symptoms below.',
+            style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+          ),
         ),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.tagBlueSurface),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            SymptomPickerStrings.skAsksLabel,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: AppColors.tagBlueText,
-              letterSpacing: 0.06,
+      ],
+    );
+  }
+}
+
+/// Fallback for card 1 when AI is unavailable — shows rule-based context chips.
+class _BriefingFallbackContent extends StatelessWidget {
+  const _BriefingFallbackContent({required this.patientContext});
+  final PatientContext patientContext;
+
+  @override
+  Widget build(BuildContext context) {
+    final ctx = patientContext;
+    final chips = <(String, Color)>[];
+    if (ctx.isPregnant) chips.add((SymptomPickerStrings.chipPregnant, AppColors.statusWarning));
+    if (ctx.hasKnownHypertension) chips.add((SymptomPickerStrings.chipHtn, AppColors.statusCritical));
+    if (ctx.hasKnownDiabetes) chips.add((SymptomPickerStrings.chipDm, AppColors.statusInfo));
+    if (ctx.isTbScreenDue) chips.add((SymptomPickerStrings.chipTbDue, AppColors.statusSuccess));
+    if (ctx.isUnder5) chips.add((SymptomPickerStrings.chipUnder5, AppColors.statusInfo));
+    if (chips.isEmpty) chips.add((SymptomPickerStrings.chipRoutine, AppColors.textMuted));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            Icon(Icons.wifi_off, size: 12, color: AppColors.textMuted),
+            SizedBox(width: 4),
+            Text('AI offline · local context',
+                style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          children: chips.map((c) => Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: c.$2,
+              borderRadius: BorderRadius.circular(20),
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            SymptomPickerStrings.skOpenerPhrase,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: AppColors.tagBlueText,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            SymptomPickerStrings.skOpenerPhraseBn,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: AppColors.navy,
-            ),
-          ),
-        ],
-      ),
+            child: Text(c.$1,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600)),
+          )).toList(),
+        ),
+      ],
     );
   }
 }
@@ -1048,6 +1360,70 @@ class _DurationButton extends StatelessWidget {
         ),
       ),
     ),
+    );
+  }
+}
+
+// ── Gap 4: Other symptoms free-text field ────────────────────────────────────
+
+/// Free-text field for symptoms not covered by the tile grid.
+class _OtherSymptomsField extends StatefulWidget {
+  const _OtherSymptomsField({required this.vm});
+  final TriageViewModel vm;
+
+  @override
+  State<_OtherSymptomsField> createState() => _OtherSymptomsFieldState();
+}
+
+class _OtherSymptomsFieldState extends State<_OtherSymptomsField> {
+  late final TextEditingController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: widget.vm.customSymptomText);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            SymptomPickerStrings.otherSymptomsLabel,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.navy,
+            ),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _ctrl,
+            decoration: const InputDecoration(
+              hintText: SymptomPickerStrings.otherSymptomsHint,
+              border: OutlineInputBorder(),
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+            maxLines: 2,
+            onChanged: widget.vm.setCustomSymptomText,
+          ),
+        ],
+      ),
     );
   }
 }
