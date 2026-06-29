@@ -1,9 +1,12 @@
-/// Widget tests for VisitFlowScreen — unified single-route 4-step flow
-/// (Apon Sushashthya V1 §3.1, extended with Step 2 AI Programme Recommendation).
+/// Widget tests for VisitFlowScreen — unified single-route 3-step flow
+/// (Apon Sushashthya V1 §3.1). Step 2 is composite — it renders the AI
+/// Programme Recommendation first, then the screening form — so the SK
+/// sees three top-level progress dots.
 ///
-/// Tests run the wrapper at `debugInitialStep: 3` so the final AI-recommendation
-/// step (stateless) is rendered without instantiating Steps 1–3 (those need
-/// the full Provider tree of DAOs and are covered by their own screen tests).
+/// Tests run the wrapper at `debugInitialStep: 2` so the final AI-
+/// recommendation step (stateless) is rendered without instantiating
+/// Steps 1–2 (those need the full Provider tree of DAOs and are covered
+/// by their own screen tests).
 library;
 
 import 'package:flutter/material.dart';
@@ -24,7 +27,7 @@ Future<GoRouter> _pumpFlowAtStep3(WidgetTester tester) async {
           visitId: 'v1',
           patientId: 'p1',
           patientName: 'Nasrin Begum',
-          debugInitialStep: 3,
+          debugInitialStep: 2,
         ),
       ),
       GoRoute(path: '/home', builder: (_, _) => const Text('home-route')),
@@ -38,17 +41,13 @@ Future<GoRouter> _pumpFlowAtStep3(WidgetTester tester) async {
 
 void main() {
   group('VisitFlowScreen progress header', () {
-    testWidgets('renders 4 step pills with spec titles', (tester) async {
+    testWidgets('renders 3 step pills with spec titles', (tester) async {
       await _pumpFlowAtStep3(tester);
-      // Step pills: "1. How are you?", "2. Programmes", "3. … form",
-      // "4. Summary".
+      // Step pills: "1. How are you?", "2. … form", "3. Summary".
       expect(find.textContaining(VisitFlowStrings.step1Title), findsOneWidget);
       expect(
-          find.textContaining(VisitFlowStrings.step2ProgrammeTitle),
-          findsOneWidget);
-      expect(
           find.textContaining(VisitFlowStrings.step2TitleSuffix), findsOneWidget);
-      expect(find.text('4. ${VisitFlowStrings.step3Title}'), findsOneWidget);
+      expect(find.text('3. ${VisitFlowStrings.step3Title}'), findsOneWidget);
     });
 
     testWidgets('"Back to visits" label is present on the header',
@@ -114,17 +113,15 @@ void main() {
 
   group('VisitFlowStrings', () {
     test('stepIndicatorFor interpolates the 1-based step number', () {
-      expect(VisitFlowStrings.stepIndicatorFor(1), 'Step 1 of 4');
-      expect(VisitFlowStrings.stepIndicatorFor(2), 'Step 2 of 4');
-      expect(VisitFlowStrings.stepIndicatorFor(3), 'Step 3 of 4');
-      expect(VisitFlowStrings.stepIndicatorFor(4), 'Step 4 of 4');
+      expect(VisitFlowStrings.stepIndicatorFor(1), 'Step 1 of 3');
+      expect(VisitFlowStrings.stepIndicatorFor(2), 'Step 2 of 3');
+      expect(VisitFlowStrings.stepIndicatorFor(3), 'Step 3 of 3');
     });
 
-    test('all 4 step labels are non-empty', () {
+    test('all 3 step labels are non-empty', () {
       expect(VisitFlowStrings.step1Label, isNotEmpty);
       expect(VisitFlowStrings.step2Label, isNotEmpty);
       expect(VisitFlowStrings.step3Label, isNotEmpty);
-      expect(VisitFlowStrings.step4Label, isNotEmpty);
     });
   });
 

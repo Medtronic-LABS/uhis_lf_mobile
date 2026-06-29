@@ -125,8 +125,14 @@ class _ProgrammeSelectionScreenState extends State<ProgrammeSelectionScreen> {
           _RecommendationCard(
             recommendation: rec,
             isSelected: vm.isSelected(rec.programme),
-            onAccept: () => vm.addProgramme(rec.programme),
-            onSkip: () => vm.removeProgramme(rec.programme),
+            onAccept: () {
+              vm.addProgramme(rec.programme);
+              _showProgrammeToast(context, rec.programme, added: true);
+            },
+            onSkip: () {
+              vm.removeProgramme(rec.programme);
+              _showProgrammeToast(context, rec.programme, added: false);
+            },
           ),
           const SizedBox(height: 10),
         ],
@@ -160,9 +166,51 @@ class _ProgrammeSelectionScreenState extends State<ProgrammeSelectionScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (ctx) => _AddProgrammeSheet(vm: vm),
+      builder: (ctx) => _AddProgrammeSheet(
+        vm: vm,
+        onAdded: (p) => _showProgrammeToast(context, p, added: true),
+      ),
     );
   }
+}
+
+/// Shared confirmation toast. Pops a 1.5 s SnackBar at the bottom of the
+/// scaffold whenever the SK adds or removes a programme from the
+/// recommendations or the add-programme sheet.
+void _showProgrammeToast(
+  BuildContext context,
+  Programme programme,
+  {required bool added}
+) {
+  if (programme == Programme.unknown) return;
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  if (messenger == null) return;
+  messenger.hideCurrentSnackBar();
+  messenger.showSnackBar(
+    SnackBar(
+      duration: const Duration(milliseconds: 1500),
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: added ? AppColors.statusSuccess : AppColors.navy,
+      content: Row(
+        children: [
+          Icon(
+            added ? Icons.check_circle_rounded : Icons.remove_circle_outline,
+            color: Colors.white,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              added
+                  ? ProgrammeSelectionStrings.toastAdded(programme.wireTag)
+                  : ProgrammeSelectionStrings.toastRemoved(programme.wireTag),
+              style: const TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 // ─── Loading skeleton ────────────────────────────────────────────────────────
@@ -650,8 +698,9 @@ class _RecommendationCard extends StatelessWidget {
 // ─── Add programme sheet ─────────────────────────────────────────────────────
 
 class _AddProgrammeSheet extends StatelessWidget {
-  const _AddProgrammeSheet({required this.vm});
+  const _AddProgrammeSheet({required this.vm, required this.onAdded});
   final ProgrammeSelectionViewModel vm;
+  final ValueChanged<Programme> onAdded;
 
   /// Programmes a user can manually add. We surface the full set known to
   /// the mobile app and exclude any already-selected programmes; SK can untick
@@ -737,6 +786,7 @@ class _AddProgrammeSheet extends StatelessWidget {
                               onTap: () {
                                 vm.addProgramme(p);
                                 Navigator.of(context).pop();
+                                onAdded(p);
                               },
                               borderRadius: BorderRadius.circular(20),
                               child: Container(

@@ -2810,6 +2810,12 @@ abstract final class ProgrammeSelectionStrings {
   static const String sourceBdNational = 'BD national';
   static const String sourcePatientContext = 'Context';
   static const String sourceSymptom = 'Symptom';
+
+  // Confirmation toasts shown when the SK accepts / removes a programme.
+  static String toastAdded(String programmeTag) =>
+      '$programmeTag added to this visit';
+  static String toastRemoved(String programmeTag) =>
+      '$programmeTag removed from this visit';
 }
 
 /// Visit completion screen strings.
@@ -2835,18 +2841,18 @@ abstract final class VisitFlowStrings {
   VisitFlowStrings._();
 
   static const String step1Label = 'Symptoms';
-  static const String step2Label = 'Programmes';
-  static const String step3Label = 'Vitals & form';
-  static const String step4Label = 'AI recommends';
+  static const String step2Label = 'Vitals & form';
+  static const String step3Label = 'AI recommends';
 
   // Step-pill titles inside the navy flow header.
-  // Step 3 (form) = "{programme} form" — programme name is computed at runtime.
+  // Step 2 (form) = "{programme} form" — programme name is computed at
+  // runtime. The AI Programme Recommendation phase is rendered inside Step 2
+  // BEFORE the form mounts, so the SK still sees 3 progress dots.
   static const String step1Title = 'How are you?';
-  static const String step2ProgrammeTitle = 'Programmes';
   static const String step2TitleSuffix = 'form';
   static const String step3Title = 'Summary';
 
-  static const String stepIndicator = 'Step %1 of 4';
+  static const String stepIndicator = 'Step %1 of 3';
   static String stepIndicatorFor(int oneBased) =>
       stepIndicator.replaceFirst('%1', oneBased.toString());
 

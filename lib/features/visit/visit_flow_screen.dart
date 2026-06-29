@@ -75,10 +75,12 @@ class VisitFlowScreen extends StatefulWidget {
 
 class _VisitFlowState extends State<VisitFlowScreen> {
   /// Total number of steps in the flow. Single source of truth for the
-  /// progress header + clamps + bounds checks.
-  static const int _totalSteps = 4;
+  /// progress header + clamps + bounds checks. Step 2 is a composite host
+  /// — it renders the AI programme recommendation first, then the screening
+  /// form — so the SK still sees three top-level progress dots.
+  static const int _totalSteps = 3;
 
-  /// Current step index — 0..3.
+  /// Current step index — 0..2.
   late int _step =
       widget.debugInitialStep?.clamp(0, _totalSteps - 1) ?? 0;
 
@@ -216,27 +218,11 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           },
         );
       case 1:
-        return _ProgrammeSelectionStepHost(
+        // Step 2 is composite: AI programme recommendation → form. The
+        // internal phase switch lives inside the host so the SK still sees a
+        // 3-step progress header.
+        return _Step2ProgrammesThenForm(
           key: ValueKey('flow-step2-${widget.visitId}'),
-          patientId: widget.patientId,
-          patientName: widget.patientName,
-          patientAge: widget.patientAge,
-          patientGender: widget.patientGender,
-          gestationalWeeks: widget.gestationalWeeks,
-          confirmedSymptoms: _confirmedSymptoms,
-          sicknessDuration: _sicknessDuration,
-          otherSymptoms: _otherSymptoms,
-          rulePathways: _pathways,
-          onContinue: (programmes) {
-            setState(() {
-              _confirmedProgrammes = programmes;
-              _step = 2;
-            });
-          },
-        );
-      case 2:
-        return _Step2VitalsForm(
-          key: ValueKey('flow-step3-${widget.visitId}'),
           visitId: widget.visitId,
           patientId: widget.patientId,
           memberId: widget.memberId,
@@ -244,26 +230,26 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           villageId: widget.villageId,
           householdMemberLocalId: widget.householdMemberLocalId,
           patientAge: widget.patientAge,
+          patientName: widget.patientName,
+          patientGender: widget.patientGender,
           gestationalWeeks: widget.gestationalWeeks,
-          // The form composer reads pathway names; the SK-confirmed
-          // programme set from Step 2 is authoritative.
-          pathwayNames: _confirmedProgrammes
-              .where((p) => p != Programme.unknown)
-              .map((p) => p.name)
-              .toList(),
+          confirmedSymptoms: _confirmedSymptoms,
+          sicknessDuration: _sicknessDuration,
+          otherSymptoms: _otherSymptoms,
+          seedProgrammes: _confirmedProgrammes,
           origin: widget.origin,
           onAdvance: (programme, referral) {
             setState(() {
               _primaryProgramme = programme;
               _referralRecommended = referral;
-              _step = 3;
+              _step = 2;
             });
           },
         );
-      case 3:
+      case 2:
       default:
         return _Step3AiReco(
-          key: ValueKey('flow-step4-${widget.visitId}'),
+          key: ValueKey('flow-step3-${widget.visitId}'),
           visitId: widget.visitId,
           patientLabel: widget.patientName ?? widget.patientId,
           primaryProgramme: _primaryProgramme,
@@ -350,9 +336,8 @@ class _VisitFlowHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final stepLabels = <String>[
       '1. ${VisitFlowStrings.step1Title}',
-      '2. ${VisitFlowStrings.step2ProgrammeTitle}',
-      '3. $_programmeLabel ${VisitFlowStrings.step2TitleSuffix}',
-      '4. ${VisitFlowStrings.step3Title}',
+      '2. $_programmeLabel ${VisitFlowStrings.step2TitleSuffix}',
+      '3. ${VisitFlowStrings.step3Title}',
     ];
 
     return Material(
@@ -585,7 +570,6 @@ class _Step1Symptoms extends StatelessWidget {
 /// Thin host for [VisitFormScreen] in the same pattern as Step 1.
 class _Step2VitalsForm extends StatelessWidget {
   const _Step2VitalsForm({
-    super.key,
     required this.visitId,
     required this.patientId,
     required this.onAdvance,
@@ -630,52 +614,75 @@ class _Step2VitalsForm extends StatelessWidget {
   }
 }
 
-/// Step 2 — AI Programme Recommendation.
+/// Step 2 — composite "AI programme recommendation → screening form".
 ///
-/// Builds the request payload from the SK-confirmed symptoms (carried over
-/// from Step 1) plus the patient's currentProgrammes (read from the local
-/// [PatientProgrammesDao]) and hands it to [ProgrammeSelectionScreen]. On
-/// continue, the SK-confirmed programme set advances to Step 3.
-class _ProgrammeSelectionStepHost extends StatefulWidget {
-  const _ProgrammeSelectionStepHost({
+/// Renders the [ProgrammeSelectionScreen] first; once the SK taps Continue,
+/// swaps to [VisitFormScreen] using the confirmed programme set. The phase
+/// switch is owned here so the top-level [VisitFlowScreen] keeps a 3-step
+/// progress header.
+///
+/// Back button behaviour:
+///   - From the form phase, hitting back returns to the programme phase
+///     (programme selection is preserved).
+///   - From the programme phase, back bubbles up to the host which drops to
+///     Step 1.
+class _Step2ProgrammesThenForm extends StatefulWidget {
+  const _Step2ProgrammesThenForm({
     super.key,
+    required this.visitId,
     required this.patientId,
     required this.confirmedSymptoms,
     required this.sicknessDuration,
     required this.otherSymptoms,
-    required this.rulePathways,
-    required this.onContinue,
-    this.patientName,
+    required this.seedProgrammes,
+    required this.onAdvance,
+    this.memberId,
+    this.householdId,
+    this.villageId,
+    this.householdMemberLocalId,
     this.patientAge,
+    this.patientName,
     this.patientGender,
     this.gestationalWeeks,
+    this.origin,
   });
 
+  final String visitId;
   final String patientId;
-  final String? patientName;
+  final String? memberId;
+  final String? householdId;
+  final String? villageId;
+  final int? householdMemberLocalId;
   final int? patientAge;
+  final String? patientName;
   final String? patientGender;
   final int? gestationalWeeks;
   final Set<String> confirmedSymptoms;
   final String? sicknessDuration;
   final String? otherSymptoms;
-  final List<ActivatedPathway> rulePathways;
-  final ValueChanged<Set<Programme>> onContinue;
+  final Set<Programme> seedProgrammes;
+  final String? origin;
+  final void Function(Programme primaryProgramme, bool referralRecommended)
+      onAdvance;
 
   @override
-  State<_ProgrammeSelectionStepHost> createState() =>
-      _ProgrammeSelectionStepHostState();
+  State<_Step2ProgrammesThenForm> createState() =>
+      _Step2ProgrammesThenFormState();
 }
 
-class _ProgrammeSelectionStepHostState
-    extends State<_ProgrammeSelectionStepHost> {
+enum _Step2Phase { programmes, form }
+
+class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
+  _Step2Phase _phase = _Step2Phase.programmes;
   Set<Programme> _currentProgrammes = const <Programme>{};
+  Set<Programme> _selectedProgrammes = const <Programme>{};
   Map<String, dynamic> _request = const <String, dynamic>{};
   bool _ready = false;
 
   @override
   void initState() {
     super.initState();
+    _selectedProgrammes = widget.seedProgrammes;
     WidgetsBinding.instance.addPostFrameCallback((_) => _hydrate());
   }
 
@@ -728,10 +735,33 @@ class _ProgrammeSelectionStepHostState
     if (!_ready) {
       return const Center(child: CircularProgressIndicator());
     }
-    return ProgrammeSelectionScreen(
-      request: _request,
-      currentProgrammes: _currentProgrammes,
-      onContinue: widget.onContinue,
+    if (_phase == _Step2Phase.programmes) {
+      return ProgrammeSelectionScreen(
+        request: _request,
+        currentProgrammes: _currentProgrammes,
+        onContinue: (programmes) {
+          setState(() {
+            _selectedProgrammes = programmes;
+            _phase = _Step2Phase.form;
+          });
+        },
+      );
+    }
+    return _Step2VitalsForm(
+      visitId: widget.visitId,
+      patientId: widget.patientId,
+      memberId: widget.memberId,
+      householdId: widget.householdId,
+      villageId: widget.villageId,
+      householdMemberLocalId: widget.householdMemberLocalId,
+      patientAge: widget.patientAge,
+      gestationalWeeks: widget.gestationalWeeks,
+      pathwayNames: _selectedProgrammes
+          .where((p) => p != Programme.unknown)
+          .map((p) => p.name)
+          .toList(),
+      origin: widget.origin,
+      onAdvance: widget.onAdvance,
     );
   }
 }
