@@ -21,7 +21,6 @@ import 'patient_context_builder.dart';
 import 'visit_step_header.dart';
 import 'triage_view_model.dart';
 import 'unified_symptom_catalog.dart';
-import '../../../core/widgets/skeleton.dart';
 
 /// Symptom picker screen for the triage step.
 ///
@@ -323,7 +322,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     if (_isLoading) {
       return Scaffold(
         appBar: AppBar(title: Text(TriageStrings.pickerTitle)),
-        body: const SkeletonSymptomPicker(),
+        body: const SizedBox.shrink(),
       );
     }
 

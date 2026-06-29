@@ -20,7 +20,6 @@ import '../visit/visit_controller.dart';
 import '../visit/widgets/widgets.dart';
 import 'dashboard_repository.dart';
 import 'mission_dashboard_repository.dart';
-import '../../core/widgets/skeleton.dart';
 
 enum _NeedFilter {
   highRisk,
@@ -567,14 +566,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       future: _queueFuture,
                       builder: (context, snap) {
                         if (snap.connectionState == ConnectionState.waiting) {
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              const _TodaysVisitsHeader(),
-                              const SizedBox(height: 8),
-                              const SkeletonPatientCardList(),
-                            ],
-                          );
+                          return const SizedBox.shrink();
                         }
                         final queue = snap.data ?? const [];
                         if (queue.isEmpty) {
