@@ -105,6 +105,23 @@ class RecentVitals {
       latestBmi == null;
 }
 
+/// Vitals from a single encounter/visit — used for visit-by-visit navigation.
+class VisitVitals {
+  const VisitVitals({
+    required this.encounterId,
+    required this.date,
+    required this.programme,
+    required this.readings,
+  });
+
+  final String encounterId;
+  final DateTime date;
+  final String programme;
+  final List<VitalReading> readings;
+
+  bool get isEmpty => readings.isEmpty;
+}
+
 /// Repository for fetching patient vitals history.
 ///
 /// Server-side vitals are sourced exclusively from the FHIR Observation
@@ -330,6 +347,105 @@ class VitalsRepository extends ApiRepository {
     final stripped = _bareId(patientId);
     final rows = await dao.recentForPatient(stripped, limit: limit);
     return rows.map((r) => r.id).where((id) => id.isNotEmpty).toList();
+  }
+
+  /// Returns vitals grouped by visit, newest visit first.
+  ///
+  /// Each [VisitVitals] holds all readings captured in one encounter.
+  /// Encounters with no vitals are omitted.
+  Future<List<VisitVitals>> recentByVisit(
+    String patientId, {
+    int limit = 10,
+  }) async {
+    final encDao = _encounters;
+    if (encDao == null) return const [];
+    final stripped = _bareId(patientId);
+    final result = <VisitVitals>[];
+    try {
+      final rows = await encDao.recentForPatient(stripped, limit: limit);
+      for (final row in rows) {
+        final m = row.vitalsData;
+        if (m == null || m.isEmpty) continue;
+        final ts = DateTime.fromMillisecondsSinceEpoch(
+            row.completedAt ?? row.startedAt);
+
+        double? asDouble(Object? v) {
+          if (v is num) return v.toDouble();
+          if (v is String) return double.tryParse(v);
+          return null;
+        }
+
+        final readings = <VitalReading>[];
+
+        final sys = asDouble(m['systolic'] ?? m['systolicBp']);
+        final dia = asDouble(m['diastolic'] ?? m['diastolicBp']);
+        if (sys != null && dia != null) {
+          readings.add(VitalReading(
+              type: VitalType.bloodPressure,
+              date: ts,
+              systolic: sys,
+              diastolic: dia,
+              unit: 'mmHg'));
+        }
+
+        final glucose = asDouble(m['glucose'] ?? m['bloodGlucose'] ?? m['glucoseValue'] ?? m['bg']);
+        if (glucose != null) {
+          readings.add(VitalReading(
+              type: VitalType.glucose, date: ts, value: glucose, unit: 'mg/dL'));
+        }
+
+        final weight = asDouble(m['weight']);
+        if (weight != null) {
+          readings.add(VitalReading(
+              type: VitalType.weight, date: ts, value: weight, unit: 'kg'));
+        }
+
+        final height = asDouble(m['height']);
+        if (height != null) {
+          readings.add(VitalReading(
+              type: VitalType.height, date: ts, value: height, unit: 'cm'));
+        }
+
+        double? bmi = asDouble(m['bmi']);
+        if (bmi == null && height != null && weight != null && height > 0) {
+          final h = height / 100.0;
+          bmi = weight / (h * h);
+        }
+        if (bmi != null) {
+          readings.add(VitalReading(type: VitalType.bmi, date: ts, value: bmi));
+        }
+
+        final temp = asDouble(m['temperature'] ?? m['temp']);
+        if (temp != null) {
+          readings.add(VitalReading(
+              type: VitalType.temperature, date: ts, value: temp, unit: '°C'));
+        }
+
+        final spo2 = asDouble(m['spO2'] ?? m['spo2'] ?? m['oxygenSaturation']);
+        if (spo2 != null) {
+          readings.add(VitalReading(
+              type: VitalType.spO2, date: ts, value: spo2, unit: '%'));
+        }
+
+        final rr = asDouble(m['respiratoryRate'] ?? m['respiratoryRateValue']);
+        if (rr != null) {
+          readings.add(VitalReading(
+              type: VitalType.respiratoryRate, date: ts, value: rr, unit: '/min'));
+        }
+
+        if (readings.isNotEmpty) {
+          result.add(VisitVitals(
+            encounterId: row.id,
+            date: ts,
+            programme: row.programme,
+            readings: readings,
+          ));
+        }
+      }
+    } on Object catch (e) {
+      debugPrint('[VitalsRepository] recentByVisit failed: $e');
+    }
+    return result;
   }
 
 }

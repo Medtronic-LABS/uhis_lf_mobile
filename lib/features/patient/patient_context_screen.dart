@@ -8,6 +8,7 @@ import '../../core/constants/app_strings.dart';
 import '../../core/db/assessment_dao.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
+import '../../core/db/household_dao.dart';
 import '../../core/db/member_dao.dart' show MemberDao, HouseholdMemberEntity;
 import '../../core/models/programme.dart';
 import '../../core/models/risk.dart';
@@ -27,10 +28,12 @@ class PatientOrMemberData {
     this.localAssessments = const [],
     this.recentVisits = const [],
     this.memberId,
+    this.householdName,
   });
 
   final PatientWithProgrammes? localPatient;
   final MemberHealthDetails? remoteMember;
+  final String? householdName;
   final Set<Programme> programmes;
   final List<MemberAssessment> remoteAssessments;
 
@@ -131,6 +134,18 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
     });
   }
 
+  /// Looks up household name from the local DB. Returns null if not found.
+  Future<String?> _householdName(String? householdId) async {
+    if (householdId == null || householdId.isEmpty) return null;
+    try {
+      final dao = context.read<HouseholdDao>();
+      final entity = await dao.getById(householdId);
+      return entity?.name?.trim().isNotEmpty == true ? entity!.name : null;
+    } on Object {
+      return null;
+    }
+  }
+
   /// Build the local-first Recent Visits feed from three on-device sources.
   /// Spec: dashboard-prioritization-impl §Patient Detail; matches the
   /// offline-first contract (architecture.md §3.1). Returns deduped list
@@ -152,15 +167,24 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
       for (final e in encs) {
         final date = DateTime.fromMillisecondsSinceEpoch(
             e.completedAt ?? e.startedAt);
+        final prog = Programme.fromString(e.programme);
+        final serviceLabel = prog == Programme.unknown
+            ? 'Assessment'
+            : prog.wireTag;
         out.add(MemberAssessment(
           id: e.id,
-          type: e.programme.toUpperCase(),
+          type: serviceLabel,
           date: date,
           status: e.status.name,
           rawJson: <String, dynamic>{
             'programme': e.programme,
             'status': e.status.name,
             'serverVisitId': e.serverVisitId,
+            'encounterId': e.id,
+            'serviceProvided': serviceLabel,
+            if (e.triageData != null) ...e.triageData!,
+            if (e.vitalsData != null) ...e.vitalsData!,
+            if (e.assessmentData != null) ...e.assessmentData!,
           },
         ));
       }
@@ -263,6 +287,7 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
         localAssessments: localAssessments,
         recentVisits: visits,
         memberId: widget.patientId,
+        householdName: await _householdName(localPatient.patient.householdId),
       );
     }
 
@@ -313,6 +338,7 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
         localAssessments: localAssessments,
         recentVisits: visits,
         memberId: member.id,
+        householdName: await _householdName(member.householdId),
       );
     }
 
@@ -404,6 +430,7 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
         localAssessments: localAssessmentsList,
         recentVisits: visits,
         memberId: memberId,
+        householdName: await _householdName(data['householdId']?.toString()),
       );
     }
 
@@ -498,8 +525,6 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(14, 14, 14, 110),
                     children: [
-                      _GreetingCard(data: data),
-                      const SizedBox(height: 10),
                       if (data.riskReasons.isNotEmpty)
                         _AiSummaryCard(
                           name: data.name ?? PatientContextStrings.fallbackTitle,
@@ -551,7 +576,7 @@ class _AssessmentsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final dateFormat = DateFormat('MMM d, yyyy');
+    final dateFormat = DateFormat('MMM d, yyyy · h:mm a');
 
     if (assessments.isEmpty) {
       return Card(
@@ -1242,7 +1267,9 @@ class _PatientDetailHeader extends StatelessWidget {
     final subtitleParts = <String>[];
     if (data.age != null) subtitleParts.add('Age ${data.age}');
     if (data.gender != null) subtitleParts.add(data.gender!);
-    if (data.householdId != null) subtitleParts.add('HH ${data.householdId}');
+    if (data.householdId != null) {
+      subtitleParts.add(data.householdName ?? 'HH ${data.householdId}');
+    }
     final subtitle = subtitleParts.join(' · ');
 
     return Container(
@@ -1362,78 +1389,6 @@ class _PatientDetailHeader extends StatelessWidget {
     if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
     return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
         .toUpperCase();
-  }
-}
-
-class _GreetingCard extends StatelessWidget {
-  const _GreetingCard({required this.data});
-
-  final PatientOrMemberData data;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: tokens.cardSurface,
-        borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.waving_hand, size: 18, color: tokens.statusInfo),
-              const SizedBox(width: 6),
-              Text(
-                PatientContextStrings.sayHelloFirst,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: tokens.statusInfo,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: tokens.statusInfoSurface,
-              borderRadius: BorderRadius.circular(LeapfrogColors.radiusMd),
-              border: Border(
-                left: BorderSide(color: tokens.statusInfo, width: 3),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  PatientContextStrings.greetingBangla,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: tokens.brandNavy,
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  PatientContextStrings.greetingEnglish,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: tokens.statusInfo,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 

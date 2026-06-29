@@ -102,41 +102,12 @@ class _OpenFollowupsSectionState extends State<OpenFollowupsSection> {
 
             return Card(
               child: Column(
-                children: followUps.map((fu) {
-                  final isOverdue = fu.isOverdue;
-                  final dateStr = DateFormat.MMMd().format(fu.dueDate);
-                  final daysOverdue = isOverdue
-                      ? DateTime.now().difference(fu.dueDate).inDays
-                      : 0;
-
-                  return ListTile(
-                    leading: Icon(
-                      isOverdue ? Icons.warning_amber : Icons.schedule,
-                      color: isOverdue
-                          ? theme.colorScheme.error
-                          : theme.colorScheme.primary,
-                    ),
-                    title: Text(_typeLabel(fu.type)),
-                    subtitle: Text(
-                      isOverdue
-                          ? 'Overdue by $daysOverdue days'
-                          : 'Due $dateStr',
-                      style: TextStyle(
-                        color: isOverdue ? theme.colorScheme.error : null,
-                      ),
-                    ),
-                    trailing: fu.programme != null
-                        ? Chip(
-                            label: Text(
-                              fu.programme!,
-                              style: const TextStyle(fontSize: 11),
-                            ),
-                            padding: EdgeInsets.zero,
-                            visualDensity: VisualDensity.compact,
-                          )
-                        : null,
-                  );
-                }).toList(),
+                children: [
+                  for (var i = 0; i < followUps.length; i++) ...[
+                    if (i > 0) const Divider(height: 1, indent: 16, endIndent: 16),
+                    _FollowUpTile(fu: followUps[i], typeLabel: _typeLabel(followUps[i].type)),
+                  ],
+                ],
               ),
             );
           },
@@ -161,6 +132,174 @@ class _OpenFollowupsSectionState extends State<OpenFollowupsSection> {
         return 'Lost to follow-up check';
       case FollowUpType.other:
         return 'Follow-up';
+    }
+  }
+}
+
+class _FollowUpTile extends StatelessWidget {
+  const _FollowUpTile({required this.fu, required this.typeLabel});
+
+  final FollowUp fu;
+  final String typeLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isOverdue = fu.isOverdue;
+    final daysOverdue = isOverdue
+        ? DateTime.now().difference(fu.dueDate).inDays
+        : 0;
+    final dueDateStr =
+        DateFormat('MMM d, yyyy · h:mm a').format(fu.dueDate);
+    final iconColor =
+        isOverdue ? theme.colorScheme.error : theme.colorScheme.primary;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(_typeIcon(fu.type), size: 20, color: iconColor),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Title row
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        typeLabel,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    if (fu.programme != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          fu.programme!,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.onPrimaryContainer,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                // Due date + overdue badge
+                Row(
+                  children: [
+                    Text(
+                      dueDateStr,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: isOverdue
+                            ? theme.colorScheme.error
+                            : theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    if (isOverdue) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.errorContainer,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '$daysOverdue d overdue',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.error,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                // Reason
+                if (fu.reason != null && fu.reason!.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    fu.reason!,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                // Attempts
+                if (fu.attempts > 0) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    fu.unsuccessfulAttempts > 0
+                        ? '${fu.attempts} attempt${fu.attempts > 1 ? 's' : ''} · ${fu.unsuccessfulAttempts} unsuccessful'
+                        : '${fu.attempts} attempt${fu.attempts > 1 ? 's' : ''}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: fu.unsuccessfulAttempts > 0
+                          ? theme.colorScheme.error
+                          : theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+                // Referral site
+                if (fu.type == FollowUpType.referred &&
+                    fu.referredSiteId != null) ...[
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Icon(Icons.local_hospital_outlined,
+                          size: 12,
+                          color: theme.colorScheme.onSurfaceVariant),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Facility: ${fu.referredSiteId}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  IconData _typeIcon(FollowUpType type) {
+    switch (type) {
+      case FollowUpType.referred:
+        return Icons.local_hospital;
+      case FollowUpType.householdVisit:
+        return Icons.home;
+      case FollowUpType.lost:
+        return Icons.person_search;
+      case FollowUpType.medicalReview:
+        return Icons.medical_services;
+      case FollowUpType.screening:
+        return Icons.health_and_safety;
+      case FollowUpType.assessment:
+        return Icons.assignment;
+      case FollowUpType.other:
+        return Icons.schedule;
     }
   }
 }

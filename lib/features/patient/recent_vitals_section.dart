@@ -71,7 +71,8 @@ class RecentVitalsSection extends StatefulWidget {
 }
 
 class _RecentVitalsSectionState extends State<RecentVitalsSection> {
-  Future<RecentVitals>? _future;
+  Future<List<VisitVitals>>? _future;
+  int _page = 0;
 
   @override
   void initState() {
@@ -82,10 +83,8 @@ class _RecentVitalsSectionState extends State<RecentVitalsSection> {
   void _load() {
     final repo = context.read<VitalsRepository>();
     setState(() {
-      _future = repo.recent(
-        widget.patientId,
-        memberReference: widget.memberReference,
-      );
+      _future = repo.recentByVisit(widget.patientId);
+      _page = 0;
     });
   }
 
@@ -103,7 +102,7 @@ class _RecentVitalsSectionState extends State<RecentVitalsSection> {
           ),
         ),
         const SizedBox(height: 8),
-        FutureBuilder<RecentVitals>(
+        FutureBuilder<List<VisitVitals>>(
           future: _future,
           builder: (context, snap) {
             if (snap.connectionState == ConnectionState.waiting) {
@@ -135,8 +134,8 @@ class _RecentVitalsSectionState extends State<RecentVitalsSection> {
               );
             }
 
-            final vitals = snap.data;
-            if (vitals == null || vitals.isEmpty) {
+            final visits = snap.data;
+            if (visits == null || visits.isEmpty) {
               return Card(
                 color: theme.colorScheme.surfaceContainerHighest,
                 child: const Padding(
@@ -152,136 +151,206 @@ class _RecentVitalsSectionState extends State<RecentVitalsSection> {
               );
             }
 
-            final all = vitals.allReadings;
+            final total = visits.length;
+            final page = _page.clamp(0, total - 1);
+            final visit = visits[page];
 
-            // Build visible rows, separated by dividers
             final rows = <Widget>[];
-            void addRow(Widget row) {
-              if (rows.isNotEmpty) rows.add(const Divider(height: 24));
-              rows.add(row);
-            }
-
-            if (vitals.latestBp != null) {
-              final bp = vitals.latestBp!;
-              addRow(_VitalRow(
-                icon: Icons.favorite,
-                label: 'Blood Pressure',
-                value: bp.displayValue,
-                unit: 'mmHg',
-                date: bp.date,
-                classification: _classify(
-                    VitalType.bloodPressure, null, bp.systolic, bp.diastolic),
-                trend: bp.systolic != null
-                    ? _trendFor(all, VitalType.bloodPressure, bp.systolic!)
-                    : null,
-              ));
-            }
-
-            if (vitals.latestSpO2 != null) {
-              final r = vitals.latestSpO2!;
-              addRow(_VitalRow(
-                icon: Icons.air,
-                label: 'SpO₂',
-                value: r.displayValue,
-                unit: '%',
-                date: r.date,
-                classification: _classify(VitalType.spO2, r.value, null, null),
-                trend: r.value != null
-                    ? _trendFor(all, VitalType.spO2, r.value!)
-                    : null,
-              ));
-            }
-
-            if (vitals.latestRr != null) {
-              final r = vitals.latestRr!;
-              addRow(_VitalRow(
-                icon: Icons.waves,
-                label: 'Respiratory Rate',
-                value: r.displayValue,
-                unit: '/min',
-                date: r.date,
-                classification:
-                    _classify(VitalType.respiratoryRate, r.value, null, null),
-                trend: r.value != null
-                    ? _trendFor(all, VitalType.respiratoryRate, r.value!)
-                    : null,
-              ));
-            }
-
-            if (vitals.latestGlucose != null) {
-              final r = vitals.latestGlucose!;
-              addRow(_VitalRow(
-                icon: Icons.bloodtype,
-                label: 'Blood Glucose',
-                value: r.displayValue,
-                unit: 'mg/dL',
-                date: r.date,
-                classification: _classify(VitalType.glucose, r.value, null, null),
-                trend: r.value != null
-                    ? _trendFor(all, VitalType.glucose, r.value!)
-                    : null,
-              ));
-            }
-
-            if (vitals.latestWeight != null) {
-              final r = vitals.latestWeight!;
-              addRow(_VitalRow(
-                icon: Icons.monitor_weight,
-                label: 'Weight',
-                value: r.displayValue,
-                unit: 'kg',
-                date: r.date,
-                trend: r.value != null
-                    ? _trendFor(all, VitalType.weight, r.value!)
-                    : null,
-              ));
-            }
-
-            if (vitals.latestBmi != null) {
-              final r = vitals.latestBmi!;
-              addRow(_VitalRow(
-                icon: Icons.person,
-                label: 'BMI',
-                value: r.displayValue,
-                unit: 'kg/m²',
-                date: r.date,
-                classification: _classify(VitalType.bmi, r.value, null, null),
-                trend: r.value != null
-                    ? _trendFor(all, VitalType.bmi, r.value!)
-                    : null,
-              ));
-            }
-
-            if (vitals.latestTemperature != null) {
-              final r = vitals.latestTemperature!;
-              addRow(_VitalRow(
-                icon: Icons.thermostat,
-                label: 'Temperature',
-                value: r.displayValue,
-                unit: '°C',
-                date: r.date,
-                classification:
-                    _classify(VitalType.temperature, r.value, null, null),
-                trend: r.value != null
-                    ? _trendFor(all, VitalType.temperature, r.value!)
-                    : null,
-              ));
-            }
-
-            if (rows.isEmpty) {
-              return const SizedBox.shrink();
+            for (var i = 0; i < visit.readings.length; i++) {
+              if (i > 0) rows.add(const Divider(height: 24));
+              rows.add(_vitalRowFor(visit.readings[i], visit.readings));
             }
 
             return Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: Column(children: rows),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Visit date header
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              DateFormat('MMM d, yyyy · h:mm a').format(visit.date),
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: theme.colorScheme.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            if (page == 0) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.shade600,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'Latest',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        if (total > 1)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.chevron_left),
+                                iconSize: 20,
+                                visualDensity: VisualDensity.compact,
+                                tooltip: 'Older visit',
+                                onPressed: page < total - 1
+                                    ? () => setState(() => _page = page + 1)
+                                    : null,
+                              ),
+                              Text(
+                                '${page + 1}/$total',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.chevron_right),
+                                iconSize: 20,
+                                visualDensity: VisualDensity.compact,
+                                tooltip: 'Newer visit',
+                                onPressed: page > 0
+                                    ? () => setState(() => _page = page - 1)
+                                    : null,
+                              ),
+                            ],
+                          ),
+                      ],
+                    ),
+                    const Divider(height: 16),
+                    ...rows,
+                  ],
+                ),
               ),
             );
           },
         ),
       ],
     );
+  }
+
+  Widget _vitalRowFor(VitalReading r, List<VitalReading> all) {
+    switch (r.type) {
+      case VitalType.bloodPressure:
+        return _VitalRow(
+          icon: Icons.favorite,
+          label: 'Blood Pressure',
+          value: r.displayValue,
+          unit: 'mmHg',
+          date: r.date,
+          classification:
+              _classify(VitalType.bloodPressure, null, r.systolic, r.diastolic),
+          trend: r.systolic != null
+              ? _trendFor(all, VitalType.bloodPressure, r.systolic!)
+              : null,
+        );
+      case VitalType.spO2:
+        return _VitalRow(
+          icon: Icons.air,
+          label: 'SpO₂',
+          value: r.displayValue,
+          unit: '%',
+          date: r.date,
+          classification: _classify(VitalType.spO2, r.value, null, null),
+          trend: r.value != null
+              ? _trendFor(all, VitalType.spO2, r.value!)
+              : null,
+        );
+      case VitalType.respiratoryRate:
+        return _VitalRow(
+          icon: Icons.waves,
+          label: 'Respiratory Rate',
+          value: r.displayValue,
+          unit: '/min',
+          date: r.date,
+          classification:
+              _classify(VitalType.respiratoryRate, r.value, null, null),
+          trend: r.value != null
+              ? _trendFor(all, VitalType.respiratoryRate, r.value!)
+              : null,
+        );
+      case VitalType.glucose:
+        return _VitalRow(
+          icon: Icons.bloodtype,
+          label: 'Blood Glucose',
+          value: r.displayValue,
+          unit: 'mg/dL',
+          date: r.date,
+          classification: _classify(VitalType.glucose, r.value, null, null),
+          trend: r.value != null
+              ? _trendFor(all, VitalType.glucose, r.value!)
+              : null,
+        );
+      case VitalType.weight:
+        return _VitalRow(
+          icon: Icons.monitor_weight,
+          label: 'Weight',
+          value: r.displayValue,
+          unit: 'kg',
+          date: r.date,
+          trend: r.value != null
+              ? _trendFor(all, VitalType.weight, r.value!)
+              : null,
+        );
+      case VitalType.bmi:
+        return _VitalRow(
+          icon: Icons.person,
+          label: 'BMI',
+          value: r.displayValue,
+          unit: 'kg/m²',
+          date: r.date,
+          classification: _classify(VitalType.bmi, r.value, null, null),
+          trend: r.value != null
+              ? _trendFor(all, VitalType.bmi, r.value!)
+              : null,
+        );
+      case VitalType.temperature:
+        return _VitalRow(
+          icon: Icons.thermostat,
+          label: 'Temperature',
+          value: r.displayValue,
+          unit: '°C',
+          date: r.date,
+          classification:
+              _classify(VitalType.temperature, r.value, null, null),
+          trend: r.value != null
+              ? _trendFor(all, VitalType.temperature, r.value!)
+              : null,
+        );
+      case VitalType.height:
+        return _VitalRow(
+          icon: Icons.straighten,
+          label: 'Height',
+          value: r.displayValue,
+          unit: 'cm',
+          date: r.date,
+        );
+      case VitalType.muac:
+        return _VitalRow(
+          icon: Icons.straighten,
+          label: 'MUAC',
+          value: r.displayValue,
+          unit: 'cm',
+          date: r.date,
+        );
+    }
   }
 }
 
@@ -307,7 +376,6 @@ class _VitalRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final dateStr = DateFormat.MMMd().format(date);
 
     return Row(
       children: [
@@ -333,6 +401,15 @@ class _VitalRow extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
+                  if (unit != null) ...[
+                    const SizedBox(width: 4),
+                    Text(
+                      unit!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                   if (trend != null) ...[
                     const SizedBox(width: 4),
                     _TrendBadge(trend: trend!),
@@ -342,35 +419,22 @@ class _VitalRow extends StatelessWidget {
             ],
           ),
         ),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            if (classification != null)
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: _classificationColor(classification!, theme),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  classification!,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: _classificationTextColor(classification!, theme),
-                  ),
-                ),
-              ),
-            const SizedBox(height: 2),
-            Text(
-              dateStr,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+        if (classification != null)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: _classificationColor(classification!, theme),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              classification!,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: _classificationTextColor(classification!, theme),
               ),
             ),
-          ],
-        ),
+          ),
       ],
     );
   }
