@@ -663,12 +663,92 @@ class _AssessmentsSection extends StatelessWidget {
                 child: Center(
                   child: TextButton(
                     onPressed: () {
-                      // TODO: Show full assessment list
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        backgroundColor: Colors.transparent,
+                        builder: (_) => _AllAssessmentsSheet(
+                          assessments: assessments,
+                          dateFormat: dateFormat,
+                        ),
+                      );
                     },
                     child: Text('View all ${assessments.length} assessments'),
                   ),
                 ),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom sheet listing all assessments — shown when the SK taps "View all N assessments".
+class _AllAssessmentsSheet extends StatelessWidget {
+  const _AllAssessmentsSheet({
+    required this.assessments,
+    required this.dateFormat,
+  });
+
+  final List<MemberAssessment> assessments;
+  final DateFormat dateFormat;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      builder: (context, scrollController) => Container(
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: scheme.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Row(
+                children: [
+                  Text(
+                    PatientContextStrings.allAssessmentsTitle,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '${assessments.length} total',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView.builder(
+                controller: scrollController,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                itemCount: assessments.length,
+                itemBuilder: (context, index) => _AssessmentTile(
+                  assessment: assessments[index],
+                  dateFormat: dateFormat,
+                ),
+              ),
+            ),
           ],
         ),
       ),

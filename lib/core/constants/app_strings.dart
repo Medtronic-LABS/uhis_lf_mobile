@@ -502,6 +502,8 @@ abstract final class PatientContextStrings {
       'How is everyone? How is the patient today?';
   static String aiSummaryLead(String name) =>
       '$name has the following risk drivers worth addressing today.';
+
+  static const String allAssessmentsTitle = 'All assessments';
 }
 
 
