@@ -12,6 +12,7 @@ import '../../core/widgets/location_filter_sheet.dart';
 import '../dashboard/dashboard_repository.dart';
 import '../dashboard/mission_dashboard_repository.dart';
 import 'household_detail_screen.dart';
+import '../../core/widgets/skeleton.dart';
 
 /// View mode for the list screen.
 enum HouseholdListMode {
@@ -336,12 +337,12 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
         ),
       ),
       body: _future == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const SkeletonHouseholdList()
           : FutureBuilder<List<_HouseholdItem>>(
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const SkeletonHouseholdList();
           }
           if (snapshot.hasError) {
             // ignore: avoid_print

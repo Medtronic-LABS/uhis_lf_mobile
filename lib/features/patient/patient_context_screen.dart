@@ -20,6 +20,7 @@ import 'recent_vitals_section.dart';
 import 'vitals_repository.dart';
 import '../visit/briefing/visit_briefing_repository.dart';
 import 'followup_repository.dart';
+import '../../core/widgets/skeleton.dart';
 
 /// Combined data type that can hold either a local patient or remote member.
 class PatientOrMemberData {
@@ -470,9 +471,7 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
         future: _future,
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
-            return const SafeArea(
-              child: Center(child: CircularProgressIndicator()),
-            );
+            return const SafeArea(child: SkeletonPatientDetail());
           }
           final data = snap.data;
           if (data == null || !data.hasData) {

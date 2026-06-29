@@ -11,6 +11,7 @@ import 'widgets/sync_strip.dart';
 import 'widgets/urgent_banner.dart';
 import 'widgets/worklist_card.dart';
 import 'worklist_repository.dart';
+import '../../core/widgets/skeleton.dart';
 
 /// Embedded view rendered into `DashboardScreen` — not a standalone route.
 /// The dashboard supplies the AppBar; we own the chip row, sync strip,
@@ -121,7 +122,7 @@ class _WorklistViewState extends State<WorklistView> {
               future: _future,
               builder: (context, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const SkeletonPatientCardList();
                 }
                 if (snap.hasError) {
                   return _ErrorState(

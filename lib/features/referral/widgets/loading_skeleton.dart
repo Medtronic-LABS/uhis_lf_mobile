@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/widgets/skeleton.dart';
+
+export '../../../core/widgets/skeleton.dart' show SkeletonBox, SkeletonAnimation;
+
 /// Shimmer loading skeleton for referral list.
-class ReferralLoadingSkeleton extends StatefulWidget {
+class ReferralLoadingSkeleton extends StatelessWidget {
   const ReferralLoadingSkeleton({
     super.key,
     this.itemCount = 5,
@@ -10,48 +14,20 @@ class ReferralLoadingSkeleton extends StatefulWidget {
   final int itemCount;
 
   @override
-  State<ReferralLoadingSkeleton> createState() => _ReferralLoadingSkeletonState();
-}
-
-class _ReferralLoadingSkeletonState extends State<ReferralLoadingSkeleton>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 1500),
-      vsync: this,
-    )..repeat();
-    _animation = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _animation,
-      builder: (context, child) => ListView.builder(
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: widget.itemCount,
-        itemBuilder: (context, index) => _SkeletonCard(
-          shimmerValue: _animation.value,
-          delay: index * 0.15,
+  Widget build(BuildContext context) => SkeletonAnimation(
+        builder: (context, v) => ListView.builder(
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: itemCount,
+          itemBuilder: (_, i) => _ReferralCardSkeleton(
+            shimmerValue: v,
+            delay: i * 0.15,
+          ),
         ),
-      ),
-    );
-  }
+      );
 }
 
-class _SkeletonCard extends StatelessWidget {
-  const _SkeletonCard({
+class _ReferralCardSkeleton extends StatelessWidget {
+  const _ReferralCardSkeleton({
     required this.shimmerValue,
     this.delay = 0,
   });
@@ -62,7 +38,7 @@ class _SkeletonCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final adjustedValue = (shimmerValue + delay) % 1.0;
+    final v = (shimmerValue + delay) % 1.0;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -72,92 +48,40 @@ class _SkeletonCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Identity strip skeleton
-            Row(
-              children: [
-                _ShimmerBox(
-                  width: 120,
-                  height: 20,
-                  value: adjustedValue,
-                  scheme: scheme,
-                ),
-                const SizedBox(width: 8),
-                _ShimmerBox(
-                  width: 40,
-                  height: 20,
-                  value: adjustedValue,
-                  scheme: scheme,
-                ),
-                const Spacer(),
-                _ShimmerBox(
-                  width: 70,
-                  height: 24,
-                  borderRadius: 12,
-                  value: adjustedValue,
-                  scheme: scheme,
-                ),
-              ],
-            ),
+            // Identity strip
+            Row(children: [
+              SkeletonBox(shimmerValue: v, width: 120, height: 20),
+              const SizedBox(width: 8),
+              SkeletonBox(shimmerValue: v, width: 40, height: 20, delay: 0.04),
+              const Spacer(),
+              SkeletonBox(shimmerValue: v, width: 70, height: 24, borderRadius: 12, delay: 0.06),
+            ]),
             const SizedBox(height: 14),
 
-            // SLA banner skeleton
-            _ShimmerBox(
-              width: double.infinity,
-              height: 56,
-              borderRadius: 12,
-              value: adjustedValue,
-              scheme: scheme,
-            ),
+            // SLA banner
+            SkeletonBox(shimmerValue: v, width: double.infinity, height: 56, borderRadius: 12, delay: 0.08),
             const SizedBox(height: 14),
 
-            // Metadata skeleton
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _ShimmerBox(
-                        width: 80,
-                        height: 14,
-                        value: adjustedValue,
-                        scheme: scheme,
-                      ),
-                      const SizedBox(height: 6),
-                      _ShimmerBox(
-                        width: 120,
-                        height: 14,
-                        value: adjustedValue,
-                        scheme: scheme,
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _ShimmerBox(
-                        width: 60,
-                        height: 14,
-                        value: adjustedValue,
-                        scheme: scheme,
-                      ),
-                      const SizedBox(height: 6),
-                      _ShimmerBox(
-                        width: 100,
-                        height: 14,
-                        value: adjustedValue,
-                        scheme: scheme,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+            // Metadata columns
+            Row(children: [
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  SkeletonBox(shimmerValue: v, width: 80, height: 14, delay: 0.10),
+                  const SizedBox(height: 6),
+                  SkeletonBox(shimmerValue: v, width: 120, height: 14, delay: 0.12),
+                ]),
+              ),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  SkeletonBox(shimmerValue: v, width: 60, height: 14, delay: 0.10),
+                  const SizedBox(height: 6),
+                  SkeletonBox(shimmerValue: v, width: 100, height: 14, delay: 0.12),
+                ]),
+              ),
+            ]),
             const SizedBox(height: 14),
 
-            // Timeline skeleton
+            // Timeline row
             Container(
               height: 48,
               decoration: BoxDecoration(
@@ -168,92 +92,28 @@ class _SkeletonCard extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: List.generate(
                   5,
-                  (i) => _ShimmerBox(
+                  (i) => SkeletonBox(
+                    shimmerValue: v,
                     width: 40,
                     height: 24,
                     borderRadius: 12,
-                    value: (adjustedValue + i * 0.1) % 1.0,
-                    scheme: scheme,
+                    delay: 0.10 + i * 0.05,
                   ),
                 ),
               ),
             ),
             const SizedBox(height: 14),
 
-            // Action buttons skeleton
-            Row(
-              children: [
-                _ShimmerBox(
-                  width: 80,
-                  height: 32,
-                  borderRadius: 8,
-                  value: adjustedValue,
-                  scheme: scheme,
-                ),
-                const SizedBox(width: 8),
-                _ShimmerBox(
-                  width: 80,
-                  height: 32,
-                  borderRadius: 8,
-                  value: adjustedValue,
-                  scheme: scheme,
-                ),
-                const Spacer(),
-                _ShimmerBox(
-                  width: 100,
-                  height: 32,
-                  borderRadius: 8,
-                  value: adjustedValue,
-                  scheme: scheme,
-                ),
-              ],
-            ),
+            // Action buttons
+            Row(children: [
+              SkeletonBox(shimmerValue: v, width: 80, height: 32, borderRadius: 8, delay: 0.14),
+              const SizedBox(width: 8),
+              SkeletonBox(shimmerValue: v, width: 80, height: 32, borderRadius: 8, delay: 0.16),
+              const Spacer(),
+              SkeletonBox(shimmerValue: v, width: 100, height: 32, borderRadius: 8, delay: 0.18),
+            ]),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _ShimmerBox extends StatelessWidget {
-  const _ShimmerBox({
-    required this.width,
-    required this.height,
-    required this.value,
-    required this.scheme,
-    this.borderRadius = 6,
-  });
-
-  final double width;
-  final double height;
-  final double value;
-  final ColorScheme scheme;
-  final double borderRadius;
-
-  @override
-  Widget build(BuildContext context) {
-    // Gradient that slides across the box
-    final gradient = LinearGradient(
-      begin: Alignment.centerLeft,
-      end: Alignment.centerRight,
-      colors: [
-        scheme.surfaceContainerLow,
-        scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        scheme.surfaceContainerLow,
-      ],
-      stops: [
-        (value - 0.3).clamp(0.0, 1.0),
-        value,
-        (value + 0.3).clamp(0.0, 1.0),
-      ],
-    );
-
-    return Container(
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        gradient: gradient,
-        borderRadius: BorderRadius.circular(borderRadius),
       ),
     );
   }
@@ -293,27 +153,19 @@ class ReferralEmptyState extends StatelessWidget {
                 color: scheme.surfaceContainerLow,
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                icon,
-                size: 64,
-                color: scheme.outline,
-              ),
+              child: Icon(icon, size: 64, color: scheme.outline),
             ),
             const SizedBox(height: 24),
             Text(
               title,
-              style: textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+              style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
               textAlign: TextAlign.center,
             ),
             if (subtitle != null) ...[
               const SizedBox(height: 8),
               Text(
                 subtitle!,
-                style: textTheme.bodyMedium?.copyWith(
-                  color: scheme.outline,
-                ),
+                style: textTheme.bodyMedium?.copyWith(color: scheme.outline),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -332,7 +184,7 @@ class ReferralEmptyState extends StatelessWidget {
   }
 }
 
-/// Offline indicator banner that shows when device is offline.
+/// Offline indicator banner.
 class OfflineIndicator extends StatelessWidget {
   const OfflineIndicator({
     super.key,
@@ -355,11 +207,7 @@ class OfflineIndicator extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.cloud_off_rounded,
-            size: 20,
-            color: scheme.onErrorContainer,
-          ),
+          Icon(Icons.cloud_off_rounded, size: 20, color: scheme.onErrorContainer),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -386,9 +234,7 @@ class OfflineIndicator extends StatelessWidget {
           if (onRetry != null)
             TextButton(
               onPressed: onRetry,
-              style: TextButton.styleFrom(
-                foregroundColor: scheme.onErrorContainer,
-              ),
+              style: TextButton.styleFrom(foregroundColor: scheme.onErrorContainer),
               child: const Text('Retry'),
             ),
         ],
@@ -397,12 +243,9 @@ class OfflineIndicator extends StatelessWidget {
   }
 }
 
-/// Syncing indicator that shows during sync operations.
+/// Syncing indicator banner.
 class SyncingIndicator extends StatelessWidget {
-  const SyncingIndicator({
-    super.key,
-    this.message = 'Syncing...',
-  });
+  const SyncingIndicator({super.key, this.message = 'Syncing...'});
 
   final String message;
 

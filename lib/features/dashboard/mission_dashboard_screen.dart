@@ -20,6 +20,7 @@ import '../visit/visit_controller.dart';
 import '../visit/widgets/widgets.dart';
 import 'dashboard_repository.dart';
 import 'mission_dashboard_repository.dart';
+import '../../core/widgets/skeleton.dart';
 
 enum _NeedFilter {
   highRisk,
@@ -571,11 +572,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             children: [
                               const _TodaysVisitsHeader(),
                               const SizedBox(height: 8),
-                              const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 32),
-                                child:
-                                    Center(child: CircularProgressIndicator()),
-                              ),
+                              const SkeletonPatientCardList(),
                             ],
                           );
                         }
