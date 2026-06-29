@@ -718,18 +718,271 @@ def page_changelog():
 
 
 # ---------------------------------------------------------------------------
+# AI Service page builders
+# Paths relative to the leapfrog-setup/ root (one level above REPO_ROOT).
+# ---------------------------------------------------------------------------
+
+_LF_ROOT = REPO_ROOT.parent  # leapfrog-setup/
+
+
+def _read_py(rel: str) -> str:
+    """Read a Python source file relative to leapfrog-setup/. Returns '' on missing."""
+    path = _LF_ROOT / rel
+    return path.read_text() if path.exists() else ""
+
+
+def _parse_fastapi_routes(src: str) -> list[tuple[str, str, str, str]]:
+    """
+    Extract FastAPI route tuples (method, path, response_model, docstring)
+    from source text using regex.
+    Returns list of (METHOD, path, response_model, summary).
+    """
+    routes = []
+    pattern = re.compile(
+        r'@router\.(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']'
+        r'(?:[^)]*response_model\s*=\s*(\w+))?[^)]*\)'
+        r'(?:\s*@[^\n]+\n)*'          # skip stacked decorators
+        r'\s*(?:async\s+)?def\s+\w+[^:]*:'
+        r'\s*"""([^"]*?)"""',
+        re.DOTALL,
+    )
+    for m in pattern.finditer(src):
+        method = m.group(1).upper()
+        path = m.group(2)
+        model = m.group(3) or "—"
+        doc = m.group(4).strip().split("\n")[0].strip() if m.group(4) else "—"
+        routes.append((method, path, model, doc))
+    return routes
+
+
+def _parse_pydantic_models(src: str) -> list[tuple[str, list[str]]]:
+    """
+    Extract Pydantic model names and their field names from source text.
+    Returns list of (ModelName, [field: type, ...]).
+    """
+    models = []
+    # Match class Foo(BaseModel): ... until next class or EOF
+    class_pattern = re.compile(r'class\s+(\w+)\s*\((?:BaseModel|[A-Za-z]+Model)\)[^:]*:(.*?)(?=\nclass |\Z)', re.DOTALL)
+    field_pattern = re.compile(r'^\s{4}(\w+)\s*:\s*([^\n=]+?)(?:\s*=.*)?$', re.MULTILINE)
+    for cm in class_pattern.finditer(src):
+        name = cm.group(1)
+        body = cm.group(2)
+        fields = [f"{fm.group(1)}: {fm.group(2).strip()}" for fm in field_pattern.finditer(body)]
+        if fields:
+            models.append((name, fields))
+    return models
+
+
+def _parse_settings(src: str) -> list[tuple[str, str, str]]:
+    """
+    Extract settings fields from a pydantic-settings class.
+    Returns list of (field_name, type_hint, default).
+    """
+    settings = []
+    field_pat = re.compile(r'^\s{4}(\w+)\s*:\s*([^\n=]+?)\s*=\s*(.+)$', re.MULTILINE)
+    for m in field_pat.finditer(src):
+        name = m.group(1)
+        if name.startswith("model_"):
+            continue
+        settings.append((name.upper(), m.group(2).strip(), m.group(3).strip().strip('"').strip("'")))
+    return settings
+
+
+def page_ai_scribe():
+    scribe_root = "ai-scribe-service/app"
+
+    scribe_src   = _read_py(f"{scribe_root}/api/scribe.py")
+    upload_src   = _read_py(f"{scribe_root}/api/upload.py")
+    schemas_src  = _read_py(f"{scribe_root}/models/schemas.py")
+    config_src   = _read_py(f"{scribe_root}/core/config.py")
+
+    scribe_routes = _parse_fastapi_routes(scribe_src)
+    upload_routes = _parse_fastapi_routes(upload_src)
+    models        = _parse_pydantic_models(schemas_src)
+    env_vars      = _parse_settings(config_src)
+
+    scribe_rows = [
+        [f"<code>{m}</code>", f"<code>/ai-scribe-service{p}</code>", f"<code>{r}</code>", d]
+        for m, p, r, d in scribe_routes
+    ]
+    upload_rows = [
+        [f"<code>{m}</code>", f"<code>/ai-scribe-service{p}</code>", f"<code>{r}</code>", d]
+        for m, p, r, d in upload_routes
+    ]
+
+    model_html = ""
+    for name, fields in models:
+        model_html += h(3, name)
+        model_html += ul([f"<code>{f}</code>" for f in fields])
+
+    env_rows = [(f"<code>{n}</code>", t, d) for n, t, d in env_vars]
+
+    async_flow = [
+        "<strong>POST /scribe/transcribe</strong> — upload audio → 202 Accepted + jobId",
+        "<strong>GET /scribe/results/{jobId}</strong> — poll until status = completed",
+        "<strong>GET /scribe/notes/{noteId}</strong> — fetch full SOAP note + FHIR Bundle + rationale",
+        "<strong>POST /scribe/notes/{noteId}/accept</strong> — SK confirms; edits logged",
+        "<strong>POST /scribe/notes/{noteId}/reject</strong> — SK discards; reason logged",
+    ]
+
+    chunked_flow = [
+        "<strong>POST /upload/init</strong> — create session → uploadId + chunk params",
+        "<strong>PUT /upload/{id}/chunk/{n}</strong> — send 256 KB slice (any order, resumable)",
+        "<strong>GET /upload/{id}/status</strong> — check progress + missing chunks",
+        "<strong>POST /upload/{id}/complete</strong> — assemble → S3 → queue transcription job",
+        "<strong>DELETE /upload/{id}</strong> — cancel session",
+    ]
+
+    return (
+        h(1, "AI Scribe Service")
+        + info(
+            "Voice → SOAP note pipeline for offline-first community health workers. "
+            "Transcribes audio using Gemini / OpenAI / Sarvam ASR, runs structured inference, "
+            "builds a FHIR R4 Bundle, and waits for SK acceptance before committing."
+        )
+        + table(
+            ["Item", "Value"],
+            [
+                ["Language", "Python 3.12 · FastAPI · Gunicorn + Uvicorn workers"],
+                ["Port", "8095"],
+                ["Gateway prefix", "<code>/ai-scribe-service/</code>"],
+                ["Database", "PostgreSQL 16 — schema <code>ai_scribe</code>"],
+                ["Auth cache", "Redis 7"],
+                ["Default ASR model", "<code>gemini-2.5-flash</code>"],
+                ["Default inference model", "<code>gpt-4o-mini</code>"],
+                ["Audio storage", "S3 — folder <code>scribe/</code>"],
+                ["Last published", TODAY],
+            ],
+        )
+        + h(2, "Async Transcription Flow")
+        + p("Optimised for rural Android devices on 2G/3G. Audio &lt; 1 MB → direct POST. Audio ≥ 1 MB → chunked upload then complete.")
+        + ul(async_flow)
+        + h(2, "Chunked Upload Flow")
+        + p("256 KB chunks, resumable, 24-hour session TTL. Designed for connectivity drops in rural Bangladesh.")
+        + ul(chunked_flow)
+        + h(2, "Scribe Endpoints")
+        + (table(["Method", "Path (via gateway)", "Response model", "Summary"], scribe_rows)
+           if scribe_rows else p("No routes parsed."))
+        + h(2, "Upload Endpoints")
+        + (table(["Method", "Path (via gateway)", "Response model", "Summary"], upload_rows)
+           if upload_rows else p("No routes parsed."))
+        + h(2, "Request / Response Models")
+        + (model_html if model_html else p("No Pydantic models parsed."))
+        + h(2, "Environment Variables")
+        + (table(["Variable", "Type", "Default"], env_rows) if env_rows else p("No settings parsed."))
+        + h(2, "Human-in-the-loop invariant")
+        + warning(
+            "A scribe note is a <strong>proposal</strong> until explicitly accepted by the SK. "
+            "Every accept/reject action is logged with the rationale snapshot (modelVersion, asrProvider, "
+            "llmModel, confidence, humanReviewRequired). Auto-commit is prohibited."
+        )
+        + note("This page is auto-generated from ai-scribe-service/app/ source on every push to main.")
+    )
+
+
+def page_ai_visit_briefing():
+    svc_root = "ai-visit-briefing-service/app"
+
+    main_src    = _read_py(f"{svc_root}/main.py")
+    models_src  = _read_py(f"{svc_root}/models.py")
+    gemini_src  = _read_py(f"{svc_root}/services/gemini_service.py")
+
+    routes = _parse_fastapi_routes(main_src)
+    models = _parse_pydantic_models(models_src)
+
+    route_rows = [
+        [f"<code>{m}</code>", f"<code>/ai-visit-briefing-service{p}</code>", f"<code>{r}</code>", d]
+        for m, p, r, d in routes
+    ]
+
+    model_html = ""
+    for name, fields in models:
+        model_html += h(3, name)
+        model_html += ul([f"<code>{f}</code>" for f in fields])
+
+    # Parse Gemini model constant from gemini_service.py
+    gemini_model = "gemini-2.5-flash"
+    m = re.search(r'gemini[_-][\w.-]+', gemini_src)
+    if m:
+        gemini_model = m.group(0).replace("_", "-")
+
+    cards = [
+        ["Before You Knock", "<code>briefingCard</code>", "AI headline + 3-5 clinical bullet points (most important concern first)"],
+        ["Today's Priorities", "<code>todaysPriorities</code>", "Numbered list of 3-5 actionable visit priorities with clinical specifics"],
+        ["Suggested Discussion Points", "<code>suggestedDiscussionPoints</code>", "Culturally appropriate opening line + topic sections (heart / baby / nutrition / medication / lungs / home / checkup) each with 2-3 open-ended questions"],
+    ]
+
+    briefing_request_fields = [
+        ["patientId", "Required — used for logging"],
+        ["activeProgrammes", "Drives which topics appear in Discussion Points"],
+        ["gestationalWeeks", "Triggers pregnancy-specific priorities"],
+        ["recentVitals", "BP / glucose / weight snapshot → referenced in Today's Priorities"],
+        ["openFollowUps", "Overdue follow-ups surfaced in Before You Knock"],
+        ["riskIndicators", "Clinical risk tags → headline severity"],
+        ["currentMedications", "Drug adherence check in Discussion Points"],
+    ]
+
+    return (
+        h(1, "AI Visit Briefing Service")
+        + info(
+            "Generates three pre-visit AI briefing cards for the SK before each patient encounter. "
+            "Cards are fetched asynchronously while the SK reviews symptoms on the triage screen. "
+            "Powered by Gemini " + gemini_model + "."
+        )
+        + table(
+            ["Item", "Value"],
+            [
+                ["Language", "Python 3.12 · FastAPI"],
+                ["Port", "8096"],
+                ["Gateway prefix", "<code>/ai-visit-briefing-service/</code>"],
+                ["Direct dev URL", "<code>--dart-define=AI_SERVICE_URL=http://10.0.2.2:8096</code>"],
+                ["AI model", f"<code>{gemini_model}</code>"],
+                ["Auth", "None (internal service; gateway handles auth)"],
+                ["Last published", TODAY],
+            ],
+        )
+        + h(2, "Three Briefing Cards")
+        + table(["Card", "Response field", "Content"], cards)
+        + h(2, "Endpoints")
+        + (table(["Method", "Path (via gateway)", "Response model", "Summary"], route_rows)
+           if route_rows else p("No routes parsed."))
+        + h(2, "BriefingRequest — key fields")
+        + table(["Field", "Purpose"], briefing_request_fields)
+        + h(2, "Request / Response Models")
+        + (model_html if model_html else p("No Pydantic models parsed."))
+        + h(2, "Flutter integration")
+        + p(
+            "Called from <code>VisitBriefingRepository</code> in <code>lib/features/visit/briefing/</code>. "
+            "Fetch starts immediately after <code>PatientContext</code> is built in <code>SymptomPickerScreen</code>. "
+            "Cards update when data arrives; a loading skeleton is shown during the fetch. "
+            "Graceful degradation: Card 1 falls back to rule-based context chips; Cards 2 &amp; 3 show "
+            "&#34;AI unavailable&#34; when the service is unreachable."
+        )
+        + h(2, "Graceful degradation")
+        + ul([
+            "Card 1 (Before You Knock) falls back to local rule-based context chips.",
+            "Cards 2 &amp; 3 (Priorities + Discussion) show &#34;AI unavailable&#34; — visit proceeds normally.",
+            "No crash, no blocked flow — offline-first contract maintained.",
+        ])
+        + note("This page is auto-generated from ai-visit-briefing-service/app/ source on every push to main.")
+    )
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 PAGES = [
-    ("UHIS Leapfrog Mobile",   page_home),
-    ("Developer Setup Guide",  page_developer_setup),
-    ("Architecture Overview",  page_architecture),
-    ("Screens & Navigation",   page_screens),
-    ("Offline Sync Model",     page_offline_sync),
-    ("Database Schema",        page_database),
-    ("Assessment & CDS",       page_assessment_cds),
-    ("API Reference",          page_api_reference),
-    ("Changelog",              page_changelog),
+    ("UHIS Leapfrog Mobile",       page_home),
+    ("Developer Setup Guide",      page_developer_setup),
+    ("Architecture Overview",      page_architecture),
+    ("Screens & Navigation",       page_screens),
+    ("Offline Sync Model",         page_offline_sync),
+    ("Database Schema",            page_database),
+    ("Assessment & CDS",           page_assessment_cds),
+    ("API Reference",              page_api_reference),
+    ("AI Scribe Service",          page_ai_scribe),
+    ("AI Visit Briefing Service",  page_ai_visit_briefing),
+    ("Changelog",                  page_changelog),
 ]
 
 if __name__ == "__main__":
