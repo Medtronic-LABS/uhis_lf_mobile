@@ -13,6 +13,7 @@ import '../../../core/api/scribe_api_service.dart' show ScribeMode;
 import '../../patient/followup_repository.dart';
 import '../../patient/vitals_repository.dart';
 import '../../scribe/scribe_controller.dart';
+import '../../scribe/scribe_mic_waveform.dart';
 import '../../scribe/scribe_session.dart';
 import '../briefing/briefing_models.dart';
 import '../briefing/visit_briefing_repository.dart';
@@ -20,6 +21,7 @@ import '../pathway/pathway_engine.dart';
 import 'patient_context_builder.dart';
 import 'visit_step_header.dart';
 import 'triage_view_model.dart';
+import 'ai_scribe_triage_vocab.dart';
 import 'unified_symptom_catalog.dart';
 
 /// Symptom picker screen for the triage step.
@@ -80,19 +82,21 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   }
 
   Future<void> _loadPatientContext() async {
-    debugPrint('[SymptomPicker] Starting load for encounterId=${widget.encounterId}, patientId=${widget.patientId}');
-    
+    debugPrint(
+      '[SymptomPicker] Starting load for encounterId=${widget.encounterId}, patientId=${widget.patientId}',
+    );
+
     // Read all DAOs before any async operations
     final encounterDao = context.read<EncounterDao>();
     final patientDao = context.read<PatientDao>();
     final programmesDao = context.read<PatientProgrammesDao>();
     final pregnancyDao = context.read<PregnancySnapshotDao>();
-    
+
     try {
       // Get patientId - either from widget or look up from encounter
       var patientId = widget.patientId;
       debugPrint('[SymptomPicker] Initial patientId: $patientId');
-      
+
       if (patientId.isEmpty) {
         // Look up patientId from encounter
         debugPrint('[SymptomPicker] Looking up patient from encounter...');
@@ -100,10 +104,12 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         debugPrint('[SymptomPicker] Encounter found: ${encounter != null}');
         if (encounter != null) {
           patientId = encounter.patientId;
-          debugPrint('[SymptomPicker] Got patientId from encounter: $patientId');
+          debugPrint(
+            '[SymptomPicker] Got patientId from encounter: $patientId',
+          );
         }
       }
-      
+
       if (patientId.isEmpty) {
         debugPrint('[SymptomPicker] ERROR: patientId still empty');
         if (!mounted) return;
@@ -124,11 +130,13 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       final ctx = await builder.build(patientId);
       debugPrint('[SymptomPicker] PatientContext built: ${ctx != null}');
       if (ctx != null) {
-        debugPrint('[SymptomPicker] PatientContext: age=${ctx.ageMonths}mo, sex=${ctx.sex.name}, pregnant=${ctx.isPregnant}, programmes=${ctx.activeProgrammes.map((p) => p.name).join(',')}');
+        debugPrint(
+          '[SymptomPicker] PatientContext: age=${ctx.ageMonths}mo, sex=${ctx.sex.name}, pregnant=${ctx.isPregnant}, programmes=${ctx.activeProgrammes.map((p) => p.name).join(',')}',
+        );
       }
 
       if (!mounted) return;
-      
+
       if (ctx == null) {
         debugPrint('[SymptomPicker] ERROR: Patient not found');
         setState(() {
@@ -137,7 +145,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         });
         return;
       }
-      
+
       debugPrint('[SymptomPicker] Success! Setting up view model...');
       setState(() {
         _patientContext = ctx;
@@ -164,10 +172,13 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       final followUpRepo = context.read<FollowUpRepository>();
       final briefingRepo = context.read<VisitBriefingRepository>();
 
-      final visitsByVisit =
-          await vitalsRepo.recentByVisit(widget.patientId, limit: 5);
-      final followUps =
-          await followUpRepo.openForPatientLocal(widget.patientId);
+      final visitsByVisit = await vitalsRepo.recentByVisit(
+        widget.patientId,
+        limit: 5,
+      );
+      final followUps = await followUpRepo.openForPatientLocal(
+        widget.patientId,
+      );
 
       Map<String, dynamic>? vitalsMap;
       if (visitsByVisit.isNotEmpty) {
@@ -181,10 +192,12 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         final glucose = latest.readings
             .where((r) => r.type == VitalType.glucose)
             .firstOrNull;
-        final spo2 =
-            latest.readings.where((r) => r.type == VitalType.spO2).firstOrNull;
-        final bmi =
-            latest.readings.where((r) => r.type == VitalType.bmi).firstOrNull;
+        final spo2 = latest.readings
+            .where((r) => r.type == VitalType.spO2)
+            .firstOrNull;
+        final bmi = latest.readings
+            .where((r) => r.type == VitalType.bmi)
+            .firstOrNull;
         vitalsMap = {
           if (bp?.systolic != null)
             'bloodPressureSystolic': bp!.systolic!.toInt(),
@@ -198,8 +211,9 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       }
 
       final followUpSummaries = followUps.map((f) {
-        final daysOverdue =
-            f.isOverdue ? DateTime.now().difference(f.dueDate).inDays : null;
+        final daysOverdue = f.isOverdue
+            ? DateTime.now().difference(f.dueDate).inDays
+            : null;
         return {
           'type': f.type.name,
           'daysOverdue': daysOverdue,
@@ -211,8 +225,8 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       if (followUps.any((f) => f.isOverdue)) risks.add('missed_followup');
       final latestBp = visitsByVisit.isNotEmpty
           ? visitsByVisit.first.readings
-              .where((r) => r.type == VitalType.bloodPressure)
-              .firstOrNull
+                .where((r) => r.type == VitalType.bloodPressure)
+                .firstOrNull
           : null;
       if (latestBp?.systolic != null && latestBp!.systolic! >= 140) {
         risks.add('elevated_bp');
@@ -226,12 +240,12 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         if (widget.patientName != null) 'patientName': widget.patientName,
         if (widget.patientAge != null) 'ageYears': widget.patientAge,
         if (widget.patientGender != null) 'gender': widget.patientGender,
-        'activeProgrammes':
-            patientCtx.activeProgrammes.map((p) => p.name).toList(),
+        'activeProgrammes': patientCtx.activeProgrammes
+            .map((p) => p.name)
+            .toList(),
         'visitCount': visitsByVisit.length,
         if (lastVisit != null)
-          'lastVisitDate':
-              lastVisit.date.toIso8601String().split('T').first,
+          'lastVisitDate': lastVisit.date.toIso8601String().split('T').first,
         if (lastVisit != null) 'lastVisitProgramme': lastVisit.programme,
         if (vitalsMap != null && vitalsMap.isNotEmpty)
           'recentVitals': vitalsMap,
@@ -263,7 +277,9 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     final vm = _viewModel;
     if (vm == null || _patientContext == null) return;
 
-    debugPrint('[SymptomPicker] Continue tapped — ${vm.activatedPathways.length} pathways: ${vm.activatedPathways.map((p) => p.programme.name).join(', ')}');
+    debugPrint(
+      '[SymptomPicker] Continue tapped — ${vm.activatedPathways.length} pathways: ${vm.activatedPathways.map((p) => p.programme.name).join(', ')}',
+    );
 
     // In-flow host (VisitFlowScreen) intercepts via callback; spec §3.1
     // collapses old "/triage-result" preview into Step 2's header so the SK
@@ -351,7 +367,11 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const SizedBox(height: 48),
-                Icon(Icons.error_outline, size: 48, color: theme.colorScheme.error),
+                Icon(
+                  Icons.error_outline,
+                  size: 48,
+                  color: theme.colorScheme.error,
+                ),
                 const SizedBox(height: 16),
                 Text(
                   _error ?? 'Failed to load patient context',
@@ -392,22 +412,32 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                 patientLabel: widget.patientName ?? TriageStrings.pickerTitle,
                 onBack: () => context.pop(),
               ),
-        floatingActionButton: AppConfig.scribeEnabled
-            ? _ScribeTriageFab(
-                encounterId: widget.encounterId,
-                patientId: widget.patientId,
-                viewModel: _viewModel!,
-              )
-            : null,
+        // Floating mic moved to a prominent purple banner at the top of the
+        // sliver list (see _AiScribeTriageBanner below). The legacy FAB is
+        // retired — banner makes the entry point unmissable per spec §4.1.2.
+        floatingActionButton: null,
         body: Consumer<TriageViewModel>(
           builder: (context, vm, _) {
             final clusters = vm.symptomsByCluster;
             return CustomScrollView(
               slivers: [
+                // Prominent AI Scribe mic banner — spec §4.1.2 / §5.1.1.
+                if (AppConfig.scribeEnabled)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                      child: _AiScribeTriageBanner(
+                        encounterId: widget.encounterId,
+                        patientId: widget.patientId,
+                        viewModel: vm,
+                      ),
+                    ),
+                  ),
+
                 // Subtitle header
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                     child: Text(
                       TriageStrings.pickerSubtitle,
                       style: theme.textTheme.bodyMedium?.copyWith(
@@ -477,7 +507,9 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                         padding: const EdgeInsets.only(bottom: 8),
                         child: TextButton(
                           onPressed: () => _navigateToForm([]),
-                          child: const Text(TriageStrings.noSymptomsRoutineVisit),
+                          child: const Text(
+                            TriageStrings.noSymptomsRoutineVisit,
+                          ),
                         ),
                       ),
 
@@ -613,9 +645,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
             ? theme.colorScheme.onError
             : theme.colorScheme.onPrimaryContainer;
       }
-      return isDanger
-          ? theme.colorScheme.error
-          : theme.colorScheme.onSurface;
+      return isDanger ? theme.colorScheme.error : theme.colorScheme.onSurface;
     }
 
     return Semantics(
@@ -625,128 +655,130 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       button: true,
       selected: isSelected,
       child: Material(
-      color: getBackgroundColor(),
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        key: const Key('triage_symptom_chip_tap'),
-        onTap: onTap,
+        color: getBackgroundColor(),
         borderRadius: BorderRadius.circular(16),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isSelected
-                  ? (isDanger ? theme.colorScheme.error : theme.colorScheme.primary)
-                  : (isDanger
-                      ? theme.colorScheme.error.withValues(alpha: 0.5)
-                      : Colors.transparent),
-              width: isSelected ? 2 : 1,
+        child: InkWell(
+          key: const Key('triage_symptom_chip_tap'),
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isSelected
+                    ? (isDanger
+                          ? theme.colorScheme.error
+                          : theme.colorScheme.primary)
+                    : (isDanger
+                          ? theme.colorScheme.error.withValues(alpha: 0.5)
+                          : Colors.transparent),
+                width: isSelected ? 2 : 1,
+              ),
             ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Emoji or fallback icon
-                Stack(
-                  alignment: Alignment.topRight,
-                  children: [
-                    symptom.emoji != null
-                        ? Text(
-                            symptom.emoji!,
-                            style: const TextStyle(fontSize: 32),
-                          )
-                        : Icon(
-                            _getIconData(symptom.icon ?? 'help_outline'),
-                            size: 36,
-                            color: getIconColor(),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Emoji or fallback icon
+                  Stack(
+                    alignment: Alignment.topRight,
+                    children: [
+                      symptom.emoji != null
+                          ? Text(
+                              symptom.emoji!,
+                              style: const TextStyle(fontSize: 32),
+                            )
+                          : Icon(
+                              _getIconData(symptom.icon ?? 'help_outline'),
+                              size: 36,
+                              color: getIconColor(),
+                            ),
+                      // AI badge for scribe pre-ticked symptoms
+                      if (isScribePreTick && isSelected)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 1,
                           ),
-                    // AI badge for scribe pre-ticked symptoms
-                    if (isScribePreTick && isSelected)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 4,
-                          vertical: 1,
-                        ),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.tertiary,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          ComposerStrings.scribeAiBadge,
-                          style: theme.textTheme.labelSmall?.copyWith(
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.tertiary,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            ComposerStrings.scribeAiBadge,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onTertiary,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        )
+                      // Standard pre-ticked indicator (patient context, not scribe)
+                      else if (isPreTicked && isSelected)
+                        Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.tertiary,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.auto_awesome,
+                            size: 12,
                             color: theme.colorScheme.onTertiary,
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                      )
-                    // Standard pre-ticked indicator (patient context, not scribe)
-                    else if (isPreTicked && isSelected)
-                      Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.tertiary,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.auto_awesome,
-                          size: 12,
-                          color: theme.colorScheme.onTertiary,
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                // English label
-                Text(
-                  TriageStrings.symptomLabel(symptom.code),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: getTextColor(),
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
+                    ],
                   ),
-                ),
-                // Bangla sub-label
-                if (TriageStrings.symptomBangla(symptom.code) != null)
+                  const SizedBox(height: 6),
+                  // English label
                   Text(
-                    TriageStrings.symptomBangla(symptom.code)!,
+                    TriageStrings.symptomLabel(symptom.code),
                     textAlign: TextAlign.center,
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: isSelected
-                          ? getTextColor().withValues(alpha: 0.85)
-                          : AppColors.textMuted,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: getTextColor(),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
                     ),
                   ),
-                // Selection checkmark
-                if (isSelected)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 3),
-                    child: Icon(
-                      Icons.check_circle,
-                      size: 16,
-                      color: isDanger
-                          ? theme.colorScheme.onError
-                          : theme.colorScheme.primary,
+                  // Bangla sub-label
+                  if (TriageStrings.symptomBangla(symptom.code) != null)
+                    Text(
+                      TriageStrings.symptomBangla(symptom.code)!,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: isSelected
+                            ? getTextColor().withValues(alpha: 0.85)
+                            : AppColors.textMuted,
+                      ),
                     ),
-                  ),
-              ],
+                  // Selection checkmark
+                  if (isSelected)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Icon(
+                        Icons.check_circle,
+                        size: 16,
+                        color: isDanger
+                            ? theme.colorScheme.onError
+                            : theme.colorScheme.primary,
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
       ),
-    ),
     );
   }
 
-  // ── _ScribeTriageFab ──────────────────────────────────────────────────────
+  // ── Symptom tile icon mapping ─────────────────────────────────────────────
 
   IconData _getIconData(String iconName) {
     switch (iconName) {
@@ -843,10 +875,11 @@ class _AiBriefingSection extends StatelessWidget {
           child: briefingLoading
               ? const _BriefingLoadingSkeleton(lines: 3)
               : briefingData == null
-                  ? _BriefingFallbackContent(
-                      patientContext: patientContext, isFemale: isFemale)
-                  : _BriefingCard1Content(
-                      data: briefingData!, isFemale: isFemale),
+              ? _BriefingFallbackContent(
+                  patientContext: patientContext,
+                  isFemale: isFemale,
+                )
+              : _BriefingCard1Content(data: briefingData!, isFemale: isFemale),
         ),
         const SizedBox(height: 8),
         _BriefingCard(
@@ -856,8 +889,8 @@ class _AiBriefingSection extends StatelessWidget {
           child: briefingLoading
               ? const _BriefingLoadingSkeleton(lines: 4)
               : briefingData == null
-                  ? const _BriefingUnavailable()
-                  : _BriefingCard3Content(data: briefingData!),
+              ? const _BriefingUnavailable()
+              : _BriefingCard3Content(data: briefingData!),
         ),
       ],
     );
@@ -926,7 +959,10 @@ class _BriefingCardState extends State<_BriefingCard> {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: AppColors.aiSurfaceStart,
                       borderRadius: BorderRadius.circular(4),
@@ -944,7 +980,9 @@ class _BriefingCardState extends State<_BriefingCard> {
                   ),
                   const SizedBox(width: 6),
                   Icon(
-                    _expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                    _expanded
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
                     size: 18,
                     color: AppColors.textMuted,
                   ),
@@ -1005,13 +1043,13 @@ class _BriefingCard1Content extends StatelessWidget {
           ),
           child: Row(
             children: [
-              const Icon(Icons.waving_hand,
-                  size: 14, color: Colors.white),
+              const Icon(Icons.waving_hand, size: 14, color: Colors.white),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   SymptomPickerStrings.beforeYouKnockGreetingFor(
-                      isFemale: isFemale),
+                    isFemale: isFemale,
+                  ),
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
@@ -1063,7 +1101,11 @@ class _BriefingCard3Content extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.waving_hand, size: 13, color: AppColors.tagBlueText),
+              const Icon(
+                Icons.waving_hand,
+                size: 13,
+                color: AppColors.tagBlueText,
+              ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -1081,40 +1123,51 @@ class _BriefingCard3Content extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 6),
-        ...sdp.sections.take(4).map((s) => Padding(
-              padding: const EdgeInsets.only(bottom: 3),
-              child: Row(
-                children: [
-                  Icon(_iconFor(s.icon), size: 12, color: AppColors.aiPurple),
-                  const SizedBox(width: 5),
-                  Expanded(
-                    child: Text(
-                      s.topic,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.navy,
+        ...sdp.sections
+            .take(4)
+            .map(
+              (s) => Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: Row(
+                  children: [
+                    Icon(_iconFor(s.icon), size: 12, color: AppColors.aiPurple),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        s.topic,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.navy,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            )),
+            ),
       ],
     );
   }
 
   IconData _iconFor(String icon) {
     switch (icon) {
-      case 'heart': return Icons.favorite_outline;
-      case 'baby': return Icons.child_care;
-      case 'nutrition': return Icons.restaurant;
-      case 'medication': return Icons.medication_outlined;
-      case 'lungs': return Icons.air;
-      case 'home': return Icons.home_outlined;
-      default: return Icons.checklist_outlined;
+      case 'heart':
+        return Icons.favorite_outline;
+      case 'baby':
+        return Icons.child_care;
+      case 'nutrition':
+        return Icons.restaurant;
+      case 'medication':
+        return Icons.medication_outlined;
+      case 'lungs':
+        return Icons.air;
+      case 'home':
+        return Icons.home_outlined;
+      default:
+        return Icons.checklist_outlined;
     }
   }
 }
@@ -1134,15 +1187,18 @@ class _BriefingLoadingSkeleton extends StatelessWidget {
         final maxW = constraints.maxWidth;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: List.generate(lines, (i) => Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            height: 10,
-            width: maxW * _fractions[i % _fractions.length],
-            decoration: BoxDecoration(
-              color: AppColors.border,
-              borderRadius: BorderRadius.circular(4),
+          children: List.generate(
+            lines,
+            (i) => Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              height: 10,
+              width: maxW * _fractions[i % _fractions.length],
+              decoration: BoxDecoration(
+                color: AppColors.border,
+                borderRadius: BorderRadius.circular(4),
+              ),
             ),
-          )),
+          ),
         );
       },
     );
@@ -1184,12 +1240,24 @@ class _BriefingFallbackContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final ctx = patientContext;
     final chips = <(String, Color)>[];
-    if (ctx.isPregnant) chips.add((SymptomPickerStrings.chipPregnant, AppColors.statusWarning));
-    if (ctx.hasKnownHypertension) chips.add((SymptomPickerStrings.chipHtn, AppColors.statusCritical));
-    if (ctx.hasKnownDiabetes) chips.add((SymptomPickerStrings.chipDm, AppColors.statusInfo));
-    if (ctx.isTbScreenDue) chips.add((SymptomPickerStrings.chipTbDue, AppColors.statusSuccess));
-    if (ctx.isUnder5) chips.add((SymptomPickerStrings.chipUnder5, AppColors.statusInfo));
-    if (chips.isEmpty) chips.add((SymptomPickerStrings.chipRoutine, AppColors.textMuted));
+    if (ctx.isPregnant) {
+      chips.add((SymptomPickerStrings.chipPregnant, AppColors.statusWarning));
+    }
+    if (ctx.hasKnownHypertension) {
+      chips.add((SymptomPickerStrings.chipHtn, AppColors.statusCritical));
+    }
+    if (ctx.hasKnownDiabetes) {
+      chips.add((SymptomPickerStrings.chipDm, AppColors.statusInfo));
+    }
+    if (ctx.isTbScreenDue) {
+      chips.add((SymptomPickerStrings.chipTbDue, AppColors.statusSuccess));
+    }
+    if (ctx.isUnder5) {
+      chips.add((SymptomPickerStrings.chipUnder5, AppColors.statusInfo));
+    }
+    if (chips.isEmpty) {
+      chips.add((SymptomPickerStrings.chipRoutine, AppColors.textMuted));
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1202,13 +1270,13 @@ class _BriefingFallbackContent extends StatelessWidget {
           ),
           child: Row(
             children: [
-              const Icon(Icons.waving_hand,
-                  size: 14, color: Colors.white),
+              const Icon(Icons.waving_hand, size: 14, color: Colors.white),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   SymptomPickerStrings.beforeYouKnockGreetingFor(
-                      isFemale: isFemale),
+                    isFemale: isFemale,
+                  ),
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
@@ -1226,26 +1294,38 @@ class _BriefingFallbackContent extends StatelessWidget {
           children: [
             Icon(Icons.wifi_off, size: 12, color: AppColors.textMuted),
             SizedBox(width: 4),
-            Text('AI offline · local context',
-                style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
+            Text(
+              'AI offline · local context',
+              style: TextStyle(fontSize: 10, color: AppColors.textMuted),
+            ),
           ],
         ),
         const SizedBox(height: 8),
         Wrap(
           spacing: 6,
           runSpacing: 4,
-          children: chips.map((c) => Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: c.$2,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(c.$1,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600)),
-          )).toList(),
+          children: chips
+              .map(
+                (c) => Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: c.$2,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    c.$1,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              )
+              .toList(),
         ),
       ],
     );
@@ -1296,9 +1376,8 @@ class _DurationPicker extends StatelessWidget {
                   label: SymptomPickerStrings.duration1Day,
                   value: SymptomPickerStrings.durationValue1,
                   selected: vm.sicknessDuration,
-                  onTap: (v) => vm.setDuration(
-                    vm.sicknessDuration == v ? null : v,
-                  ),
+                  onTap: (v) =>
+                      vm.setDuration(vm.sicknessDuration == v ? null : v),
                 ),
               ),
               const SizedBox(width: 8),
@@ -1307,9 +1386,8 @@ class _DurationPicker extends StatelessWidget {
                   label: SymptomPickerStrings.duration2To3Days,
                   value: SymptomPickerStrings.durationValue2to3,
                   selected: vm.sicknessDuration,
-                  onTap: (v) => vm.setDuration(
-                    vm.sicknessDuration == v ? null : v,
-                  ),
+                  onTap: (v) =>
+                      vm.setDuration(vm.sicknessDuration == v ? null : v),
                 ),
               ),
               const SizedBox(width: 8),
@@ -1318,9 +1396,8 @@ class _DurationPicker extends StatelessWidget {
                   label: SymptomPickerStrings.duration4Plus,
                   value: SymptomPickerStrings.durationValue4plus,
                   selected: vm.sicknessDuration,
-                  onTap: (v) => vm.setDuration(
-                    vm.sicknessDuration == v ? null : v,
-                  ),
+                  onTap: (v) =>
+                      vm.setDuration(vm.sicknessDuration == v ? null : v),
                 ),
               ),
             ],
@@ -1365,26 +1442,26 @@ class _DurationButton extends StatelessWidget {
       button: true,
       selected: isSelected,
       child: GestureDetector(
-      key: const Key('triage_answer_option_tap'),
-      onTap: () => onTap(value),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: borderColor),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: textColor,
+        key: const Key('triage_answer_option_tap'),
+        onTap: () => onTap(value),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: borderColor),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: textColor,
+            ),
           ),
         ),
       ),
-    ),
     );
   }
 }
@@ -1442,7 +1519,10 @@ class _OtherSymptomsFieldState extends State<_OtherSymptomsField> {
               hintText: SymptomPickerStrings.otherSymptomsHint,
               border: OutlineInputBorder(),
               isDense: true,
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
             ),
             maxLines: 2,
             onChanged: widget.vm.setCustomSymptomText,
@@ -1453,18 +1533,21 @@ class _OtherSymptomsFieldState extends State<_OtherSymptomsField> {
   }
 }
 
-// ── Scribe triage FAB ─────────────────────────────────────────────────────────
+// ── _AiScribeTriageBanner ────────────────────────────────────────────────────
+//
+// Prominent purple banner at the top of Step 1. Spec §4.1.2 (ANC) / §5.1.1
+// (NCD): tap-to-record. Result symptoms render as pre-ticked chips in the
+// list below; SK can untick AI picks or add missed ones manually.
+//
+// State machine driven by [ScribeController.session]:
+//   idle       → mic icon, "tap to fill the form by voice"
+//   recording  → red pulse, "Listening… tap to stop"
+//   processing → spinner, "AI is reviewing the recording"
+//   reviewReady (mode==triage) → silently transitions back to idle once the
+//   [TriageViewModel] has consumed the result and the controller is reset.
 
-/// Optional FAB shown on [SymptomPickerScreen] when [AppConfig.scribeEnabled].
-///
-/// Taps the [ScribeController] (if provided by an ancestor [Provider]) to
-/// start a triage-mode recording.  When the result arrives the
-/// [TriageViewModel] is updated via [TriageViewModel.applyScribeTriageResult].
-///
-/// If no [ScribeController] is in scope the FAB is hidden — the screen
-/// remains fully functional without scribe.
-class _ScribeTriageFab extends StatelessWidget {
-  const _ScribeTriageFab({
+class _AiScribeTriageBanner extends StatefulWidget {
+  const _AiScribeTriageBanner({
     required this.encounterId,
     required this.patientId,
     required this.viewModel,
@@ -1475,78 +1558,284 @@ class _ScribeTriageFab extends StatelessWidget {
   final TriageViewModel viewModel;
 
   @override
+  State<_AiScribeTriageBanner> createState() => _AiScribeTriageBannerState();
+}
+
+class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
+  static const Color _gradStart = Color(0xFF4F3FBA);
+  static const Color _gradEnd = Color(0xFF6E54E0);
+  static const Color _iconBg = Color(0xFF5E47C9);
+  static const Color _recordingIconBg = Color(0xFF7A63E8);
+  static const Color _errorGradStart = Color(0xFF8B3A3A);
+  static const Color _errorGradEnd = Color(0xFFB84A4A);
+
+  bool _showDone = false;
+  bool _triageResultConsumed = false;
+  ScribeController? _scribe;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final next = context.read<ScribeController>();
+    if (!identical(_scribe, next)) {
+      _scribe?.removeListener(_onScribeChanged);
+      _scribe = next;
+      _scribe!.addListener(_onScribeChanged);
+      _onScribeChanged();
+    }
+  }
+
+  @override
+  void dispose() {
+    _scribe?.removeListener(_onScribeChanged);
+    super.dispose();
+  }
+
+  void _onScribeChanged() {
+    if (!mounted || _showDone) return;
+    final session = _scribe!.session;
+    if (session.state == ScribeState.reviewReady &&
+        session.mode == ScribeMode.triage &&
+        !_triageResultConsumed) {
+      _consumeTriageResult(_scribe!);
+    } else if (session.state == ScribeState.error) {
+      setState(() {});
+    }
+  }
+
+  void _consumeTriageResult(ScribeController controller) {
+    _triageResultConsumed = true;
+    final triageResult = controller.session.triageExtractionResult;
+    if (triageResult != null) {
+      widget.viewModel.applyScribeTriageResult(triageResult);
+    }
+    controller.resetSession();
+    setState(() => _showDone = true);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Scribe controller is optional — guard with try/catch on context.read.
-    ScribeController? controller;
+    ScribeController controller;
     try {
-      controller = context.read<ScribeController>();
+      controller = context.watch<ScribeController>();
     } catch (_) {
-      // No ScribeController in scope — hide FAB.
       return const SizedBox.shrink();
     }
 
     final session = controller.session;
     final isRecording = session.state == ScribeState.recording;
-    final isProcessing = session.state == ScribeState.uploading ||
-        session.state == ScribeState.processing;
+    final isError = !_showDone && session.state == ScribeState.error;
+    final isProcessing =
+        !_showDone &&
+        !isError &&
+        (session.state == ScribeState.uploading ||
+            session.state == ScribeState.processing);
+
+    final title = _showDone
+        ? SymptomPickerStrings.scribeBannerDone
+        : isError
+        ? SymptomPickerStrings.scribeBannerError
+        : isRecording
+        ? SymptomPickerStrings.scribeBannerRecording
+        : isProcessing
+        ? SymptomPickerStrings.scribeBannerProcessing
+        : SymptomPickerStrings.scribeBannerTitle;
+
+    final subtitle = _showDone
+        ? SymptomPickerStrings.scribeBannerDoneSubtitle
+        : isError
+        ? SymptomPickerStrings.scribeBannerErrorSubtitle
+        : isRecording
+        ? SymptomPickerStrings.scribeBannerRecordingSubtitle
+        : SymptomPickerStrings.scribeBannerSubtitle;
 
     void onTap() {
-      controller!.bindContext(context);
+      controller.bindContext(context);
       if (isRecording) {
         controller.stopRecording(
-          patientId: patientId,
-          encounterId: encounterId,
+          patientId: widget.patientId,
+          encounterId: widget.encounterId,
+        );
+      } else if (isError) {
+        setState(() {
+          _showDone = false;
+          _triageResultConsumed = false;
+        });
+        controller.resetSession();
+      } else if (_showDone) {
+        setState(() {
+          _showDone = false;
+          _triageResultConsumed = false;
+        });
+        controller.startRecordingForTriage(
+          patientId: widget.patientId,
+          encounterId: widget.encounterId,
+          symptomCatalog: AiScribeTriageVocab.codes,
         );
       } else if (!isProcessing) {
         controller.startRecordingForTriage(
-          patientId: patientId,
-          encounterId: encounterId,
-          symptomCatalog: UnifiedSymptomCatalog.all
-              .map((s) => s.code)
-              .toList(),
+          patientId: widget.patientId,
+          encounterId: widget.encounterId,
+          symptomCatalog: AiScribeTriageVocab.codes,
         );
       }
     }
 
-    // Wire the triage result into the viewmodel when it arrives.
-    if (session.state == ScribeState.reviewReady &&
-        session.mode == ScribeMode.triage) {
-      // Result arrived — apply and reset. We do this in the next frame so the
-      // build pass completes cleanly before mutating external state.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        // Triage results come via TriageExtractionResult, not FormPrefillResult.
-        // The controller stores triage results in session when mode == triage.
-        // TODO: expose triageExtractionResult on ScribeSession (tracked gap).
-        // ignore: unused_local_variable
-        final _ = session.formPrefillResult;
-      });
-    }
-
-    return FloatingActionButton.extended(
-      onPressed: isProcessing ? null : onTap,
-      backgroundColor: isRecording
-          ? Theme.of(context).colorScheme.error
-          : Theme.of(context).colorScheme.primary,
-      icon: isProcessing
-          ? const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
+    return Material(
+      color: Colors.transparent,
+      child: Semantics(
+        button: true,
+        label: isRecording
+            ? SymptomPickerStrings.scribeStopRecordingLabel
+            : isError
+            ? SymptomPickerStrings.scribeBannerError
+            : _showDone
+            ? SymptomPickerStrings.scribeBannerDone
+            : SymptomPickerStrings.scribeBannerTitle,
+        child: InkWell(
+          onTap: isProcessing ? null : onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 280),
+            curve: Curves.easeOut,
+            padding: const EdgeInsets.fromLTRB(12, 14, 16, 14),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: _showDone
+                    ? const [Color(0xFF3D7A52), Color(0xFF2F9E62)]
+                    : isError
+                    ? const [_errorGradStart, _errorGradEnd]
+                    : const [_gradStart, _gradEnd],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-            )
-          : Icon(
-              isRecording ? Icons.stop : Icons.mic,
-              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: _showDone
+                  ? Border.all(
+                      color: Colors.white.withValues(alpha: 0.35),
+                      width: 1,
+                    )
+                  : null,
+              boxShadow: [
+                BoxShadow(
+                  color: (_showDone ? const Color(0xFF2F9E62) : _gradStart)
+                      .withValues(alpha: 0.25),
+                  blurRadius: 14,
+                  offset: const Offset(0, 6),
+                ),
+              ],
             ),
-      label: Text(
-        isProcessing
-            ? ComposerStrings.scribeAiBadge
-            : isRecording
-                ? ScribeStrings.fabStop
-                : ComposerStrings.scribeRecordButton,
-        style: const TextStyle(color: Colors.white),
+            child: Row(
+              children: [
+                // idle → mic · recording → waveform · processing → spinner
+                // · done → green check → idle.
+                SizedBox(
+                  width: 52,
+                  height: 52,
+                  child: Center(
+                    child: _buildCircleContent(
+                      controller: controller,
+                      isRecording: isRecording,
+                      isProcessing: isProcessing,
+                      isError: isError,
+                      showDone: _showDone,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          if (isRecording) ...[
+                            const ScribeRecordingLiveDot(),
+                            const SizedBox(width: 8),
+                          ],
+                          Expanded(
+                            child: Text(
+                              title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.78),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCircleContent({
+    required ScribeController controller,
+    required bool isRecording,
+    required bool isProcessing,
+    required bool isError,
+    required bool showDone,
+  }) {
+    if (showDone) {
+      return const ScribeDoneMicOrb();
+    }
+    if (isRecording) {
+      return ScribeRecordingMicOrb(
+        recorderController: controller.waveformRecorder,
+        backgroundColor: _recordingIconBg,
+      );
+    }
+    if (isProcessing) {
+      return const ScribeProcessingMicOrb(backgroundColor: _iconBg);
+    }
+    if (isError) {
+      return Container(
+        width: 44,
+        height: 44,
+        decoration: const BoxDecoration(
+          color: _iconBg,
+          shape: BoxShape.circle,
+        ),
+        alignment: Alignment.center,
+        child: const Icon(
+          Icons.refresh_rounded,
+          color: Colors.white,
+          size: 22,
+        ),
+      );
+    }
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: const BoxDecoration(
+        color: _iconBg,
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: const Icon(
+        Icons.mic_rounded,
+        color: Colors.white,
+        size: 22,
       ),
     );
   }

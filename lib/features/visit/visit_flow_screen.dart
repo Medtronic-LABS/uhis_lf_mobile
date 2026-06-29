@@ -20,10 +20,13 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
+import '../../core/api/scribe_api_service.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/models/programme.dart';
 import '../../core/theme/app_theme.dart';
 import 'pathway/pathway_engine.dart';
+import '../scribe/scribe_controller.dart';
+import '../scribe/scribe_permission_service.dart';
 import 'triage/symptom_picker_screen.dart';
 import 'visit_form_screen.dart';
 
@@ -492,16 +495,22 @@ class _Step1Symptoms extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SymptomPickerScreen(
-      encounterId: encounterId,
-      patientId: patientId,
-      memberId: memberId,
-      householdId: householdId,
-      patientAge: patientAge,
-      patientName: patientName,
-      patientGender: patientGender,
-      origin: origin,
-      onAdvance: onAdvance,
+    return ChangeNotifierProvider<ScribeController>(
+      create: (ctx) => ScribeController(
+        api: ctx.read<ScribeApiService>(),
+        permissionService: ScribePermissionService(),
+      ),
+      child: SymptomPickerScreen(
+        encounterId: encounterId,
+        patientId: patientId,
+        memberId: memberId,
+        householdId: householdId,
+        patientAge: patientAge,
+        patientName: patientName,
+        patientGender: patientGender,
+        origin: origin,
+        onAdvance: onAdvance,
+      ),
     );
   }
 }

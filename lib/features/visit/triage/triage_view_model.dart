@@ -5,6 +5,7 @@ import '../../../core/models/programme.dart';
 import '../../scribe/models/ai_extracted_field.dart';
 import '../pathway/ai_pathway_client.dart';
 import '../pathway/pathway_engine.dart';
+import 'ai_scribe_triage_vocab.dart';
 import 'patient_context_builder.dart';
 import 'unified_symptom_catalog.dart';
 
@@ -23,9 +24,9 @@ class TriageViewModel extends ChangeNotifier {
     required PatientContext patientContext,
     AiPathwayClient? aiPathwayClient,
     String? memberId,
-  })  : _patientContext = patientContext,
-        _aiClient = aiPathwayClient,
-        _memberId = memberId {
+  }) : _patientContext = patientContext,
+       _aiClient = aiPathwayClient,
+       _memberId = memberId {
     _initPreTicks();
     _initAiSuggestions();
   }
@@ -47,8 +48,7 @@ class TriageViewModel extends ChangeNotifier {
   /// Used by the UI to render an "AI" badge on the tile. This is a subset of
   /// [_preTicked] — all scribe pre-ticks are also added to [_preTicked].
   final Set<String> _scribePreTicked = {};
-  Set<String> get scribePreTickedSymptoms =>
-      Set.unmodifiable(_scribePreTicked);
+  Set<String> get scribePreTickedSymptoms => Set.unmodifiable(_scribePreTicked);
 
   /// Free-text symptom description entered manually by the SK.
   String? _customSymptomText;
@@ -174,10 +174,7 @@ class TriageViewModel extends ChangeNotifier {
 
   /// Build a [PathwaySuggestionRequest] from current state and fire the fetch.
   /// When it resolves, merge the result into [_aiSuggestions] and notify.
-  void _fetchAiSuggestionsForeground(
-    AiPathwayClient client,
-    String memberId,
-  ) {
+  void _fetchAiSuggestionsForeground(AiPathwayClient client, String memberId) {
     final req = PathwaySuggestionRequest(
       memberId: memberId,
       symptoms: _selectedSymptoms.toList(),
@@ -266,7 +263,9 @@ class TriageViewModel extends ChangeNotifier {
       _selectedSymptoms,
       _patientContext,
     );
-    debugPrint('[Triage] Pathways updated: ${_activatedPathways.map((p) => p.programme.name).toList()}');
+    debugPrint(
+      '[Triage] Pathways updated: ${_activatedPathways.map((p) => p.programme.name).toList()}',
+    );
   }
 
   /// Get symptoms grouped by cluster for display.
@@ -306,7 +305,8 @@ class TriageViewModel extends ChangeNotifier {
     }
 
     // Expand NCD if known conditions
-    if (_patientContext.hasKnownHypertension || _patientContext.hasKnownDiabetes) {
+    if (_patientContext.hasKnownHypertension ||
+        _patientContext.hasKnownDiabetes) {
       expanded.add(SymptomCluster.ncdMetabolic);
     }
 
@@ -346,13 +346,20 @@ class TriageViewModel extends ChangeNotifier {
     if (!AppConfig.scribeEnabled) return;
 
     final floor = AppConfig.scribeSymptomConfidenceFloor;
+    final validCodes = AiScribeTriageVocab.codes
+        .where(UnifiedSymptomCatalog.allCodes.contains)
+        .toSet();
+
+    var appliedCount = 0;
     for (final extracted in result.symptomCodes) {
       if (extracted.confidence < floor) continue;
+      if (!validCodes.contains(extracted.fieldId)) continue;
       _scribePreTicked.add(extracted.fieldId);
       _addPreTick(extracted.fieldId);
+      appliedCount++;
     }
     debugPrint(
-      '[Triage] Scribe applied ${_scribePreTicked.length} pre-ticks from result',
+      '[Triage] Scribe applied $appliedCount valid pre-ticks from result',
     );
     _updateActivatedPathways();
     notifyListeners();
