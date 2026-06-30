@@ -264,18 +264,98 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   Future<bool?> _confirmExit() async {
     return showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        content: const Text(VisitFlowStrings.discardConfirm),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text(VisitFlowStrings.discardCancel),
+      barrierColor: Colors.black54,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 22, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Danger icon disc — softens the warning while making it clear
+              // this is a destructive action.
+              Container(
+                width: 52,
+                height: 52,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.statusCritical.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.exit_to_app_rounded,
+                  size: 28,
+                  color: AppColors.statusCritical,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                VisitFlowStrings.discardConfirmTitle,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.navy,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                VisitFlowStrings.discardConfirm,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textMuted,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Stack the CTAs vertically so the destructive action is
+              // visually separated from the safer "Stay" path; Stay is
+              // primary (filled navy) so a stray tap doesn't lose the visit.
+              SizedBox(
+                height: 48,
+                child: FilledButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.navy,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size.fromHeight(48),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  child: const Text(VisitFlowStrings.discardCancel),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 48,
+                child: TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.statusCritical,
+                    minimumSize: const Size.fromHeight(48),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  child: const Text(VisitFlowStrings.discardConfirmCta),
+                ),
+              ),
+            ],
           ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text(VisitFlowStrings.discardConfirmCta),
-          ),
-        ],
+        ),
       ),
     );
   }

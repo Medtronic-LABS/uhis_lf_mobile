@@ -2923,10 +2923,12 @@ abstract final class VisitFlowStrings {
       stepIndicator.replaceFirst('%1', oneBased.toString());
 
   static const String backToVisits = 'Back to visits';
+  static const String discardConfirmTitle = 'Leave this visit?';
   static const String discardConfirm =
-      'Leave this visit? Unsaved details will be lost.';
-  static const String discardCancel = 'Stay';
-  static const String discardConfirmCta = 'Leave';
+      'The symptoms, programmes and form entries on this visit will be '
+      'discarded. You will start fresh next time.';
+  static const String discardCancel = 'Stay on this visit';
+  static const String discardConfirmCta = 'Yes, leave';
 }
 
 /// Teleconsult placeholder screen strings.
