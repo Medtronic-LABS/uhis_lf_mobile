@@ -200,21 +200,49 @@ class ScribeJobResult {
 
 /// HTTP client for the ai-scribe-service.
 ///
-/// Routes to [AppConfig.scribeBaseUrl] which defaults to the local container
-/// (`http://10.0.2.2:8095/` from the Android emulator). The nginx gateway
-/// adds an `/ai-scribe-service/` routing prefix; the container itself does
-/// not. [_scribeUrl] strips that prefix before building the absolute URL.
+/// Uses a dedicated Dio instance — no UHIS auth interceptors or cookie jar.
+/// Base URL: [AppConfig.aiServiceBaseUrl] when set (via --dart-define
+/// AI_SERVICE_URL=http://10.0.2.2:8095), otherwise [AppConfig.scribeBaseUrl].
+/// The nginx gateway adds an `/ai-scribe-service/` routing prefix; the
+/// container itself does not. [_scribePath] strips that prefix so requests
+/// hit the service directly.
 class ScribeApiService extends ApiRepository {
-  ScribeApiService(super.api);
+  ScribeApiService(super.api) {
+    _dio = Dio(BaseOptions(
+      baseUrl: _effectiveBaseUrl(),
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(minutes: 2),
+      validateStatus: (s) => s != null && s < 500,
+    ));
+  }
+
+  late final Dio _dio;
+
+  static String _effectiveBaseUrl() {
+    final ai = AppConfig.aiServiceBaseUrl;
+    return ai.isNotEmpty ? ai : AppConfig.scribeBaseUrl;
+  }
 
   static const int _chunkThresholdBytes = 1 * 1024 * 1024; // 1 MB
 
   static const String _nginxPrefix = '/ai-scribe-service';
 
-  static String _scribeUrl(String path) {
-    final p = path.startsWith(_nginxPrefix) ? path.substring(_nginxPrefix.length) : path;
-    final base = AppConfig.scribeBaseUrl;
-    return base.endsWith('/') ? '$base${p.startsWith('/') ? p.substring(1) : p}' : '$base$p';
+  static String _scribePath(String path) {
+    return path.startsWith(_nginxPrefix) ? path.substring(_nginxPrefix.length) : path;
+  }
+
+  Future<dynamic> _post(String path, {Object? data, String? action}) async {
+    final resp = await _dio.post(path, data: data);
+    final code = resp.statusCode ?? 0;
+    if (code < 200 || code >= 300) throw ApiException(action ?? path, code);
+    return resp.data;
+  }
+
+  Future<dynamic> _get(String path, {String? action}) async {
+    final resp = await _dio.get(path);
+    final code = resp.statusCode ?? 0;
+    if (code < 200 || code >= 300) throw ApiException(action ?? path, code);
+    return resp.data;
   }
 
   /// Submit audio for async transcription.
@@ -371,10 +399,7 @@ class ScribeApiService extends ApiRepository {
       'metadata': _jsonEncode(metadata),
     });
 
-    final resp = await api.dio.post(
-      _scribeUrl(Endpoints.scribeTranscribe),
-      data: form,
-    );
+    final resp = await _dio.post(_scribePath(Endpoints.scribeTranscribe), data: form);
     if ((resp.statusCode ?? 0) != 202) {
       throw ApiException('scribe submit', resp.statusCode ?? 0);
     }
@@ -412,16 +437,16 @@ class ScribeApiService extends ApiRepository {
     const chunkSize = 256 * 1024; // 256 KB
 
     // 1. Init
-    final initResp = await postOk(
-      _scribeUrl(Endpoints.scribeUploadInit),
+    final initResp = await _post(
+      _scribePath(Endpoints.scribeUploadInit),
       data: {'filename': 'consultation.opus', 'size': size},
       action: 'scribe upload init',
     ) as Map<String, dynamic>;
     final uploadId = initResp['uploadId'] as String;
 
     // 2. Check existing chunks (resume support)
-    final statusResp = await getOk(
-      _scribeUrl(Endpoints.scribeUploadStatus(uploadId)),
+    final statusResp = await _get(
+      _scribePath(Endpoints.scribeUploadStatus(uploadId)),
       action: 'scribe upload status',
     ) as Map<String, dynamic>;
     final received = ((statusResp['receivedChunks'] as List?)
@@ -436,8 +461,8 @@ class ScribeApiService extends ApiRepository {
       if (!received.contains(chunkNum)) {
         final end = (offset + chunkSize).clamp(0, bytes.length);
         final chunk = bytes.sublist(offset, end);
-        final resp = await api.dio.put(
-          _scribeUrl(Endpoints.scribeUploadChunk(uploadId, chunkNum)),
+        final resp = await _dio.put(
+          _scribePath(Endpoints.scribeUploadChunk(uploadId, chunkNum)),
           data: chunk,
           options: Options(contentType: 'application/octet-stream'),
         );
@@ -458,8 +483,8 @@ class ScribeApiService extends ApiRepository {
       formSchema: formSchema,
       symptomCatalog: symptomCatalog,
     );
-    final completeResp = await postOk(
-      _scribeUrl(Endpoints.scribeUploadComplete(uploadId)),
+    final completeResp = await _post(
+      _scribePath(Endpoints.scribeUploadComplete(uploadId)),
       data: {'metadata': metadata},
       action: 'scribe upload complete',
     ) as Map<String, dynamic>;
@@ -469,8 +494,8 @@ class ScribeApiService extends ApiRepository {
   /// Poll job status. Returns null if network fails (caller retries).
   Future<ScribeJobResult?> pollResult(String jobId) async {
     try {
-      final body = await getOk(
-        _scribeUrl(Endpoints.scribeResult(jobId)),
+      final body = await _get(
+        _scribePath(Endpoints.scribeResult(jobId)),
         action: 'scribe poll',
       );
       return ScribeJobResult.fromJson(body as Map<String, dynamic>);
@@ -485,8 +510,8 @@ class ScribeApiService extends ApiRepository {
   /// Fetch full note (includes rationale).
   Future<ScribeJobResult?> getNote(String noteId) async {
     try {
-      final body = await getOk(
-        _scribeUrl(Endpoints.scribeNote(noteId)),
+      final body = await _get(
+        _scribePath(Endpoints.scribeNote(noteId)),
         action: 'scribe get note',
       );
       debugPrint('[ScribeAPI] getNote response keys: ${body.keys.toList()}');
@@ -511,8 +536,8 @@ class ScribeApiService extends ApiRepository {
 
   /// Accept a draft note. [edits] overrides specific SOAP fields.
   Future<void> acceptNote(String noteId, {SoapNote? edits}) async {
-    await postOk(
-      _scribeUrl(Endpoints.scribeAccept(noteId)),
+    await _post(
+      _scribePath(Endpoints.scribeAccept(noteId)),
       data: {'edits': edits?.toJson() ?? {}},
       action: 'scribe accept',
     );
@@ -520,8 +545,8 @@ class ScribeApiService extends ApiRepository {
 
   /// Reject a draft note.
   Future<void> rejectNote(String noteId, {String? reason}) async {
-    await postOk(
-      _scribeUrl(Endpoints.scribeReject(noteId)),
+    await _post(
+      _scribePath(Endpoints.scribeReject(noteId)),
       data: {'reason': reason ?? ''},
       action: 'scribe reject',
     );
