@@ -6,8 +6,10 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../models/field_schema.dart';
+import '../_shared/field_label.dart';
 
 class UrineTestWidget extends StatelessWidget {
   const UrineTestWidget({
@@ -26,9 +28,9 @@ class UrineTestWidget extends StatelessWidget {
   final bool readOnly;
 
   static const _fields = [
-    ('urinaryAlbumin', 'Albumin'),
-    ('urinarySugar', 'Sugar'),
-    ('urinaryBilirubin', 'Bilirubin'),
+    ('urinaryAlbumin', ComposerStrings.urinaryAlbuminShort),
+    ('urinarySugar', ComposerStrings.urinarySugarShort),
+    ('urinaryBilirubin', ComposerStrings.urinaryBilirubinShort),
   ];
 
   static const _options = ['Absent', 'Present', 'Trace', 'N/A'];
@@ -41,12 +43,8 @@ class UrineTestWidget extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          schema.label.isEmpty ? 'Urine Dipstick' : schema.label,
-          style: theme.textTheme.labelLarge
-              ?.copyWith(color: AppColors.textMuted),
-        ),
-        const SizedBox(height: 8),
+        SdkFieldLabel(schema: schema, fallback: 'Urine Dipstick'),
+        const SizedBox(height: 4),
         ..._fields.map((field) {
           final (key, label) = field;
           final currentVal = current[key]?.toString();
@@ -67,7 +65,6 @@ class UrineTestWidget extends StatelessWidget {
                     initialValue: _options.contains(currentVal) ? currentVal : null,
                     isExpanded: true,
                     decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
                       contentPadding:
                           EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     ),

@@ -7,8 +7,10 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../models/field_schema.dart';
+import '../_shared/field_label.dart';
 
 class SupplyPairWidget extends StatefulWidget {
   const SupplyPairWidget({
@@ -61,22 +63,17 @@ class _SupplyPairWidgetState extends State<SupplyPairWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          widget.schema.label,
-          style: theme.textTheme.labelLarge
-              ?.copyWith(color: AppColors.textMuted),
-        ),
-        const SizedBox(height: 8),
+        SdkFieldLabel(schema: widget.schema),
+        const SizedBox(height: 4),
         Row(
           children: [
             Expanded(
               child: _SupplyInput(
                 ctrl: _consumedCtrl,
-                label: 'Consumed',
+                label: ComposerStrings.supplyConsumedShort,
                 readOnly: widget.readOnly,
                 onChanged: (_) => _emit(),
               ),
@@ -85,7 +82,7 @@ class _SupplyPairWidgetState extends State<SupplyPairWidget> {
             Expanded(
               child: _SupplyInput(
                 ctrl: _providedCtrl,
-                label: 'Provided today',
+                label: ComposerStrings.supplyProvidedShort,
                 readOnly: widget.readOnly,
                 onChanged: (_) => _emit(),
               ),
@@ -129,7 +126,6 @@ class _SupplyInput extends StatelessWidget {
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           textAlign: TextAlign.center,
           decoration: const InputDecoration(
-            border: OutlineInputBorder(),
             contentPadding:
                 EdgeInsets.symmetric(horizontal: 10, vertical: 10),
           ),

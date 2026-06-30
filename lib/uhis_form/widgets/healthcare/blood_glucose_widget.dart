@@ -7,8 +7,11 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../models/field_schema.dart';
+import '../_shared/field_label.dart';
+import '../_shared/status_badge.dart';
 
 class BloodGlucoseWidget extends StatefulWidget {
   const BloodGlucoseWidget({
@@ -52,6 +55,7 @@ class _BloodGlucoseWidgetState extends State<BloodGlucoseWidget> {
   }
 
   void _emit() {
+    setState(() {});
     final v = double.tryParse(_valueCtrl.text);
     if (v != null) {
       widget.onChanged({
@@ -81,12 +85,8 @@ class _BloodGlucoseWidgetState extends State<BloodGlucoseWidget> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          widget.schema.label.isEmpty ? 'Blood Glucose' : widget.schema.label,
-          style: theme.textTheme.labelLarge
-              ?.copyWith(color: AppColors.textMuted),
-        ),
-        const SizedBox(height: 8),
+        SdkFieldLabel(schema: widget.schema, fallback: 'Blood Glucose'),
+        const SizedBox(height: 4),
         // Type selector
         Wrap(
           spacing: 8,
@@ -130,32 +130,31 @@ class _BloodGlucoseWidgetState extends State<BloodGlucoseWidget> {
           inputFormatters: [
             FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
           ],
-          decoration: InputDecoration(
+          decoration: const InputDecoration(
             suffixText: _unit,
-            border: const OutlineInputBorder(),
             contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           ),
           onChanged: (_) => _emit(),
         ),
         if (inRange) ...[
           const SizedBox(height: 6),
-          Text(
-            'Within normal range (${_selectedType.toLowerCase()} < $max mmol/L)',
-            style: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFF16A34A),
-              fontWeight: FontWeight.w500,
+          Align(
+            alignment: Alignment.centerRight,
+            child: SdkStatusBadge(
+              label: ComposerStrings.rangeInRange,
+              textColor: AppColors.rangeNormal,
+              surfaceColor: AppColors.rangeNormalSurface,
             ),
           ),
         ] else if (outRange) ...[
           const SizedBox(height: 6),
-          Text(
-            'Above normal range — consider referral',
-            style: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFFDC2626),
-              fontWeight: FontWeight.w500,
+          Align(
+            alignment: Alignment.centerRight,
+            child: SdkStatusBadge(
+              label: ComposerStrings.rangeOutOfRange,
+              textColor: AppColors.rangeCritical,
+              surfaceColor: AppColors.rangeCriticalSurface,
             ),
           ),
         ],

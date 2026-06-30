@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../features/visit/widgets/form_fields/age_ymd_field.dart';
 import '../../models/field_schema.dart';
+import '../_shared/field_label.dart';
 
 class AgeYmdWidget extends StatelessWidget {
   const AgeYmdWidget({
@@ -22,10 +23,17 @@ class AgeYmdWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AgeYmdField(
-      labelText: schema.label,
-      currentValue: value,
-      onChanged: readOnly ? (_) {} : onChanged,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SdkFieldLabel(schema: schema),
+        const SizedBox(height: 4),
+        AgeYmdField(
+          labelText: schema.label,
+          currentValue: value,
+          onChanged: readOnly ? (_) {} : onChanged,
+        ),
+      ],
     );
   }
 }

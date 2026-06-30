@@ -36,19 +36,24 @@ class DynamicFormRenderer extends StatelessWidget {
           separatorBuilder: (_, _) => const SizedBox(height: 12),
           itemBuilder: (context, i) {
             final section = sections[i];
-            final visibleFields = section.fields
-                .where((f) => controller.isVisible(f.fieldId))
-                .toList();
-
             return SectionCard(
               title: section.title,
-              children: visibleFields
-                  .map((f) => FieldRenderer(
+              children: section.fields
+                  .map((f) => AnimatedSize(
                         key: ValueKey(f.fieldId),
-                        schema: f,
-                        value: controller.fieldValues[f.fieldId],
-                        onChanged: (v) => controller.setValue(f.fieldId, v),
-                        aiHint: controller.getAiHint(f.fieldId),
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeInOut,
+                        child: controller.isVisible(f.fieldId)
+                            ? FieldRenderer(
+                                schema: f,
+                                value: controller.fieldValues[f.fieldId],
+                                onChanged: (v) =>
+                                    controller.setValue(f.fieldId, v),
+                                aiHint: controller.getAiHint(f.fieldId),
+                                errorText:
+                                    controller.validationErrors[f.fieldId],
+                              )
+                            : const SizedBox.shrink(),
                       ))
                   .toList(),
             );

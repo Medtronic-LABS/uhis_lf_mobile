@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../features/visit/widgets/form_fields/radio_form_field.dart';
 import '../../models/field_schema.dart';
+import '../_shared/field_label.dart';
 
 class RadioGroupWidget extends StatelessWidget {
   const RadioGroupWidget({
@@ -22,11 +23,18 @@ class RadioGroupWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RadioFormField(
-      labelText: schema.label,
-      options: schema.options.map((o) => o.label).toList(),
-      currentValue: value,
-      onChanged: readOnly ? (_) {} : onChanged,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SdkFieldLabel(schema: schema),
+        const SizedBox(height: 4),
+        RadioFormField(
+          labelText: schema.label,
+          options: schema.options.map((o) => o.label).toList(),
+          currentValue: value,
+          onChanged: readOnly ? (_) {} : onChanged,
+        ),
+      ],
     );
   }
 }

@@ -13,8 +13,10 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../models/field_schema.dart';
+import '../_shared/field_label.dart';
 
 class AnthropometryWidget extends StatefulWidget {
   const AnthropometryWidget({
@@ -57,6 +59,7 @@ class _AnthropometryWidgetState extends State<AnthropometryWidget> {
   }
 
   void _emit() {
+    setState(() {});
     final h = double.tryParse(_heightCtrl.text);
     final w = double.tryParse(_weightCtrl.text);
     if (h != null && w != null && h > 0) {
@@ -83,24 +86,19 @@ class _AnthropometryWidgetState extends State<AnthropometryWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final bmi = _bmi;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          widget.schema.label,
-          style: theme.textTheme.labelLarge
-              ?.copyWith(color: AppColors.textMuted),
-        ),
-        const SizedBox(height: 8),
+        SdkFieldLabel(schema: widget.schema),
+        const SizedBox(height: 4),
         Row(
           children: [
             Expanded(
               child: _LabeledInput(
                 ctrl: _heightCtrl,
-                label: 'Height',
+                label: ComposerStrings.heightShort,
                 unit: 'cm',
                 readOnly: widget.readOnly,
                 onChanged: (_) => _emit(),
@@ -110,7 +108,7 @@ class _AnthropometryWidgetState extends State<AnthropometryWidget> {
             Expanded(
               child: _LabeledInput(
                 ctrl: _weightCtrl,
-                label: 'Weight',
+                label: ComposerStrings.weightShort,
                 unit: 'kg',
                 readOnly: widget.readOnly,
                 onChanged: (_) => _emit(),
@@ -158,7 +156,6 @@ class _LabeledInput extends StatelessWidget {
           textAlign: TextAlign.center,
           decoration: InputDecoration(
             suffixText: unit,
-            border: const OutlineInputBorder(),
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
           ),
@@ -215,9 +212,9 @@ class _BmiRow extends StatelessWidget {
   }
 
   static (String, Color) _classify(double bmi) {
-    if (bmi < 18.5) return ('Underweight', const Color(0xFFCA8A04));
-    if (bmi < 25)   return ('Normal', const Color(0xFF16A34A));
-    if (bmi < 30)   return ('Overweight', const Color(0xFFEA580C));
-    return ('Obese', const Color(0xFFDC2626));
+    if (bmi < 18.5) return ('Underweight', AppColors.rangeElevated);
+    if (bmi < 25)   return (ComposerStrings.rangeNormal, AppColors.rangeNormal);
+    if (bmi < 30)   return ('Overweight', AppColors.rangeAbnormal);
+    return ('Obese', AppColors.rangeCritical);
   }
 }

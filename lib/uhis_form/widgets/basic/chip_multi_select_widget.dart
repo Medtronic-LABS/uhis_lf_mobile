@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../features/visit/widgets/form_fields/dialog_multi_select_field.dart';
 import '../../models/field_schema.dart';
+import '../_shared/field_label.dart';
 
 class ChipMultiSelectWidget extends StatelessWidget {
   const ChipMultiSelectWidget({
@@ -25,11 +26,18 @@ class ChipMultiSelectWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final selected = (value ?? []).map((v) => v.toString()).toList();
-    return DialogMultiSelectField(
-      labelText: schema.label,
-      options: schema.options.map((o) => o.label).toList(),
-      currentValue: selected,
-      onChanged: readOnly ? (_) {} : onChanged,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SdkFieldLabel(schema: schema),
+        const SizedBox(height: 4),
+        DialogMultiSelectField(
+          labelText: schema.label,
+          options: schema.options.map((o) => o.label).toList(),
+          currentValue: selected,
+          onChanged: readOnly ? (_) {} : onChanged,
+        ),
+      ],
     );
   }
 }

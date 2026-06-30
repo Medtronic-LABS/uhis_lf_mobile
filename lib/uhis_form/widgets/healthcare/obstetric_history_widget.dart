@@ -8,8 +8,10 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../models/field_schema.dart';
+import '../_shared/field_label.dart';
 
 class ObstetricHistoryWidget extends StatefulWidget {
   const ObstetricHistoryWidget({
@@ -99,20 +101,14 @@ class _ObstetricHistoryWidgetState extends State<ObstetricHistoryWidget> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          widget.schema.label.isEmpty
-              ? 'Obstetric History'
-              : widget.schema.label,
-          style: theme.textTheme.labelLarge
-              ?.copyWith(color: AppColors.textMuted),
-        ),
-        const SizedBox(height: 8),
+        SdkFieldLabel(schema: widget.schema, fallback: 'Obstetric History'),
+        const SizedBox(height: 4),
         Row(
           children: [
             Expanded(
               child: _ObsInput(
                 ctrl: _gravidaCtrl,
-                label: 'Gravida',
+                label: ComposerStrings.fieldGravida,
                 readOnly: widget.readOnly,
                 onChanged: (_) => setState(_emit),
               ),
@@ -121,7 +117,7 @@ class _ObstetricHistoryWidgetState extends State<ObstetricHistoryWidget> {
             Expanded(
               child: _ObsInput(
                 ctrl: _parityCtrl,
-                label: 'Parity',
+                label: ComposerStrings.parityShort,
                 readOnly: widget.readOnly,
                 onChanged: (_) => setState(_emit),
               ),
@@ -130,7 +126,7 @@ class _ObstetricHistoryWidgetState extends State<ObstetricHistoryWidget> {
             Expanded(
               child: _ObsInput(
                 ctrl: _livingCtrl,
-                label: 'Living',
+                label: ComposerStrings.livingShort,
                 readOnly: widget.readOnly,
                 onChanged: (_) => setState(_emit),
               ),
@@ -153,7 +149,7 @@ class _ObstetricHistoryWidgetState extends State<ObstetricHistoryWidget> {
             warning,
             style: const TextStyle(
               fontSize: 12,
-              color: Color(0xFFEA580C),
+              color: AppColors.rangeAbnormal,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -188,7 +184,6 @@ class _ObsInput extends StatelessWidget {
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           textAlign: TextAlign.center,
           decoration: const InputDecoration(
-            border: OutlineInputBorder(),
             contentPadding:
                 EdgeInsets.symmetric(horizontal: 6, vertical: 10),
           ),

@@ -17,6 +17,7 @@ import 'package:flutter/services.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../models/field_schema.dart';
+import '../_shared/field_label.dart';
 
 class BloodPressureWidget extends StatefulWidget {
   const BloodPressureWidget({
@@ -74,6 +75,7 @@ class _BloodPressureWidgetState extends State<BloodPressureWidget> {
   }
 
   void _emit() {
+    setState(() {});
     final sys = int.tryParse(_sysCtrl.text);
     final dia = int.tryParse(_diaCtrl.text);
     if (sys != null && dia != null) {
@@ -100,12 +102,8 @@ class _BloodPressureWidgetState extends State<BloodPressureWidget> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          widget.schema.label,
-          style: theme.textTheme.labelLarge
-              ?.copyWith(color: AppColors.textMuted),
-        ),
-        const SizedBox(height: 8),
+        SdkFieldLabel(schema: widget.schema),
+        const SizedBox(height: 4),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -171,7 +169,6 @@ class _NumericInput extends StatelessWidget {
       decoration: InputDecoration(
         hintText: hint,
         suffixText: suffix,
-        border: const OutlineInputBorder(),
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       ),
       onChanged: onChanged,
@@ -188,18 +185,18 @@ class _RangeStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (label, color) = switch (range) {
-      _BpRange.normal  => ('Normal', const Color(0xFF16A34A)),
-      _BpRange.elevated => ('Elevated', const Color(0xFFCA8A04)),
-      _BpRange.stage1  => ('Stage 1 Hypertension', const Color(0xFFEA580C)),
-      _BpRange.stage2  => ('Stage 2 Hypertension', const Color(0xFFDC2626)),
-      _BpRange.crisis  => ('Hypertensive Crisis', const Color(0xFF7F1D1D)),
+    final (label, color, surface) = switch (range) {
+      _BpRange.normal  => (ComposerStrings.rangeNormal,   AppColors.rangeNormal,   AppColors.rangeNormalSurface),
+      _BpRange.elevated => (ComposerStrings.rangeElevated, AppColors.rangeElevated, AppColors.rangeElevatedSurface),
+      _BpRange.stage1  => (ComposerStrings.rangeBpStage1, AppColors.rangeAbnormal, AppColors.rangeAbnormalSurface),
+      _BpRange.stage2  => (ComposerStrings.rangeBpStage2, AppColors.rangeCritical, AppColors.rangeCriticalSurface),
+      _BpRange.crisis  => (ComposerStrings.rangeBpCrisis, AppColors.rangeCrisis,   AppColors.rangeCrisisSurface),
     };
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
+        color: surface,
         borderRadius: BorderRadius.circular(6),
         border: Border(left: BorderSide(color: color, width: 3)),
       ),
@@ -214,3 +211,4 @@ class _RangeStrip extends StatelessWidget {
     );
   }
 }
+

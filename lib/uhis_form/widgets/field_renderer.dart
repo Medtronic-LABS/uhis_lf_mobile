@@ -20,14 +20,19 @@ import 'basic/date_field_widget.dart';
 import 'basic/dropdown_widget.dart';
 import 'basic/instruction_widget.dart';
 import 'basic/number_field_widget.dart';
-import 'basic/radio_group_widget.dart';
+import 'basic/pill_selector_widget.dart';
 import 'basic/text_field_widget.dart';
 import 'basic/toggle_widget.dart';
 import 'healthcare/anthropometry_widget.dart';
 import 'healthcare/blood_glucose_widget.dart';
 import 'healthcare/blood_pressure_widget.dart';
 import 'healthcare/danger_signs_widget.dart';
+import 'healthcare/glass_prescription_widget.dart';
+import 'healthcare/lab_result_widget.dart';
+import 'healthcare/muac_widget.dart';
 import 'healthcare/obstetric_history_widget.dart';
+import 'healthcare/pregnancy_profile_widget.dart';
+import 'healthcare/referral_card_widget.dart';
 import 'healthcare/supply_pair_widget.dart';
 import 'healthcare/urine_test_widget.dart';
 import 'healthcare/vitals_bundle_widget.dart';
@@ -40,6 +45,7 @@ class FieldRenderer extends StatelessWidget {
     this.value,
     this.aiHint,
     this.readOnly = false,
+    this.errorText,
   });
 
   final FieldSchema schema;
@@ -47,6 +53,7 @@ class FieldRenderer extends StatelessWidget {
   final ValueChanged<dynamic> onChanged;
   final dynamic aiHint;
   final bool readOnly;
+  final String? errorText;
 
   @override
   Widget build(BuildContext context) {
@@ -57,6 +64,7 @@ class FieldRenderer extends StatelessWidget {
           value: value?.toString(),
           onChanged: (v) => onChanged(v),
           readOnly: readOnly,
+          errorText: errorText,
         ),
       FieldKind.integerInput => NumberFieldWidget(
           schema: schema,
@@ -64,6 +72,7 @@ class FieldRenderer extends StatelessWidget {
           value: value is num ? value as num : int.tryParse(value?.toString() ?? ''),
           onChanged: (v) => onChanged(v),
           readOnly: readOnly,
+          errorText: errorText,
         ),
       FieldKind.decimalInput => NumberFieldWidget(
           schema: schema,
@@ -71,6 +80,7 @@ class FieldRenderer extends StatelessWidget {
           value: value is num ? value as num : double.tryParse(value?.toString() ?? ''),
           onChanged: (v) => onChanged(v),
           readOnly: readOnly,
+          errorText: errorText,
         ),
       FieldKind.datePicker => DateFieldWidget(
           schema: schema,
@@ -78,7 +88,7 @@ class FieldRenderer extends StatelessWidget {
           onChanged: (v) => onChanged(v),
           readOnly: readOnly,
         ),
-      FieldKind.radioGroup => RadioGroupWidget(
+      FieldKind.radioGroup => PillSelectorWidget(
           schema: schema,
           value: value?.toString(),
           onChanged: (v) => onChanged(v),
@@ -166,16 +176,34 @@ class FieldRenderer extends StatelessWidget {
           readOnly: readOnly,
         ),
 
-      // Tier-2 composites — rendered as text inputs until widgets are built
-      FieldKind.muac ||
-      FieldKind.labResult ||
-      FieldKind.pregnancyProfile ||
-      FieldKind.glassPrescription ||
-      FieldKind.referralCard =>
-        NumberFieldWidget(
+      // ── Tier-2 composites ────────────────────────────────────────────────
+      FieldKind.muac => MuacWidget(
           schema: schema,
-          decimal: true,
           value: value is num ? value as num : null,
+          onChanged: (v) => onChanged(v),
+          readOnly: readOnly,
+        ),
+      FieldKind.labResult => LabResultWidget(
+          schema: schema,
+          value: value is Map<String, dynamic> ? value as Map<String, dynamic> : null,
+          onChanged: (v) => onChanged(v),
+          readOnly: readOnly,
+        ),
+      FieldKind.pregnancyProfile => PregnancyProfileWidget(
+          schema: schema,
+          value: value is Map<String, dynamic> ? value as Map<String, dynamic> : null,
+          onChanged: (v) => onChanged(v),
+          readOnly: readOnly,
+        ),
+      FieldKind.glassPrescription => GlassPrescriptionWidget(
+          schema: schema,
+          value: value is Map<String, dynamic> ? value as Map<String, dynamic> : null,
+          onChanged: (v) => onChanged(v),
+          readOnly: readOnly,
+        ),
+      FieldKind.referralCard => ReferralCardWidget(
+          schema: schema,
+          value: value is Map<String, dynamic> ? value as Map<String, dynamic> : null,
           onChanged: (v) => onChanged(v),
           readOnly: readOnly,
         ),

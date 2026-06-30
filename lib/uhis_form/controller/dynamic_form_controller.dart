@@ -49,6 +49,7 @@ class DynamicFormController extends ChangeNotifier {
 
   Map<String, dynamic> get fieldValues => UnmodifiableMapView(_fieldValues);
   Map<String, bool> get fieldVisible => UnmodifiableMapView(_fieldVisible);
+  Map<String, String> get validationErrors => UnmodifiableMapView(_validationErrors);
 
   bool get isSaving => _isSaving;
   bool get hasError => _errorMessage != null;
@@ -60,6 +61,7 @@ class DynamicFormController extends ChangeNotifier {
   final Map<String, bool> _fieldVisible = {};
   final Map<String, dynamic> _aiHints = {};
   final Set<String> _touchedByUser = {};
+  Map<String, String> _validationErrors = {};
 
   bool _isSaving = false;
   String? _errorMessage;
@@ -79,6 +81,29 @@ class DynamicFormController extends ChangeNotifier {
   }
 
   bool isVisible(String fieldId) => _fieldVisible[fieldId] ?? true;
+
+  // ── Validation ──────────────────────────────────────────────────────────────
+
+  /// Returns a map of fieldId → error message for all visible required fields
+  /// that are empty or unset. Stores the result and triggers a rebuild.
+  Map<String, String> validate() {
+    final errors = <String, String>{};
+    for (final field in formSchema.allFields) {
+      if (!field.required) continue;
+      if (!isVisible(field.fieldId)) continue;
+      final v = _fieldValues[field.fieldId];
+      final isEmpty = v == null ||
+          (v is String && v.trim().isEmpty) ||
+          (v is Map && v.isEmpty) ||
+          (v is List && v.isEmpty);
+      if (isEmpty) {
+        errors[field.fieldId] = '${field.label} is required';
+      }
+    }
+    _validationErrors = errors;
+    notifyListeners();
+    return errors;
+  }
 
   // ── AI Scribe integration ───────────────────────────────────────────────────
 

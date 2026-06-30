@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../models/field_schema.dart';
+import '../_shared/field_label.dart';
 
 class VitalsBundleWidget extends StatefulWidget {
   const VitalsBundleWidget({
@@ -82,16 +83,11 @@ class _VitalsBundleWidgetState extends State<VitalsBundleWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          widget.schema.label.isEmpty ? 'Vitals' : widget.schema.label,
-          style: theme.textTheme.labelLarge
-              ?.copyWith(color: AppColors.textMuted),
-        ),
-        const SizedBox(height: 8),
+        SdkFieldLabel(schema: widget.schema, fallback: 'Vitals'),
+        const SizedBox(height: 4),
         GridView.count(
           crossAxisCount: 2,
           shrinkWrap: true,
@@ -105,6 +101,7 @@ class _VitalsBundleWidgetState extends State<VitalsBundleWidget> {
                 ctrl: _ctrlFor(key),
                 label: label,
                 unit: unit,
+                vitalKey: key,
                 readOnly: widget.readOnly,
                 onChanged: (_) => _emit(),
               ),
@@ -120,6 +117,7 @@ class _VitalCell extends StatelessWidget {
     required this.ctrl,
     required this.label,
     required this.unit,
+    required this.vitalKey,
     required this.onChanged,
     this.readOnly = false,
   });
@@ -127,16 +125,28 @@ class _VitalCell extends StatelessWidget {
   final TextEditingController ctrl;
   final String label;
   final String unit;
+  final String vitalKey;
   final bool readOnly;
   final ValueChanged<String> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: ctrl,
+      builder: (context, textValue, _) {
+        final rawValue = double.tryParse(textValue.text);
+        final flag = _flagFor(vitalKey, rawValue);
+        return _buildCell(flag);
+      },
+    );
+  }
+
+  Widget _buildCell((String, Color)? flag) {
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(8),
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(AppRadius.button),
+        boxShadow: AppShadows.statBox,
       ),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Column(
@@ -150,21 +160,23 @@ class _VitalCell extends StatelessWidget {
               FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
             ],
             textAlign: TextAlign.center,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
-            ),
+            style: AppTextStyles.vitalValue,
             decoration: InputDecoration(
               border: InputBorder.none,
               hintText: '—',
-              hintStyle: theme.textTheme.titleMedium?.copyWith(
+              hintStyle: AppTextStyles.vitalValue.copyWith(
                 color: AppColors.textMuted,
               ),
-              suffixText: unit,
-              suffixStyle: TextStyle(
-                fontSize: 11,
-                color: AppColors.textMuted,
-              ),
+              suffix: flag == null
+                  ? Text(unit, style: const TextStyle(fontSize: 11, color: AppColors.textMuted))
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(unit, style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                        const SizedBox(width: 4),
+                        _VitalBadge(label: flag.$1, color: flag.$2),
+                      ],
+                    ),
               isDense: true,
               contentPadding: EdgeInsets.zero,
             ),
@@ -172,10 +184,61 @@ class _VitalCell extends StatelessWidget {
           ),
           Text(
             label,
-            style: theme.textTheme.labelSmall
-                ?.copyWith(color: AppColors.textMuted),
+            style: const TextStyle(
+              fontFamily: 'Nunito',
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+              color: AppColors.textMuted,
+            ),
           ),
         ],
+      ),
+    );
+  }
+
+  static (String, Color)? _flagFor(String key, double? value) {
+    if (value == null) return null;
+    switch (key) {
+      case 'temperature':
+        if (value < 35.0 || value > 38.5) return (value > 38.5 ? 'High ⚠' : 'Low ⚠', AppColors.rangeCritical);
+        if (value < 35.5 || value > 37.5) return (value > 37.5 ? 'High ⚠' : 'Low ⚠', AppColors.rangeElevated);
+      case 'pulse':
+        if (value < 50 || value > 120) return (value > 120 ? 'High ⚠' : 'Low ⚠', AppColors.rangeCritical);
+        if (value < 60 || value > 100) return (value > 100 ? 'High ⚠' : 'Low ⚠', AppColors.rangeElevated);
+      case 'breathsPerMinute':
+        if (value < 8 || value > 30) return (value > 30 ? 'High ⚠' : 'Low ⚠', AppColors.rangeCritical);
+        if (value < 12 || value > 20) return (value > 20 ? 'High ⚠' : 'Low ⚠', AppColors.rangeElevated);
+      case 'spo2':
+      case 'SpO2':
+        if (value < 90) return ('Low ⚠', AppColors.rangeCritical);
+        if (value < 95) return ('Low ⚠', AppColors.rangeElevated);
+    }
+    return null;
+  }
+}
+
+class _VitalBadge extends StatelessWidget {
+  const _VitalBadge({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
       ),
     );
   }

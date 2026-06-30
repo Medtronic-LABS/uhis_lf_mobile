@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../features/visit/widgets/form_fields/date_form_field.dart';
 import '../../models/field_schema.dart';
+import '../_shared/field_label.dart';
 
 class DateFieldWidget extends StatelessWidget {
   const DateFieldWidget({
@@ -24,11 +25,18 @@ class DateFieldWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DateFormField(
-      labelText: schema.label,
-      currentValue: value,
-      hint: schema.hint,
-      onChanged: readOnly ? (_) {} : onChanged,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SdkFieldLabel(schema: schema),
+        const SizedBox(height: 4),
+        DateFormField(
+          labelText: schema.label,
+          currentValue: value,
+          hint: schema.hint,
+          onChanged: readOnly ? (_) {} : onChanged,
+        ),
+      ],
     );
   }
 }

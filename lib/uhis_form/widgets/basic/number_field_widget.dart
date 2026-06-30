@@ -4,7 +4,9 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../models/field_schema.dart';
+import '../_shared/field_label.dart';
 
 class NumberFieldWidget extends StatefulWidget {
   const NumberFieldWidget({
@@ -14,6 +16,7 @@ class NumberFieldWidget extends StatefulWidget {
     required this.decimal,
     this.value,
     this.readOnly = false,
+    this.errorText,
   });
 
   final FieldSchema schema;
@@ -21,6 +24,7 @@ class NumberFieldWidget extends StatefulWidget {
   final num? value;
   final ValueChanged<num> onChanged;
   final bool readOnly;
+  final String? errorText;
 
   @override
   State<NumberFieldWidget> createState() => _NumberFieldWidgetState();
@@ -63,24 +67,34 @@ class _NumberFieldWidgetState extends State<NumberFieldWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return TextFormField(
-      controller: _ctrl,
-      readOnly: widget.readOnly,
-      keyboardType: widget.decimal
-          ? const TextInputType.numberWithOptions(decimal: true)
-          : TextInputType.number,
-      inputFormatters: widget.decimal
-          ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))]
-          : [FilteringTextInputFormatter.digitsOnly],
-      decoration: InputDecoration(
-        labelText: widget.schema.label,
-        hintText: widget.schema.hint,
-        suffixText: widget.schema.unit,
-        border: const OutlineInputBorder(),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      ),
-      onChanged: _emit,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SdkFieldLabel(schema: widget.schema),
+        const SizedBox(height: 4),
+        TextFormField(
+          controller: _ctrl,
+          readOnly: widget.readOnly,
+          keyboardType: widget.decimal
+              ? const TextInputType.numberWithOptions(decimal: true)
+              : TextInputType.number,
+          inputFormatters: widget.decimal
+              ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))]
+              : [FilteringTextInputFormatter.digitsOnly],
+          style: const TextStyle(
+            fontFamily: 'NunitoSans',
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
+          decoration: InputDecoration(
+            hintText: widget.schema.hint,
+            suffixText: widget.schema.unit,
+            errorText: widget.errorText,
+          ),
+          onChanged: _emit,
+        ),
+      ],
     );
   }
 }

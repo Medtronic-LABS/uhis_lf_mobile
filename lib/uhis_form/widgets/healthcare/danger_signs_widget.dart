@@ -7,6 +7,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../models/field_schema.dart';
 
 class DangerSignsWidget extends StatelessWidget {
@@ -38,10 +39,9 @@ class DangerSignsWidget extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFFEF2F2),
+        color: AppColors.imciSurface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFFCA5A5)),
-        // ignore: prefer_const_constructors
+        border: Border.all(color: AppColors.imciBorder),
         boxShadow: const [],
       ),
       padding: const EdgeInsets.all(12),
@@ -51,13 +51,25 @@ class DangerSignsWidget extends StatelessWidget {
           Row(
             children: [
               const Icon(Icons.warning_amber_rounded,
-                  size: 18, color: Color(0xFFDC2626)),
+                  size: 18, color: AppColors.dangerSignIconColor),
               const SizedBox(width: 6),
-              Text(
-                schema.label.isEmpty ? 'Danger Signs' : schema.label,
-                style: theme.textTheme.labelLarge?.copyWith(
-                  color: const Color(0xFF7F1D1D),
-                  fontWeight: FontWeight.w700,
+              Expanded(
+                child: RichText(
+                  text: TextSpan(
+                    text: schema.label.isEmpty ? 'Danger Signs' : schema.label,
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: AppColors.dangerSignText,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    children: schema.required
+                        ? const [
+                            TextSpan(
+                              text: ' *',
+                              style: TextStyle(color: AppColors.pink),
+                            ),
+                          ]
+                        : null,
+                  ),
                 ),
               ),
             ],
@@ -82,7 +94,7 @@ class DangerSignsWidget extends StatelessWidget {
               },
             );
           }),
-          const Divider(height: 16, color: Color(0xFFFCA5A5)),
+          const Divider(height: 16, color: AppColors.imciBorder),
           _DangerSignTile(
             label: 'None of the above',
             checked: selected.contains(_noneValue),
@@ -132,16 +144,16 @@ class _DangerSignTile extends StatelessWidget {
               decoration: BoxDecoration(
                 color: checked
                     ? (isNone
-                        ? const Color(0xFF16A34A)
-                        : const Color(0xFFDC2626))
+                        ? AppColors.rangeNormal
+                        : AppColors.dangerSignIconColor)
                     : Colors.white,
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(
                   color: checked
                       ? (isNone
-                          ? const Color(0xFF16A34A)
-                          : const Color(0xFFDC2626))
-                      : const Color(0xFFFCA5A5),
+                          ? AppColors.rangeNormal
+                          : AppColors.dangerSignIconColor)
+                      : AppColors.imciBorder,
                   width: 1.5,
                 ),
               ),
@@ -155,8 +167,8 @@ class _DangerSignTile extends StatelessWidget {
                 label,
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: isNone
-                      ? const Color(0xFF374151)
-                      : const Color(0xFF7F1D1D),
+                      ? AppColors.textMid
+                      : AppColors.dangerSignText,
                   fontWeight:
                       isNone ? FontWeight.w500 : FontWeight.w400,
                 ),
