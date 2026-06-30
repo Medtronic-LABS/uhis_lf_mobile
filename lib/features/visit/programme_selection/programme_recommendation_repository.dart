@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/endpoints.dart';
 import '../../../core/config/app_config.dart';
+import '../../../core/db/ai_response_cache_dao.dart';
 import 'programme_recommendation_models.dart';
 
 /// Calls the unified leapfrog-ai-services Programme Recommendation endpoint.
@@ -12,14 +15,25 @@ import 'programme_recommendation_models.dart';
 /// goes direct to the local service. Otherwise it routes through the nginx
 /// gateway at [Endpoints.programmeRecommendation].
 ///
+/// Results are cached in SQLite via [AiResponseCacheDao]. Cache key is
+/// `programme-reco:{patientId}` and the content_hash covers every field in
+/// the request payload — so the SK editing the symptom set, the gender, the
+/// current programme list, etc. invalidates the entry and the next entry to
+/// Step 2 re-hits the API. Cache TTL defaults to 24 hours.
+///
 /// The service is fail-soft on the server side — when Gemini is unavailable
 /// it falls back to a deterministic heuristic — so this repository surfaces
 /// errors as exceptions without retry. The screen renders a localized
 /// "unable to load" empty-state when this throws.
 class ProgrammeRecommendationRepository {
-  const ProgrammeRecommendationRepository(this._client);
+  const ProgrammeRecommendationRepository(this._client,
+      {AiResponseCacheDao? cache})
+      : _cache = cache;
 
   final ApiClient _client;
+  final AiResponseCacheDao? _cache;
+
+  static const String _kind = 'programme-reco';
 
   (Dio, String) _resolve() {
     final aiUrl = AppConfig.aiServiceBaseUrl;
@@ -34,11 +48,41 @@ class ProgrammeRecommendationRepository {
     return (_client.dio, Endpoints.programmeRecommendation);
   }
 
+  String _hashOf(Map<String, dynamic> req) =>
+      jsonEncode(req).hashCode.toRadixString(16);
+
+  String _cacheKeyFor(Map<String, dynamic> req) {
+    final pid = (req['patientId'] as String?)?.trim() ?? 'unknown';
+    return '$_kind:$pid';
+  }
+
   Future<ProgrammeRecommendationResponse> recommend(
     Map<String, dynamic> request,
   ) async {
+    final cacheKey = _cacheKeyFor(request);
+    final hash = _hashOf(request);
+
+    final cache = _cache;
+    if (cache != null) {
+      final cached = await cache.get(cacheKey, contentHash: hash);
+      if (cached != null) {
+        final decoded = jsonDecode(cached.payload) as Map<String, dynamic>;
+        return ProgrammeRecommendationResponse.fromJson(decoded);
+      }
+    }
+
     final (dio, path) = _resolve();
     final response = await dio.post<Map<String, dynamic>>(path, data: request);
-    return ProgrammeRecommendationResponse.fromJson(response.data ?? const {});
+    final data = response.data ?? const <String, dynamic>{};
+
+    if (cache != null) {
+      await cache.put(
+        cacheKey: cacheKey,
+        kind: _kind,
+        contentHash: hash,
+        payload: jsonEncode(data),
+      );
+    }
+    return ProgrammeRecommendationResponse.fromJson(data);
   }
 }
