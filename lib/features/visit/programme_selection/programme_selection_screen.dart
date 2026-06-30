@@ -74,7 +74,7 @@ class _ProgrammeSelectionScreenState extends State<ProgrammeSelectionScreen> {
                   Expanded(child: _buildBody(context, vm)),
                   _ContinueBar(
                     selectedCount: vm.selectedProgrammes.length,
-                    onContinue: () => widget.onContinue(vm.selectedProgrammes),
+                    onContinue: () => _openReviewSheet(context, vm),
                   ),
                 ],
               );
@@ -157,6 +157,33 @@ class _ProgrammeSelectionScreenState extends State<ProgrammeSelectionScreen> {
         ),
       ],
     );
+  }
+
+  /// Modal review before the form opens. Lists every programme the SK has
+  /// confirmed; chips carry × to remove inline. SK can still hit "+ Add"
+  /// from inside the sheet so they don't have to dismiss and re-tap.
+  Future<void> _openReviewSheet(
+    BuildContext context,
+    ProgrammeSelectionViewModel vm,
+  ) async {
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => _ReviewBeforeContinueSheet(
+        vm: vm,
+        onAdd: () {
+          Navigator.of(ctx).pop(false);
+          _openAddProgrammeSheet(context, vm);
+        },
+      ),
+    );
+    if (confirmed == true && context.mounted) {
+      widget.onContinue(vm.selectedProgrammes);
+    }
   }
 
   Future<void> _openAddProgrammeSheet(
@@ -974,6 +1001,250 @@ class _AddProgrammeSheet extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+// ─── Review-before-continue sheet ───────────────────────────────────────────
+//
+// Bottom sheet shown when the SK taps Continue. Lists every programme the SK
+// has confirmed so far as a removable chip, and exposes "+ Add" so they can
+// pull more from the manual list without dismissing first. Pops `true` when
+// the SK confirms and the screen advances to the form; pops `false` when
+// they back out.
+
+class _ReviewBeforeContinueSheet extends StatelessWidget {
+  const _ReviewBeforeContinueSheet({required this.vm, required this.onAdd});
+
+  final ProgrammeSelectionViewModel vm;
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: vm,
+      builder: (context, _) {
+        final selected = vm.selectedProgrammes
+            .where((p) => p != Programme.unknown)
+            .toList();
+
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Grabber.
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.border,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Title row.
+                Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: AppColors.pink.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      alignment: Alignment.center,
+                      child: const Icon(
+                        Icons.checklist_rounded,
+                        size: 18,
+                        color: AppColors.pink,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            ProgrammeSelectionStrings.reviewSheetTitle(
+                                selected.length),
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.navy,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          const Text(
+                            ProgrammeSelectionStrings.reviewSheetSubtitle,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                // Selected programme chips with × remove.
+                if (selected.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 16),
+                    decoration: BoxDecoration(
+                      color: AppColors.canvas,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.info_outline_rounded,
+                            size: 16, color: AppColors.textMuted),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            ProgrammeSelectionStrings.reviewSheetEmpty,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: selected
+                        .map(
+                          (p) => _ReviewChip(
+                            programme: p,
+                            onRemove: () => vm.removeProgramme(p),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                const SizedBox(height: 14),
+                // Inline Add row.
+                OutlinedButton.icon(
+                  onPressed: onAdd,
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text(
+                      ProgrammeSelectionStrings.reviewSheetAddMore),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.navy,
+                    side: const BorderSide(color: AppColors.border),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                // Footer CTAs.
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.textMuted,
+                          side: const BorderSide(color: AppColors.border),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: const Text(
+                            ProgrammeSelectionStrings.reviewSheetBack),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 2,
+                      child: FilledButton.icon(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                        label: Text(
+                          selected.isEmpty
+                              ? ProgrammeSelectionStrings.continueCtaEmpty
+                              : ProgrammeSelectionStrings
+                                  .continueCta(selected.length),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.pink,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ReviewChip extends StatelessWidget {
+  const _ReviewChip({required this.programme, required this.onRemove});
+  final Programme programme;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.navy,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            programme.wireTag,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(width: 6),
+          InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: onRemove,
+            child: Container(
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.18),
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: const Icon(
+                Icons.close_rounded,
+                size: 14,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

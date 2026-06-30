@@ -26,8 +26,10 @@ class VisitBriefingRepository {
   final ApiClient _client;
   final AiResponseCacheDao? _cache;
 
-  static const String _kindBriefing = 'visit-briefing';
-  static const String _kindSummary = 'patient-summary';
+  // Cache namespace — bump when the API response shape changes so rows
+  // written by the old client are ignored. Last bump: greeting block added.
+  static const String _kindBriefing = 'visit-briefing.v2';
+  static const String _kindSummary = 'patient-summary.v2';
 
   /// Returns the Dio instance and path pair to use for a given remote path.
   (Dio, String) _resolve(String gatewayPath, String directPath) {

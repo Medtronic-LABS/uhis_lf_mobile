@@ -2837,6 +2837,19 @@ abstract final class ProgrammeSelectionStrings {
   static const String skipConfirmCta = 'Yes, skip';
   static const String skipConfirmCancel = 'Keep it';
 
+  // ── Review-before-continue sheet ─────────────────────────────────────────
+  /// Title — "Review N programme(s)".
+  static String reviewSheetTitle(int count) => count == 1
+      ? 'Review 1 programme'
+      : 'Review $count programmes';
+  static const String reviewSheetSubtitle =
+      'Confirm the assessments below. You can add or remove before continuing.';
+  static const String reviewSheetEmpty =
+      'No programmes selected. Add one before continuing, or proceed with a '
+      'routine visit.';
+  static const String reviewSheetAddMore = 'Add another programme';
+  static const String reviewSheetBack = 'Back';
+
   // Cross-program notice callout
   static const String crossNoticeTitle = 'Cross-programme alert';
 
