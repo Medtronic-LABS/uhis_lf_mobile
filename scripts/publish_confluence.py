@@ -339,12 +339,26 @@ def page_developer_setup():
             "  --dart-define=API_BASE_URL=http://192.168.1.100:80 \\\n"
             "  --dart-define=PASSWORD_HASH_KEY=<hash_key>"
         )
-        + h(2, "Build APK")
+        + h(2, "Physical device (wireless ADB)")
+        + p("Physical devices need your Mac LAN IP — <code>10.0.2.2</code> is emulator-only.")
         + code(
-            "flutter build apk --release \\\n"
-            "  --dart-define=API_BASE_URL=https://your-server.example.com \\\n"
-            "  --dart-define=PASSWORD_HASH_KEY=<hash_key>\n"
-            "# Output: build/app/outputs/flutter-apk/app-release.apk"
+            "# 1. Find Mac LAN IP\n"
+            "ifconfig | grep 'inet 192'\n\n"
+            "# 2. Pair via Settings → Developer options → Wireless debugging\n"
+            "adb pair 192.168.1.X:PORT\n"
+            "adb connect 192.168.1.X:PORT\n\n"
+            "# 3. Run\n"
+            "flutter run \\\n"
+            "  --dart-define=BASE_URL=http://192.168.1.X \\\n"
+            "  --dart-define=PASSWORD_HASH_KEY=<hash_key>"
+        )
+        + h(2, "Build production APK")
+        + code(
+            "flutter build apk --debug \\\n"
+            "  --dart-define=BASE_URL=https://spice-dev-backend.uhis.labsplatform.com \\\n"
+            "  --dart-define=AI_SERVICE_URL=https://spice-dev-backend.uhis.labsplatform.com/ai-scribe \\\n"
+            "  --dart-define=PASSWORD_HASH_KEY=<hash_key>\n\n"
+            "adb install -r build/app/outputs/flutter-apk/app-debug.apk"
         )
         + h(2, "Environment variables")
         + table(
@@ -458,20 +472,25 @@ def page_screens():
                 ["2", "/referrals", "ReferralListScreen", "Visits subtab (village + tier chips) + Referrals subtab (SLA breach countdown)"],
             ],
         )
-        + h(3, "Composite scoring (Mission Dashboard)")
+        + h(3, "Band + Modifier Risk Model (Mission Dashboard)")
+        + p("Worst single clinical finding sets the band. Modifiers rank within bands. Band and modifier are <strong>never shown to the SK</strong> — they drive sort order only.")
         + table(
-            ["Factor", "Points"],
+            ["Band", "Label", "Status pill", "Examples"],
             [
-                ["Base tier: CRITICAL / OVERDUE / UPCOMING", "100 / 50 / 10"],
-                ["Pregnant (ANC/PNC enrolled or snapshot present)", "+10"],
-                ["Near-term ANC", "+15"],
-                ["High-risk pregnancy gap", "+20"],
-                ["PNC window", "+12"],
-                ["Had delivery complications", "+10"],
-                ["CQL CRITICAL alert", "+25"],
-                ["Days overdue (capped)", "+0–15"],
+                ["1", "Severe", "NOW (pulsing)", "BP ≥160/110, Hb &lt;7, one-sided weakness, danger sign"],
+                ["2", "Moderate", "TODAY", "BP ≥140/90, Hb 7–9.9, fasting glucose 10–17.9"],
+                ["3", "Mild", "TODAY / THIS WEEK", "BP 130–139/85–89, fasting glucose 6.1–6.9"],
+                ["4", "Routine", "ROUTINE", "No active clinical trigger"],
             ],
         )
+        + table(
+            ["Modifier", "Meaning", "Sort position"],
+            [
+                ["a", "Additional risk (comorbidity, first pregnancy, age ≥60, GA ≥36 wks)", "Higher within band"],
+                ["b", "Overdue — longer overdue ranks higher", "Below 'a' within band"],
+            ],
+        )
+        + p("Sort sequence: <strong>1a → 1b → 1 → 2a → 2b → 2 → 3a → 3b → 3 → 4</strong>. Pregnant patients rank above non-pregnant in the same band.")
         + h(2, "Full-screen routes (outside shell)")
         + table(
             ["Route", "Screen", "Notes"],
@@ -838,7 +857,8 @@ def page_ai_scribe():
         + info(
             "Voice → SOAP note pipeline for offline-first community health workers. "
             "Transcribes audio using Gemini / OpenAI / Sarvam ASR, runs structured inference, "
-            "builds a FHIR R4 Bundle, and waits for SK acceptance before committing."
+            "builds a FHIR R4 Bundle, and waits for SK acceptance before committing. "
+            "Migrations run automatically on container start via <code>entrypoint.sh</code>."
         )
         + table(
             ["Item", "Value"],
@@ -875,6 +895,12 @@ def page_ai_scribe():
             "A scribe note is a <strong>proposal</strong> until explicitly accepted by the SK. "
             "Every accept/reject action is logged with the rationale snapshot (modelVersion, asrProvider, "
             "llmModel, confidence, humanReviewRequired). Auto-commit is prohibited."
+        )
+        + h(2, "triageNotes — triage context pass-through")
+        + p(
+            "The <code>metadata.triageNotes</code> field (optional string) lets the SK app pass triage-screen "
+            "symptom observations into the inference prompt. This improves clinical extraction accuracy when "
+            "the SK has already noted key symptoms before recording."
         )
         + note("This page is auto-generated from ai-scribe-service/app/ source on every push to main.")
     )

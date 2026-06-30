@@ -475,22 +475,22 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                   ),
                 ),
 
-                // Duration picker (below symptoms list)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                    child: _DurationPicker(vm: vm),
-                  ),
-                ),
-
                 // Other symptoms — free-text + chips + "Add from list" button
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                     child: _OtherSymptomsField(
                       vm: vm,
                       onAddFromList: () => _openAddSymptomSheet(context, vm),
                     ),
+                  ),
+                ),
+
+                // Duration picker (below other symptoms)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                    child: _DurationPicker(vm: vm),
                   ),
                 ),
               ],
