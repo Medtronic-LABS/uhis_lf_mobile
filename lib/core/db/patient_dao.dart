@@ -32,10 +32,15 @@ class PatientDao {
   /// Used by the worklist recompute pass — leaves the demographic columns
   /// untouched so they aren't accidentally wiped if a stale Patient instance
   /// is passed in.
+  ///
+  /// `sortRank` is the numeric `sortRankFor(band, modifier)` value persisted
+  /// into the legacy `risk_score` column. SQL ORDER BY DESC on `risk_score`
+  /// yields the spec §2.8 sequence 1a → 1b → 1 → 2a → 2b → 2 → 3a → 3b → 3 → 4.
   Future<void> updateRisk({
     required String patientId,
-    required int score,
+    required int sortRank,
     required String bandWireTag,
+    required String modifierWireTag,
     required String reasonsJson,
     int? nextDueAt,
     int? lastVisitAt,
@@ -45,8 +50,9 @@ class PatientDao {
     await _db.db.update(
       AppDatabase.tablePatients,
       {
-        'risk_score': score,
+        'risk_score': sortRank,
         'risk_band': bandWireTag,
+        'risk_modifier': modifierWireTag,
         'risk_reasons': reasonsJson,
         'next_due_at': ?nextDueAt,
         'last_visit_at': ?lastVisitAt,

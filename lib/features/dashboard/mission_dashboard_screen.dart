@@ -389,9 +389,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (encounterId != null) {
       debugPrint('[Dashboard] Starting visit, navigating with origin=dashboard');
       context.go(
-        '/patients/visit/$encounterId/triage?origin=dashboard',
+        '/patients/visit/$encounterId/flow?origin=dashboard',
         extra: {
           'patientId': patientId,
+          'patientName': item.patientName,
           'householdId': item.householdId,
           'patientAge': item.age,
         },
@@ -483,11 +484,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     // Check if a refresh is pending (e.g., assessment completed while on another tab)
     _checkPendingRefresh();
-    
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
-    
+
     return Scaffold(
-      backgroundColor: tokens.canvas,
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
+      // Pink "+ Enrol new" FAB — fixed bottom-right per spec §2.1. Opens
+      // QR enrolment flow when the route lands; for now surfaces a snackbar
+      // so the SK gets clear feedback rather than silent taps.
+      floatingActionButton: _EnrolNewFab(),
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -986,6 +989,55 @@ class _ReferralNotificationButtonState
 // "Today's visits" priority-ordered patient cards with colored left border.
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Pink "+ Enrol new" FAB — Apon Sushashthya V1 §2.1.
+///
+/// Opens the QR enrolment flow when it ships; until then we surface a clear
+/// snackbar so the SK gets feedback instead of a silent tap. Lives at the
+/// bottom-right of the dashboard scaffold.
+class _EnrolNewFab extends StatelessWidget {
+  const _EnrolNewFab();
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    return FloatingActionButton.extended(
+      key: const Key('dashboard_enrol_new_fab'),
+      backgroundColor: tokens.brandPink,
+      foregroundColor: Colors.white,
+      elevation: 4,
+      icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
+      label: const Text(
+        MissionDashboardStrings.enrolNewCta,
+        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+      ),
+      onPressed: () {
+        final messenger = ScaffoldMessenger.maybeOf(context);
+        messenger?.hideCurrentSnackBar();
+        messenger?.showSnackBar(
+          SnackBar(
+            duration: const Duration(milliseconds: 1800),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: tokens.brandNavy,
+            content: const Row(
+              children: [
+                Icon(Icons.info_outline_rounded,
+                    color: Colors.white, size: 18),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    MissionDashboardStrings.enrolNewComingSoon,
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _DashboardHeader extends StatelessWidget {
   const _DashboardHeader({
     required this.greeting,
@@ -1167,7 +1219,7 @@ class _DashboardStatCard extends StatelessWidget {
       label: '$label: $value',
       button: true,
       child: Material(
-      color: tokens.cardSurface,
+      color: Theme.of(context).colorScheme.surface,
       borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
       child: InkWell(
         key: const Key('dashboard_stat_card_tap'),
@@ -1229,7 +1281,7 @@ class _DashboardStatCard extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: tokens.textPrimary,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
               const SizedBox(height: 2),
@@ -1248,7 +1300,7 @@ class _DashboardStatCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
-                    color: tokens.textMuted,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -1278,7 +1330,7 @@ class _TodaysVisitsHeader extends StatelessWidget {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w800,
-                color: tokens.brandNavy,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
           ),
@@ -1319,7 +1371,6 @@ class _MoreVisitsLink extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Semantics(
@@ -1338,7 +1389,7 @@ class _MoreVisitsLink extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w800,
-              color: tokens.brandNavy,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
         ),
@@ -1353,31 +1404,46 @@ class _EmptyVisitsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(20, 32, 20, 32),
       decoration: BoxDecoration(
-        color: tokens.cardSurface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Column(
         children: [
-          Icon(Icons.check_circle_outline,
-              size: 40, color: tokens.statusSuccess),
-          const SizedBox(height: 8),
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: tokens.statusSuccess.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: Icon(
+              Icons.check_circle_rounded,
+              size: 36,
+              color: tokens.statusSuccess,
+            ),
+          ),
+          const SizedBox(height: 12),
           Text(
             MissionDashboardStrings.noMissionsToday,
             style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: tokens.textPrimary,
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             MissionDashboardStrings.allCaughtUp,
+            textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: tokens.textMuted,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              height: 1.4,
             ),
           ),
         ],
@@ -1400,54 +1466,90 @@ class _AiSortedInfoCard extends StatelessWidget {
       builder: (context, snap) {
         final count = snap.data?.length ?? 0;
         final isLoading = snap.connectionState == ConnectionState.waiting;
-        const tags = [
-          MissionDashboardStrings.aiSortedTagRisk,
-          MissionDashboardStrings.aiSortedTagOverdue,
-          MissionDashboardStrings.aiSortedTagCce,
+        const tags = <(String, String)>[
+          ('🎯', MissionDashboardStrings.aiSortedTagRisk),
+          ('⏰', MissionDashboardStrings.aiSortedTagOverdue),
+          ('🚨', MissionDashboardStrings.aiSortedTagCce),
         ];
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               colors: [AppColors.navy, AppColors.navyMid],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.auto_awesome, size: 14, color: Colors.white70),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  isLoading
-                      ? 'AI sorted your visits overnight'
-                      : MissionDashboardStrings.aiSortedVisits(count),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.navy.withValues(alpha: 0.18),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
               ),
-              const SizedBox(width: 8),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Icon(Icons.auto_awesome,
+                        size: 14, color: Colors.white),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      isLoading
+                          ? 'AI sorted your visits overnight'
+                          : MissionDashboardStrings.aiSortedVisits(count),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        height: 1.25,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
               Wrap(
-                spacing: 4,
+                spacing: 6,
+                runSpacing: 6,
                 children: tags
                     .map(
-                      (tag) => Container(
+                      (t) => Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
+                            horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          tag,
-                          style: const TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
+                          color: Colors.white.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.18),
                           ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(t.$1, style: const TextStyle(fontSize: 11)),
+                            const SizedBox(width: 4),
+                            Text(
+                              t.$2,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     )
@@ -1462,6 +1564,7 @@ class _AiSortedInfoCard extends StatelessWidget {
 }
 
 /// Empty state shown when filters are active but no items match.
+/// Apon Sushashthya V1 §2.7 — magnifying glass illustration + helpful text.
 class _FilterEmptyCard extends StatelessWidget {
   const _FilterEmptyCard({required this.onClearFilters});
 
@@ -1471,21 +1574,31 @@ class _FilterEmptyCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(20, 28, 20, 24),
       decoration: BoxDecoration(
-        color: tokens.cardSurface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Column(
         children: [
-          const Text('🔍', style: TextStyle(fontSize: 28)),
-          const SizedBox(height: 8),
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: tokens.aiPurple.withValues(alpha: 0.10),
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: const Text('🔍', style: TextStyle(fontSize: 30)),
+          ),
+          const SizedBox(height: 12),
           Text(
             MissionDashboardStrings.noVisitsMatchFilters,
             style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: tokens.textPrimary,
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
           const SizedBox(height: 4),
@@ -1495,17 +1608,28 @@ class _FilterEmptyCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: tokens.textMuted,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              height: 1.4,
             ),
           ),
-          const SizedBox(height: 12),
-          TextButton(
-            onPressed: onClearFilters,
-            child: Text(
-              MissionDashboardStrings.clearNeedFilters,
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                color: tokens.aiPurple,
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: onClearFilters,
+              icon: const Icon(Icons.cleaning_services_outlined, size: 16),
+              label: Text(MissionDashboardStrings.clearNeedFilters),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: tokens.aiPurple,
+                side: BorderSide(color: tokens.aiPurple.withValues(alpha: 0.4)),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
           ),
@@ -1602,14 +1726,14 @@ class _VisitFilterPanel extends StatelessWidget {
       children: [
         // ── Row 1: village chips ──────────────────────────────────────────
         if (villages.isNotEmpty) ...[
-          const Padding(
-            padding: EdgeInsets.only(bottom: 6),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
             child: Text(
               MissionDashboardStrings.whichVillageVisiting,
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: AppColors.textStrong,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
           ),
@@ -1633,7 +1757,7 @@ class _VisitFilterPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          const Divider(height: 1, color: AppColors.border),
+          Divider(height: 1, color: Theme.of(context).colorScheme.outlineVariant),
           const SizedBox(height: 8),
         ],
 
@@ -1642,21 +1766,21 @@ class _VisitFilterPanel extends StatelessWidget {
           padding: const EdgeInsets.only(bottom: 6),
           child: Row(
             children: [
-              const Text(
+              Text(
                 MissionDashboardStrings.filterByNeed,
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.textStrong,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
               const SizedBox(width: 4),
-              const Text(
+              Text(
                 '(${MissionDashboardStrings.filterByNeedOptional})',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w400,
-                  color: AppColors.textMuted,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
               const Spacer(),
@@ -1667,12 +1791,12 @@ class _VisitFilterPanel extends StatelessWidget {
                   child: GestureDetector(
                     key: const Key('dashboard_filter_clear_needs_tap'),
                     onTap: onClearNeeds,
-                    child: const Text(
+                    child: Text(
                       MissionDashboardStrings.clearNeedFilters,
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.navy,
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                   ),
@@ -1691,6 +1815,7 @@ class _VisitFilterPanel extends StatelessWidget {
                   .where((n) => availableNeeds.contains(n))
                   .map((need) {
                 final active = selectedNeeds.contains(need);
+                final cs = Theme.of(context).colorScheme;
                 return Padding(
                   padding: const EdgeInsets.only(right: 6),
                   child: Semantics(
@@ -1705,12 +1830,12 @@ class _VisitFilterPanel extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
-                          color: active ? AppColors.aiPurple : Colors.white,
+                          color: active ? AppColors.aiPurple : cs.surface,
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
                             color: active
                                 ? AppColors.aiPurple
-                                : AppColors.border,
+                                : cs.outlineVariant,
                             width: 1,
                           ),
                         ),
@@ -1721,7 +1846,7 @@ class _VisitFilterPanel extends StatelessWidget {
                             fontWeight:
                                 active ? FontWeight.w800 : FontWeight.w500,
                             color:
-                                active ? Colors.white : AppColors.textStrong,
+                                active ? Colors.white : cs.onSurface,
                           ),
                         ),
                       ),
@@ -1731,6 +1856,7 @@ class _VisitFilterPanel extends StatelessWidget {
               }),
               ...availableProgrammes.map((prog) {
                 final active = selectedProgrammes.contains(prog);
+                final cs = Theme.of(context).colorScheme;
                 return Padding(
                   padding: const EdgeInsets.only(right: 6),
                   child: Semantics(
@@ -1745,12 +1871,12 @@ class _VisitFilterPanel extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
-                          color: active ? AppColors.aiPurple : Colors.white,
+                          color: active ? AppColors.aiPurple : cs.surface,
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
                             color: active
                                 ? AppColors.aiPurple
-                                : AppColors.border,
+                                : cs.outlineVariant,
                             width: 1,
                           ),
                         ),
@@ -1761,7 +1887,7 @@ class _VisitFilterPanel extends StatelessWidget {
                             fontWeight:
                                 active ? FontWeight.w800 : FontWeight.w500,
                             color:
-                                active ? Colors.white : AppColors.textStrong,
+                                active ? Colors.white : cs.onSurface,
                           ),
                         ),
                       ),
@@ -1801,10 +1927,10 @@ class _VillageChip extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: isActive ? AppColors.navy : Colors.white,
+              color: isActive ? AppColors.navy : Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: isActive ? AppColors.navy : AppColors.border,
+                color: isActive ? AppColors.navy : Theme.of(context).colorScheme.outlineVariant,
                 width: 1,
               ),
             ),
@@ -1813,7 +1939,7 @@ class _VillageChip extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: isActive ? Colors.white : AppColors.textStrong,
+                color: isActive ? Colors.white : Theme.of(context).colorScheme.onSurface,
               ),
             ),
           ),

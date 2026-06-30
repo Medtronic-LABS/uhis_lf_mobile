@@ -60,8 +60,10 @@ abstract final class LockStrings {
       'Verify your identity to access your ward dashboard.';
   static const String biometricCancelled = 'Biometric cancelled';
   static const String unlockWithBiometrics = 'Unlock with device';
+
   /// @deprecated Use [unlockWithBiometrics] instead. Kept for migration.
-  static const String unlockWithPhonePasswordOrBiometrics = unlockWithBiometrics;
+  static const String unlockWithPhonePasswordOrBiometrics =
+      unlockWithBiometrics;
   static const String profileLoading = 'Profile loading…';
   static const String offlinePasswordDisabled =
       'You are offline. Connect to the internet to sign in with password.';
@@ -79,10 +81,12 @@ abstract final class LockStrings {
   static const String shasthyaKormi = 'SHASTHYA KORMI';
   static const String verifyFingerprint = 'Verify fingerprint';
   static const String tapToPlaceFinger = 'Touch sensor to begin';
-  static const String tapToPlaceFingerSubtitle = 'Tap to place your finger and sign in';
+  static const String tapToPlaceFingerSubtitle =
+      'Tap to place your finger and sign in';
   static const String aponSushashthya = 'Apon Sushashthya';
   static const String aponSushashthyaBn = 'আপন সুস্বাস্থ্য';
-  static const String splashTagline = 'AI-powered community health for every household in Bangladesh';
+  static const String splashTagline =
+      'AI-powered community health for every household in Bangladesh';
   static const String readingFingerprint = 'Reading fingerprint…';
   static const String fingerprintVerified = 'Verified!';
   static const String communityHealth = 'Community Health';
@@ -186,7 +190,8 @@ abstract final class SettingsStrings {
 abstract final class SearchStrings {
   SearchStrings._();
 
-  static const String barHint = 'Search by name, phone, NID, household number or name';
+  static const String barHint =
+      'Search by name, phone, NID, household number or name';
   static const String scopeAll = 'All';
   static const String scopePatients = 'Patients';
   static const String scopeHouseholds = 'Households';
@@ -254,8 +259,7 @@ abstract final class SyncStrings {
   static const String patients = 'patients';
 
   static const String done = 'Ready to go';
-  static const String syncFailed =
-      'We couldn\'t finish downloading your data.';
+  static const String syncFailed = 'We couldn\'t finish downloading your data.';
   static const String continueOffline = 'Continue with what we have';
   static const String retry = CommonStrings.retry;
 
@@ -263,10 +267,9 @@ abstract final class SyncStrings {
   static const String upToDate = 'Data up to date';
 
   /// `Downloading households… 120 of 340`.
-  static String progressNamed(String entity, int done, int total) =>
-      total > 0
-          ? 'Downloading $entity… $done of $total'
-          : 'Downloading $entity… $done';
+  static String progressNamed(String entity, int done, int total) => total > 0
+      ? 'Downloading $entity… $done of $total'
+      : 'Downloading $entity… $done';
 
   /// `Households 340 · Patients 512` style summary line on completion.
   static String entityCount(String entity, int count) => '$entity $count';
@@ -353,7 +356,8 @@ abstract final class HouseholdListStrings {
   static const String filterAllSS = 'All SS';
   static const String filterClearAll = 'Clear All';
   static const String filterApply = 'Apply';
-  static String activeFilterCount(int n) => '$n filter${n == 1 ? '' : 's'} active';
+  static String activeFilterCount(int n) =>
+      '$n filter${n == 1 ? '' : 's'} active';
 }
 
 /// Household detail screen strings.
@@ -457,7 +461,10 @@ abstract final class WorklistStrings {
 
   // Rationale bottom sheet.
   static const String whyThisScore = 'Why this score?';
-  static String riskScoreLabel(int score) => 'Risk score: $score';
+  static const String urgencyNow = 'Now';
+  static const String urgencyToday = 'Today';
+  static const String urgencyThisWeek = 'This week';
+  static const String urgencyRoutine = 'Routine';
   static const String riskDriversHeader = 'Risk drivers';
   static const String modelVersionLabel = 'Model version';
   static const String computedAtLabel = 'Computed';
@@ -496,8 +503,7 @@ abstract final class PatientContextStrings {
   // ── HTML detail composition ──────────────────────────────────────────────
   static const String backToWorklist = 'Back to worklist';
   static const String sayHelloFirst = ' Say hello first';
-  static const String greetingBangla =
-      'আপনাদের কেমন আছেন? রোগী কেমন আছে?';
+  static const String greetingBangla = 'আপনাদের কেমন আছেন? রোগী কেমন আছে?';
   static const String greetingEnglish =
       'How is everyone? How is the patient today?';
   static String aiSummaryLead(String name) =>
@@ -505,7 +511,6 @@ abstract final class PatientContextStrings {
 
   static const String allAssessmentsTitle = 'All assessments';
 }
-
 
 /// Copy for the Referral SLA dashboard, cards, banners, and notifications.
 /// Spec: `leapfrog-setup/designs/referral-sla-engine.md` §11.
@@ -518,11 +523,13 @@ abstract final class ReferralStrings {
   static const String createReasonHint = 'Select a reason';
   static const String createTierLabel = 'Urgency level';
   static const String createNotesLabel = 'Additional notes (optional)';
-  static const String createNotesHint = 'Enter any notes for the receiving facility';
+  static const String createNotesHint =
+      'Enter any notes for the receiving facility';
   static const String createSubmit = 'Submit Referral';
   static const String createCancel = 'Cancel';
   static const String createSuccess = 'Referral created';
-  static const String createFailed = 'Failed to create referral — please try again';
+  static const String createFailed =
+      'Failed to create referral — please try again';
   static const String createReasonRequired = 'Please select a reason';
   static const String tierEmergencyLabel = 'Emergency (6h SLA)';
   static const String tierUrgentLabel = 'Urgent (24h SLA)';
@@ -564,8 +571,11 @@ abstract final class ReferralStrings {
       '$n escalation${n == 1 ? "" : "s"} pending';
 
   // ── Critical banner ──────────────────────────────────────────────────────
-  static String criticalBannerFmt(String patientName, String tier, String detail) =>
-      'BREACHED: $patientName · $tier · $detail';
+  static String criticalBannerFmt(
+    String patientName,
+    String tier,
+    String detail,
+  ) => 'BREACHED: $patientName · $tier · $detail';
 
   // ── Timeline node labels ─────────────────────────────────────────────────
   static const String stepCreated = 'Created';
@@ -598,7 +608,9 @@ abstract final class ReferralStrings {
       case 'delay-48h':
         return 'Delay over 48 h';
       case 'missed-follow-up':
-        return value != null ? '$value missed follow-up(s)' : 'Missed follow-up';
+        return value != null
+            ? '$value missed follow-up(s)'
+            : 'Missed follow-up';
       case 'escalation-pending':
         return 'Escalation pending';
       case 'under-5':
@@ -735,7 +747,8 @@ abstract final class ReferralStrings {
   // ── Error Messages ───────────────────────────────────────────────────────
   static const String errorNoPhone = 'No phone number available';
   static const String errorPhoneDialer = 'Could not open phone dialer';
-  static const String errorWhatsApp = 'Could not open WhatsApp. Is it installed?';
+  static const String errorWhatsApp =
+      'Could not open WhatsApp. Is it installed?';
   static const String errorSms = 'Could not open SMS app';
   static const String errorMaps = 'Could not open Google Maps';
   static String errorOpening(String type, String error) =>
@@ -757,6 +770,7 @@ abstract final class MissionDashboardStrings {
   // ── HTML Dashboard composition ───────────────────────────────────────────
   static String aiSortedVisits(int n) => 'AI sorted your $n visits overnight';
   static const String visitsToday = 'Visits today';
+
   /// Stat subline built from the SK's actual worklist. Returns `'No villages'`
   /// when the queue is empty (cold start, before sync), `'1 village'` or
   /// `'N villages'` once data lands. Distance estimate dropped — no source
@@ -766,6 +780,7 @@ abstract final class MissionDashboardStrings {
     if (villageCount == 1) return '1 village';
     return '$villageCount villages';
   }
+
   static const String referralAlertsLabel = 'Referral alerts';
   static const String tapToFollowUp = 'Tap to follow up →';
   static const String referralCceComingSoon = 'CCE integration coming soon';
@@ -807,14 +822,16 @@ abstract final class MissionDashboardStrings {
   static String progressFraction(int done, int total) => '$done / $total';
   static String progressPercent(int percent) => '$percent%';
   static String remainingVisits(int n) => '$n Visits Remaining';
-  static String estimatedDuration(String duration) => 'Estimated Time: $duration';
+  static String estimatedDuration(String duration) =>
+      'Estimated Time: $duration';
   static String completionPrediction(String time) =>
       'At current pace, all visits can be completed by $time';
 
   // ── Critical Alert Banner ────────────────────────────────────────────────
   static const String criticalAlert = '🔴 Critical Alert';
   static const String emergencyAncAlert = '🔴 Emergency ANC Alert';
-  static const String immediateFollowUpRequired = 'Immediate follow-up required.';
+  static const String immediateFollowUpRequired =
+      'Immediate follow-up required.';
   static String childReferralOverdue(int days) =>
       '$days Child Referral${days == 1 ? '' : 's'} Overdue';
   static String highRiskPregnancyWaiting(String name, String duration) =>
@@ -1007,6 +1024,11 @@ abstract final class MissionDashboardStrings {
   static const String aiSortedTagOverdue = 'Overdue flags';
   static const String aiSortedTagCce = 'CCE alerts';
 
+  // ── "+ Enrol new" FAB ────────────────────────────────────────────────────
+  static const String enrolNewCta = '+ Enrol new';
+  static const String enrolNewComingSoon =
+      'QR enrolment flow coming soon. Use the Patients tab to view existing patients.';
+
   // ── Status pills (compact tier label shown in the card right-side pill) ───
   static String statusPillForTier(DashboardTier tier) {
     switch (tier) {
@@ -1087,8 +1109,7 @@ abstract final class VisitTriageStrings {
       '⚠ $name · current concerns flagged — act today if symptoms persist';
 
   static const String skAsksFamily = 'SK ASKS THE FAMILY ';
-  static const String skAsksBangla =
-      'রোগী কেমন আছে? কতদিন হলো অসুস্থ?';
+  static const String skAsksBangla = 'রোগী কেমন আছে? কতদিন হলো অসুস্থ?';
   static const String skAsksEnglish =
       'How is the patient? How many days unwell?';
 
@@ -1145,6 +1166,18 @@ abstract final class ScribeStrings {
       'Record conversation to auto-select symptoms?';
   static const String triageConsentAllow = 'Allow';
   static const String triageConsentDeny = 'Not now';
+
+  static const String transcriptionFailed = 'Transcription failed.';
+  static const String pollTimeout =
+      'AI is taking too long. Tap to try again.';
+  static const String pollUnreachable =
+      'Could not reach AI Scribe. Tap to try again.';
+  static const String recordingNotFinalized =
+      'Recording could not be saved. Please record again.';
+  static const String recordingNoOutput =
+      'Recording produced no output. Please record again.';
+  static const String noSpeechDetected =
+      'No speech detected — please speak closer to the microphone and try again.';
 }
 
 /// AI Scribe inline banner strings (replaces FAB labels for the new single-form layout).
@@ -1264,6 +1297,32 @@ abstract final class TriageStrings {
   static const String symptomUmbilicusRed = 'Umbilicus red / discharge';
   static const String symptomJaundice = 'Jaundice (yellow skin / eyes)';
 
+  // ── AI Scribe vocab — codes present in [AiScribeTriageVocab.codes] that
+  // don't have a [UnifiedSymptomCatalog] entry. Vocab is the Step 1 source of
+  // truth; these labels render in the Step 1 chips + "Add symptom" sheet.
+  static const String symptomHeavyBleeding = 'Heavy bleeding';
+  static const String symptomFoulSmellingVaginalDischarge =
+      'Foul-smelling vaginal discharge';
+  static const String symptomEpigastricPain = 'Epigastric pain';
+  static const String symptomHeadache = 'Headache';
+  static const String symptomEdema = 'Edema';
+  static const String symptomBreastPain = 'Breast pain';
+  static const String symptomBreastSwelling = 'Breast swelling';
+  static const String symptomPerinealWoundDischarge =
+      'Perineal wound discharge';
+  static const String symptomPainfulUrination = 'Painful urination';
+  static const String symptomBreathlessness = 'Breathlessness';
+  static const String symptomLeakingFluidVagina = 'Leaking fluid from vagina';
+  static const String symptomPainfulUterineContractions =
+      'Painful uterine contractions';
+  static const String symptomOneSidedWeakness = 'One-sided weakness';
+  static const String symptomSwellingBothFeet = 'Swelling of both feet';
+  static const String symptomPalpitations = 'Palpitations';
+  static const String symptomSwellingOneLeg = 'Swelling of one leg';
+  static const String symptomExcessiveThirst = 'Excessive thirst';
+  static const String symptomFootNumbness = 'Foot numbness';
+  static const String symptomWeakness = 'Weakness';
+
   // ── Bangla symptom labels (shown as sub-label in tile) ───────────────────
   // Danger signs
   static const String symptomConvulsionsBn = 'খিঁচুনি';
@@ -1333,61 +1392,116 @@ abstract final class TriageStrings {
   /// Returns the Bangla sub-label for a symptom code, or null if not translated.
   static String? symptomBangla(String code) {
     switch (code) {
-      case 'convulsions': return symptomConvulsionsBn;
-      case 'unconscious': return symptomUnconsciousBn;
-      case 'lethargy': return symptomLethargyBn;
-      case 'not_eating': return symptomNotEatingBn;
-      case 'chest_indrawing': return symptomChestIndrawingBn;
-      case 'stridor': return symptomStridorBn;
-      case 'vaginal_bleeding': return symptomVaginalBleedingBn;
-      case 'water_break': return symptomWaterBreakBn;
-      case 'reduced_fetal_movement': return symptomReducedFetalMovementBn;
-      case 'chest_pain': return symptomChestPainBn;
-      case 'hemoptysis': return symptomHemoptysisBn;
-      case 'fever': return symptomFeverBn;
-      case 'cough': return symptomCoughBn;
-      case 'cough_over_2_weeks': return symptomCoughOver2WeeksBn;
-      case 'difficulty_breathing': return symptomDifficultyBreathingBn;
-      case 'fast_breathing': return symptomFastBreathingBn;
-      case 'shortness_breath': return symptomShortnessBreathBn;
-      case 'diarrhea': return symptomDiarrheaBn;
-      case 'bloody_diarrhea': return symptomBloodyDiarrheaBn;
-      case 'vomiting': return symptomVomitingBn;
-      case 'loss_appetite': return symptomLossAppetiteBn;
-      case 'muac_red': return symptomMuacRedBn;
-      case 'visible_wasting': return symptomVisibleWastingBn;
-      case 'edema_both_feet': return symptomEdemaBothFeetBn;
-      case 'weight_loss': return symptomWeightLossBn;
-      case 'pregnant': return symptomPregnantBn;
-      case 'headache_severe': return symptomHeadacheSevereBn;
-      case 'blurred_vision': return symptomBlurredVisionBn;
-      case 'abdominal_pain': return symptomAbdominalPainBn;
-      case 'swelling_face_hands': return symptomSwellingFaceHandsBn;
-      case 'high_bp_known': return symptomHighBpKnownBn;
-      case 'labor_signs': return symptomLaborSignsBn;
-      case 'eye_pain': return symptomEyePainBn;
-      case 'gradual_vision_loss': return symptomGradualVisionLossBn;
-      case 'reduced_vision': return symptomReducedVisionBn;
-      case 'no_family_planning': return symptomNoFamilyPlanningBn;
-      case 'wants_contraception': return symptomWantsContraceptionBn;
-      case 'dizziness': return symptomDizzinessBn;
-      case 'numbness': return symptomNumbnessBn;
-      case 'polyuria': return symptomPolyuriaBn;
-      case 'polydipsia': return symptomPolydipsiaBn;
-      case 'foot_pain': return symptomFootPainBn;
-      case 'foot_wound': return symptomFootWoundBn;
-      case 'night_sweats': return symptomNightSweatsBn;
-      case 'fatigue': return symptomFatigueBn;
-      case 'tb_contact': return symptomTbContactBn;
-      case 'feeling_sad': return symptomFeelingSadBn;
-      case 'anxiety': return symptomAnxietyBn;
-      case 'sleep_difficulty': return symptomSleepDifficultyBn;
-      case 'ear_problem': return symptomEarProblemBn;
-      case 'skin_rash': return symptomSkinRashBn;
-      case 'eye_discharge': return symptomEyeDischargeBn;
-      case 'umbilicus_red': return symptomUmbilicusRedBn;
-      case 'jaundice': return symptomJaundiceBn;
-      default: return null;
+      case 'convulsions':
+        return symptomConvulsionsBn;
+      case 'unconscious':
+        return symptomUnconsciousBn;
+      case 'lethargy':
+        return symptomLethargyBn;
+      case 'not_eating':
+        return symptomNotEatingBn;
+      case 'chest_indrawing':
+        return symptomChestIndrawingBn;
+      case 'stridor':
+        return symptomStridorBn;
+      case 'vaginal_bleeding':
+        return symptomVaginalBleedingBn;
+      case 'water_break':
+        return symptomWaterBreakBn;
+      case 'reduced_fetal_movement':
+        return symptomReducedFetalMovementBn;
+      case 'chest_pain':
+        return symptomChestPainBn;
+      case 'hemoptysis':
+        return symptomHemoptysisBn;
+      case 'fever':
+        return symptomFeverBn;
+      case 'cough':
+        return symptomCoughBn;
+      case 'cough_over_2_weeks':
+        return symptomCoughOver2WeeksBn;
+      case 'difficulty_breathing':
+        return symptomDifficultyBreathingBn;
+      case 'fast_breathing':
+        return symptomFastBreathingBn;
+      case 'shortness_breath':
+        return symptomShortnessBreathBn;
+      case 'diarrhea':
+        return symptomDiarrheaBn;
+      case 'bloody_diarrhea':
+        return symptomBloodyDiarrheaBn;
+      case 'vomiting':
+        return symptomVomitingBn;
+      case 'loss_appetite':
+        return symptomLossAppetiteBn;
+      case 'muac_red':
+        return symptomMuacRedBn;
+      case 'visible_wasting':
+        return symptomVisibleWastingBn;
+      case 'edema_both_feet':
+        return symptomEdemaBothFeetBn;
+      case 'weight_loss':
+        return symptomWeightLossBn;
+      case 'pregnant':
+        return symptomPregnantBn;
+      case 'headache_severe':
+        return symptomHeadacheSevereBn;
+      case 'blurred_vision':
+        return symptomBlurredVisionBn;
+      case 'abdominal_pain':
+        return symptomAbdominalPainBn;
+      case 'swelling_face_hands':
+        return symptomSwellingFaceHandsBn;
+      case 'high_bp_known':
+        return symptomHighBpKnownBn;
+      case 'labor_signs':
+        return symptomLaborSignsBn;
+      case 'eye_pain':
+        return symptomEyePainBn;
+      case 'gradual_vision_loss':
+        return symptomGradualVisionLossBn;
+      case 'reduced_vision':
+        return symptomReducedVisionBn;
+      case 'no_family_planning':
+        return symptomNoFamilyPlanningBn;
+      case 'wants_contraception':
+        return symptomWantsContraceptionBn;
+      case 'dizziness':
+        return symptomDizzinessBn;
+      case 'numbness':
+        return symptomNumbnessBn;
+      case 'polyuria':
+        return symptomPolyuriaBn;
+      case 'polydipsia':
+        return symptomPolydipsiaBn;
+      case 'foot_pain':
+        return symptomFootPainBn;
+      case 'foot_wound':
+        return symptomFootWoundBn;
+      case 'night_sweats':
+        return symptomNightSweatsBn;
+      case 'fatigue':
+        return symptomFatigueBn;
+      case 'tb_contact':
+        return symptomTbContactBn;
+      case 'feeling_sad':
+        return symptomFeelingSadBn;
+      case 'anxiety':
+        return symptomAnxietyBn;
+      case 'sleep_difficulty':
+        return symptomSleepDifficultyBn;
+      case 'ear_problem':
+        return symptomEarProblemBn;
+      case 'skin_rash':
+        return symptomSkinRashBn;
+      case 'eye_discharge':
+        return symptomEyeDischargeBn;
+      case 'umbilicus_red':
+        return symptomUmbilicusRedBn;
+      case 'jaundice':
+        return symptomJaundiceBn;
+      default:
+        return null;
     }
   }
 
@@ -1395,63 +1509,152 @@ abstract final class TriageStrings {
   static String symptomLabel(String code) {
     switch (code) {
       // Danger signs
-      case 'convulsions': return symptomConvulsions;
-      case 'unconscious': return symptomUnconscious;
-      case 'lethargy': return symptomLethargy;
-      case 'not_eating': return symptomNotEating;
-      case 'chest_indrawing': return symptomChestIndrawing;
-      case 'stridor': return symptomStridor;
-      case 'vaginal_bleeding': return symptomVaginalBleeding;
-      case 'water_break': return symptomWaterBreak;
-      case 'reduced_fetal_movement': return symptomReducedFetalMovement;
-      case 'chest_pain': return symptomChestPain;
-      case 'hemoptysis': return symptomHemoptysis;
+      case 'convulsions':
+        return symptomConvulsions;
+      case 'unconscious':
+        return symptomUnconscious;
+      case 'lethargy':
+        return symptomLethargy;
+      case 'not_eating':
+        return symptomNotEating;
+      case 'chest_indrawing':
+        return symptomChestIndrawing;
+      case 'stridor':
+        return symptomStridor;
+      case 'vaginal_bleeding':
+        return symptomVaginalBleeding;
+      case 'water_break':
+        return symptomWaterBreak;
+      case 'reduced_fetal_movement':
+        return symptomReducedFetalMovement;
+      case 'chest_pain':
+        return symptomChestPain;
+      case 'hemoptysis':
+        return symptomHemoptysis;
       // Fever & respiratory
-      case 'fever': return symptomFever;
-      case 'cough': return symptomCough;
-      case 'cough_over_2_weeks': return symptomCoughOver2Weeks;
-      case 'difficulty_breathing': return symptomDifficultyBreathing;
-      case 'fast_breathing': return symptomFastBreathing;
-      case 'shortness_breath': return symptomShortnessBreath;
+      case 'fever':
+        return symptomFever;
+      case 'cough':
+        return symptomCough;
+      case 'cough_over_2_weeks':
+        return symptomCoughOver2Weeks;
+      case 'difficulty_breathing':
+        return symptomDifficultyBreathing;
+      case 'fast_breathing':
+        return symptomFastBreathing;
+      case 'shortness_breath':
+        return symptomShortnessBreath;
       // GI & nutrition
-      case 'diarrhea': return symptomDiarrhea;
-      case 'bloody_diarrhea': return symptomBloodyDiarrhea;
-      case 'vomiting': return symptomVomiting;
-      case 'loss_appetite': return symptomLossAppetite;
-      case 'muac_red': return symptomMuacRed;
-      case 'visible_wasting': return symptomVisibleWasting;
-      case 'edema_both_feet': return symptomEdemaBothFeet;
-      case 'weight_loss': return symptomWeightLoss;
+      case 'diarrhea':
+        return symptomDiarrhea;
+      case 'bloody_diarrhea':
+        return symptomBloodyDiarrhea;
+      case 'vomiting':
+        return symptomVomiting;
+      case 'loss_appetite':
+        return symptomLossAppetite;
+      case 'muac_red':
+        return symptomMuacRed;
+      case 'visible_wasting':
+        return symptomVisibleWasting;
+      case 'edema_both_feet':
+        return symptomEdemaBothFeet;
+      case 'weight_loss':
+        return symptomWeightLoss;
       // Maternal
-      case 'pregnant': return symptomPregnant;
-      case 'headache_severe': return symptomHeadacheSevere;
-      case 'blurred_vision': return symptomBlurredVision;
-      case 'abdominal_pain': return symptomAbdominalPain;
-      case 'swelling_face_hands': return symptomSwellingFaceHands;
-      case 'high_bp_known': return symptomHighBpKnown;
-      case 'labor_signs': return symptomLaborSigns;
+      case 'pregnant':
+        return symptomPregnant;
+      case 'headache_severe':
+        return symptomHeadacheSevere;
+      case 'blurred_vision':
+        return symptomBlurredVision;
+      case 'abdominal_pain':
+        return symptomAbdominalPain;
+      case 'swelling_face_hands':
+        return symptomSwellingFaceHands;
+      case 'high_bp_known':
+        return symptomHighBpKnown;
+      case 'labor_signs':
+        return symptomLaborSigns;
       // NCD / metabolic
-      case 'dizziness': return symptomDizziness;
-      case 'numbness': return symptomNumbness;
-      case 'polyuria': return symptomPolyuria;
-      case 'polydipsia': return symptomPolydipsia;
-      case 'foot_pain': return symptomFootPain;
-      case 'foot_wound': return symptomFootWound;
+      case 'dizziness':
+        return symptomDizziness;
+      case 'numbness':
+        return symptomNumbness;
+      case 'polyuria':
+        return symptomPolyuria;
+      case 'polydipsia':
+        return symptomPolydipsia;
+      case 'foot_pain':
+        return symptomFootPain;
+      case 'foot_wound':
+        return symptomFootWound;
       // TB indicators
-      case 'night_sweats': return symptomNightSweats;
-      case 'fatigue': return symptomFatigue;
-      case 'tb_contact': return symptomTbContact;
+      case 'night_sweats':
+        return symptomNightSweats;
+      case 'fatigue':
+        return symptomFatigue;
+      case 'tb_contact':
+        return symptomTbContact;
       // Mental health
-      case 'feeling_sad': return symptomFeelingSad;
-      case 'anxiety': return symptomAnxiety;
-      case 'sleep_difficulty': return symptomSleepDifficulty;
+      case 'feeling_sad':
+        return symptomFeelingSad;
+      case 'anxiety':
+        return symptomAnxiety;
+      case 'sleep_difficulty':
+        return symptomSleepDifficulty;
       // Child health
-      case 'ear_problem': return symptomEarProblem;
-      case 'skin_rash': return symptomSkinRash;
-      case 'eye_discharge': return symptomEyeDischarge;
-      case 'umbilicus_red': return symptomUmbilicusRed;
-      case 'jaundice': return symptomJaundice;
-      default: return code;
+      case 'ear_problem':
+        return symptomEarProblem;
+      case 'skin_rash':
+        return symptomSkinRash;
+      case 'eye_discharge':
+        return symptomEyeDischarge;
+      case 'umbilicus_red':
+        return symptomUmbilicusRed;
+      case 'jaundice':
+        return symptomJaundice;
+      // AI Scribe triage vocab — codes not in the cluster catalog
+      case 'heavy_bleeding':
+        return symptomHeavyBleeding;
+      case 'foul_smelling_vaginal_discharge':
+        return symptomFoulSmellingVaginalDischarge;
+      case 'epigastric_pain':
+        return symptomEpigastricPain;
+      case 'headache':
+        return symptomHeadache;
+      case 'edema':
+        return symptomEdema;
+      case 'breast_pain':
+        return symptomBreastPain;
+      case 'breast_swelling':
+        return symptomBreastSwelling;
+      case 'perineal_wound_discharge':
+        return symptomPerinealWoundDischarge;
+      case 'painful_urination':
+        return symptomPainfulUrination;
+      case 'breathlessness':
+        return symptomBreathlessness;
+      case 'leaking_fluid_vagina':
+        return symptomLeakingFluidVagina;
+      case 'painful_uterine_contractions':
+        return symptomPainfulUterineContractions;
+      case 'one_sided_weakness':
+        return symptomOneSidedWeakness;
+      case 'swelling_both_feet':
+        return symptomSwellingBothFeet;
+      case 'palpitations':
+        return symptomPalpitations;
+      case 'swelling_one_leg':
+        return symptomSwellingOneLeg;
+      case 'excessive_thirst':
+        return symptomExcessiveThirst;
+      case 'foot_numbness':
+        return symptomFootNumbness;
+      case 'weakness':
+        return symptomWeakness;
+      default:
+        return code;
     }
   }
 }
@@ -1534,11 +1737,13 @@ abstract final class ComposerStrings {
   static const String fieldUrinaryAlbumin = 'Urinary albumin';
   static const String fieldUrinarySugar = 'Urinary sugar';
   static const String fieldUrinaryBilirubin = 'Urinary bilirubin';
-  static const String fieldFolicAcidConsumed = 'Folic acid consumed (last month)';
+  static const String fieldFolicAcidConsumed =
+      'Folic acid consumed (last month)';
   static const String fieldFolicAcidProvided = 'Folic acid provided';
   static const String fieldIfaConsumed = 'IFA tablets consumed (last month)';
   static const String fieldCalciumConsumed = 'Calcium consumed (last month)';
-  static const String fieldAncVisitsOtherProviders = 'ANC visits with other providers';
+  static const String fieldAncVisitsOtherProviders =
+      'ANC visits with other providers';
   static const String fieldAncFromMedicalDoctor = 'ANC from medical doctor?';
   static const String fieldPreviousPregnancyComplications =
       'Previous pregnancy complications';
@@ -1866,6 +2071,16 @@ abstract final class ComposerStrings {
         return fieldGlassesSold;
       case 'fieldReferPlace':
         return fieldReferPlace;
+      case 'fieldMorningHeadaches':
+        return fieldMorningHeadaches;
+      case 'fieldChestTightnessOrSob':
+        return fieldChestTightnessOrSob;
+      case 'fieldHighSaltIntake':
+        return fieldHighSaltIntake;
+      case 'fieldFamilyHistoryHtn':
+        return fieldFamilyHistoryHtn;
+      case 'fieldOneSidedWeakness':
+        return fieldOneSidedWeakness;
       default:
         return key;
     }
@@ -1873,18 +2088,30 @@ abstract final class ComposerStrings {
 
   // ── Section title resolver ──────────────────────────────────────────────────
 
+  // ── NCD HTN screening fields (spec §5.2.2) ──────────────────────────────────
+  static const String fieldMorningHeadaches = 'Morning headaches?';
+  static const String fieldChestTightnessOrSob =
+      'Chest tightness or shortness of breath?';
+  static const String fieldHighSaltIntake = 'High salt in daily food?';
+  static const String fieldFamilyHistoryHtn = 'Family history of high BP?';
+  static const String fieldOneSidedWeakness =
+      'One-sided weakness or stroke signs?';
+
   // ── FINDRISC / Framingham fields ────────────────────────────────────────────
   static const String fieldOnBpMedication = 'On BP medication?';
   static const String fieldWaistCircumference = 'Waist circumference (cm)';
-  static const String fieldIsPhysicallyActive = 'Physically active ≥ 30 min/day?';
+  static const String fieldIsPhysicallyActive =
+      'Physically active ≥ 30 min/day?';
   static const String fieldEatsDailyFruitVeg = 'Eats fruit / vegetables daily?';
-  static const String fieldHadPreviousHighGlucose = 'Previous high blood glucose?';
+  static const String fieldHadPreviousHighGlucose =
+      'Previous high blood glucose?';
   static const String fieldHasFamilyHistoryDm = 'Family history of diabetes?';
 
   // ── Family planning fields ───────────────────────────────────────────────────
   static const String fieldNumberOfLivingChildren = 'Number of living children';
   static const String fieldAgeOfLastChildMonths = 'Age of last child (months)';
-  static const String fieldDesireForFutureChildren = 'Desire for future children';
+  static const String fieldDesireForFutureChildren =
+      'Desire for future children';
   static const String fieldCurrentFpMethod = 'Current FP method';
 
   // ── Eye / cataract fields ────────────────────────────────────────────────────
@@ -1975,12 +2202,16 @@ abstract final class ComposerStrings {
   // PNC Child
   static const String fieldCongenitalDefect = 'Congenital defect?';
   static const String fieldPncChildWeight = 'Child weight (kg)';
-  static const String fieldChildFeedLast24Hrs = 'Child feeding in last 24 hours';
+  static const String fieldChildFeedLast24Hrs =
+      'Child feeding in last 24 hours';
   static const String fieldOtherChildFeed = 'Other feed';
-  static const String fieldHrsBreastFed = 'Hours after birth breastfeeding started';
-  static const String fieldMonthAdditionalFeedGiven = 'Month additional food started';
+  static const String fieldHrsBreastFed =
+      'Hours after birth breastfeeding started';
+  static const String fieldMonthAdditionalFeedGiven =
+      'Month additional food started';
   static const String fieldChildBreastFeeding = 'Child breastfeeding?';
-  static const String fieldAdditionalFood24Hrs = 'Additional food in last 24 hours?';
+  static const String fieldAdditionalFood24Hrs =
+      'Additional food in last 24 hours?';
   static const String fieldReceivedVaccine = 'Child received vaccines?';
   static const String fieldDewormingMedicine = 'Child took deworming medicine?';
   static const String fieldAnyIllness = 'Any illness / complications?';
@@ -2037,18 +2268,21 @@ abstract final class ComposerStrings {
   // ── AI Scribe pre-fill indicators (S4.6) ───────────────────────────────────
   static const String unmappedFindingsTitle = 'Also mentioned';
   static const String scribeAiBadge = 'AI';
-  static const String scribeAiPreFilledHint = 'Pre-filled by AI — please verify';
+  static const String scribeAiPreFilledHint =
+      'Pre-filled by AI — please verify';
   static const String scribeRecordButton = 'Record';
 
   // ── Cross-section reveal banner ─────────────────────────────────────────────
-  static const String tbAddedBannerText = 'TB screening added — cough ≥ 2 weeks';
+  static const String tbAddedBannerText =
+      'TB screening added — cough ≥ 2 weeks';
 
   // ── Submit / orchestrator ───────────────────────────────────────────────────
   static String syncProgress(int done, int total) =>
       '$done of $total programmes synced';
   static const String submitButton = 'Submit Assessment';
   static const String resumeDraftTitle = 'Resume visit?';
-  static const String resumeDraftMessage = 'An unfinished assessment was found.';
+  static const String resumeDraftMessage =
+      'An unfinished assessment was found.';
   static const String resumeButton = 'Resume';
   static const String discardButton = 'Discard';
   static const String nextButton = 'Next';
@@ -2076,10 +2310,8 @@ abstract final class CdsStrings {
       'Pneumonia — treat or refer if worsening';
   static const String samMessage =
       'Severe acute malnutrition — refer immediately';
-  static const String mamMessage =
-      'Moderate malnutrition — treat at community';
-  static const String severeAnemiaMessage =
-      'Severe anemia — refer immediately';
+  static const String mamMessage = 'Moderate malnutrition — treat at community';
+  static const String severeAnemiaMessage = 'Severe anemia — refer immediately';
   static const String anemiaMessage =
       'Anemia detected — supplement and follow up';
   static const String glucoseHighMessage =
@@ -2290,7 +2522,7 @@ abstract final class PathwayStrings {
   static const String reviewTitle = "Today's Assessment Plan";
   static const String reviewSubtitle = 'Based on symptoms and patient history';
   static const String startAssessment = 'Start Assessment';
-  static const String addProgramme = '+ Add section manually';
+  static const String addProgramme = 'Add section manually';
   static const String confirmRemoveTitle = 'Skip this assessment?';
   static String confirmRemoveBody(String programmeName, String trigger) =>
       '$programmeName was recommended because: $trigger.\n\n'
@@ -2299,14 +2531,20 @@ abstract final class PathwayStrings {
   static const String skipAnywayButton = 'Skip anyway';
 
   // ── Pathway rationales (localized explainability) ────────────────────────
-  static const String pathwayNeonateRationale = 'Neonate assessment (age < 2 months)';
-  static const String pathwayIccmRationale = 'Child illness assessment (WHO IMCI)';
-  static const String pathwayAncRationale = 'Antenatal care — pregnancy confirmed';
-  static const String pathwayPncRationale = 'Postnatal care — within 6 weeks of delivery';
-  static const String pathwayTbScreenRationale = 'TB screening — WHO 4-symptom screen';
+  static const String pathwayNeonateRationale =
+      'Neonate assessment (age < 2 months)';
+  static const String pathwayIccmRationale =
+      'Child illness assessment (WHO IMCI)';
+  static const String pathwayAncRationale =
+      'Antenatal care — pregnancy confirmed';
+  static const String pathwayPncRationale =
+      'Postnatal care — within 6 weeks of delivery';
+  static const String pathwayTbScreenRationale =
+      'TB screening — WHO 4-symptom screen';
   static const String pathwayNcdHtnRationale = 'NCD — hypertension review';
   static const String pathwayNcdDmRationale = 'NCD — diabetes symptoms';
-  static const String pathwayNutritionRationale = 'Nutrition assessment — malnutrition indicators';
+  static const String pathwayNutritionRationale =
+      'Nutrition assessment — malnutrition indicators';
   static const String pathwayEpiRationale = 'Immunization — vaccines overdue';
   static const String pathwayManualRationale = 'Manually added';
   static const String pathwayFamilyPlanningRationale =
@@ -2337,20 +2575,34 @@ abstract final class PathwayStrings {
   /// Returns the localized rationale for a pathway rationale key.
   static String rationale(String key) {
     switch (key) {
-      case 'pathwayNeonateRationale': return pathwayNeonateRationale;
-      case 'pathwayIccmRationale': return pathwayIccmRationale;
-      case 'pathwayAncRationale': return pathwayAncRationale;
-      case 'pathwayPncRationale': return pathwayPncRationale;
-      case 'pathwayTbScreenRationale': return pathwayTbScreenRationale;
-      case 'pathwayNcdHtnRationale': return pathwayNcdHtnRationale;
-      case 'pathwayNcdDmRationale': return pathwayNcdDmRationale;
-      case 'pathwayNutritionRationale': return pathwayNutritionRationale;
-      case 'pathwayEpiRationale': return pathwayEpiRationale;
-      case 'pathwayManualRationale': return pathwayManualRationale;
-      case 'pathwayFamilyPlanningRationale': return pathwayFamilyPlanningRationale;
-      case 'pathwayCataractRationale': return pathwayCataractRationale;
-      case 'pathwayEyeCareRationale': return pathwayEyeCareRationale;
-      default: return key;
+      case 'pathwayNeonateRationale':
+        return pathwayNeonateRationale;
+      case 'pathwayIccmRationale':
+        return pathwayIccmRationale;
+      case 'pathwayAncRationale':
+        return pathwayAncRationale;
+      case 'pathwayPncRationale':
+        return pathwayPncRationale;
+      case 'pathwayTbScreenRationale':
+        return pathwayTbScreenRationale;
+      case 'pathwayNcdHtnRationale':
+        return pathwayNcdHtnRationale;
+      case 'pathwayNcdDmRationale':
+        return pathwayNcdDmRationale;
+      case 'pathwayNutritionRationale':
+        return pathwayNutritionRationale;
+      case 'pathwayEpiRationale':
+        return pathwayEpiRationale;
+      case 'pathwayManualRationale':
+        return pathwayManualRationale;
+      case 'pathwayFamilyPlanningRationale':
+        return pathwayFamilyPlanningRationale;
+      case 'pathwayCataractRationale':
+        return pathwayCataractRationale;
+      case 'pathwayEyeCareRationale':
+        return pathwayEyeCareRationale;
+      default:
+        return key;
     }
   }
 }
@@ -2369,9 +2621,12 @@ abstract final class TriageResultStrings {
 
   static String stepSubtitle(int stepIndex) {
     switch (stepIndex) {
-      case 0: return 'Step 1 of 3 · Tap all symptoms mentioned';
-      case 1: return 'Step 2 of 3 · AI triage active';
-      default: return 'Step 3 of 3 · Fill in what you see';
+      case 0:
+        return 'Step 1 of 3 · Tap all symptoms mentioned';
+      case 1:
+        return 'Step 2 of 3 · AI triage active';
+      default:
+        return 'Step 3 of 3 · Fill in what you see';
     }
   }
 
@@ -2385,21 +2640,27 @@ abstract final class TriageResultStrings {
 
   // IMCI measurements
   static const String measureTempLabel = 'Take temperature';
-  static const String measureTempHint = 'Place thermometer under arm for 1 minute';
+  static const String measureTempHint =
+      'Place thermometer under arm for 1 minute';
   static const String measureBreathLabel = 'Count breaths in 1 minute';
-  static const String measureBreathHint = 'Watch the chest go up and down — count for 60 seconds';
+  static const String measureBreathHint =
+      'Watch the chest go up and down — count for 60 seconds';
   static const String measureChestLabel = 'Look at the chest';
-  static const String measureChestHint = 'Does the chest go IN when breathing? (chest in-drawing)';
+  static const String measureChestHint =
+      'Does the chest go IN when breathing? (chest in-drawing)';
 
   // NCD measurements
   static const String measureBpLabel = 'Take blood pressure';
-  static const String measureBpHint = 'Left arm, patient seated, at rest for 5 minutes';
+  static const String measureBpHint =
+      'Left arm, patient seated, at rest for 5 minutes';
   static const String measureWeightLabel = 'Weigh the patient';
-  static const String measureWeightHint = 'Remove shoes — record to nearest 0.1 kg';
+  static const String measureWeightHint =
+      'Remove shoes — record to nearest 0.1 kg';
 
   // ANC measurements
   static const String measureFundalLabel = 'Measure fundal height';
-  static const String measureFundalHint = 'Pubic symphysis to uterine fundus in cm';
+  static const String measureFundalHint =
+      'Pubic symphysis to uterine fundus in cm';
 
   // ── Programme banner ────────────────────────────────────────────────────────
   static const String programmeBannerPrefix = 'AI identified: ';
@@ -2418,11 +2679,78 @@ abstract final class TriageResultStrings {
 abstract final class SymptomPickerStrings {
   SymptomPickerStrings._();
 
+  // ── AI Scribe triage banner (spec §4.1.2 / §5.1.1) ───────────────────────
+  static String scribeBannerTitleFor({required bool isFemale}) =>
+      isFemale
+          ? '🎙 AI Scribe — tap and let her speak'
+          : '🎙 AI Scribe — tap and let him speak';
+  static String scribeBannerSubtitleFor({required bool isFemale}) =>
+      isFemale
+          ? 'Symptoms appear automatically as she talks'
+          : 'Symptoms appear automatically as he talks';
+  static const String scribeBannerRecording = 'Listening… tap to stop';
+  static const String scribeBannerProcessing = 'AI is reviewing the recording';
+  static const String scribeBannerTriageProcessing = 'Analysing symptoms…';
+  static const String scribeBannerProcessingSubtitle = 'Transcribing your recording…';
+  static String scribeDoneWithCount(int n) => n == 1
+      ? 'Scribe complete · 1 symptom detected'
+      : n > 1
+          ? 'Scribe complete · $n symptoms detected'
+          : 'Scribe complete';
+  static const String scribeBannerDoneSubtitle = 'Tap to record again';
+  static const String scribeBannerRecordingSubtitle = 'Tap anywhere to stop';
+  static const String scribeBannerError = 'Voice review failed';
+  static const String scribeBannerErrorSubtitle = 'Tap to try again';
+  static const String scribeBannerNoSymptoms = 'No symptoms detected';
+  static const String scribeBannerNoSymptomsSubtitle =
+      'Speak the patient\'s symptoms clearly, then tap to try again';
+
+  /// Accessibility label for the in-circle stop affordance shown while the
+  /// AI Scribe is recording.
+  static const String scribeStopRecordingLabel = 'Stop recording';
+
   // ── AI briefing cards ────────────────────────────────────────────────────
   static const String briefCardTitle = 'Before you knock · AI brief';
   static const String briefCard1Title = 'Before You Knock';
-  static const String briefCard2Title = "Today's Priorities";
-  static const String briefCard3Title = 'Suggested Discussion Points';
+
+  /// Card 3 title — gendered. Spec §4.1 / §5.1: greet the patient before
+  /// opening the symptom screen. Pronoun resolved from patient profile.
+  static String briefCard3TitleFor({required bool isFemale}) =>
+      'How is ${isFemale ? 'she' : 'he'} feeling today?';
+
+  // ── Before You Knock instructional leading line ──────────────────────────
+  /// Shown on the navy strip at the top of Card 1.
+  static String beforeYouKnockGreetingFor({required bool isFemale}) =>
+      'Sit with ${isFemale ? 'her' : 'him'} — greet them.';
+
+  // ── "Sit with her / him — greet warmly" card (Step 1, between
+  // Before-You-Knock and the AI Scribe). All static — never AI-generated.
+
+  /// Header (uppercase, small). Gendered.
+  static String sitWithGreetHeaderFor({required bool isFemale}) =>
+      isFemale ? 'SIT WITH HER — GREET WARMLY' : 'SIT WITH HIM — GREET WARMLY';
+
+  /// Bangla greeting the SK opens with. ANC variant for women of reproductive
+  /// age; NCD/general variant otherwise. Includes the second-line ask so the
+  /// SK has a natural pause before the AI Scribe records.
+  static String sitWithGreetBanglaFor({required bool isFemale}) => isFemale
+      ? '"আপু, আপনি কেমন আছেন?\nবাচ্চা কেমন নড়াচড়া করছে?"'
+      : '"কাকা, আপনি কেমন আছেন?\nকোথাও কষ্ট আছে কি?"';
+
+  /// English translation of [sitWithGreetBanglaFor].
+  static String sitWithGreetEnglishFor({required bool isFemale}) => isFemale
+      ? 'Sister, how are you? Is the baby moving well?'
+      : 'Brother, how are you? Are you feeling any discomfort?';
+
+  /// Helper hint below the greeting — primes the SK to talk about home life
+  /// before launching the clinical conversation.
+  static String sitWithGreetHintFor({required bool isFemale}) => isFemale
+      ? 'Ask how she feels at home, with family, and about her sleep — before the pregnancy checkup'
+      : 'Ask how he feels at home, with family, and about his sleep — before the visit';
+
+  // ── "How is she feeling today?" heading shown just above the AI Scribe.
+  static String howFeelingTodayHeadingFor({required bool isFemale}) =>
+      'How is ${isFemale ? 'she' : 'he'} feeling today? 🎙️';
 
   // ── Patient context chips ────────────────────────────────────────────────
   static const String chipPregnant = 'Pregnant · ANC';
@@ -2450,13 +2778,132 @@ abstract final class SymptomPickerStrings {
   static const String durationValue4plus = '4+';
 
   // ── CTA button ───────────────────────────────────────────────────────────
-  static const String ctaWithPathways = 'AI is checking — see what to do next →';
+  static const String ctaWithPathways =
+      'AI is checking — see what to do next →';
   static const String ctaRoutine = 'Continue (routine visit)';
 
   // ── Other symptoms free-text ─────────────────────────────────────────────
-  static const String otherSymptomsLabel = 'Other symptoms';
-  static const String otherSymptomsHint =
-      'Describe any other symptoms not listed above…';
+  static const String otherSymptomsLabel = 'Other symptoms / Notes';
+  static const String otherSymptomsHint = 'Type symptom manually…';
+  static const String otherSymptomsAddFromList = 'Add from list';
+
+  // ── AI-driven symptom list (replaces the hardcoded cluster grid) ─────────
+  static const String detectedSymptomsTitle = 'Symptoms detected by AI';
+  static const String detectedSymptomsSubtitleEmpty =
+      'Tap the mic above to record the patient. AI-detected symptoms will appear here for you to review.';
+  static const String detectedSymptomsSubtitleFilled =
+      'Review each symptom. Tap × to remove anything incorrect, or add what is missing.';
+  static const String addSymptomCta = 'Add symptoms';
+  static const String addSymptomFromList = 'Add from list';
+  static const String addSymptomSheetTitle = 'Add symptoms';
+  static const String addSymptomSheetSubtitle =
+      'Tap to add or remove. AI-detected symptoms are already ticked — press Done when finished.';
+  static const String addSymptomSheetEmpty = 'All symptoms already added.';
+  static const String addSymptomSheetDone = 'Done';
+  static String addSymptomSheetCounter(int added) =>
+      added == 0 ? 'No symptoms selected' : '$added selected';
+  static const String removeSymptomSemanticPrefix = 'Remove symptom';
+}
+
+/// Strings for the AI Programme Selection step (Step 2 of the visit flow).
+///
+/// Surfaces the AI's programme recommendations grounded in BRAC + Bangladesh
+/// national clinical guidelines and lets the SK accept / reject before the
+/// screening form loads.
+abstract final class ProgrammeSelectionStrings {
+  ProgrammeSelectionStrings._();
+
+  static const String stepLabel = 'Programmes';
+  static const String stepTitle = 'AI recommended programmes';
+
+  // Loading / empty states
+  static const String loadingTitle = 'AI is reviewing the symptoms…';
+  static const String loadingSubtitle =
+      'Checking BRAC protocols and Bangladesh national clinical guidelines';
+  static const String failedTitle = 'Unable to load AI recommendations';
+  static const String failedSubtitle =
+      'Continue with the current enrolment or add a programme manually.';
+  static const String retry = 'Retry';
+
+  // Current Programme widget
+  static const String currentProgrammeTitle = 'Current Programme';
+  static const String currentProgrammeNone =
+      'Patient is not enrolled in any programme yet.';
+  static const String consistencyConsistent =
+      'Selected symptoms are consistent with this programme.';
+  static const String consistencyInconsistent =
+      'Selected symptoms do not strongly match this programme.';
+
+  // AI Recommended Programmes widget
+  static const String aiRecommendedTitle = 'AI Recommended Programmes';
+  static String confidenceChip(int pct) => '$pct% confidence';
+  static const String currentBadge = 'Current';
+  static const String acceptCta = 'Add';
+  static const String acceptedCta = 'Added';
+  static const String rejectCta = 'Skip';
+
+  // ── Manual-add confirmation dialog ───────────────────────────────────────
+  /// Title fires when the SK selects a programme directly from the manual
+  /// add sheet — keeps a deliberate confirmation before opening the form.
+  static String addConfirmTitle(String programmeTag) =>
+      'Add $programmeTag assessment?';
+  static const String addConfirmBody =
+      'This will open the screening questions for the selected programme. '
+      'You can remove it later from the recommendations list.';
+  static const String addConfirmCta = 'Yes, add';
+  static const String addConfirmCancel = 'Cancel';
+
+  /// Skip confirmation when SK rejects an AI recommendation card.
+  static String skipConfirmTitle(String programmeTag) =>
+      'Skip $programmeTag for this visit?';
+  static const String skipConfirmBody =
+      'The AI recommended this programme based on the patient\'s symptoms and '
+      'history. Are you sure you want to skip it?';
+  static const String skipConfirmCta = 'Yes, skip';
+  static const String skipConfirmCancel = 'Keep it';
+
+  // ── Review-before-continue sheet ─────────────────────────────────────────
+  /// Title — "Review N programme(s)".
+  static String reviewSheetTitle(int count) => count == 1
+      ? 'Review 1 programme'
+      : 'Review $count programmes';
+  static const String reviewSheetSubtitle =
+      'Confirm the assessments below. You can add or remove before continuing.';
+  static const String reviewSheetEmpty =
+      'No programmes selected. Add one before continuing, or proceed with a '
+      'routine visit.';
+  static const String reviewSheetAddMore = 'Add another programme';
+  static const String reviewSheetBack = 'Back';
+
+  // Cross-program notice callout
+  static const String crossNoticeTitle = 'Cross-programme alert';
+
+  // Add programme sheet
+  static const String addProgrammeCta = 'Add another programme';
+  static const String addProgrammeSheetTitle = 'Add a programme';
+  static const String addProgrammeSheetSubtitle =
+      'Tap to select. Already-recommended programmes are hidden.';
+  static const String addProgrammeSheetEmpty =
+      'All programmes already selected.';
+
+  // Continue
+  static String continueCta(int count) => count <= 1
+      ? 'Continue with $count programme'
+      : 'Continue with $count programmes';
+  static const String continueCtaEmpty = 'Continue (no programme)';
+
+  // Rationale source labels — match RationaleSource.displayLabel but as
+  // string constants so widgets can show them inline.
+  static const String sourceBrac = 'BRAC';
+  static const String sourceBdNational = 'BD national';
+  static const String sourcePatientContext = 'Context';
+  static const String sourceSymptom = 'Symptom';
+
+  // Confirmation toasts shown when the SK accepts / removes a programme.
+  static String toastAdded(String programmeTag) =>
+      '$programmeTag added to this visit';
+  static String toastRemoved(String programmeTag) =>
+      '$programmeTag removed from this visit';
 }
 
 /// Visit completion screen strings.
@@ -2472,6 +2919,41 @@ abstract final class VisitCompleteStrings {
   static const String sendCounsellingMessage = 'Send Counselling Message';
   static const String createReferral = 'Create Referral';
   static const String backToHome = 'Back to Home';
+}
+
+/// Strings for the unified 3-step visit flow (spec §3.1).
+///
+/// One `VisitFlowScreen` hosts: Step 1 Symptom check → Step 2 Vitals + form →
+/// Step 3 AI Recommendation. Progress header shows step labels.
+abstract final class VisitFlowStrings {
+  VisitFlowStrings._();
+
+  static const String step1Label = 'Symptoms';
+  static const String step2Label = 'Vitals & form';
+  static const String step3Label = 'AI recommends';
+
+  // Step-pill titles inside the navy flow header.
+  // Step 2 is the composite "AI programme recommendation → assessment form"
+  // phase, so the pill label stays static and does NOT carry the programme
+  // name (which is only known after the SK confirms).
+  static const String step1Title = 'How are you?';
+  static const String step2Title = 'Assessment forms';
+  // Retained for backwards-compatibility with tests pinning the legacy
+  // interpolation contract — the header no longer references this string.
+  static const String step2TitleSuffix = 'form';
+  static const String step3Title = 'Summary';
+
+  static const String stepIndicator = 'Step %1 of 3';
+  static String stepIndicatorFor(int oneBased) =>
+      stepIndicator.replaceFirst('%1', oneBased.toString());
+
+  static const String backToVisits = 'Back to visits';
+  static const String discardConfirmTitle = 'Leave this visit?';
+  static const String discardConfirm =
+      'The symptoms, programmes and form entries on this visit will be '
+      'discarded. You will start fresh next time.';
+  static const String discardCancel = 'Stay on this visit';
+  static const String discardConfirmCta = 'Yes, leave';
 }
 
 /// Teleconsult placeholder screen strings.
@@ -2517,4 +2999,35 @@ abstract final class TrainingStrings {
   static const String certificatesTitle = 'Certificates';
   static const String certificatesSubtitle =
       'Complete modules to earn programme certificates';
+}
+
+/// NCD assessment form copy — spec §5.2.2 Hypertension Screening section.
+///
+/// Bengali secondary labels mirror the spec wording so the SK can match the
+/// printed flow charts during home visits.
+abstract final class NcdScreeningStrings {
+  NcdScreeningStrings._();
+
+  static const String sectionTitle = 'Hypertension screening';
+  static const String sectionSubtitle =
+      'Yes / No — strengthens AI clinical decision support.';
+
+  // Stroke sign — band 1 short-circuit (§2.8.2).
+  static const String strokeSignTitle = 'One-sided weakness or stroke signs?';
+  static const String strokeSignBn = 'এক পাশে দুর্বলতা / স্ট্রোকের লক্ষণ?';
+  static const String strokeSignSubtitle =
+      'Sudden numbness or weakness on one side — immediate emergency referral.';
+
+  static const String morningHeadachesTitle = 'Morning headaches?';
+  static const String morningHeadachesBn = 'সকালে মাথা ব্যথা?';
+
+  static const String chestTightnessTitle =
+      'Chest tightness or shortness of breath?';
+  static const String chestTightnessBn = 'বুকে চাপ বা শ্বাসকষ্ট?';
+
+  static const String highSaltTitle = 'High salt in daily food?';
+  static const String highSaltBn = 'খাবারে অতিরিক্ত লবণ?';
+
+  static const String familyHistoryTitle = 'Family history of high BP?';
+  static const String familyHistoryBn = 'বাবা-মায়ের / পরিবারে উচ্চ রক্তচাপ?';
 }

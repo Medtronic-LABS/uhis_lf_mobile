@@ -19,6 +19,7 @@ import 'core/auth/auth_repository.dart';
 import 'core/auth/auth_state.dart';
 import 'core/auth/biometric_service.dart';
 import 'core/constants/app_strings.dart';
+import 'core/db/ai_response_cache_dao.dart';
 import 'core/db/app_database.dart';
 import 'core/db/assessment_dao.dart';
 import 'core/db/encounter_dao.dart';
@@ -59,6 +60,7 @@ import 'features/visit/household_repository.dart';
 import 'features/visit/observation_repository.dart';
 import 'features/visit/submission/unified_submission_orchestrator.dart';
 import 'features/visit/briefing/visit_briefing_repository.dart';
+import 'features/visit/programme_selection/programme_recommendation_repository.dart';
 import 'features/visit/visit_controller.dart';
 import 'features/worklist/worklist_repository.dart';
 
@@ -236,6 +238,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     api: widget.api,
   );
   late final AssessmentDraftDao _draftDao = AssessmentDraftDao(widget.appDb);
+  late final AiResponseCacheDao _aiCacheDao = AiResponseCacheDao(widget.appDb);
   late final UserHierarchyService _userHierarchy =
       UserHierarchyService(widget.api, widget.authRepo);
   late final UnifiedSubmissionOrchestrator _submissionOrchestrator =
@@ -384,11 +387,19 @@ class _UhisNextAppState extends State<UhisNextApp>
             value: _assessmentRepo),
         // Sectioned assessment draft persistence + fan-out orchestration
         Provider<AssessmentDraftDao>.value(value: _draftDao),
+        Provider<AiResponseCacheDao>.value(value: _aiCacheDao),
         Provider<UnifiedSubmissionOrchestrator>.value(
             value: _submissionOrchestrator),
         // AI Visit Briefing service
         Provider<VisitBriefingRepository>(
-            create: (_) => VisitBriefingRepository(widget.api)),
+            create: (_) =>
+                VisitBriefingRepository(widget.api, cache: _aiCacheDao)),
+        // AI Programme Recommendation — Step 2 picker grounded in BRAC + BD
+        // national clinical guidelines. Caches per-patient via _aiCacheDao
+        // so re-entering Step 2 doesn't re-hit the API.
+        Provider<ProgrammeRecommendationRepository>(
+            create: (_) => ProgrammeRecommendationRepository(widget.api,
+                cache: _aiCacheDao)),
         // AI Scribe API service
         Provider<ScribeApiService>(
             create: (_) => ScribeApiService(widget.api)),

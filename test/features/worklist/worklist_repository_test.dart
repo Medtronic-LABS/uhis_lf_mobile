@@ -68,7 +68,7 @@ void main() {
     );
   }
 
-  test('recompute orders by risk_score DESC and exposes urgent at index 0',
+  test('recompute orders by sortRank DESC and exposes band1 at index 0',
       () async {
     await patients.upsertMany([
       mkPatient('a', name: 'Low Adult', age: 30),
@@ -77,7 +77,7 @@ void main() {
     ]);
     await programmes.replaceFor('b', {Programme.tb});
     await programmes.replaceFor('c', {Programme.anc});
-    // Make 'c' urgent via redFlag.
+    // Make 'c' band1 via redFlag.
     await patients.upsertMany([
       Patient(
         id: 'c',
@@ -96,9 +96,9 @@ void main() {
     final list = await repo.load();
     expect(list, isNotEmpty);
     expect(list.first.patientId, 'c');
-    expect(list.first.band, RiskBand.urgent);
+    expect(list.first.band, Band.band1);
     expect(list.first.isUrgent, isTrue);
-    expect(list.last.band, RiskBand.low);
+    expect(list.last.band, Band.band4);
   });
 
   test('chip filter narrows the list to a programme', () async {
@@ -120,7 +120,7 @@ void main() {
     expect(tbOnly.map((e) => e.patientId).toList(), ['c']);
   });
 
-  test('null risk_score rows do not steal the urgent slot', () async {
+  test('null risk_score rows do not steal the band1 slot', () async {
     await patients.upsertMany([
       mkPatient('a', name: 'Unscored', age: 30),
       mkPatient('b', name: 'Scored Mid', age: 30),
@@ -128,8 +128,9 @@ void main() {
     await programmes.replaceFor('b', {Programme.ncd});
     await patients.updateRisk(
       patientId: 'b',
-      score: 65,
-      bandWireTag: RiskBand.high.wireTag,
+      sortRank: sortRankFor(Band.band2, Modifier.none),
+      bandWireTag: Band.band2.wireTag,
+      modifierWireTag: Modifier.none.wireTag,
       reasonsJson: '[]',
     );
 
@@ -137,5 +138,55 @@ void main() {
     expect(list.first.patientId, 'b');
     // Unscored row still appears, just at the bottom.
     expect(list.last.patientId, 'a');
+  });
+
+  test('pregnant ranks above non-pregnant within the same band', () async {
+    await patients.upsertMany([
+      mkPatient('np', name: 'Non Pregnant', age: 30),
+      mkPatient('preg', name: 'Pregnant', age: 28),
+    ]);
+    await programmes.replaceFor('preg', {Programme.anc});
+    // Force both onto band2 with the same modifier so only pregnancy can
+    // break the tie.
+    final sortRank = sortRankFor(Band.band2, Modifier.none);
+    await patients.updateRisk(
+      patientId: 'np',
+      sortRank: sortRank,
+      bandWireTag: Band.band2.wireTag,
+      modifierWireTag: Modifier.none.wireTag,
+      reasonsJson: '[]',
+    );
+    await patients.updateRisk(
+      patientId: 'preg',
+      sortRank: sortRank,
+      bandWireTag: Band.band2.wireTag,
+      modifierWireTag: Modifier.none.wireTag,
+      reasonsJson: '[]',
+    );
+
+    final list = await repo.load();
+    expect(list.first.patientId, 'preg');
+    expect(list.last.patientId, 'np');
+  });
+
+  test('village match within band ranks ahead when SK selects a village',
+      () async {
+    await patients.upsertMany([
+      mkPatient('off', name: 'Off Village', age: 40, villageId: 'v2'),
+      mkPatient('on', name: 'On Village', age: 40, villageId: 'v1'),
+    ]);
+    final sortRank = sortRankFor(Band.band3, Modifier.none);
+    for (final id in ['off', 'on']) {
+      await patients.updateRisk(
+        patientId: id,
+        sortRank: sortRank,
+        bandWireTag: Band.band3.wireTag,
+        modifierWireTag: Modifier.none.wireTag,
+        reasonsJson: '[]',
+      );
+    }
+
+    final list = await repo.load(selectedVillageId: 'v1');
+    expect(list.first.patientId, 'on');
   });
 }

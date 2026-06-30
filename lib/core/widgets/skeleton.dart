@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../app/theme.dart';
+import '../theme/app_theme.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Primitives
@@ -27,7 +27,13 @@ class SkeletonBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    // Shimmer tints sit between the canvas + card-surface palette so the
+    // skeleton blends with the Leapfrog theme rather than the Material 3
+    // default scheme (which leans grey-pink). Matches the visual weight of
+    // the real mission card the skeleton stands in for.
+    final tokens = Theme.of(context).extension<LeapfrogColors>();
+    final base = tokens?.cardSurfaceMuted ?? AppColors.cardSurfaceMuted;
+    final highlight = AppColors.border;
     final v = (shimmerValue + delay) % 1.0;
     return Container(
       width: width,
@@ -37,9 +43,9 @@ class SkeletonBox extends StatelessWidget {
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
           colors: [
-            scheme.surfaceContainerLow,
-            scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-            scheme.surfaceContainerLow,
+            base,
+            highlight,
+            base,
           ],
           stops: [
             (v - 0.3).clamp(0.0, 1.0),
@@ -104,14 +110,14 @@ class _SkeletonCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final tokens = Theme.of(context).extension<LeapfrogColors>();
     return Container(
       width: double.infinity,
       padding: padding,
       decoration: BoxDecoration(
-        color: scheme.surface,
+        color: tokens?.cardSurface ?? AppColors.cardSurface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+        border: Border.all(color: AppColors.border),
       ),
       child: child,
     );
@@ -154,9 +160,12 @@ class _PatientCardSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Mirror MissionQueueCard exactly so the swap from skeleton → real card
+    // is visually seamless: same surface, same 4px grey left border
+    // (#E5E7EB — never red, since the band is unknown during load), same
+    // 12px corner radius, same 14/12 padding, same avatar + pill geometry.
     final tokens = Theme.of(context).extension<LeapfrogColors>();
-    final scheme = Theme.of(context).colorScheme;
-    final cardBg = tokens?.cardSurface ?? scheme.surface;
+    final cardBg = tokens?.cardSurface ?? AppColors.cardSurface;
     final v = (shimmerValue + delay) % 1.0;
 
     return Padding(
@@ -165,13 +174,10 @@ class _PatientCardSkeleton extends StatelessWidget {
         color: cardBg,
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
+          decoration: const BoxDecoration(
+            borderRadius: BorderRadius.all(Radius.circular(12)),
             border: Border(
-              left: BorderSide(
-                color: scheme.surfaceContainerHighest,
-                width: 4,
-              ),
+              left: BorderSide(color: AppColors.border, width: 4),
             ),
           ),
           padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
@@ -205,118 +211,302 @@ class _PatientCardSkeleton extends StatelessWidget {
   }
 }
 
-/// Skeleton matching [PatientContextScreen] — header card + vitals row + assessments.
+/// Skeleton matching [PatientContextScreen] — purple header + canvas body
+/// + the three sections (Gemini summary banner, vitals strip, assessments).
 ///
-/// Pass [name] when it is already known at navigation time so the header shows
-/// the real patient name instead of a shimmer box.
+/// Pass [name] when it is already known at navigation time so the header
+/// shows the real patient name + initials instead of a shimmer box. Avoids
+/// the all-white loader the SK previously saw when tapping a worklist card.
 class SkeletonPatientDetail extends StatelessWidget {
   const SkeletonPatientDetail({super.key, this.name});
 
   /// Pre-known patient name — shown as real text; skeletons the rest.
   final String? name;
 
+  String _initials(String n) {
+    final parts = n.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) return '?';
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
+        .toUpperCase();
+  }
+
   @override
-  Widget build(BuildContext context) => SkeletonAnimation(
-        builder: (context, v) => SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Patient header
-              _SkeletonCard(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SkeletonBox(shimmerValue: v, width: 56, height: 56, borderRadius: 28),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (name != null)
-                            Text(
-                              name!,
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            )
-                          else
-                            SkeletonBox(shimmerValue: v, width: 160, height: 20, delay: 0.05),
-                          const SizedBox(height: 8),
-                          Row(children: [
-                            SkeletonBox(shimmerValue: v, width: 64, height: 22, borderRadius: 11, delay: 0.08),
-                            const SizedBox(width: 8),
-                            SkeletonBox(shimmerValue: v, width: 64, height: 22, borderRadius: 11, delay: 0.10),
-                          ]),
-                          const SizedBox(height: 8),
-                          SkeletonBox(shimmerValue: v, width: 100, height: 13, delay: 0.12),
-                        ],
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>();
+    final headerColor = tokens?.aiPurpleDark ?? AppColors.aiPurpleDark;
+    final canvas = tokens?.canvas ?? AppColors.canvas;
+    return Container(
+      color: canvas,
+      child: SkeletonAnimation(
+        builder: (context, v) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── Purple header (matches _PatientDetailHeader) ─────────────
+            Container(
+              color: headerColor,
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 14),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      const IconButton(
+                        icon: Icon(Icons.arrow_back, color: Colors.white),
+                        onPressed: null,
+                        tooltip: 'Back',
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              // Vitals row
-              _SkeletonCard(
-                child: Row(
-                  children: List.generate(3, (i) {
-                    return Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.only(right: i < 2 ? 8 : 0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SkeletonBox(shimmerValue: v, width: 40, height: 11, delay: i * 0.06),
-                            const SizedBox(height: 6),
-                            SkeletonBox(shimmerValue: v, width: 60, height: 22, delay: i * 0.06 + 0.05),
-                          ],
+                      const Expanded(
+                        child: Text(
+                          'Back to worklist',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
-                    );
-                  }),
-                ),
-              ),
-              const SizedBox(height: 12),
-              // Assessment section
-              _SkeletonCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(children: [
-                      SkeletonBox(shimmerValue: v, width: 120, height: 16),
-                      const Spacer(),
-                      SkeletonBox(shimmerValue: v, width: 50, height: 13, delay: 0.05),
-                    ]),
-                    const SizedBox(height: 12),
-                    const Divider(height: 1),
-                    const SizedBox(height: 8),
-                    ...List.generate(3, (i) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 7),
-                      child: Row(children: [
-                        SkeletonBox(shimmerValue: v, width: 36, height: 36, borderRadius: 8, delay: i * 0.08),
+                      const IconButton(
+                        icon: Icon(Icons.cloud_download_outlined,
+                            color: Colors.white),
+                        onPressed: null,
+                        tooltip: 'Refresh',
+                      ),
+                    ],
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 24,
+                          backgroundColor:
+                              Colors.white.withValues(alpha: 0.18),
+                          child: Text(
+                            name == null ? '?' : _initials(name!),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              SkeletonBox(shimmerValue: v, width: 64, height: 18, borderRadius: 4, delay: i * 0.08 + 0.05),
+                              if (name != null)
+                                Text(
+                                  name!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                )
+                              else
+                                _PaleBar(
+                                    shimmerValue: v,
+                                    width: 160,
+                                    height: 20,
+                                    delay: 0.05),
                               const SizedBox(height: 6),
-                              SkeletonBox(shimmerValue: v, width: 100, height: 12, delay: i * 0.08 + 0.08),
+                              _PaleBar(
+                                  shimmerValue: v,
+                                  width: 110,
+                                  height: 12,
+                                  delay: 0.10),
                             ],
                           ),
                         ),
-                        SkeletonBox(shimmerValue: v, width: 16, height: 16, borderRadius: 8, delay: i * 0.08 + 0.10),
-                      ]),
-                    )),
-                  ],
-                ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+            // ── Canvas body — mirrors the real ListView ──────────────────
+            Expanded(
+              child: ListView(
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 110),
+                children: [
+                  // 1) Gemini summary banner (light card + text lines).
+                  _SkeletonCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          SkeletonBox(
+                              shimmerValue: v,
+                              width: 22,
+                              height: 22,
+                              borderRadius: 6),
+                          const SizedBox(width: 8),
+                          SkeletonBox(
+                              shimmerValue: v,
+                              width: 120,
+                              height: 14,
+                              delay: 0.04),
+                        ]),
+                        const SizedBox(height: 10),
+                        SkeletonBox(
+                            shimmerValue: v,
+                            width: double.infinity,
+                            height: 11,
+                            delay: 0.08),
+                        const SizedBox(height: 6),
+                        SkeletonBox(
+                            shimmerValue: v,
+                            width: 240,
+                            height: 11,
+                            delay: 0.12),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  // 2) Vitals strip.
+                  _SkeletonCard(
+                    child: Row(
+                      children: List.generate(3, (i) {
+                        return Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.only(right: i < 2 ? 8 : 0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SkeletonBox(
+                                    shimmerValue: v,
+                                    width: 40,
+                                    height: 11,
+                                    delay: i * 0.06),
+                                const SizedBox(height: 6),
+                                SkeletonBox(
+                                    shimmerValue: v,
+                                    width: 60,
+                                    height: 22,
+                                    delay: i * 0.06 + 0.05),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  // 3) Assessments section.
+                  _SkeletonCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          SkeletonBox(
+                              shimmerValue: v, width: 120, height: 16),
+                          const Spacer(),
+                          SkeletonBox(
+                              shimmerValue: v,
+                              width: 50,
+                              height: 13,
+                              delay: 0.05),
+                        ]),
+                        const SizedBox(height: 12),
+                        const Divider(height: 1),
+                        const SizedBox(height: 8),
+                        ...List.generate(
+                            3,
+                            (i) => Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 7),
+                                  child: Row(children: [
+                                    SkeletonBox(
+                                        shimmerValue: v,
+                                        width: 36,
+                                        height: 36,
+                                        borderRadius: 8,
+                                        delay: i * 0.08),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          SkeletonBox(
+                                              shimmerValue: v,
+                                              width: 64,
+                                              height: 18,
+                                              borderRadius: 4,
+                                              delay: i * 0.08 + 0.05),
+                                          const SizedBox(height: 6),
+                                          SkeletonBox(
+                                              shimmerValue: v,
+                                              width: 100,
+                                              height: 12,
+                                              delay: i * 0.08 + 0.08),
+                                        ],
+                                      ),
+                                    ),
+                                    SkeletonBox(
+                                        shimmerValue: v,
+                                        width: 16,
+                                        height: 16,
+                                        borderRadius: 8,
+                                        delay: i * 0.08 + 0.10),
+                                  ]),
+                                )),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-      );
+      ),
+    );
+  }
+}
+
+/// White-tinted shimmer bar for use INSIDE the purple header where the
+/// default canvas-tinted [SkeletonBox] would look too dark.
+class _PaleBar extends StatelessWidget {
+  const _PaleBar({
+    required this.shimmerValue,
+    required this.width,
+    required this.height,
+    this.delay = 0,
+  });
+
+  final double shimmerValue;
+  final double width;
+  final double height;
+  final double delay;
+  static const double borderRadius = 4;
+
+  @override
+  Widget build(BuildContext context) {
+    final v = (shimmerValue + delay) % 1.0;
+    final base = Colors.white.withValues(alpha: 0.16);
+    final highlight = Colors.white.withValues(alpha: 0.32);
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [base, highlight, base],
+          stops: [
+            (v - 0.3).clamp(0.0, 1.0),
+            v,
+            (v + 0.3).clamp(0.0, 1.0),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(borderRadius),
+      ),
+    );
+  }
 }
 
 /// Skeleton matching household / member list tiles.

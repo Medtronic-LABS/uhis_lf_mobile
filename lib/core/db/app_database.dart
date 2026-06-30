@@ -20,7 +20,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 13;
+  static const int schemaVersion = 15;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -41,6 +41,7 @@ class AppDatabase {
   static const String tableAssessmentDraft = 'assessment_draft';
   static const String tableAiSuggestions = 'ai_suggestions';
   static const String tableEvalLog = 'eval_log';
+  static const String tableAiResponseCache = 'ai_response_cache';
 
   /// Opens (creating if needed) the on-device database, encrypted with
   /// a per-device key stored in Android EncryptedSharedPreferences.
@@ -176,6 +177,7 @@ class AppDatabase {
         age INTEGER,
         risk_score INTEGER,
         risk_band TEXT,
+        risk_modifier TEXT,
         risk_reasons TEXT,
         risk_hint_level TEXT,
         risk_hint_color TEXT,
@@ -430,6 +432,25 @@ class AppDatabase {
         'CREATE INDEX idx_eval_log_upload ON $tableEvalLog(upload_status)');
     await db.execute(
         'CREATE INDEX idx_eval_log_captured ON $tableEvalLog(captured_at DESC)');
+
+    // v15 — AI response cache. Stores the most recent payload returned by an
+    // AI service (briefing, programme recommendation, etc) so re-opening a
+    // visit or revisiting a step does not re-hit the API. Keyed by a
+    // caller-controlled cache_key (typically `{kind}:{visitId|patientId}`)
+    // plus a content_hash that the caller bumps when the input changes.
+    await db.execute('''
+      CREATE TABLE $tableAiResponseCache (
+        cache_key TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL
+      )''');
+    await db.execute(
+        'CREATE INDEX idx_ai_cache_kind ON $tableAiResponseCache(kind)');
+    await db.execute(
+        'CREATE INDEX idx_ai_cache_expires ON $tableAiResponseCache(expires_at)');
   }
 
   static Future<void> _onUpgrade(Database db, int from, int to) async {
@@ -849,6 +870,53 @@ class AppDatabase {
       }
       await addCol13(
           'ALTER TABLE $tablePatients ADD COLUMN village_name TEXT');
+    }
+    if (from < 14) {
+      // v14 — Spec §2.8 band+modifier risk model. risk_band column repurposed
+      // to carry `band1`/`band2`/`band3`/`band4`; risk_modifier added for the
+      // `a`/`b`/`none` letter modifier. risk_score column retained as the
+      // numeric sort rank (sortRankFor(band, modifier)) — DESC ORDER BY still
+      // yields the spec sort sequence 1a → 1b → 1 → 2a → 2b → 2 → 3a → 3b → 3 → 4.
+      Future<void> addCol14(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* column already present */}
+      }
+      await addCol14(
+          'ALTER TABLE $tablePatients ADD COLUMN risk_modifier TEXT');
+      // Stale rows: clear the legacy 0–100 score + old wire tags so the
+      // first post-upgrade recompute pass fills them with the new shape.
+      await db.execute(
+          'UPDATE $tablePatients SET risk_score = NULL, risk_band = NULL, risk_modifier = NULL');
+    }
+    if (from < 15) {
+      // v15 — AI response cache for briefing + programme-recommendation
+      // (and future AI surfaces). Keyed by `{kind}:{scopeId}` with a content
+      // hash so cache invalidates when the input changes (e.g. SK edits the
+      // symptom set before re-entering Step 2).
+      Future<void> addTbl15(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* table already present */}
+      }
+      Future<void> addIdx15(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* index already present */}
+      }
+      await addTbl15('''
+        CREATE TABLE IF NOT EXISTS $tableAiResponseCache (
+          cache_key TEXT PRIMARY KEY,
+          kind TEXT NOT NULL,
+          content_hash TEXT NOT NULL,
+          payload TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          expires_at INTEGER NOT NULL
+        )''');
+      await addIdx15(
+          'CREATE INDEX IF NOT EXISTS idx_ai_cache_kind ON $tableAiResponseCache(kind)');
+      await addIdx15(
+          'CREATE INDEX IF NOT EXISTS idx_ai_cache_expires ON $tableAiResponseCache(expires_at)');
     }
   }
 

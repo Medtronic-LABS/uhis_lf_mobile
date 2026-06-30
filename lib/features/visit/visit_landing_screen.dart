@@ -103,9 +103,10 @@ class _VisitLandingScreenState extends State<VisitLandingScreen> {
       final originParam = origin != null ? '?origin=$origin' : '';
       debugPrint('[VisitLanding] navigating to triage with origin=$origin');
       context.go(
-        '/patients/visit/$encounterId/triage$originParam',
+        '/patients/visit/$encounterId/flow$originParam',
         extra: {
           'patientId': widget.patientId,
+          'patientName': widget.data?.patientName,
           'memberId': null,
           'householdId': widget.data?.householdId,
           'patientAge': widget.data?.patientAge,

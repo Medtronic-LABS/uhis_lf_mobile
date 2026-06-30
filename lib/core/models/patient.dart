@@ -28,6 +28,7 @@ class Patient {
     this.age,
     this.riskScore,
     this.riskBand,
+    this.riskModifier,
     this.riskReasons = const <String>[],
     this.riskHintLevel,
     this.riskHintColor,
@@ -53,8 +54,14 @@ class Patient {
 
   // ── Risk / scheduling (worklist) ──────────────────────────────────────────
   final int? age;
+
+  /// Numeric sort rank — `sortRankFor(band, modifier)`. SQL ORDER BY DESC on
+  /// this column yields the spec sequence 1a → 1b → 1 → … → 4. Column name
+  /// retained from the legacy 0–100 composite-score model to keep migrations
+  /// minimal; semantics changed in schema v14.
   final int? riskScore;
-  final RiskBand? riskBand;
+  final Band? riskBand;
+  final Modifier? riskModifier;
   final List<String> riskReasons;
   final String? riskHintLevel;
   final String? riskHintColor;
@@ -108,6 +115,7 @@ class Patient {
         'age': age,
         'risk_score': riskScore,
         'risk_band': riskBand?.wireTag,
+        'risk_modifier': riskModifier?.wireTag,
         'risk_reasons':
             riskReasons.isEmpty ? null : jsonEncode(riskReasons),
         'risk_hint_level': riskHintLevel,
@@ -136,7 +144,10 @@ class Patient {
         riskScore: row['risk_score'] as int?,
         riskBand: row['risk_band'] == null
             ? null
-            : RiskBand.fromWireTag(row['risk_band'] as String?),
+            : Band.fromWireTag(row['risk_band'] as String?),
+        riskModifier: row['risk_modifier'] == null
+            ? null
+            : Modifier.fromWireTag(row['risk_modifier'] as String?),
         riskReasons: _decodeReasons(row['risk_reasons'] as String?),
         riskHintLevel: row['risk_hint_level'] as String?,
         riskHintColor: row['risk_hint_color'] as String?,

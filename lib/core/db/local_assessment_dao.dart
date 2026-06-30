@@ -446,14 +446,15 @@ class LocalAssessmentDao {
       // Hb
       final hb = parseDouble('hemoglobin');
 
-      // Glucose: convert to fasting mg/dL equivalent
-      double? fastingGlu;
+      // Glucose: forms capture mmol/L per spec §2.8 (ANC §4.2.3, NCD §5.2.1).
+      // Store fasting only; random readings cannot be compared against the
+      // band thresholds reliably.
+      double? fastingGluMmolL;
       final glucoseRaw = parseDouble('glucoseValue');
       final glucoseType = (map['glucoseType'] as String?)?.toLowerCase();
       if (glucoseRaw != null) {
-        // Store fasting glucose only; if random, skip (cannot reliably compare)
         if (glucoseType == 'fasting' || glucoseType == null) {
-          fastingGlu = glucoseRaw;
+          fastingGluMmolL = glucoseRaw;
         }
       }
 
@@ -480,19 +481,34 @@ class LocalAssessmentDao {
       // Parity
       final parity = parseInt('parity');
 
-      // Diabetes (check for explicit diabetes field or high fasting glucose)
+      // Diabetes (check for explicit diabetes field or fasting glucose ≥ 7.0
+      // mmol/L per spec §2.8.2 DM diagnostic cutoff).
       final diabetesRaw = map['diabetes'] ?? map['hasDiabetes'];
       final hasDiabetes = diabetesRaw == true ||
           diabetesRaw == 'yes' ||
-          (fastingGlu != null && fastingGlu >= 126);
+          (fastingGluMmolL != null && fastingGluMmolL >= 7.0);
+
+      // Spec §5.2.2 HTN screening + §2.8.2 stroke-sign Band 1 short-circuit.
+      // Accepts either flat fields (legacy form-prefill shape) or a nested
+      // `htnScreening` map (current NcdAssessment.toJson shape).
+      bool readBoolFlag(String key) {
+        dynamic v = map[key];
+        if (v == null && map['htnScreening'] is Map) {
+          v = (map['htnScreening'] as Map)[key];
+        }
+        return v == true || v == 'true' || v == 'yes' || v == 1;
+      }
+
+      final hasStrokeSign = readBoolFlag('oneSidedWeakness');
 
       result[pid] = ClinicalVitals(
         systolicBp: sys,
         diastolicBp: dia,
         hemoglobin: hb,
-        fastingGlucoseMgDl: fastingGlu,
+        fastingGlucoseMmolL: fastingGluMmolL,
         hasDangerSign: hasDanger,
         hasEclampsia: hasEclampsia,
+        hasStrokeSign: hasStrokeSign,
         parity: parity,
         hasDiabetes: hasDiabetes,
         assessmentType: type,

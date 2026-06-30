@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
-import '../../app/theme.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/constants/app_strings.dart';
@@ -89,7 +88,7 @@ class _LockBarrierState extends State<LockBarrier> {
     return PopScope(
       canPop: false,
       child: Material(
-        color: AppColors.cardSurface,
+        color: Theme.of(context).colorScheme.surface,
         child: Column(
           children: [
             LockProgramHeader(title: programTitle, pageCount: 8),

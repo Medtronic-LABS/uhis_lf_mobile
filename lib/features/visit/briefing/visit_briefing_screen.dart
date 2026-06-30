@@ -153,9 +153,10 @@ class _VisitBriefingScreenState extends State<VisitBriefingScreen> {
     final originParam =
         widget.origin != null ? '?origin=${widget.origin}' : '';
     context.go(
-      '/patients/visit/${widget.encounterId}/triage$originParam',
+      '/patients/visit/${widget.encounterId}/flow$originParam',
       extra: {
         'patientId': widget.patientId,
+        'patientName': widget.patientName,
         'memberId': widget.memberId,
         'householdId': widget.householdId,
         'patientAge': widget.patientAge,

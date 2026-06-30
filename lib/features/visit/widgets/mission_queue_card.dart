@@ -246,10 +246,22 @@ class MissionQueueCard extends StatelessWidget {
     return parts.join(' · ');
   }
 
-  /// Border: red only for critical (Band 1 danger sign); grey otherwise per spec.
+  /// Border colour rule — Apon Sushashthya V1 §2.6.
+  ///
+  /// Default: neutral grey (#E5E7EB) — reduces visual noise on routine
+  /// visits. Red border applies ONLY to Band 1 cards when a CCE alert is
+  /// active (driver `sla-breached`) OR a clinical danger sign is present
+  /// (driver `danger-sign`, `stroke-sign`, or `eclampsia`). A Band 1 patient
+  /// flagged purely on labs (severe anaemia, BP ≥ 160/110) without a
+  /// danger-sign driver keeps the grey border so the worklist stays calm.
   Color _borderColorForTier(DashboardTier tier, LeapfrogColors tokens) {
-    if (tier == DashboardTier.critical) return tokens.statusCritical;
-    return const Color(0xFFE5E7EB);
+    if (tier != DashboardTier.critical) return const Color(0xFFE5E7EB);
+    final drivers = item.drivers;
+    final cceOrDanger = drivers.contains('sla-breached') ||
+        drivers.contains('danger-sign') ||
+        drivers.contains('stroke-sign') ||
+        drivers.contains('eclampsia');
+    return cceOrDanger ? tokens.statusCritical : const Color(0xFFE5E7EB);
   }
 
   /// Programme-coded avatar colour.

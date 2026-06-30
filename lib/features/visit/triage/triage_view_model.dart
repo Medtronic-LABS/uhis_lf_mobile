@@ -5,6 +5,7 @@ import '../../../core/models/programme.dart';
 import '../../scribe/models/ai_extracted_field.dart';
 import '../pathway/ai_pathway_client.dart';
 import '../pathway/pathway_engine.dart';
+import 'ai_scribe_triage_vocab.dart';
 import 'patient_context_builder.dart';
 import 'unified_symptom_catalog.dart';
 
@@ -23,10 +24,13 @@ class TriageViewModel extends ChangeNotifier {
     required PatientContext patientContext,
     AiPathwayClient? aiPathwayClient,
     String? memberId,
-  })  : _patientContext = patientContext,
-        _aiClient = aiPathwayClient,
-        _memberId = memberId {
-    _initPreTicks();
+  }) : _patientContext = patientContext,
+       _aiClient = aiPathwayClient,
+       _memberId = memberId {
+    // Step 1 is AI-driven: the symptom list starts empty and is populated by
+    // the AI Scribe response. SK reviews / edits from there. Patient-context
+    // pathway pre-activation still runs via [_updateActivatedPathways].
+    _updateActivatedPathways();
     _initAiSuggestions();
   }
 
@@ -47,8 +51,7 @@ class TriageViewModel extends ChangeNotifier {
   /// Used by the UI to render an "AI" badge on the tile. This is a subset of
   /// [_preTicked] — all scribe pre-ticks are also added to [_preTicked].
   final Set<String> _scribePreTicked = {};
-  Set<String> get scribePreTickedSymptoms =>
-      Set.unmodifiable(_scribePreTicked);
+  Set<String> get scribePreTickedSymptoms => Set.unmodifiable(_scribePreTicked);
 
   /// Free-text symptom description entered manually by the SK.
   String? _customSymptomText;
@@ -57,6 +60,31 @@ class TriageViewModel extends ChangeNotifier {
   void setCustomSymptomText(String? text) {
     _customSymptomText = text?.trim().isEmpty == true ? null : text?.trim();
     notifyListeners();
+  }
+
+  /// Chips added from the symptom-search "no match → add to other" flow.
+  final List<String> _otherChips = [];
+  List<String> get otherChips => List.unmodifiable(_otherChips);
+
+  void addOtherChip(String text) {
+    final t = text.trim();
+    if (t.isEmpty || _otherChips.contains(t)) return;
+    _otherChips.add(t);
+    notifyListeners();
+  }
+
+  void removeOtherChip(String text) {
+    if (_otherChips.remove(text)) notifyListeners();
+  }
+
+  /// Chips joined with typed free-text — sent as `otherSymptoms` downstream.
+  String? get combinedCustomText {
+    final chips = _otherChips.join(', ');
+    final typed = _customSymptomText ?? '';
+    if (chips.isEmpty && typed.isEmpty) return null;
+    if (chips.isEmpty) return typed;
+    if (typed.isEmpty) return chips;
+    return '$chips, $typed';
   }
 
   /// Rule-activated pathways based on current selection.
@@ -101,50 +129,6 @@ class TriageViewModel extends ChangeNotifier {
   /// Whether no symptoms are selected (routine visit).
   bool get isRoutineVisit => _selectedSymptoms.isEmpty;
 
-  /// Initialize pre-ticks based on patient context.
-  void _initPreTicks() {
-    // Pre-tick based on known conditions
-    if (_patientContext.hasKnownHypertension) {
-      _addPreTick('high_bp_known');
-    }
-    if (_patientContext.hasKnownDiabetes) {
-      _addPreTick('polyuria');
-      _addPreTick('polydipsia');
-    }
-
-    // Pre-tick pregnancy if enrolled
-    if (_patientContext.isPregnant) {
-      _addPreTick('pregnant');
-    }
-
-    // Pre-tick TB indicators if screen due
-    if (_patientContext.isTbScreenDue) {
-      // Pre-expand TB cluster but don't pre-tick symptoms
-    }
-
-    // Pre-tick based on active programmes
-    for (final prog in _patientContext.activeProgrammes) {
-      switch (prog) {
-        case Programme.anc:
-          _addPreTick('pregnant');
-          break;
-        case Programme.ncd:
-          if (_patientContext.hasKnownHypertension) {
-            _addPreTick('high_bp_known');
-          }
-          break;
-        case Programme.tb:
-          // Don't pre-tick TB symptoms, just highlight the cluster
-          break;
-        default:
-          break;
-      }
-    }
-
-    // Update pathways after pre-ticks
-    _updateActivatedPathways();
-  }
-
   /// Load cached AI suggestions on init, then fire-and-forget the live fetch.
   ///
   /// Step 1: load stale-or-fresh cache so the UI has something immediately.
@@ -174,10 +158,7 @@ class TriageViewModel extends ChangeNotifier {
 
   /// Build a [PathwaySuggestionRequest] from current state and fire the fetch.
   /// When it resolves, merge the result into [_aiSuggestions] and notify.
-  void _fetchAiSuggestionsForeground(
-    AiPathwayClient client,
-    String memberId,
-  ) {
+  void _fetchAiSuggestionsForeground(AiPathwayClient client, String memberId) {
     final req = PathwaySuggestionRequest(
       memberId: memberId,
       symptoms: _selectedSymptoms.toList(),
@@ -225,6 +206,26 @@ class TriageViewModel extends ChangeNotifier {
     _selectedSymptoms.add(code);
   }
 
+  /// Add a symptom by code (used by the "Add symptom" sheet).
+  ///
+  /// Idempotent: a code already in the set stays in the set.
+  void addSymptom(String code) {
+    if (_selectedSymptoms.add(code)) {
+      _updateActivatedPathways();
+      notifyListeners();
+    }
+  }
+
+  /// Remove a symptom by code (used by the chip × affordance).
+  void removeSymptom(String code) {
+    if (_selectedSymptoms.remove(code)) {
+      _preTicked.remove(code);
+      _scribePreTicked.remove(code);
+      _updateActivatedPathways();
+      notifyListeners();
+    }
+  }
+
   /// Toggle a symptom selection.
   void toggleSymptom(String code) {
     if (_selectedSymptoms.contains(code)) {
@@ -266,7 +267,9 @@ class TriageViewModel extends ChangeNotifier {
       _selectedSymptoms,
       _patientContext,
     );
-    debugPrint('[Triage] Pathways updated: ${_activatedPathways.map((p) => p.programme.name).toList()}');
+    debugPrint(
+      '[Triage] Pathways updated: ${_activatedPathways.map((p) => p.programme.name).toList()}',
+    );
   }
 
   /// Get symptoms grouped by cluster for display.
@@ -306,7 +309,8 @@ class TriageViewModel extends ChangeNotifier {
     }
 
     // Expand NCD if known conditions
-    if (_patientContext.hasKnownHypertension || _patientContext.hasKnownDiabetes) {
+    if (_patientContext.hasKnownHypertension ||
+        _patientContext.hasKnownDiabetes) {
       expanded.add(SymptomCluster.ncdMetabolic);
     }
 
@@ -339,24 +343,64 @@ class TriageViewModel extends ChangeNotifier {
   /// Apply a triage extraction result from the AI scribe service.
   ///
   /// For each [AIExtractedField] in [result.symptomCodes] whose confidence
-  /// meets [AppConfig.scribeSymptomConfidenceFloor], the code is added to
+  /// meets [AppConfig.scribeSymptomConfidenceFloor] AND whose code is part of
+  /// the constrained [AiScribeTriageVocab.codes] list, the code is added to
   /// the selected set and marked as a scribe pre-tick. This is a no-op when
-  /// [AppConfig.scribeEnabled] is false.
+  /// [AppConfig.scribeEnabled] is false. The picker UI renders chips for every
+  /// code that survives this filter, regardless of whether it has a
+  /// [UnifiedSymptomCatalog] entry — the vocab is the source of truth for
+  /// Step 1.
   void applyScribeTriageResult(TriageExtractionResult result) {
     if (!AppConfig.scribeEnabled) return;
 
     final floor = AppConfig.scribeSymptomConfidenceFloor;
+    final validCodes = AiScribeTriageVocab
+        .applicableCodes(_patientContext)
+        .toSet();
+
+    var appliedCount = 0;
+    var demographicSkipped = 0;
     for (final extracted in result.symptomCodes) {
-      if (extracted.confidence < floor) continue;
+      if (extracted.confidence < floor) {
+        debugPrint(
+          '[AIScribe] pre-tick skip ${extracted.fieldId}: '
+          'confidence=${extracted.confidence} < floor=$floor',
+        );
+        continue;
+      }
+      if (!AiScribeTriageVocab.codes.contains(extracted.fieldId)) {
+        debugPrint(
+          '[AIScribe] pre-tick skip ${extracted.fieldId}: not in vocab',
+        );
+        continue;
+      }
+      if (!validCodes.contains(extracted.fieldId)) {
+        demographicSkipped++;
+        debugPrint(
+          '[AIScribe] pre-tick skip ${extracted.fieldId}: demographic filter',
+        );
+        continue;
+      }
       _scribePreTicked.add(extracted.fieldId);
       _addPreTick(extracted.fieldId);
+      appliedCount++;
+      debugPrint(
+        '[AIScribe] pre-tick applied ${extracted.fieldId} '
+        '(confidence=${(extracted.confidence * 100).toStringAsFixed(0)}%)',
+      );
     }
     debugPrint(
-      '[Triage] Scribe applied ${_scribePreTicked.length} pre-ticks from result',
+      '[Triage] Scribe applied $appliedCount pre-ticks; '
+      'dropped $demographicSkipped demographic-ineligible codes',
     );
     _updateActivatedPathways();
     notifyListeners();
   }
+
+  /// Vocab codes applicable to the current patient. The picker sheet uses
+  /// this so the SK only sees demographic-relevant options.
+  List<String> get applicableVocabCodes =>
+      AiScribeTriageVocab.applicableCodes(_patientContext);
 
   /// Get the patient context.
   PatientContext get patientContext => _patientContext;

@@ -662,6 +662,43 @@ class SectionRegistry {
       ],
     ),
 
+    // ── NCD HTN screening (priority 42.5) — spec §5.2.2 ──────────────────────
+    // Four Yes/No screening questions plus stroke-sign escalation. Stroke
+    // sign is the Band 1 short-circuit (§2.8.2) — any "yes" forces the
+    // patient onto the immediate-referral list regardless of BP reading.
+    FormSection(
+      sectionId: 'ncd-htn-screening',
+      programmes: {Programme.ncd},
+      priority: 42,
+      fields: const [
+        FieldDef(
+          fieldId: 'oneSidedWeakness',
+          type: FieldType.booleanField,
+          labelKey: 'fieldOneSidedWeakness',
+        ),
+        FieldDef(
+          fieldId: 'morningHeadaches',
+          type: FieldType.booleanField,
+          labelKey: 'fieldMorningHeadaches',
+        ),
+        FieldDef(
+          fieldId: 'chestTightnessOrSob',
+          type: FieldType.booleanField,
+          labelKey: 'fieldChestTightnessOrSob',
+        ),
+        FieldDef(
+          fieldId: 'highSaltIntake',
+          type: FieldType.booleanField,
+          labelKey: 'fieldHighSaltIntake',
+        ),
+        FieldDef(
+          fieldId: 'familyHistoryHtn',
+          type: FieldType.booleanField,
+          labelKey: 'fieldFamilyHistoryHtn',
+        ),
+      ],
+    ),
+
     // ── NCD DM (priority 43) — NCD only ──────────────────────────────────────
     FormSection(
       sectionId: 'ncd-dm',

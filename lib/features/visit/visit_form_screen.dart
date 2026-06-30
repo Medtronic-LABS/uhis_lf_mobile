@@ -40,7 +40,9 @@ class VisitFormScreen extends StatefulWidget {
     this.patientAge,
     this.gestationalWeeks,
     this.activatedPathways,
+    this.triageNotes,
     this.origin,
+    this.onAdvance,
   });
 
   final String visitId;
@@ -55,7 +57,16 @@ class VisitFormScreen extends StatefulWidget {
   /// Programme name strings from triage. Non-empty ⇒ sectioned assessment.
   final List<String>? activatedPathways;
 
+  /// Free-text extra symptoms the SK entered in Step 1 not in the symptom list.
+  final String? triageNotes;
+
   final String? origin;
+
+  /// When non-null the screen calls this with the primary programme +
+  /// referral flag instead of pushing the `/complete` route. Used by
+  /// [VisitFlowScreen] to keep the SK on the same route for all 3 steps.
+  final void Function(Programme primaryProgramme, bool referralRecommended)?
+      onAdvance;
 
   @override
   State<VisitFormScreen> createState() => _VisitFormScreenState();
@@ -178,6 +189,10 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
 
     _scribeCtrl.bindContext(context);
 
+    // In-flow hosting (VisitFlowScreen wraps us) suppresses our own AppBars
+    // — the wrapper owns the navy patient + step header.
+    final bool embedded = widget.onAdvance != null;
+
     return ChangeNotifierProvider<ScribeController>.value(
       value: _scribeCtrl,
       child: Consumer<VisitController>(
@@ -186,7 +201,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
 
           if (session == null || session.id != widget.visitId) {
             return Scaffold(
-              appBar: AppBar(title: const Text('Visit')),
+              appBar: embedded ? null : AppBar(title: const Text('Visit')),
               body: const Center(child: Text('Visit session not found.')),
             );
           }
@@ -207,11 +222,12 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
           }
 
           if (_hasActivatedPathways) {
-            return _buildSectionedScreen(ctx, visitCtrl, session);
+            return _buildSectionedScreen(ctx, visitCtrl, session, embedded);
           }
 
           return Scaffold(
-            appBar: AppBar(title: const Text('Routine Visit')),
+            appBar:
+                embedded ? null : AppBar(title: const Text('Routine Visit')),
             body: const Center(
               child: Text('No assessment pathways activated.'),
             ),
@@ -227,6 +243,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     BuildContext ctx,
     VisitController visitCtrl,
     VisitSession session,
+    bool embedded,
   ) {
     debugPrint(
         '[VisitForm] Sectioned mode — programmes: ${widget.activatedPathways?.join(', ')}');
@@ -237,7 +254,9 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
       patientId: widget.patientId ?? '',
       householdMemberLocalId: widget.householdMemberLocalId ?? 0,
       memberId: widget.memberId,
+      triageNotes: widget.triageNotes,
       draftDao: ctx.read<AssessmentDraftDao>(),
+      embedded: embedded,
       onSubmit: () => _onSectionedSubmit(ctx, visitCtrl, session),
       onReferNow: (_) {
         setState(() => _sectionedReferralTriggered = true);
@@ -279,17 +298,22 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
       }
 
       if (mounted && ctx.mounted) {
-        ctx.go(
-          '/patients/visit/${widget.visitId}/complete',
-          extra: {
-            'patientLabel': widget.patientId ?? 'Patient',
-            'primaryProgramme': _getPrimaryProgramme().name,
-            'referralRecommended': _referralRecommended,
-            'memberId': widget.memberId,
-            'householdId': widget.householdId,
-            'origin': widget.origin ?? 'patients',
-          },
-        );
+        final onAdvance = widget.onAdvance;
+        if (onAdvance != null) {
+          onAdvance(_getPrimaryProgramme(), _referralRecommended);
+        } else {
+          ctx.go(
+            '/patients/visit/${widget.visitId}/complete',
+            extra: {
+              'patientLabel': widget.patientId ?? 'Patient',
+              'primaryProgramme': _getPrimaryProgramme().name,
+              'referralRecommended': _referralRecommended,
+              'memberId': widget.memberId,
+              'householdId': widget.householdId,
+              'origin': widget.origin ?? 'patients',
+            },
+          );
+        }
       }
     } catch (e) {
       if (!ctx.mounted) return;

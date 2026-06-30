@@ -48,7 +48,7 @@ class CounsellingScreen extends StatelessWidget {
         children: [
           // ── Patient header ──────────────────────────────────────────────
           ListTile(
-            tileColor: AppColors.cardSurface,
+            tileColor: Theme.of(context).colorScheme.surface,
             leading: const CircleAvatar(
               backgroundColor: _waAccentColor,
               child: Icon(Icons.person, color: Colors.white),
@@ -98,7 +98,7 @@ class CounsellingScreen extends StatelessWidget {
           // ── Disabled message input bar ──────────────────────────────────
           SafeArea(
             child: Container(
-              color: AppColors.cardSurface,
+              color: Theme.of(context).colorScheme.surface,
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.xl,
                 vertical: AppSpacing.md,

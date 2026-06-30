@@ -70,7 +70,7 @@ class TrainingScreen extends StatelessWidget {
               child: Text(
                 TrainingStrings.subtitle,
                 style: theme.textTheme.bodyLarge?.copyWith(
-                  color: AppColors.textMuted,
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
             ),
@@ -149,7 +149,7 @@ class _ModuleCard extends StatelessWidget {
                 module.label,
                 style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
+                  color: theme.colorScheme.onSurface,
                 ),
               ),
 
@@ -167,7 +167,7 @@ class _ModuleCard extends StatelessWidget {
                   Text(
                     '0%',
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: AppColors.textMuted,
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],

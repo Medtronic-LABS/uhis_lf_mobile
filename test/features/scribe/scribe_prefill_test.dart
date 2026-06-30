@@ -27,6 +27,11 @@ import 'package:uhis_next/features/visit/triage/triage_view_model.dart';
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /// Minimal patient context with no pre-ticks (blank slate for scribe tests).
+///
+/// Adult female (30 yrs) so the demographic gate keeps every vocab category
+/// in play — maternal codes apply (female + reproductive age) and NCD codes
+/// apply (adult). Tests that need a different demographic should build their
+/// own [PatientContext].
 PatientContext _blankContext({String patientId = 'test-patient'}) =>
     PatientContext(
       patientId: patientId,
@@ -41,24 +46,21 @@ PatientContext _blankContext({String patientId = 'test-patient'}) =>
 FormPrefillResult _prefillResult(
   Map<String, ({dynamic value, double confidence})> fields, {
   List<String> unmapped = const [],
-}) =>
-    FormPrefillResult(
-      fields: fields.entries
-          .map(
-            (e) => AIExtractedField(
-              fieldId: e.key,
-              value: e.value.value,
-              confidence: e.value.confidence,
-            ),
-          )
-          .toList(),
-      unmappedFindings: unmapped,
-    );
+}) => FormPrefillResult(
+  fields: fields.entries
+      .map(
+        (e) => AIExtractedField(
+          fieldId: e.key,
+          value: e.value.value,
+          confidence: e.value.confidence,
+        ),
+      )
+      .toList(),
+  unmappedFindings: unmapped,
+);
 
 /// Build a [TriageExtractionResult] from a map of code → confidence.
-TriageExtractionResult _triageResult(
-  Map<String, double> codeConfidences,
-) =>
+TriageExtractionResult _triageResult(Map<String, double> codeConfidences) =>
     TriageExtractionResult(
       symptomCodes: codeConfidences.entries
           .map(
@@ -73,12 +75,12 @@ TriageExtractionResult _triageResult(
 
 /// Build an [ActivatedPathway] for [programme].
 ActivatedPathway _pathway(Programme programme) => ActivatedPathway(
-      programme: programme,
-      priority: 10,
-      confidence: 1.0,
-      trigger: PathwayTrigger.rule,
-      rationaleKey: 'test',
-    );
+  programme: programme,
+  priority: 10,
+  confidence: 1.0,
+  trigger: PathwayTrigger.rule,
+  rationaleKey: 'test',
+);
 
 /// Open an in-memory [AppDatabase] via sqflite_ffi.
 Future<AppDatabase> _openInMemoryDb() async {
@@ -123,13 +125,14 @@ void main() {
     });
 
     // Test 1 ─────────────────────────────────────────────────────────────────
-    test(
-        'Test 1 — applyScribePrefill populates isScribePreFilled for fields '
+    test('Test 1 — applyScribePrefill populates isScribePreFilled for fields '
         'above confidence floor (default 0.6)', () {
-      vm.applyScribePrefill(_prefillResult({
-        'temperature': (value: 37.2, confidence: 0.85),
-        'hasCough': (value: true, confidence: 0.75),
-      }));
+      vm.applyScribePrefill(
+        _prefillResult({
+          'temperature': (value: 37.2, confidence: 0.85),
+          'hasCough': (value: true, confidence: 0.75),
+        }),
+      );
 
       expect(vm.isScribePreFilled('temperature'), isTrue);
       expect(vm.isScribePreFilled('hasCough'), isTrue);
@@ -138,68 +141,80 @@ void main() {
     });
 
     // Test 2 ─────────────────────────────────────────────────────────────────
-    test(
-        'Test 2 — applyScribePrefill skips fields below confidence floor', () {
-      vm.applyScribePrefill(_prefillResult({
-        'temperature': (value: 37.5, confidence: 0.9),
-        'hasFever': (value: true, confidence: 0.3), // below floor of 0.6
-      }));
+    test('Test 2 — applyScribePrefill skips fields below confidence floor', () {
+      vm.applyScribePrefill(
+        _prefillResult({
+          'temperature': (value: 37.5, confidence: 0.9),
+          'hasFever': (value: true, confidence: 0.3), // below floor of 0.6
+        }),
+      );
 
       expect(vm.isScribePreFilled('temperature'), isTrue);
-      expect(vm.isScribePreFilled('hasFever'), isFalse,
-          reason: 'Confidence 0.3 < floor 0.6 — must be skipped');
+      expect(
+        vm.isScribePreFilled('hasFever'),
+        isFalse,
+        reason: 'Confidence 0.3 < floor 0.6 — must be skipped',
+      );
       expect(vm.fieldValues.containsKey('hasFever'), isFalse);
     });
 
     // Test 3 ─────────────────────────────────────────────────────────────────
-    test(
-        'Test 3 — applyScribePrefill does NOT overwrite a field already '
+    test('Test 3 — applyScribePrefill does NOT overwrite a field already '
         'touched by the SK', () {
       // SK sets temperature manually first.
       vm.setFieldValue('temperature', 38.1);
       vm.markFieldTouched('temperature');
 
       // Scribe arrives with a different value.
-      vm.applyScribePrefill(_prefillResult({
-        'temperature': (value: 36.6, confidence: 0.95),
-      }));
+      vm.applyScribePrefill(
+        _prefillResult({'temperature': (value: 36.6, confidence: 0.95)}),
+      );
 
       // SK value wins.
-      expect(vm.fieldValues['temperature'], equals(38.1),
-          reason: 'SK-entered field must never be overwritten by scribe');
+      expect(
+        vm.fieldValues['temperature'],
+        equals(38.1),
+        reason: 'SK-entered field must never be overwritten by scribe',
+      );
       expect(vm.isScribePreFilled('temperature'), isFalse);
     });
 
     // Test 4 ─────────────────────────────────────────────────────────────────
-    test(
-        'Test 4 — markFieldTouched removes field from isScribePreFilled', () {
-      vm.applyScribePrefill(_prefillResult({
-        'hasCough': (value: true, confidence: 0.8),
-      }));
+    test('Test 4 — markFieldTouched removes field from isScribePreFilled', () {
+      vm.applyScribePrefill(
+        _prefillResult({'hasCough': (value: true, confidence: 0.8)}),
+      );
       expect(vm.isScribePreFilled('hasCough'), isTrue);
 
       vm.markFieldTouched('hasCough');
 
-      expect(vm.isScribePreFilled('hasCough'), isFalse,
-          reason: 'After SK touches the field the pre-fill badge must clear');
+      expect(
+        vm.isScribePreFilled('hasCough'),
+        isFalse,
+        reason: 'After SK touches the field the pre-fill badge must clear',
+      );
     });
 
     // Test 5 ─────────────────────────────────────────────────────────────────
-    test(
-        'Test 5 — Race invariant: late-arriving scribe result still skips '
+    test('Test 5 — Race invariant: late-arriving scribe result still skips '
         'SK-entered fields', () {
       // SK fills temperature before scribe result arrives.
       vm.setFieldValue('temperature', 38.0);
       vm.markFieldTouched('temperature');
 
       // Delayed scribe result arrives later.
-      vm.applyScribePrefill(_prefillResult({
-        'temperature': (value: 36.5, confidence: 0.9),
-        'hasCough': (value: true, confidence: 0.8),
-      }));
+      vm.applyScribePrefill(
+        _prefillResult({
+          'temperature': (value: 36.5, confidence: 0.9),
+          'hasCough': (value: true, confidence: 0.8),
+        }),
+      );
 
-      expect(vm.fieldValues['temperature'], equals(38.0),
-          reason: 'Race invariant: SK-entered field is never overwritten');
+      expect(
+        vm.fieldValues['temperature'],
+        equals(38.0),
+        reason: 'Race invariant: SK-entered field is never overwritten',
+      );
       expect(vm.isScribePreFilled('hasCough'), isTrue);
       expect(vm.fieldValues['hasCough'], isTrue);
     });
@@ -217,42 +232,168 @@ void main() {
     tearDown(() => vm.dispose());
 
     // Test 6 ─────────────────────────────────────────────────────────────────
-    test(
-        'Test 6 — applyScribeTriageResult pre-ticks codes ≥ confidence floor '
-        'and skips below-floor codes', () {
-      vm.applyScribeTriageResult(_triageResult({
-        'fever': 0.85, // above default floor 0.7 → pre-tick
-        'cough': 0.90, // above floor → pre-tick
-        'diarrhea': 0.50, // below floor → skip
-        'lethargy': 0.65, // below 0.7 → skip
-      }));
+    test('Test 6 — applyScribeTriageResult pre-ticks codes ≥ confidence floor '
+        'when the code is in the AI Scribe vocab; skips below-floor codes and '
+        'codes outside the vocab', () {
+      vm.applyScribeTriageResult(
+        _triageResult({
+          'fever': 0.85, // in vocab → kept
+          'abdominal_pain': 0.90, // in vocab → kept
+          'heavy_bleeding': 0.95, // in vocab → kept (vocab is source of truth)
+          'cough': 0.95, // NOT in AI triage vocab → skip
+          'diarrhea': 0.50, // below floor → skip
+        }),
+      );
 
       expect(vm.isScribePreTick('fever'), isTrue);
-      expect(vm.isSelected('fever'), isTrue,
-          reason: 'Pre-ticked codes are also selected');
+      expect(
+        vm.isSelected('fever'),
+        isTrue,
+        reason: 'Pre-ticked codes are also selected',
+      );
 
-      expect(vm.isScribePreTick('cough'), isTrue);
-      expect(vm.isSelected('cough'), isTrue);
+      expect(vm.isScribePreTick('abdominal_pain'), isTrue);
+      expect(vm.isSelected('abdominal_pain'), isTrue);
 
-      expect(vm.isScribePreTick('diarrhea'), isFalse,
-          reason: 'Confidence 0.50 < floor 0.70');
+      expect(
+        vm.isScribePreTick('heavy_bleeding'),
+        isTrue,
+        reason: 'heavy_bleeding is in AiScribeTriageVocab — Step 1 source of '
+            'truth — and must be surfaced as a chip',
+      );
+      expect(vm.isSelected('heavy_bleeding'), isTrue);
+
+      expect(
+        vm.isScribePreTick('cough'),
+        isFalse,
+        reason: 'Cough is outside the constrained 32-code scribe vocabulary',
+      );
+      expect(vm.isSelected('cough'), isFalse);
+
+      expect(
+        vm.isScribePreTick('diarrhea'),
+        isFalse,
+        reason: 'Confidence 0.50 < floor 0.70',
+      );
       expect(vm.isSelected('diarrhea'), isFalse);
-
-      expect(vm.isScribePreTick('lethargy'), isFalse,
-          reason: 'Confidence 0.65 < floor 0.70');
     });
 
     test(
-        'Test 6b — SK can freely untick a scribe-pre-ticked symptom without alert',
-        () {
-      vm.applyScribeTriageResult(_triageResult({'fever': 0.9}));
-      expect(vm.isSelected('fever'), isTrue);
+      'Test 6b — SK can freely untick a scribe-pre-ticked symptom without alert',
+      () {
+        vm.applyScribeTriageResult(_triageResult({'fever': 0.9}));
+        expect(vm.isSelected('fever'), isTrue);
 
-      vm.toggleSymptom('fever'); // SK unticks
+        vm.toggleSymptom('fever'); // SK unticks
 
-      expect(vm.isSelected('fever'), isFalse,
-          reason: 'SK untick must be respected with no guard or alert');
-    });
+        expect(
+          vm.isSelected('fever'),
+          isFalse,
+          reason: 'SK untick must be respected with no guard or alert',
+        );
+      },
+    );
+
+    test(
+      'Test 6c — male patient drops AI-detected maternal codes via the '
+      'demographic pre-screen, keeps general + NCD codes',
+      () {
+        final maleAdult = PatientContext(
+          patientId: 'p-male',
+          ageMonths: 480, // 40 yrs
+          sex: Sex.male,
+          isPregnant: false,
+          knownConditions: {},
+          activeProgrammes: {},
+        );
+        final maleVm = TriageViewModel(patientContext: maleAdult);
+        addTearDown(maleVm.dispose);
+
+        maleVm.applyScribeTriageResult(
+          _triageResult({
+            'fever': 0.9, // general → kept
+            'chest_pain': 0.9, // ncd → kept (adult)
+            'vaginal_bleeding': 0.95, // maternal → dropped (male)
+            'breast_pain': 0.9, // maternal → dropped (male)
+          }),
+        );
+
+        expect(maleVm.isSelected('fever'), isTrue);
+        expect(maleVm.isSelected('chest_pain'), isTrue);
+        expect(
+          maleVm.isSelected('vaginal_bleeding'),
+          isFalse,
+          reason: 'maternal code must not apply to a male patient',
+        );
+        expect(maleVm.isSelected('breast_pain'), isFalse);
+        expect(
+          maleVm.applicableVocabCodes.contains('vaginal_bleeding'),
+          isFalse,
+        );
+      },
+    );
+
+    test(
+      'Test 6d — paediatric patient drops AI-detected NCD codes via the '
+      'demographic pre-screen',
+      () {
+        final toddler = PatientContext(
+          patientId: 'p-kid',
+          ageMonths: 36, // 3 yrs
+          sex: Sex.male,
+          isPregnant: false,
+          knownConditions: {},
+          activeProgrammes: {},
+        );
+        final kidVm = TriageViewModel(patientContext: toddler);
+        addTearDown(kidVm.dispose);
+
+        kidVm.applyScribeTriageResult(
+          _triageResult({
+            'fever': 0.9, // general → kept
+            'chest_pain': 0.9, // ncd → dropped (under 18)
+            'foot_wound': 0.9, // ncd → dropped (under 18)
+          }),
+        );
+
+        expect(kidVm.isSelected('fever'), isTrue);
+        expect(
+          kidVm.isSelected('chest_pain'),
+          isFalse,
+          reason: 'ncd code must not apply to a paediatric patient',
+        );
+        expect(kidVm.isSelected('foot_wound'), isFalse);
+        expect(kidVm.applicableVocabCodes.contains('chest_pain'), isFalse);
+      },
+    );
+
+    test(
+      'Test 6e — adult female keeps both maternal and NCD codes',
+      () {
+        final adultFemale = PatientContext(
+          patientId: 'p-f',
+          ageMonths: 360, // 30 yrs
+          sex: Sex.female,
+          isPregnant: false,
+          knownConditions: {},
+          activeProgrammes: {},
+        );
+        final vm = TriageViewModel(patientContext: adultFemale);
+        addTearDown(vm.dispose);
+
+        vm.applyScribeTriageResult(
+          _triageResult({
+            'vaginal_bleeding': 0.9,
+            'chest_pain': 0.9,
+            'fever': 0.9,
+          }),
+        );
+
+        expect(vm.isSelected('vaginal_bleeding'), isTrue);
+        expect(vm.isSelected('chest_pain'), isTrue);
+        expect(vm.isSelected('fever'), isTrue);
+      },
+    );
   });
 
   // ── S4.1 SectionRegistry.toScribeSchema ──────────────────────────────────
@@ -260,98 +401,133 @@ void main() {
   group('SectionRegistry.toScribeSchema', () {
     // Test 7 ─────────────────────────────────────────────────────────────────
     test(
-        'Test 7 — toScribeSchema([vitals, symptom-detail]) returns deduplicated '
-        'field list with correct type mappings', () {
-      final vitals = SectionRegistry.byId('vitals')!;
-      final symptomDetail = SectionRegistry.byId('symptom-detail')!;
+      'Test 7 — toScribeSchema([vitals, symptom-detail]) returns deduplicated '
+      'field list with correct type mappings',
+      () {
+        final vitals = SectionRegistry.byId('vitals')!;
+        final symptomDetail = SectionRegistry.byId('symptom-detail')!;
 
-      final schema = SectionRegistry.toScribeSchema([vitals, symptomDetail]);
+        final schema = SectionRegistry.toScribeSchema([vitals, symptomDetail]);
 
-      // Every fieldId appears exactly once.
-      final ids = schema.map((s) => s.fieldId).toList();
-      expect(ids.toSet().length, equals(ids.length),
-          reason: 'No duplicate fieldIds in schema');
+        // Every fieldId appears exactly once.
+        final ids = schema.map((s) => s.fieldId).toList();
+        expect(
+          ids.toSet().length,
+          equals(ids.length),
+          reason: 'No duplicate fieldIds in schema',
+        );
 
-      // temperature → decimal (doubleField)
-      final tempSchema = schema.firstWhere((s) => s.fieldId == 'temperature');
-      expect(tempSchema.type, equals(FieldType.decimal),
-          reason: 'doubleField maps to FieldType.decimal');
+        // temperature → decimal (doubleField)
+        final tempSchema = schema.firstWhere((s) => s.fieldId == 'temperature');
+        expect(
+          tempSchema.type,
+          equals(FieldType.decimal),
+          reason: 'doubleField maps to FieldType.decimal',
+        );
 
-      // hasCough → boolean (booleanField)
-      final coughSchema = schema.firstWhere((s) => s.fieldId == 'hasCough');
-      expect(coughSchema.type, equals(FieldType.boolean),
-          reason: 'booleanField maps to FieldType.boolean');
+        // hasCough → boolean (booleanField)
+        final coughSchema = schema.firstWhere((s) => s.fieldId == 'hasCough');
+        expect(
+          coughSchema.type,
+          equals(FieldType.boolean),
+          reason: 'booleanField maps to FieldType.boolean',
+        );
 
-      // All expected fieldIds present.
-      expect(ids, containsAll([
-        'temperature', 'breathsPerMinute', 'weightKg', 'muacCm', 'spo2',
-        'hasCough', 'coughDays', 'hasFever', 'feverDays', 'hasDiarrhea',
-      ]));
-    });
+        // All expected fieldIds present.
+        expect(
+          ids,
+          containsAll([
+            'temperature',
+            'breathsPerMinute',
+            'weightKg',
+            'muacCm',
+            'spo2',
+            'hasCough',
+            'coughDays',
+            'hasFever',
+            'feverDays',
+            'hasDiarrhea',
+          ]),
+        );
+      },
+    );
 
     test(
-        'rdtResult (selectField) maps to FieldType.enumType with allowedValues',
-        () {
-      final iccmClassify = SectionRegistry.byId('iccm-classify')!;
-      final schema = SectionRegistry.toScribeSchema([iccmClassify]);
+      'rdtResult (selectField) maps to FieldType.enumType with allowedValues',
+      () {
+        final iccmClassify = SectionRegistry.byId('iccm-classify')!;
+        final schema = SectionRegistry.toScribeSchema([iccmClassify]);
 
-      final rdtSchema = schema.firstWhere((s) => s.fieldId == 'rdtResult');
-      expect(rdtSchema.type, equals(FieldType.enumType));
-      expect(rdtSchema.allowedValues,
-          containsAll(['positive', 'negative', 'not_done']));
-    });
+        final rdtSchema = schema.firstWhere((s) => s.fieldId == 'rdtResult');
+        expect(rdtSchema.type, equals(FieldType.enumType));
+        expect(
+          rdtSchema.allowedValues,
+          containsAll(['positive', 'negative', 'not_done']),
+        );
+      },
+    );
 
-    test(
-        'ncdSymptoms (multiSelectField) maps to FieldType.enumType', () {
+    test('ncdSymptoms (multiSelectField) maps to FieldType.enumType', () {
       final ncdHtn = SectionRegistry.byId('ncd-htn')!;
       final schema = SectionRegistry.toScribeSchema([ncdHtn]);
 
-      final symptomsSchema =
-          schema.firstWhere((s) => s.fieldId == 'ncdSymptoms');
+      final symptomsSchema = schema.firstWhere(
+        (s) => s.fieldId == 'ncdSymptoms',
+      );
       expect(symptomsSchema.type, equals(FieldType.enumType));
     });
 
     test(
-        'toScribeSchema deduplicates shared fields across overlapping sections',
-        () {
-      // hasCough appears in both symptom-detail AND tb-screen-detail.
-      final symptomDetail = SectionRegistry.byId('symptom-detail')!;
-      final tbDetail = SectionRegistry.byId('tb-screen-detail')!;
+      'toScribeSchema deduplicates shared fields across overlapping sections',
+      () {
+        // hasCough appears in both symptom-detail AND tb-screen-detail.
+        final symptomDetail = SectionRegistry.byId('symptom-detail')!;
+        final tbDetail = SectionRegistry.byId('tb-screen-detail')!;
 
-      final schema =
-          SectionRegistry.toScribeSchema([symptomDetail, tbDetail]);
+        final schema = SectionRegistry.toScribeSchema([
+          symptomDetail,
+          tbDetail,
+        ]);
 
-      final hasCoughCount =
-          schema.where((s) => s.fieldId == 'hasCough').length;
-      expect(hasCoughCount, equals(1),
-          reason: 'hasCough is shared — must appear exactly once');
-    });
+        final hasCoughCount = schema
+            .where((s) => s.fieldId == 'hasCough')
+            .length;
+        expect(
+          hasCoughCount,
+          equals(1),
+          reason: 'hasCough is shared — must appear exactly once',
+        );
+      },
+    );
 
-    test(
-        'FormFieldSchemaBuilder.forProgramme delegates to SectionRegistry '
+    test('FormFieldSchemaBuilder.forProgramme delegates to SectionRegistry '
         'and returns non-empty schema with correct types for IMCI', () {
       final schema = FormFieldSchemaBuilder.forProgramme(Programme.imci);
       expect(schema, isNotEmpty);
 
       final temp = schema.firstWhere(
         (s) => s.fieldId == 'temperature',
-        orElse: () => throw TestFailure(
-          'temperature field not found in IMCI schema',
-        ),
+        orElse: () =>
+            throw TestFailure('temperature field not found in IMCI schema'),
       );
       expect(temp.type, equals(FieldType.decimal));
     });
 
     test(
-        'FormFieldSchemaBuilder.forProgrammes deduplicates across programmes',
-        () {
-      final schema = FormFieldSchemaBuilder.forProgrammes(
-        [Programme.imci, Programme.tb],
-      );
+      'FormFieldSchemaBuilder.forProgrammes deduplicates across programmes',
+      () {
+        final schema = FormFieldSchemaBuilder.forProgrammes([
+          Programme.imci,
+          Programme.tb,
+        ]);
 
-      final ids = schema.map((s) => s.fieldId).toList();
-      expect(ids.toSet().length, equals(ids.length),
-          reason: 'No duplicate fieldIds when merging IMCI + TB');
-    });
+        final ids = schema.map((s) => s.fieldId).toList();
+        expect(
+          ids.toSet().length,
+          equals(ids.length),
+          reason: 'No duplicate fieldIds when merging IMCI + TB',
+        );
+      },
+    );
   });
 }

@@ -56,7 +56,7 @@ class TeleconsultScreen extends StatelessWidget {
                   patientLabel,
                   style: theme.textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
+                    color: theme.colorScheme.onSurface,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -76,7 +76,7 @@ class TeleconsultScreen extends StatelessWidget {
                   TeleconsultStrings.placeholder,
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyLarge?.copyWith(
-                    color: AppColors.textMuted,
+                    color: theme.colorScheme.onSurfaceVariant,
                     height: 1.6,
                   ),
                 ),

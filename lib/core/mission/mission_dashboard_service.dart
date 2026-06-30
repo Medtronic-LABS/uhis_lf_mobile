@@ -146,7 +146,7 @@ class MissionInputData {
 
   /// Patients flagged red by the on-device risk engine
   /// (`Patient.redFlag == true`). Drives the `red-flag` CRITICAL driver.
-  /// Separate from `RiskBand.urgent` because the spec lets either fire.
+  /// Separate from `Band.band1` because the spec lets either fire.
   final Set<String> redFlagPatientIds;
 
   /// Patients with `member.isPregnant == true`. Drives the pregnancy
@@ -246,10 +246,10 @@ class MissionDashboardService {
       return due != null && due.isBefore(now.add(const Duration(days: 1)));
     }).length;
 
-    // Count high-risk diabetic patients (NCD + high/urgent risk)
+    // Count high-risk diabetic patients (NCD + band1/band2)
     final diabeticHighRisk = data.worklistEntries.where((e) =>
         e.programmes.contains(Programme.ncd) &&
-        (e.band == RiskBand.urgent || e.band == RiskBand.high)).length;
+        (e.band == Band.band1 || e.band == Band.band2)).length;
 
     // Total visits = worklist + due follow-ups
     final totalVisits = data.worklistEntries.length + data.followUps.length;
@@ -518,21 +518,30 @@ class MissionDashboardService {
     int score = 0;
     final drivers = <String>[];
 
-    // Risk band contribution
+    // Spec §2.8 band contribution. Band 1 = Severe → critical-risk driver.
+    // Surface specific danger-sign / stroke / eclampsia drivers when the
+    // reasons list carries them so the card border rule (§2.6) can paint
+    // red ONLY for clinical danger signs / CCE alerts — not for band1 cards
+    // that landed on labs alone.
+    final reasonText = entry.reasons.join(' ').toLowerCase();
+    if (reasonText.contains('danger-sign')) drivers.add('danger-sign');
+    if (reasonText.contains('stroke-sign')) drivers.add('stroke-sign');
+    if (reasonText.contains('eclampsia')) drivers.add('eclampsia');
+
     switch (entry.band) {
-      case RiskBand.urgent:
+      case Band.band1:
         score += _wCriticalRisk;
-        drivers.add('urgent-risk');
+        drivers.add('band1-severe');
         break;
-      case RiskBand.high:
+      case Band.band2:
         score += _wHighRisk;
-        drivers.add('high-risk');
+        drivers.add('band2-moderate');
         break;
-      case RiskBand.moderate:
+      case Band.band3:
         score += _wMediumRisk;
-        drivers.add('moderate-risk');
+        drivers.add('band3-mild');
         break;
-      case RiskBand.low:
+      case Band.band4:
         break;
     }
 
@@ -897,7 +906,7 @@ class MissionDashboardService {
   ({DashboardTier tier, List<String> drivers})? _classify({
     required String patientId,
     required int? age,
-    required RiskBand? band,
+    required Band? band,
     required DateTime? dueAt,
     required MissionInputData input,
     required DateTime now,
@@ -910,7 +919,7 @@ class MissionDashboardService {
 
     // ── CRITICAL: strong drivers (user-locked) ──
     if (input.redFlagPatientIds.contains(patientId) ||
-        band == RiskBand.urgent) {
+        band == Band.band1) {
       drivers.add('red-flag');
     }
     if (preg != null &&

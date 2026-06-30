@@ -11,15 +11,16 @@ WorklistEntry _entry({
   String? name,
   int? age,
   DateTime? nextDueAt,
-  RiskBand band = RiskBand.low,
+  Band band = Band.band4,
+  Modifier modifier = Modifier.none,
   Set<Programme> programmes = const <Programme>{},
 }) =>
     WorklistEntry(
       patientId: patientId,
       displayName: name ?? 'Patient $patientId',
       age: age,
-      score: 0,
       band: band,
+      modifier: modifier,
       programmes: programmes,
       nextDueAt: nextDueAt,
     );
@@ -160,10 +161,10 @@ void main() {
       },
     );
 
-    test('red-flag risk band → CRITICAL', () {
+    test('band1 risk band → CRITICAL', () {
       final input = MissionInputData(
         worklistEntries: [
-          _entry(patientId: 'r1', band: RiskBand.urgent),
+          _entry(patientId: 'r1', band: Band.band1),
         ],
       );
       final queue = service.computeTieredQueue(input);

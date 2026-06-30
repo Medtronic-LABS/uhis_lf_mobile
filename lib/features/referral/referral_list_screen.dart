@@ -889,9 +889,10 @@ class _ReferralListScreenState extends State<ReferralListScreen>
       if (!mounted) return;
       if (encounterId != null) {
         context.push(
-          '/patients/visit/$encounterId/triage?origin=tasks',
+          '/patients/visit/$encounterId/flow?origin=tasks',
           extra: {
             'patientId': item.patientId,
+            'patientName': item.patientName,
             'householdId': item.householdId,
             'patientAge': item.age,
           },
@@ -1975,7 +1976,7 @@ class _CompletedTodayChip extends StatelessWidget {
           color: isSelected ? color.withValues(alpha: 0.2) : Colors.transparent,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isSelected ? color : tokens.textMuted.withValues(alpha: 0.3),
+            color: isSelected ? color : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
             width: isSelected ? 2 : 1,
           ),
         ),
@@ -1985,14 +1986,14 @@ class _CompletedTodayChip extends StatelessWidget {
             Icon(
               Icons.check_circle_rounded,
               size: 14,
-              color: isSelected ? color : tokens.textMuted,
+              color: isSelected ? color : theme.colorScheme.onSurfaceVariant,
             ),
             const SizedBox(width: 6),
             Text(
               'Completed',
               style: theme.textTheme.bodySmall?.copyWith(
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected ? color : tokens.textMuted,
+                color: isSelected ? color : theme.colorScheme.onSurfaceVariant,
               ),
             ),
             if (count > 0) ...[
@@ -2000,14 +2001,14 @@ class _CompletedTodayChip extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: isSelected ? color : tokens.textMuted.withValues(alpha: 0.2),
+                  color: isSelected ? color : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
                   '$count',
                   style: theme.textTheme.labelSmall?.copyWith(
                     fontWeight: FontWeight.w700,
-                    color: isSelected ? Colors.white : tokens.textMuted,
+                    color: isSelected ? Colors.white : theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
               ),
@@ -2045,7 +2046,7 @@ class _VisitVillageChip extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: isActive ? navyColor : Colors.white,
+              color: isActive ? navyColor : Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
                 color: isActive ? navyColor : AppColors.border,
@@ -2056,7 +2057,7 @@ class _VisitVillageChip extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: isActive ? Colors.white : AppColors.textStrong,
+                color: isActive ? Colors.white : Theme.of(context).colorScheme.onSurface,
               ),
             ),
           ),

@@ -92,7 +92,7 @@ class VisitCompleteScreen extends StatelessWidget {
                 VisitCompleteStrings.saved,
                 style: theme.textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
+                  color: theme.colorScheme.onSurface,
                 ),
               ),
               const SizedBox(height: AppSpacing.xxxl),

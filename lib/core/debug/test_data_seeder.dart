@@ -2,6 +2,7 @@ import 'dart:math';
 
 import '../db/app_database.dart';
 import '../models/programme.dart';
+import '../models/risk.dart';
 
 /// Seeds the local SQLite database with dummy patients and programme
 /// enrollments for testing the worklist UI. Only meant for debug builds.
@@ -77,20 +78,26 @@ class TestDataSeeder {
           programmes.add(Programme.tb);
         }
 
-        // Risk scoring: higher for under-5s and pregnant women
-        int riskScore = _random.nextInt(40);
-        if (age < 5) riskScore += 30 + _random.nextInt(20);
-        if (programmes.contains(Programme.anc)) riskScore += 20 + _random.nextInt(15);
-        if (programmes.contains(Programme.tb)) riskScore += 25;
-        riskScore = riskScore.clamp(0, 100);
-
-        final riskBand = riskScore >= 70
-            ? 'critical'
-            : riskScore >= 50
-                ? 'high'
-                : riskScore >= 30
-                    ? 'medium'
-                    : 'low';
+        // Spec §2.8 band+modifier seeding. Choose a band by programme +
+        // age; choose modifier randomly so the worklist sort exercises the
+        // full 1a → 1b → 1 → … → 4 sequence in dev.
+        final Band band;
+        if (age < 1 || (programmes.contains(Programme.anc) && _random.nextDouble() < 0.15)) {
+          band = Band.band1;
+        } else if (programmes.contains(Programme.tb) || (age < 5 && _random.nextDouble() < 0.4)) {
+          band = Band.band2;
+        } else if (programmes.contains(Programme.anc) || age < 5) {
+          band = Band.band3;
+        } else {
+          band = Band.band4;
+        }
+        final modifierRoll = _random.nextInt(3);
+        final Modifier modifier = switch (modifierRoll) {
+          0 => Modifier.a,
+          1 => Modifier.b,
+          _ => Modifier.none,
+        };
+        final sortRank = sortRankFor(band, modifier);
 
         final reasons = <String>[];
         if (age < 5) reasons.add('under-5:$age');
@@ -122,10 +129,11 @@ class TestDataSeeder {
             'is_active': 1,
             'updated_at': now.millisecondsSinceEpoch,
             'age': age,
-            'risk_score': riskScore,
-            'risk_band': riskBand,
+            'risk_score': sortRank,
+            'risk_band': band.wireTag,
+            'risk_modifier': modifier.wireTag,
             'risk_reasons': reasons.join(','),
-            'red_flag': riskScore >= 70 ? 1 : 0,
+            'red_flag': band == Band.band1 ? 1 : 0,
             'last_visit_at': lastVisitAt,
             'next_due_at': nextDueAt,
             'missed_visit_count': _random.nextInt(4),
