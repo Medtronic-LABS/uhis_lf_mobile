@@ -1148,48 +1148,77 @@ class _ReviewBeforeContinueSheet extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 14),
-                // Footer CTAs.
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.of(context).pop(false),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.textMuted,
-                          side: const BorderSide(color: AppColors.border),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
+                const SizedBox(height: 16),
+                // Footer divider so the CTAs feel anchored to the sheet.
+                Container(height: 1, color: AppColors.border),
+                const SizedBox(height: 12),
+                // Footer CTAs — equal height; primary takes 2/3 of the row
+                // so the long "Continue with N programmes" label never wraps.
+                SizedBox(
+                  height: 52,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(context).pop(false),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.navy,
+                            side: const BorderSide(color: AppColors.border),
+                            minimumSize: const Size.fromHeight(52),
+                            padding: EdgeInsets.zero,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            textStyle: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                        ),
-                        child: const Text(
-                            ProgrammeSelectionStrings.reviewSheetBack),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      flex: 2,
-                      child: FilledButton.icon(
-                        onPressed: () => Navigator.of(context).pop(true),
-                        icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-                        label: Text(
-                          selected.isEmpty
-                              ? ProgrammeSelectionStrings.continueCtaEmpty
-                              : ProgrammeSelectionStrings
-                                  .continueCta(selected.length),
-                        ),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.pink,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
+                          child: const Text(
+                              ProgrammeSelectionStrings.reviewSheetBack),
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 10),
+                      Expanded(
+                        flex: 2,
+                        child: FilledButton(
+                          onPressed: () => Navigator.of(context).pop(true),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.pink,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size.fromHeight(52),
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            textStyle: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  selected.isEmpty
+                                      ? ProgrammeSelectionStrings
+                                          .continueCtaEmpty
+                                      : ProgrammeSelectionStrings
+                                          .continueCta(selected.length),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              const Icon(Icons.arrow_forward_rounded,
+                                  size: 18),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
