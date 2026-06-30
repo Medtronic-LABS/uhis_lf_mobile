@@ -2511,7 +2511,7 @@ abstract final class PathwayStrings {
   static const String reviewTitle = "Today's Assessment Plan";
   static const String reviewSubtitle = 'Based on symptoms and patient history';
   static const String startAssessment = 'Start Assessment';
-  static const String addProgramme = '+ Add section manually';
+  static const String addProgramme = 'Add section manually';
   static const String confirmRemoveTitle = 'Skip this assessment?';
   static String confirmRemoveBody(String programmeName, String trigger) =>
       '$programmeName was recommended because: $trigger.\n\n'
@@ -2814,13 +2814,34 @@ abstract final class ProgrammeSelectionStrings {
   static String confidenceChip(int pct) => '$pct% confidence';
   static const String currentBadge = 'Current';
   static const String acceptCta = 'Add';
+  static const String acceptedCta = 'Added';
   static const String rejectCta = 'Skip';
+
+  // ── Manual-add confirmation dialog ───────────────────────────────────────
+  /// Title fires when the SK selects a programme directly from the manual
+  /// add sheet — keeps a deliberate confirmation before opening the form.
+  static String addConfirmTitle(String programmeTag) =>
+      'Add $programmeTag assessment?';
+  static const String addConfirmBody =
+      'This will open the screening questions for the selected programme. '
+      'You can remove it later from the recommendations list.';
+  static const String addConfirmCta = 'Yes, add';
+  static const String addConfirmCancel = 'Cancel';
+
+  /// Skip confirmation when SK rejects an AI recommendation card.
+  static String skipConfirmTitle(String programmeTag) =>
+      'Skip $programmeTag for this visit?';
+  static const String skipConfirmBody =
+      'The AI recommended this programme based on the patient\'s symptoms and '
+      'history. Are you sure you want to skip it?';
+  static const String skipConfirmCta = 'Yes, skip';
+  static const String skipConfirmCancel = 'Keep it';
 
   // Cross-program notice callout
   static const String crossNoticeTitle = 'Cross-programme alert';
 
   // Add programme sheet
-  static const String addProgrammeCta = '+ Add another programme';
+  static const String addProgrammeCta = 'Add another programme';
   static const String addProgrammeSheetTitle = 'Add a programme';
   static const String addProgrammeSheetSubtitle =
       'Tap to select. Already-recommended programmes are hidden.';
@@ -2874,10 +2895,13 @@ abstract final class VisitFlowStrings {
   static const String step3Label = 'AI recommends';
 
   // Step-pill titles inside the navy flow header.
-  // Step 2 (form) = "{programme} form" — programme name is computed at
-  // runtime. The AI Programme Recommendation phase is rendered inside Step 2
-  // BEFORE the form mounts, so the SK still sees 3 progress dots.
+  // Step 2 is the composite "AI programme recommendation → assessment form"
+  // phase, so the pill label stays static and does NOT carry the programme
+  // name (which is only known after the SK confirms).
   static const String step1Title = 'How are you?';
+  static const String step2Title = 'Assessment forms';
+  // Retained for backwards-compatibility with tests pinning the legacy
+  // interpolation contract — the header no longer references this string.
   static const String step2TitleSuffix = 'form';
   static const String step3Title = 'Summary';
 

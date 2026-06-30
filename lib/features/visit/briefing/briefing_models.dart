@@ -57,15 +57,47 @@ class SuggestedDiscussionPoints {
       );
 }
 
+/// AI-generated greeting card content. All three fields may be empty when
+/// the upstream API omits them — the screen falls back to the localized
+/// static greeting in that case.
+class GreetingContent {
+  const GreetingContent({
+    required this.bangla,
+    required this.english,
+    required this.hint,
+  });
+
+  final String bangla;
+  final String english;
+  final String hint;
+
+  static const GreetingContent empty =
+      GreetingContent(bangla: '', english: '', hint: '');
+
+  bool get isEmpty =>
+      bangla.trim().isEmpty &&
+      english.trim().isEmpty &&
+      hint.trim().isEmpty;
+
+  factory GreetingContent.fromJson(Map<String, dynamic> json) =>
+      GreetingContent(
+        bangla: (json['bangla'] as String?)?.trim() ?? '',
+        english: (json['english'] as String?)?.trim() ?? '',
+        hint: (json['hint'] as String?)?.trim() ?? '',
+      );
+}
+
 class VisitBriefingResponse {
   const VisitBriefingResponse({
     required this.briefingCard,
     required this.suggestedDiscussionPoints,
+    required this.greeting,
     required this.transitionPrompt,
   });
 
   final BriefingCardContent briefingCard;
   final SuggestedDiscussionPoints suggestedDiscussionPoints;
+  final GreetingContent greeting;
   final String transitionPrompt;
 
   factory VisitBriefingResponse.fromJson(Map<String, dynamic> json) =>
@@ -74,6 +106,8 @@ class VisitBriefingResponse {
             json['briefingCard'] as Map<String, dynamic>? ?? {}),
         suggestedDiscussionPoints: SuggestedDiscussionPoints.fromJson(
             json['suggestedDiscussionPoints'] as Map<String, dynamic>? ?? {}),
+        greeting: GreetingContent.fromJson(
+            json['greeting'] as Map<String, dynamic>? ?? const {}),
         transitionPrompt: json['transitionPrompt'] as String? ?? '',
       );
 }

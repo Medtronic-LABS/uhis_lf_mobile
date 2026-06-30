@@ -326,17 +326,11 @@ class _VisitFlowHeader extends StatelessWidget {
     return name.substring(0, name.length >= 2 ? 2 : 1).toUpperCase();
   }
 
-  String get _programmeLabel {
-    final p = primaryProgramme;
-    if (p == Programme.unknown) return 'Visit';
-    return p.name.toUpperCase();
-  }
-
   @override
   Widget build(BuildContext context) {
     final stepLabels = <String>[
       '1. ${VisitFlowStrings.step1Title}',
-      '2. $_programmeLabel ${VisitFlowStrings.step2TitleSuffix}',
+      '2. ${VisitFlowStrings.step2Title}',
       '3. ${VisitFlowStrings.step3Title}',
     ];
 

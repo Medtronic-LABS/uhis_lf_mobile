@@ -600,7 +600,10 @@ class _AiBriefingSection extends StatelessWidget {
         // primes the SK before they tap the AI Scribe below.
         _GreetWarmlyCard(
           isFemale: isFemale,
-          openingLine: briefingData?.suggestedDiscussionPoints.openingLine,
+          loading: briefingLoading,
+          greeting: briefingData?.greeting,
+          fallbackOpeningLine:
+              briefingData?.suggestedDiscussionPoints.openingLine,
         ),
       ],
     );
@@ -764,19 +767,56 @@ class _BriefingCard1Content extends StatelessWidget {
 // English translation, otherwise the localized fallback is shown.
 
 class _GreetWarmlyCard extends StatelessWidget {
-  const _GreetWarmlyCard({required this.isFemale, this.openingLine});
+  const _GreetWarmlyCard({
+    required this.isFemale,
+    required this.loading,
+    this.greeting,
+    this.fallbackOpeningLine,
+  });
 
   final bool isFemale;
-  final String? openingLine;
+  final bool loading;
+
+  /// AI-generated greeting block. When null or empty, the localized static
+  /// fallback is shown so the SK still has a sensible opener offline.
+  final GreetingContent? greeting;
+
+  /// Legacy fallback — the SDP opening line was used before the dedicated
+  /// greeting block existed. Surface it as the English row when the new
+  /// `greeting.english` field is empty.
+  final String? fallbackOpeningLine;
 
   static const Color _navyBg = Color(0xFF1B2B5E);
   static const Color _navyHint = Color(0xFF243C7A);
 
+  String _resolveBangla() {
+    final g = greeting;
+    if (g != null && g.bangla.trim().isNotEmpty) return g.bangla.trim();
+    return SymptomPickerStrings.sitWithGreetBanglaFor(isFemale: isFemale);
+  }
+
+  String _resolveEnglish() {
+    final g = greeting;
+    if (g != null && g.english.trim().isNotEmpty) return g.english.trim();
+    if (fallbackOpeningLine != null && fallbackOpeningLine!.trim().isNotEmpty) {
+      return fallbackOpeningLine!.trim();
+    }
+    return SymptomPickerStrings.sitWithGreetEnglishFor(isFemale: isFemale);
+  }
+
+  String _resolveHint() {
+    final g = greeting;
+    if (g != null && g.hint.trim().isNotEmpty) return g.hint.trim();
+    return SymptomPickerStrings.sitWithGreetHintFor(isFemale: isFemale);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final english = (openingLine == null || openingLine!.trim().isEmpty)
-        ? SymptomPickerStrings.sitWithGreetEnglishFor(isFemale: isFemale)
-        : openingLine!.trim();
+    final bangla = _resolveBangla();
+    final english = _resolveEnglish();
+    final hint = _resolveHint();
+
+    final hasAi = greeting != null && !greeting!.isEmpty;
 
     return Container(
       decoration: BoxDecoration(
@@ -792,72 +832,130 @@ class _GreetWarmlyCard extends StatelessWidget {
             children: [
               const Text('👋', style: TextStyle(fontSize: 13)),
               const SizedBox(width: 6),
-              Text(
-                SymptomPickerStrings.sitWithGreetHeaderFor(isFemale: isFemale),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white.withValues(alpha: 0.75),
-                  letterSpacing: 0.8,
+              Expanded(
+                child: Text(
+                  SymptomPickerStrings.sitWithGreetHeaderFor(
+                      isFemale: isFemale),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white.withValues(alpha: 0.75),
+                    letterSpacing: 0.8,
+                  ),
                 ),
               ),
+              if (hasAi)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    '✦ AI',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: 10),
-          Text(
-            SymptomPickerStrings.sitWithGreetBanglaFor(isFemale: isFemale),
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: Colors.white,
-              height: 1.35,
+          if (loading && !hasAi)
+            const _GreetLoadingSkeleton()
+          else ...[
+            Text(
+              bangla,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+                height: 1.35,
+              ),
             ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '"$english"',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: Colors.white.withValues(alpha: 0.85),
-              fontStyle: FontStyle.italic,
-              height: 1.35,
+            const SizedBox(height: 6),
+            Text(
+              '"$english"',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: Colors.white.withValues(alpha: 0.85),
+                fontStyle: FontStyle.italic,
+                height: 1.35,
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(
-              color: _navyHint,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '💡',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.white.withValues(alpha: 0.85),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    SymptomPickerStrings.sitWithGreetHintFor(
-                      isFemale: isFemale,
-                    ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: _navyHint,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '💡',
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 13,
                       color: Colors.white.withValues(alpha: 0.85),
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      hint,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.white.withValues(alpha: 0.85),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
+          ],
         ],
       ),
+    );
+  }
+}
+
+/// Skeleton shown inside [_GreetWarmlyCard] while the briefing API is in
+/// flight. Mirrors the navy palette so it doesn't flash white.
+class _GreetLoadingSkeleton extends StatelessWidget {
+  const _GreetLoadingSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        final w = c.maxWidth;
+        Widget bar(double fraction, double height) => Container(
+              width: w * fraction,
+              height: height,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            bar(0.85, 18),
+            const SizedBox(height: 8),
+            bar(0.65, 18),
+            const SizedBox(height: 12),
+            bar(0.55, 12),
+            const SizedBox(height: 12),
+            bar(0.95, 14),
+          ],
+        );
+      },
     );
   }
 }

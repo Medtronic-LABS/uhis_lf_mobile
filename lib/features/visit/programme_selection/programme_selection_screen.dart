@@ -129,9 +129,13 @@ class _ProgrammeSelectionScreenState extends State<ProgrammeSelectionScreen> {
               vm.addProgramme(rec.programme);
               _showProgrammeToast(context, rec.programme, added: true);
             },
-            onSkip: () {
+            onSkip: () async {
+              final ok = await _confirmSkip(context, rec.programme);
+              if (!ok) return;
               vm.removeProgramme(rec.programme);
-              _showProgrammeToast(context, rec.programme, added: false);
+              if (context.mounted) {
+                _showProgrammeToast(context, rec.programme, added: false);
+              }
             },
           ),
           const SizedBox(height: 10),
@@ -172,6 +176,126 @@ class _ProgrammeSelectionScreenState extends State<ProgrammeSelectionScreen> {
       ),
     );
   }
+}
+
+/// Confirm the SK wants to add a manually-selected programme. Returns true
+/// when the SK taps "Yes, add", false otherwise (including dismiss).
+Future<bool> _confirmAdd(BuildContext context, Programme programme) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      title: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: AppColors.statusSuccess.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            alignment: Alignment.center,
+            child: const Icon(
+              Icons.add_circle_outline_rounded,
+              color: AppColors.statusSuccess,
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              ProgrammeSelectionStrings.addConfirmTitle(programme.wireTag),
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: AppColors.navy,
+              ),
+            ),
+          ),
+        ],
+      ),
+      content: const Text(
+        ProgrammeSelectionStrings.addConfirmBody,
+        style: TextStyle(fontSize: 13, color: AppColors.textMuted, height: 1.4),
+      ),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: const Text(ProgrammeSelectionStrings.addConfirmCancel),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(ctx).pop(true),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.statusSuccess,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text(ProgrammeSelectionStrings.addConfirmCta),
+        ),
+      ],
+    ),
+  );
+  return ok == true;
+}
+
+/// Confirm the SK wants to skip an AI-recommended programme. Surfaces the
+/// safety reminder that the AI recommended it before letting the SK drop it.
+Future<bool> _confirmSkip(BuildContext context, Programme programme) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      title: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: AppColors.statusCritical.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            alignment: Alignment.center,
+            child: const Icon(
+              Icons.warning_amber_rounded,
+              color: AppColors.statusCritical,
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              ProgrammeSelectionStrings.skipConfirmTitle(programme.wireTag),
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: AppColors.navy,
+              ),
+            ),
+          ),
+        ],
+      ),
+      content: const Text(
+        ProgrammeSelectionStrings.skipConfirmBody,
+        style: TextStyle(fontSize: 13, color: AppColors.textMuted, height: 1.4),
+      ),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: const Text(ProgrammeSelectionStrings.skipConfirmCancel),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(ctx).pop(true),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.statusCritical,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text(ProgrammeSelectionStrings.skipConfirmCta),
+        ),
+      ],
+    ),
+  );
+  return ok == true;
 }
 
 /// Shared confirmation toast. Pops a 1.5 s SnackBar at the bottom of the
@@ -657,33 +781,55 @@ class _RecommendationCard extends StatelessWidget {
                 ],
               ),
             ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
-                child: OutlinedButton(
+                child: OutlinedButton.icon(
                   onPressed: isSelected ? onSkip : null,
+                  icon: const Icon(Icons.close_rounded, size: 16),
+                  label: const Text(ProgrammeSelectionStrings.rejectCta),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.textMuted,
-                    side: const BorderSide(color: AppColors.border),
+                    foregroundColor: AppColors.statusCritical,
+                    side: BorderSide(
+                      color: isSelected
+                          ? AppColors.statusCritical
+                          : AppColors.border,
+                    ),
+                    disabledForegroundColor:
+                        AppColors.textMuted.withValues(alpha: 0.5),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
-                  child: const Text(ProgrammeSelectionStrings.rejectCta),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
-                child: FilledButton(
+                child: FilledButton.icon(
                   onPressed: isSelected ? null : onAccept,
+                  icon: Icon(
+                    isSelected
+                        ? Icons.check_circle_rounded
+                        : Icons.add_rounded,
+                    size: 18,
+                  ),
+                  label: Text(
+                    isSelected
+                        ? ProgrammeSelectionStrings.acceptedCta
+                        : ProgrammeSelectionStrings.acceptCta,
+                  ),
                   style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.navy,
+                    backgroundColor: AppColors.statusSuccess,
                     foregroundColor: Colors.white,
                     disabledBackgroundColor:
-                        AppColors.navy.withValues(alpha: 0.4),
-                  ),
-                  child: Text(
-                    isSelected
-                        ? ProgrammeSelectionStrings.currentBadge
-                        : ProgrammeSelectionStrings.acceptCta,
+                        AppColors.statusSuccess.withValues(alpha: 0.85),
+                    disabledForegroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
               ),
@@ -783,8 +929,11 @@ class _AddProgrammeSheet extends StatelessWidget {
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(20),
                             child: InkWell(
-                              onTap: () {
+                              onTap: () async {
+                                final ok = await _confirmAdd(context, p);
+                                if (!ok) return;
                                 vm.addProgramme(p);
+                                if (!context.mounted) return;
                                 Navigator.of(context).pop();
                                 onAdded(p);
                               },
