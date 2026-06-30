@@ -2740,7 +2740,7 @@ abstract final class SymptomPickerStrings {
       'Tap the mic above to record the patient. AI-detected symptoms will appear here for you to review.';
   static const String detectedSymptomsSubtitleFilled =
       'Review each symptom. Tap × to remove anything incorrect, or add what is missing.';
-  static const String addSymptomCta = '+ Add symptom';
+  static const String addSymptomCta = 'Add symptoms';
   static const String addSymptomSheetTitle = 'Add symptoms';
   static const String addSymptomSheetSubtitle =
       'Tap to add or remove. AI-detected symptoms are already ticked — press Done when finished.';
