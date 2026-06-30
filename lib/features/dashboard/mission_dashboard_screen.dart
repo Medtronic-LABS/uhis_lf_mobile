@@ -489,6 +489,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     
     return Scaffold(
       backgroundColor: tokens.canvas,
+      // Pink "+ Enrol new" FAB — fixed bottom-right per spec §2.1. Opens
+      // QR enrolment flow when the route lands; for now surfaces a snackbar
+      // so the SK gets clear feedback rather than silent taps.
+      floatingActionButton: _EnrolNewFab(),
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -987,6 +991,55 @@ class _ReferralNotificationButtonState
 // "Today's visits" priority-ordered patient cards with colored left border.
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Pink "+ Enrol new" FAB — Apon Sushashthya V1 §2.1.
+///
+/// Opens the QR enrolment flow when it ships; until then we surface a clear
+/// snackbar so the SK gets feedback instead of a silent tap. Lives at the
+/// bottom-right of the dashboard scaffold.
+class _EnrolNewFab extends StatelessWidget {
+  const _EnrolNewFab();
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    return FloatingActionButton.extended(
+      key: const Key('dashboard_enrol_new_fab'),
+      backgroundColor: tokens.brandPink,
+      foregroundColor: Colors.white,
+      elevation: 4,
+      icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
+      label: const Text(
+        MissionDashboardStrings.enrolNewCta,
+        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+      ),
+      onPressed: () {
+        final messenger = ScaffoldMessenger.maybeOf(context);
+        messenger?.hideCurrentSnackBar();
+        messenger?.showSnackBar(
+          SnackBar(
+            duration: const Duration(milliseconds: 1800),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: tokens.brandNavy,
+            content: const Row(
+              children: [
+                Icon(Icons.info_outline_rounded,
+                    color: Colors.white, size: 18),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    MissionDashboardStrings.enrolNewComingSoon,
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _DashboardHeader extends StatelessWidget {
   const _DashboardHeader({
     required this.greeting,
@@ -1401,54 +1454,90 @@ class _AiSortedInfoCard extends StatelessWidget {
       builder: (context, snap) {
         final count = snap.data?.length ?? 0;
         final isLoading = snap.connectionState == ConnectionState.waiting;
-        const tags = [
-          MissionDashboardStrings.aiSortedTagRisk,
-          MissionDashboardStrings.aiSortedTagOverdue,
-          MissionDashboardStrings.aiSortedTagCce,
+        const tags = <(String, String)>[
+          ('🎯', MissionDashboardStrings.aiSortedTagRisk),
+          ('⏰', MissionDashboardStrings.aiSortedTagOverdue),
+          ('🚨', MissionDashboardStrings.aiSortedTagCce),
         ];
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               colors: [AppColors.navy, AppColors.navyMid],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.auto_awesome, size: 14, color: Colors.white70),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  isLoading
-                      ? 'AI sorted your visits overnight'
-                      : MissionDashboardStrings.aiSortedVisits(count),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.navy.withValues(alpha: 0.18),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
               ),
-              const SizedBox(width: 8),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Icon(Icons.auto_awesome,
+                        size: 14, color: Colors.white),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      isLoading
+                          ? 'AI sorted your visits overnight'
+                          : MissionDashboardStrings.aiSortedVisits(count),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        height: 1.25,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
               Wrap(
-                spacing: 4,
+                spacing: 6,
+                runSpacing: 6,
                 children: tags
                     .map(
-                      (tag) => Container(
+                      (t) => Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
+                            horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          tag,
-                          style: const TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
+                          color: Colors.white.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.18),
                           ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(t.$1, style: const TextStyle(fontSize: 11)),
+                            const SizedBox(width: 4),
+                            Text(
+                              t.$2,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     )

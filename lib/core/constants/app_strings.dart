@@ -1024,6 +1024,11 @@ abstract final class MissionDashboardStrings {
   static const String aiSortedTagOverdue = 'Overdue flags';
   static const String aiSortedTagCce = 'CCE alerts';
 
+  // ── "+ Enrol new" FAB ────────────────────────────────────────────────────
+  static const String enrolNewCta = '+ Enrol new';
+  static const String enrolNewComingSoon =
+      'QR enrolment flow coming soon. Use the Patients tab to view existing patients.';
+
   // ── Status pills (compact tier label shown in the card right-side pill) ───
   static String statusPillForTier(DashboardTier tier) {
     switch (tier) {
