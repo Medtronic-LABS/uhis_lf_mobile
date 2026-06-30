@@ -261,8 +261,9 @@ class ScribeApiService extends ApiRepository {
   ScribeApiService(super.api) {
     _dio = Dio(BaseOptions(
       baseUrl: _effectiveBaseUrl(),
-      connectTimeout: const Duration(seconds: 30),
-      receiveTimeout: const Duration(minutes: 2),
+      connectTimeout: const Duration(seconds: 60),
+      sendTimeout: const Duration(minutes: 3),
+      receiveTimeout: const Duration(minutes: 3),
       validateStatus: (s) => s != null && s < 500,
     ));
   }
@@ -336,6 +337,7 @@ class ScribeApiService extends ApiRepository {
     String? encounterId,
     List<String> programmes = const [],
     String language = 'bn',
+    String? triageNotes,
   }) async {
     return submitAudioWithMode(
       audioFile,
@@ -345,6 +347,7 @@ class ScribeApiService extends ApiRepository {
       programmes: programmes,
       language: language,
       formSchema: formSchema,
+      triageNotes: triageNotes,
     );
   }
 
@@ -379,6 +382,7 @@ class ScribeApiService extends ApiRepository {
     String language = 'bn',
     List<FormFieldSchema>? formSchema,
     List<String>? symptomCatalog,
+    String? triageNotes,
   }) async {
     final size = await audioFile.length();
     if (size >= _chunkThresholdBytes) {
@@ -391,6 +395,7 @@ class ScribeApiService extends ApiRepository {
         language: language,
         formSchema: formSchema,
         symptomCatalog: symptomCatalog,
+        triageNotes: triageNotes,
       );
     }
     return _simpleUploadWithMode(
@@ -402,6 +407,7 @@ class ScribeApiService extends ApiRepository {
       language: language,
       formSchema: formSchema,
       symptomCatalog: symptomCatalog,
+      triageNotes: triageNotes,
     );
   }
 
@@ -413,6 +419,7 @@ class ScribeApiService extends ApiRepository {
     String language = 'bn',
     List<FormFieldSchema>? formSchema,
     List<String>? symptomCatalog,
+    String? triageNotes,
   }) {
     return {
       'mode': mode.name == 'formPrefill' ? 'form_prefill' : mode.name,
@@ -426,6 +433,8 @@ class ScribeApiService extends ApiRepository {
       if (formSchema != null)
         'formSchema': formSchema.map((f) => f.toJson()).toList(),
       'symptomCatalog': ?symptomCatalog,
+      if (triageNotes != null && triageNotes.isNotEmpty)
+        'triageNotes': triageNotes,
     };
   }
 
@@ -438,6 +447,7 @@ class ScribeApiService extends ApiRepository {
     String language = 'bn',
     List<FormFieldSchema>? formSchema,
     List<String>? symptomCatalog,
+    String? triageNotes,
   }) async {
     final metadata = _buildMetadata(
       mode: mode,
@@ -447,6 +457,7 @@ class ScribeApiService extends ApiRepository {
       language: language,
       formSchema: formSchema,
       symptomCatalog: symptomCatalog,
+      triageNotes: triageNotes,
     );
     debugPrint(
       '[AIScribe] submit: mode=${metadata['mode']} '
@@ -498,6 +509,7 @@ class ScribeApiService extends ApiRepository {
     String language = 'bn',
     List<FormFieldSchema>? formSchema,
     List<String>? symptomCatalog,
+    String? triageNotes,
   }) async {
     final size = await audioFile.length();
     const chunkSize = 256 * 1024; // 256 KB
@@ -551,6 +563,7 @@ class ScribeApiService extends ApiRepository {
       language: language,
       formSchema: formSchema,
       symptomCatalog: symptomCatalog,
+      triageNotes: triageNotes,
     );
     final completeResp = await _post(
       _scribePath(Endpoints.scribeUploadComplete(uploadId)),

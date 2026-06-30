@@ -19,9 +19,12 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart' show DatabaseException;
 
+import 'package:provider/provider.dart';
+
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../scribe/scribe_controller.dart';
 import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/models/programme.dart';
 import '../../scribe/models/ai_extracted_field.dart';
@@ -360,6 +363,7 @@ class SectionedAssessmentScreen extends StatefulWidget {
     required this.patientId,
     required this.householdMemberLocalId,
     this.memberId,
+    this.triageNotes,
     required this.draftDao,
     this.onSubmit,
     this.onReferNow,
@@ -372,6 +376,12 @@ class SectionedAssessmentScreen extends StatefulWidget {
   final String patientId;
   final int householdMemberLocalId;
   final String? memberId;
+
+  /// Free-text symptoms the SK noted in Step 1 that are outside the standard
+  /// symptom picker. Shown as a reminder card in the form and passed to the
+  /// SOAP scribe as additional context.
+  final String? triageNotes;
+
   final AssessmentDraftDao draftDao;
 
   /// Callback invoked when the SK taps Submit and the draft is persisted.
@@ -408,6 +418,15 @@ class _SectionedAssessmentScreenState
       memberId: widget.memberId,
       draftDao: widget.draftDao,
     );
+    // Wire triageNotes into ScribeController so they appear in scribe metadata.
+    if (widget.triageNotes != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        try {
+          context.read<ScribeController>().setTriageNotes(widget.triageNotes);
+        } catch (_) {}
+      });
+    }
   }
 
   @override
@@ -425,6 +444,7 @@ class _SectionedAssessmentScreenState
         onSubmit: widget.onSubmit,
         onReferNow: widget.onReferNow,
         embedded: widget.embedded,
+        triageNotes: widget.triageNotes,
       ),
     );
   }
@@ -437,12 +457,14 @@ class _SectionedAssessmentView extends StatelessWidget {
     this.onSubmit,
     this.onReferNow,
     this.embedded = false,
+    this.triageNotes,
   });
 
   final SectionedAssessmentViewModel viewModel;
   final VoidCallback? onSubmit;
   final void Function(String alertId)? onReferNow;
   final bool embedded;
+  final String? triageNotes;
 
   @override
   Widget build(BuildContext context) {
@@ -456,6 +478,68 @@ class _SectionedAssessmentView extends StatelessWidget {
             ),
       body: Column(
         children: [
+          // ── Triage notes reminder card ─────────────────────────────────────
+          if (triageNotes != null && triageNotes!.trim().isNotEmpty)
+            Builder(builder: (ctx) {
+              final isDark = Theme.of(ctx).brightness == Brightness.dark;
+              final cardBg = isDark
+                  ? AppColors.statusWarningSurfaceDark
+                  : const Color(0xFFFFF8E1);
+              final cardBorder = isDark
+                  ? AppColors.statusWarningDark
+                  : const Color(0xFFFFCC02);
+              final emphColor = isDark
+                  ? AppColors.statusWarningDark
+                  : const Color(0xFF795548);
+              final bodyColor = isDark
+                  ? AppColors.textPrimaryDark
+                  : const Color(0xFF4E342E);
+              return Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                decoration: BoxDecoration(
+                  color: cardBg,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: cardBorder, width: 1),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.info_outline_rounded,
+                        size: 16, color: emphColor),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Patient also mentioned',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: emphColor,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            triageNotes!.trim(),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: bodyColor,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+            }),
+
           // ── TB added banner ────────────────────────────────────────────────
           if (viewModel.tbBannerVisible)
             _TbAddedBanner(onDismiss: viewModel.dismissTbBanner),

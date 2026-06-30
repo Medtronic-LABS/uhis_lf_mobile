@@ -62,6 +62,31 @@ class TriageViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Chips added from the symptom-search "no match → add to other" flow.
+  final List<String> _otherChips = [];
+  List<String> get otherChips => List.unmodifiable(_otherChips);
+
+  void addOtherChip(String text) {
+    final t = text.trim();
+    if (t.isEmpty || _otherChips.contains(t)) return;
+    _otherChips.add(t);
+    notifyListeners();
+  }
+
+  void removeOtherChip(String text) {
+    if (_otherChips.remove(text)) notifyListeners();
+  }
+
+  /// Chips joined with typed free-text — sent as `otherSymptoms` downstream.
+  String? get combinedCustomText {
+    final chips = _otherChips.join(', ');
+    final typed = _customSymptomText ?? '';
+    if (chips.isEmpty && typed.isEmpty) return null;
+    if (chips.isEmpty) return typed;
+    if (typed.isEmpty) return chips;
+    return '$chips, $typed';
+  }
+
   /// Rule-activated pathways based on current selection.
   List<ActivatedPathway> _activatedPathways = [];
 

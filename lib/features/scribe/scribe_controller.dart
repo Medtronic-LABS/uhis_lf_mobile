@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:audio_waveforms/audio_waveforms.dart';
 import 'package:flutter/widgets.dart';
@@ -88,6 +87,13 @@ class ScribeController extends ChangeNotifier {
   List<String>? _currentSymptomCatalog;
   ScribeMode _currentMode = ScribeMode.soap;
   List<String> _currentProgrammes = const [];
+  String? _triageNotes;
+
+  /// Set before starting a form recording to include Step 1 extra symptom
+  /// notes in the SOAP generation context.
+  void setTriageNotes(String? notes) {
+    _triageNotes = notes?.trim().isEmpty == true ? null : notes?.trim();
+  }
 
   // Context bound during the recording tap — needed for permission rationale.
   BuildContext? _context;
@@ -287,12 +293,6 @@ class ScribeController extends ChangeNotifier {
     _recordingPath = effectivePath;
     debugPrint('[AIScribe] Recording saved to: $effectivePath');
 
-    if (!await _checkAudioHasSignal(effectivePath)) {
-      debugPrint('[AIScribe] Audio energy below threshold — silent recording, skipping upload');
-      _setRecordingError(ScribeStrings.noSpeechDetected);
-      return;
-    }
-
     debugPrint('[AIScribe] Uploading audio (mode=${_currentMode.name})...');
 
     try {
@@ -308,6 +308,7 @@ class ScribeController extends ChangeNotifier {
             patientId: patientId,
             encounterId: encounterId,
             programmes: _currentProgrammes,
+            triageNotes: _triageNotes,
           );
           break;
         case ScribeMode.triage:
@@ -319,11 +320,13 @@ class ScribeController extends ChangeNotifier {
           );
           break;
         case ScribeMode.soap:
-          jobId = await _api.submitAudio(
+          jobId = await _api.submitAudioWithMode(
             file,
+            mode: ScribeMode.soap,
             patientId: patientId,
             encounterId: encounterId,
-            programme: programme,
+            programmes: programme != null ? [programme] : [],
+            triageNotes: _triageNotes,
           );
       }
 
@@ -380,6 +383,7 @@ class ScribeController extends ChangeNotifier {
     _currentSymptomCatalog = null;
     _currentProgrammes = const [];
     _currentMode = ScribeMode.soap;
+    _triageNotes = null;
     _recycleRecorder();
     _session = const ScribeSession();
     notifyListeners();
@@ -574,32 +578,6 @@ class ScribeController extends ChangeNotifier {
 
   // ── private helpers ───────────────────────────────────────────────────────
 
-  /// Returns false when the WAV file is effectively silent (RMS < 200 / 32767,
-  /// ~-44 dBFS). Reads up to 8000 PCM samples from just after the 44-byte WAV
-  /// header (~0.5 s at 16 kHz). Fails-open: returns true on any read error so
-  /// a healthy recording is never blocked by an unexpected I/O issue.
-  Future<bool> _checkAudioHasSignal(String path) async {
-    try {
-      final bytes = await File(path).readAsBytes();
-      // Fewer than 44+4 bytes means the WAV header has no payload.
-      if (bytes.length <= 48) return false;
-      final sampleCount = math.min((bytes.length - 44) ~/ 2, 8000);
-      var sumSquares = 0.0;
-      for (var i = 0; i < sampleCount; i++) {
-        final offset = 44 + i * 2;
-        final raw = bytes[offset] | (bytes[offset + 1] << 8);
-        // Convert unsigned 16-bit to signed.
-        final signed = raw > 32767 ? raw - 65536 : raw;
-        sumSquares += signed * signed;
-      }
-      final rms = math.sqrt(sumSquares / sampleCount);
-      debugPrint('[AIScribe] Audio energy check: RMS=${rms.toStringAsFixed(1)} (threshold=200)');
-      return rms > 200;
-    } catch (_) {
-      // If the check itself fails, don't block upload.
-      return true;
-    }
-  }
 
   void _prepareFreshRecorder() {
     if (_recorder.isRecording) return;

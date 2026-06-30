@@ -2680,15 +2680,23 @@ abstract final class SymptomPickerStrings {
   SymptomPickerStrings._();
 
   // ── AI Scribe triage banner (spec §4.1.2 / §5.1.1) ───────────────────────
-  static const String scribeBannerTitle =
-      '🎙 AI Scribe — tap to fill the form by voice';
-  static const String scribeBannerSubtitle =
-      'SK talks to her/him — fields fill automatically';
+  static String scribeBannerTitleFor({required bool isFemale}) =>
+      isFemale
+          ? '🎙 AI Scribe — tap and let her speak'
+          : '🎙 AI Scribe — tap and let him speak';
+  static String scribeBannerSubtitleFor({required bool isFemale}) =>
+      isFemale
+          ? 'Symptoms appear automatically as she talks'
+          : 'Symptoms appear automatically as he talks';
   static const String scribeBannerRecording = 'Listening… tap to stop';
   static const String scribeBannerProcessing = 'AI is reviewing the recording';
   static const String scribeBannerTriageProcessing = 'Analysing symptoms…';
   static const String scribeBannerProcessingSubtitle = 'Transcribing your recording…';
-  static const String scribeBannerDone = 'Voice capture complete';
+  static String scribeDoneWithCount(int n) => n == 1
+      ? 'Scribe complete · 1 symptom detected'
+      : n > 1
+          ? 'Scribe complete · $n symptoms detected'
+          : 'Scribe complete';
   static const String scribeBannerDoneSubtitle = 'Tap to record again';
   static const String scribeBannerRecordingSubtitle = 'Tap anywhere to stop';
   static const String scribeBannerError = 'Voice review failed';
@@ -2775,9 +2783,9 @@ abstract final class SymptomPickerStrings {
   static const String ctaRoutine = 'Continue (routine visit)';
 
   // ── Other symptoms free-text ─────────────────────────────────────────────
-  static const String otherSymptomsLabel = 'Other symptoms';
-  static const String otherSymptomsHint =
-      'Describe any other symptoms not listed above…';
+  static const String otherSymptomsLabel = 'Other symptoms / Notes';
+  static const String otherSymptomsHint = 'Type symptom manually…';
+  static const String otherSymptomsAddFromList = 'Add from list';
 
   // ── AI-driven symptom list (replaces the hardcoded cluster grid) ─────────
   static const String detectedSymptomsTitle = 'Symptoms detected by AI';
@@ -2786,6 +2794,7 @@ abstract final class SymptomPickerStrings {
   static const String detectedSymptomsSubtitleFilled =
       'Review each symptom. Tap × to remove anything incorrect, or add what is missing.';
   static const String addSymptomCta = 'Add symptoms';
+  static const String addSymptomFromList = 'Add from list';
   static const String addSymptomSheetTitle = 'Add symptoms';
   static const String addSymptomSheetSubtitle =
       'Tap to add or remove. AI-detected symptoms are already ticked — press Done when finished.';
