@@ -618,7 +618,9 @@ class _BriefingCard extends StatefulWidget {
 }
 
 class _BriefingCardState extends State<_BriefingCard> {
-  bool _expanded = false;
+  // Default to open so the SK reads the brief without an extra tap; tap-to-
+  // collapse is preserved for SKs who prefer the compact header.
+  bool _expanded = true;
 
   @override
   Widget build(BuildContext context) {
