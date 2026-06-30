@@ -143,12 +143,16 @@ class ScribeJobResult {
     final transcriptJson = j['transcript'] as Map<String, dynamic>?;
     final formPrefillJson = j['formPrefill'] as Map<String, dynamic>?;
     final triageJson = j['triage'] as Map<String, dynamic>?;
+    final detectedSymptoms = (j['detectedSymptoms'] as List?)
+        ?.whereType<String>()
+        .where((s) => s.isNotEmpty)
+        .toList() ?? const <String>[];
 
     // Determine mode from response
     ScribeMode mode = ScribeMode.soap;
     if (formPrefillJson != null) {
       mode = ScribeMode.formPrefill;
-    } else if (triageJson != null) {
+    } else if (triageJson != null || detectedSymptoms.isNotEmpty) {
       mode = ScribeMode.triage;
     }
 
@@ -170,7 +174,21 @@ class ScribeJobResult {
               'transcriptText': transcriptJson?['text'],
               'noteId': j['noteId'],
             })
-          : null,
+          : detectedSymptoms.isNotEmpty
+              ? TriageExtractionResult(
+                  symptomCodes: detectedSymptoms
+                      .map((code) => AIExtractedField(
+                            fieldId: code,
+                            value: true,
+                            confidence: 1.0,
+                            source: FieldSource.aiPending,
+                            extractedAt: DateTime.now(),
+                          ))
+                      .toList(),
+                  transcriptText: transcriptJson?['text'] as String?,
+                  noteId: j['noteId'] as String?,
+                )
+              : null,
       transcriptText: transcriptJson?['text'] as String?,
       transcriptTranslation: transcriptJson?['translation'] as String?,
       noteId: j['noteId'] as String?,
