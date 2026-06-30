@@ -193,6 +193,12 @@ class ScribeController extends ChangeNotifier {
     }
 
     try {
+      // Defensive: RecorderController can enter a bad internal state after
+      // multiple start/stop cycles. A no-op stop() before record() clears it.
+      try {
+        await _recorder.stop();
+      } catch (_) {}
+
       final dir = await getTemporaryDirectory();
       _recordingPath =
           '${dir.path}/scribe_${DateTime.now().millisecondsSinceEpoch}.aac';
@@ -242,12 +248,26 @@ class ScribeController extends ChangeNotifier {
 
     try {
       final path = await _recorder.stop();
-      if (path == null) {
+      // audio_waveforms RecorderController.stop() can return null on the 3rd+
+      // reuse of the same controller (double-stop quirk in the native layer).
+      // The file IS written to _recordingPath — fall back to it when stop() lies.
+      final effectivePath = path ?? _recordingPath;
+      if (effectivePath == null) {
+        debugPrint('[AIScribe] stop() returned null and no pre-set path — no output');
         _setError('Recording produced no output.');
         return;
       }
-      _recordingPath = path;
-      debugPrint('[AIScribe] Recording saved to: $path');
+      final audioFile = File(effectivePath);
+      if (!audioFile.existsSync() || audioFile.lengthSync() == 0) {
+        debugPrint('[AIScribe] Audio file missing or empty at $effectivePath');
+        _setError('Recording produced no output.');
+        return;
+      }
+      _recordingPath = effectivePath;
+      debugPrint(
+        '[AIScribe] Recording saved to: $effectivePath'
+        '${path == null ? " (stop returned null — used pre-set path)" : ""}',
+      );
     } catch (e) {
       debugPrint('[AIScribe] Stop recording failed: $e');
       _setError('Stop recording failed: $e');
@@ -333,6 +353,7 @@ class ScribeController extends ChangeNotifier {
   /// Used by triage mode after extracted symptoms are consumed by
   /// [TriageViewModel], so the banner returns to the "tap to record" state.
   void resetSession() {
+    debugPrint('[AIScribe] resetSession() — back to idle');
     _elapsedTimer?.cancel();
     _pollTimer?.cancel();
     _recordingPath = null;
