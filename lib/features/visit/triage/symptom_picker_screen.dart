@@ -415,36 +415,18 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           builder: (context, vm, _) {
             return CustomScrollView(
               slivers: [
-                // Prominent AI Scribe mic banner — spec §4.1.2 / §5.1.1.
-                if (AppConfig.scribeEnabled)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                      child: _AiScribeTriageBanner(
-                        encounterId: widget.encounterId,
-                        patientId: widget.patientId,
-                        viewModel: vm,
-                      ),
-                    ),
-                  ),
-
-                // Subtitle header
+                // 1) Before You Knock (AI brief — collapsible card).
+                // 2) Sit with her / him — greet warmly (navy filled card).
+                // 3) "How is she feeling today?" heading.
+                // 4) AI Scribe banner.
+                //
+                // The greet card was previously a navy strip mixed inside the
+                // Before-You-Knock body. It now stands on its own per design
+                // reference so the SK reads context first, greets the
+                // patient, then taps the scribe.
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                    child: Text(
-                      TriageStrings.pickerSubtitle,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                ),
-
-                // AI briefing cards — Before You Knock / Conversation Guide / Begin Consultation
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
                     child: _AiBriefingSection(
                       briefingLoading: _briefingLoading,
                       briefingData: _briefingData,
@@ -452,6 +434,36 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                     ),
                   ),
                 ),
+
+                // Section heading directly above the AI Scribe banner.
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: Text(
+                      SymptomPickerStrings.howFeelingTodayHeadingFor(
+                        isFemale: _patientContext!.sex == Sex.female,
+                      ),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.navy,
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Prominent AI Scribe mic banner — spec §4.1.2 / §5.1.1.
+                if (AppConfig.scribeEnabled)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: _AiScribeTriageBanner(
+                        encounterId: widget.encounterId,
+                        patientId: widget.patientId,
+                        viewModel: vm,
+                      ),
+                    ),
+                  ),
 
                 // AI-detected symptom list — populated by the scribe response.
                 // Replaces the previous hardcoded cluster grid; SK reviews,
@@ -570,6 +582,8 @@ class _AiBriefingSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
+        // 1) Before You Knock — collapsible AI brief card. No navy greet
+        // strip embedded here; greet now stands on its own (see below).
         _BriefingCard(
           icon: Icons.psychology_outlined,
           iconColor: AppColors.navy,
@@ -577,22 +591,16 @@ class _AiBriefingSection extends StatelessWidget {
           child: briefingLoading
               ? const _BriefingLoadingSkeleton(lines: 3)
               : briefingData == null
-              ? _BriefingFallbackContent(
-                  patientContext: patientContext,
-                  isFemale: isFemale,
-                )
-              : _BriefingCard1Content(data: briefingData!, isFemale: isFemale),
+              ? _BriefingFallbackContent(patientContext: patientContext)
+              : _BriefingCard1Content(data: briefingData!),
         ),
-        const SizedBox(height: 8),
-        _BriefingCard(
-          icon: Icons.chat_bubble_outline,
-          iconColor: Colors.teal,
-          title: SymptomPickerStrings.briefCard3TitleFor(isFemale: isFemale),
-          child: briefingLoading
-              ? const _BriefingLoadingSkeleton(lines: 4)
-              : briefingData == null
-              ? const _BriefingUnavailable()
-              : _BriefingCard3Content(data: briefingData!),
+        const SizedBox(height: 10),
+        // 2) Sit With Her / Him — Greet Warmly. Navy-filled card carrying the
+        // Bangla greeting prompt + English translation + a helper hint that
+        // primes the SK before they tap the AI Scribe below.
+        _GreetWarmlyCard(
+          isFemale: isFemale,
+          openingLine: briefingData?.suggestedDiscussionPoints.openingLine,
         ),
       ],
     );
@@ -710,18 +718,16 @@ class _BriefingCardState extends State<_BriefingCard> {
 
 // ── Card 1 content: Before You Knock ─────────────────────────────────────────
 //
-// Spec §4.1.1 / §5.1.1: open the card with a navy "sit with him/her — greet
-// them" instructional strip, then the AI-generated brief in the brand pink
-// (#9D174D). Body hard-capped at 2 lines total (headline + 1 follow-up bullet)
-// so the SK can absorb it in one glance.
+// Spec §4.1.1 / §5.1.1: AI-generated brief in the brand pink (#9D174D). Body
+// hard-capped at 2 lines total (headline + 1 follow-up bullet) so the SK can
+// absorb it in one glance. The instructional "sit with her — greet warmly"
+// strip used to live here but now stands on its own as [_GreetWarmlyCard].
 
 class _BriefingCard1Content extends StatelessWidget {
-  const _BriefingCard1Content({required this.data, required this.isFemale});
+  const _BriefingCard1Content({required this.data});
   final VisitBriefingResponse data;
-  final bool isFemale;
 
   static const Color _aiTextColor = Color(0xFF9D174D);
-  static const Color _greetBgColor = Color(0xFF1B2B5E);
 
   @override
   Widget build(BuildContext context) {
@@ -734,145 +740,125 @@ class _BriefingCard1Content extends StatelessWidget {
         ? '$headline\n$firstPoint'
         : headline;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Navy greet strip — instructional, never AI-generated.
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: _greetBgColor,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.waving_hand, size: 14, color: Colors.white),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  SymptomPickerStrings.beforeYouKnockGreetingFor(
-                    isFemale: isFemale,
-                  ),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        // AI-generated body — pink, 2-line hard stop.
-        Text(
-          aiBody,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            height: 1.35,
-            color: _aiTextColor,
-          ),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ],
+    return Text(
+      aiBody,
+      style: const TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        height: 1.35,
+        color: _aiTextColor,
+      ),
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
     );
   }
 }
 
-// ── Card 3 content: Suggested Discussion Points ───────────────────────────────
+// ── Sit With Her / Him — Greet Warmly card ────────────────────────────────
+//
+// Navy-filled card the SK sees right after Before You Knock. Header is the
+// instruction ("👋 SIT WITH HER — GREET WARMLY"), body is the prepared
+// Bangla greeting + English translation, footer is a small helper hint so
+// the SK leads with empathy before tapping the AI Scribe below. When the
+// briefing API returns a non-empty openingLine we surface it as the
+// English translation, otherwise the localized fallback is shown.
 
-class _BriefingCard3Content extends StatelessWidget {
-  const _BriefingCard3Content({required this.data});
-  final VisitBriefingResponse data;
+class _GreetWarmlyCard extends StatelessWidget {
+  const _GreetWarmlyCard({required this.isFemale, this.openingLine});
+
+  final bool isFemale;
+  final String? openingLine;
+
+  static const Color _navyBg = Color(0xFF1B2B5E);
+  static const Color _navyHint = Color(0xFF243C7A);
 
   @override
   Widget build(BuildContext context) {
-    final sdp = data.suggestedDiscussionPoints;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          decoration: BoxDecoration(
-            color: AppColors.tagBlueSurface,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    final english = (openingLine == null || openingLine!.trim().isEmpty)
+        ? SymptomPickerStrings.sitWithGreetEnglishFor(isFemale: isFemale)
+        : openingLine!.trim();
+
+    return Container(
+      decoration: BoxDecoration(
+        color: _navyBg,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
             children: [
-              const Icon(
-                Icons.waving_hand,
-                size: 13,
-                color: AppColors.tagBlueText,
-              ),
+              const Text('👋', style: TextStyle(fontSize: 13)),
               const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  sdp.openingLine,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontStyle: FontStyle.italic,
-                    color: AppColors.tagBlueText,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+              Text(
+                SymptomPickerStrings.sitWithGreetHeaderFor(isFemale: isFemale),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white.withValues(alpha: 0.75),
+                  letterSpacing: 0.8,
                 ),
               ),
             ],
           ),
-        ),
-        const SizedBox(height: 6),
-        ...sdp.sections
-            .take(4)
-            .map(
-              (s) => Padding(
-                padding: const EdgeInsets.only(bottom: 3),
-                child: Row(
-                  children: [
-                    Icon(_iconFor(s.icon), size: 12, color: AppColors.aiPurple),
-                    const SizedBox(width: 5),
-                    Expanded(
-                      child: Text(
-                        s.topic,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.navy,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+          const SizedBox(height: 10),
+          Text(
+            SymptomPickerStrings.sitWithGreetBanglaFor(isFemale: isFemale),
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+              height: 1.35,
             ),
-      ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '"$english"',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: Colors.white.withValues(alpha: 0.85),
+              fontStyle: FontStyle.italic,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: _navyHint,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '💡',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.white.withValues(alpha: 0.85),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    SymptomPickerStrings.sitWithGreetHintFor(
+                      isFemale: isFemale,
+                    ),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.85),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
-  }
-
-  IconData _iconFor(String icon) {
-    switch (icon) {
-      case 'heart':
-        return Icons.favorite_outline;
-      case 'baby':
-        return Icons.child_care;
-      case 'nutrition':
-        return Icons.restaurant;
-      case 'medication':
-        return Icons.medication_outlined;
-      case 'lungs':
-        return Icons.air;
-      case 'home':
-        return Icons.home_outlined;
-      default:
-        return Icons.checklist_outlined;
-    }
   }
 }
 
@@ -909,36 +895,11 @@ class _BriefingLoadingSkeleton extends StatelessWidget {
   }
 }
 
-class _BriefingUnavailable extends StatelessWidget {
-  const _BriefingUnavailable();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Row(
-      children: [
-        Icon(Icons.wifi_off, size: 14, color: AppColors.textMuted),
-        SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            'AI unavailable — continue with symptoms below.',
-            style: TextStyle(fontSize: 11, color: AppColors.textMuted),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Fallback for card 1 when AI is unavailable — shows the navy greet strip
-/// followed by rule-based context chips. Same shape as the AI variant so the
-/// SK sees a consistent card layout whether or not the upstream call worked.
+/// Fallback for card 1 when AI is unavailable — shows rule-based context
+/// chips. The instructional greet strip has been moved to its own card.
 class _BriefingFallbackContent extends StatelessWidget {
-  const _BriefingFallbackContent({
-    required this.patientContext,
-    required this.isFemale,
-  });
+  const _BriefingFallbackContent({required this.patientContext});
   final PatientContext patientContext;
-  final bool isFemale;
 
   @override
   Widget build(BuildContext context) {
@@ -966,34 +927,6 @@ class _BriefingFallbackContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1B2B5E),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.waving_hand, size: 14, color: Colors.white),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  SymptomPickerStrings.beforeYouKnockGreetingFor(
-                    isFemale: isFemale,
-                  ),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
         const Row(
           children: [
             Icon(Icons.wifi_off, size: 12, color: AppColors.textMuted),

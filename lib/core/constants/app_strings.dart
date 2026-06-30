@@ -2699,6 +2699,35 @@ abstract final class SymptomPickerStrings {
   static String beforeYouKnockGreetingFor({required bool isFemale}) =>
       'Sit with ${isFemale ? 'her' : 'him'} — greet them.';
 
+  // ── "Sit with her / him — greet warmly" card (Step 1, between
+  // Before-You-Knock and the AI Scribe). All static — never AI-generated.
+
+  /// Header (uppercase, small). Gendered.
+  static String sitWithGreetHeaderFor({required bool isFemale}) =>
+      isFemale ? 'SIT WITH HER — GREET WARMLY' : 'SIT WITH HIM — GREET WARMLY';
+
+  /// Bangla greeting the SK opens with. ANC variant for women of reproductive
+  /// age; NCD/general variant otherwise. Includes the second-line ask so the
+  /// SK has a natural pause before the AI Scribe records.
+  static String sitWithGreetBanglaFor({required bool isFemale}) => isFemale
+      ? '"আপু, আপনি কেমন আছেন?\nবাচ্চা কেমন নড়াচড়া করছে?"'
+      : '"কাকা, আপনি কেমন আছেন?\nকোথাও কষ্ট আছে কি?"';
+
+  /// English translation of [sitWithGreetBanglaFor].
+  static String sitWithGreetEnglishFor({required bool isFemale}) => isFemale
+      ? 'Sister, how are you? Is the baby moving well?'
+      : 'Brother, how are you? Are you feeling any discomfort?';
+
+  /// Helper hint below the greeting — primes the SK to talk about home life
+  /// before launching the clinical conversation.
+  static String sitWithGreetHintFor({required bool isFemale}) => isFemale
+      ? 'Ask how she feels at home, with family, and about her sleep — before the pregnancy checkup'
+      : 'Ask how he feels at home, with family, and about his sleep — before the visit';
+
+  // ── "How is she feeling today?" heading shown just above the AI Scribe.
+  static String howFeelingTodayHeadingFor({required bool isFemale}) =>
+      'How is ${isFemale ? 'she' : 'he'} feeling today? 🎙️';
+
   // ── Patient context chips ────────────────────────────────────────────────
   static const String chipPregnant = 'Pregnant · ANC';
   static const String chipHtn = 'Known HTN';
