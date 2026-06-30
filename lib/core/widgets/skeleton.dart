@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../app/theme.dart';
+import '../theme/app_theme.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Primitives
@@ -27,7 +27,13 @@ class SkeletonBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    // Shimmer tints sit between the canvas + card-surface palette so the
+    // skeleton blends with the Leapfrog theme rather than the Material 3
+    // default scheme (which leans grey-pink). Matches the visual weight of
+    // the real mission card the skeleton stands in for.
+    final tokens = Theme.of(context).extension<LeapfrogColors>();
+    final base = tokens?.cardSurfaceMuted ?? AppColors.cardSurfaceMuted;
+    final highlight = AppColors.border;
     final v = (shimmerValue + delay) % 1.0;
     return Container(
       width: width,
@@ -37,9 +43,9 @@ class SkeletonBox extends StatelessWidget {
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
           colors: [
-            scheme.surfaceContainerLow,
-            scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-            scheme.surfaceContainerLow,
+            base,
+            highlight,
+            base,
           ],
           stops: [
             (v - 0.3).clamp(0.0, 1.0),
@@ -104,14 +110,14 @@ class _SkeletonCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final tokens = Theme.of(context).extension<LeapfrogColors>();
     return Container(
       width: double.infinity,
       padding: padding,
       decoration: BoxDecoration(
-        color: scheme.surface,
+        color: tokens?.cardSurface ?? AppColors.cardSurface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+        border: Border.all(color: AppColors.border),
       ),
       child: child,
     );
@@ -154,9 +160,12 @@ class _PatientCardSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Mirror MissionQueueCard exactly so the swap from skeleton → real card
+    // is visually seamless: same surface, same 4px grey left border
+    // (#E5E7EB — never red, since the band is unknown during load), same
+    // 12px corner radius, same 14/12 padding, same avatar + pill geometry.
     final tokens = Theme.of(context).extension<LeapfrogColors>();
-    final scheme = Theme.of(context).colorScheme;
-    final cardBg = tokens?.cardSurface ?? scheme.surface;
+    final cardBg = tokens?.cardSurface ?? AppColors.cardSurface;
     final v = (shimmerValue + delay) % 1.0;
 
     return Padding(
@@ -165,13 +174,10 @@ class _PatientCardSkeleton extends StatelessWidget {
         color: cardBg,
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
+          decoration: const BoxDecoration(
+            borderRadius: BorderRadius.all(Radius.circular(12)),
             border: Border(
-              left: BorderSide(
-                color: scheme.surfaceContainerHighest,
-                width: 4,
-              ),
+              left: BorderSide(color: AppColors.border, width: 4),
             ),
           ),
           padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
