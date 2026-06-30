@@ -1792,7 +1792,7 @@ class _AiSummaryCard extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: tokens.cardSurface,
+                          color: Theme.of(context).colorScheme.surface,
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: tokens.aiBorder),
                         ),
@@ -1850,10 +1850,10 @@ class _SameHouseholdStrip extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
-            color: tokens.cardSurface,
+            color: Theme.of(context).colorScheme.surface,
             border: Border(
               bottom: BorderSide(
-                color: tokens.textMuted.withValues(alpha: 0.2),
+                color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.2),
               ),
             ),
           ),

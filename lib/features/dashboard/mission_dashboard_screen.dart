@@ -484,11 +484,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     // Check if a refresh is pending (e.g., assessment completed while on another tab)
     _checkPendingRefresh();
-    
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
-    
+
     return Scaffold(
-      backgroundColor: tokens.canvas,
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
       // Pink "+ Enrol new" FAB — fixed bottom-right per spec §2.1. Opens
       // QR enrolment flow when the route lands; for now surfaces a snackbar
       // so the SK gets clear feedback rather than silent taps.
@@ -1221,7 +1219,7 @@ class _DashboardStatCard extends StatelessWidget {
       label: '$label: $value',
       button: true,
       child: Material(
-      color: tokens.cardSurface,
+      color: Theme.of(context).colorScheme.surface,
       borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
       child: InkWell(
         key: const Key('dashboard_stat_card_tap'),
@@ -1283,7 +1281,7 @@ class _DashboardStatCard extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: tokens.textPrimary,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
               const SizedBox(height: 2),
@@ -1302,7 +1300,7 @@ class _DashboardStatCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
-                    color: tokens.textMuted,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -1332,7 +1330,7 @@ class _TodaysVisitsHeader extends StatelessWidget {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w800,
-                color: tokens.brandNavy,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
           ),
@@ -1373,7 +1371,6 @@ class _MoreVisitsLink extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Semantics(
@@ -1392,7 +1389,7 @@ class _MoreVisitsLink extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w800,
-              color: tokens.brandNavy,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
         ),
@@ -1409,9 +1406,9 @@ class _EmptyVisitsCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 32, 20, 32),
       decoration: BoxDecoration(
-        color: tokens.cardSurface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Column(
         children: [
@@ -1435,7 +1432,7 @@ class _EmptyVisitsCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w800,
-              color: tokens.textPrimary,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
           const SizedBox(height: 4),
@@ -1445,7 +1442,7 @@ class _EmptyVisitsCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: tokens.textMuted,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
               height: 1.4,
             ),
           ),
@@ -1579,9 +1576,9 @@ class _FilterEmptyCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 28, 20, 24),
       decoration: BoxDecoration(
-        color: tokens.cardSurface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Column(
         children: [
@@ -1601,7 +1598,7 @@ class _FilterEmptyCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w800,
-              color: tokens.textPrimary,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
           const SizedBox(height: 4),
@@ -1611,7 +1608,7 @@ class _FilterEmptyCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: tokens.textMuted,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
               height: 1.4,
             ),
           ),
@@ -1729,14 +1726,14 @@ class _VisitFilterPanel extends StatelessWidget {
       children: [
         // ── Row 1: village chips ──────────────────────────────────────────
         if (villages.isNotEmpty) ...[
-          const Padding(
-            padding: EdgeInsets.only(bottom: 6),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
             child: Text(
               MissionDashboardStrings.whichVillageVisiting,
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: AppColors.textStrong,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
           ),
@@ -1760,7 +1757,7 @@ class _VisitFilterPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          const Divider(height: 1, color: AppColors.border),
+          Divider(height: 1, color: Theme.of(context).colorScheme.outlineVariant),
           const SizedBox(height: 8),
         ],
 
@@ -1769,21 +1766,21 @@ class _VisitFilterPanel extends StatelessWidget {
           padding: const EdgeInsets.only(bottom: 6),
           child: Row(
             children: [
-              const Text(
+              Text(
                 MissionDashboardStrings.filterByNeed,
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.textStrong,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
               const SizedBox(width: 4),
-              const Text(
+              Text(
                 '(${MissionDashboardStrings.filterByNeedOptional})',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w400,
-                  color: AppColors.textMuted,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
               const Spacer(),
@@ -1794,12 +1791,12 @@ class _VisitFilterPanel extends StatelessWidget {
                   child: GestureDetector(
                     key: const Key('dashboard_filter_clear_needs_tap'),
                     onTap: onClearNeeds,
-                    child: const Text(
+                    child: Text(
                       MissionDashboardStrings.clearNeedFilters,
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.navy,
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                   ),
@@ -1818,6 +1815,7 @@ class _VisitFilterPanel extends StatelessWidget {
                   .where((n) => availableNeeds.contains(n))
                   .map((need) {
                 final active = selectedNeeds.contains(need);
+                final cs = Theme.of(context).colorScheme;
                 return Padding(
                   padding: const EdgeInsets.only(right: 6),
                   child: Semantics(
@@ -1832,12 +1830,12 @@ class _VisitFilterPanel extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
-                          color: active ? AppColors.aiPurple : Colors.white,
+                          color: active ? AppColors.aiPurple : cs.surface,
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
                             color: active
                                 ? AppColors.aiPurple
-                                : AppColors.border,
+                                : cs.outlineVariant,
                             width: 1,
                           ),
                         ),
@@ -1848,7 +1846,7 @@ class _VisitFilterPanel extends StatelessWidget {
                             fontWeight:
                                 active ? FontWeight.w800 : FontWeight.w500,
                             color:
-                                active ? Colors.white : AppColors.textStrong,
+                                active ? Colors.white : cs.onSurface,
                           ),
                         ),
                       ),
@@ -1858,6 +1856,7 @@ class _VisitFilterPanel extends StatelessWidget {
               }),
               ...availableProgrammes.map((prog) {
                 final active = selectedProgrammes.contains(prog);
+                final cs = Theme.of(context).colorScheme;
                 return Padding(
                   padding: const EdgeInsets.only(right: 6),
                   child: Semantics(
@@ -1872,12 +1871,12 @@ class _VisitFilterPanel extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
-                          color: active ? AppColors.aiPurple : Colors.white,
+                          color: active ? AppColors.aiPurple : cs.surface,
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
                             color: active
                                 ? AppColors.aiPurple
-                                : AppColors.border,
+                                : cs.outlineVariant,
                             width: 1,
                           ),
                         ),
@@ -1888,7 +1887,7 @@ class _VisitFilterPanel extends StatelessWidget {
                             fontWeight:
                                 active ? FontWeight.w800 : FontWeight.w500,
                             color:
-                                active ? Colors.white : AppColors.textStrong,
+                                active ? Colors.white : cs.onSurface,
                           ),
                         ),
                       ),
@@ -1928,10 +1927,10 @@ class _VillageChip extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: isActive ? AppColors.navy : Colors.white,
+              color: isActive ? AppColors.navy : Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: isActive ? AppColors.navy : AppColors.border,
+                color: isActive ? AppColors.navy : Theme.of(context).colorScheme.outlineVariant,
                 width: 1,
               ),
             ),
@@ -1940,7 +1939,7 @@ class _VillageChip extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: isActive ? Colors.white : AppColors.textStrong,
+                color: isActive ? Colors.white : Theme.of(context).colorScheme.onSurface,
               ),
             ),
           ),

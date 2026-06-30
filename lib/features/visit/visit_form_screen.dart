@@ -40,6 +40,7 @@ class VisitFormScreen extends StatefulWidget {
     this.patientAge,
     this.gestationalWeeks,
     this.activatedPathways,
+    this.triageNotes,
     this.origin,
     this.onAdvance,
   });
@@ -55,6 +56,9 @@ class VisitFormScreen extends StatefulWidget {
 
   /// Programme name strings from triage. Non-empty ⇒ sectioned assessment.
   final List<String>? activatedPathways;
+
+  /// Free-text extra symptoms the SK entered in Step 1 not in the symptom list.
+  final String? triageNotes;
 
   final String? origin;
 
@@ -250,6 +254,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
       patientId: widget.patientId ?? '',
       householdMemberLocalId: widget.householdMemberLocalId ?? 0,
       memberId: widget.memberId,
+      triageNotes: widget.triageNotes,
       draftDao: ctx.read<AssessmentDraftDao>(),
       embedded: embedded,
       onSubmit: () => _onSectionedSubmit(ctx, visitCtrl, session),

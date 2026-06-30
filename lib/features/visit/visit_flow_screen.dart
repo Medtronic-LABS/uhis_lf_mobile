@@ -150,7 +150,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
         }
       },
       child: Scaffold(
-        backgroundColor: AppColors.canvas,
+        backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
         body: SafeArea(
           child: Column(
             children: [
@@ -159,6 +159,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
                 patientName: _patientName,
                 patientAge: _patientAge,
                 householdId: widget.householdId,
+                patientGender: widget.patientGender,
                 primaryProgramme: _pathways.isNotEmpty
                     ? _pathways.first.programme
                     : _primaryProgramme,
@@ -266,7 +267,6 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       context: context,
       barrierColor: Colors.black54,
       builder: (ctx) => Dialog(
-        backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
         child: Padding(
@@ -305,9 +305,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
               Text(
                 VisitFlowStrings.discardConfirm,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
-                  color: AppColors.textMuted,
+                  color: Theme.of(ctx).colorScheme.onSurfaceVariant,
                   height: 1.4,
                 ),
               ),
@@ -384,6 +384,7 @@ class _VisitFlowHeader extends StatelessWidget {
     this.patientName,
     this.patientAge,
     this.householdId,
+    this.patientGender,
     this.primaryProgramme = Programme.unknown,
   });
 
@@ -392,6 +393,7 @@ class _VisitFlowHeader extends StatelessWidget {
   final String? patientName;
   final int? patientAge;
   final String? householdId;
+  final String? patientGender;
   final Programme primaryProgramme;
 
   static const Color _headerColor = Color(0xFF1B2B5E); // Navy
@@ -490,15 +492,32 @@ class _VisitFlowHeader extends StatelessWidget {
                               fontWeight: FontWeight.w800,
                             ),
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            _demographicsLine(),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.7),
-                              fontSize: 12,
-                            ),
+                          const SizedBox(height: 4),
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 2,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              if (patientAge != null)
+                                _DemoChip(
+                                  icon: Icons.cake_outlined,
+                                  label: 'Age $patientAge',
+                                ),
+                              if (patientGender != null && patientGender!.isNotEmpty)
+                                _DemoChip(
+                                  icon: patientGender!.toUpperCase().startsWith('F')
+                                      ? Icons.female_rounded
+                                      : Icons.male_rounded,
+                                  label: patientGender!.toUpperCase().startsWith('F')
+                                      ? 'Female'
+                                      : 'Male',
+                                ),
+                              if (householdId != null && householdId!.isNotEmpty)
+                                _DemoChip(
+                                  icon: Icons.home_outlined,
+                                  label: 'House #$householdId',
+                                ),
+                            ],
                           ),
                         ],
                       ),
@@ -569,13 +588,28 @@ class _VisitFlowHeader extends StatelessWidget {
     );
   }
 
-  String _demographicsLine() {
-    final parts = <String>[];
-    if (patientAge != null) parts.add('Age $patientAge');
-    if (householdId != null && householdId!.isNotEmpty) {
-      parts.add('House #$householdId');
-    }
-    return parts.isEmpty ? '—' : parts.join(' · ');
+}
+
+class _DemoChip extends StatelessWidget {
+  const _DemoChip({required this.icon, required this.label});
+  final IconData icon;
+  final String label;
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: Colors.white.withValues(alpha: 0.75)),
+        const SizedBox(width: 3),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.75),
+            fontSize: 12,
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -654,6 +688,7 @@ class _Step2VitalsForm extends StatelessWidget {
     this.patientAge,
     this.gestationalWeeks,
     this.pathwayNames,
+    this.triageNotes,
     this.origin,
   });
 
@@ -666,6 +701,7 @@ class _Step2VitalsForm extends StatelessWidget {
   final int? patientAge;
   final int? gestationalWeeks;
   final List<String>? pathwayNames;
+  final String? triageNotes;
   final String? origin;
   final void Function(Programme primaryProgramme, bool referralRecommended)
       onAdvance;
@@ -682,6 +718,7 @@ class _Step2VitalsForm extends StatelessWidget {
       patientAge: patientAge,
       gestationalWeeks: gestationalWeeks,
       activatedPathways: pathwayNames,
+      triageNotes: triageNotes,
       origin: origin,
       onAdvance: onAdvance,
     );
@@ -834,6 +871,7 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
           .where((p) => p != Programme.unknown)
           .map((p) => p.name)
           .toList(),
+      triageNotes: widget.otherSymptoms,
       origin: widget.origin,
       onAdvance: widget.onAdvance,
     );
@@ -910,7 +948,7 @@ class _Step3AiReco extends StatelessWidget {
             VisitCompleteStrings.saved,
             style: theme.textTheme.headlineMedium?.copyWith(
               fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
           const SizedBox(height: AppSpacing.xxxl),

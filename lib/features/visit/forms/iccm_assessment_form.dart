@@ -1058,7 +1058,7 @@ class _MuacIndicator extends StatelessWidget {
       'red' => AppColors.imciText,
       'yellow' => AppColors.ncdText,
       'green' => AppColors.tbText,
-      _ => AppColors.textPrimary,
+      _ => Theme.of(context).colorScheme.onSurface,
     };
 
     return Container(
