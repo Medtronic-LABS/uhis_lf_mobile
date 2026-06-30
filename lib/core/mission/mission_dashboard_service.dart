@@ -519,6 +519,15 @@ class MissionDashboardService {
     final drivers = <String>[];
 
     // Spec §2.8 band contribution. Band 1 = Severe → critical-risk driver.
+    // Surface specific danger-sign / stroke / eclampsia drivers when the
+    // reasons list carries them so the card border rule (§2.6) can paint
+    // red ONLY for clinical danger signs / CCE alerts — not for band1 cards
+    // that landed on labs alone.
+    final reasonText = entry.reasons.join(' ').toLowerCase();
+    if (reasonText.contains('danger-sign')) drivers.add('danger-sign');
+    if (reasonText.contains('stroke-sign')) drivers.add('stroke-sign');
+    if (reasonText.contains('eclampsia')) drivers.add('eclampsia');
+
     switch (entry.band) {
       case Band.band1:
         score += _wCriticalRisk;

@@ -1407,31 +1407,46 @@ class _EmptyVisitsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(20, 32, 20, 32),
       decoration: BoxDecoration(
         color: tokens.cardSurface,
         borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
       child: Column(
         children: [
-          Icon(Icons.check_circle_outline,
-              size: 40, color: tokens.statusSuccess),
-          const SizedBox(height: 8),
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: tokens.statusSuccess.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: Icon(
+              Icons.check_circle_rounded,
+              size: 36,
+              color: tokens.statusSuccess,
+            ),
+          ),
+          const SizedBox(height: 12),
           Text(
             MissionDashboardStrings.noMissionsToday,
             style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
               color: tokens.textPrimary,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             MissionDashboardStrings.allCaughtUp,
+            textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: tokens.textMuted,
+              height: 1.4,
             ),
           ),
         ],
@@ -1552,6 +1567,7 @@ class _AiSortedInfoCard extends StatelessWidget {
 }
 
 /// Empty state shown when filters are active but no items match.
+/// Apon Sushashthya V1 §2.7 — magnifying glass illustration + helpful text.
 class _FilterEmptyCard extends StatelessWidget {
   const _FilterEmptyCard({required this.onClearFilters});
 
@@ -1561,20 +1577,30 @@ class _FilterEmptyCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(20, 28, 20, 24),
       decoration: BoxDecoration(
         color: tokens.cardSurface,
         borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
       child: Column(
         children: [
-          const Text('🔍', style: TextStyle(fontSize: 28)),
-          const SizedBox(height: 8),
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: tokens.aiPurple.withValues(alpha: 0.10),
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: const Text('🔍', style: TextStyle(fontSize: 30)),
+          ),
+          const SizedBox(height: 12),
           Text(
             MissionDashboardStrings.noVisitsMatchFilters,
             style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
               color: tokens.textPrimary,
             ),
           ),
@@ -1586,16 +1612,27 @@ class _FilterEmptyCard extends StatelessWidget {
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: tokens.textMuted,
+              height: 1.4,
             ),
           ),
-          const SizedBox(height: 12),
-          TextButton(
-            onPressed: onClearFilters,
-            child: Text(
-              MissionDashboardStrings.clearNeedFilters,
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                color: tokens.aiPurple,
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: onClearFilters,
+              icon: const Icon(Icons.cleaning_services_outlined, size: 16),
+              label: Text(MissionDashboardStrings.clearNeedFilters),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: tokens.aiPurple,
+                side: BorderSide(color: tokens.aiPurple.withValues(alpha: 0.4)),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
           ),
