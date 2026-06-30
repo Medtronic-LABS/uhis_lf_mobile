@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
@@ -9,6 +10,7 @@ import '../core/models/programme.dart';
 import '../core/constants/app_strings.dart';
 import '../core/models/dashboard_tier.dart';
 import '../features/dashboard/mission_dashboard_screen.dart';
+import '../uhis_form/form_gallery_screen.dart';
 import '../features/household/household_detail_screen.dart';
 import '../features/household/household_list_screen.dart';
 import '../features/lock/lock_screen.dart';
@@ -33,6 +35,7 @@ final _homeNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'home');
 final _patientsNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'patients');
 final _tasksNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'tasks');
 final _mapNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'assistant');
+final _galleryNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'gallery');
 
 GoRouter buildRouter(AuthState auth) {
   return GoRouter(
@@ -325,6 +328,18 @@ GoRouter buildRouter(AuthState auth) {
               ),
             ],
           ),
+
+          // Tab 4: Form Gallery
+          StatefulShellBranch(
+            navigatorKey: _galleryNavigatorKey,
+            routes: [
+              GoRoute(
+                path: '/gallery',
+                name: 'gallery',
+                builder: (_, _) => const FormGalleryScreen(),
+              ),
+            ],
+          ),
         ],
       ),
 
@@ -407,6 +422,16 @@ GoRouter buildRouter(AuthState auth) {
         path: '/household/:id',
         redirect: (_, state) => '/patients/household/${state.pathParameters['id']}',
       ),
+
+      // ─────────────────────────────────────────────────────────────────────
+      // Dev-only routes (debug builds)
+      // ─────────────────────────────────────────────────────────────────────
+      if (kDebugMode)
+        GoRoute(
+          path: '/dev/form-gallery',
+          name: 'form-gallery',
+          builder: (_, _) => const FormGalleryScreen(),
+        ),
     ],
   );
 }

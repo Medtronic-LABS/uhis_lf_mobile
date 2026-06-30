@@ -189,7 +189,7 @@ class FormSchemaParser {
     }
 
     // Fall through — plain number or text input
-    final inputType = item['inputType'] as int? ?? 96;
+    final inputType = (item['inputType'] as num?)?.toInt() ?? 96;
     final kind = _editTextKind(inputType);
     return (_buildField(item, kind), 1);
   }

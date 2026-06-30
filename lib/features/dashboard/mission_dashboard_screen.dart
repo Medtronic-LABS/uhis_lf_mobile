@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -808,6 +809,9 @@ class _SettingsMenu extends StatelessWidget {
               final theme = ctx.read<ThemeProvider>();
               await theme.toggleDarkMode();
               break;
+            case 'form_gallery':
+              ctx.push('/dev/form-gallery');
+              break;
             case 'logout':
               final confirmLogout = await showDialog<bool>(
                 context: ctx,
@@ -885,6 +889,15 @@ class _SettingsMenu extends StatelessWidget {
               },
             ),
           ),
+          if (kDebugMode)
+            const PopupMenuItem(
+              value: 'form_gallery',
+              child: ListTile(
+                leading: Icon(Icons.view_list_outlined),
+                title: Text('Form Gallery'),
+                subtitle: Text('Dev: render all programme forms'),
+              ),
+            ),
           const PopupMenuItem(
             value: 'logout',
             child: ListTile(

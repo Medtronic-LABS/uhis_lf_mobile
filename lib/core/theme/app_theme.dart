@@ -161,6 +161,24 @@ abstract final class AppColors {
   //   onTrack text     = tbText                (0x065F46)
   static const Color slaOverdueText = Color(0xFFDC2626); // brighter than statusCritical
   static const Color slaDueSoonText = Color(0xFFD97706); // matches amber-700
+
+  // ─── Healthcare range palette ──────────────────────────
+  // Exact hex values from HTML prototype — distinct from status palette
+  static const Color rangeNormal   = Color(0xFF16A34A); // green-600
+  static const Color rangeElevated = Color(0xFFCA8A04); // amber-600
+  static const Color rangeAbnormal = Color(0xFFEA580C); // orange-600 (Stage 1)
+  static const Color rangeCritical = Color(0xFFDC2626); // red-600   (Stage 2)
+  static const Color rangeCrisis   = Color(0xFF7F1D1D); // red-900   (hypertensive crisis)
+
+  static const Color rangeNormalSurface   = Color(0xFFDCFCE7); // green-100
+  static const Color rangeElevatedSurface = Color(0xFFFEF3C7); // = statusWarningSurface
+  static const Color rangeAbnormalSurface = Color(0xFFFFF7ED); // orange-50
+  static const Color rangeCriticalSurface = Color(0xFFFEE2E2); // = statusCriticalSurface
+  static const Color rangeCrisisSurface   = Color(0xFFFEE2E2);
+
+  // Named aliases for danger-sign widget (bg/border reuse imciSurface/imciBorder)
+  static const Color dangerSignIconColor = rangeCritical; // #DC2626
+  static const Color dangerSignText      = rangeCrisis;   // #7F1D1D
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -809,8 +827,8 @@ TextTheme _buildTextTheme(Brightness brightness) {
     bodyMedium: b.bodyMedium?.copyWith(fontSize: 12, fontWeight: FontWeight.w400),
     bodySmall:  b.bodySmall?.copyWith(fontSize: 11, fontWeight: FontWeight.w400),
     // ─── Label — chips, section labels, navigation ─────────
-    labelLarge:  b.labelLarge?.copyWith(fontSize: 12, fontWeight: FontWeight.w700),
-    labelMedium: b.labelMedium?.copyWith(fontSize: 11, fontWeight: FontWeight.w700),
+    labelLarge:  h.labelLarge?.copyWith(fontSize: 12, fontWeight: FontWeight.w700),
+    labelMedium: h.labelMedium?.copyWith(fontSize: 11, fontWeight: FontWeight.w700),
     labelSmall:  b.labelSmall?.copyWith(fontSize: 10, fontWeight: FontWeight.w700),
   );
 }
@@ -913,29 +931,31 @@ ThemeData buildAppTheme() {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: AppColors.cardSurface,
+      fillColor: AppColors.cardSurfaceMuted,
       hintStyle: const TextStyle(
         fontFamily: 'NunitoSans', fontSize: 13, color: AppColors.textMuted,
       ),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppRadius.button),
-        borderSide: const BorderSide(color: AppColors.border),
+        borderRadius: BorderRadius.circular(AppRadius.field),
+        borderSide: const BorderSide(color: AppColors.border, width: 1.5),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppRadius.button),
-        borderSide: const BorderSide(color: AppColors.border),
+        borderRadius: BorderRadius.circular(AppRadius.field),
+        borderSide: const BorderSide(color: AppColors.border, width: 1.5),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppRadius.button),
+        borderRadius: BorderRadius.circular(AppRadius.field),
         borderSide: const BorderSide(color: AppColors.aiPurple, width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppRadius.button),
-        borderSide: const BorderSide(color: AppColors.statusCritical),
+        borderRadius: BorderRadius.circular(AppRadius.field),
+        borderSide: const BorderSide(color: AppColors.statusCritical, width: 1.5),
       ),
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.h5xl, vertical: AppSpacing.xl,
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.field),
+        borderSide: const BorderSide(color: AppColors.statusCritical, width: 1.5),
       ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
@@ -1000,7 +1020,7 @@ ThemeData buildAppTheme() {
     chipTheme: ChipThemeData(
       backgroundColor: AppColors.cardSurface,
       selectedColor: AppColors.navy,
-      side: const BorderSide(color: AppColors.border),
+      side: const BorderSide(color: AppColors.border, width: 1.5),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.pill),
       ),
@@ -1154,29 +1174,31 @@ ThemeData buildDarkTheme() {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: AppColors.cardSurfaceDark,
+      fillColor: AppColors.cardSurfaceMutedDark,
       hintStyle: const TextStyle(
         fontFamily: 'NunitoSans', fontSize: 13, color: AppColors.textMutedDark,
       ),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppRadius.button),
-        borderSide: const BorderSide(color: AppColors.borderDark),
+        borderRadius: BorderRadius.circular(AppRadius.field),
+        borderSide: const BorderSide(color: AppColors.borderDark, width: 1.5),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppRadius.button),
-        borderSide: const BorderSide(color: AppColors.borderDark),
+        borderRadius: BorderRadius.circular(AppRadius.field),
+        borderSide: const BorderSide(color: AppColors.borderDark, width: 1.5),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppRadius.button),
+        borderRadius: BorderRadius.circular(AppRadius.field),
         borderSide: const BorderSide(color: AppColors.aiPurpleLight, width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppRadius.button),
-        borderSide: const BorderSide(color: AppColors.statusCriticalDark),
+        borderRadius: BorderRadius.circular(AppRadius.field),
+        borderSide: const BorderSide(color: AppColors.statusCriticalDark, width: 1.5),
       ),
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.h5xl, vertical: AppSpacing.xl,
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.field),
+        borderSide: const BorderSide(color: AppColors.statusCriticalDark, width: 1.5),
       ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(

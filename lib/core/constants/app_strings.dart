@@ -2304,6 +2304,64 @@ abstract final class ComposerStrings {
   static const String tapToSelect = 'Tap to select';
   static const String doneLabel = 'Done';
   static String nSelected(int n) => '$n selected';
+
+  // ── BP / glucose range status labels ────────────────────────────────────────
+  static const String rangeNormal = 'Normal';
+  static const String rangeElevated = 'Elevated';
+  static const String rangeBpStage1 = 'Stage 1 HTN';
+  static const String rangeBpStage2 = 'Stage 2 HTN';
+  static const String rangeBpCrisis = 'Hypertensive Crisis ⚠';
+  static const String rangeInRange = 'In Range';
+  static const String rangeOutOfRange = 'Out of Range';
+
+  // ── Vital flag labels (abnormal indicator badges) ───────────────────────────
+  static const String vitalFlagHigh = 'High ⚠';
+  static const String vitalFlagLow = 'Low ⚠';
+
+  // ── MUAC classification labels ───────────────────────────────────────────────
+  static const String muacLabel = 'MUAC (cm)';
+  static const String muacSam = 'SAM';
+  static const String muacMam = 'MAM';
+  static const String muacNormal = 'Normal';
+
+  // ── Lab result reference prefix ──────────────────────────────────────────────
+  static const String labReferencePrefix = 'Ref:';
+
+  // ── Referral urgency labels ──────────────────────────────────────────────────
+  static const String referralUrgencyLabel = 'Urgency';
+  static const String referralRoutine = 'Routine';
+  static const String referralUrgent = 'Urgent';
+  static const String referralEmergency = 'Emergency';
+
+  // ── Pregnancy profile labels ─────────────────────────────────────────────────
+  static const String lmpLabel = 'Last Menstrual Period';
+  static const String eddLabel = 'Estimated Due Date';
+  static const String gestationalAgeLabel = 'Gestational Age';
+  static const String gestationalAgeWeeks = 'weeks';
+  static const String gestationalAgePreterm = 'Preterm (< 37 weeks)';
+
+  // ── Glass prescription labels ────────────────────────────────────────────────
+  static const String eyeOd = 'OD (Right)';
+  static const String eyeOs = 'OS (Left)';
+  static const String sphereLabel = 'Sphere';
+  static const String cylinderLabel = 'Cylinder';
+  static const String axisLabel = 'Axis';
+  static const String glassPrescriptionSummary = 'Prescription recorded';
+
+  // ── Compound-widget column sub-labels ────────────────────────────────────────
+  static const String heightShort = 'Height';
+  static const String weightShort = 'Weight';
+  static const String parityShort = 'Parity';
+  static const String livingShort = 'Living';
+
+  // ── Urine test sub-labels ────────────────────────────────────────────────────
+  static const String urinaryAlbuminShort = 'Albumin';
+  static const String urinarySugarShort = 'Sugar';
+  static const String urinaryBilirubinShort = 'Bilirubin';
+
+  // ── Supply pair sub-labels ───────────────────────────────────────────────────
+  static const String supplyConsumedShort = 'Consumed';
+  static const String supplyProvidedShort = 'Provided today';
 }
 
 /// CDS (Clinical Decision Support) alert strings.
@@ -3047,4 +3105,14 @@ abstract final class NcdScreeningStrings {
 
   static const String familyHistoryTitle = 'Family history of high BP?';
   static const String familyHistoryBn = 'বাবা-মায়ের / পরিবারে উচ্চ রক্তচাপ?';
+}
+
+abstract final class FormGalleryStrings {
+  FormGalleryStrings._();
+  static const String tabLabel     = 'Gallery';
+  static const String screenTitle  = 'Form Gallery';
+  static const String vitalsTab    = 'Vitals';
+  static const String symptomsTab  = 'Symptoms';
+  static const String programmesTab = 'Programmes';
+  static const String fields       = 'fields';
 }
