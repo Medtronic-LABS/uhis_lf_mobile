@@ -1366,6 +1366,7 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
         (session.state == ScribeState.uploading ||
             session.state == ScribeState.processing);
 
+    final isTriage = session.mode == ScribeMode.triage;
     final title = _showDone
         ? SymptomPickerStrings.scribeBannerDone
         : isError
@@ -1376,10 +1377,14 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
         : isRecording
         ? SymptomPickerStrings.scribeBannerRecording
         : isProcessing
-        ? SymptomPickerStrings.scribeBannerProcessing
+        ? (isTriage
+            ? SymptomPickerStrings.scribeBannerTriageProcessing
+            : SymptomPickerStrings.scribeBannerProcessing)
         : SymptomPickerStrings.scribeBannerTitle;
 
     // Show partial transcript while processing so the SK sees what was heard.
+    // Before ASR finishes, shows a "Transcribing…" placeholder; once the
+    // backend publishes the transcript mid-job, switches to the quoted text.
     final liveText = session.liveTranscript;
     final subtitle = _showDone
         ? SymptomPickerStrings.scribeBannerDoneSubtitle
@@ -1390,6 +1395,8 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
         ? SymptomPickerStrings.scribeBannerRecordingSubtitle
         : isProcessing && liveText != null && liveText.isNotEmpty
         ? '"$liveText"'
+        : isProcessing
+        ? SymptomPickerStrings.scribeBannerProcessingSubtitle
         : SymptomPickerStrings.scribeBannerSubtitle;
 
     void onTap() {

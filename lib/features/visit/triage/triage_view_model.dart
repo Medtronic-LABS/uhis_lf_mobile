@@ -336,15 +336,33 @@ class TriageViewModel extends ChangeNotifier {
     var appliedCount = 0;
     var demographicSkipped = 0;
     for (final extracted in result.symptomCodes) {
-      if (extracted.confidence < floor) continue;
-      if (!AiScribeTriageVocab.codes.contains(extracted.fieldId)) continue;
+      if (extracted.confidence < floor) {
+        debugPrint(
+          '[AIScribe] pre-tick skip ${extracted.fieldId}: '
+          'confidence=${extracted.confidence} < floor=$floor',
+        );
+        continue;
+      }
+      if (!AiScribeTriageVocab.codes.contains(extracted.fieldId)) {
+        debugPrint(
+          '[AIScribe] pre-tick skip ${extracted.fieldId}: not in vocab',
+        );
+        continue;
+      }
       if (!validCodes.contains(extracted.fieldId)) {
         demographicSkipped++;
+        debugPrint(
+          '[AIScribe] pre-tick skip ${extracted.fieldId}: demographic filter',
+        );
         continue;
       }
       _scribePreTicked.add(extracted.fieldId);
       _addPreTick(extracted.fieldId);
       appliedCount++;
+      debugPrint(
+        '[AIScribe] pre-tick applied ${extracted.fieldId} '
+        '(confidence=${(extracted.confidence * 100).toStringAsFixed(0)}%)',
+      );
     }
     debugPrint(
       '[Triage] Scribe applied $appliedCount pre-ticks; '

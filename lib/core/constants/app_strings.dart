@@ -1172,6 +1172,12 @@ abstract final class ScribeStrings {
       'AI is taking too long. Tap to try again.';
   static const String pollUnreachable =
       'Could not reach AI Scribe. Tap to try again.';
+  static const String recordingNotFinalized =
+      'Recording could not be saved. Please record again.';
+  static const String recordingNoOutput =
+      'Recording produced no output. Please record again.';
+  static const String noSpeechDetected =
+      'No speech detected — please speak closer to the microphone and try again.';
 }
 
 /// AI Scribe inline banner strings (replaces FAB labels for the new single-form layout).
@@ -2680,11 +2686,16 @@ abstract final class SymptomPickerStrings {
       'SK talks to her/him — fields fill automatically';
   static const String scribeBannerRecording = 'Listening… tap to stop';
   static const String scribeBannerProcessing = 'AI is reviewing the recording';
+  static const String scribeBannerTriageProcessing = 'Analysing symptoms…';
+  static const String scribeBannerProcessingSubtitle = 'Transcribing your recording…';
   static const String scribeBannerDone = 'Voice capture complete';
   static const String scribeBannerDoneSubtitle = 'Tap to record again';
   static const String scribeBannerRecordingSubtitle = 'Tap anywhere to stop';
   static const String scribeBannerError = 'Voice review failed';
   static const String scribeBannerErrorSubtitle = 'Tap to try again';
+  static const String scribeBannerNoSymptoms = 'No symptoms detected';
+  static const String scribeBannerNoSymptomsSubtitle =
+      'Speak the patient\'s symptoms clearly, then tap to try again';
 
   /// Accessibility label for the in-circle stop affordance shown while the
   /// AI Scribe is recording.

@@ -133,20 +133,24 @@ class ScribeJobResult {
   final String? errorMessage;
 
   factory ScribeJobResult.fromJson(Map<String, dynamic> j) {
+    final jobId = j['jobId'] as String? ?? '';
+    final statusStr = j['status'] as String?;
     final soapJson = j['soap'] as Map<String, dynamic>?;
-    debugPrint('[ScribeJobResult] fromJson - soapJson: ${soapJson?.keys.toList()}');
-    if (soapJson != null) {
-      debugPrint('[ScribeJobResult] fromJson - subjective: ${soapJson['subjective']?.toString().substring(0, (soapJson['subjective']?.toString().length ?? 0).clamp(0, 100))}');
-    }
     final ratJson = j['rationale'] as Map<String, dynamic>?;
     final errJson = j['error'] as Map<String, dynamic>?;
     final transcriptJson = j['transcript'] as Map<String, dynamic>?;
     final formPrefillJson = j['formPrefill'] as Map<String, dynamic>?;
     final triageJson = j['triage'] as Map<String, dynamic>?;
     final detectedSymptoms = (j['detectedSymptoms'] as List?)
-        ?.whereType<String>()
-        .where((s) => s.isNotEmpty)
-        .toList() ?? const <String>[];
+            ?.whereType<String>()
+            .where((s) => s.isNotEmpty)
+            .toList() ??
+        const <String>[];
+
+    debugPrint(
+      '[AIScribe] poll parse: jobId=$jobId status=$statusStr '
+      'keys=${j.keys.toList()}',
+    );
 
     // Determine mode from response
     ScribeMode mode = ScribeMode.soap;
@@ -156,9 +160,76 @@ class ScribeJobResult {
       mode = ScribeMode.triage;
     }
 
+    TriageExtractionResult? triageResult;
+    String triageSource = 'none';
+    if (triageJson != null) {
+      triageSource = 'triage.symptomCodes';
+      triageResult = TriageExtractionResult.fromJson({
+        ...triageJson,
+        'transcriptText': transcriptJson?['text'],
+        'noteId': j['noteId'],
+      });
+      debugPrint(
+        '[AIScribe] triage payload from server object '
+        '(keys=${triageJson.keys.toList()})',
+      );
+    } else if (detectedSymptoms.isNotEmpty) {
+      triageSource = 'detectedSymptoms fallback';
+      triageResult = TriageExtractionResult(
+        symptomCodes: detectedSymptoms
+            .map(
+              (code) => AIExtractedField(
+                fieldId: code,
+                value: true,
+                confidence: 0.8,
+                source: FieldSource.aiPending,
+                extractedAt: DateTime.now(),
+              ),
+            )
+            .toList(),
+        transcriptText: transcriptJson?['text'] as String?,
+        noteId: j['noteId'] as String?,
+      );
+      debugPrint(
+        '[AIScribe] triage payload from detectedSymptoms fallback '
+        '(codes=$detectedSymptoms, confidence=0.8 each)',
+      );
+    }
+
+    if (mode == ScribeMode.triage) {
+      final floor = AppConfig.scribeSymptomConfidenceFloor;
+      final count = triageResult?.symptomCodes.length ?? 0;
+      debugPrint(
+        '[AIScribe] triage resolved: source=$triageSource mode=$mode '
+        'symptoms=$count floor=$floor',
+      );
+      if (triageResult != null) {
+        for (final field in triageResult.symptomCodes) {
+          final passes = field.confidence >= floor;
+          debugPrint(
+            '[AIScribe]   → ${field.fieldId}: '
+            'confidence=${(field.confidence * 100).toStringAsFixed(0)}% '
+            'passesFloor=$passes',
+          );
+        }
+      } else {
+        debugPrint('[AIScribe] triage mode but no triageResult built');
+      }
+      final transcriptLen = transcriptJson?['text']?.toString().length ?? 0;
+      debugPrint('[AIScribe] transcript length=$transcriptLen chars');
+    }
+
+    if (soapJson != null) {
+      final subj = soapJson['subjective']?.toString() ?? '';
+      debugPrint(
+        '[AIScribe] soap subjective (${subj.length} chars): '
+        '${subj.substring(0, subj.length.clamp(0, 100))}',
+      );
+    }
+
     return ScribeJobResult(
-      jobId: j['jobId'] as String? ?? '',
-      status: _parseStatus(j['status'] as String?),
+      jobId: jobId,
+      status: _parseStatus(statusStr),
       mode: mode,
       soap: soapJson != null ? SoapNote.fromJson(soapJson) : null,
       formPrefill: formPrefillJson != null
@@ -168,27 +239,7 @@ class ScribeJobResult {
               'noteId': j['noteId'],
             })
           : null,
-      triageResult: triageJson != null
-          ? TriageExtractionResult.fromJson({
-              ...triageJson,
-              'transcriptText': transcriptJson?['text'],
-              'noteId': j['noteId'],
-            })
-          : detectedSymptoms.isNotEmpty
-              ? TriageExtractionResult(
-                  symptomCodes: detectedSymptoms
-                      .map((code) => AIExtractedField(
-                            fieldId: code,
-                            value: true,
-                            confidence: 1.0,
-                            source: FieldSource.aiPending,
-                            extractedAt: DateTime.now(),
-                          ))
-                      .toList(),
-                  transcriptText: transcriptJson?['text'] as String?,
-                  noteId: j['noteId'] as String?,
-                )
-              : null,
+      triageResult: triageResult,
       transcriptText: transcriptJson?['text'] as String?,
       transcriptTranslation: transcriptJson?['translation'] as String?,
       noteId: j['noteId'] as String?,
@@ -229,6 +280,13 @@ class ScribeApiService extends ApiRepository {
 
   static String _scribePath(String path) {
     return path.startsWith(_nginxPrefix) ? path.substring(_nginxPrefix.length) : path;
+  }
+
+  /// Lower-cased file extension (without dot) of [path], defaulting to `wav`.
+  static String _extensionOf(String path) {
+    final dot = path.lastIndexOf('.');
+    if (dot < 0 || dot == path.length - 1) return 'wav';
+    return path.substring(dot + 1).toLowerCase();
   }
 
   Future<dynamic> _post(String path, {Object? data, String? action}) async {
@@ -390,11 +448,17 @@ class ScribeApiService extends ApiRepository {
       formSchema: formSchema,
       symptomCatalog: symptomCatalog,
     );
+    debugPrint(
+      '[AIScribe] submit: mode=${metadata['mode']} '
+      'baseUrl=${_effectiveBaseUrl()} '
+      'catalogSize=${symptomCatalog?.length ?? 0} '
+      'language=$language',
+    );
 
     final form = FormData.fromMap({
       'audio_file': await MultipartFile.fromFile(
         audioFile.path,
-        filename: 'consultation.aac',
+        filename: 'consultation.${_extensionOf(audioFile.path)}',
       ),
       'metadata': _jsonEncode(metadata),
     });
@@ -403,7 +467,9 @@ class ScribeApiService extends ApiRepository {
     if ((resp.statusCode ?? 0) != 202) {
       throw ApiException('scribe submit', resp.statusCode ?? 0);
     }
-    return (resp.data as Map<String, dynamic>)['jobId'] as String;
+    final jobId = (resp.data as Map<String, dynamic>)['jobId'] as String;
+    debugPrint('[AIScribe] submit accepted jobId=$jobId');
+    return jobId;
   }
 
   /// JSON encode helper that handles nested structures.
@@ -439,7 +505,10 @@ class ScribeApiService extends ApiRepository {
     // 1. Init
     final initResp = await _post(
       _scribePath(Endpoints.scribeUploadInit),
-      data: {'filename': 'consultation.opus', 'size': size},
+      data: {
+        'filename': 'consultation.${_extensionOf(audioFile.path)}',
+        'size': size,
+      },
       action: 'scribe upload init',
     ) as Map<String, dynamic>;
     final uploadId = initResp['uploadId'] as String;
@@ -498,11 +567,20 @@ class ScribeApiService extends ApiRepository {
         _scribePath(Endpoints.scribeResult(jobId)),
         action: 'scribe poll',
       );
-      return ScribeJobResult.fromJson(body as Map<String, dynamic>);
+      final result = ScribeJobResult.fromJson(body as Map<String, dynamic>);
+      if (result.status != ScribeJobStatus.processing &&
+          result.status != ScribeJobStatus.queued) {
+        debugPrint(
+          '[AIScribe] poll terminal: jobId=$jobId '
+          'status=${result.status.name} mode=${result.mode.name} '
+          'triageSymptoms=${result.triageResult?.symptomCodes.length ?? 0}',
+        );
+      }
+      return result;
     } on ApiException {
       rethrow;
     } catch (e) {
-      debugPrint('[scribe] pollResult failed, caller will retry: $e');
+      debugPrint('[AIScribe] pollResult failed, caller will retry: $e');
       return null;
     }
   }
