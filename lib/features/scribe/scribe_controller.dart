@@ -7,6 +7,8 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../core/api/scribe_api_service.dart';
 import '../../core/constants/app_strings.dart';
+import '../visit/triage/ai_scribe_triage_vocab.dart';
+import '../visit/triage/triage_transcript_matcher.dart';
 import 'form_field_schema_builder.dart';
 import 'models/ai_extracted_field.dart';
 import 'scribe_permission_service.dart';
@@ -27,9 +29,9 @@ class ScribeController extends ChangeNotifier {
   final ScribeApiService _api;
   final ScribePermissionService _perm;
   /// Records the consultation audio AND drives the live recording waveform.
-  /// One mic, one recorder: audio_waveforms owns capture so the visualizer
-  /// reacts to the same signal that gets uploaded for transcription.
-  final RecorderController _recorder = RecorderController();
+  /// Recycled after each session — [RecorderController] can hang on reuse after
+  /// stop() on Android (audio_waveforms native quirk).
+  RecorderController _recorder = RecorderController();
 
   ScribeSession _session = const ScribeSession();
   ScribeSession get session => _session;
@@ -38,23 +40,43 @@ class ScribeController extends ChangeNotifier {
   /// Owned here in the scribe layer; the banner widget only renders from it.
   RecorderController get waveformRecorder => _recorder;
 
-  /// Capture settings — AAC-LC mono @16 kHz / 32 kbps, matched to what the AI
-  /// Scribe service already accepts for transcription (same as before).
+  /// Capture settings — WAV/PCM mono @16 kHz.
+  ///
+  /// We deliberately record WAV (genuine audio) rather than AAC. On Android,
+  /// AAC is muxed into an MP4 container whose `moov` trailer is only written
+  /// during stop(); audio_waveforms' stop() can hang, leaving a truncated,
+  /// undecodable MP4. WAV uses the AudioRecord + WavEncoder path which writes
+  /// PCM immediately and finalizes the 44-byte header synchronously on stop —
+  /// no container trailer, decodable even if interrupted.
   static const RecorderSettings _recorderSettings = RecorderSettings(
     androidEncoderSettings: AndroidEncoderSettings(
-      androidEncoder: AndroidEncoder.aacLc,
+      androidEncoder: AndroidEncoder.wav,
+    ),
+    iosEncoderSettings: IosEncoderSetting(
+      iosEncoder: IosEncoder.kAudioFormatLinearPCM,
     ),
     sampleRate: 16000,
-    bitRate: 32000,
   );
+
+  /// File extension for captured audio — kept in sync with [_recorderSettings].
+  static const String _recordingExtension = 'wav';
 
   Timer? _elapsedTimer;
   Timer? _pollTimer;
   String? _recordingPath;
 
   static const Duration _pollInterval = Duration(milliseconds: 2500);
+  // Triage jobs are shorter (ASR only, no SOAP render); poll faster so the
+  // SK sees symptom chips appear within ~1s of the worker finishing.
+  static const Duration _triagePollInterval = Duration(milliseconds: 1000);
   static const Duration _pollTimeout = Duration(seconds: 90);
   static const int _maxConsecutivePollErrors = 5;
+
+  /// Max time to wait for the native recorder to finalize the captured file
+  /// after stop() is issued. audio_waveforms' stop() Future can hang on Android
+  /// even though the native writer finalizes the file shortly after, so we poll
+  /// the file for finalization instead of trusting the Future alone.
+  static const Duration _recorderFinalizeTimeout = Duration(seconds: 12);
 
   DateTime? _pollStartedAt;
   int _consecutivePollErrors = 0;
@@ -92,9 +114,11 @@ class ScribeController extends ChangeNotifier {
     }
 
     try {
+      _prepareFreshRecorder();
+
       final dir = await getTemporaryDirectory();
       _recordingPath =
-          '${dir.path}/scribe_${DateTime.now().millisecondsSinceEpoch}.aac';
+          '${dir.path}/scribe_${DateTime.now().millisecondsSinceEpoch}.$_recordingExtension';
 
       await _recorder.record(
         path: _recordingPath,
@@ -193,15 +217,11 @@ class ScribeController extends ChangeNotifier {
     }
 
     try {
-      // Defensive: RecorderController can enter a bad internal state after
-      // multiple start/stop cycles. A no-op stop() before record() clears it.
-      try {
-        await _recorder.stop();
-      } catch (_) {}
+      _prepareFreshRecorder();
 
       final dir = await getTemporaryDirectory();
       _recordingPath =
-          '${dir.path}/scribe_${DateTime.now().millisecondsSinceEpoch}.aac';
+          '${dir.path}/scribe_${DateTime.now().millisecondsSinceEpoch}.$_recordingExtension';
 
       await _recorder.record(
         path: _recordingPath,
@@ -246,33 +266,25 @@ class ScribeController extends ChangeNotifier {
       '[AIScribe] Stopping recording after ${_session.elapsedSeconds}s',
     );
 
-    try {
-      final path = await _recorder.stop();
-      // audio_waveforms RecorderController.stop() can return null on the 3rd+
-      // reuse of the same controller (double-stop quirk in the native layer).
-      // The file IS written to _recordingPath — fall back to it when stop() lies.
-      final effectivePath = path ?? _recordingPath;
-      if (effectivePath == null) {
-        debugPrint('[AIScribe] stop() returned null and no pre-set path — no output');
-        _setError('Recording produced no output.');
-        return;
-      }
-      final audioFile = File(effectivePath);
-      if (!audioFile.existsSync() || audioFile.lengthSync() == 0) {
-        debugPrint('[AIScribe] Audio file missing or empty at $effectivePath');
-        _setError('Recording produced no output.');
-        return;
-      }
-      _recordingPath = effectivePath;
+    // Drop WaveformWidget before native stop — reduces audio_waveforms hang.
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    final effectivePath = await _stopRecorderSafely();
+    if (effectivePath == null) {
       debugPrint(
-        '[AIScribe] Recording saved to: $effectivePath'
-        '${path == null ? " (stop returned null — used pre-set path)" : ""}',
+        '[AIScribe] recording not finalized — not uploading truncated audio',
       );
-    } catch (e) {
-      debugPrint('[AIScribe] Stop recording failed: $e');
-      _setError('Stop recording failed: $e');
+      _setRecordingError(ScribeStrings.recordingNotFinalized);
       return;
     }
+    final audioFile = File(effectivePath);
+    if (!audioFile.existsSync() || audioFile.lengthSync() == 0) {
+      debugPrint('[AIScribe] Audio file missing or empty at $effectivePath');
+      _setRecordingError(ScribeStrings.recordingNoOutput);
+      return;
+    }
+    _recordingPath = effectivePath;
+    debugPrint('[AIScribe] Recording saved to: $effectivePath');
 
     debugPrint('[AIScribe] Uploading audio (mode=${_currentMode.name})...');
 
@@ -361,7 +373,21 @@ class ScribeController extends ChangeNotifier {
     _currentSymptomCatalog = null;
     _currentProgrammes = const [];
     _currentMode = ScribeMode.soap;
+    _recycleRecorder();
     _session = const ScribeSession();
+    notifyListeners();
+  }
+
+  /// Surface a user-visible error without throwing (e.g. empty triage result).
+  void surfaceError(String message, {ScribeMode? mode}) {
+    _elapsedTimer?.cancel();
+    _pollTimer?.cancel();
+    _recycleRecorder();
+    _session = ScribeSession(
+      state: ScribeState.error,
+      errorMessage: message,
+      mode: mode ?? _currentMode,
+    );
     notifyListeners();
   }
 
@@ -541,13 +567,149 @@ class ScribeController extends ChangeNotifier {
 
   // ── private helpers ───────────────────────────────────────────────────────
 
+  void _prepareFreshRecorder() {
+    if (_recorder.isRecording) return;
+    _recycleRecorder();
+  }
+
+  void _recycleRecorder() {
+    try {
+      _recorder.dispose();
+    } catch (e) {
+      debugPrint('[AIScribe] recorder dispose: $e');
+    }
+    _recorder = RecorderController();
+  }
+
+  /// Stops capture and waits for the recording to be fully finalized before
+  /// returning its path. Returns null when the file never finalized (so the
+  /// caller fails instead of uploading a truncated, undecodable MP4).
+  ///
+  /// audio_waveforms records AAC into an MP4 container; the `moov` trailer is
+  /// written during the native stop(). On Android the Dart stop() Future can
+  /// hang even though the native writer completes, so we fire stop() but gate
+  /// on the file actually being finalized (moov atom present + size stable).
+  Future<String?> _stopRecorderSafely() async {
+    final presetPath = _recordingPath;
+
+    // Fire stop() but do not block solely on its Future — it can hang.
+    unawaited(
+      _recorder
+          .stop()
+          .then((p) => debugPrint('[AIScribe] stop() returned path=$p'))
+          .catchError((Object e) {
+        debugPrint('[AIScribe] stop() error: $e');
+        return null;
+      }),
+    );
+
+    final finalized = await _awaitFinalizedRecording(presetPath);
+
+    // Recycle only after finalization — disposing mid-finalize aborts the
+    // header/trailer write and corrupts the file.
+    _recycleRecorder();
+    notifyListeners();
+    return finalized;
+  }
+
+  /// Polls [path] until the file is finalized (WAV header / MP4 trailer present)
+  /// and the byte size is stable, or [_recorderFinalizeTimeout] elapses. Returns
+  /// the path when finalized, otherwise null.
+  Future<String?> _awaitFinalizedRecording(String? path) async {
+    if (path == null) return null;
+    final file = File(path);
+    final deadline = DateTime.now().add(_recorderFinalizeTimeout);
+    var lastSize = -1;
+    var stableHits = 0;
+
+    while (DateTime.now().isBefore(deadline)) {
+      if (file.existsSync()) {
+        final size = file.lengthSync();
+        final hasTrailer = size > 0 && await _isRecordingFinalized(file);
+        if (hasTrailer && size == lastSize) {
+          stableHits++;
+          if (stableHits >= 2) {
+            debugPrint('[AIScribe] recording finalized ($size bytes)');
+            return path;
+          }
+        } else {
+          stableHits = 0;
+        }
+        lastSize = size;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+
+    final exists = file.existsSync();
+    final size = exists ? file.lengthSync() : 0;
+    debugPrint(
+      '[AIScribe] recording NOT finalized before deadline '
+      '(exists=$exists size=$size) — refusing to upload truncated audio',
+    );
+    return null;
+  }
+
+  /// True when the recording has been finalized and is decodable.
+  ///
+  /// - WAV: the `RIFF`/`WAVE` header is written only when stop() patches the
+  ///   placeholder, so its presence at the head is a precise finalized signal.
+  /// - MP4/M4A: finalization writes the `moov` atom near the end of the file.
+  ///
+  /// A file lacking the relevant marker is still being written (or truncated)
+  /// and must not be uploaded.
+  Future<bool> _isRecordingFinalized(File file) async {
+    RandomAccessFile? raf;
+    try {
+      final len = file.lengthSync();
+      if (len < 44) return false;
+      raf = await file.open();
+
+      // WAV head check.
+      await raf.setPosition(0);
+      final head = await raf.read(64);
+      final hasRiff = _containsMarker(head, const [0x52, 0x49, 0x46, 0x46]); // RIFF
+      final hasWave = _containsMarker(head, const [0x57, 0x41, 0x56, 0x45]); // WAVE
+      if (hasRiff && hasWave) return true;
+
+      // MP4/M4A tail check.
+      const tailWindow = 256 * 1024;
+      final start = len > tailWindow ? len - tailWindow : 0;
+      await raf.setPosition(start);
+      final tail = await raf.read(len - start);
+      return _containsMarker(tail, const [0x6d, 0x6f, 0x6f, 0x76]); // moov
+    } catch (e) {
+      debugPrint('[AIScribe] finalize check failed: $e');
+      return false;
+    } finally {
+      try {
+        await raf?.close();
+      } catch (_) {}
+    }
+  }
+
+  bool _containsMarker(List<int> haystack, List<int> needle) {
+    if (needle.isEmpty || haystack.length < needle.length) return false;
+    for (var i = 0; i + needle.length <= haystack.length; i++) {
+      var matched = true;
+      for (var j = 0; j < needle.length; j++) {
+        if (haystack[i + j] != needle[j]) {
+          matched = false;
+          break;
+        }
+      }
+      if (matched) return true;
+    }
+    return false;
+  }
+
   void _startPolling(String jobId) {
-    debugPrint('[AIScribe] Starting to poll job: $jobId');
+    final interval = _currentMode == ScribeMode.triage ? _triagePollInterval : _pollInterval;
+    debugPrint('[AIScribe] Starting to poll job: $jobId (interval=${interval.inMilliseconds}ms)');
     _pollTimer?.cancel();
     _pollStartedAt = DateTime.now();
     _consecutivePollErrors = 0;
     _pollInFlight = false;
-    _pollTimer = Timer.periodic(_pollInterval, (timer) {
+    _pollTimer = Timer.periodic(interval, (timer) {
       unawaited(_pollOnce(jobId, timer));
     });
   }
@@ -733,11 +895,22 @@ class ScribeController extends ChangeNotifier {
           timer.cancel();
           _pollTimer?.cancel();
           debugPrint('[AIScribe] Job failed: ${result.errorMessage}');
-          _setError(result.errorMessage ?? ScribeStrings.transcriptionFailed);
+          _setRecordingError(
+            result.errorMessage ?? ScribeStrings.transcriptionFailed,
+          );
           break;
 
         default:
-          break; // queued / processing — keep polling
+          // queued / processing — keep polling, but surface partial transcript
+          // as liveTranscript so the banner shows what was heard so far.
+          final partial = result.transcriptText;
+          if (partial != null &&
+              partial.isNotEmpty &&
+              partial != _session.liveTranscript) {
+            _session = _session.copyWith(liveTranscript: partial);
+            notifyListeners();
+          }
+          break;
       }
     } catch (e, st) {
       debugPrint('[AIScribe] Poll error: $e\n$st');
@@ -756,21 +929,60 @@ class ScribeController extends ChangeNotifier {
     }
   }
 
-  /// Triage banner completion — always lands on [ScribeState.reviewReady] so
-  /// the Step 1 mic orb can show the green check, even when the backend omits
-  /// the triage payload or the poll times out.
+  /// Triage banner completion — lands on [ScribeState.reviewReady] when at
+  /// least one symptom was extracted; otherwise [ScribeState.error].
   void _completeTriageJob({required ScribeJobResult? result}) {
     _pollTimer?.cancel();
-    debugPrint(
-      '[AIScribe] Triage job finished '
-      '(payload=${result?.triageResult != null})',
-    );
+
+    var triageResult = result?.triageResult;
+    if (triageResult != null && triageResult.symptomCodes.isNotEmpty) {
+      debugPrint(
+        '[AIScribe] triage server payload: '
+        '${triageResult.symptomCodes.length} codes '
+        '(${triageResult.codes.join(', ')})',
+      );
+    }
+    if (triageResult == null || triageResult.symptomCodes.isEmpty) {
+      final fallbackText = TriageTranscriptMatcher.fallbackSearchText(
+        transcriptText: result?.transcriptText,
+        transcriptTranslation: result?.transcriptTranslation,
+        soapSubjective: result?.soap?.subjective,
+        soapObjective: result?.soap?.objective,
+        soapAssessment: result?.soap?.assessment,
+      );
+      if (fallbackText != null) {
+        triageResult = TriageTranscriptMatcher.match(
+          fallbackText,
+          catalog: _currentSymptomCatalog ?? AiScribeTriageVocab.codes,
+          noteId: result?.noteId,
+        );
+        if (triageResult != null) {
+          debugPrint(
+            '[AIScribe] Triage fallback matched '
+            '${triageResult.symptomCodes.length} codes from transcript/soap',
+          );
+        }
+      }
+    }
+
+    final hasPayload =
+        triageResult != null && triageResult.symptomCodes.isNotEmpty;
+    debugPrint('[AIScribe] Triage job finished (payload=$hasPayload)');
+
+    if (!hasPayload) {
+      surfaceError(
+        SymptomPickerStrings.scribeBannerNoSymptomsSubtitle,
+        mode: ScribeMode.triage,
+      );
+      return;
+    }
+
     _session = _session.copyWith(
       state: ScribeState.reviewReady,
       mode: ScribeMode.triage,
       noteId: result?.noteId,
-      transcriptText: result?.transcriptText,
-      triageExtractionResult: result?.triageResult,
+      transcriptText: result?.transcriptText ?? triageResult.transcriptText,
+      triageExtractionResult: triageResult,
     );
     notifyListeners();
   }
@@ -814,11 +1026,24 @@ class ScribeController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Error during the record/finalize phase. Preserves the active mode so the
+  /// triage / form-prefill banners render their own error affordance.
+  void _setRecordingError(String message) {
+    _session = _session.copyWith(
+      state: ScribeState.error,
+      errorMessage: message,
+      mode: _currentMode,
+    );
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _elapsedTimer?.cancel();
     _pollTimer?.cancel();
-    _recorder.dispose();
+    try {
+      _recorder.dispose();
+    } catch (_) {}
     super.dispose();
   }
 

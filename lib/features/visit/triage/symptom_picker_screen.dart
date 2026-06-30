@@ -1341,11 +1341,11 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
   void _consumeTriageResult(ScribeController controller) {
     _triageResultConsumed = true;
     final triageResult = controller.session.triageExtractionResult;
-    if (triageResult != null) {
+    if (triageResult != null && triageResult.symptomCodes.isNotEmpty) {
       widget.viewModel.applyScribeTriageResult(triageResult);
+      controller.resetSession();
+      setState(() => _showDone = true);
     }
-    controller.resetSession();
-    setState(() => _showDone = true);
   }
 
   @override
@@ -1369,19 +1369,27 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
     final title = _showDone
         ? SymptomPickerStrings.scribeBannerDone
         : isError
-        ? SymptomPickerStrings.scribeBannerError
+        ? (session.errorMessage ==
+                SymptomPickerStrings.scribeBannerNoSymptomsSubtitle
+            ? SymptomPickerStrings.scribeBannerNoSymptoms
+            : SymptomPickerStrings.scribeBannerError)
         : isRecording
         ? SymptomPickerStrings.scribeBannerRecording
         : isProcessing
         ? SymptomPickerStrings.scribeBannerProcessing
         : SymptomPickerStrings.scribeBannerTitle;
 
+    // Show partial transcript while processing so the SK sees what was heard.
+    final liveText = session.liveTranscript;
     final subtitle = _showDone
         ? SymptomPickerStrings.scribeBannerDoneSubtitle
         : isError
-        ? SymptomPickerStrings.scribeBannerErrorSubtitle
+        ? (session.errorMessage ??
+              SymptomPickerStrings.scribeBannerErrorSubtitle)
         : isRecording
         ? SymptomPickerStrings.scribeBannerRecordingSubtitle
+        : isProcessing && liveText != null && liveText.isNotEmpty
+        ? '"$liveText"'
         : SymptomPickerStrings.scribeBannerSubtitle;
 
     void onTap() {
