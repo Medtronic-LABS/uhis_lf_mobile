@@ -203,10 +203,6 @@ class _PathwayReviewSheetState extends State<PathwayReviewSheet> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  PathwayStrings.reviewTitle,
-                  style: theme.textTheme.headlineSmall,
-                ),
                 const SizedBox(height: 4),
                 Text(
                   PathwayStrings.reviewSubtitle,

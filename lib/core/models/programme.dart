@@ -1,9 +1,15 @@
-/// The four UHIS frontline health programmes surfaced by the AI Worklist.
+/// The UHIS frontline health programmes surfaced by the AI Worklist.
 ///
 /// The wire-side `diagnosisType[]` field (spice-service `PatientDTO`) and the
 /// per-domain detail endpoints (`/medical-review/tb/details`, `/pregnancy/info`,
 /// `/immunisation/list`, etc.) carry programme membership in different shapes;
 /// [Programme.fromTag] is the single home for the mapping.
+///
+/// **PILOT-SCOPE v1** — only the 3 care journeys in [kPilotProgrammes] are active.
+/// Non-pilot programmes remain in the enum so wire data from the server still
+/// deserialises correctly; they are simply gated out of the UI and pathway engine.
+/// To expand scope post-pilot, add programmes back to [kPilotProgrammes].
+/// Search for `PILOT-SCOPE` across the codebase to find every disabled block.
 enum Programme {
   imci,
   anc,
@@ -16,6 +22,21 @@ enum Programme {
   cataract,
   eyeCare,
   unknown;
+
+  // ---------------------------------------------------------------------------
+  // PILOT-SCOPE v1: active programmes for the July 2026 field pilot.
+  // 3 care journeys: sick child (imci), pregnancy (anc/pnc), NCD.
+  // To restore a programme: add it here + un-comment blocks tagged PILOT-SCOPE.
+  // ---------------------------------------------------------------------------
+  static const Set<Programme> kPilotProgrammes = {
+    Programme.imci,
+    Programme.anc,
+    Programme.pnc,
+    Programme.ncd,
+  };
+
+  /// True when this programme is included in the v1 pilot scope.
+  bool get isPilot => kPilotProgrammes.contains(this);
 
   /// Case-insensitive tag mapper. Accepts the strings the spice service
   /// returns in `diagnosisType[]`, on enrolment markers, and on follow-up rows.

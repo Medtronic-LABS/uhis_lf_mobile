@@ -1,7 +1,11 @@
 /// Training Hub placeholder screen.
 ///
-/// Shows 6 programme training module cards in a 2-column grid plus a
+/// Shows pilot programme training module cards in a 2-column grid plus a
 /// certificates card. All cards are UI scaffolds — no API calls.
+///
+/// PILOT-SCOPE v1: shows only the 3 pilot care journeys (IMCI / ANC / NCD).
+/// To restore TB, EPI, Nutrition modules: un-comment the entries below and
+/// add their programmes to kPilotProgrammes in programme.dart.
 ///
 /// Engineering Design Standards:
 ///   - Pure UI — no I/O, no business logic.
@@ -32,17 +36,11 @@ class TrainingScreen extends StatelessWidget {
       icon: Icons.monitor_heart_rounded,
       color: AppColors.ncdHeader
     ),
-    (label: 'TB', icon: Icons.air_rounded, color: AppColors.tbHeader),
-    (
-      label: 'EPI',
-      icon: Icons.vaccines_rounded,
-      color: AppColors.statusSuccess
-    ),
-    (
-      label: 'Nutrition',
-      icon: Icons.restaurant_rounded,
-      color: AppColors.statusInfo
-    ),
+    // PILOT-SCOPE v1: TB, EPI, Nutrition disabled for pilot.
+    // To restore: un-comment entries below.
+    // (label: 'TB', icon: Icons.air_rounded, color: AppColors.tbHeader),
+    // (label: 'EPI', icon: Icons.vaccines_rounded, color: AppColors.statusSuccess),
+    // (label: 'Nutrition', icon: Icons.restaurant_rounded, color: AppColors.statusInfo),
   ];
 
   @override

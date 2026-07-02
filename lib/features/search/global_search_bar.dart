@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
+import '../household/enrollment/enrollment_entry_sheet.dart';
 import '../household/household_detail_screen.dart';
 import 'global_search_repository.dart';
 import 'household_search_repository.dart';
@@ -32,6 +33,13 @@ class _GlobalSearchBarState extends State<GlobalSearchBar> {
       searchController: _controller,
       barHintText: SearchStrings.barHint,
       barLeading: const Icon(Icons.search),
+      barTrailing: [
+        IconButton(
+          icon: const Icon(Icons.qr_code_scanner_rounded),
+          tooltip: SearchStrings.scanNidTooltip,
+          onPressed: () => showEnrollmentEntrySheet(context),
+        ),
+      ],
       isFullScreen: true,
       suggestionsBuilder: (context, controller) {
         return [

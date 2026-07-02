@@ -213,6 +213,7 @@ abstract final class SearchStrings {
   static String nid(Object nid) => 'NID $nid';
   static String householdNo(Object no) => 'No $no';
   static String memberCount(Object count) => '$count members';
+  static const String scanNidTooltip = 'Scan NID card to find patient';
 }
 
 /// App-specific fallback PIN: setup (create + confirm), unlock, and management.
@@ -1025,7 +1026,7 @@ abstract final class MissionDashboardStrings {
   static const String aiSortedTagCce = 'CCE alerts';
 
   // ── "+ Enrol new" FAB ────────────────────────────────────────────────────
-  static const String enrolNewCta = '+ Enrol new';
+  static const String enrolNewCta = 'Enroll new';
   static const String enrolNewComingSoon =
       'QR enrolment flow coming soon. Use the Patients tab to view existing patients.';
 
@@ -1136,7 +1137,6 @@ abstract final class ScribeStrings {
   static const String rationaleAllow = 'Allow';
   static const String rationaleNotNow = 'Not now';
 
-  static const String reviewTitle = 'AI Draft Note';
   static const String reviewAccept = 'Accept Note';
   static const String reviewReject = 'Reject';
   static const String reviewRequired = 'Review required';
@@ -2519,7 +2519,6 @@ abstract final class PathwayStrings {
   PathwayStrings._();
 
   // ── Review sheet ─────────────────────────────────────────────────────────
-  static const String reviewTitle = "Today's Assessment Plan";
   static const String reviewSubtitle = 'Based on symptoms and patient history';
   static const String startAssessment = 'Start Assessment';
   static const String addProgramme = 'Add section manually';
