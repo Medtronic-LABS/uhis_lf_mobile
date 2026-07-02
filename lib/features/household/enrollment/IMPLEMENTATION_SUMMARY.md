@@ -35,7 +35,7 @@ Complete household enrollment flow for Apon Sushashthya (আপন সুস্�
 
 | Screen | Route | File | Purpose |
 |--------|-------|------|---------|
-| NID Scan | `/household/enrollment/nid-scan` | `enrollment_nid_scan_screen.dart` | Modal: camera frame (mint green corners, dashed border), shutter button, fallback "Create Household" card |
+| NID Scan / entry | modal sheet (`showEnrollmentEntrySheet`) | `enrollment_entry_sheet.dart` | Full-screen dark overlay: camera viewfinder (mint corners, dashed border, sweep), shutter, post-scan identity card, "Create Household" fallback card. Navigates onward via GoRouter `context.push`. |
 | Create Household | `/household/enrollment/create` | `create_household_screen.dart` | Step 1: household type, member count, house #, occupation, income, disability Q + conditional |
 | Household Head Info | `/household/enrollment/head-info` | `household_head_info_screen.dart` | Step 2: head name, ID type (BRN/NID), ID #, DOB picker + age, gender, marital status, disability, mobile + checkbox |
 | Success | `/household/enrollment/success` | `household_created_screen.dart` | Confirmation: green header, household details card (2-col), member cards with badge, "Add Member" dashed button, "Save" CTA |
@@ -54,8 +54,8 @@ Complete household enrollment flow for Apon Sushashthya (আপন সুস্�
 ### 7. Dashboard Integration
 - Updated `lib/features/dashboard/mission_dashboard_screen.dart`
   - Changed FAB from "coming soon" mock to live enrollment entry point
-  - Button icon: `Icons.home_outlined`, label: "Enroll Household"
-  - Navigates to `/household/enrollment/nid-scan` on tap
+  - Button icon: `Icons.home_outlined`, label: "Enroll Now"
+  - Opens the enrollment entry modal via `showEnrollmentEntrySheet(context)` on tap
 
 ---
 
@@ -212,9 +212,10 @@ When backend is ready:
 │   ├── enrollment_segmented_buttons.dart
 │   ├── enrollment_member_card.dart
 │   ├── enrollment_status_header.dart
-│   └── enrollment_button.dart
+│   ├── enrollment_button.dart
+│   └── enrollment_sticky_bar.dart   (shared elevated bottom CTA)
 ├── enrollment_controller.dart
-├── enrollment_nid_scan_screen.dart
+├── enrollment_entry_sheet.dart      (NID-scan / entry modal)
 ├── create_household_screen.dart
 ├── household_head_info_screen.dart
 ├── household_created_screen.dart

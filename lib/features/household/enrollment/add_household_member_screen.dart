@@ -10,6 +10,7 @@ import 'models/household_enrollment_models.dart';
 import 'widgets/enrollment_input_field.dart';
 import 'widgets/enrollment_segmented_buttons.dart';
 import 'widgets/enrollment_dropdown.dart';
+import 'widgets/enrollment_sticky_bar.dart';
 
 /// Screen for adding a new household member.
 ///
@@ -462,31 +463,9 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                   left: 0,
                   right: 0,
                   bottom: 0,
-                  child: Container(
-                    color: const Color(0xFFF5F6FB),
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton(
-                        onPressed: () => _handleSaveMember(controller),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.navy,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: const Text(
-                          EnrollmentStrings.saveMemberCTA,
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
+                  child: EnrollmentStickyBar(
+                    label: EnrollmentStrings.saveMemberCTA,
+                    onPressed: () => _handleSaveMember(controller),
                   ),
                 ),
               ],

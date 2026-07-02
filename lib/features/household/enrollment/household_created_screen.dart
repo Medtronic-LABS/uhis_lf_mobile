@@ -7,6 +7,7 @@ import '../../../core/constants/app_strings.dart';
 import 'enrollment_controller.dart';
 import 'models/household_enrollment_models.dart';
 import 'widgets/enrollment_member_card.dart';
+import 'widgets/enrollment_sticky_bar.dart';
 
 /// Success screen: household has been enrolled.
 ///
@@ -299,46 +300,10 @@ class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
                   left: 0,
                   right: 0,
                   bottom: 0,
-                  child: Container(
-                    color: const Color(0xFFF5F6FB),
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton(
-                        onPressed: controller.loading
-                            ? null
-                            : () => _handleSave(controller),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.navy,
-                          foregroundColor: Colors.white,
-                          disabledBackgroundColor:
-                              AppColors.navy.withValues(alpha: 0.5),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: controller.loading
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    Colors.white,
-                                  ),
-                                ),
-                              )
-                            : const Text(
-                                EnrollmentStrings.saveHousehold,
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                      ),
-                    ),
+                  child: EnrollmentStickyBar(
+                    label: EnrollmentStrings.saveHousehold,
+                    loading: controller.loading,
+                    onPressed: () => _handleSave(controller),
                   ),
                 ),
               ],

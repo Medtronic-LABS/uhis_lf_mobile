@@ -9,6 +9,7 @@ import 'widgets/enrollment_section_header.dart';
 import 'widgets/enrollment_input_field.dart';
 import 'widgets/enrollment_segmented_buttons.dart';
 import 'widgets/enrollment_dropdown.dart';
+import 'widgets/enrollment_sticky_bar.dart';
 
 /// Step 1 of household enrollment: household information.
 ///
@@ -42,6 +43,10 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
     _incomeCtrl = TextEditingController();
     _disabilityCountCtrl = TextEditingController();
 
+    // Rebuild the CTA enabled-state as the required text fields change.
+    _houseNumberCtrl.addListener(_onFormChanged);
+    _totalMembersCtrl.addListener(_onFormChanged);
+
     // Defer so ChangeNotifierProvider finishes its first build before
     // notifyListeners() is called (avoids !_dirty assertion).
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -58,12 +63,24 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
 
   @override
   void dispose() {
+    _houseNumberCtrl.removeListener(_onFormChanged);
+    _totalMembersCtrl.removeListener(_onFormChanged);
     _houseNumberCtrl.dispose();
     _totalMembersCtrl.dispose();
     _incomeCtrl.dispose();
     _disabilityCountCtrl.dispose();
     super.dispose();
   }
+
+  void _onFormChanged() => setState(() {});
+
+  /// Mandatory fields for Step 1 (spec: keep CTA disabled until all present).
+  bool get _isFormComplete =>
+      _selectedHealthWorker != null &&
+      _selectedVillage != null &&
+      _householdType != null &&
+      _houseNumberCtrl.text.trim().isNotEmpty &&
+      _totalMembersCtrl.text.trim().isNotEmpty;
 
   void _handleNext(EnrollmentController controller) {
     controller.updateHousehold(
@@ -268,31 +285,10 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                   left: 0,
                   right: 0,
                   bottom: 0,
-                  child: Container(
-                    color: const Color(0xFFF5F6FB),
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton(
-                        onPressed: () => _handleNext(controller),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.navy,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: const Text(
-                          EnrollmentStrings.continueArrow,
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
+                  child: EnrollmentStickyBar(
+                    label: EnrollmentStrings.continueArrow,
+                    enabled: _isFormComplete,
+                    onPressed: () => _handleNext(controller),
                   ),
                 ),
               ],
