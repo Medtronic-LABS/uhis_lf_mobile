@@ -77,8 +77,8 @@ class EnrollmentRepository extends ApiRepository {
       'name': head.name,
       'householdNo': household.householdNumber,
       'householdType': household.householdType,
-      'villageId': villageId,
-      'subVillageId': subVillageId,
+      'villageId': villageId.toString(),
+      'subVillageId': subVillageId.toString(),
       'village': household.villageName ?? '',
       'shasthyaShebikaId': userId,
       'noOfPeople': household.numberOfMembers,
@@ -125,21 +125,20 @@ class EnrollmentRepository extends ApiRepository {
     required Map<String, dynamic> provenance,
     required int nowMs,
   }) {
+    final normDob = _normaliseDob(member.dateOfBirth);
     return {
       'referenceId': _uuid.v4(),
       'householdReferenceId': householdReferenceId,
       'name': member.name,
       'nationalId': member.idNumber ?? '',
       'idType': member.idType.toLowerCase(),
-      'dateOfBirth': _normaliseDob(member.dateOfBirth),
+      'dateOfBirth': normDob,
       'gender': member.gender.toLowerCase(),
       'isHouseholdHead': isHouseholdHead,
       'isActive': true,
-      'isChild': member.age < 18,
+      'isChild': _isChild(member.age, normDob),
       'maritalStatus': member.maritalStatus.toLowerCase(),
-      'disability': member.disabilityStatus.toLowerCase() == 'none'
-          ? 'absent'
-          : 'present',
+      'disability': _disabilityValue(member.disabilityStatus),
       'villageId': villageId,
       'subVillageId': subVillageId,
       'village': villageName,
@@ -171,11 +170,66 @@ class EnrollmentRepository extends ApiRepository {
     }
   }
 
-  /// Ensure DOB is ISO-8601 with UTC offset suffix: "YYYY-MM-DDT00:00:00+00:00".
+  /// Normalize DOB to "YYYY-MM-DDT00:00:00+00:00".
+  ///
+  /// Handles:
+  /// - Already ISO with time component → return as-is
+  /// - "YYYY-MM-DD" → append time suffix
+  /// - "DD Mon YYYY" (NID OCR output, including common OCR variants like "Noy"→Nov) → parse and convert
+  /// - Unparseable → return empty string (never send garbage to the backend)
   static String _normaliseDob(String dob) {
     if (dob.isEmpty) return dob;
-    // Already has time component — return as-is.
     if (dob.contains('T')) return dob;
-    return '${dob}T00:00:00+00:00';
+
+    // YYYY-MM-DD
+    if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(dob.trim())) {
+      return '${dob.trim()}T00:00:00+00:00';
+    }
+
+    // "DD Mon YYYY" — NID card format, possibly with OCR typos
+    final match =
+        RegExp(r'^(\d{1,2})\s+([A-Za-z]{3,4})\s+(\d{4})$').firstMatch(dob.trim());
+    if (match != null) {
+      final day = int.tryParse(match.group(1)!);
+      final month = _parseMonth(match.group(2)!);
+      final year = int.tryParse(match.group(3)!);
+      if (day != null && month != null && year != null) {
+        final d = DateTime.utc(year, month, day);
+        final iso = d.toIso8601String().split('T')[0];
+        return '${iso}T00:00:00+00:00';
+      }
+    }
+
+    return '';
+  }
+
+  /// Map month abbreviations to month numbers, including common OCR variants
+  /// from Bangladeshi NID cards (e.g. "Noy" for November).
+  static int? _parseMonth(String abbr) {
+    const map = {
+      'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4,
+      'may': 5, 'jun': 6, 'jul': 7, 'aug': 8,
+      'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
+      // OCR variants
+      'noy': 11, 'nob': 11, 'okt': 10, 'agt': 8,
+      'jao': 1,  'fob': 2,  'mao': 3,
+    };
+    return map[abbr.toLowerCase()];
+  }
+
+  /// Determine isChild from age if known, otherwise derive from normalised DOB.
+  static bool _isChild(int age, String normDob) {
+    if (age > 0) return age < 18;
+    if (normDob.isEmpty) return false;
+    final parsed = DateTime.tryParse(normDob);
+    if (parsed == null) return false;
+    return DateTime.now().difference(parsed).inDays < 18 * 365;
+  }
+
+  /// Convert internal disabilityStatus to the API "absent"/"present" string.
+  /// Internal defaults to 'Absent'; also accepts 'None' for compatibility.
+  static String _disabilityValue(String status) {
+    final s = status.toLowerCase();
+    return (s == 'none' || s == 'absent') ? 'absent' : 'present';
   }
 }
