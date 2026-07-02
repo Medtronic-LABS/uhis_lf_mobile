@@ -493,50 +493,50 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                     child: _DurationPicker(vm: vm),
                   ),
                 ),
-              ],
-            );
-          },
-        ),
-        bottomNavigationBar: Consumer<TriageViewModel>(
-          builder: (context, vm, _) {
-            return SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Routine visit button
-                    if (vm.isRoutineVisit && vm.activatedPathways.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: TextButton(
-                          onPressed: () => _navigateToForm([]),
-                          child: const Text(
-                            TriageStrings.noSymptomsRoutineVisit,
-                          ),
-                        ),
-                      ),
 
-                    // Continue button
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        onPressed: _onContinue,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.pink,
-                          foregroundColor: Colors.white,
-                        ),
-                        child: Text(
-                          vm.selectedSymptoms.isNotEmpty &&
-                                  vm.activatedPathways.isNotEmpty
-                              ? SymptomPickerStrings.ctaWithPathways
-                              : SymptomPickerStrings.ctaRoutine,
-                        ),
+                // CTA — inline at scroll bottom so it moves with content.
+                SliverToBoxAdapter(
+                  child: SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Divider(height: 1),
+                          const SizedBox(height: 16),
+                          if (vm.isRoutineVisit && vm.activatedPathways.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: TextButton(
+                                onPressed: () => _navigateToForm([]),
+                                child: const Text(
+                                  TriageStrings.noSymptomsRoutineVisit,
+                                ),
+                              ),
+                            ),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton(
+                              onPressed: _onContinue,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: AppColors.pink,
+                                foregroundColor: Colors.white,
+                              ),
+                              child: Text(
+                                vm.selectedSymptoms.isNotEmpty &&
+                                        vm.activatedPathways.isNotEmpty
+                                    ? SymptomPickerStrings.ctaWithPathways
+                                    : SymptomPickerStrings.ctaRoutine,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             );
           },
         ),

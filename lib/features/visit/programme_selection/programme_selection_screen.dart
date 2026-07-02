@@ -72,10 +72,6 @@ class _ProgrammeSelectionScreenState extends State<ProgrammeSelectionScreen> {
               return Column(
                 children: [
                   Expanded(child: _buildBody(context, vm)),
-                  _ContinueBar(
-                    selectedCount: vm.selectedProgrammes.length,
-                    onContinue: () => _openReviewSheet(context, vm),
-                  ),
                 ],
               );
             },
@@ -154,6 +150,13 @@ class _ProgrammeSelectionScreenState extends State<ProgrammeSelectionScreen> {
               borderRadius: BorderRadius.circular(10),
             ),
           ),
+        ),
+
+        // CTA — inline at scroll bottom so it moves with content.
+        const SizedBox(height: 12),
+        _ContinueBar(
+          selectedCount: vm.selectedProgrammes.length,
+          onContinue: () => _openReviewSheet(context, vm),
         ),
       ],
     );

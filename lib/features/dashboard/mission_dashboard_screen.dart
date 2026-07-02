@@ -21,6 +21,7 @@ import '../visit/visit_controller.dart';
 import '../visit/widgets/widgets.dart';
 import 'dashboard_repository.dart';
 import 'mission_dashboard_repository.dart';
+import '../household/enrollment/enrollment_entry_sheet.dart';
 
 enum _NeedFilter {
   highRisk,
@@ -1018,35 +1019,12 @@ class _EnrolNewFab extends StatelessWidget {
       backgroundColor: tokens.brandPink,
       foregroundColor: Colors.white,
       elevation: 4,
-      icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
+      icon: const Icon(Icons.home_outlined, size: 20),
       label: const Text(
-        MissionDashboardStrings.enrolNewCta,
+        'Enroll Now',
         style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
       ),
-      onPressed: () {
-        final messenger = ScaffoldMessenger.maybeOf(context);
-        messenger?.hideCurrentSnackBar();
-        messenger?.showSnackBar(
-          SnackBar(
-            duration: const Duration(milliseconds: 1800),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: tokens.brandNavy,
-            content: const Row(
-              children: [
-                Icon(Icons.info_outline_rounded,
-                    color: Colors.white, size: 18),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    MissionDashboardStrings.enrolNewComingSoon,
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+      onPressed: () => showEnrollmentEntrySheet(context),
     );
   }
 }

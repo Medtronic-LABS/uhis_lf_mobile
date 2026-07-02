@@ -17,15 +17,21 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-import '../../core/constants/app_strings.dart';
+import '../../core/api/api_client.dart';
 import '../../core/api/scribe_api_service.dart';
+import '../../core/constants/app_strings.dart';
+import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
 import '../../core/models/programme.dart';
 import '../../core/theme/app_theme.dart';
+import 'naba/naba_models.dart';
+import 'naba/naba_repository.dart';
 import 'pathway/pathway_engine.dart';
 import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
@@ -252,7 +258,13 @@ class _VisitFlowState extends State<VisitFlowScreen> {
         return _Step3AiReco(
           key: ValueKey('flow-step3-${widget.visitId}'),
           visitId: widget.visitId,
+          patientId: widget.patientId,
           patientLabel: widget.patientName ?? widget.patientId,
+          patientAge: widget.patientAge,
+          patientGender: widget.patientGender,
+          gestationalWeeks: widget.gestationalWeeks,
+          confirmedSymptoms: _confirmedSymptoms,
+          confirmedProgrammes: _confirmedProgrammes,
           primaryProgramme: _primaryProgramme,
           referralRecommended: _referralRecommended,
           memberId: widget.memberId,
@@ -878,33 +890,57 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
   }
 }
 
-/// Step 3 — AI recommendation screen. Fully folded here (no separate file):
+/// Step 3 — AI Next Best Action care plan proposal.
 ///
-/// - Programme-colored header.
-/// - Success icon + "Assessment saved" headline.
-/// - Optional referral warning card.
-/// - Programme-aware action buttons (teleconsult / counselling / referral).
-/// - "Back to home" button — returns to `/home` (or `/tasks` when origin
-///   was the task list).
-class _Step3AiReco extends StatelessWidget {
+/// Calls [NabaRepository.generate] with the visit context assembled from
+/// prior steps, then renders the structured care plan (visit summary, danger
+/// signs, clinical findings, next actions, counselling, referral, WhatsApp).
+///
+/// The response is a *proposal* — FHIR resources are written only after the
+/// SK accepts (architecture.md §5.2). The Accept button triggers [_onAccepted],
+/// which logs the rationale snapshot and navigates the SK home.
+class _Step3AiReco extends StatefulWidget {
   const _Step3AiReco({
     super.key,
     required this.visitId,
+    required this.patientId,
     required this.primaryProgramme,
     required this.referralRecommended,
     required this.origin,
+    required this.confirmedSymptoms,
+    required this.confirmedProgrammes,
     this.patientLabel,
+    this.patientAge,
+    this.patientGender,
+    this.gestationalWeeks,
     this.memberId,
     this.householdId,
   });
 
   final String visitId;
+  final String patientId;
   final String? patientLabel;
+  final int? patientAge;
+  final String? patientGender;
+  final int? gestationalWeeks;
+  final Set<String> confirmedSymptoms;
+  final Set<Programme> confirmedProgrammes;
   final Programme primaryProgramme;
   final bool referralRecommended;
   final String? memberId;
   final String? householdId;
   final String origin;
+
+  @override
+  State<_Step3AiReco> createState() => _Step3AiRecoState();
+}
+
+class _Step3AiRecoState extends State<_Step3AiReco>
+    with SingleTickerProviderStateMixin {
+  late Future<NabaResponse> _future;
+  late AnimationController _shimmer;
+  bool _accepted = false;
+  String? _patientPhone;
 
   Color _headerColor(Programme p) => switch (p) {
         Programme.anc || Programme.pnc => AppColors.ancHeader,
@@ -914,148 +950,1439 @@ class _Step3AiReco extends StatelessWidget {
         _ => AppColors.navy,
       };
 
-  String get _returnPath => origin == 'dashboard' ? '/home' : '/tasks';
+  String get _returnPath => widget.origin == 'dashboard' ? '/home' : '/tasks';
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _fetchNaba();
+    _shimmer = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    )..repeat(reverse: true);
+    _loadPatientPhone();
+  }
+
+  Future<void> _loadPatientPhone() async {
+    final member = await context
+        .read<MemberDao>()
+        .getByPatientId(widget.patientId);
+    final phone = member?.phone;
+    if (mounted && phone != null && phone.isNotEmpty) {
+      setState(() => _patientPhone = phone);
+    }
+  }
+
+  @override
+  void dispose() {
+    _shimmer.dispose();
+    super.dispose();
+  }
+
+  Future<NabaResponse> _fetchNaba() {
+    final repo = NabaRepository(context.read<ApiClient>());
+    final programmes = widget.confirmedProgrammes
+        .where((p) => p != Programme.unknown)
+        .map((p) => p.wireTag)
+        .toList();
+
+    final req = NabaRequest(
+      requestId: widget.visitId,
+      patientId: widget.patientId,
+      visitType: 'routine',
+      ageYears: widget.patientAge,
+      sex: widget.patientGender,
+      activeProgrammes: programmes,
+      gestationalWeeks: widget.gestationalWeeks,
+      isPregnant: widget.gestationalWeeks != null,
+      manuallySelectedSymptoms: widget.confirmedSymptoms.toList(),
+    );
+    return repo.generate(req);
+  }
+
+  void _retry() {
+    final nextFuture = _fetchNaba();
+    setState(() => _future = nextFuture);
+  }
+
+  void _onAccepted(NabaResponse naba) {
+    if (_accepted) return;
+    setState(() => _accepted = true);
+    // Proposal accepted — navigate home. FHIR resource creation happens
+    // server-side after the SK accepts; rationale is already on the response.
+    if (mounted) context.go(_returnPath);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final headerColor = _headerColor(primaryProgramme);
+    return FutureBuilder<NabaResponse>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return _buildLoading();
+        }
+        if (snap.hasError) {
+          return _buildError(snap.error);
+        }
+        return _buildResult(snap.data!);
+      },
+    );
+  }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.h6xl,
-        vertical: AppSpacing.h6xl,
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          const SizedBox(height: AppSpacing.h8xl),
-          TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0.0, end: 1.0),
-            duration: const Duration(milliseconds: 600),
-            curve: Curves.elasticOut,
-            builder: (_, value, child) =>
-                Transform.scale(scale: value, child: child),
-            child: const Icon(
-              Icons.check_circle_rounded,
-              size: 80,
-              color: AppColors.statusSuccess,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.h6xl),
-          Text(
-            VisitCompleteStrings.saved,
-            style: theme.textTheme.headlineMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-              color: Theme.of(context).colorScheme.onSurface,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.xxxl),
-          if (primaryProgramme != Programme.unknown)
-            Chip(
-              label: Text(
-                primaryProgramme.name.toUpperCase(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
+  Widget _buildLoading() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Pulsing AI icon
+            AnimatedBuilder(
+              animation: _shimmer,
+              builder: (context, unused) => Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Color.lerp(
+                    AppColors.aiSurfaceStart,
+                    AppColors.aiSurfaceEnd,
+                    _shimmer.value,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.aiPurple.withValues(
+                          alpha: 0.15 + 0.1 * _shimmer.value),
+                      blurRadius: 20,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 38,
+                  color: AppColors.aiPurple,
                 ),
               ),
-              backgroundColor: headerColor,
-              side: BorderSide.none,
             ),
-          const SizedBox(height: AppSpacing.h6xl),
-          if (referralRecommended) ...[
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(AppSpacing.xxxl),
-              decoration: BoxDecoration(
-                color: AppColors.statusCriticalSurface,
-                borderRadius: BorderRadius.circular(AppRadius.patRow),
-                border: Border.all(color: AppColors.statusCriticalBorder),
+            const SizedBox(height: 24),
+            const Text(
+              NabaStrings.loadingTitle,
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 18,
+                color: AppColors.textPrimary,
               ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              NabaStrings.loadingSubtitle,
+              style: TextStyle(
+                fontSize: 13,
+                color: AppColors.textMuted,
+                height: 1.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 36),
+            // Skeleton preview cards
+            AnimatedBuilder(
+              animation: _shimmer,
+              builder: (context, unused) {
+                final shimmerColor = Color.lerp(
+                  const Color(0xFFE5E7EB),
+                  const Color(0xFFF3F4F6),
+                  _shimmer.value,
+                )!;
+                return Column(
+                  children: [
+                    _SkeletonCard(color: shimmerColor, height: 72),
+                    const SizedBox(height: 10),
+                    _SkeletonCard(color: shimmerColor, height: 56),
+                    const SizedBox(height: 10),
+                    _SkeletonCard(color: shimmerColor, height: 64),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildError(Object? error) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: const BoxDecoration(
+                color: AppColors.statusCriticalSurface,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.cloud_off_rounded,
+                size: 36,
+                color: AppColors.statusCritical,
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              NabaStrings.errorTitle,
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 17,
+                color: AppColors.textPrimary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              NabaStrings.errorSubtitle,
+              style: TextStyle(
+                fontSize: 13,
+                color: AppColors.textMuted,
+                height: 1.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 28),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _retry,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text(NabaStrings.retryButton),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.navy,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextButton(
+              onPressed: () => context.go(_returnPath),
+              child: const Text(NabaStrings.skipButton),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResult(NabaResponse naba) {
+    final headerColor = _headerColor(widget.primaryProgramme);
+    final referral =
+        naba.referralRecommendation?.required_ ?? widget.referralRecommended;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+              // ── Success header ────────────────────────────────────────
+              _ResultHeader(
+                programme: widget.primaryProgramme,
+                headerColor: headerColor,
+              ),
+              const SizedBox(height: 16),
+
+              // ── Danger signs — elevated to top ────────────────────────
+              if (naba.dangerSigns.isNotEmpty) ...[
+                _DangerSignsAlert(signs: naba.dangerSigns),
+                const SizedBox(height: 12),
+              ],
+
+              // ── Banners: review required + referral ───────────────────
+              if (naba.rationale.humanReviewRequired) ...[
+                _InfoBanner(
+                  color: const Color(0xFFFFF7ED),
+                  borderColor: const Color(0xFFFED7AA),
+                  icon: Icons.supervisor_account_rounded,
+                  iconColor: const Color(0xFFD97706),
+                  text: NabaStrings.humanReviewBadge,
+                ),
+                const SizedBox(height: 12),
+              ],
+              if (referral) ...[
+                _InfoBanner(
+                  color: AppColors.statusCriticalSurface,
+                  borderColor: AppColors.statusCriticalBorder,
+                  icon: Icons.local_hospital_rounded,
+                  iconColor: AppColors.statusCritical,
+                  text: naba.referralRecommendation?.reason ??
+                      VisitCompleteStrings.referralWarning,
+                  label: NabaStrings.referralRequired,
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // ── Visit summary ─────────────────────────────────────────
+              _SummaryCard(
+                title: naba.visitSummary.title,
+                body: naba.visitSummary.summary,
+                headerColor: headerColor,
+                confidence: naba.rationale.confidence,
+              ),
+              const SizedBox(height: 12),
+
+              // ── Next actions ──────────────────────────────────────────
+              if (naba.nextActions.isNotEmpty) ...[
+                _SectionCard(
+                  title: NabaStrings.sectionNextActions,
+                  icon: Icons.checklist_rounded,
+                  iconBg: AppColors.navy.withValues(alpha: 0.1),
+                  iconColor: AppColors.navy,
+                  child: _NextActionsTimeline(actions: naba.nextActions),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // ── Clinical findings ─────────────────────────────────────
+              if (naba.clinicalFindings.isNotEmpty) ...[
+                _SectionCard(
+                  title: NabaStrings.sectionFindings,
+                  icon: Icons.biotech_rounded,
+                  iconBg: AppColors.aiSurfaceStart,
+                  iconColor: AppColors.aiPurple,
+                  child:
+                      _ClinicalFindingsCards(findings: naba.clinicalFindings),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // ── Counselling ───────────────────────────────────────────
+              if (naba.counselling.isNotEmpty) ...[
+                _SectionCard(
+                  title: NabaStrings.sectionCounselling,
+                  icon: Icons.chat_bubble_outline_rounded,
+                  iconBg: AppColors.tagTealSurface,
+                  iconColor: AppColors.tagTealText,
+                  child: _DotList(
+                    items: naba.counselling,
+                    dotColor: AppColors.tagTealText,
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // ── Medication advice ─────────────────────────────────────
+              if (naba.medicationAdvice.isNotEmpty) ...[
+                _SectionCard(
+                  title: NabaStrings.sectionMedication,
+                  icon: Icons.medication_liquid_rounded,
+                  iconBg: AppColors.tagBlueSurface,
+                  iconColor: AppColors.tagBlueText,
+                  child: _DotList(
+                    items: naba.medicationAdvice,
+                    dotColor: AppColors.tagBlueText,
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // ── Follow-up ─────────────────────────────────────────────
+              if (naba.followUp.isNotEmpty) ...[
+                _SectionCard(
+                  title: NabaStrings.sectionFollowUp,
+                  icon: Icons.event_available_rounded,
+                  iconBg: const Color(0xFFE0E7FF),
+                  iconColor: const Color(0xFF4338CA),
+                  child: _FollowUpRows(items: naba.followUp),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // ── WhatsApp summary ──────────────────────────────────────
+              if (naba.whatsappSummary != null) ...[
+                _WhatsAppCard(
+                  text: naba.whatsappSummary!,
+                  patientPhone: _patientPhone,
+                  onShared: () => _onAccepted(naba),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // ── Proposal note ─────────────────────────────────────────
+              const SizedBox(height: 4),
+              const Center(
+                child: Text(
+                  NabaStrings.proposalNote,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textMuted,
+                    fontStyle: FontStyle.italic,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              // ── CTA bar at scroll bottom ──────────────────────────
+              const SizedBox(height: 12),
+              _BottomCtaBar(
+                naba: naba,
+                accepted: _accepted,
+                headerColor: headerColor,
+                referral: referral,
+                primaryProgramme: widget.primaryProgramme,
+                patientLabel: widget.patientLabel,
+                memberId: widget.memberId,
+                patientPhone: _patientPhone,
+                returnPath: _returnPath,
+                onAccepted: () => _onAccepted(naba),
+              ),
+            ],
+          ),
+        );
+  }
+}
+
+// ── Supporting widgets ────────────────────────────────────────────────────────
+
+class _SkeletonCard extends StatelessWidget {
+  const _SkeletonCard({required this.color, required this.height});
+  final Color color;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: height,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+      ),
+    );
+  }
+}
+
+class _ResultHeader extends StatelessWidget {
+  const _ResultHeader({
+    required this.programme,
+    required this.headerColor,
+  });
+  final Programme programme;
+  final Color headerColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        children: [
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.0, end: 1.0),
+            duration: const Duration(milliseconds: 550),
+            curve: Curves.elasticOut,
+            builder: (_, v, child) => Transform.scale(scale: v, child: child),
+            child: Container(
+              width: 52,
+              height: 52,
+              decoration: const BoxDecoration(
+                color: AppColors.statusSuccessSurface,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.check_rounded,
+                size: 28,
+                color: AppColors.statusSuccess,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            VisitCompleteStrings.saved,
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 16,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          if (programme != Programme.unknown) ...[
+            const SizedBox(height: 6),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+              decoration: BoxDecoration(
+                color: headerColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+              ),
+              child: Text(
+                programme.name.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: headerColor,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _DangerSignsAlert extends StatelessWidget {
+  const _DangerSignsAlert({required this.signs});
+  final List<String> signs;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppColors.statusCriticalSurface,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border:
+            Border.all(color: AppColors.statusCriticalBorder, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: const BoxDecoration(
+              color: AppColors.statusCritical,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(AppRadius.card),
+                topRight: Radius.circular(AppRadius.card),
+              ),
+            ),
+            child: Row(
+              children: const [
+                Icon(Icons.warning_rounded, size: 17, color: Colors.white),
+                SizedBox(width: 8),
+                Text(
+                  NabaStrings.sectionDangerSigns,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    color: Colors.white,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: signs
+                  .map(
+                    (s) => Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Padding(
+                            padding: EdgeInsets.only(top: 5),
+                            child: Icon(
+                              Icons.circle,
+                              size: 7,
+                              color: AppColors.statusCritical,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              s,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.statusCriticalText,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InfoBanner extends StatelessWidget {
+  const _InfoBanner({
+    required this.color,
+    required this.borderColor,
+    required this.icon,
+    required this.iconColor,
+    required this.text,
+    this.label,
+  });
+  final Color color;
+  final Color borderColor;
+  final IconData icon;
+  final Color iconColor;
+  final String text;
+  final String? label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: borderColor),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: iconColor),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (label != null) ...[
+                  Text(
+                    label!,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: iconColor,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                ],
+                Text(
+                  text,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.4,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryCard extends StatelessWidget {
+  const _SummaryCard({
+    required this.title,
+    required this.body,
+    required this.headerColor,
+    required this.confidence,
+  });
+  final String title;
+  final String body;
+  final Color headerColor;
+  final double confidence;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        boxShadow: AppShadows.card,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Programme-coloured header strip
+          Container(
+            width: double.infinity,
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: headerColor,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(AppRadius.card),
+                topRight: Radius.circular(AppRadius.card),
+              ),
+            ),
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          // Summary body
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+            child: Text(
+              body,
+              style: const TextStyle(
+                fontSize: 14,
+                color: AppColors.textPrimary,
+                height: 1.55,
+              ),
+            ),
+          ),
+          // Confidence footer
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 12,
+                  color: AppColors.aiPurple.withValues(alpha: 0.7),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'AI confidence: ${(confidence * 100).toStringAsFixed(0)}%',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textMuted,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionCard extends StatelessWidget {
+  const _SectionCard({
+    required this.title,
+    required this.icon,
+    required this.iconBg,
+    required this.iconColor,
+    required this.child,
+  });
+  final String title;
+  final IconData icon;
+  final Color iconBg;
+  final Color iconColor;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        boxShadow: AppShadows.listItem,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(AppRadius.rxIcon),
+                ),
+                child: Icon(icon, size: 16, color: iconColor),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                  color: AppColors.textPrimary,
+                  letterSpacing: 0.1,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Divider(height: 1, color: AppColors.border),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _NextActionsTimeline extends StatelessWidget {
+  const _NextActionsTimeline({required this.actions});
+  final List<NabaNextAction> actions;
+
+  static const _urgencyFg = {
+    'Now': AppColors.statusCritical,
+    'Today': Color(0xFFD97706),
+    'This week': AppColors.navy,
+  };
+  static const _urgencyBg = {
+    'Now': AppColors.statusCriticalSurface,
+    'Today': Color(0xFFFEF3C7),
+    'This week': Color(0xFFEFF6FF),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: List.generate(actions.length, (i) {
+        final a = actions[i];
+        final fgColor =
+            _urgencyFg[a.urgency] ?? AppColors.textMuted;
+        final bgColor =
+            _urgencyBg[a.urgency] ?? AppColors.cardSurfaceMuted;
+        final isLast = i == actions.length - 1;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Spine: circle + line
+            Column(
+              children: [
+                Container(
+                  width: 26,
+                  height: 26,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: fgColor.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: fgColor.withValues(alpha: 0.4),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Text(
+                    '${a.priority}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                      color: fgColor,
+                    ),
+                  ),
+                ),
+                if (!isLast)
+                  Container(width: 1.5, height: 16, color: AppColors.border),
+              ],
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      a.action,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textPrimary,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: bgColor,
+                        borderRadius: BorderRadius.circular(AppRadius.pill),
+                      ),
+                      child: Text(
+                        a.urgency.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: fgColor,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      }),
+    );
+  }
+}
+
+class _ClinicalFindingsCards extends StatelessWidget {
+  const _ClinicalFindingsCards({required this.findings});
+  final List<NabaClinicalFinding> findings;
+
+  Color _severityColor(String s) => switch (s) {
+        'High' => AppColors.statusCritical,
+        'Medium' => const Color(0xFFD97706),
+        _ => AppColors.statusSuccess,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: findings
+          .map((f) {
+            final sc = _severityColor(f.severity);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppColors.cardSurfaceMuted,
+                  borderRadius: BorderRadius.circular(AppRadius.rxIcon),
+                  border: Border(
+                    left: BorderSide(color: sc, width: 3.5),
+                  ),
+                ),
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            f.finding,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: sc.withValues(alpha: 0.12),
+                            borderRadius:
+                                BorderRadius.circular(AppRadius.flag),
+                          ),
+                          child: Text(
+                            f.severity.toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: sc,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      f.reason,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textMuted,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          })
+          .toList(),
+    );
+  }
+}
+
+class _DotList extends StatelessWidget {
+  const _DotList({required this.items, required this.dotColor});
+  final List<String> items;
+  final Color dotColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: items
+          .map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(
-                    Icons.warning_amber_rounded,
-                    color: AppColors.statusCritical,
-                    size: 24,
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: dotColor,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
                   ),
-                  const SizedBox(width: AppSpacing.md),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      VisitCompleteStrings.referralWarning,
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        color: AppColors.statusCriticalText,
-                        fontWeight: FontWeight.w600,
+                      item,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textPrimary,
+                        height: 1.5,
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: AppSpacing.h8xl),
-          ],
-          const SizedBox(height: AppSpacing.h8xl),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+          )
+          .toList(),
+    );
+  }
+}
+
+class _FollowUpRows extends StatelessWidget {
+  const _FollowUpRows({required this.items});
+  final List<NabaFollowUpItem> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: items
+          .map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE0E7FF),
+                      borderRadius:
+                          BorderRadius.circular(AppRadius.rxIcon),
+                    ),
+                    child: const Icon(
+                      Icons.event_rounded,
+                      size: 16,
+                      color: Color(0xFF4338CA),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.activity,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          item.timeline,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class _WhatsAppCard extends StatefulWidget {
+  const _WhatsAppCard({
+    required this.text,
+    this.patientPhone,
+    this.onShared,
+  });
+  final String text;
+  // Pre-loaded from MemberDao; pre-fills recipient in SMS and WhatsApp.
+  final String? patientPhone;
+  // Called when the user returns to the app after launching SMS or WhatsApp.
+  final VoidCallback? onShared;
+
+  @override
+  State<_WhatsAppCard> createState() => _WhatsAppCardState();
+}
+
+class _WhatsAppCardState extends State<_WhatsAppCard>
+    with WidgetsBindingObserver {
+  bool _copied = false;
+  // True after a launch so we fire onShared on the next app-resume event.
+  bool _launchedExternal = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _launchedExternal) {
+      _launchedExternal = false;
+      widget.onShared?.call();
+    }
+  }
+
+  Future<void> _copy() async {
+    await Clipboard.setData(ClipboardData(text: widget.text));
+    if (!mounted) return;
+    setState(() => _copied = true);
+    await Future<void>.delayed(const Duration(seconds: 2));
+    if (mounted) setState(() => _copied = false);
+  }
+
+  Future<void> _sendSms(BuildContext context) async {
+    final encoded = Uri.encodeComponent(widget.text);
+    // sms:<phone>?body=<text> pre-fills both the recipient and message body.
+    // When no phone is available, sms:?body=<text> still opens the composer.
+    final phone = widget.patientPhone ?? '';
+    final uri = Uri.parse('sms:$phone?body=$encoded');
+    if (!await canLaunchUrl(uri)) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(NabaStrings.smsNotAvailable)),
+        );
+      }
+      return;
+    }
+    await launchUrl(uri);
+    _launchedExternal = true;
+  }
+
+  Future<void> _sendWhatsApp(BuildContext context) async {
+    final encoded = Uri.encodeComponent(widget.text);
+    // Normalise phone: WhatsApp expects E.164 without the leading +.
+    // e.g. +8801700123456 → 8801700123456
+    final rawPhone = widget.patientPhone?.replaceAll(RegExp(r'[^\d]'), '') ?? '';
+
+    // whatsapp://send?phone=<e164>&text=<text> opens a chat to the number.
+    // Omitting the phone param opens the share sheet to pick any contact.
+    final phoneParam = rawPhone.isNotEmpty ? 'phone=$rawPhone&' : '';
+    final nativeUri = Uri.parse('whatsapp://send?${phoneParam}text=$encoded');
+    if (await canLaunchUrl(nativeUri)) {
+      await launchUrl(nativeUri);
+      _launchedExternal = true;
+      return;
+    }
+    // Fallback: wa.me/<phone>?text=<text> (browser universal link).
+    final waPath = rawPhone.isNotEmpty ? rawPhone : '';
+    final webUri = Uri.parse('https://wa.me/$waPath?text=$encoded');
+    if (await canLaunchUrl(webUri)) {
+      await launchUrl(webUri, mode: LaunchMode.externalApplication);
+      _launchedExternal = true;
+      return;
+    }
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(NabaStrings.whatsAppNotInstalled)),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppColors.waBg,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: AppColors.waBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header row ─────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 8, 0),
+            child: Row(
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: AppColors.whatsapp,
+                    borderRadius: BorderRadius.circular(AppRadius.waIcon),
+                  ),
+                  child: const Icon(
+                    Icons.chat_rounded,
+                    size: 15,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    NabaStrings.sectionWhatsApp,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                      color: AppColors.waHeader,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                // Copy button
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 180),
+                  child: _copied
+                      ? TextButton.icon(
+                          key: const ValueKey('copied'),
+                          onPressed: null,
+                          icon: const Icon(Icons.check_rounded, size: 14),
+                          label: const Text(
+                            NabaStrings.whatsAppCopied,
+                            style: TextStyle(fontSize: 11),
+                          ),
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppColors.statusSuccess,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        )
+                      : TextButton.icon(
+                          key: const ValueKey('copy'),
+                          onPressed: _copy,
+                          icon: const Icon(Icons.copy_rounded, size: 14),
+                          label: const Text(
+                            NabaStrings.copyWhatsApp,
+                            style: TextStyle(fontSize: 11),
+                          ),
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppColors.waHeader,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Divider(height: 1, color: AppColors.waBorder),
+          // ── Message body ───────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            child: Text(
+              widget.text,
+              style: const TextStyle(
+                fontSize: 13,
+                height: 1.55,
+                color: AppColors.textStrong,
+              ),
+            ),
+          ),
+          const Divider(height: 1, color: AppColors.waBorder),
+          // ── Share actions ──────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _sendSms(context),
+                    icon: const Icon(Icons.sms_rounded, size: 16),
+                    label: const Text(NabaStrings.sendViaSms),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.navy,
+                      side: const BorderSide(color: AppColors.border),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      textStyle: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () => _sendWhatsApp(context),
+                    icon: const Icon(Icons.chat_rounded, size: 16),
+                    label: const Text(NabaStrings.sendViaWhatsApp),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.whatsapp,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      textStyle: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BottomCtaBar extends StatelessWidget {
+  const _BottomCtaBar({
+    required this.naba,
+    required this.accepted,
+    required this.headerColor,
+    required this.referral,
+    required this.primaryProgramme,
+    required this.returnPath,
+    required this.onAccepted,
+    this.patientLabel,
+    this.memberId,
+    this.patientPhone,
+  });
+  final NabaResponse naba;
+  final bool accepted;
+  final Color headerColor;
+  final bool referral;
+  final Programme primaryProgramme;
+  final String returnPath;
+  final VoidCallback onAccepted;
+  final String? patientLabel;
+  final String? memberId;
+  final String? patientPhone;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Divider(height: 1, color: AppColors.border),
+        const SizedBox(height: 16),
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: accepted ? null : onAccepted,
+                  icon: const Icon(Icons.check_rounded),
+                  label: const Text(NabaStrings.acceptProposal),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: headerColor,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor:
+                        headerColor.withValues(alpha: 0.4),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    textStyle: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
               if (primaryProgramme == Programme.anc ||
                   primaryProgramme == Programme.pnc) ...[
-                FilledButton.icon(
-                  onPressed: () => context.push(
-                    '/teleconsult',
-                    extra: {
-                      'patientLabel': patientLabel ?? '',
-                      'patientId': memberId ?? '',
-                    },
-                  ),
-                  icon: const Icon(Icons.video_call_rounded),
-                  label: const Text(VisitCompleteStrings.bookTeleconsult),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: headerColor,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.xl),
-              ],
-              if (primaryProgramme == Programme.epi ||
-                  primaryProgramme == Programme.imci) ...[
-                FilledButton.icon(
-                  onPressed: () => context.push(
-                    '/counselling',
-                    extra: {
-                      'patientLabel': patientLabel ?? '',
-                      'patientId': memberId ?? '',
-                    },
-                  ),
-                  icon: const Icon(Icons.health_and_safety_rounded),
-                  label: const Text(VisitCompleteStrings.sendCounsellingMessage),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: headerColor,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => context.push(
+                      '/teleconsult',
+                      extra: {
+                        'patientLabel': patientLabel ?? '',
+                        'patientId': memberId ?? '',
+                      },
+                    ),
+                    icon: const Icon(Icons.video_call_rounded),
+                    label:
+                        const Text(VisitCompleteStrings.bookTeleconsult),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: headerColor,
+                      side: BorderSide(
+                          color: headerColor.withValues(alpha: 0.4)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
                   ),
                 ),
-                const SizedBox(height: AppSpacing.xl),
               ],
-              if (referralRecommended) ...[
-                OutlinedButton(
-                  onPressed: () => context.go('/tasks'),
-                  child: const Text(VisitCompleteStrings.createReferral),
+              if ((primaryProgramme == Programme.imci ||
+                      primaryProgramme == Programme.epi) &&
+                  naba.whatsappSummary != null) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => context.push(
+                      '/counselling',
+                      extra: {
+                        'patientLabel': patientLabel ?? '',
+                        'patientId': memberId ?? '',
+                        'whatsappMessage': naba.whatsappSummary,
+                        'patientPhone': patientPhone,
+                      },
+                    ),
+                    icon: const Icon(Icons.chat_rounded),
+                    label: const Text(VisitCompleteStrings.sendCounsellingMessage),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: headerColor,
+                      side: BorderSide(
+                          color: headerColor.withValues(alpha: 0.4)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
                 ),
-                const SizedBox(height: AppSpacing.xl),
               ],
+              if (referral) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () => context.go('/tasks'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.statusCritical,
+                      side: const BorderSide(
+                          color: AppColors.statusCriticalBorder),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: const Text(VisitCompleteStrings.createReferral),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 4),
               TextButton(
-                onPressed: () => context.go(_returnPath),
+                onPressed: () => context.go(returnPath),
+                style: TextButton.styleFrom(
+                    foregroundColor: AppColors.textMuted),
                 child: const Text(VisitCompleteStrings.backToHome),
               ),
             ],
           ),
         ],
-      ),
-    );
+      );
   }
 }

@@ -44,6 +44,7 @@ abstract final class AppColors {
   // ─── Canvas / neutrals ─────────────────────────────────────
   // HTML: --bg, --card, --text, --muted, --border
   static const Color canvas           = Color(0xFFF0F2F8); // --bg
+  static const Color pageBackground   = Color(0xFFF5F6FB); // enrollment/form page canvas
   static const Color cardSurface      = Color(0xFFFFFFFF); // --card / --white
   static const Color cardSurfaceMuted = Color(0xFFF8F9FC);
   static const Color chatBg           = Color(0xFFF9FAFB); // .chat-area background

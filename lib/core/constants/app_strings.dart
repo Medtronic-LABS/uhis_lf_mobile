@@ -3031,6 +3031,59 @@ abstract final class VisitFlowStrings {
   static const String discardConfirmCta = 'Yes, leave';
 }
 
+/// Strings for the AI Next Best Action (NABA) Step 3 screen.
+abstract final class NabaStrings {
+  NabaStrings._();
+
+  static const String loadingTitle = 'Generating care plan…';
+  static const String loadingSubtitle =
+      'AI is reviewing the assessment. This takes a few seconds.';
+
+  static const String errorTitle = 'Could not generate care plan';
+  static const String errorSubtitle =
+      'The assessment has been saved. Tap Retry to try again, or '
+      'continue without AI recommendations.';
+  static const String retryButton = 'Retry';
+  static const String skipButton = 'Skip — go to home';
+
+  static const String sectionDangerSigns = 'Danger signs to watch for';
+  static const String sectionFindings = 'Clinical findings';
+  static const String sectionNextActions = 'Next actions';
+  static const String sectionCounselling = 'Counselling points';
+  static const String sectionMedication = 'Medication advice';
+  static const String sectionFollowUp = 'Follow-up schedule';
+  static const String sectionReferral = 'Referral recommendation';
+  static const String sectionWhatsApp = 'WhatsApp counselling (Bangla)';
+  static const String sectionRationale = 'AI rationale';
+
+  static const String humanReviewBadge = 'Human review recommended';
+  static const String highConfidence = 'High confidence';
+  static const String referralRequired = 'Referral required';
+  static const String referralNotRequired = 'No referral needed';
+
+  static const String urgencyNow = 'NOW';
+  static const String urgencyToday = 'TODAY';
+  static const String urgencyThisWeek = 'THIS WEEK';
+  static const String urgencyRoutine = 'ROUTINE';
+
+  static const String severityHigh = 'High';
+  static const String severityMedium = 'Medium';
+  static const String severityLow = 'Low';
+
+  static const String copyWhatsApp = 'Copy';
+  static const String whatsAppCopied = 'Copied!';
+  static const String sendViaSms = 'Send via SMS';
+  static const String sendViaWhatsApp = 'Send via WhatsApp';
+  static const String whatsAppNotInstalled =
+      'WhatsApp is not installed on this device.';
+  static const String smsNotAvailable =
+      'SMS is not available on this device.';
+
+  static const String acceptProposal = 'Accept & continue';
+  static const String proposalNote =
+      'This is an AI proposal. Review and accept to proceed.';
+}
+
 /// Teleconsult placeholder screen strings.
 /// Used by [TeleconsultScreen].
 abstract final class TeleconsultStrings {
@@ -3052,14 +3105,14 @@ abstract final class CounsellingStrings {
 
   static const String title = 'Counselling Messages';
   static const String subtitle = 'AI-generated health counselling';
-  static const String comingSoon = 'AI messages coming soon';
-  static const String typeMessage = 'Type a message...';
-  static const String messagePlaceholder1 =
-      'Remember to take your iron + folic acid tablet every day with food.';
-  static const String messagePlaceholder2 =
-      'Your next ANC visit is in 4 weeks. Please attend even if you feel well.';
-  static const String messagePlaceholder3 =
-      'Drink at least 8 glasses of water daily and rest when you feel tired.';
+  static const String sendWhatsApp = 'Send via WhatsApp';
+  static const String sendSms = 'Send via SMS';
+  static const String copyMessage = 'Copy message';
+  static const String noMessage =
+      'No counselling message generated for this visit.';
+  static const String whatsAppNotInstalled =
+      'WhatsApp is not installed on this device.';
+  static const String smsNotAvailable = 'SMS is not available on this device.';
 }
 
 /// Training Hub placeholder screen strings.
@@ -3115,4 +3168,273 @@ abstract final class FormGalleryStrings {
   static const String symptomsTab  = 'Symptoms';
   static const String programmesTab = 'Programmes';
   static const String fields       = 'fields';
+}
+
+/// Household enrollment flow strings.
+abstract final class EnrollmentStrings {
+  EnrollmentStrings._();
+
+  // ── NID Scan Screen ──────────────────────────────────────────────────────
+  static const String nidScanTitle = 'Scan Head\'s ID';
+  static const String nidScanSubtitle = 'Position ID card in the frame';
+  static const String nidScanOrCreate = 'Or create household manually';
+  static const String nidScanCameraHint = 'Place ID card here';
+
+  // ── Create Household Screen (Step 1) ──────────────────────────────────────
+  static const String createHouseholdTitle = 'Household Information';
+  static const String createHouseholdSubtitle = 'Step 1 of 2';
+
+  static const String householdNumberLabel = 'Household Number';
+  static const String householdNumberHint = 'Auto-generated';
+
+  static const String healthWorkerLabel = 'Health Worker';
+  static const String healthWorkerHint = 'Your name';
+
+  static const String villageLabel = 'Village';
+  static const String villageHint = 'Select village';
+
+  static const String householdTypeLabel = 'Household Type';
+  static const List<String> householdTypes = [
+    'Single-family',
+    'Multi-family',
+    'Institutional',
+    'Other',
+  ];
+
+  static const String numberOfMembersLabel = 'Number of Members';
+  static const String numberOfMembersHint = 'Estimated count';
+
+  static const String houseNumberLabel = 'House Number';
+  static const String houseNumberHint = 'e.g., 123 A/B';
+
+  static const String occupationLabel = 'Primary Occupation';
+  static const String occupationHint = 'Farmer, Labour, Business, etc.';
+
+  static const String monthlyIncomeLabel = 'Monthly Income';
+  static const List<String> incomeRanges = [
+    '<10000',
+    '10000-25000',
+    '25000-50000',
+    '>50000',
+  ];
+
+  static const String disabilityQuestionLabel =
+      'Does any household member have a disability?';
+  static const String disabilityDetailsLabel = 'Please specify';
+  static const String disabilityDetailsHint = 'Type of disability';
+
+  // ── Household Head Info Screen (Step 2) ──────────────────────────────────
+  static const String householdHeadTitle = 'Household Head Information';
+  static const String householdHeadSubtitle = 'Step 2 of 2';
+
+  static const String headNameLabel = 'Full Name';
+  static const String headNameHint = 'Head\'s full name';
+
+  static const String fatherNameLabel = 'Father\'s Name';
+  static const String fatherNameHint = 'As printed on the NID (Bangla)';
+  static const String motherNameLabel = 'Mother\'s Name';
+  static const String motherNameHint = 'As printed on the NID (Bangla)';
+
+  static const String idTypeLabel = 'ID Type';
+  static const List<String> idTypes = ['BRN', 'NID'];
+
+  static const String idNumberLabel = 'ID Number';
+  static const String idNumberHint = 'Birth Registration or NID number';
+
+  static const String mobileNumberLabel = 'Mobile Number';
+  static const String mobileNumberHint = '+880 1XXX XXXXXX';
+  static const String mobileNotAvailableLabel = 'Not Available';
+
+  static const String dateOfBirthLabel = 'Date of Birth';
+  static const String dateOfBirthHint = 'DD/MM/YYYY';
+  static const String approximateAgeLabel = 'Or Approximate Age';
+  static const String approximateAgeHint = 'Years';
+
+  static const String ageLabel = 'Age';
+  static const String ageHint = 'Calculated from DOB';
+
+  static const String genderLabel = 'Gender';
+  static const List<String> genders = ['Male', 'Female', 'Other'];
+
+  static const String maritalStatusLabel = 'Marital Status';
+  static const List<String> maritalStatuses = [
+    'Single',
+    'Married',
+    'Widowed',
+    'Divorced',
+  ];
+
+  static const String disabilityStatusLabel = 'Disability Status';
+  static const List<String> disabilityStatuses = [
+    'None',
+    'Physical',
+    'Sensory',
+    'Cognitive',
+    'Multiple',
+  ];
+
+  // ── Add Member Screen ────────────────────────────────────────────────────
+  static const String addMemberTitle = 'Add Household Member';
+  static const String memberNameLabel = 'Full Name';
+  static const String memberNameHint = 'Member\'s full name';
+
+  static const String relationshipToHeadLabel = 'Relationship to Head';
+  static const List<String> relationships = [
+    'Spouse',
+    'Child',
+    'Parent',
+    'Sibling',
+    'Other',
+  ];
+
+  static const String memberVillageLabel = 'Village (if different)';
+  static const String memberVillageHint = 'For external members';
+
+  static const String nidScanCTA = 'Scan ID (Optional)';
+
+  // ── Success Screen ───────────────────────────────────────────────────────
+  static const String householdCreatedTitle = 'Household Enrolled!';
+  static const String householdCreatedSubtitle =
+      'Your household has been created successfully.';
+
+  static const String householdDetailsTitle = 'Household Details';
+
+  static const String membersAddedLabel = 'Members Added';
+  static String membersAddedCount(int count) => '$count members';
+
+  static const String addMoreMembers = 'Add Member';
+  static const String saveHousehold = 'Save & Continue';
+
+  // ── Shared validation messages ───────────────────────────────────────────
+  static const String fieldRequired = 'This field is required';
+  static const String invalidEmail = 'Please enter a valid email';
+  static const String invalidPhone = 'Please enter a valid phone number';
+  static const String invalidAge = 'Please enter a valid age';
+  static const String invalidDate = 'Please enter a valid date';
+
+  static const String enrollmentFailed = 'Enrollment failed';
+  static const String enrollmentSuccess = 'Household enrolled successfully';
+
+  // ── Common CTA buttons ───────────────────────────────────────────────────
+  static const String next = 'Next';
+  static const String previous = 'Previous';
+  static const String save = 'Save';
+  static const String cancel = 'Cancel';
+  static const String submit = 'Submit';
+  static const String createHousehold = 'Create Household';
+  static const String scanAgain = 'Scan Again';
+
+  // ── Redesign (v2) additions ───────────────────────────────────────────────
+  static const String createHouseholdAppBarSubtitle =
+      'Register a new household in your catchment area';
+
+  static const String householdInfoSectionHeader = '🏠 Household Information';
+  static const String householdHeadSectionHeader =
+      '👤 Household Head Information';
+
+  static const String autoGeneratedSuffix = '(auto-generated)';
+
+  static const String householdTypeHint = 'Select type';
+  static const String householdHeadOccupationLabel = 'Household Head Occupation';
+  static const String monthlyIncomeInputLabel = 'Monthly Household Income (BDT)';
+  static const String monthlyIncomeInputHint = 'e.g. 12000';
+  static const String disabilityAnyPersonLabel =
+      'Any person with disability?';
+  static const String disabilityPersonCountLabel =
+      'Number of persons with disability';
+  static const String disabilityPersonCountHint = 'e.g. 1';
+
+  static const String totalMembersLabel = 'Total Household Members';
+  static const String totalMembersHint = 'e.g. 5';
+
+  static const List<String> householdTypesV2 = ['BRAC VO', 'NVO'];
+  static const List<String> gendersHead = ['Male', 'Female', 'Third Gender'];
+  static const List<String> maritalStatusesV2 = [
+    'Married',
+    'Single',
+    'Separated / Divorced',
+    'Widowed',
+    'Unmarried',
+  ];
+  static const List<String> disabilityStatusesV2 = ['Present', 'Absent'];
+  static const List<String> disabilityYesNo = ['Yes', 'No'];
+  static const List<String> gendersMember = ['Male', 'Female', 'Other'];
+  static const List<String> idTypesV2 = ['BRN', 'National ID'];
+
+  static const List<String> healthWorkerOptions = [
+    'Jahnara Begum — Char Bhadra',
+    'Fatema Khatun — Bhadra',
+    'Roksana Akter — Noyapara',
+  ];
+  static const List<String> villageOptions = [
+    'Char Bhadra',
+    'Bhadra',
+    'Noyapara',
+  ];
+  static const List<String> occupationOptions = [
+    'Farmer',
+    'Day labourer',
+    'Rickshaw / transport',
+    'Small business',
+    'Garments worker',
+    'Government service',
+    'Private service',
+    'Housewife',
+    'Other',
+  ];
+
+  static const String continueArrow = 'Continue →';
+  static const String createHouseholdCTA = '✓ Create Household';
+  static const String saveMemberCTA = 'Save Member →';
+
+  static const String mobileNotAvailableHint = 'Not Available';
+
+  static const String nidScanButtonLabel = 'Scan NID card to read number';
+  static const String nidScanNoBrnHint =
+      'If member has no NID, enter Birth Registration ID instead.';
+  static String nidNumberCaptured(String number) =>
+      '✓ NID number captured: $number';
+  static const String nidScanNotFound =
+      'Could not read the NID number. Try again or type it in below.';
+  static const String nidScanError =
+      'Camera unavailable. Please type the NID number below.';
+  static const String headPrefilledFromScan =
+      'Name, date of birth & NID read from the card — verify, then add '
+      "father's & mother's names (Bangla) manually.";
+  static String nidDetailsCaptured(String number) =>
+      '✓ Read from NID · verify the details below';
+
+  // ── Existing-patient lookup (POST /spice-service/patient/search) ───────────
+  /// Shown in the Add Member form after a scanned NID matches an existing
+  /// registration and the server demographics have been loaded in.
+  static String existingPatientLoaded(String name) =>
+      '✓ Already registered as $name — details loaded from server';
+
+  /// Compact banner shown on the post-scan sheet when the scanned NID already
+  /// belongs to a registered patient.
+  static String existingPatientFound(String name) =>
+      'Already registered as $name';
+
+  static const String existingPatientHint =
+      'This person is already in the system — link them to a household '
+      'instead of registering again.';
+
+  static const String dobHelperText =
+      'If exact DOB is unknown, leave blank and enter approximate age below.';
+  static const String villageHelperText =
+      'Only if member lives outside this household\'s village';
+  static const String villageMemberHint = 'Leave blank if same village';
+  static const String otpHelperText = 'OTP verification required';
+
+  static const String addMemberSubtitle = 'Adding to';
+
+  static const String householdMembersSectionHeader = '👪 Household Members';
+
+  static const String householdCreatedTitle2 = 'Household Created';
+
+  // Detail card labels
+  static const String detailLabelHouseholdNo = 'Household No.';
+  static const String detailLabelHouseNo = 'House No.';
+  static const String detailLabelVillage = 'Village';
+  static const String detailLabelTotalMembers = 'Total Members';
 }
