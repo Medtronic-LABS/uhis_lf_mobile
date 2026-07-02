@@ -3266,6 +3266,21 @@ abstract final class EnrollmentStrings {
   static String nidDetailsCaptured(String number) =>
       '✓ Read from NID · verify the details below';
 
+  // ── Existing-patient lookup (POST /spice-service/patient/search) ───────────
+  /// Shown in the Add Member form after a scanned NID matches an existing
+  /// registration and the server demographics have been loaded in.
+  static String existingPatientLoaded(String name) =>
+      '✓ Already registered as $name — details loaded from server';
+
+  /// Compact banner shown on the post-scan sheet when the scanned NID already
+  /// belongs to a registered patient.
+  static String existingPatientFound(String name) =>
+      'Already registered as $name';
+
+  static const String existingPatientHint =
+      'This person is already in the system — link them to a household '
+      'instead of registering again.';
+
   static const String dobHelperText =
       'If exact DOB is unknown, leave blank and enter approximate age below.';
   static const String villageHelperText =

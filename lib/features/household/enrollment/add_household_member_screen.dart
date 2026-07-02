@@ -1,12 +1,16 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/api/api_repository.dart';
+import '../../../core/models/patient.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_strings.dart';
 import 'enrollment_controller.dart';
 import 'nid_ocr_service.dart';
+import 'patient_lookup_repository.dart';
 import 'models/household_enrollment_models.dart';
 import 'widgets/enrollment_input_field.dart';
 import 'widgets/enrollment_segmented_buttons.dart';
@@ -42,6 +46,10 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   bool _mobileNotAvailable = false;
   bool _nidScanned = false;
   bool _scanLoading = false;
+
+  /// Set when the scanned NID matches a patient already registered on the
+  /// server — surfaces a de-duplication banner and loads authoritative details.
+  Patient? _existingPatient;
 
   @override
   void initState() {
@@ -117,6 +125,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
         final data = result.data!;
         setState(() {
           _nidScanned = true;
+          _existingPatient = null;
           if (data.nidNumber != null) _brnCtrl.text = data.nidNumber!;
           if (data.name != null) _nameCtrl.text = data.name!;
           final dob = data.dateOfBirth;
@@ -126,6 +135,8 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
             if (parsed != null) _calculateAge(parsed);
           }
         });
+        final nid = data.nidNumber;
+        if (nid != null) await _lookupExisting(nid);
       case NidScanStatus.notFound:
         _showSnack(EnrollmentStrings.nidScanNotFound);
       case NidScanStatus.error:
@@ -133,6 +144,49 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       case NidScanStatus.cancelled:
         break;
     }
+  }
+
+  /// Best-effort remote lookup: if the scanned NID is already registered, load
+  /// the server's demographics over the OCR values (authoritative) and flag the
+  /// duplicate. Offline / transport failures degrade silently to OCR-only.
+  Future<void> _lookupExisting(String nid) async {
+    final repo = context.read<PatientLookupRepository>();
+    try {
+      final patient = await repo.lookupByNid(nid);
+      if (!mounted || patient == null) return;
+      setState(() {
+        _existingPatient = patient;
+        final name = patient.name;
+        if (name != null && name.isNotEmpty) _nameCtrl.text = name;
+        final dob = patient.dob;
+        if (dob != null && dob.isNotEmpty) {
+          _dobCtrl.text = dob;
+          final parsed = DateTime.tryParse(dob);
+          if (parsed != null) _calculateAge(parsed);
+        }
+        _gender = _matchGender(patient.gender) ?? _gender;
+        final phone = patient.phone;
+        if (phone != null && phone.isNotEmpty) {
+          _mobileCtrl.text = phone;
+          _mobileNotAvailable = false;
+        }
+      });
+    } on DioException catch (_) {
+      // Offline or transport error — keep OCR values, no user-facing error.
+    } on ApiException catch (e) {
+      debugPrint('Add member: patient lookup failed: $e');
+    }
+  }
+
+  /// Map a server gender string onto one of the segmented-button options,
+  /// case-insensitively. Returns null when it doesn't match so the control is
+  /// left untouched rather than desynced.
+  String? _matchGender(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    for (final g in EnrollmentStrings.gendersMember) {
+      if (g.toLowerCase() == raw.toLowerCase()) return g;
+    }
+    return null;
   }
 
   void _showSnack(String message) {
@@ -304,6 +358,60 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                             fontWeight: FontWeight.w600,
                             color: Color(0xFF14996A),
                           ),
+                        ),
+                      ),
+                    ],
+
+                    // Existing-registration de-duplication banner
+                    if (_existingPatient != null) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          border: Border.all(color: const Color(0xFF3B82F6)),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.badge_outlined,
+                              size: 16,
+                              color: Color(0xFF1D4ED8),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    EnrollmentStrings.existingPatientLoaded(
+                                      _existingPatient?.name ?? '',
+                                    ),
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF1D4ED8),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  const Text(
+                                    EnrollmentStrings.existingPatientHint,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Color(0xFF1D4ED8),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],

@@ -1,12 +1,16 @@
 import 'package:camera/camera.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/api/api_repository.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/models/patient.dart';
 import 'enrollment_controller.dart';
 import 'nid_ocr_service.dart';
+import 'patient_lookup_repository.dart';
 
 // Design tokens — prototype-aligned
 const _teal = Color(0xFF6EE7B7);
@@ -50,6 +54,9 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
   _OverlayState _overlayState = _OverlayState.scanner;
   bool _isScanning = false;
   NidCardData? _scanned;
+
+  /// Non-null when the scanned NID already belongs to a registered patient.
+  Patient? _existingPatient;
 
   final NidOcrService _ocr = NidOcrService();
 
@@ -139,14 +146,33 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
       case NidScanStatus.success:
         setState(() {
           _scanned = result.data;
+          _existingPatient = null;
           _overlayState = _OverlayState.postScan;
         });
+        final nid = result.data?.nidNumber;
+        if (nid != null) _lookupExisting(nid);
       case NidScanStatus.notFound:
         _showSnack(EnrollmentStrings.nidScanNotFound);
       case NidScanStatus.error:
         _showSnack(EnrollmentStrings.nidScanError);
       case NidScanStatus.cancelled:
         break;
+    }
+  }
+
+  /// Best-effort remote check: does this scanned NID already belong to a
+  /// registered patient? Surfaces a de-duplication banner on the post-scan
+  /// sheet. Offline / transport failures degrade silently.
+  Future<void> _lookupExisting(String nid) async {
+    final repo = context.read<PatientLookupRepository>();
+    try {
+      final patient = await repo.lookupByNid(nid);
+      if (!mounted || patient == null) return;
+      setState(() => _existingPatient = patient);
+    } on DioException catch (_) {
+      // Offline or transport error — no duplicate warning, no user-facing error.
+    } on ApiException catch (e) {
+      debugPrint('EnrollmentOverlay: patient lookup failed: $e');
     }
   }
 
@@ -183,6 +209,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
               if (_overlayState == _OverlayState.postScan)
                 _PostScanSheet(
                   data: _scanned,
+                  existing: _existingPatient,
                   onLinkExisting: () => Navigator.of(context).pop(),
                   onCreateNew: () {
                     Navigator.of(context).pop();
@@ -644,11 +671,15 @@ class _CornerPainter extends CustomPainter {
 class _PostScanSheet extends StatelessWidget {
   const _PostScanSheet({
     required this.data,
+    required this.existing,
     required this.onLinkExisting,
     required this.onCreateNew,
   });
 
   final NidCardData? data;
+
+  /// Non-null when the scanned NID matches a patient already registered.
+  final Patient? existing;
   final VoidCallback onLinkExisting;
   final VoidCallback onCreateNew;
 
@@ -657,6 +688,7 @@ class _PostScanSheet extends StatelessWidget {
     final name = data?.name;
     final dob = data?.dateOfBirth;
     final nid = data?.nidNumber;
+    final existingName = existing?.name;
     return Positioned(
       left: 0,
       right: 0,
@@ -751,6 +783,50 @@ class _PostScanSheet extends StatelessWidget {
                 ],
               ),
             ),
+            // Existing-registration de-duplication banner
+            if (existing != null) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  border: Border.all(color: const Color(0xFF3B82F6)),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.badge_outlined,
+                        size: 16, color: Color(0xFF1D4ED8)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            EnrollmentStrings.existingPatientFound(
+                                existingName ?? ''),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF1D4ED8),
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          const Text(
+                            EnrollmentStrings.existingPatientHint,
+                            style: TextStyle(
+                                fontSize: 11, color: Color(0xFF1D4ED8)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 10),
             // Father / Mother cannot be OCR'd (Bengali only) — set expectation.
             Container(

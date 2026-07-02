@@ -11,6 +11,11 @@ class Endpoints {
   /// Returns user hierarchy: villages, subVillages, workflowIds, facilities.
   static const String staticUserData = '/spice-service/static-data/user-data';
 
+  /// Patient search by identifier / free text. Used to look up an existing
+  /// registration from a scanned NID before enrolling a duplicate.
+  /// Postman: `patient-controller/searchPatient` → `{{spice_url}}/patient/search`.
+  static const String patientSearch = '/spice-service/patient/search';
+
   // ── Offline-service: bulk sync ────────────────────────────────────────────
   /// Bulk pull — households, members, followUps, householdMemberLinks.
   static const String offlineSyncFetch =
