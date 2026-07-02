@@ -77,9 +77,11 @@ class EnrollmentRepository extends ApiRepository {
       'name': head.name,
       'householdNo': household.householdNumber,
       'householdType': household.householdType,
-      'villageId': villageId.toString(),
-      'subVillageId': subVillageId.toString(),
-      'village': household.villageName ?? '',
+      // Backend villageId = sub-village ID (what fetch-synced-data filters on).
+      // hierarchy.villages = unions (id=40), hierarchy.subVillages = actual villages (id=262).
+      'villageId': subVillageId.toString(),
+      'subVillageId': villageId.toString(),
+      'village': household.subVillageName ?? household.villageName ?? '',
       'shasthyaShebikaId': userId,
       'noOfPeople': household.numberOfMembers,
       'householdHeadOccupation': household.occupation,
@@ -131,7 +133,7 @@ class EnrollmentRepository extends ApiRepository {
       'householdReferenceId': householdReferenceId,
       'name': member.name,
       'nationalId': member.idNumber ?? '',
-      'idType': member.idType.toLowerCase(),
+      'idType': _normalizeIdType(member.idType),
       'dateOfBirth': normDob,
       'gender': member.gender.toLowerCase(),
       'isHouseholdHead': isHouseholdHead,
@@ -139,10 +141,10 @@ class EnrollmentRepository extends ApiRepository {
       'isChild': _isChild(member.age, normDob),
       'maritalStatus': member.maritalStatus.toLowerCase(),
       'disability': _disabilityValue(member.disabilityStatus),
-      'villageId': villageId,
-      'subVillageId': subVillageId,
-      'village': villageName,
-      'subVillage': subVillageName,
+      'villageId': subVillageId,
+      'subVillageId': villageId,
+      'village': subVillageName.isNotEmpty ? subVillageName : villageName,
+      'subVillage': villageName,
       'phoneNumber': member.mobileNumber ?? '',
       'latitude': 0.0,
       'longitude': 0.0,
@@ -224,6 +226,12 @@ class EnrollmentRepository extends ApiRepository {
     final parsed = DateTime.tryParse(normDob);
     if (parsed == null) return false;
     return DateTime.now().difference(parsed).inDays < 18 * 365;
+  }
+
+  /// Normalize idType to backend-expected values: 'nid' or 'brn'.
+  static String _normalizeIdType(String raw) {
+    final s = raw.toLowerCase().replaceAll(' ', '');
+    return s == 'nationalid' ? 'nid' : s;
   }
 
   /// Convert internal disabilityStatus to the API "absent"/"present" string.

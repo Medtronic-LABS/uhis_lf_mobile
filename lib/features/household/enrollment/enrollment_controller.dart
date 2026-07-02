@@ -163,9 +163,6 @@ class EnrollmentController extends ChangeNotifier {
     if (_household!.houseNumber.trim().isEmpty) {
       errors.add('House number is required');
     }
-    if (_household!.occupation.trim().isEmpty) {
-      errors.add('Occupation is required');
-    }
     if (_household!.disabilityQuestion &&
         (_household!.disabilityDetails?.trim().isEmpty ?? true)) {
       errors.add('Please specify disability details');
@@ -186,18 +183,8 @@ class EnrollmentController extends ChangeNotifier {
     if (_householdHead!.name.trim().isEmpty) {
       errors.add('Head name is required');
     }
-    if (_householdHead!.age <= 0) {
-      errors.add('Head age must be valid');
-    }
-    if (_householdHead!.dateOfBirth.isEmpty) {
-      errors.add('Date of birth is required');
-    }
     if (_householdHead!.idNumber?.trim().isEmpty ?? true) {
       errors.add('ID number is required');
-    }
-    if (!_householdHead!.mobileAvailable &&
-        (_householdHead!.mobileNumber?.trim().isEmpty ?? true)) {
-      errors.add('Mobile number is required');
     }
     if (_householdHead!.maritalStatus.isEmpty) {
       errors.add('Marital status is required');

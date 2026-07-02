@@ -219,7 +219,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
                   onCreateNew: () {
                     Navigator.of(context).pop();
                     context.push(
-                      '/household/enrollment/head-info',
+                      '/household/enrollment/create',
                       extra: {
                         'fromNidScan': true,
                         'nidNumber': _scanned?.nidNumber,

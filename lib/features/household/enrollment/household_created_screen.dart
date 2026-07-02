@@ -26,42 +26,6 @@ class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
   @override
   void initState() {
     super.initState();
-    // Add pre-filled mock members on first build
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final controller = context.read<EnrollmentController>();
-      if (controller.members.isEmpty) {
-        controller.addMember(
-          HouseholdMember(
-            name: 'Ajay Kumar',
-            age: 42,
-            gender: 'Male',
-            dateOfBirth: '1982-05-20',
-            idType: 'NID',
-            idNumber: '1234567890123',
-            relationshipToHead: 'Head',
-            maritalStatus: 'Married',
-            disabilityStatus: 'Absent',
-            nidScanned: true,
-          ),
-        );
-
-        controller.addMember(
-          HouseholdMember(
-            name: 'Asha Kumari',
-            age: 38,
-            gender: 'Female',
-            dateOfBirth: '1986-08-15',
-            idType: 'BRN',
-            idNumber: '9876543210987',
-            relationshipToHead: 'Spouse',
-            maritalStatus: 'Married',
-            disabilityStatus: 'Absent',
-            nidScanned: false,
-          ),
-        );
-      }
-    });
   }
 
   Future<void> _handleSave(EnrollmentController controller) async {

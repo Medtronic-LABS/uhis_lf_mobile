@@ -25,8 +25,9 @@ import '../features/teleconsult/teleconsult_screen.dart';
 import '../features/training/training_screen.dart';
 import '../features/visit/briefing/visit_briefing_screen.dart';
 import '../features/visit/visit_flow_screen.dart';
+import '../core/api/api_client.dart';
+import '../core/auth/auth_repository.dart';
 import '../features/household/enrollment/create_household_screen.dart';
-import '../features/household/enrollment/household_head_info_screen.dart';
 import '../features/household/enrollment/household_created_screen.dart';
 import '../features/household/enrollment/add_household_member_screen.dart';
 import '../features/household/enrollment/enrollment_controller.dart';
@@ -334,56 +335,49 @@ GoRouter buildRouter(AuthState auth) {
       ),
 
       // ─────────────────────────────────────────────────────────────────────
-      // Household enrollment flow routes (entry via overlay on dashboard)
+      // Household enrollment flow — single shared EnrollmentController
+      // with auth deps, persisted across all enrollment screens.
       // ─────────────────────────────────────────────────────────────────────
-      GoRoute(
-        path: '/household/enrollment/create',
-        pageBuilder: (context, state) => MaterialPage(
-          key: const ValueKey('enrollment-create'),
-          child: ChangeNotifierProvider(
-            create: (_) => EnrollmentController(),
-            child: const CreateHouseholdScreen(),
+      ShellRoute(
+        navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'enrollment'),
+        builder: (context, state, child) => ChangeNotifierProvider(
+          create: (ctx) => EnrollmentController(
+            auth: ctx.read<AuthRepository>(),
+            apiClient: ctx.read<ApiClient>(),
           ),
+          child: child,
         ),
-      ),
-      GoRoute(
-        path: '/household/enrollment/head-info',
-        pageBuilder: (context, state) {
-          final extra = state.extra as Map<String, dynamic>?;
-          final fromNidScan = extra?['fromNidScan'] == true;
-          return MaterialPage(
-            key: const ValueKey('enrollment-head-info'),
-            child: ChangeNotifierProvider(
-              create: (_) => EnrollmentController(),
-              child: HouseholdHeadInfoScreen(
-                fromNidScan: fromNidScan,
-                scannedNidNumber: extra?['nidNumber'] as String?,
-                scannedName: extra?['name'] as String?,
-                scannedDateOfBirth: extra?['dateOfBirth'] as String?,
-              ),
+        routes: [
+          GoRoute(
+            path: '/household/enrollment/create',
+            pageBuilder: (context, state) {
+              final extra = state.extra as Map<String, dynamic>?;
+              return MaterialPage(
+                key: const ValueKey('enrollment-create'),
+                child: CreateHouseholdScreen(
+                  fromNidScan: extra?['fromNidScan'] == true,
+                  scannedNidNumber: extra?['nidNumber'] as String?,
+                  scannedName: extra?['name'] as String?,
+                  scannedDateOfBirth: extra?['dateOfBirth'] as String?,
+                ),
+              );
+            },
+          ),
+          GoRoute(
+            path: '/household/enrollment/success',
+            pageBuilder: (context, state) => const MaterialPage(
+              key: ValueKey('enrollment-success'),
+              child: HouseholdCreatedScreen(),
             ),
-          );
-        },
-      ),
-      GoRoute(
-        path: '/household/enrollment/success',
-        pageBuilder: (context, state) => MaterialPage(
-          key: const ValueKey('enrollment-success'),
-          child: ChangeNotifierProvider(
-            create: (_) => EnrollmentController(),
-            child: const HouseholdCreatedScreen(),
           ),
-        ),
-      ),
-      GoRoute(
-        path: '/household/enrollment/add-member',
-        pageBuilder: (context, state) => MaterialPage(
-          key: const ValueKey('enrollment-add-member'),
-          child: ChangeNotifierProvider(
-            create: (_) => EnrollmentController(),
-            child: const AddHouseholdMemberScreen(),
+          GoRoute(
+            path: '/household/enrollment/add-member',
+            pageBuilder: (context, state) => const MaterialPage(
+              key: ValueKey('enrollment-add-member'),
+              child: AddHouseholdMemberScreen(),
+            ),
           ),
-        ),
+        ],
       ),
 
       // ─────────────────────────────────────────────────────────────────────
