@@ -411,6 +411,8 @@ GoRouter buildRouter(AuthState auth) {
             child: CounsellingScreen(
               patientLabel: extra['patientLabel'] as String? ?? '',
               patientId: extra['patientId'] as String? ?? '',
+              whatsappMessage: extra['whatsappMessage'] as String?,
+              patientPhone: extra['patientPhone'] as String?,
             ),
           );
         },

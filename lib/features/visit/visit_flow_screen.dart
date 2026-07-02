@@ -1332,6 +1332,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
                 primaryProgramme: widget.primaryProgramme,
                 patientLabel: widget.patientLabel,
                 memberId: widget.memberId,
+                patientPhone: _patientPhone,
                 returnPath: _returnPath,
                 onAccepted: () => _onAccepted(naba),
               ),
@@ -2261,6 +2262,7 @@ class _BottomCtaBar extends StatelessWidget {
     required this.onAccepted,
     this.patientLabel,
     this.memberId,
+    this.patientPhone,
   });
   final NabaResponse naba;
   final bool accepted;
@@ -2271,6 +2273,7 @@ class _BottomCtaBar extends StatelessWidget {
   final VoidCallback onAccepted;
   final String? patientLabel;
   final String? memberId;
+  final String? patientPhone;
 
   @override
   Widget build(BuildContext context) {
@@ -2318,6 +2321,33 @@ class _BottomCtaBar extends StatelessWidget {
                     icon: const Icon(Icons.video_call_rounded),
                     label:
                         const Text(VisitCompleteStrings.bookTeleconsult),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: headerColor,
+                      side: BorderSide(
+                          color: headerColor.withValues(alpha: 0.4)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
+              if ((primaryProgramme == Programme.imci ||
+                      primaryProgramme == Programme.epi) &&
+                  naba.whatsappSummary != null) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => context.push(
+                      '/counselling',
+                      extra: {
+                        'patientLabel': patientLabel ?? '',
+                        'patientId': memberId ?? '',
+                        'whatsappMessage': naba.whatsappSummary,
+                        'patientPhone': patientPhone,
+                      },
+                    ),
+                    icon: const Icon(Icons.chat_rounded),
+                    label: const Text(VisitCompleteStrings.sendCounsellingMessage),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: headerColor,
                       side: BorderSide(

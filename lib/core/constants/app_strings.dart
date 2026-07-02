@@ -3030,14 +3030,14 @@ abstract final class CounsellingStrings {
 
   static const String title = 'Counselling Messages';
   static const String subtitle = 'AI-generated health counselling';
-  static const String comingSoon = 'AI messages coming soon';
-  static const String typeMessage = 'Type a message...';
-  static const String messagePlaceholder1 =
-      'Remember to take your iron + folic acid tablet every day with food.';
-  static const String messagePlaceholder2 =
-      'Your next ANC visit is in 4 weeks. Please attend even if you feel well.';
-  static const String messagePlaceholder3 =
-      'Drink at least 8 glasses of water daily and rest when you feel tired.';
+  static const String sendWhatsApp = 'Send via WhatsApp';
+  static const String sendSms = 'Send via SMS';
+  static const String copyMessage = 'Copy message';
+  static const String noMessage =
+      'No counselling message generated for this visit.';
+  static const String whatsAppNotInstalled =
+      'WhatsApp is not installed on this device.';
+  static const String smsNotAvailable = 'SMS is not available on this device.';
 }
 
 /// Training Hub placeholder screen strings.
