@@ -40,6 +40,8 @@ class HouseholdHeadInfoScreen extends StatefulWidget {
 
 class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
   late TextEditingController _nameCtrl;
+  late TextEditingController _fatherCtrl;
+  late TextEditingController _motherCtrl;
   late TextEditingController _idNumberCtrl;
   late TextEditingController _mobileCtrl;
   late TextEditingController _dobCtrl;
@@ -55,6 +57,8 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController();
+    _fatherCtrl = TextEditingController();
+    _motherCtrl = TextEditingController();
     _idNumberCtrl = TextEditingController();
     _mobileCtrl = TextEditingController();
     _dobCtrl = TextEditingController();
@@ -93,6 +97,8 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
     _nameCtrl.removeListener(_onFormChanged);
     _idNumberCtrl.removeListener(_onFormChanged);
     _nameCtrl.dispose();
+    _fatherCtrl.dispose();
+    _motherCtrl.dispose();
     _idNumberCtrl.dispose();
     _mobileCtrl.dispose();
     _dobCtrl.dispose();
@@ -164,6 +170,8 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
 
     controller.updateHead(
       name: _nameCtrl.text,
+      fatherName: _fatherCtrl.text.trim().isEmpty ? null : _fatherCtrl.text,
+      motherName: _motherCtrl.text.trim().isEmpty ? null : _motherCtrl.text,
       age: int.tryParse(_ageCtrl.text) ?? 0,
       gender: _gender!,
       dateOfBirth: _dobCtrl.text,
@@ -256,6 +264,22 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
                       hint: EnrollmentStrings.headNameHint,
                       controller: _nameCtrl,
                       isRequired: true,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Father's Name (Bangla on the card → manual entry)
+                    EnrollmentInputField(
+                      label: EnrollmentStrings.fatherNameLabel,
+                      hint: EnrollmentStrings.fatherNameHint,
+                      controller: _fatherCtrl,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Mother's Name (Bangla on the card → manual entry)
+                    EnrollmentInputField(
+                      label: EnrollmentStrings.motherNameLabel,
+                      hint: EnrollmentStrings.motherNameHint,
+                      controller: _motherCtrl,
                     ),
                     const SizedBox(height: 16),
 

@@ -3092,6 +3092,11 @@ abstract final class EnrollmentStrings {
   static const String headNameLabel = 'Full Name';
   static const String headNameHint = 'Head\'s full name';
 
+  static const String fatherNameLabel = 'Father\'s Name';
+  static const String fatherNameHint = 'As printed on the NID (Bangla)';
+  static const String motherNameLabel = 'Mother\'s Name';
+  static const String motherNameHint = 'As printed on the NID (Bangla)';
+
   static const String idTypeLabel = 'ID Type';
   static const List<String> idTypes = ['BRN', 'NID'];
 
