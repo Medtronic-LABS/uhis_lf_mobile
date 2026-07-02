@@ -734,7 +734,7 @@ class _BriefingCard1Content extends StatelessWidget {
   const _BriefingCard1Content({required this.data});
   final VisitBriefingResponse data;
 
-  static const Color _aiTextColor = Color(0xFF9D174D);
+  static const Color _aiTextColor = AppColors.ancText;
 
   @override
   Widget build(BuildContext context) {
@@ -790,7 +790,7 @@ class _GreetWarmlyCard extends StatelessWidget {
   /// `greeting.english` field is empty.
   final String? fallbackOpeningLine;
 
-  static const Color _navyBg = Color(0xFF1B2B5E);
+  static const Color _navyBg = AppColors.navy;
   static const Color _navyHint = Color(0xFF243C7A);
 
   String _resolveBangla() {

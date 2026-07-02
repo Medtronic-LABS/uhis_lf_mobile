@@ -10,14 +10,10 @@ import '../../../core/api/api_repository.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/models/patient.dart';
+import '../../../core/theme/app_theme.dart';
 import 'enrollment_controller.dart';
 import 'nid_ocr_service.dart';
 import 'patient_lookup_repository.dart';
-
-// Design tokens — prototype-aligned
-const _teal = Color(0xFF6EE7B7);
-const _navy = Color(0xFF1B2B5E);
-const _muted = Color(0xFF6B7280);
 
 /// Full-screen dark overlay with NID camera viewfinder.
 ///
@@ -79,9 +75,10 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
       vsync: this,
       duration: const Duration(milliseconds: 1800),
     )..repeat(reverse: true);
-    _sweep = Tween<double>(begin: 0.06, end: 0.92).animate(
-      CurvedAnimation(parent: _sweepCtrl, curve: Curves.easeInOut),
-    );
+    _sweep = Tween<double>(
+      begin: 0.06,
+      end: 0.92,
+    ).animate(CurvedAnimation(parent: _sweepCtrl, curve: Curves.easeInOut));
     _initCamera();
   }
 
@@ -268,7 +265,12 @@ class _ScannerBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.h5xl,
+        AppSpacing.h5xl,
+        AppSpacing.h5xl,
+        AppSpacing.h6xl,
+      ),
       child: Column(
         children: [
           // Title
@@ -288,9 +290,9 @@ class _ScannerBody extends StatelessWidget {
             readingCard
                 ? 'Reading the NID number…'
                 : cameraUnavailable
-                    ? 'Camera unavailable — use Create Household below'
-                    : 'Position the card within the frame',
-            style: const TextStyle(fontSize: 12, color: Color(0x99FFFFFF)),
+                ? 'Camera unavailable — use Create Household below'
+                : 'Position the card within the frame',
+            style: const TextStyle(fontSize: 12, color: AppColors.onDarkLow),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 20),
@@ -304,7 +306,7 @@ class _ScannerBody extends StatelessWidget {
           const SizedBox(height: 10),
           const Text(
             'Bangladesh National ID Card · Smart NID · Birth Registration',
-            style: TextStyle(fontSize: 11, color: Color(0x73FFFFFF)),
+            style: TextStyle(fontSize: 11, color: AppColors.onDarkFaint),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 18),
@@ -330,23 +332,21 @@ class _ScannerBody extends StatelessWidget {
                     shape: BoxShape.circle,
                     color: Colors.white,
                     border: Border.all(
-                      color: _canCapture
-                          ? const Color(0xFF1a1a2e)
-                          : Colors.grey,
+                      color: _canCapture ? AppColors.textPrimary : Colors.grey,
                       width: 2,
                     ),
                   ),
                   child: (isScanning || readingCard)
                       ? const Padding(
-                          padding: EdgeInsets.all(16),
+                          padding: EdgeInsets.all(AppSpacing.xxxl),
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Color(0xFF1a1a2e),
+                            color: AppColors.textPrimary,
                           ),
                         )
                       : const Icon(
                           Icons.camera_alt,
-                          color: Color(0xFF1a1a2e),
+                          color: AppColors.textPrimary,
                           size: 24,
                         ),
                 ),
@@ -356,7 +356,7 @@ class _ScannerBody extends StatelessWidget {
           const SizedBox(height: 8),
           const Text(
             'Tap to capture',
-            style: TextStyle(fontSize: 11, color: Color(0x80FFFFFF)),
+            style: TextStyle(fontSize: 11, color: AppColors.onDarkFaint),
           ),
           const SizedBox(height: 20),
           // Or divider
@@ -375,7 +375,7 @@ class _ScannerBody extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: Color(0x66FFFFFF),
+                    color: AppColors.onDarkFaint,
                   ),
                 ),
               ),
@@ -393,15 +393,14 @@ class _ScannerBody extends StatelessWidget {
             onTap: onCreateHousehold,
             child: Container(
               width: double.infinity,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.12),
                 border: Border.all(
                   color: Colors.white.withValues(alpha: 0.25),
                   width: 1.5,
                 ),
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(AppRadius.patRow),
               ),
               child: Row(
                 children: [
@@ -428,7 +427,7 @@ class _ScannerBody extends StatelessWidget {
                           'Register a new household manually',
                           style: TextStyle(
                             fontSize: 10,
-                            color: Color(0x8CFFFFFF),
+                            color: AppColors.onDarkLow,
                           ),
                         ),
                       ],
@@ -436,7 +435,7 @@ class _ScannerBody extends StatelessWidget {
                   ),
                   const Icon(
                     Icons.chevron_right,
-                    color: Color(0x80FFFFFF),
+                    color: AppColors.onDarkFaint,
                     size: 16,
                   ),
                 ],
@@ -448,14 +447,14 @@ class _ScannerBody extends StatelessWidget {
           GestureDetector(
             onTap: onCancel,
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.h7xl,
+                vertical: AppSpacing.lg,
+              ),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.12),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.25),
-                ),
-                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+                borderRadius: BorderRadius.circular(AppRadius.field),
               ),
               child: const Text(
                 'Cancel',
@@ -507,22 +506,21 @@ class _Viewfinder extends StatelessWidget {
               // translucent placeholder while the camera initialises.
               Positioned.fill(
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(AppRadius.card),
                   child: cameraController != null
                       ? FittedBox(
                           fit: BoxFit.cover,
                           clipBehavior: Clip.hardEdge,
                           child: SizedBox(
-                            width: cameraController!.value.previewSize?.height ??
+                            width:
+                                cameraController!.value.previewSize?.height ??
                                 w,
                             height:
                                 cameraController!.value.previewSize?.width ?? h,
                             child: CameraPreview(cameraController!),
                           ),
                         )
-                      : Container(
-                          color: Colors.white.withValues(alpha: 0.04),
-                        ),
+                      : Container(color: Colors.white.withValues(alpha: 0.04)),
                 ),
               ),
               // Inner dashed hint
@@ -537,7 +535,7 @@ class _Viewfinder extends StatelessWidget {
                       color: Colors.white.withValues(alpha: 0.25),
                       width: 1.5,
                     ),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(AppRadius.field),
                   ),
                   child: (isScanning || cameraController != null)
                       ? null
@@ -546,7 +544,7 @@ class _Viewfinder extends StatelessWidget {
                             cameraUnavailable
                                 ? Icons.no_photography_outlined
                                 : Icons.credit_card_outlined,
-                            color: const Color(0x26FFFFFF),
+                            color: AppColors.onDarkSurface,
                             size: 40,
                           ),
                         ),
@@ -554,16 +552,8 @@ class _Viewfinder extends StatelessWidget {
               ),
               // Corner brackets
               _corner(top: _inset, left: _inset),
-              _corner(
-                top: _inset,
-                left: w - _inset - _cSize,
-                flipH: true,
-              ),
-              _corner(
-                top: h - _inset - _cSize,
-                left: _inset,
-                flipV: true,
-              ),
+              _corner(top: _inset, left: w - _inset - _cSize, flipH: true),
+              _corner(top: h - _inset - _cSize, left: _inset, flipV: true),
               _corner(
                 top: h - _inset - _cSize,
                 left: w - _inset - _cSize,
@@ -584,7 +574,7 @@ class _Viewfinder extends StatelessWidget {
                         gradient: LinearGradient(
                           colors: [
                             Colors.transparent,
-                            _teal,
+                            AppColors.tbBorder,
                             Colors.transparent,
                           ],
                         ),
@@ -599,14 +589,14 @@ class _Viewfinder extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       CircularProgressIndicator(
-                        color: _teal,
+                        color: AppColors.tbBorder,
                         strokeWidth: 2.5,
                       ),
                       SizedBox(height: 12),
                       Text(
                         'Scanning...',
                         style: TextStyle(
-                          color: Color(0xB3FFFFFF),
+                          color: AppColors.onDarkMid,
                           fontSize: 13,
                         ),
                       ),
@@ -653,7 +643,7 @@ class _CornerPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = _teal
+      ..color = AppColors.tbBorder
       ..strokeWidth = thick
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
@@ -710,7 +700,12 @@ class _PostScanSheet extends StatelessWidget {
             ),
           ],
         ),
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.h5xl,
+          AppSpacing.xxxl,
+          AppSpacing.h5xl,
+          AppSpacing.h8xl,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -719,7 +714,7 @@ class _PostScanSheet extends StatelessWidget {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: const Color(0xFFE5E7EB),
+                color: AppColors.border,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -735,20 +730,23 @@ class _PostScanSheet extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w900,
-                          color: _navy,
+                          color: AppColors.navy,
                         ),
                       ),
                       SizedBox(height: 2),
                       Text(
                         '✦ Details read on-device',
-                        style: TextStyle(fontSize: 11, color: _muted),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textMuted,
+                        ),
                       ),
                     ],
                   ),
                 ),
                 GestureDetector(
                   onTap: onLinkExisting,
-                  child: const Icon(Icons.close, color: _muted),
+                  child: const Icon(Icons.close, color: AppColors.textMuted),
                 ),
               ],
             ),
@@ -760,11 +758,11 @@ class _PostScanSheet extends StatelessWidget {
                 gradient: const LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [_navy, Color(0xFF2d3f7a)],
+                  colors: [AppColors.navy, AppColors.navyMid],
                 ),
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(AppRadius.patRow),
               ),
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(AppSpacing.xxxl),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -793,18 +791,23 @@ class _PostScanSheet extends StatelessWidget {
               const SizedBox(height: 10),
               Container(
                 width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.xl,
+                  vertical: AppSpacing.lg,
+                ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEFF6FF),
-                  border: Border.all(color: const Color(0xFF3B82F6)),
-                  borderRadius: BorderRadius.circular(10),
+                  color: AppColors.childSurface,
+                  border: Border.all(color: AppColors.infoAccent),
+                  borderRadius: BorderRadius.circular(AppRadius.field),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.badge_outlined,
-                        size: 16, color: Color(0xFF1D4ED8)),
+                    const Icon(
+                      Icons.badge_outlined,
+                      size: 16,
+                      color: AppColors.infoAccentDark,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Column(
@@ -812,18 +815,21 @@ class _PostScanSheet extends StatelessWidget {
                         children: [
                           Text(
                             EnrollmentStrings.existingPatientFound(
-                                existingName ?? ''),
+                              existingName ?? '',
+                            ),
                             style: const TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
-                              color: Color(0xFF1D4ED8),
+                              color: AppColors.infoAccentDark,
                             ),
                           ),
                           const SizedBox(height: 3),
                           const Text(
                             EnrollmentStrings.existingPatientHint,
                             style: TextStyle(
-                                fontSize: 11, color: Color(0xFF1D4ED8)),
+                              fontSize: 11,
+                              color: AppColors.infoAccentDark,
+                            ),
                           ),
                         ],
                       ),
@@ -836,22 +842,32 @@ class _PostScanSheet extends StatelessWidget {
             // Father / Mother cannot be OCR'd (Bengali only) — set expectation.
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.xl,
+                vertical: AppSpacing.lg,
+              ),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFF7ED),
-                border: Border.all(color: const Color(0xFFFED7AA)),
-                borderRadius: BorderRadius.circular(10),
+                color: AppColors.ncdSurface,
+                border: Border.all(color: AppColors.warningBorderAlt),
+                borderRadius: BorderRadius.circular(AppRadius.field),
               ),
               child: const Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.info_outline, size: 15, color: Color(0xFF9A3412)),
+                  Icon(
+                    Icons.info_outline,
+                    size: 15,
+                    color: AppColors.warningTextAlt,
+                  ),
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       "Father's & mother's names are printed in Bangla — "
                       'please type them in.',
-                      style: TextStyle(fontSize: 11, color: Color(0xFF9A3412)),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.warningTextAlt,
+                      ),
                     ),
                   ),
                 ],
@@ -865,7 +881,7 @@ class _PostScanSheet extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF1a1a2e),
+                  color: AppColors.textPrimary,
                 ),
               ),
             ),
@@ -874,13 +890,13 @@ class _PostScanSheet extends StatelessWidget {
               icon: Icons.link_rounded,
               title: 'Link to existing household',
               subtitle: 'Search and select from your households',
-              bgColor: const Color(0xFFF8F9FC),
+              bgColor: AppColors.cardSurfaceMuted,
               onTap: onLinkExisting,
             ),
             const SizedBox(height: 10),
             Row(
               children: [
-                const Expanded(child: Divider(color: Color(0xFFE5E7EB))),
+                const Expanded(child: Divider(color: AppColors.border)),
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 10),
                   child: Text(
@@ -888,11 +904,11 @@ class _PostScanSheet extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF9CA3AF),
+                      color: AppColors.textDisabled,
                     ),
                   ),
                 ),
-                const Expanded(child: Divider(color: Color(0xFFE5E7EB))),
+                const Expanded(child: Divider(color: AppColors.border)),
               ],
             ),
             const SizedBox(height: 10),
@@ -938,14 +954,14 @@ class _SheetOptionButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: bgColor,
           border: Border.all(
-            color: bordered ? _navy : const Color(0xFFE5E7EB),
+            color: bordered ? AppColors.navy : AppColors.border,
             width: 1.5,
           ),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.button),
         ),
         child: Row(
           children: [
-            Icon(icon, color: _navy, size: 18),
+            Icon(icon, color: AppColors.navy, size: 18),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -956,19 +972,22 @@ class _SheetOptionButton extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w800,
-                      color: _navy,
+                      color: AppColors.navy,
                     ),
                   ),
                   Text(
                     subtitle,
-                    style: const TextStyle(fontSize: 10, color: _muted),
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: AppColors.textMuted,
+                    ),
                   ),
                 ],
               ),
             ),
             const Icon(
               Icons.chevron_right,
-              color: Color(0xFF9CA3AF),
+              color: AppColors.textDisabled,
               size: 16,
             ),
           ],
@@ -1002,7 +1021,7 @@ class _NidField extends StatelessWidget {
           style: const TextStyle(
             fontSize: 9,
             fontWeight: FontWeight.w700,
-            color: Color(0x80FFFFFF),
+            color: AppColors.onDarkFaint,
             letterSpacing: 0.8,
           ),
         ),
@@ -1014,7 +1033,7 @@ class _NidField extends StatelessWidget {
             fontWeight: emphasise ? FontWeight.w800 : FontWeight.w600,
             letterSpacing: emphasise ? 1.5 : 0,
             fontStyle: dim ? FontStyle.italic : FontStyle.normal,
-            color: dim ? const Color(0x80FFFFFF) : Colors.white,
+            color: dim ? AppColors.onDarkFaint : Colors.white,
           ),
         ),
       ],
@@ -1029,7 +1048,7 @@ class _NidDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 1,
-      margin: const EdgeInsets.symmetric(vertical: 10),
+      margin: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
       color: Colors.white.withValues(alpha: 0.12),
     );
   }

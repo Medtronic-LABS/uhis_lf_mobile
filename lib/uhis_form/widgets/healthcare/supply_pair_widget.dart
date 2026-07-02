@@ -126,8 +126,7 @@ class _SupplyInput extends StatelessWidget {
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           textAlign: TextAlign.center,
           decoration: const InputDecoration(
-            contentPadding:
-                EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            contentPadding: AppTheme.denseFieldPadding,
           ),
           onChanged: onChanged,
         ),

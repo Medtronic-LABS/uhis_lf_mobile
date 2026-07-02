@@ -9,6 +9,7 @@ import '../core/auth/auth_state.dart';
 import '../core/models/programme.dart';
 import '../core/constants/app_strings.dart';
 import '../core/models/dashboard_tier.dart';
+import '../core/theme/app_theme.dart';
 import '../features/dashboard/mission_dashboard_screen.dart';
 import '../uhis_form/form_gallery_screen.dart';
 import '../features/household/household_detail_screen.dart';
@@ -594,14 +595,14 @@ class _SplashScreenState extends State<_SplashScreen>
             height: 80,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFFE8356D), Color(0xFFb01f52)],
+                colors: [AppColors.pink, AppColors.brandAccentDeep],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(22),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFE8356D).withValues(alpha: 0.45),
+                  color: AppColors.pink.withValues(alpha: 0.45),
                   blurRadius: 40,
                   offset: const Offset(0, 12),
                 ),
@@ -658,7 +659,7 @@ class _SplashScreenState extends State<_SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1B2B5E),
+      backgroundColor: AppColors.navy,
       body: SafeArea(
         child: Center(
           child: Column(
@@ -781,7 +782,7 @@ class _AnimatedDots extends StatelessWidget {
               final t = sin(phase * pi).clamp(0.0, 1.0);
               final color = Color.lerp(
                 Colors.white.withValues(alpha: 0.25),
-                const Color(0xFFE8356D),
+                AppColors.pink,
                 t,
               )!;
               return Container(

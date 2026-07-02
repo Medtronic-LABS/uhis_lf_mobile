@@ -14,6 +14,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_strings.dart';
+import '../../../core/theme/app_theme.dart';
 import 'cds_rules.dart';
 
 /// A single CDS alert banner.
@@ -56,7 +57,7 @@ class CdsBanner extends StatelessWidget {
           Icons.local_hospital_rounded,
         ),
       CdsSeverity.warning => (
-          const Color(0xFFFFF3CD), // amber-50 equivalent
+          AppColors.statusWarningSurface,
           Icons.warning_amber_rounded,
         ),
       CdsSeverity.info => (
@@ -67,20 +68,20 @@ class CdsBanner extends StatelessWidget {
 
     final iconColor = switch (alert.severity) {
       CdsSeverity.urgent => theme.colorScheme.error,
-      CdsSeverity.warning => const Color(0xFFB45309), // amber-700
+      CdsSeverity.warning => AppColors.statusWarningText,
       CdsSeverity.info => theme.colorScheme.primary,
     };
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.sm),
       color: backgroundColor,
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.button),
         side: BorderSide(color: iconColor.withValues(alpha: 0.4)),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl, vertical: AppSpacing.lg),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

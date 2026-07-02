@@ -169,7 +169,7 @@ class _NumericInput extends StatelessWidget {
       decoration: InputDecoration(
         hintText: hint,
         suffixText: suffix,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        contentPadding: AppTheme.denseFieldPadding,
       ),
       onChanged: onChanged,
     );

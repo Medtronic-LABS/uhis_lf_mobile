@@ -10,6 +10,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../core/theme/app_theme.dart';
 import '../models/field_kind.dart';
 import '../models/field_schema.dart';
 import 'basic/age_or_dob_widget.dart';
@@ -269,7 +270,7 @@ class _AiHintWrapper extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: const Color(0xFF6B63D4),
+              color: AppColors.aiPurple,
               borderRadius: BorderRadius.circular(4),
             ),
             child: const Text(

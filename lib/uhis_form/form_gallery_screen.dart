@@ -298,18 +298,19 @@ class _GalleryWidgetCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.button),
         boxShadow: AppShadows.statBox,
       ),
-      child: Stack(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-            child: child,
-          ),
-          Positioned(
-            top: 8,
-            right: 8,
-            child: _KindChip(kind: kind),
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Align(
+              alignment: Alignment.centerRight,
+              child: _KindChip(kind: kind),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            child,
+          ],
+        ),
       ),
     );
   }
@@ -649,19 +650,19 @@ class _StatsBar extends StatelessWidget {
               _StatPill(
                 label: 'fields',
                 value: '${allKinds.length}',
-                color: const Color(0xFF1D6D2F),
+                color: AppColors.fieldKindGreen,
               ),
               const SizedBox(width: 6),
               _StatPill(
                 label: 'visible',
                 value: '$visibleCount',
-                color: const Color(0xFF7B3FA0),
+                color: AppColors.fieldKindPurple,
               ),
               const SizedBox(width: 6),
               _StatPill(
                 label: 'filled',
                 value: '$filledCount',
-                color: const Color(0xFFC2410C),
+                color: AppColors.fieldKindOrange,
               ),
             ],
           ),
@@ -815,25 +816,25 @@ Color _kindColor(FieldKind k) => switch (k) {
       FieldKind.vitalsBundle ||
       FieldKind.anthropometry ||
       FieldKind.bloodGlucose =>
-        const Color(0xFF0F6CBD),
-      FieldKind.dangerSigns => const Color(0xFFB91C1C),
-      FieldKind.supplyPair => const Color(0xFF047857),
+        AppColors.fieldKindBlue,
+      FieldKind.dangerSigns => AppColors.fieldKindRed,
+      FieldKind.supplyPair => AppColors.statusSuccessActionDark,
       FieldKind.urineTest ||
       FieldKind.obstetricHistory ||
       FieldKind.muac ||
       FieldKind.labResult ||
       FieldKind.pregnancyProfile =>
-        const Color(0xFF7C3AED),
+        AppColors.fieldKindViolet,
       FieldKind.glassPrescription || FieldKind.referralCard =>
-        const Color(0xFFB45309),
+        AppColors.fieldKindAmber,
       FieldKind.radioGroup ||
       FieldKind.dropdown ||
       FieldKind.chipMultiSelect =>
-        const Color(0xFF1D4ED8),
+        AppColors.fieldKindIndigo,
       FieldKind.datePicker ||
       FieldKind.ageOrDob ||
       FieldKind.ageYmd =>
-        const Color(0xFF0369A1),
-      FieldKind.computedLabel || FieldKind.instruction => const Color(0xFF64748B),
+        AppColors.fieldKindTeal,
+      FieldKind.computedLabel || FieldKind.instruction => AppColors.fieldKindSlate,
       _ => AppColors.navy,
     };

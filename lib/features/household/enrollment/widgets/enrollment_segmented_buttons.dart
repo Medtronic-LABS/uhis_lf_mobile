@@ -57,9 +57,9 @@ class EnrollmentSegmentedButtons extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppColors.cardSurface,
             border: Border.all(color: AppColors.border, width: 1.5),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppRadius.button),
           ),
-          padding: const EdgeInsets.all(4),
+          padding: const EdgeInsets.all(AppSpacing.xs),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -71,7 +71,7 @@ class EnrollmentSegmentedButtons extends StatelessWidget {
 
                   return Padding(
                     padding: EdgeInsets.only(
-                      right: index < options.length - 1 ? 4 : 0,
+                      right: index < options.length - 1 ? AppSpacing.xs : 0,
                     ),
                     child: GestureDetector(
                       onTap: () => onChanged(option),
@@ -91,7 +91,7 @@ class EnrollmentSegmentedButtons extends StatelessWidget {
                                   color: AppColors.border,
                                   width: 1,
                                 ),
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(AppRadius.field),
                         ),
                         child: Text(
                           option,

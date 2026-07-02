@@ -492,16 +492,16 @@ class _SectionedAssessmentView extends StatelessWidget {
               final isDark = Theme.of(ctx).brightness == Brightness.dark;
               final cardBg = isDark
                   ? AppColors.statusWarningSurfaceDark
-                  : const Color(0xFFFFF8E1);
+                  : AppColors.statusWarningSurface;
               final cardBorder = isDark
                   ? AppColors.statusWarningDark
-                  : const Color(0xFFFFCC02);
+                  : AppColors.statusWarningBorder;
               final emphColor = isDark
                   ? AppColors.statusWarningDark
-                  : const Color(0xFF795548);
+                  : AppColors.statusWarningText;
               final bodyColor = isDark
                   ? AppColors.textPrimaryDark
-                  : const Color(0xFF4E342E);
+                  : AppColors.statusWarningText;
               return Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               child: Container(

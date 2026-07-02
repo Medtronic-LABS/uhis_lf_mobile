@@ -397,7 +397,7 @@ class _UserProfileCard extends StatelessWidget {
                     fontFamily: 'NunitoSans',
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
-                    color: Color(0x80FFFFFF),
+                    color: AppColors.onDarkFaint,
                     letterSpacing: 0.80,
                   ),
                 ),
@@ -473,7 +473,7 @@ class _InitialsAvatar extends StatelessWidget {
       width: 44,
       height: 44,
       decoration: const BoxDecoration(
-        color: Color(0x26FFFFFF), // rgba(255,255,255,0.15)
+        color: AppColors.onDarkSurface,
         shape: BoxShape.circle,
       ),
       alignment: Alignment.center,
@@ -513,7 +513,7 @@ class _InfoPanel extends StatelessWidget {
               fontFamily: 'NunitoSans',
               fontSize: 9,
               fontWeight: FontWeight.w700,
-              color: Color(0x80FFFFFF),
+              color: AppColors.onDarkFaint,
               letterSpacing: 0.5,
             ),
           ),

@@ -3,7 +3,6 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_theme.dart';
 import '../../models/field_schema.dart';
 import '../_shared/field_label.dart';
 
@@ -31,27 +30,12 @@ class DropdownWidget extends StatelessWidget {
         DropdownButtonFormField<String>(
           initialValue: schema.options.any((o) => o.value == value) ? value : null,
           isExpanded: true,
+          // Inherits border/fill/padding/radius from Theme.of(context)
+          // .inputDecorationTheme — matches text_field_widget.dart /
+          // number_field_widget.dart, so it picks up app-theme changes
+          // instead of duplicating them.
           decoration: InputDecoration(
             hintText: schema.hint ?? 'Select',
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppRadius.field),
-              borderSide:
-                  const BorderSide(color: AppColors.aiBorder, width: 1.5),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppRadius.field),
-              borderSide:
-                  const BorderSide(color: AppColors.aiBorder, width: 1.5),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppRadius.field),
-              borderSide:
-                  const BorderSide(color: AppColors.aiPurple, width: 1.5),
-            ),
-            filled: true,
-            fillColor: AppColors.cardSurfaceMuted,
           ),
           items: schema.options
               .map((o) => DropdownMenuItem(

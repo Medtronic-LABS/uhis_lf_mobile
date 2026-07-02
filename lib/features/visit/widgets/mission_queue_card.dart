@@ -255,13 +255,13 @@ class MissionQueueCard extends StatelessWidget {
   /// flagged purely on labs (severe anaemia, BP ≥ 160/110) without a
   /// danger-sign driver keeps the grey border so the worklist stays calm.
   Color _borderColorForTier(DashboardTier tier, LeapfrogColors tokens) {
-    if (tier != DashboardTier.critical) return const Color(0xFFE5E7EB);
+    if (tier != DashboardTier.critical) return AppColors.border;
     final drivers = item.drivers;
     final cceOrDanger = drivers.contains('sla-breached') ||
         drivers.contains('danger-sign') ||
         drivers.contains('stroke-sign') ||
         drivers.contains('eclampsia');
-    return cceOrDanger ? tokens.statusCritical : const Color(0xFFE5E7EB);
+    return cceOrDanger ? tokens.statusCritical : AppColors.border;
   }
 
   /// Programme-coded avatar colour.

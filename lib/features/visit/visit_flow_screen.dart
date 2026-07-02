@@ -277,12 +277,12 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   Future<bool?> _confirmExit() async {
     return showDialog<bool>(
       context: context,
-      barrierColor: Colors.black54,
+      barrierColor: Theme.of(context).colorScheme.scrim,
       builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.card)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.h8xl, vertical: AppSpacing.h6xl),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 22, 20, 16),
+          padding: const EdgeInsets.fromLTRB(AppSpacing.h5xl, 22, AppSpacing.h5xl, AppSpacing.xxxl),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -336,7 +336,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
                     foregroundColor: Colors.white,
                     minimumSize: const Size.fromHeight(48),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(AppRadius.field),
                     ),
                     textStyle: const TextStyle(
                       fontSize: 14,
@@ -355,7 +355,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
                     foregroundColor: AppColors.statusCritical,
                     minimumSize: const Size.fromHeight(48),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(AppRadius.field),
                     ),
                     textStyle: const TextStyle(
                       fontSize: 14,
@@ -408,7 +408,7 @@ class _VisitFlowHeader extends StatelessWidget {
   final String? patientGender;
   final Programme primaryProgramme;
 
-  static const Color _headerColor = Color(0xFF1B2B5E); // Navy
+  static const Color _headerColor = AppColors.navy; // Navy
 
   String get _initials {
     final name = (patientName ?? '').trim();
@@ -433,7 +433,7 @@ class _VisitFlowHeader extends StatelessWidget {
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(4, 4, 12, 12),
+          padding: const EdgeInsets.fromLTRB(AppSpacing.xs, AppSpacing.xs, AppSpacing.xl, AppSpacing.xl),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -441,10 +441,10 @@ class _VisitFlowHeader extends StatelessWidget {
               // Row 1: ← Back to visits
               InkWell(
                 onTap: onBack,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(AppRadius.rxIcon),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 6),
+                      horizontal: AppSpacing.md, vertical: AppSpacing.sm),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -467,7 +467,7 @@ class _VisitFlowHeader extends StatelessWidget {
 
               // Row 2 + 3: avatar + name / age · house
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
@@ -476,7 +476,7 @@ class _VisitFlowHeader extends StatelessWidget {
                       height: 40,
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(AppRadius.pill),
                       ),
                       alignment: Alignment.center,
                       child: Text(
@@ -541,7 +541,7 @@ class _VisitFlowHeader extends StatelessWidget {
 
               // Row 4: 3-step line indicators with labels below.
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -552,7 +552,7 @@ class _VisitFlowHeader extends StatelessWidget {
                           child: Container(
                             height: 3,
                             margin: EdgeInsets.only(
-                              right: i == stepLabels.length - 1 ? 0 : 6,
+                              right: i == stepLabels.length - 1 ? 0 : AppSpacing.sm,
                             ),
                             decoration: BoxDecoration(
                               color: filled
@@ -571,7 +571,7 @@ class _VisitFlowHeader extends StatelessWidget {
                         return Expanded(
                           child: Padding(
                             padding: EdgeInsets.only(
-                              right: i == stepLabels.length - 1 ? 0 : 6,
+                              right: i == stepLabels.length - 1 ? 0 : AppSpacing.sm,
                             ),
                             child: Text(
                               stepLabels[i],
@@ -1032,7 +1032,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   Widget _buildLoading() {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.h8xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1066,11 +1066,9 @@ class _Step3AiRecoState extends State<_Step3AiReco>
               ),
             ),
             const SizedBox(height: 24),
-            const Text(
+            Text(
               NabaStrings.loadingTitle,
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 18,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 color: AppColors.textPrimary,
               ),
               textAlign: TextAlign.center,
@@ -1091,8 +1089,8 @@ class _Step3AiRecoState extends State<_Step3AiReco>
               animation: _shimmer,
               builder: (context, unused) {
                 final shimmerColor = Color.lerp(
-                  const Color(0xFFE5E7EB),
-                  const Color(0xFFF3F4F6),
+                  AppColors.border,
+                  AppColors.progressTrack,
                   _shimmer.value,
                 )!;
                 return Column(
@@ -1115,7 +1113,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   Widget _buildError(Object? error) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(AppSpacing.h8xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1161,7 +1159,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
                 label: const Text(NabaStrings.retryButton),
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.navy,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxl),
                 ),
               ),
             ),
@@ -1182,7 +1180,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         naba.referralRecommendation?.required_ ?? widget.referralRecommended;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.xxxl, AppSpacing.xxxl, AppSpacing.xxxl, AppSpacing.h8xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1202,10 +1200,10 @@ class _Step3AiRecoState extends State<_Step3AiReco>
               // ── Banners: review required + referral ───────────────────
               if (naba.rationale.humanReviewRequired) ...[
                 _InfoBanner(
-                  color: const Color(0xFFFFF7ED),
-                  borderColor: const Color(0xFFFED7AA),
+                  color: AppColors.ncdSurface,
+                  borderColor: AppColors.warningBorderAlt,
                   icon: Icons.supervisor_account_rounded,
-                  iconColor: const Color(0xFFD97706),
+                  iconColor: AppColors.slaDueSoonText,
                   text: NabaStrings.humanReviewBadge,
                 ),
                 const SizedBox(height: 12),
@@ -1292,8 +1290,8 @@ class _Step3AiRecoState extends State<_Step3AiReco>
                 _SectionCard(
                   title: NabaStrings.sectionFollowUp,
                   icon: Icons.event_available_rounded,
-                  iconBg: const Color(0xFFE0E7FF),
-                  iconColor: const Color(0xFF4338CA),
+                  iconBg: AppColors.followUpIconBg,
+                  iconColor: AppColors.followUpIconFg,
                   child: _FollowUpRows(items: naba.followUp),
                 ),
                 const SizedBox(height: 12),
@@ -1311,12 +1309,10 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 
               // ── Proposal note ─────────────────────────────────────────
               const SizedBox(height: 4),
-              const Center(
+              Center(
                 child: Text(
                   NabaStrings.proposalNote,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textMuted,
+                  style: AppTextStyles.subText.copyWith(
                     fontStyle: FontStyle.italic,
                   ),
                   textAlign: TextAlign.center,
@@ -1395,11 +1391,9 @@ class _ResultHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          const Text(
+          Text(
             VisitCompleteStrings.saved,
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 16,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
               color: AppColors.textPrimary,
             ),
           ),
@@ -1414,9 +1408,7 @@ class _ResultHeader extends StatelessWidget {
               ),
               child: Text(
                 programme.name.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
+                style: AppTextStyles.scorePill.copyWith(
                   color: headerColor,
                   letterSpacing: 0.8,
                 ),
@@ -1474,7 +1466,7 @@ class _DangerSignsAlert extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(AppSpacing.xl),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: signs
@@ -1537,7 +1529,7 @@ class _InfoBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.xl),
       decoration: BoxDecoration(
         color: color,
         borderRadius: BorderRadius.circular(AppRadius.card),
@@ -1555,9 +1547,7 @@ class _InfoBanner extends StatelessWidget {
                 if (label != null) ...[
                   Text(
                     label!,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
+                    style: AppTextStyles.scorePill.copyWith(
                       color: iconColor,
                       letterSpacing: 0.5,
                     ),
@@ -1566,11 +1556,7 @@ class _InfoBanner extends StatelessWidget {
                 ],
                 Text(
                   text,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    height: 1.4,
-                    color: AppColors.textPrimary,
-                  ),
+                  style: AppTextStyles.body.copyWith(height: 1.4),
                 ),
               ],
             ),
@@ -1609,7 +1595,7 @@ class _SummaryCard extends StatelessWidget {
           Container(
             width: double.infinity,
             padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                const EdgeInsets.symmetric(horizontal: AppSpacing.xxxl, vertical: AppSpacing.xl),
             decoration: BoxDecoration(
               color: headerColor,
               borderRadius: const BorderRadius.only(
@@ -1628,7 +1614,7 @@ class _SummaryCard extends StatelessWidget {
           ),
           // Summary body
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.xxxl, AppSpacing.xxl, AppSpacing.xxxl, AppSpacing.lg),
             child: Text(
               body,
               style: const TextStyle(
@@ -1640,7 +1626,7 @@ class _SummaryCard extends StatelessWidget {
           ),
           // Confidence footer
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.xxxl, 0, AppSpacing.xxxl, AppSpacing.xl),
             child: Row(
               children: [
                 Icon(
@@ -1651,11 +1637,7 @@ class _SummaryCard extends StatelessWidget {
                 const SizedBox(width: 4),
                 Text(
                   'AI confidence: ${(confidence * 100).toStringAsFixed(0)}%',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textMuted,
-                    letterSpacing: 0.2,
-                  ),
+                  style: AppTextStyles.subText.copyWith(letterSpacing: 0.2),
                 ),
               ],
             ),
@@ -1684,7 +1666,7 @@ class _SectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(AppSpacing.xxl),
       decoration: BoxDecoration(
         color: AppColors.cardSurface,
         borderRadius: BorderRadius.circular(AppRadius.card),
@@ -1732,13 +1714,13 @@ class _NextActionsTimeline extends StatelessWidget {
 
   static const _urgencyFg = {
     'Now': AppColors.statusCritical,
-    'Today': Color(0xFFD97706),
+    'Today': AppColors.slaDueSoonText,
     'This week': AppColors.navy,
   };
   static const _urgencyBg = {
     'Now': AppColors.statusCriticalSurface,
-    'Today': Color(0xFFFEF3C7),
-    'This week': Color(0xFFEFF6FF),
+    'Today': AppColors.statusWarningSurface,
+    'This week': AppColors.childSurface,
   };
 
   @override
@@ -1791,11 +1773,7 @@ class _NextActionsTimeline extends StatelessWidget {
                   children: [
                     Text(
                       a.action,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textPrimary,
-                        height: 1.4,
-                      ),
+                      style: AppTextStyles.body.copyWith(height: 1.4),
                     ),
                     const SizedBox(height: 4),
                     Container(
@@ -1832,7 +1810,7 @@ class _ClinicalFindingsCards extends StatelessWidget {
 
   Color _severityColor(String s) => switch (s) {
         'High' => AppColors.statusCritical,
-        'Medium' => const Color(0xFFD97706),
+        'Medium' => AppColors.slaDueSoonText,
         _ => AppColors.statusSuccess,
       };
 
@@ -1852,7 +1830,7 @@ class _ClinicalFindingsCards extends StatelessWidget {
                     left: BorderSide(color: sc, width: 3.5),
                   ),
                 ),
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, AppSpacing.lg),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1879,9 +1857,7 @@ class _ClinicalFindingsCards extends StatelessWidget {
                           ),
                           child: Text(
                             f.severity.toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
+                            style: AppTextStyles.microTag.copyWith(
                               color: sc,
                               letterSpacing: 0.5,
                             ),
@@ -1892,11 +1868,7 @@ class _ClinicalFindingsCards extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(
                       f.reason,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textMuted,
-                        height: 1.4,
-                      ),
+                      style: AppTextStyles.vitalUnit.copyWith(height: 1.4),
                     ),
                   ],
                 ),
@@ -1938,11 +1910,7 @@ class _DotList extends StatelessWidget {
                   Expanded(
                     child: Text(
                       item,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textPrimary,
-                        height: 1.5,
-                      ),
+                      style: AppTextStyles.body.copyWith(height: 1.5),
                     ),
                   ),
                 ],
@@ -1972,14 +1940,14 @@ class _FollowUpRows extends StatelessWidget {
                     width: 32,
                     height: 32,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE0E7FF),
+                      color: AppColors.followUpIconBg,
                       borderRadius:
                           BorderRadius.circular(AppRadius.rxIcon),
                     ),
                     child: const Icon(
                       Icons.event_rounded,
                       size: 16,
-                      color: Color(0xFF4338CA),
+                      color: AppColors.followUpIconFg,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -1998,10 +1966,7 @@ class _FollowUpRows extends StatelessWidget {
                         const SizedBox(height: 2),
                         Text(
                           item.timeline,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textMuted,
-                          ),
+                          style: AppTextStyles.vitalUnit,
                         ),
                       ],
                     ),
@@ -2127,7 +2092,7 @@ class _WhatsAppCardState extends State<_WhatsAppCard>
         children: [
           // ── Header row ─────────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 8, 0),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.xl, 8, 0),
             child: Row(
               children: [
                 Container(
@@ -2193,7 +2158,7 @@ class _WhatsAppCardState extends State<_WhatsAppCard>
           const Divider(height: 1, color: AppColors.waBorder),
           // ── Message body ───────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.xl, AppSpacing.xxl, AppSpacing.xl),
             child: Text(
               widget.text,
               style: const TextStyle(
@@ -2206,7 +2171,7 @@ class _WhatsAppCardState extends State<_WhatsAppCard>
           const Divider(height: 1, color: AppColors.waBorder),
           // ── Share actions ──────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, AppSpacing.xl),
             child: Row(
               children: [
                 Expanded(
@@ -2217,11 +2182,8 @@ class _WhatsAppCardState extends State<_WhatsAppCard>
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.navy,
                       side: const BorderSide(color: AppColors.border),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      textStyle: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                      textStyle: AppTextStyles.chip,
                     ),
                   ),
                 ),
@@ -2234,11 +2196,8 @@ class _WhatsAppCardState extends State<_WhatsAppCard>
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.whatsapp,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      textStyle: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                      textStyle: AppTextStyles.chip,
                     ),
                   ),
                 ),
@@ -2297,11 +2256,8 @@ class _BottomCtaBar extends StatelessWidget {
                     foregroundColor: Colors.white,
                     disabledBackgroundColor:
                         headerColor.withValues(alpha: 0.4),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    textStyle: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
+                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxl),
+                    textStyle: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
               ),
@@ -2325,7 +2281,7 @@ class _BottomCtaBar extends StatelessWidget {
                       foregroundColor: headerColor,
                       side: BorderSide(
                           color: headerColor.withValues(alpha: 0.4)),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
                     ),
                   ),
                 ),
@@ -2352,7 +2308,7 @@ class _BottomCtaBar extends StatelessWidget {
                       foregroundColor: headerColor,
                       side: BorderSide(
                           color: headerColor.withValues(alpha: 0.4)),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
                     ),
                   ),
                 ),
@@ -2367,7 +2323,7 @@ class _BottomCtaBar extends StatelessWidget {
                       foregroundColor: AppColors.statusCritical,
                       side: const BorderSide(
                           color: AppColors.statusCriticalBorder),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
                     ),
                     child: const Text(VisitCompleteStrings.createReferral),
                   ),

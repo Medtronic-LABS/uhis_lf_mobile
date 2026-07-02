@@ -132,8 +132,7 @@ class _BloodGlucoseWidgetState extends State<BloodGlucoseWidget> {
           ],
           decoration: const InputDecoration(
             suffixText: _unit,
-            contentPadding:
-                EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            contentPadding: AppTheme.denseFieldPadding,
           ),
           onChanged: (_) => _emit(),
         ),

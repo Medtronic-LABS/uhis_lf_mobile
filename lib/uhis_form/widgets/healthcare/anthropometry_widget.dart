@@ -156,8 +156,7 @@ class _LabeledInput extends StatelessWidget {
           textAlign: TextAlign.center,
           decoration: InputDecoration(
             suffixText: unit,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            contentPadding: AppTheme.denseFieldPadding,
           ),
           onChanged: onChanged,
         ),

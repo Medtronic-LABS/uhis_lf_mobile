@@ -193,7 +193,7 @@ class _SubmitBar extends StatelessWidget {
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Text(
                       ctrl.errorMessage ?? '',
-                      style: const TextStyle(color: Color(0xFFDC2626)),
+                      style: const TextStyle(color: AppColors.rangeCritical),
                       textAlign: TextAlign.center,
                     ),
                   ),

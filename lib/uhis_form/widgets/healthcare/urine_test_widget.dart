@@ -65,8 +65,7 @@ class UrineTestWidget extends StatelessWidget {
                     initialValue: _options.contains(currentVal) ? currentVal : null,
                     isExpanded: true,
                     decoration: const InputDecoration(
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      contentPadding: AppTheme.denseFieldPadding,
                     ),
                     hint: const Text('Select'),
                     items: _options
