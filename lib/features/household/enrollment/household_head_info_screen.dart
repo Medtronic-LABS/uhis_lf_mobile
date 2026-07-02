@@ -17,7 +17,9 @@ import 'widgets/enrollment_button.dart';
 /// disability, contact info). Pre-fills from NID scan if available. Validates
 /// on blur and navigates to success screen or add member flow.
 class HouseholdHeadInfoScreen extends StatefulWidget {
-  const HouseholdHeadInfoScreen({super.key});
+  const HouseholdHeadInfoScreen({super.key, this.fromNidScan = false});
+
+  final bool fromNidScan;
 
   @override
   State<HouseholdHeadInfoScreen> createState() =>
@@ -46,18 +48,24 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
     _dobCtrl = TextEditingController();
     _ageCtrl = TextEditingController();
 
-    // Pre-fill from NID scan if available
-    final controller = context.read<EnrollmentController>();
-    if (controller.nidScanResult != null) {
-      final scan = controller.nidScanResult!;
-      _nameCtrl.text = scan['name'] ?? '';
-      _idNumberCtrl.text = scan['idNumber'] ?? '';
-      if (scan['dateOfBirth'] != null) {
-        _dobCtrl.text = scan['dateOfBirth'];
-      }
-      if (scan['gender'] != null) {
-        _gender = scan['gender'];
-      }
+    if (widget.fromNidScan) {
+      // Run mock scan after first frame so ChangeNotifierProvider is fully
+      // mounted before notifyListeners() fires.
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        final controller = context.read<EnrollmentController>();
+        await controller.mockNidScan();
+        if (!mounted) return;
+        final scan = controller.nidScanResult;
+        if (scan != null) {
+          setState(() {
+            _nameCtrl.text = scan['name'] ?? '';
+            _idNumberCtrl.text = scan['idNumber'] ?? '';
+            _dobCtrl.text = scan['dateOfBirth'] ?? '';
+            _gender = scan['gender'] as String?;
+          });
+        }
+      });
     }
   }
 

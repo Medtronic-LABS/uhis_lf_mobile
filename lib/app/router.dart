@@ -348,13 +348,17 @@ GoRouter buildRouter(AuthState auth) {
       ),
       GoRoute(
         path: '/household/enrollment/head-info',
-        pageBuilder: (context, state) => MaterialPage(
-          key: const ValueKey('enrollment-head-info'),
-          child: ChangeNotifierProvider(
-            create: (_) => EnrollmentController()..mockNidScan(),
-            child: const HouseholdHeadInfoScreen(),
-          ),
-        ),
+        pageBuilder: (context, state) {
+          final fromNidScan =
+              (state.extra as Map<String, dynamic>?)?['fromNidScan'] == true;
+          return MaterialPage(
+            key: const ValueKey('enrollment-head-info'),
+            child: ChangeNotifierProvider(
+              create: (_) => EnrollmentController(),
+              child: HouseholdHeadInfoScreen(fromNidScan: fromNidScan),
+            ),
+          );
+        },
       ),
       GoRoute(
         path: '/household/enrollment/success',

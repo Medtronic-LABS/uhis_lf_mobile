@@ -38,14 +38,18 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
     _occupationCtrl = TextEditingController();
     _disabilityDetailsCtrl = TextEditingController();
 
-    // Initialize household if not already done
-    final controller = context.read<EnrollmentController>();
-    if (controller.household == null) {
-      controller.initializeHousehold(
-        healthWorkerId: 'current_user_id',
-        villageId: 'default_village',
-      );
-    }
+    // Defer initialization so ChangeNotifierProvider finishes its first build
+    // before notifyListeners() is called (avoids !_dirty assertion).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final controller = context.read<EnrollmentController>();
+      if (controller.household == null) {
+        controller.initializeHousehold(
+          healthWorkerId: 'current_user_id',
+          villageId: 'default_village',
+        );
+      }
+    });
   }
 
   @override
