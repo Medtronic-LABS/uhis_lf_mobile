@@ -20,6 +20,7 @@ import '../visit/visit_controller.dart';
 import '../visit/widgets/widgets.dart';
 import 'dashboard_repository.dart';
 import 'mission_dashboard_repository.dart';
+import '../household/enrollment/enrollment_entry_sheet.dart';
 
 enum _NeedFilter {
   highRisk,
@@ -1010,9 +1011,7 @@ class _EnrolNewFab extends StatelessWidget {
         'Enroll Household',
         style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
       ),
-      onPressed: () {
-        context.push('/household/enrollment/nid-scan');
-      },
+      onPressed: () => showEnrollmentEntrySheet(context),
     );
   }
 }

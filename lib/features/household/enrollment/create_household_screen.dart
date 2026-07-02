@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_strings.dart';
 import 'enrollment_controller.dart';
+import 'household_enrollment_sheet.dart';
 import 'widgets/enrollment_section_header.dart';
 import 'widgets/enrollment_input_field.dart';
 import 'widgets/enrollment_segmented_buttons.dart';
@@ -78,7 +78,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       return;
     }
 
-    context.push('/household/enrollment/head-info');
+    Navigator.of(context).pushNamed('/head-info');
   }
 
   @override
@@ -87,20 +87,10 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       builder: (context, controller, child) {
         return Scaffold(
           backgroundColor: AppColors.canvas,
-          appBar: AppBar(
-            backgroundColor: AppColors.cardSurface,
-            elevation: 0,
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back, color: AppColors.navy),
-              onPressed: () => context.pop(),
-            ),
-            title: const Text(
-              EnrollmentStrings.createHouseholdTitle,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: AppColors.navy,
-              ),
+          appBar: PreferredSize(
+            preferredSize: const Size.fromHeight(56),
+            child: EnrollmentOverlayHeader(
+              title: EnrollmentStrings.createHouseholdTitle,
             ),
           ),
           body: SafeArea(

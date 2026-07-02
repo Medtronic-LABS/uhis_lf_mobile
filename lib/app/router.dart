@@ -25,7 +25,6 @@ import '../features/teleconsult/teleconsult_screen.dart';
 import '../features/training/training_screen.dart';
 import '../features/visit/briefing/visit_briefing_screen.dart';
 import '../features/visit/visit_flow_screen.dart';
-import '../features/household/enrollment/enrollment_nid_scan_screen.dart';
 import '../features/household/enrollment/create_household_screen.dart';
 import '../features/household/enrollment/household_head_info_screen.dart';
 import '../features/household/enrollment/household_created_screen.dart';
@@ -335,29 +334,15 @@ GoRouter buildRouter(AuthState auth) {
       ),
 
       // ─────────────────────────────────────────────────────────────────────
-      // Household enrollment flow routes
+      // Household enrollment flow routes (entry via overlay on dashboard)
       // ─────────────────────────────────────────────────────────────────────
-      GoRoute(
-        path: '/household/enrollment/nid-scan',
-        pageBuilder: (context, state) => MaterialPage(
-          key: const ValueKey('enrollment-nid-scan'),
-          child: ChangeNotifierProvider(
-            create: (_) => EnrollmentController(),
-            child: const EnrollmentNidScanScreen(),
-          ),
-        ),
-      ),
       GoRoute(
         path: '/household/enrollment/create',
         pageBuilder: (context, state) => MaterialPage(
           key: const ValueKey('enrollment-create'),
-          child: Consumer<EnrollmentController>(
-            builder: (context, controller, _) {
-              return ChangeNotifierProvider.value(
-                value: controller,
-                child: const CreateHouseholdScreen(),
-              );
-            },
+          child: ChangeNotifierProvider(
+            create: (_) => EnrollmentController(),
+            child: const CreateHouseholdScreen(),
           ),
         ),
       ),
@@ -365,13 +350,9 @@ GoRouter buildRouter(AuthState auth) {
         path: '/household/enrollment/head-info',
         pageBuilder: (context, state) => MaterialPage(
           key: const ValueKey('enrollment-head-info'),
-          child: Consumer<EnrollmentController>(
-            builder: (context, controller, _) {
-              return ChangeNotifierProvider.value(
-                value: controller,
-                child: const HouseholdHeadInfoScreen(),
-              );
-            },
+          child: ChangeNotifierProvider(
+            create: (_) => EnrollmentController()..mockNidScan(),
+            child: const HouseholdHeadInfoScreen(),
           ),
         ),
       ),
@@ -379,13 +360,9 @@ GoRouter buildRouter(AuthState auth) {
         path: '/household/enrollment/success',
         pageBuilder: (context, state) => MaterialPage(
           key: const ValueKey('enrollment-success'),
-          child: Consumer<EnrollmentController>(
-            builder: (context, controller, _) {
-              return ChangeNotifierProvider.value(
-                value: controller,
-                child: const HouseholdCreatedScreen(),
-              );
-            },
+          child: ChangeNotifierProvider(
+            create: (_) => EnrollmentController(),
+            child: const HouseholdCreatedScreen(),
           ),
         ),
       ),
@@ -393,13 +370,9 @@ GoRouter buildRouter(AuthState auth) {
         path: '/household/enrollment/add-member',
         pageBuilder: (context, state) => MaterialPage(
           key: const ValueKey('enrollment-add-member'),
-          child: Consumer<EnrollmentController>(
-            builder: (context, controller, _) {
-              return ChangeNotifierProvider.value(
-                value: controller,
-                child: const AddHouseholdMemberScreen(),
-              );
-            },
+          child: ChangeNotifierProvider(
+            create: (_) => EnrollmentController(),
+            child: const AddHouseholdMemberScreen(),
           ),
         ),
       ),

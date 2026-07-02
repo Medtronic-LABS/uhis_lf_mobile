@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_strings.dart';
 import 'enrollment_controller.dart';
+import 'household_enrollment_sheet.dart';
 import 'widgets/enrollment_button.dart';
 
-/// Modal screen for scanning household head's ID.
+/// First step of the household enrollment overlay: scan household head's ID.
 ///
 /// User can either scan an ID card (camera overlay with mint-green corners
 /// and dashed border) or skip to manual entry. Mock scan returns pre-filled
-/// head information.
+/// head information. Navigation uses the inner [Navigator] provided by
+/// [HouseholdEnrollmentSheet]; the close button dismisses the overlay via
+/// the root navigator.
 class EnrollmentNidScanScreen extends StatefulWidget {
   const EnrollmentNidScanScreen({super.key});
 
@@ -30,20 +32,11 @@ class _EnrollmentNidScanScreenState extends State<EnrollmentNidScanScreen> {
       builder: (context, controller, child) {
         return Scaffold(
           backgroundColor: AppColors.canvas,
-          appBar: AppBar(
-            backgroundColor: AppColors.cardSurface,
-            elevation: 0,
-            leading: IconButton(
-              icon: const Icon(Icons.close, color: AppColors.navy),
-              onPressed: () => context.pop(),
-            ),
-            title: const Text(
-              EnrollmentStrings.nidScanTitle,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: AppColors.navy,
-              ),
+          appBar: PreferredSize(
+            preferredSize: const Size.fromHeight(56),
+            child: EnrollmentOverlayHeader(
+              title: EnrollmentStrings.nidScanTitle,
+              showBack: false,
             ),
           ),
           body: SafeArea(
@@ -291,7 +284,7 @@ class _EnrollmentNidScanScreenState extends State<EnrollmentNidScanScreen> {
           EnrollmentButton(
             label: EnrollmentStrings.createHousehold,
             onPressed: () {
-              context.push('/household/enrollment/create');
+              Navigator.of(context).pushNamed('/create');
             },
             variant: EnrollmentButtonVariant.secondary,
           ),
@@ -322,7 +315,7 @@ class _EnrollmentNidScanScreenState extends State<EnrollmentNidScanScreen> {
         if (mounted) {
           await Future.delayed(const Duration(seconds: 1));
           if (mounted) {
-            context.go('/household/enrollment/head-info');
+            Navigator.of(context).pushNamed('/head-info');
           }
         }
       }
