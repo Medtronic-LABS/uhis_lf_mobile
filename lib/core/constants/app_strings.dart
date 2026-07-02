@@ -15,6 +15,8 @@
 ///   * Keep the rendered value stable — e2e selectors match on these strings.
 library;
 
+import 'package:intl/intl.dart';
+
 import '../models/dashboard_tier.dart';
 
 /// App-wide identity strings.
@@ -1225,6 +1227,16 @@ abstract final class ScribeBannerStrings {
   /// Badge shown once the "Other" (standard/batch) mode is active, so it's
   /// always clear which engine — this or Real-Time ASR — is running.
   static const String modeOtherBadge = 'OTHER';
+
+  static const String modeGemini = 'Gemini';
+  static const String modeGeminiFull = 'AI Scribe · Gemini';
+  static const String modeAsrFull = 'Live ASR · Sarvam';
+  static const String modeSheetTitle = 'AI Scribe mode';
+  static const String modeGeminiTitle = 'AI Scribe (Gemini)';
+  static const String modeGeminiDesc = 'Records full consultation. AI analyzes after recording ends.';
+  static const String modeAsrTitle = 'Live ASR (Sarvam)';
+  static const String modeAsrDesc = 'Real-time Bengali transcript + live detected symptoms.';
+  static const String modeGeminiDefault = 'Default';
 }
 
 /// Bottom-nav tab labels + placeholder copy.
@@ -3049,4 +3061,37 @@ abstract final class NcdScreeningStrings {
 
   static const String familyHistoryTitle = 'Family history of high BP?';
   static const String familyHistoryBn = 'বাবা-মায়ের / পরিবারে উচ্চ রক্তচাপ?';
+}
+
+abstract final class PerformanceStrings {
+  static const String title = 'My Performance';
+  static const String periodWeek = 'Week';
+  static const String periodMonth = 'Month';
+  static const String heroSubline = 'visits this period';
+  static const String weeklyTarget = 'Weekly target';
+  static const String statVisitsToday = 'Visits today';
+  static const String statVisitsTodaySub = 'so far';
+  static const String statHouseholds = 'Households';
+  static const String statHouseholdsSub = 'enrolled';
+  static const String statReferrals = 'Referrals';
+  static const String statReferralsSub = 'this week';
+  static const String statThisWeek = 'Visits';
+  static const String statThisMonth = 'Visits';
+  static const String statTotalVisitsSub = 'this period';
+  static const String sectionProgramme = 'VISITS BY PROGRAMME';
+  static const String sectionRecent = 'RECENT ACTIVITY';
+  static const String today = 'Today';
+  static const String yesterday = 'Yesterday';
+  static const String badgeCompleted = 'Completed';
+  static const String badgeReferred = 'Referred';
+  static const String loadError = 'Could not load performance data';
+  static const String iconTooltip = 'My performance';
+
+  static String periodLabelWeek(DateTime start, DateTime end) {
+    final fmt = DateFormat('MMM d');
+    return '${fmt.format(start)} – ${DateFormat('d').format(end)}';
+  }
+
+  static String periodLabelMonth(DateTime date) =>
+      DateFormat('MMMM yyyy').format(date);
 }
