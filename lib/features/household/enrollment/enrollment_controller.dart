@@ -1,16 +1,28 @@
 import 'package:flutter/foundation.dart';
 import 'dart:math';
 
+import '../../../core/api/api_client.dart';
+import '../../../core/auth/auth_repository.dart';
+import 'enrollment_repository.dart';
 import 'models/household_enrollment_models.dart';
 
 /// Controller for managing household enrollment state across all screens.
 ///
 /// Holds the active household being enrolled, the household head info, and
 /// any members being added. Provides methods to update form state, generate
-/// household numbers, and handle mock NID scans.
+/// household numbers, and submit to [EnrollmentRepository].
 ///
 /// Use via Provider to share state across enrollment screens.
 class EnrollmentController extends ChangeNotifier {
+  EnrollmentController({AuthRepository? auth, ApiClient? apiClient})
+      : _auth = auth,
+        _repo = (auth != null && apiClient != null)
+            ? EnrollmentRepository(apiClient)
+            : null;
+
+  final AuthRepository? _auth;
+  final EnrollmentRepository? _repo;
+
   Household? _household;
   HouseholdHeadInfo? _householdHead;
   final List<HouseholdMember> _members = [];
@@ -29,12 +41,18 @@ class EnrollmentController extends ChangeNotifier {
   void initializeHousehold({
     required String healthWorkerId,
     required String villageId,
+    String? villageName,
+    String? subVillageId,
+    String? subVillageName,
   }) {
     final householdNumber = _generateHouseholdNumber();
     _household = Household(
       householdNumber: householdNumber,
       healthWorkerId: healthWorkerId,
       villageId: villageId,
+      villageName: villageName,
+      subVillageId: subVillageId,
+      subVillageName: subVillageName,
       householdType: 'Single-family',
       numberOfMembers: 0,
       houseNumber: '',
@@ -215,8 +233,10 @@ class EnrollmentController extends ChangeNotifier {
     return errors;
   }
 
-  /// Submit household enrollment (mocked for now).
-  /// Backend integration to come later.
+  /// Submit household enrollment to `POST /offline-service/offline-sync/create`.
+  ///
+  /// Falls back to a mock delay when the controller was constructed without
+  /// auth/api deps (e.g. in widget tests).
   Future<bool> submitHousehold() async {
     final householdErrors = validateHouseholdForm();
     final headErrors = validateHeadForm();
@@ -231,16 +251,26 @@ class EnrollmentController extends ChangeNotifier {
     _error = null;
 
     try {
-      await Future.delayed(const Duration(milliseconds: 1200));
+      final repo = _repo;
+      final auth = _auth;
+      if (repo != null && auth != null) {
+        final userId = await auth.userId() ?? 0;
+        final orgId = await auth.organizationFhirId() ?? '';
+        final deviceId = await auth.deviceId();
 
-      // TODO: Post to backend when ready
-      // For now, just log the data
-      final enrollmentData = {
-        'household': _household?.toJson(),
-        'head': _householdHead?.toJson(),
-        'members': _members.map((m) => m.toJson()).toList(),
-      };
-      debugPrint('Enrollment data (to be posted): $enrollmentData');
+        await repo.submit(
+          household: _household!,
+          head: _householdHead!,
+          members: _members,
+          userId: userId,
+          organizationId: orgId,
+          deviceId: deviceId,
+        );
+      } else {
+        // No HTTP client injected — dev/test path.
+        debugPrint('[EnrollmentController] mock submit: ${_household?.toJson()}');
+        await Future.delayed(const Duration(milliseconds: 800));
+      }
 
       _setLoading(false);
       return true;

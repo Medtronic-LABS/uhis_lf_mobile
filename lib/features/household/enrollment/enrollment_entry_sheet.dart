@@ -5,7 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/api/api_client.dart';
 import '../../../core/api/api_repository.dart';
+import '../../../core/auth/auth_repository.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/models/patient.dart';
 import 'enrollment_controller.dart';
@@ -34,7 +36,10 @@ void showEnrollmentEntrySheet(BuildContext context) {
     barrierColor: Colors.transparent,
     enableDrag: false,
     builder: (_) => ChangeNotifierProvider(
-      create: (_) => EnrollmentController(),
+      create: (ctx) => EnrollmentController(
+        auth: ctx.read<AuthRepository>(),
+        apiClient: ctx.read<ApiClient>(),
+      ),
       child: const _EnrollmentOverlay(),
     ),
   );

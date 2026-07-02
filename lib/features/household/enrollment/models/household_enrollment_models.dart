@@ -189,6 +189,9 @@ class Household {
     required this.householdNumber,
     required this.healthWorkerId,
     required this.villageId,
+    this.villageName,
+    this.subVillageId,
+    this.subVillageName,
     required this.householdType,
     required this.numberOfMembers,
     required this.houseNumber,
@@ -203,6 +206,9 @@ class Household {
   final String householdNumber;
   final String healthWorkerId;
   final String villageId;
+  final String? villageName;
+  final String? subVillageId;
+  final String? subVillageName;
   final String householdType; // 'Single-family', 'Multi-family', 'Institutional', 'Other'
   final int numberOfMembers;
   final String houseNumber;
@@ -217,6 +223,9 @@ class Household {
     String? householdNumber,
     String? healthWorkerId,
     String? villageId,
+    String? villageName,
+    String? subVillageId,
+    String? subVillageName,
     String? householdType,
     int? numberOfMembers,
     String? houseNumber,
@@ -231,6 +240,9 @@ class Household {
       householdNumber: householdNumber ?? this.householdNumber,
       healthWorkerId: healthWorkerId ?? this.healthWorkerId,
       villageId: villageId ?? this.villageId,
+      villageName: villageName ?? this.villageName,
+      subVillageId: subVillageId ?? this.subVillageId,
+      subVillageName: subVillageName ?? this.subVillageName,
       householdType: householdType ?? this.householdType,
       numberOfMembers: numberOfMembers ?? this.numberOfMembers,
       houseNumber: houseNumber ?? this.houseNumber,
@@ -248,6 +260,9 @@ class Household {
       'householdNumber': householdNumber,
       'healthWorkerId': healthWorkerId,
       'villageId': villageId,
+      'villageName': villageName,
+      'subVillageId': subVillageId,
+      'subVillageName': subVillageName,
       'householdType': householdType,
       'numberOfMembers': numberOfMembers,
       'houseNumber': houseNumber,
@@ -265,6 +280,9 @@ class Household {
       householdNumber: json['householdNumber'] as String? ?? '',
       healthWorkerId: json['healthWorkerId'] as String? ?? '',
       villageId: json['villageId'] as String? ?? '',
+      villageName: json['villageName'] as String?,
+      subVillageId: json['subVillageId'] as String?,
+      subVillageName: json['subVillageName'] as String?,
       householdType: json['householdType'] as String? ?? 'Single-family',
       numberOfMembers: json['numberOfMembers'] as int? ?? 0,
       houseNumber: json['houseNumber'] as String? ?? '',

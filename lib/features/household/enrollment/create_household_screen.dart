@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/auth/auth_repository.dart';
+import '../../../core/auth/user_hierarchy_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_strings.dart';
 import 'enrollment_controller.dart';
@@ -49,13 +51,28 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
 
     // Defer so ChangeNotifierProvider finishes its first build before
     // notifyListeners() is called (avoids !_dirty assertion).
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       final controller = context.read<EnrollmentController>();
       if (controller.household == null) {
+        final auth = context.read<AuthRepository>();
+        final hierarchy = context.read<UserHierarchyService>();
+
+        final userId = await auth.userId();
+        final villages = hierarchy.villages ?? [];
+        final subVillages = hierarchy.subVillages ?? [];
+
+        final firstVillage = villages.isNotEmpty ? villages.first : null;
+        final firstSubVillage =
+            subVillages.isNotEmpty ? subVillages.first : null;
+
+        if (!mounted) return;
         controller.initializeHousehold(
-          healthWorkerId: 'current_user_id',
-          villageId: 'default_village',
+          healthWorkerId: userId?.toString() ?? '',
+          villageId: firstVillage?.id.toString() ?? '',
+          villageName: firstVillage?.name,
+          subVillageId: firstSubVillage?.id.toString(),
+          subVillageName: firstSubVillage?.name,
         );
       }
     });
