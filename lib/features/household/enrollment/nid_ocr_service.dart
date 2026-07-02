@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -39,6 +40,8 @@ class NidOcrService {
   static const Set<int> _validNidLengths = {10, 13, 17};
 
   /// Opens the camera, OCRs the captured card, and returns the NID number.
+  /// Opens the system camera app, OCRs the captured card, returns the NID
+  /// number. Used by surfaces without a live in-app preview (e.g. Add Member).
   Future<NidScanResult> captureNidNumber() async {
     final XFile? photo;
     try {
@@ -46,21 +49,27 @@ class NidOcrService {
         source: ImageSource.camera,
         imageQuality: 100,
       );
-    } on Exception {
+    } on Exception catch (e) {
+      debugPrint('NidOcrService: pickImage failed: $e');
       return const NidScanResult(NidScanStatus.error);
     }
-
     if (photo == null) return const NidScanResult(NidScanStatus.cancelled);
+    return extractNidFromImage(photo.path);
+  }
 
+  /// Runs OCR on an already-captured image file (e.g. a frame from the in-app
+  /// camera preview) and extracts the NID number.
+  Future<NidScanResult> extractNidFromImage(String imagePath) async {
     final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
     try {
       final recognized =
-          await recognizer.processImage(InputImage.fromFilePath(photo.path));
+          await recognizer.processImage(InputImage.fromFilePath(imagePath));
       final nid = extractNidNumber(recognized.text);
       return nid == null
           ? const NidScanResult(NidScanStatus.notFound)
           : NidScanResult(NidScanStatus.success, nid);
-    } on Exception {
+    } on Exception catch (e) {
+      debugPrint('NidOcrService: OCR failed: $e');
       return const NidScanResult(NidScanStatus.error);
     } finally {
       await recognizer.close();

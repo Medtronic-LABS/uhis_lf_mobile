@@ -1,5 +1,7 @@
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_strings.dart';
@@ -51,6 +53,10 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
 
   final NidOcrService _ocr = NidOcrService();
 
+  CameraController? _cameraController;
+  bool _cameraReady = false;
+  bool _cameraUnavailable = false;
+
   late final AnimationController _sweepCtrl;
   late final Animation<double> _sweep;
 
@@ -64,18 +70,68 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
     _sweep = Tween<double>(begin: 0.06, end: 0.92).animate(
       CurvedAnimation(parent: _sweepCtrl, curve: Curves.easeInOut),
     );
+    _initCamera();
+  }
+
+  /// Request camera permission and start the live preview inside the overlay.
+  Future<void> _initCamera() async {
+    final status = await Permission.camera.request();
+    if (!mounted) return;
+    if (!status.isGranted) {
+      setState(() => _cameraUnavailable = true);
+      return;
+    }
+    try {
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        if (mounted) setState(() => _cameraUnavailable = true);
+        return;
+      }
+      final back = cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.back,
+        orElse: () => cameras.first,
+      );
+      final controller = CameraController(
+        back,
+        ResolutionPreset.high,
+        enableAudio: false,
+      );
+      await controller.initialize();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      setState(() {
+        _cameraController = controller;
+        _cameraReady = true;
+      });
+    } on CameraException catch (e) {
+      debugPrint('EnrollmentOverlay: camera init failed: $e');
+      if (mounted) setState(() => _cameraUnavailable = true);
+    }
   }
 
   @override
   void dispose() {
+    _cameraController?.dispose();
     _sweepCtrl.dispose();
     super.dispose();
   }
 
+  /// Capture a frame from the live preview and read the NID number from it.
   Future<void> _handleCapture() async {
-    if (_isScanning) return;
+    final controller = _cameraController;
+    if (_isScanning || controller == null || !_cameraReady) return;
     setState(() => _isScanning = true);
-    final result = await _ocr.captureNidNumber();
+
+    NidScanResult result;
+    try {
+      final frame = await controller.takePicture();
+      result = await _ocr.extractNidFromImage(frame.path);
+    } on CameraException catch (e) {
+      debugPrint('EnrollmentOverlay: takePicture failed: $e');
+      result = const NidScanResult(NidScanStatus.error);
+    }
     if (!mounted) return;
     setState(() => _isScanning = false);
 
@@ -115,6 +171,8 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
                 isScanning: _isScanning,
                 sweep: _sweep,
                 readingCard: _overlayState == _OverlayState.postScan,
+                cameraController: _cameraReady ? _cameraController : null,
+                cameraUnavailable: _cameraUnavailable,
                 onCapture: _handleCapture,
                 onCreateHousehold: () {
                   Navigator.of(context).pop();
@@ -149,6 +207,8 @@ class _ScannerBody extends StatelessWidget {
     required this.isScanning,
     required this.sweep,
     required this.readingCard,
+    required this.cameraController,
+    required this.cameraUnavailable,
     required this.onCapture,
     required this.onCreateHousehold,
     required this.onCancel,
@@ -157,9 +217,16 @@ class _ScannerBody extends StatelessWidget {
   final bool isScanning;
   final bool readingCard;
   final Animation<double> sweep;
+
+  /// Live preview controller, or null while initialising / unavailable.
+  final CameraController? cameraController;
+  final bool cameraUnavailable;
   final VoidCallback onCapture;
   final VoidCallback onCreateHousehold;
   final VoidCallback onCancel;
+
+  bool get _canCapture =>
+      !isScanning && !readingCard && cameraController != null;
 
   @override
   Widget build(BuildContext context) {
@@ -182,14 +249,21 @@ class _ScannerBody extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             readingCard
-                ? 'AI extracting name, NID number, DOB'
-                : 'Position the card within the frame',
+                ? 'Reading the NID number…'
+                : cameraUnavailable
+                    ? 'Camera unavailable — use Create Household below'
+                    : 'Position the card within the frame',
             style: const TextStyle(fontSize: 12, color: Color(0x99FFFFFF)),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 20),
-          // Viewfinder
-          _Viewfinder(isScanning: isScanning, sweep: sweep),
+          // Viewfinder with live camera preview
+          _Viewfinder(
+            isScanning: isScanning,
+            sweep: sweep,
+            cameraController: cameraController,
+            cameraUnavailable: cameraUnavailable,
+          ),
           const SizedBox(height: 10),
           const Text(
             'Bangladesh National ID Card · Smart NID · Birth Registration',
@@ -199,7 +273,7 @@ class _ScannerBody extends StatelessWidget {
           const SizedBox(height: 18),
           // Capture button
           GestureDetector(
-            onTap: (isScanning || readingCard) ? null : onCapture,
+            onTap: _canCapture ? onCapture : null,
             child: Container(
               width: 72,
               height: 72,
@@ -219,9 +293,9 @@ class _ScannerBody extends StatelessWidget {
                     shape: BoxShape.circle,
                     color: Colors.white,
                     border: Border.all(
-                      color: (isScanning || readingCard)
-                          ? Colors.grey
-                          : const Color(0xFF1a1a2e),
+                      color: _canCapture
+                          ? const Color(0xFF1a1a2e)
+                          : Colors.grey,
                       width: 2,
                     ),
                   ),
@@ -365,10 +439,17 @@ class _ScannerBody extends StatelessWidget {
 // ─── Viewfinder ───────────────────────────────────────────────────────────────
 
 class _Viewfinder extends StatelessWidget {
-  const _Viewfinder({required this.isScanning, required this.sweep});
+  const _Viewfinder({
+    required this.isScanning,
+    required this.sweep,
+    required this.cameraController,
+    required this.cameraUnavailable,
+  });
 
   final bool isScanning;
   final Animation<double> sweep;
+  final CameraController? cameraController;
+  final bool cameraUnavailable;
 
   static const double _inset = 10;
   static const double _cSize = 28;
@@ -385,12 +466,26 @@ class _Viewfinder extends StatelessWidget {
           height: h,
           child: Stack(
             children: [
+              // Live camera preview (cover-fit into the card rect) or a
+              // translucent placeholder while the camera initialises.
               Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.04),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: cameraController != null
+                      ? FittedBox(
+                          fit: BoxFit.cover,
+                          clipBehavior: Clip.hardEdge,
+                          child: SizedBox(
+                            width: cameraController!.value.previewSize?.height ??
+                                w,
+                            height:
+                                cameraController!.value.previewSize?.width ?? h,
+                            child: CameraPreview(cameraController!),
+                          ),
+                        )
+                      : Container(
+                          color: Colors.white.withValues(alpha: 0.04),
+                        ),
                 ),
               ),
               // Inner dashed hint
@@ -407,12 +502,14 @@ class _Viewfinder extends StatelessWidget {
                     ),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: isScanning
+                  child: (isScanning || cameraController != null)
                       ? null
-                      : const Center(
+                      : Center(
                           child: Icon(
-                            Icons.credit_card_outlined,
-                            color: Color(0x26FFFFFF),
+                            cameraUnavailable
+                                ? Icons.no_photography_outlined
+                                : Icons.credit_card_outlined,
+                            color: const Color(0x26FFFFFF),
                             size: 40,
                           ),
                         ),
