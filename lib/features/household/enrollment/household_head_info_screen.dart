@@ -18,9 +18,16 @@ import 'widgets/enrollment_sticky_bar.dart';
 /// Collects head's name, ID type/number, mobile (with "Not Available" toggle),
 /// DOB (date picker), age (auto-calculated), gender, marital status, disability.
 class HouseholdHeadInfoScreen extends StatefulWidget {
-  const HouseholdHeadInfoScreen({super.key, this.fromNidScan = false});
+  const HouseholdHeadInfoScreen({
+    super.key,
+    this.fromNidScan = false,
+    this.scannedNidNumber,
+  });
 
   final bool fromNidScan;
+
+  /// NID number read on-device from the entry-overlay card scan, if any.
+  final String? scannedNidNumber;
 
   @override
   State<HouseholdHeadInfoScreen> createState() =>
@@ -53,24 +60,11 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
     _nameCtrl.addListener(_onFormChanged);
     _idNumberCtrl.addListener(_onFormChanged);
 
-    if (widget.fromNidScan) {
-      // Run mock scan after first frame so ChangeNotifierProvider is fully
-      // mounted before notifyListeners() fires.
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        if (!mounted) return;
-        final controller = context.read<EnrollmentController>();
-        await controller.mockNidScan();
-        if (!mounted) return;
-        final scan = controller.nidScanResult;
-        if (scan != null) {
-          setState(() {
-            _nameCtrl.text = scan['name'] as String? ?? '';
-            _idNumberCtrl.text = scan['idNumber'] as String? ?? '';
-            _dobCtrl.text = scan['dateOfBirth'] as String? ?? '';
-            _gender = scan['gender'] as String?;
-          });
-        }
-      });
+    // Prefill the ID number from the on-device NID card scan (number only —
+    // the SK fills the rest). We treat it as a National ID when scanned.
+    if (widget.fromNidScan && (widget.scannedNidNumber?.isNotEmpty ?? false)) {
+      _idNumberCtrl.text = widget.scannedNidNumber!;
+      _idType = 'National ID';
     }
   }
 

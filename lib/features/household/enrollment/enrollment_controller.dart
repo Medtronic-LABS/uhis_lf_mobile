@@ -14,14 +14,12 @@ class EnrollmentController extends ChangeNotifier {
   Household? _household;
   HouseholdHeadInfo? _householdHead;
   final List<HouseholdMember> _members = [];
-  Map<String, dynamic>? _nidScanResult;
   bool _loading = false;
   String? _error;
 
   Household? get household => _household;
   HouseholdHeadInfo? get householdHead => _householdHead;
   List<HouseholdMember> get members => List.unmodifiable(_members);
-  Map<String, dynamic>? get nidScanResult => _nidScanResult;
   bool get loading => _loading;
   String? get error => _error;
 
@@ -123,37 +121,6 @@ class EnrollmentController extends ChangeNotifier {
       _members[index] = member;
       notifyListeners();
     }
-  }
-
-  /// Mock NID scan — returns fake data with pre-filled fields.
-  Future<Map<String, dynamic>> mockNidScan() async {
-    _setLoading(true);
-    _error = null;
-
-    try {
-      await Future.delayed(const Duration(milliseconds: 800));
-
-      final mockData = {
-        'name': 'Fatema Begum',
-        'idNumber': '3456789012345',
-        'dateOfBirth': '1985-03-15',
-        'gender': 'Female',
-      };
-
-      _nidScanResult = mockData;
-      _setLoading(false);
-      return mockData;
-    } catch (e) {
-      _error = 'NID scan failed: $e';
-      _setLoading(false);
-      rethrow;
-    }
-  }
-
-  /// Clear the NID scan result.
-  void clearNidScanResult() {
-    _nidScanResult = null;
-    notifyListeners();
   }
 
   /// Validate household form (step 1).
@@ -285,7 +252,6 @@ class EnrollmentController extends ChangeNotifier {
     _household = null;
     _householdHead = null;
     _members.clear();
-    _nidScanResult = null;
     _loading = false;
     _error = null;
     notifyListeners();

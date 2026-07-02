@@ -349,13 +349,17 @@ GoRouter buildRouter(AuthState auth) {
       GoRoute(
         path: '/household/enrollment/head-info',
         pageBuilder: (context, state) {
-          final fromNidScan =
-              (state.extra as Map<String, dynamic>?)?['fromNidScan'] == true;
+          final extra = state.extra as Map<String, dynamic>?;
+          final fromNidScan = extra?['fromNidScan'] == true;
+          final scannedNid = extra?['nidNumber'] as String?;
           return MaterialPage(
             key: const ValueKey('enrollment-head-info'),
             child: ChangeNotifierProvider(
               create: (_) => EnrollmentController(),
-              child: HouseholdHeadInfoScreen(fromNidScan: fromNidScan),
+              child: HouseholdHeadInfoScreen(
+                fromNidScan: fromNidScan,
+                scannedNidNumber: scannedNid,
+              ),
             ),
           );
         },

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/constants/app_strings.dart';
 import 'enrollment_controller.dart';
+import 'nid_ocr_service.dart';
 
 // Design tokens — prototype-aligned
 const _teal = Color(0xFF6EE7B7);
@@ -45,6 +47,9 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
     with SingleTickerProviderStateMixin {
   _OverlayState _overlayState = _OverlayState.scanner;
   bool _isScanning = false;
+  String? _scannedNid;
+
+  final NidOcrService _ocr = NidOcrService();
 
   late final AnimationController _sweepCtrl;
   late final Animation<double> _sweep;
@@ -70,17 +75,33 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
   Future<void> _handleCapture() async {
     if (_isScanning) return;
     setState(() => _isScanning = true);
-    await context.read<EnrollmentController>().mockNidScan();
+    final result = await _ocr.captureNidNumber();
     if (!mounted) return;
-    setState(() {
-      _isScanning = false;
-      _overlayState = _OverlayState.postScan;
-    });
+    setState(() => _isScanning = false);
+
+    switch (result.status) {
+      case NidScanStatus.success:
+        setState(() {
+          _scannedNid = result.nidNumber;
+          _overlayState = _OverlayState.postScan;
+        });
+      case NidScanStatus.notFound:
+        _showSnack(EnrollmentStrings.nidScanNotFound);
+      case NidScanStatus.error:
+        _showSnack(EnrollmentStrings.nidScanError);
+      case NidScanStatus.cancelled:
+        break;
+    }
+  }
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final scanResult = context.watch<EnrollmentController>().nidScanResult;
     final screenH = MediaQuery.of(context).size.height;
 
     return SizedBox(
@@ -103,13 +124,13 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
               ),
               if (_overlayState == _OverlayState.postScan)
                 _PostScanSheet(
-                  scanResult: scanResult,
+                  nidNumber: _scannedNid,
                   onLinkExisting: () => Navigator.of(context).pop(),
                   onCreateNew: () {
                     Navigator.of(context).pop();
                     context.push(
                       '/household/enrollment/head-info',
-                      extra: {'fromNidScan': true},
+                      extra: {'fromNidScan': true, 'nidNumber': _scannedNid},
                     );
                   },
                 ),
@@ -520,29 +541,17 @@ class _CornerPainter extends CustomPainter {
 
 class _PostScanSheet extends StatelessWidget {
   const _PostScanSheet({
-    required this.scanResult,
+    required this.nidNumber,
     required this.onLinkExisting,
     required this.onCreateNew,
   });
 
-  final Map<String, dynamic>? scanResult;
+  final String? nidNumber;
   final VoidCallback onLinkExisting;
   final VoidCallback onCreateNew;
 
   @override
   Widget build(BuildContext context) {
-    final name = scanResult?['name'] as String? ?? 'Unknown';
-    final initials = name
-        .split(' ')
-        .where((w) => w.isNotEmpty)
-        .map((w) => w[0])
-        .take(2)
-        .join();
-    final idNumber = scanResult?['idNumber'] as String? ?? '';
-    final gender = scanResult?['gender'] as String? ?? '';
-    final dob = scanResult?['dateOfBirth'] as String? ?? '';
-    final age = _computeAge(dob);
-
     return Positioned(
       left: 0,
       right: 0,
@@ -580,7 +589,7 @@ class _PostScanSheet extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'New enrolment',
+                        'NID card scanned',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w900,
@@ -589,7 +598,7 @@ class _PostScanSheet extends StatelessWidget {
                       ),
                       SizedBox(height: 2),
                       Text(
-                        '✦ AI filled from e-Health card scan',
+                        '✦ NID number read on-device',
                         style: TextStyle(fontSize: 11, color: _muted),
                       ),
                     ],
@@ -602,7 +611,7 @@ class _PostScanSheet extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 14),
-            // Navy gradient NID data card
+            // Navy gradient NID-number card
             Container(
               width: double.infinity,
               decoration: BoxDecoration(
@@ -614,91 +623,27 @@ class _PostScanSheet extends StatelessWidget {
                 borderRadius: BorderRadius.circular(14),
               ),
               padding: const EdgeInsets.all(16),
-              child: Stack(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Positioned(
-                    right: -10,
-                    top: -10,
-                    child: Container(
-                      width: 60,
-                      height: 60,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.05),
-                        shape: BoxShape.circle,
-                      ),
+                  const Text(
+                    '📇 NID NUMBER',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0x80FFFFFF),
+                      letterSpacing: 0.8,
                     ),
                   ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        '📲 SCANNED FROM E-HEALTH CARD',
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0x80FFFFFF),
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Container(
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.15),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Center(
-                              child: Text(
-                                initials,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  name,
-                                  style: const TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w800,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                Text(
-                                  age.isNotEmpty ? '$gender · Age $age' : gender,
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    color: Color(0x99FFFFFF),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _DataCell(label: 'NID', value: idNumber),
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: _DataCell(label: 'DOB', value: dob),
-                          ),
-                        ],
-                      ),
-                    ],
+                  const SizedBox(height: 8),
+                  Text(
+                    nidNumber ?? '—',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      letterSpacing: 1.5,
+                    ),
                   ),
                 ],
               ),
@@ -752,69 +697,6 @@ class _PostScanSheet extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  static String _computeAge(String dob) {
-    try {
-      final parts = dob.split('-');
-      if (parts.length < 3) return '';
-      final birth = DateTime(
-        int.parse(parts[0]),
-        int.parse(parts[1]),
-        int.parse(parts[2]),
-      );
-      final now = DateTime.now();
-      int age = now.year - birth.year;
-      if (now.month < birth.month ||
-          (now.month == birth.month && now.day < birth.day)) {
-        age--;
-      }
-      return '$age';
-    } catch (_) {
-      return '';
-    }
-  }
-}
-
-class _DataCell extends StatelessWidget {
-  const _DataCell({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w700,
-              color: Color(0x80FFFFFF),
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 1),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
       ),
     );
   }
