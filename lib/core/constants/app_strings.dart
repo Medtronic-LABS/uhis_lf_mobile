@@ -3032,6 +3032,43 @@ abstract final class TrainingStrings {
       'Complete modules to earn programme certificates';
 }
 
+/// Micro-coaching pilot strings — three-loop system:
+/// Learn (morning cards + quiz) → Apply (visit-triggered) → Measure (telemetry).
+abstract final class CoachingStrings {
+  CoachingStrings._();
+
+  static const String sectionTodayFocus = "TODAY'S FOCUS";
+  static const String sectionAllModules = 'ALL MODULES';
+  static const String minLabel = 'min';
+  static const String passedLabel = 'Passed';
+  static const String startLabel = 'Start';
+  static const String reviewLabel = 'Review';
+  static const String cardOf = 'of';
+  static const String nextCard = 'Next';
+  static const String prevCard = 'Back';
+  static const String startQuiz = 'Take Quiz';
+  static const String quizTitle = 'Quick Quiz';
+  static const String questionOf = 'Question';
+  static const String checkAnswer = 'Check Answer';
+  static const String nextQuestion = 'Next';
+  static const String quizResult = 'Quiz Complete';
+  static const String quizPassed = 'You passed!';
+  static const String quizFailed = 'Not quite — review the module and try again.';
+  static const String tryAgain = 'Try Again';
+  static const String backToModules = 'Back to Training';
+  static const String rationaleLabel = 'Why?';
+  static const String domainAnc = 'ANC';
+  static const String domainNcd = 'NCD';
+  static const String domainImci = 'IMCI';
+  static const String domainTb = 'TB';
+  static const String domainEpi = 'EPI';
+  static const String domainNutrition = 'Nutrition';
+
+  static String quizScore(int correct, int total) => '$correct / $total correct';
+  static String cardProgress(int current, int total) => '$current of $total';
+  static String questionProgress(int current, int total) => 'Question $current of $total';
+}
+
 /// NCD assessment form copy — spec §5.2.2 Hypertension Screening section.
 ///
 /// Bengali secondary labels mirror the spec wording so the SK can match the

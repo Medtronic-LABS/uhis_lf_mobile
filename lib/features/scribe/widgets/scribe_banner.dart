@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/api/realtime_asr_service.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/preferences/scribe_engine_notifier.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../realtime_asr/models/realtime_clinical_fields.dart';
 import '../../realtime_asr/realtime_asr_controller.dart';
@@ -171,36 +172,42 @@ class _ScribeBannerState extends State<ScribeBanner> {
                               session.pendingFieldCount > 0) ...[
                             _AcceptAllButton(onTap: widget.onAcceptAll),
                           ],
-                          // Idle: explicit mode chooser — no more implicit
-                          // whole-card tap-to-start, so it's always clear
-                          // which engine a tap will start.
+                          // Idle: single mode button driven by persisted engine
+                          // preference + a settings icon to switch the preference.
                           if (idleChoice) ...[
                             const SizedBox(width: 8),
-                            _ModeButton(
-                              key: const Key('scribe_banner_mode_asr'),
-                              label: ScribeBannerStrings.modeAsr,
-                              icon: Icons.podcasts,
-                              onTap: _liveCtrl.start,
+                            Consumer<ScribeEngineNotifier>(
+                              builder: (ctx, enginePref, _) => _ModeButton(
+                                key: const Key('scribe_banner_mode_start'),
+                                label: enginePref.isLiveAsr
+                                    ? ScribeBannerStrings.modeAsr
+                                    : ScribeBannerStrings.modeGemini,
+                                icon: enginePref.isLiveAsr
+                                    ? Icons.podcasts
+                                    : Icons.mic,
+                                onTap: enginePref.isLiveAsr
+                                    ? _liveCtrl.start
+                                    : widget.onStartRecording,
+                              ),
                             ),
                             const SizedBox(width: 6),
-                            _ModeButton(
-                              key: const Key('scribe_banner_mode_other'),
-                              label: ScribeBannerStrings.modeOther,
-                              icon: Icons.mic,
-                              onTap: widget.onStartRecording,
-                            ),
+                            _EngineSettingsButton(liveCtrl: _liveCtrl),
                           ],
                           // Live mode active: only its own stop control shows.
                           if (liveActive) ...[
                             const SizedBox(width: 8),
                             _LiveStopButton(controller: _liveCtrl),
                           ],
-                          // Batch ("Other") mode active: badge makes the
-                          // active engine explicit at a glance.
+                          // Batch mode active: badge makes the active engine
+                          // explicit at a glance.
                           if (!liveActive && !idleChoice) ...[
                             const SizedBox(width: 8),
-                            const _ModeBadge(
-                              label: ScribeBannerStrings.modeOtherBadge,
+                            Consumer<ScribeEngineNotifier>(
+                              builder: (ctx, ep, _) => _ModeBadge(
+                                label: ep.isLiveAsr
+                                    ? ScribeBannerStrings.modeAsr
+                                    : ScribeBannerStrings.modeGemini,
+                              ),
                             ),
                           ],
                         ],
@@ -1034,5 +1041,204 @@ class _LiveAsrPanel extends StatelessWidget {
       ...f.chiefComplaints,
     ];
     return parts.isEmpty ? RealtimeAsrStrings.symptomsEmpty : parts.join(' · ');
+  }
+}
+
+/// Small settings/tune icon on the banner (idle state only) — opens
+/// [_ScribeModeSheet] to switch the persisted engine preference.
+class _EngineSettingsButton extends StatelessWidget {
+  const _EngineSettingsButton({required this.liveCtrl});
+  final RealtimeAsrController liveCtrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Change AI Scribe mode',
+      button: true,
+      child: GestureDetector(
+        key: const Key('scribe_banner_engine_settings'),
+        onTap: () => showModalBottomSheet<void>(
+          context: context,
+          backgroundColor: Colors.transparent,
+          builder: (_) => _ScribeModeSheet(liveCtrl: liveCtrl),
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.18),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+          ),
+          child: const Icon(Icons.tune, color: Colors.white, size: 15),
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom sheet for switching the persisted AI Scribe engine preference.
+class _ScribeModeSheet extends StatelessWidget {
+  const _ScribeModeSheet({required this.liveCtrl});
+  final RealtimeAsrController liveCtrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<ScribeEngineNotifier>(
+      builder: (ctx, enginePref, _) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                ScribeBannerStrings.modeSheetTitle,
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 12),
+              _ModeOption(
+                title: ScribeBannerStrings.modeGeminiTitle,
+                description: ScribeBannerStrings.modeGeminiDesc,
+                icon: Icons.mic,
+                badge: ScribeBannerStrings.modeGeminiDefault,
+                selected: !enginePref.isLiveAsr,
+                onTap: () {
+                  enginePref.set(ScribeEngine.gemini);
+                  Navigator.of(context).pop();
+                },
+              ),
+              const SizedBox(height: 8),
+              _ModeOption(
+                title: ScribeBannerStrings.modeAsrTitle,
+                description: ScribeBannerStrings.modeAsrDesc,
+                icon: Icons.podcasts,
+                badge: null,
+                selected: enginePref.isLiveAsr,
+                onTap: () {
+                  enginePref.set(ScribeEngine.liveAsr);
+                  Navigator.of(context).pop();
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ModeOption extends StatelessWidget {
+  const _ModeOption({
+    required this.title,
+    required this.description,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+    this.badge,
+  });
+
+  final String title;
+  final String description;
+  final IconData icon;
+  final String? badge;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    const navy = Color(0xFF1B2B5E);
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFFF0F0FF) : Colors.grey[50],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? navy : Colors.grey[200]!,
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: selected ? navy : Colors.grey[200],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: Colors.white, size: 18),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                      if (badge != null) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.green[50],
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.green[200]!),
+                          ),
+                          child: Text(
+                            badge!,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.green[700],
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    description,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (selected)
+              const Icon(Icons.check_circle, color: Color(0xFF1B2B5E), size: 20),
+          ],
+        ),
+      ),
+    );
   }
 }
