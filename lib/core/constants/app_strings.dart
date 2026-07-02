@@ -3255,6 +3255,11 @@ abstract final class EnrollmentStrings {
       'Could not read the NID number. Try again or type it in below.';
   static const String nidScanError =
       'Camera unavailable. Please type the NID number below.';
+  static const String headPrefilledFromScan =
+      'Name, date of birth & NID read from the card — verify, then add '
+      "father's & mother's names (Bangla) manually.";
+  static String nidDetailsCaptured(String number) =>
+      '✓ Read from NID · verify the details below';
 
   static const String dobHelperText =
       'If exact DOB is unknown, leave blank and enter approximate age below.';

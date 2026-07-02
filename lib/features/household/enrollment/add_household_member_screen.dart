@@ -114,9 +114,17 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
 
     switch (result.status) {
       case NidScanStatus.success:
+        final data = result.data!;
         setState(() {
           _nidScanned = true;
-          _brnCtrl.text = result.nidNumber!;
+          if (data.nidNumber != null) _brnCtrl.text = data.nidNumber!;
+          if (data.name != null) _nameCtrl.text = data.name!;
+          final dob = data.dateOfBirth;
+          if (dob != null) {
+            _dobCtrl.text = dob;
+            final parsed = DateTime.tryParse(dob);
+            if (parsed != null) _calculateAge(parsed);
+          }
         });
       case NidScanStatus.notFound:
         _showSnack(EnrollmentStrings.nidScanNotFound);
@@ -290,7 +298,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
-                          EnrollmentStrings.nidNumberCaptured(_brnCtrl.text),
+                          EnrollmentStrings.nidDetailsCaptured(_brnCtrl.text),
                           style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,

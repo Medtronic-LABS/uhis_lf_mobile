@@ -47,4 +47,53 @@ void main() {
       expect(NidOcrService.extractNidNumber('01711223344'), isNull);
     });
   });
+
+  group('NidOcrService.extractName', () {
+    // Mirrors the Latin lines ML Kit reads off a real Smart NID card.
+    const cardText = 'Government of the Peoples Republic of Bangladesh\n'
+        'National ID Card\n'
+        'Name\n'
+        'NOOR ALAM\n'
+        'Date of Birth 25 Nov 1983\n'
+        'NID No. 600 458 9963';
+
+    test('reads the English name on the line after the Name label', () {
+      expect(NidOcrService.extractName(cardText), 'Noor Alam');
+    });
+
+    test('does not mistake the National ID Card header for the name', () {
+      expect(
+        NidOcrService.extractName('National ID Card\nName\nRomana Rahman'),
+        'Romana Rahman',
+      );
+    });
+
+    test('handles an inline "Name X" layout', () {
+      expect(NidOcrService.extractName('Name ROMANA RAHMAN'), 'Romana Rahman');
+    });
+
+    test('returns null when no name label is present', () {
+      expect(NidOcrService.extractName('NID No. 600 458 9963'), isNull);
+    });
+  });
+
+  group('NidOcrService.extractDateOfBirth', () {
+    test('parses "25 Nov 1983" to ISO yyyy-MM-dd', () {
+      expect(
+        NidOcrService.extractDateOfBirth('Date of Birth 25 Nov 1983'),
+        '1983-11-25',
+      );
+    });
+
+    test('parses a single-digit day', () {
+      expect(
+        NidOcrService.extractDateOfBirth('Date of Birth 5 Jan 1990'),
+        '1990-01-05',
+      );
+    });
+
+    test('returns null when no date is present', () {
+      expect(NidOcrService.extractDateOfBirth('Name\nNOOR ALAM'), isNull);
+    });
+  });
 }

@@ -351,14 +351,15 @@ GoRouter buildRouter(AuthState auth) {
         pageBuilder: (context, state) {
           final extra = state.extra as Map<String, dynamic>?;
           final fromNidScan = extra?['fromNidScan'] == true;
-          final scannedNid = extra?['nidNumber'] as String?;
           return MaterialPage(
             key: const ValueKey('enrollment-head-info'),
             child: ChangeNotifierProvider(
               create: (_) => EnrollmentController(),
               child: HouseholdHeadInfoScreen(
                 fromNidScan: fromNidScan,
-                scannedNidNumber: scannedNid,
+                scannedNidNumber: extra?['nidNumber'] as String?,
+                scannedName: extra?['name'] as String?,
+                scannedDateOfBirth: extra?['dateOfBirth'] as String?,
               ),
             ),
           );

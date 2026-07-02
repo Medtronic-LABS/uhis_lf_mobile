@@ -22,12 +22,16 @@ class HouseholdHeadInfoScreen extends StatefulWidget {
     super.key,
     this.fromNidScan = false,
     this.scannedNidNumber,
+    this.scannedName,
+    this.scannedDateOfBirth,
   });
 
   final bool fromNidScan;
 
-  /// NID number read on-device from the entry-overlay card scan, if any.
+  /// Fields read on-device from the entry-overlay NID card scan, if any.
   final String? scannedNidNumber;
+  final String? scannedName;
+  final String? scannedDateOfBirth;
 
   @override
   State<HouseholdHeadInfoScreen> createState() =>
@@ -60,13 +64,29 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
     _nameCtrl.addListener(_onFormChanged);
     _idNumberCtrl.addListener(_onFormChanged);
 
-    // Prefill the ID number from the on-device NID card scan (number only —
-    // the SK fills the rest). We treat it as a National ID when scanned.
-    if (widget.fromNidScan && (widget.scannedNidNumber?.isNotEmpty ?? false)) {
-      _idNumberCtrl.text = widget.scannedNidNumber!;
-      _idType = 'National ID';
+    // Prefill from the on-device NID card scan. Name / DOB / NID are read from
+    // the Latin side of the card; father & mother (Bangla) stay for the SK.
+    if (widget.fromNidScan) {
+      if (widget.scannedNidNumber?.isNotEmpty ?? false) {
+        _idNumberCtrl.text = widget.scannedNidNumber!;
+        _idType = 'National ID';
+        _prefilledFromScan = true;
+      }
+      if (widget.scannedName?.isNotEmpty ?? false) {
+        _nameCtrl.text = widget.scannedName!;
+        _prefilledFromScan = true;
+      }
+      final dob = widget.scannedDateOfBirth;
+      if (dob != null && dob.isNotEmpty) {
+        _dobCtrl.text = dob;
+        final parsed = DateTime.tryParse(dob);
+        if (parsed != null) _calculateAge(parsed);
+        _prefilledFromScan = true;
+      }
     }
   }
+
+  bool _prefilledFromScan = false;
 
   @override
   void dispose() {
@@ -192,6 +212,43 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
                           EnrollmentStrings.householdHeadSectionHeader,
                     ),
                     const SizedBox(height: 20),
+
+                    // Auto-filled-from-scan banner
+                    if (_prefilledFromScan) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFECFDF5),
+                          border: Border.all(color: const Color(0xFFA7F3D0)),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.auto_awesome,
+                              size: 15,
+                              color: Color(0xFF059669),
+                            ),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                EnrollmentStrings.headPrefilledFromScan,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Color(0xFF047857),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
 
                     // Household Head's Name
                     EnrollmentInputField(

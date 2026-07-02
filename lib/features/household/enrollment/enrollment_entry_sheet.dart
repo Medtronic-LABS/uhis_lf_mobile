@@ -49,7 +49,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
     with SingleTickerProviderStateMixin {
   _OverlayState _overlayState = _OverlayState.scanner;
   bool _isScanning = false;
-  String? _scannedNid;
+  NidCardData? _scanned;
 
   final NidOcrService _ocr = NidOcrService();
 
@@ -138,7 +138,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
     switch (result.status) {
       case NidScanStatus.success:
         setState(() {
-          _scannedNid = result.nidNumber;
+          _scanned = result.data;
           _overlayState = _OverlayState.postScan;
         });
       case NidScanStatus.notFound:
@@ -182,13 +182,18 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
               ),
               if (_overlayState == _OverlayState.postScan)
                 _PostScanSheet(
-                  nidNumber: _scannedNid,
+                  data: _scanned,
                   onLinkExisting: () => Navigator.of(context).pop(),
                   onCreateNew: () {
                     Navigator.of(context).pop();
                     context.push(
                       '/household/enrollment/head-info',
-                      extra: {'fromNidScan': true, 'nidNumber': _scannedNid},
+                      extra: {
+                        'fromNidScan': true,
+                        'nidNumber': _scanned?.nidNumber,
+                        'name': _scanned?.name,
+                        'dateOfBirth': _scanned?.dateOfBirth,
+                      },
                     );
                   },
                 ),
@@ -638,17 +643,20 @@ class _CornerPainter extends CustomPainter {
 
 class _PostScanSheet extends StatelessWidget {
   const _PostScanSheet({
-    required this.nidNumber,
+    required this.data,
     required this.onLinkExisting,
     required this.onCreateNew,
   });
 
-  final String? nidNumber;
+  final NidCardData? data;
   final VoidCallback onLinkExisting;
   final VoidCallback onCreateNew;
 
   @override
   Widget build(BuildContext context) {
+    final name = data?.name;
+    final dob = data?.dateOfBirth;
+    final nid = data?.nidNumber;
     return Positioned(
       left: 0,
       right: 0,
@@ -695,7 +703,7 @@ class _PostScanSheet extends StatelessWidget {
                       ),
                       SizedBox(height: 2),
                       Text(
-                        '✦ NID number read on-device',
+                        '✦ Details read on-device',
                         style: TextStyle(fontSize: 11, color: _muted),
                       ),
                     ],
@@ -708,7 +716,7 @@ class _PostScanSheet extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 14),
-            // Navy gradient NID-number card
+            // Navy gradient card with the auto-filled fields
             Container(
               width: double.infinity,
               decoration: BoxDecoration(
@@ -723,23 +731,46 @@ class _PostScanSheet extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    '📇 NID NUMBER',
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0x80FFFFFF),
-                      letterSpacing: 0.8,
-                    ),
+                  _NidField(
+                    label: 'NAME',
+                    value: name ?? 'Not read — enter manually',
+                    dim: name == null,
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    nidNumber ?? '—',
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                      letterSpacing: 1.5,
+                  const _NidDivider(),
+                  _NidField(
+                    label: 'DATE OF BIRTH',
+                    value: dob ?? 'Not read — enter manually',
+                    dim: dob == null,
+                  ),
+                  const _NidDivider(),
+                  _NidField(
+                    label: 'NID NUMBER',
+                    value: nid ?? '—',
+                    emphasise: true,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            // Father / Mother cannot be OCR'd (Bengali only) — set expectation.
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF7ED),
+                border: Border.all(color: const Color(0xFFFED7AA)),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.info_outline, size: 15, color: Color(0xFF9A3412)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      "Father's & mother's names are printed in Bangla — "
+                      'please type them in.',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF9A3412)),
                     ),
                   ),
                 ],
@@ -862,6 +893,63 @@ class _SheetOptionButton extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// One label/value row inside the navy scanned-details card.
+class _NidField extends StatelessWidget {
+  const _NidField({
+    required this.label,
+    required this.value,
+    this.emphasise = false,
+    this.dim = false,
+  });
+
+  final String label;
+  final String value;
+  final bool emphasise;
+  final bool dim;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.w700,
+            color: Color(0x80FFFFFF),
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: emphasise ? 20 : 14,
+            fontWeight: emphasise ? FontWeight.w800 : FontWeight.w600,
+            letterSpacing: emphasise ? 1.5 : 0,
+            fontStyle: dim ? FontStyle.italic : FontStyle.normal,
+            color: dim ? const Color(0x80FFFFFF) : Colors.white,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _NidDivider extends StatelessWidget {
+  const _NidDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 1,
+      margin: const EdgeInsets.symmetric(vertical: 10),
+      color: Colors.white.withValues(alpha: 0.12),
     );
   }
 }
