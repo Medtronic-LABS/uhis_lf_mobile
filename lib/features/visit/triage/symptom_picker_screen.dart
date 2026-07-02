@@ -10,10 +10,16 @@ import '../../../core/db/patient_dao.dart';
 import '../../../core/db/patient_programmes_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
 import '../../../core/api/scribe_api_service.dart' show ScribeMode;
+import '../../../core/api/realtime_asr_service.dart';
 import '../../patient/followup_repository.dart';
 import '../../patient/vitals_repository.dart';
+import '../../realtime_asr/chief_complaint_matcher.dart';
+import '../../realtime_asr/models/realtime_clinical_fields.dart';
+import '../../realtime_asr/realtime_asr_controller.dart';
+import '../../scribe/models/ai_extracted_field.dart';
 import '../../scribe/scribe_controller.dart';
 import '../../scribe/scribe_mic_waveform.dart';
+import '../../scribe/scribe_permission_service.dart';
 import '../../scribe/scribe_session.dart';
 import '../briefing/briefing_models.dart';
 import '../briefing/visit_briefing_repository.dart';
@@ -67,7 +73,8 @@ class SymptomPickerScreen extends StatefulWidget {
     Set<String> symptoms,
     String? sicknessDuration,
     String? otherSymptoms,
-  )? onSymptomsConfirmed;
+  )?
+  onSymptomsConfirmed;
 
   @override
   State<SymptomPickerScreen> createState() => _SymptomPickerScreenState();
@@ -557,7 +564,6 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       builder: (ctx) => _AddSymptomSheet(vm: vm),
     );
   }
-
 }
 
 // ── AI Briefing Section: 3 stacked cards ─────────────────────────────────────
@@ -835,7 +841,8 @@ class _GreetWarmlyCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   SymptomPickerStrings.sitWithGreetHeaderFor(
-                      isFemale: isFemale),
+                    isFemale: isFemale,
+                  ),
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
@@ -847,7 +854,9 @@ class _GreetWarmlyCard extends StatelessWidget {
               if (hasAi)
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 6, vertical: 2),
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(4),
@@ -936,13 +945,13 @@ class _GreetLoadingSkeleton extends StatelessWidget {
       builder: (context, c) {
         final w = c.maxWidth;
         Widget bar(double fraction, double height) => Container(
-              width: w * fraction,
-              height: height,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(4),
-              ),
-            );
+          width: w * fraction,
+          height: height,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(4),
+          ),
+        );
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1308,6 +1317,22 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
   bool _triageResultConsumed = false;
   ScribeController? _scribe;
 
+  // Independent "Live ASR" mode — see ScribeBanner's docs for the same
+  // pattern. Never runs at the same time as the batch triage recording
+  // above; both would otherwise try to capture the mic at once.
+  late final RealtimeAsrController _liveCtrl;
+  RealtimeClinicalFields? _lastAppliedLiveFields;
+
+  @override
+  void initState() {
+    super.initState();
+    _liveCtrl = RealtimeAsrController(
+      service: context.read<RealtimeAsrService>(),
+      permissionService: ScribePermissionService(),
+    );
+    _liveCtrl.addListener(_onLiveChanged);
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -1318,12 +1343,69 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
       _scribe!.addListener(_onScribeChanged);
       _onScribeChanged();
     }
+    _liveCtrl.bindContext(context);
   }
 
   @override
   void dispose() {
     _scribe?.removeListener(_onScribeChanged);
+    _liveCtrl.removeListener(_onLiveChanged);
+    _liveCtrl.dispose();
     super.dispose();
+  }
+
+  void _onLiveChanged() {
+    if (!mounted) return;
+    final fields = _liveCtrl.fields;
+    if (fields != null && !identical(fields, _lastAppliedLiveFields)) {
+      _lastAppliedLiveFields = fields;
+      debugPrint('[RealtimeASR/Triage] chiefComplaints: ${fields.chiefComplaints}');
+      if (fields.chiefComplaints.isNotEmpty) {
+        final matchedCodes = ChiefComplaintMatcher.match(fields.chiefComplaints);
+        debugPrint('[RealtimeASR/Triage] matched vocab codes: $matchedCodes');
+        if (matchedCodes.isNotEmpty) {
+          widget.viewModel.applyScribeTriageResult(
+            TriageExtractionResult(
+              symptomCodes: [
+                for (final code in matchedCodes)
+                  AIExtractedField(
+                    fieldId: code,
+                    value: true,
+                    confidence: ChiefComplaintMatcher.matchConfidence,
+                  ),
+              ],
+              transcriptText: _liveCtrl.fullTranscript,
+            ),
+          );
+        }
+      }
+    }
+    setState(() {});
+  }
+
+  void _startOther(ScribeController controller) {
+    controller.bindContext(context);
+    if (_showDone) {
+      setState(() {
+        _showDone = false;
+        _triageResultConsumed = false;
+      });
+    }
+    controller.startRecordingForTriage(
+      patientId: widget.patientId,
+      encounterId: widget.encounterId,
+      symptomCatalog: AiScribeTriageVocab.codes,
+    );
+  }
+
+  void _startAsr() {
+    if (_showDone) {
+      setState(() {
+        _showDone = false;
+        _triageResultConsumed = false;
+      });
+    }
+    _liveCtrl.start();
   }
 
   void _onScribeChanged() {
@@ -1358,15 +1440,23 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
     }
 
     final session = controller.session;
-    final isRecording = session.state == ScribeState.recording;
-    final isError = !_showDone && session.state == ScribeState.error;
+    final liveActive = _liveCtrl.isActive;
+    final isRecording = !liveActive && session.state == ScribeState.recording;
+    final isError =
+        !liveActive && !_showDone && session.state == ScribeState.error;
     final isProcessing =
+        !liveActive &&
         !_showDone &&
         !isError &&
         (session.state == ScribeState.uploading ||
             session.state == ScribeState.processing);
+    // True idle OR the terminal "done" state — both offer the ASR/Other
+    // chooser instead of an implicit whole-card tap-to-start.
+    final idleChoice = !liveActive && !isRecording && !isError && !isProcessing;
 
-    final title = _showDone
+    final title = liveActive
+        ? RealtimeAsrStrings.title
+        : _showDone
         ? SymptomPickerStrings.scribeBannerDone
         : isError
         ? SymptomPickerStrings.scribeBannerError
@@ -1376,17 +1466,25 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
         ? SymptomPickerStrings.scribeBannerProcessing
         : SymptomPickerStrings.scribeBannerTitle;
 
-    final subtitle = _showDone
+    final subtitle = liveActive
+        ? (_liveCtrl.state == RealtimeAsrState.connecting
+              ? RealtimeAsrStrings.connecting
+              : RealtimeAsrStrings.listening)
+        : _showDone
         ? SymptomPickerStrings.scribeBannerDoneSubtitle
         : isError
         ? SymptomPickerStrings.scribeBannerErrorSubtitle
         : isRecording
         ? SymptomPickerStrings.scribeBannerRecordingSubtitle
+        : idleChoice
+        ? ScribeBannerStrings.idleSub
         : SymptomPickerStrings.scribeBannerSubtitle;
 
     void onTap() {
       controller.bindContext(context);
-      if (isRecording) {
+      if (liveActive) {
+        _liveCtrl.stop();
+      } else if (isRecording) {
         controller.stopRecording(
           patientId: widget.patientId,
           encounterId: widget.encounterId,
@@ -1397,30 +1495,18 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
           _triageResultConsumed = false;
         });
         controller.resetSession();
-      } else if (_showDone) {
-        setState(() {
-          _showDone = false;
-          _triageResultConsumed = false;
-        });
-        controller.startRecordingForTriage(
-          patientId: widget.patientId,
-          encounterId: widget.encounterId,
-          symptomCatalog: AiScribeTriageVocab.codes,
-        );
-      } else if (!isProcessing) {
-        controller.startRecordingForTriage(
-          patientId: widget.patientId,
-          encounterId: widget.encounterId,
-          symptomCatalog: AiScribeTriageVocab.codes,
-        );
       }
+      // idleChoice (true idle or done) is handled by the explicit ASR/Other
+      // buttons below, not by tapping the card.
     }
 
     return Material(
       color: Colors.transparent,
       child: Semantics(
-        button: true,
-        label: isRecording
+        button: !idleChoice,
+        label: liveActive
+            ? 'Stop live ASR'
+            : isRecording
             ? SymptomPickerStrings.scribeStopRecordingLabel
             : isError
             ? SymptomPickerStrings.scribeBannerError
@@ -1428,7 +1514,7 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
             ? SymptomPickerStrings.scribeBannerDone
             : SymptomPickerStrings.scribeBannerTitle,
         child: InkWell(
-          onTap: isProcessing ? null : onTap,
+          onTap: (isProcessing || idleChoice) ? null : onTap,
           borderRadius: BorderRadius.circular(14),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 280),
@@ -1436,7 +1522,9 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
             padding: const EdgeInsets.fromLTRB(12, 14, 16, 14),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: _showDone
+                colors: liveActive
+                    ? const [_gradStart, _gradEnd]
+                    : _showDone
                     ? const [Color(0xFF3D7A52), Color(0xFF2F9E62)]
                     : isError
                     ? const [_errorGradStart, _errorGradEnd]
@@ -1460,62 +1548,100 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
                 ),
               ],
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                // idle → mic · recording → waveform · processing → spinner
-                // · done → green check → idle.
-                SizedBox(
-                  width: 52,
-                  height: 52,
-                  child: Center(
-                    child: _buildCircleContent(
-                      controller: controller,
-                      isRecording: isRecording,
-                      isProcessing: isProcessing,
-                      isError: isError,
-                      showDone: _showDone,
+                Row(
+                  children: [
+                    // idle → mic · recording → waveform · processing → spinner
+                    // · done → green check · live → podcast icon → idle.
+                    SizedBox(
+                      width: 52,
+                      height: 52,
+                      child: Center(
+                        child: _buildCircleContent(
+                          controller: controller,
+                          isRecording: isRecording,
+                          isProcessing: isProcessing,
+                          isError: isError,
+                          showDone: _showDone,
+                          liveActive: liveActive,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (isRecording) ...[
-                            const ScribeRecordingLiveDot(),
-                            const SizedBox(width: 8),
-                          ],
-                          Expanded(
-                            child: Text(
-                              title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 14,
+                          Row(
+                            children: [
+                              if (isRecording) ...[
+                                const ScribeRecordingLiveDot(),
+                                const SizedBox(width: 8),
+                              ],
+                              Expanded(
+                                child: Text(
+                                  title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 14,
+                                  ),
+                                ),
                               ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            subtitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.78),
+                              fontSize: 12,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        subtitle,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.78),
-                          fontSize: 12,
-                        ),
+                    ),
+                    // Idle/done: explicit mode chooser — no implicit whole-card
+                    // tap-to-start, so it's always clear which engine runs.
+                    if (idleChoice) ...[
+                      const SizedBox(width: 8),
+                      _TriageModeButton(
+                        key: const Key('triage_banner_mode_asr'),
+                        label: ScribeBannerStrings.modeAsr,
+                        icon: Icons.podcasts,
+                        onTap: _startAsr,
+                      ),
+                      const SizedBox(width: 6),
+                      _TriageModeButton(
+                        key: const Key('triage_banner_mode_other'),
+                        label: ScribeBannerStrings.modeOther,
+                        icon: Icons.mic,
+                        onTap: () => _startOther(controller),
                       ),
                     ],
-                  ),
+                    // Batch ("Other") mode active: badge makes the active
+                    // engine explicit at a glance (live mode's title already
+                    // says "Real-Time ASR").
+                    if (!liveActive && !idleChoice) ...[
+                      const SizedBox(width: 8),
+                      const _TriageModeBadge(
+                        label: ScribeBannerStrings.modeOtherBadge,
+                      ),
+                    ],
+                  ],
                 ),
+                if (liveActive) ...[
+                  const SizedBox(height: 10),
+                  _TriageLiveAsrPanel(controller: _liveCtrl),
+                ],
               ],
             ),
           ),
@@ -1530,7 +1656,20 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
     required bool isProcessing,
     required bool isError,
     required bool showDone,
+    required bool liveActive,
   }) {
+    if (liveActive) {
+      return Container(
+        width: 44,
+        height: 44,
+        decoration: const BoxDecoration(
+          color: _recordingIconBg,
+          shape: BoxShape.circle,
+        ),
+        alignment: Alignment.center,
+        child: const Icon(Icons.podcasts, color: Colors.white, size: 22),
+      );
+    }
     if (showDone) {
       return const ScribeDoneMicOrb();
     }
@@ -1547,32 +1686,201 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
       return Container(
         width: 44,
         height: 44,
-        decoration: const BoxDecoration(
-          color: _iconBg,
-          shape: BoxShape.circle,
-        ),
+        decoration: const BoxDecoration(color: _iconBg, shape: BoxShape.circle),
         alignment: Alignment.center,
-        child: const Icon(
-          Icons.refresh_rounded,
-          color: Colors.white,
-          size: 22,
-        ),
+        child: const Icon(Icons.refresh_rounded, color: Colors.white, size: 22),
       );
     }
     return Container(
       width: 44,
       height: 44,
-      decoration: const BoxDecoration(
-        color: _iconBg,
-        shape: BoxShape.circle,
-      ),
+      decoration: const BoxDecoration(color: _iconBg, shape: BoxShape.circle),
       alignment: Alignment.center,
-      child: const Icon(
-        Icons.mic_rounded,
-        color: Colors.white,
-        size: 22,
+      child: const Icon(Icons.mic_rounded, color: Colors.white, size: 22),
+    );
+  }
+}
+
+/// Explicit mode-chooser button on the triage banner, shown only at idle —
+/// same purpose as ScribeBanner's `_ModeButton`, styled to match this
+/// screen's rounded-chip aesthetic instead.
+class _TriageModeButton extends StatelessWidget {
+  const _TriageModeButton({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Start $label mode',
+      button: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.18),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: Colors.white, size: 14),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
+  }
+}
+
+/// Non-interactive tag making the active engine explicit once "Other"
+/// (standard/batch triage) is running.
+class _TriageModeBadge extends StatelessWidget {
+  const _TriageModeBadge({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: Colors.white.withValues(alpha: 0.85),
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.4,
+        ),
+      ),
+    );
+  }
+}
+
+/// Live transcript + on-demand detected-symptoms preview for the triage
+/// banner's "ASR" mode — content mirrors ScribeBanner's `_LiveAsrPanel`.
+/// Independent of the batch triage flow: nothing here feeds
+/// [TriageViewModel] or the pre-ticked symptom chips below.
+class _TriageLiveAsrPanel extends StatelessWidget {
+  const _TriageLiveAsrPanel({required this.controller});
+  final RealtimeAsrController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final fields = controller.fields;
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (controller.micWarning != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Colors.amberAccent, size: 16),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      controller.micWarning!,
+                      style: const TextStyle(color: Colors.amberAccent, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (controller.errorMessage != null)
+            Text(
+              controller.errorMessage!,
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+            )
+          else ...[
+            Text(
+              controller.segments.isEmpty
+                  ? RealtimeAsrStrings.transcriptEmpty
+                  : controller.fullTranscript,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.9),
+                fontSize: 12,
+                fontStyle: controller.segments.isEmpty
+                    ? FontStyle.italic
+                    : null,
+              ),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    fields == null || fields.isEmpty
+                        ? RealtimeAsrStrings.symptomsEmpty
+                        : _summarize(fields),
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.75),
+                      fontSize: 11,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                GestureDetector(
+                  onTap: controller.isExtracting ? null : controller.extractNow,
+                  child: Text(
+                    controller.isExtracting
+                        ? RealtimeAsrStrings.extracting
+                        : RealtimeAsrStrings.extractNow,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _summarize(RealtimeClinicalFields f) {
+    final parts = <String>[
+      if (f.diagnosis != null) f.diagnosis!,
+      if (f.bloodPressure != null) 'BP ${f.bloodPressure}',
+      if (f.bloodGlucose != null) 'BG ${f.bloodGlucose}',
+      ...f.chiefComplaints,
+    ];
+    return parts.isEmpty ? RealtimeAsrStrings.symptomsEmpty : parts.join(' · ');
   }
 }
 
@@ -1761,9 +2069,7 @@ class _AddSymptomSheet extends StatelessWidget {
         final selected = vm.selectedSymptoms;
         final applicableCodes = vm.applicableVocabCodes;
         final applicableCodesSet = applicableCodes.toSet();
-        final addedCount = selected
-            .where(applicableCodesSet.contains)
-            .length;
+        final addedCount = selected.where(applicableCodesSet.contains).length;
 
         return SafeArea(
           child: Padding(

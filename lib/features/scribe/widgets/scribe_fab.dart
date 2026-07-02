@@ -1,8 +1,236 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/constants/app_strings.dart';
+import '../../realtime_asr/models/realtime_clinical_fields.dart';
+import '../../realtime_asr/realtime_asr_controller.dart';
 import '../scribe_controller.dart';
 import '../scribe_session.dart';
+
+/// Wraps [ScribeFab] with an explicit ASR/Other mode chooser at idle — see
+/// [RealtimeAsrController]. Same design as ScribeBanner's mode chooser,
+/// adapted to a floating-action-button context. The batch ("Other") flow
+/// and live ASR never run at once; each is hidden while the other is active.
+class ScribeModeFab extends StatelessWidget {
+  const ScribeModeFab({
+    super.key,
+    required this.liveController,
+    required this.onStartRecording,
+    required this.onStopRecording,
+    required this.onOpenReview,
+    required this.onRetry,
+  });
+
+  final RealtimeAsrController liveController;
+  final VoidCallback onStartRecording;
+  final VoidCallback onStopRecording;
+  final VoidCallback onOpenReview;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: liveController,
+      builder: (context, _) {
+        return Consumer<ScribeController>(
+          builder: (context, ctrl, _) {
+            final session = ctrl.session;
+
+            if (liveController.isActive) {
+              return FloatingActionButton.extended(
+                heroTag: 'scribe_live_fab',
+                onPressed: liveController.stop,
+                backgroundColor: Colors.deepPurple,
+                icon: const Icon(Icons.stop_circle_outlined, color: Colors.white),
+                label: const Text(
+                  'Stop ASR',
+                  style: TextStyle(color: Colors.white),
+                ),
+              );
+            }
+
+            if (session.state == ScribeState.idle) {
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FloatingActionButton.extended(
+                    heroTag: 'scribe_asr_fab',
+                    onPressed: liveController.start,
+                    backgroundColor: Colors.deepPurple,
+                    icon: const Icon(Icons.podcasts, color: Colors.white),
+                    label: Text(
+                      ScribeBannerStrings.modeAsr,
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  FloatingActionButton.extended(
+                    heroTag: 'scribe_other_fab',
+                    onPressed: onStartRecording,
+                    backgroundColor: Theme.of(context).primaryColor,
+                    icon: const Icon(Icons.mic, color: Colors.white),
+                    label: Text(
+                      ScribeBannerStrings.modeOther,
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ],
+              );
+            }
+
+            // All other batch states (recording/uploading/error) keep the
+            // existing single-FAB behavior.
+            return ScribeFab(
+              onStartRecording: onStartRecording,
+              onStopRecording: onStopRecording,
+              onOpenReview: onOpenReview,
+              onRetry: onRetry,
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+/// Status pill shown above the form body — delegates to the existing
+/// [ScribePill] for the batch flow, or shows a live transcript + on-demand
+/// symptoms preview while [RealtimeAsrController] is active. Independent of
+/// the batch flow: nothing here is saved to the note.
+class ScribeStatusPill extends StatelessWidget {
+  const ScribeStatusPill({
+    super.key,
+    required this.liveController,
+    required this.onStop,
+  });
+
+  final RealtimeAsrController liveController;
+  final VoidCallback onStop;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: liveController,
+      builder: (context, _) {
+        if (!liveController.isActive) {
+          return ScribePill(onStop: onStop);
+        }
+        return _LiveAsrStatusPanel(controller: liveController);
+      },
+    );
+  }
+}
+
+class _LiveAsrStatusPanel extends StatelessWidget {
+  const _LiveAsrStatusPanel({required this.controller});
+  final RealtimeAsrController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final fields = controller.fields;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.deepPurple,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.podcasts, color: Colors.white, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                controller.state == RealtimeAsrState.connecting
+                    ? RealtimeAsrStrings.connecting
+                    : RealtimeAsrStrings.listening,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: controller.isExtracting ? null : controller.extractNow,
+                child: Text(
+                  controller.isExtracting
+                      ? RealtimeAsrStrings.extracting
+                      : RealtimeAsrStrings.extractNow,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (controller.micWarning != null) ...[
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.warning_amber_rounded, color: Colors.amberAccent, size: 16),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    controller.micWarning!,
+                    style: const TextStyle(color: Colors.amberAccent, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (controller.errorMessage != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              controller.errorMessage!,
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+            ),
+          ] else ...[
+            const SizedBox(height: 6),
+            Text(
+              controller.segments.isEmpty
+                  ? RealtimeAsrStrings.transcriptEmpty
+                  : controller.fullTranscript,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.9),
+                fontSize: 12,
+                fontStyle: controller.segments.isEmpty ? FontStyle.italic : null,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              fields == null || fields.isEmpty
+                  ? RealtimeAsrStrings.symptomsEmpty
+                  : _summarize(fields),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.75),
+                fontSize: 11,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _summarize(RealtimeClinicalFields f) {
+    final parts = <String>[
+      if (f.diagnosis != null) f.diagnosis!,
+      if (f.bloodPressure != null) 'BP ${f.bloodPressure}',
+      if (f.bloodGlucose != null) 'BG ${f.bloodGlucose}',
+      ...f.chiefComplaints,
+    ];
+    return parts.isEmpty ? RealtimeAsrStrings.symptomsEmpty : parts.join(' · ');
+  }
+}
 
 /// Floating action button for AI Scribe recording.
 ///

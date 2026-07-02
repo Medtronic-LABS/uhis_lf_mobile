@@ -173,6 +173,7 @@ All paths are listed here. Do NOT add a path not in this file and not in the Pos
 | `scribeUploadChunk(id,n)` | `/ai-scribe-service/upload/{id}/chunk/{n}` | PUT |
 | `scribeUploadStatus(id)` | `/ai-scribe-service/upload/{id}/status` | GET |
 | `scribeUploadComplete(id)` | `/ai-scribe-service/upload/{id}/complete` | POST |
+| `scribeRealtimeTranscribe` | `/ai-scribe-service/scribe/realtime/transcribe` | WS |
 
 ## Database — SQLCipher
 
@@ -208,6 +209,19 @@ Async flow:
 3. Poll `scribeResult(jobId)` until `status == 'completed'`
 4. `SoapFieldExtractor.extract(soapText)` — maps SOAP sections to assessment form field values
 5. User reviews the proposal → `scribeAccept` or `scribeReject`; rationale snapshot logged on accept
+
+## Real-Time ASR (Beta) — `lib/features/realtime_asr/`
+
+Lives **inside `ScribeBanner`** (`lib/features/scribe/widgets/scribe_banner.dart`) — a small "LIVE" toggle in the banner's top-right corner, so it appears everywhere AI Scribe already does (Step 1 triage picker, Step 2 ANC/NCD/TB/IMCI assessment forms), not as a separate screen or Settings entry. It's an independent live-listening aid: transcript + on-demand symptom preview against the ai-scribe-service, with nothing fed into accept/reject or the saved note — AI Scribe's record → upload → poll → review flow remains the actual note path.
+
+`ScribeBanner` owns its own `RealtimeAsrController` (created in `initState`, disposed with the widget) alongside the `ScribeController` it already consumes. The "LIVE" toggle and the main record tap are mutually exclusive — each disables the other while active, since both would otherwise try to capture the mic at once:
+
+1. `RealtimeAsrController.start()` — mic permission via the same `ScribePermissionService` AI Scribe uses, then opens `WS scribeRealtimeTranscribe` via `RealtimeAsrService` (auth headers built from the shared `ApiClient` session: Bearer token, cookies, tenantId)
+2. Mic captured via `record`'s `AudioRecorder.startStream(RecordConfig(encoder: pcm16bits, sampleRate: 16000))` — raw PCM16 chunks wrapped in a WAV header and sent as `{"type": "audio", ...}` frames
+3. Transcript segments arrive continuously and render inline in the banner; `extractNow()` (auto every 10s, or tap "Extract Now") sends `{"type": "extract", "transcript": ...}` and renders the `{"type": "symptoms", ...}` reply (`RealtimeClinicalFields` — same 7-field shape as the batch scribe API) as a one-line summary
+4. Stopping flushes, requests one final extraction, and **waits for its reply (bounded timeout) before sending `stop`** — sending `stop` immediately after `extract` would let the server cancel the in-flight extraction
+
+**Native-only**: `IOWebSocketChannel` is required to set the `Authorization`/`Cookie`/`tenantId` handshake headers this API needs; browsers don't allow custom WS headers, so on web the toggle surfaces the "not available" error inline instead of connecting (see `realtime_asr_channel_io.dart` / `realtime_asr_channel_web.dart` conditional import, same pattern as `api_client.dart`'s web/native split).
 
 ## AI Visit Briefing — `lib/features/visit/briefing/`
 

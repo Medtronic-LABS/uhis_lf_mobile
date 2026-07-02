@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/api/realtime_asr_service.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../realtime_asr/models/realtime_clinical_fields.dart';
+import '../../realtime_asr/realtime_asr_controller.dart';
 import '../scribe_controller.dart';
+import '../scribe_permission_service.dart';
 import '../scribe_session.dart';
 
 /// Inline AI Scribe banner — embedded in the visit form body.
@@ -14,7 +18,14 @@ import '../scribe_session.dart';
 ///
 /// In embedded mode, shows live transcript during recording and auto-fills
 /// form fields without requiring a separate review screen.
-class ScribeBanner extends StatelessWidget {
+///
+/// Also hosts an independent "Live" mode (top-right icon) that streams to
+/// `/scribe/realtime/transcribe` for a live transcript + live detected
+/// symptoms preview — see [RealtimeAsrController]. It never runs at the same
+/// time as the batch record-upload-poll flow above (both capture the mic
+/// exclusively), and it does not feed into accept/reject or the note itself;
+/// it's a live-listening aid.
+class ScribeBanner extends StatefulWidget {
   const ScribeBanner({
     super.key,
     required this.onStartRecording,
@@ -33,89 +44,197 @@ class ScribeBanner extends StatelessWidget {
   final VoidCallback? onClearAll;
 
   @override
-  Widget build(BuildContext context) {
-    return Consumer<ScribeController>(
-      builder: (context, ctrl, _) {
-        final state = ctrl.session.state;
-        final session = ctrl.session;
-        final tappable = state == ScribeState.idle ||
-            state == ScribeState.requestingPermission ||
-            state == ScribeState.recording ||
-            state == ScribeState.reviewReady ||
-            state == ScribeState.fieldsPopulated ||
-            state == ScribeState.error;
+  State<ScribeBanner> createState() => _ScribeBannerState();
+}
 
-        final bannerLabel = state == ScribeState.recording
-            ? 'Stop recording'
-            : state == ScribeState.reviewReady || state == ScribeState.fieldsPopulated
+class _ScribeBannerState extends State<ScribeBanner> {
+  late final RealtimeAsrController _liveCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _liveCtrl = RealtimeAsrController(
+      service: context.read<RealtimeAsrService>(),
+      permissionService: ScribePermissionService(),
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _liveCtrl.bindContext(context);
+  }
+
+  @override
+  void dispose() {
+    _liveCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: _liveCtrl,
+      builder: (context, _) {
+        return Consumer<ScribeController>(
+          builder: (context, ctrl, _) {
+            final state = ctrl.session.state;
+            final session = ctrl.session;
+            final liveActive = _liveCtrl.isActive;
+            // Only truly idle shows the ASR/Other chooser — once either mode
+            // has started, its own controls take over (see below).
+            final idleChoice = !liveActive && state == ScribeState.idle;
+            final tappable =
+                !liveActive &&
+                !idleChoice &&
+                (state == ScribeState.recording ||
+                    state == ScribeState.reviewReady ||
+                    state == ScribeState.fieldsPopulated ||
+                    state == ScribeState.error);
+
+            final bannerLabel = state == ScribeState.recording
+                ? 'Stop recording'
+                : state == ScribeState.reviewReady ||
+                      state == ScribeState.fieldsPopulated
                 ? 'Accept AI note'
                 : state == ScribeState.error
-                    ? 'Retry AI Scribe'
-                    : 'Start AI Scribe recording';
-        return Semantics(
-          label: bannerLabel,
-          button: tappable,
-          child: GestureDetector(
-            key: const Key('scribe_banner_tap'),
-            onTap: tappable ? () => _handleTap(state, ctrl) : null,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              margin: const EdgeInsets.only(bottom: 14),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                gradient: _gradient(state, session.fieldsJustPopulated),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: _shadowColor(state),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
+                ? 'Retry AI Scribe'
+                : 'AI Scribe';
+            return Semantics(
+              label: bannerLabel,
+              button: tappable,
+              child: GestureDetector(
+                key: const Key('scribe_banner_tap'),
+                onTap: tappable ? () => _handleTap(state, ctrl) : null,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  margin: const EdgeInsets.only(bottom: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
                   ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      _MicIconBox(state: state, fieldsJustPopulated: session.fieldsJustPopulated),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _BannerText(state: state, session: session),
+                  decoration: BoxDecoration(
+                    gradient: liveActive
+                        ? const LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              AppColors.aiPurpleDark,
+                              AppColors.aiPurple,
+                            ],
+                          )
+                        : _gradient(state, session.fieldsJustPopulated),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _shadowColor(state),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
                       ),
-                      if (state == ScribeState.recording) const _WaveBars(),
-                      if (state == ScribeState.uploading || state == ScribeState.processing)
-                        const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          _MicIconBox(
+                            state: state,
+                            fieldsJustPopulated: session.fieldsJustPopulated,
                           ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: liveActive
+                                ? _LiveBannerText(state: _liveCtrl.state)
+                                : _BannerText(state: state, session: session),
+                          ),
+                          if (!liveActive &&
+                              !idleChoice &&
+                              state == ScribeState.recording)
+                            const _WaveBars(),
+                          if (!liveActive &&
+                              !idleChoice &&
+                              (state == ScribeState.uploading ||
+                                  state == ScribeState.processing))
+                            const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            ),
+                          if (!liveActive &&
+                              !idleChoice &&
+                              state == ScribeState.fieldsPopulated &&
+                              session.pendingFieldCount > 0) ...[
+                            _AcceptAllButton(onTap: widget.onAcceptAll),
+                          ],
+                          // Idle: explicit mode chooser — no more implicit
+                          // whole-card tap-to-start, so it's always clear
+                          // which engine a tap will start.
+                          if (idleChoice) ...[
+                            const SizedBox(width: 8),
+                            _ModeButton(
+                              key: const Key('scribe_banner_mode_asr'),
+                              label: ScribeBannerStrings.modeAsr,
+                              icon: Icons.podcasts,
+                              onTap: _liveCtrl.start,
+                            ),
+                            const SizedBox(width: 6),
+                            _ModeButton(
+                              key: const Key('scribe_banner_mode_other'),
+                              label: ScribeBannerStrings.modeOther,
+                              icon: Icons.mic,
+                              onTap: widget.onStartRecording,
+                            ),
+                          ],
+                          // Live mode active: only its own stop control shows.
+                          if (liveActive) ...[
+                            const SizedBox(width: 8),
+                            _LiveStopButton(controller: _liveCtrl),
+                          ],
+                          // Batch ("Other") mode active: badge makes the
+                          // active engine explicit at a glance.
+                          if (!liveActive && !idleChoice) ...[
+                            const SizedBox(width: 8),
+                            const _ModeBadge(
+                              label: ScribeBannerStrings.modeOtherBadge,
+                            ),
+                          ],
+                        ],
+                      ),
+                      // Live mode: transcript + on-demand symptoms preview
+                      if (liveActive) ...[
+                        const SizedBox(height: 10),
+                        _LiveAsrPanel(controller: _liveCtrl),
+                      ],
+                      // Batch mode: live transcript during recording
+                      if (!liveActive &&
+                          state == ScribeState.recording &&
+                          session.liveTranscript != null) ...[
+                        const SizedBox(height: 10),
+                        _LiveTranscriptBox(transcript: session.liveTranscript!),
+                      ],
+                      // Batch mode: transcript preview after processing
+                      if (!liveActive &&
+                          state == ScribeState.fieldsPopulated &&
+                          session.transcriptText != null) ...[
+                        const SizedBox(height: 10),
+                        _TranscriptPreview(
+                          transcript: session.transcriptText!,
+                          fieldCount:
+                              session.pendingFieldCount +
+                              session.acceptedFieldCount,
                         ),
-                      if (state == ScribeState.fieldsPopulated && session.pendingFieldCount > 0) ...[
-                        _AcceptAllButton(onTap: onAcceptAll),
                       ],
                     ],
                   ),
-                  // Show live transcript during recording
-                  if (state == ScribeState.recording && session.liveTranscript != null) ...[
-                    const SizedBox(height: 10),
-                    _LiveTranscriptBox(transcript: session.liveTranscript!),
-                  ],
-                  // Show transcript preview after processing
-                  if (state == ScribeState.fieldsPopulated && session.transcriptText != null) ...[
-                    const SizedBox(height: 10),
-                    _TranscriptPreview(
-                      transcript: session.transcriptText!,
-                      fieldCount: session.pendingFieldCount + session.acceptedFieldCount,
-                    ),
-                  ],
-                ],
+                ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
@@ -180,20 +299,20 @@ class ScribeBanner extends StatelessWidget {
     switch (state) {
       case ScribeState.idle:
       case ScribeState.requestingPermission:
-        onStartRecording();
+        widget.onStartRecording();
         break;
       case ScribeState.recording:
-        onStopRecording();
+        widget.onStopRecording();
         break;
       case ScribeState.reviewReady:
-        onOpenReview();
+        widget.onOpenReview();
         break;
       case ScribeState.fieldsPopulated:
         // In embedded mode, tapping shows a mini-menu or accepts all
-        onAcceptAll?.call();
+        widget.onAcceptAll?.call();
         break;
       case ScribeState.error:
-        onRetry();
+        widget.onRetry();
         break;
       default:
         break;
@@ -398,17 +517,9 @@ class _MicIconBox extends StatelessWidget {
           child: Center(child: _iconWidget),
         ),
         if (state == ScribeState.recording)
-          Positioned(
-            top: -4,
-            right: -4,
-            child: _LiveDot(),
-          ),
+          Positioned(top: -4, right: -4, child: _LiveDot()),
         if (state == ScribeState.fieldsPopulated && fieldsJustPopulated)
-          Positioned(
-            top: -4,
-            right: -4,
-            child: _SuccessCheckmark(),
-          ),
+          Positioned(top: -4, right: -4, child: _SuccessCheckmark()),
       ],
     );
   }
@@ -628,9 +739,10 @@ class _WaveBarsState extends State<_WaveBars> with TickerProviderStateMixin {
       );
       _ctrls.add(c);
       _heights.add(
-        Tween<double>(begin: 6, end: 18).animate(
-          CurvedAnimation(parent: c, curve: Curves.easeInOut),
-        ),
+        Tween<double>(
+          begin: 6,
+          end: 18,
+        ).animate(CurvedAnimation(parent: c, curve: Curves.easeInOut)),
       );
       Future.delayed(Duration(milliseconds: _delayMs[i]), () {
         if (mounted) c.repeat(reverse: true);
@@ -667,5 +779,260 @@ class _WaveBarsState extends State<_WaveBars> with TickerProviderStateMixin {
         );
       }),
     );
+  }
+}
+
+/// Explicit mode-chooser button, shown only at idle (see [ScribeBanner]) —
+/// replaces the old implicit "tap the whole card to start batch recording"
+/// behavior so it's always clear which engine a tap will start.
+class _ModeButton extends StatelessWidget {
+  const _ModeButton({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Start $label mode',
+      button: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.18),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: Colors.white, size: 14),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Non-interactive tag making the active engine explicit at a glance —
+/// shown once the "Other" (standard/batch) mode is running. The live-mode
+/// equivalent is [_LiveBannerText]'s "Live ASR" title plus [_LiveStopButton].
+class _ModeBadge extends StatelessWidget {
+  const _ModeBadge({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: Colors.white.withValues(alpha: 0.85),
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.4,
+        ),
+      ),
+    );
+  }
+}
+
+/// Stop control shown only while the "ASR" (live streaming) mode is active.
+class _LiveStopButton extends StatelessWidget {
+  const _LiveStopButton({required this.controller});
+
+  final RealtimeAsrController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Stop live ASR',
+      button: true,
+      child: GestureDetector(
+        key: const Key('scribe_banner_live_stop'),
+        onTap: controller.stop,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.28),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.stop_circle_outlined, color: Colors.white, size: 16),
+              SizedBox(width: 4),
+              Text(
+                ScribeBannerStrings.modeAsr,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Banner headline text while a live session is connecting/listening.
+class _LiveBannerText extends StatelessWidget {
+  const _LiveBannerText({required this.state});
+  final RealtimeAsrState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = switch (state) {
+      RealtimeAsrState.connecting => RealtimeAsrStrings.connecting,
+      RealtimeAsrState.listening => RealtimeAsrStrings.listening,
+      RealtimeAsrState.error => 'Live ASR error',
+      RealtimeAsrState.idle => RealtimeAsrStrings.idle,
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text(
+          'Live ASR',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.65),
+            fontSize: 11,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Live transcript + on-demand detected-symptoms preview, shown while a
+/// [RealtimeAsrController] session is active. Independent of the batch
+/// scribe flow — nothing here is saved to the note.
+class _LiveAsrPanel extends StatelessWidget {
+  const _LiveAsrPanel({required this.controller});
+  final RealtimeAsrController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final fields = controller.fields;
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (controller.errorMessage != null)
+            Text(
+              controller.errorMessage!,
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+            )
+          else ...[
+            Row(
+              children: [
+                const _PulsingDot(),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    controller.segments.isEmpty
+                        ? RealtimeAsrStrings.transcriptEmpty
+                        : controller.fullTranscript,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.9),
+                      fontSize: 12,
+                      fontStyle: controller.segments.isEmpty
+                          ? FontStyle.italic
+                          : null,
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    fields == null || fields.isEmpty
+                        ? RealtimeAsrStrings.symptomsEmpty
+                        : _summarize(fields),
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.75),
+                      fontSize: 11,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                GestureDetector(
+                  key: const Key('scribe_banner_live_extract_now'),
+                  onTap: controller.isExtracting ? null : controller.extractNow,
+                  child: Text(
+                    controller.isExtracting
+                        ? RealtimeAsrStrings.extracting
+                        : RealtimeAsrStrings.extractNow,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _summarize(RealtimeClinicalFields f) {
+    final parts = <String>[
+      if (f.diagnosis != null) f.diagnosis!,
+      if (f.bloodPressure != null) 'BP ${f.bloodPressure}',
+      if (f.bloodGlucose != null) 'BG ${f.bloodGlucose}',
+      ...f.chiefComplaints,
+    ];
+    return parts.isEmpty ? RealtimeAsrStrings.symptomsEmpty : parts.join(' · ');
   }
 }

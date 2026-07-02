@@ -186,6 +186,39 @@ abstract final class SettingsStrings {
   static const String appearance = 'Appearance';
 }
 
+/// Real-Time ASR screen — live streaming transcription + live clinical
+/// extraction against the ai-scribe-service, triggered from Settings.
+abstract final class RealtimeAsrStrings {
+  RealtimeAsrStrings._();
+
+  static const String title = 'Real-Time ASR (Beta)';
+  static const String subtitle =
+      'Live transcript and detected symptoms while you talk. Not saved as a '
+      'visit note — use AI Scribe during the visit for that.';
+  static const String start = 'Start Listening';
+  static const String stop = 'Stop';
+  static const String connecting = 'Connecting…';
+  static const String listening = 'Listening…';
+  static const String idle = 'Idle';
+  static const String transcriptEmpty =
+      'Tap Start Listening and speak — the live transcript appears here.';
+  static const String extractNow = 'Extract Now';
+  static const String extracting = 'Extracting…';
+  static const String symptomsEmpty = 'No extraction yet.';
+  static const String notSupportedOnWeb =
+      'Real-time ASR is not available in the web preview — use the Android '
+      'or iOS app.';
+  static const String micPermissionDenied =
+      'Microphone permission is required for real-time ASR.';
+  static const String diagnosis = 'Diagnosis';
+  static const String bloodPressure = 'Blood Pressure';
+  static const String bloodGlucose = 'Blood Glucose';
+  static const String clinicalNotes = 'Clinical Notes';
+  static const String chiefComplaints = 'Chief Complaints';
+  static const String comorbidities = 'Comorbidities';
+  static const String complications = 'Complications';
+}
+
 /// Global search bar, scopes, result sections, and detail snackbars.
 abstract final class SearchStrings {
   SearchStrings._();
@@ -1168,8 +1201,7 @@ abstract final class ScribeStrings {
   static const String triageConsentDeny = 'Not now';
 
   static const String transcriptionFailed = 'Transcription failed.';
-  static const String pollTimeout =
-      'AI is taking too long. Tap to try again.';
+  static const String pollTimeout = 'AI is taking too long. Tap to try again.';
   static const String pollUnreachable =
       'Could not reach AI Scribe. Tap to try again.';
 }
@@ -1178,13 +1210,21 @@ abstract final class ScribeStrings {
 abstract final class ScribeBannerStrings {
   ScribeBannerStrings._();
 
-  static const String idle = 'AI Scribe — Tap to start listening';
-  static const String idleSub = 'SK talks to family — AI fills the form';
+  static const String idle = 'AI Scribe';
+  static const String idleSub = 'Tap a mode to start';
   static const String recording = 'Recording…';
   static const String uploading = 'Uploading…';
   static const String processing = 'AI processing note…';
   static const String ready = 'AI note ready — tap to review';
   static const String error = 'Upload failed — tap to retry';
+
+  /// Mode-chooser buttons shown only at idle (see [ScribeBanner]).
+  static const String modeAsr = 'ASR';
+  static const String modeOther = 'Other';
+
+  /// Badge shown once the "Other" (standard/batch) mode is active, so it's
+  /// always clear which engine — this or Real-Time ASR — is running.
+  static const String modeOtherBadge = 'OTHER';
 }
 
 /// Bottom-nav tab labels + placeholder copy.
@@ -2844,9 +2884,8 @@ abstract final class ProgrammeSelectionStrings {
 
   // ── Review-before-continue sheet ─────────────────────────────────────────
   /// Title — "Review N programme(s)".
-  static String reviewSheetTitle(int count) => count == 1
-      ? 'Review 1 programme'
-      : 'Review $count programmes';
+  static String reviewSheetTitle(int count) =>
+      count == 1 ? 'Review 1 programme' : 'Review $count programmes';
   static const String reviewSheetSubtitle =
       'Confirm the assessments below. You can add or remove before continuing.';
   static const String reviewSheetEmpty =

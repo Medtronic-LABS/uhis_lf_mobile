@@ -42,6 +42,12 @@ class Endpoints {
   static String scribeReject(String noteId) =>
       '/ai-scribe-service/scribe/notes/$noteId/reject';
 
+  /// Live streaming ASR + on-demand clinical extraction (WebSocket). See
+  /// RealtimeAsrService for URL scheme conversion + auth header handling —
+  /// this is a live-listening aid, not a replacement for scribeTranscribe.
+  static const String scribeRealtimeTranscribe =
+      '/ai-scribe-service/scribe/realtime/transcribe';
+
   // ── AI Visit Briefing: pre-visit guidance cards ───────────────────────────
   static const String visitBriefingGenerate =
       '/ai-visit-briefing-service/briefing/generate';
