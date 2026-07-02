@@ -20,6 +20,7 @@ import '../visit/visit_controller.dart';
 import '../visit/widgets/widgets.dart';
 import 'dashboard_repository.dart';
 import 'mission_dashboard_repository.dart';
+import 'sk_performance_screen.dart';
 import '../household/enrollment/enrollment_entry_sheet.dart';
 
 enum _NeedFilter {
@@ -508,6 +509,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               greeting: _greeting(),
               locationLine: _locationLine(),
               onNotifications: () => context.push('/referrals'),
+              onPerformance: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const SkPerformanceScreen(),
+                ),
+              ),
               settingsMenu: _SettingsMenu(onOfferBiometric: _offerBiometric),
             ),
             Expanded(
@@ -1048,12 +1054,14 @@ class _DashboardHeader extends StatelessWidget {
     required this.greeting,
     required this.locationLine,
     required this.onNotifications,
+    required this.onPerformance,
     required this.settingsMenu,
   });
 
   final String greeting;
   final String? locationLine;
   final VoidCallback onNotifications;
+  final VoidCallback onPerformance;
   final Widget settingsMenu;
 
   @override
@@ -1105,6 +1113,15 @@ class _DashboardHeader extends StatelessWidget {
                 ),
               ),
               _ReferralNotificationButton(onTap: onNotifications),
+              IconButton(
+                icon: const Icon(
+                  Icons.leaderboard_rounded,
+                  color: Colors.white,
+                ),
+                iconSize: 22,
+                tooltip: PerformanceStrings.iconTooltip,
+                onPressed: onPerformance,
+              ),
               settingsMenu,
             ],
           ),
