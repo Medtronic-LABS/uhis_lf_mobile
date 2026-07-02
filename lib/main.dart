@@ -57,6 +57,7 @@ import 'features/search/global_search_repository.dart';
 import 'features/search/household_search_repository.dart';
 import 'features/search/member_search_repository.dart';
 import 'features/search/patient_search_repository.dart';
+import 'features/household/enrollment/patient_lookup_repository.dart';
 import 'features/visit/assessment_repository.dart';
 import 'features/visit/encounter_repository.dart';
 import 'features/visit/household_repository.dart';
@@ -320,6 +321,9 @@ class _UhisNextAppState extends State<UhisNextApp>
                 widget.api, widget.authRepo, _householdDao, _memberDao)),
         Provider<PatientSearchRepository>(
             create: (_) => PatientSearchRepository(widget.api)),
+        // Remote NID → existing-patient lookup for enrollment de-duplication
+        Provider<PatientLookupRepository>(
+            create: (_) => PatientLookupRepository(widget.api)),
         Provider<MemberSearchRepository>(
             create: (_) =>
                 MemberSearchRepository(widget.api, _memberDao)),

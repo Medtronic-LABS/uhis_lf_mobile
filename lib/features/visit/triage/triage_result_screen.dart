@@ -194,7 +194,7 @@ class TriageResultScreen extends StatelessWidget {
               TriageResultStrings.measureSectionLabel,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 fontWeight: FontWeight.w700,
-                color: AppColors.textMuted,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
                 letterSpacing: 0.6,
               ),
             ),
@@ -296,7 +296,7 @@ class _UrgencyCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: theme.colorScheme.surface,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(summary,
@@ -327,9 +327,9 @@ class _MeasureCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: theme.colorScheme.outline),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -362,7 +362,7 @@ class _MeasureCard extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(item.hint,
                     style: theme.textTheme.labelSmall?.copyWith(
-                        color: AppColors.textMuted)),
+                        color: theme.colorScheme.onSurfaceVariant)),
               ],
             ),
           ),

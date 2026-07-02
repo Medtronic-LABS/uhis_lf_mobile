@@ -307,19 +307,11 @@ class _SheetHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'AI Draft Note',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.navy,
-                ),
-              ),
               Text(
                 '$confidencePct% confidence · $model',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: AppColors.textMuted,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
             ],
@@ -382,20 +374,20 @@ class _TranscriptCardState extends State<_TranscriptCard> {
                 children: [
                   const Icon(Icons.mic, size: 16, color: AppColors.aiPurpleDark),
                   const SizedBox(width: 8),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'Transcript',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.navy,
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                   ),
                   Icon(
                     _expanded ? Icons.expand_less : Icons.expand_more,
                     size: 18,
-                    color: AppColors.textMuted,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ],
               ),
@@ -406,9 +398,9 @@ class _TranscriptCardState extends State<_TranscriptCard> {
               padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
               child: Text(
                 widget.text,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: AppColors.textStrong,
+                  color: Theme.of(context).colorScheme.onSurface,
                   height: 1.6,
                   fontStyle: FontStyle.italic,
                 ),
@@ -478,7 +470,7 @@ class _SoapSectionState extends State<_SoapSection> {
         key: _key,
         margin: const EdgeInsets.only(bottom: 10),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
@@ -521,17 +513,17 @@ class _SoapSectionState extends State<_SoapSection> {
                       children: [
                         Text(
                           widget.title,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w800,
-                            color: AppColors.navy,
+                            color: Theme.of(context).colorScheme.onSurface,
                           ),
                         ),
                         Text(
                           widget.subtitle,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 10,
-                            color: AppColors.textMuted,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -581,9 +573,9 @@ class _SoapSectionState extends State<_SoapSection> {
                     )
                   : Text(
                       widget.text.isEmpty ? '—' : widget.text,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
-                        color: AppColors.textStrong,
+                        color: Theme.of(context).colorScheme.onSurface,
                         height: 1.6,
                       ),
                     ),

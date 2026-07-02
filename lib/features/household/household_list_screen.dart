@@ -851,7 +851,7 @@ class _TierFilterChip extends StatelessWidget {
             color: isSelected ? color.withValues(alpha: 0.2) : Colors.transparent,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: isSelected ? color : tokens.textMuted.withValues(alpha: 0.3),
+              color: isSelected ? color : Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
               width: isSelected ? 2 : 1,
             ),
           ),
@@ -860,7 +860,7 @@ class _TierFilterChip extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-              color: isSelected ? color : tokens.textPrimary,
+              color: isSelected ? color : Theme.of(context).colorScheme.onSurface,
             ),
           ),
         ),
@@ -1498,7 +1498,7 @@ class _InlineVillageChip extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: isActive ? navyColor : Colors.white,
+              color: isActive ? navyColor : Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
                 color: isActive ? navyColor : AppColors.border,
@@ -1509,7 +1509,7 @@ class _InlineVillageChip extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: isActive ? Colors.white : AppColors.textStrong,
+                color: isActive ? Colors.white : Theme.of(context).colorScheme.onSurface,
               ),
             ),
           ),

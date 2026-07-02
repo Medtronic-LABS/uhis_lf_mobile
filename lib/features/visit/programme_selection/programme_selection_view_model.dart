@@ -24,6 +24,8 @@ class ProgrammeSelectionViewModel extends ChangeNotifier {
   final Map<String, dynamic> request;
   final Set<Programme> currentProgrammes;
 
+  bool _disposed = false;
+
   bool _isLoading = true;
   bool get isLoading => _isLoading;
 
@@ -73,18 +75,26 @@ class ProgrammeSelectionViewModel extends ChangeNotifier {
   Future<void> load() async {
     _isLoading = true;
     _error = null;
-    notifyListeners();
+    if (!_disposed) notifyListeners();
     try {
       final resp = await _repository.recommend(request);
+      if (_disposed) return;
       _response = resp;
       _autoAcceptHighConfidence();
       _isLoading = false;
       notifyListeners();
     } catch (e, stack) {
       debugPrint('[ProgrammeSelection] recommend failed: $e\n$stack');
+      if (_disposed) return;
       _isLoading = false;
       _error = e.toString();
       notifyListeners();
     }
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
   }
 }

@@ -21,6 +21,7 @@ import '../visit/widgets/widgets.dart';
 import 'dashboard_repository.dart';
 import 'sk_performance_screen.dart';
 import 'mission_dashboard_repository.dart';
+import '../household/enrollment/enrollment_entry_sheet.dart';
 
 enum _NeedFilter {
   highRisk,
@@ -227,9 +228,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ..sort();
 
     // Derive available programmes from the queue (for dynamic programme chips).
+    // PILOT-SCOPE v1: only pilot programmes shown as filter chips.
+    // To restore all programmes: remove the `.where((p) => p.isPilot)` filter.
     final allProgrammes = withoutCompleted
         .expand((i) => i.programmes)
-        .where((p) => p != Programme.unknown)
+        .where((p) => p != Programme.unknown && p.isPilot)
         .toSet()
         .toList()
       ..sort((a, b) => a.name.compareTo(b.name));
@@ -424,15 +427,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (item.programmes.any((p) => p == Programme.anc || p == Programme.pnc)) {
         available.add(_NeedFilter.ancMnch);
       }
-      if (item.programmes.any((p) => p == Programme.imci || p == Programme.epi)) {
+      // PILOT-SCOPE v1: child chip matches imci only (epi not in pilot).
+      // To restore epi: change to `p == Programme.imci || p == Programme.epi`.
+      if (item.programmes.contains(Programme.imci)) {
         available.add(_NeedFilter.childImmunisation);
       }
       if (item.programmes.contains(Programme.ncd)) {
         available.add(_NeedFilter.ncd);
       }
-      if (item.programmes.any((p) => p == Programme.eyeCare || p == Programme.cataract)) {
-        available.add(_NeedFilter.eyeCare);
-      }
+      // PILOT-SCOPE v1: eyeCare/cataract chip disabled (not in pilot).
+      // To restore: un-comment the block below.
+      // if (item.programmes.any((p) => p == Programme.eyeCare || p == Programme.cataract)) {
+      //   available.add(_NeedFilter.eyeCare);
+      // }
       if (item.daysOverdue != null && item.daysOverdue! > 0) {
         available.add(_NeedFilter.missedFollowUp);
       }
@@ -461,10 +468,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         case _NeedFilter.ancMnch:
           if (item.programmes.any((p) => p == Programme.anc || p == Programme.pnc)) { return true; }
         case _NeedFilter.childImmunisation:
-          if (item.programmes.any((p) => p == Programme.imci || p == Programme.epi)) { return true; }
+          // PILOT-SCOPE v1: imci only (epi not in pilot).
+          if (item.programmes.contains(Programme.imci)) { return true; }
         case _NeedFilter.ncd:
           if (item.programmes.contains(Programme.ncd)) { return true; }
         case _NeedFilter.eyeCare:
+          // PILOT-SCOPE v1: eyeCare/cataract not in pilot — chip never added to availableNeeds.
           if (item.programmes.any((p) => p == Programme.eyeCare || p == Programme.cataract)) { return true; }
         case _NeedFilter.missedFollowUp:
           if (item.daysOverdue != null && item.daysOverdue! > 0) { return true; }
@@ -485,11 +494,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     // Check if a refresh is pending (e.g., assessment completed while on another tab)
     _checkPendingRefresh();
-    
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
-    
+
     return Scaffold(
-      backgroundColor: tokens.canvas,
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
       // Pink "+ Enrol new" FAB — fixed bottom-right per spec §2.1. Opens
       // QR enrolment flow when the route lands; for now surfaces a snackbar
       // so the SK gets clear feedback rather than silent taps.
@@ -997,51 +1004,47 @@ class _ReferralNotificationButtonState
 // "Today's visits" priority-ordered patient cards with colored left border.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Pink "+ Enrol new" FAB — Apon Sushashthya V1 §2.1.
-///
-/// Opens the QR enrolment flow when it ships; until then we surface a clear
-/// snackbar so the SK gets feedback instead of a silent tap. Lives at the
-/// bottom-right of the dashboard scaffold.
+/// Pink "Enroll new" compact pill FAB — Apon Sushashthya V1 §2.1.
 class _EnrolNewFab extends StatelessWidget {
   const _EnrolNewFab();
 
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
-    return FloatingActionButton.extended(
-      key: const Key('dashboard_enrol_new_fab'),
-      backgroundColor: tokens.brandPink,
-      foregroundColor: Colors.white,
-      elevation: 4,
-      icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
-      label: const Text(
-        MissionDashboardStrings.enrolNewCta,
-        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
-      ),
-      onPressed: () {
-        final messenger = ScaffoldMessenger.maybeOf(context);
-        messenger?.hideCurrentSnackBar();
-        messenger?.showSnackBar(
-          SnackBar(
-            duration: const Duration(milliseconds: 1800),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: tokens.brandNavy,
-            content: const Row(
+    return Semantics(
+      button: true,
+      label: MissionDashboardStrings.enrolNewCta,
+      child: Material(
+        key: const Key('dashboard_enrol_new_fab'),
+        color: tokens.brandPink,
+        borderRadius: BorderRadius.circular(24),
+        elevation: 2,
+        shadowColor: tokens.brandPink.withValues(alpha: 0.4),
+        child: InkWell(
+          onTap: () => showEnrollmentEntrySheet(context),
+          borderRadius: BorderRadius.circular(24),
+          splashColor: Colors.white.withValues(alpha: 0.15),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.info_outline_rounded,
-                    color: Colors.white, size: 18),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    MissionDashboardStrings.enrolNewComingSoon,
-                    style: TextStyle(color: Colors.white),
+                Icon(Icons.person_add_alt_1_rounded, size: 15, color: Colors.white),
+                SizedBox(width: 6),
+                Text(
+                  MissionDashboardStrings.enrolNewCta,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    letterSpacing: 0.2,
                   ),
                 ),
               ],
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }
@@ -1238,91 +1241,93 @@ class _DashboardStatCard extends StatelessWidget {
       label: '$label: $value',
       button: true,
       child: Material(
-      color: tokens.cardSurface,
+      color: Theme.of(context).colorScheme.surface,
       borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
       child: InkWell(
         key: const Key('dashboard_stat_card_tap'),
         onTap: isLoading ? null : onTap,
         borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
         child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (isLoading)
-                    SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 3,
-                        color: accent,
-                      ),
-                    )
-                  else
-                    Text(
-                      value,
-                      style: TextStyle(
-                        fontSize: 30,
-                        fontWeight: FontWeight.w900,
-                        color: accent,
-                        height: 1,
-                      ),
-                    ),
-                  if (showPulse && !isLoading) ...[
-                    const SizedBox(width: 6),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: accent,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: accent.withValues(alpha: 0.4),
-                              blurRadius: 6,
-                              spreadRadius: 1,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: tokens.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                subline,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: accent,
-                ),
-              ),
-              if (footnote != null) ...[
-                const SizedBox(height: 3),
+              if (isLoading)
+                SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2.5, color: accent),
+                )
+              else ...[
                 Text(
-                  footnote!,
+                  value,
                   style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: tokens.textMuted,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                    color: accent,
+                    height: 1,
                   ),
                 ),
+                if (showPulse) ...[
+                  const SizedBox(width: 4),
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: accent,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: accent.withValues(alpha: 0.4),
+                          blurRadius: 5,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Theme.of(context).colorScheme.onSurface,
+                        height: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      subline,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: accent,
+                        height: 1.2,
+                      ),
+                    ),
+                    if (footnote != null) ...[
+                      const SizedBox(height: 1),
+                      Text(
+                        footnote!,
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w500,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          height: 1.2,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, size: 14, color: accent.withValues(alpha: 0.5)),
             ],
           ),
         ),
@@ -1349,7 +1354,7 @@ class _TodaysVisitsHeader extends StatelessWidget {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w800,
-                color: tokens.brandNavy,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
           ),
@@ -1390,7 +1395,6 @@ class _MoreVisitsLink extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Semantics(
@@ -1409,7 +1413,7 @@ class _MoreVisitsLink extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w800,
-              color: tokens.brandNavy,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
         ),
@@ -1426,9 +1430,9 @@ class _EmptyVisitsCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 32, 20, 32),
       decoration: BoxDecoration(
-        color: tokens.cardSurface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Column(
         children: [
@@ -1452,7 +1456,7 @@ class _EmptyVisitsCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w800,
-              color: tokens.textPrimary,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
           const SizedBox(height: 4),
@@ -1462,7 +1466,7 @@ class _EmptyVisitsCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: tokens.textMuted,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
               height: 1.4,
             ),
           ),
@@ -1492,84 +1496,69 @@ class _AiSortedInfoCard extends StatelessWidget {
           ('🚨', MissionDashboardStrings.aiSortedTagCce),
         ];
         return Container(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               colors: [AppColors.navy, AppColors.navyMid],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
                 color: AppColors.navy.withValues(alpha: 0.18),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
               ),
             ],
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+          child: Row(
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 26,
-                    height: 26,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.16),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Icon(Icons.auto_awesome,
-                        size: 14, color: Colors.white),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      isLoading
-                          ? 'AI sorted your visits overnight'
-                          : MissionDashboardStrings.aiSortedVisits(count),
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        height: 1.25,
-                      ),
-                    ),
-                  ),
-                ],
+              Container(
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(Icons.auto_awesome, size: 12, color: Colors.white),
               ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  isLoading
+                      ? 'AI sorted your visits overnight'
+                      : MissionDashboardStrings.aiSortedVisits(count),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    height: 1.2,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Row(
+                mainAxisSize: MainAxisSize.min,
                 children: tags
                     .map(
                       (t) => Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
+                        margin: const EdgeInsets.only(left: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.14),
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.18),
-                          ),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(t.$1, style: const TextStyle(fontSize: 11)),
-                            const SizedBox(width: 4),
-                            Text(
-                              t.$2,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
+                        child: Text(
+                          '${t.$1} ${t.$2}',
+                          style: const TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
                     )
@@ -1596,9 +1585,9 @@ class _FilterEmptyCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 28, 20, 24),
       decoration: BoxDecoration(
-        color: tokens.cardSurface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Column(
         children: [
@@ -1618,7 +1607,7 @@ class _FilterEmptyCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w800,
-              color: tokens.textPrimary,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
           const SizedBox(height: 4),
@@ -1628,7 +1617,7 @@ class _FilterEmptyCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: tokens.textMuted,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
               height: 1.4,
             ),
           ),
@@ -1746,14 +1735,14 @@ class _VisitFilterPanel extends StatelessWidget {
       children: [
         // ── Row 1: village chips ──────────────────────────────────────────
         if (villages.isNotEmpty) ...[
-          const Padding(
-            padding: EdgeInsets.only(bottom: 6),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
             child: Text(
               MissionDashboardStrings.whichVillageVisiting,
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: AppColors.textStrong,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
           ),
@@ -1777,7 +1766,7 @@ class _VisitFilterPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          const Divider(height: 1, color: AppColors.border),
+          Divider(height: 1, color: Theme.of(context).colorScheme.outlineVariant),
           const SizedBox(height: 8),
         ],
 
@@ -1786,21 +1775,21 @@ class _VisitFilterPanel extends StatelessWidget {
           padding: const EdgeInsets.only(bottom: 6),
           child: Row(
             children: [
-              const Text(
+              Text(
                 MissionDashboardStrings.filterByNeed,
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.textStrong,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
               const SizedBox(width: 4),
-              const Text(
+              Text(
                 '(${MissionDashboardStrings.filterByNeedOptional})',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w400,
-                  color: AppColors.textMuted,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
               const Spacer(),
@@ -1811,12 +1800,12 @@ class _VisitFilterPanel extends StatelessWidget {
                   child: GestureDetector(
                     key: const Key('dashboard_filter_clear_needs_tap'),
                     onTap: onClearNeeds,
-                    child: const Text(
+                    child: Text(
                       MissionDashboardStrings.clearNeedFilters,
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.navy,
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                   ),
@@ -1835,6 +1824,7 @@ class _VisitFilterPanel extends StatelessWidget {
                   .where((n) => availableNeeds.contains(n))
                   .map((need) {
                 final active = selectedNeeds.contains(need);
+                final cs = Theme.of(context).colorScheme;
                 return Padding(
                   padding: const EdgeInsets.only(right: 6),
                   child: Semantics(
@@ -1849,12 +1839,12 @@ class _VisitFilterPanel extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
-                          color: active ? AppColors.aiPurple : Colors.white,
+                          color: active ? AppColors.aiPurple : cs.surface,
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
                             color: active
                                 ? AppColors.aiPurple
-                                : AppColors.border,
+                                : cs.outlineVariant,
                             width: 1,
                           ),
                         ),
@@ -1865,7 +1855,7 @@ class _VisitFilterPanel extends StatelessWidget {
                             fontWeight:
                                 active ? FontWeight.w800 : FontWeight.w500,
                             color:
-                                active ? Colors.white : AppColors.textStrong,
+                                active ? Colors.white : cs.onSurface,
                           ),
                         ),
                       ),
@@ -1875,6 +1865,7 @@ class _VisitFilterPanel extends StatelessWidget {
               }),
               ...availableProgrammes.map((prog) {
                 final active = selectedProgrammes.contains(prog);
+                final cs = Theme.of(context).colorScheme;
                 return Padding(
                   padding: const EdgeInsets.only(right: 6),
                   child: Semantics(
@@ -1889,12 +1880,12 @@ class _VisitFilterPanel extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
-                          color: active ? AppColors.aiPurple : Colors.white,
+                          color: active ? AppColors.aiPurple : cs.surface,
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
                             color: active
                                 ? AppColors.aiPurple
-                                : AppColors.border,
+                                : cs.outlineVariant,
                             width: 1,
                           ),
                         ),
@@ -1905,7 +1896,7 @@ class _VisitFilterPanel extends StatelessWidget {
                             fontWeight:
                                 active ? FontWeight.w800 : FontWeight.w500,
                             color:
-                                active ? Colors.white : AppColors.textStrong,
+                                active ? Colors.white : cs.onSurface,
                           ),
                         ),
                       ),
@@ -1945,10 +1936,10 @@ class _VillageChip extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: isActive ? AppColors.navy : Colors.white,
+              color: isActive ? AppColors.navy : Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: isActive ? AppColors.navy : AppColors.border,
+                color: isActive ? AppColors.navy : Theme.of(context).colorScheme.outlineVariant,
                 width: 1,
               ),
             ),
@@ -1957,7 +1948,7 @@ class _VillageChip extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: isActive ? Colors.white : AppColors.textStrong,
+                color: isActive ? Colors.white : Theme.of(context).colorScheme.onSurface,
               ),
             ),
           ),

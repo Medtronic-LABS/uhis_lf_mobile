@@ -3,6 +3,10 @@
 /// Three-loop model: Learn (this screen + module player + quiz)
 /// → Apply (visit-triggered, future) → Measure (telemetry, future).
 ///
+/// PILOT-SCOPE v1: shows only the 3 pilot care journeys (IMCI / ANC / NCD).
+/// To restore TB, EPI, Nutrition modules: un-comment the entries below and
+/// add their programmes to kPilotProgrammes in programme.dart.
+///
 /// Engineering Design Standards:
 ///   - Pure UI — no I/O, no business logic.
 ///   - All strings from [TrainingStrings] / [CoachingStrings].
@@ -276,7 +280,7 @@ class _GridModuleCard extends StatelessWidget {
                         ? '${(module.quizScore * 100).round()}%'
                         : '${module.estimatedMinutes} ${CoachingStrings.minLabel}',
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: AppColors.textMuted,
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],

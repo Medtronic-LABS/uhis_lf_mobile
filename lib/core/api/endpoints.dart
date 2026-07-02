@@ -11,6 +11,11 @@ class Endpoints {
   /// Returns user hierarchy: villages, subVillages, workflowIds, facilities.
   static const String staticUserData = '/spice-service/static-data/user-data';
 
+  /// Patient search by identifier / free text. Used to look up an existing
+  /// registration from a scanned NID before enrolling a duplicate.
+  /// Postman: `patient-controller/searchPatient` → `{{spice_url}}/patient/search`.
+  static const String patientSearch = '/spice-service/patient/search';
+
   // ── Offline-service: bulk sync ────────────────────────────────────────────
   /// Bulk pull — households, members, followUps, householdMemberLinks.
   static const String offlineSyncFetch =
@@ -60,6 +65,11 @@ class Endpoints {
   /// AppConfig.aiServiceBaseUrl override in dev (see ProgrammeRecommendationRepository).
   static const String programmeRecommendation =
       '/leapfrog-ai-services/programme-recommendation/recommend';
+
+  // ── AI Next Best Action: post-assessment care plan proposal ──────────────
+  /// POST /naba/generate on the unified ai-scribe-service (port 8095).
+  /// Routed through nginx in prod; direct via AppConfig.aiServiceBaseUrl in dev.
+  static const String nabaGenerate = '/ai-scribe-service/naba/generate';
 
   // Chunked upload — for audio files ≥ 1 MB (rural 2G path)
   static const String scribeUploadInit = '/ai-scribe-service/upload/init';

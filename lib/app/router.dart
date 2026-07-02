@@ -25,6 +25,12 @@ import '../features/teleconsult/teleconsult_screen.dart';
 import '../features/training/training_screen.dart';
 import '../features/visit/briefing/visit_briefing_screen.dart';
 import '../features/visit/visit_flow_screen.dart';
+import '../core/api/api_client.dart';
+import '../core/auth/auth_repository.dart';
+import '../features/household/enrollment/create_household_screen.dart';
+import '../features/household/enrollment/household_created_screen.dart';
+import '../features/household/enrollment/add_household_member_screen.dart';
+import '../features/household/enrollment/enrollment_controller.dart';
 import 'bottom_nav.dart';
 
 /// Navigation keys for each tab's navigator.
@@ -274,6 +280,10 @@ GoRouter buildRouter(AuthState auth) {
                           patientGender: extra?['patientGender'] as String?,
                           gestationalWeeks:
                               extra?['gestationalWeeks'] as int?,
+                          isPostpartum:
+                              extra?['isPostpartum'] as bool? ?? false,
+                          postpartumWeeks:
+                              extra?['postpartumWeeks'] as int?,
                           origin: origin,
                         ),
                       );
@@ -329,6 +339,52 @@ GoRouter buildRouter(AuthState auth) {
       ),
 
       // ─────────────────────────────────────────────────────────────────────
+      // Household enrollment flow — single shared EnrollmentController
+      // with auth deps, persisted across all enrollment screens.
+      // ─────────────────────────────────────────────────────────────────────
+      ShellRoute(
+        navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'enrollment'),
+        builder: (context, state, child) => ChangeNotifierProvider(
+          create: (ctx) => EnrollmentController(
+            auth: ctx.read<AuthRepository>(),
+            apiClient: ctx.read<ApiClient>(),
+          ),
+          child: child,
+        ),
+        routes: [
+          GoRoute(
+            path: '/household/enrollment/create',
+            pageBuilder: (context, state) {
+              final extra = state.extra as Map<String, dynamic>?;
+              return MaterialPage(
+                key: const ValueKey('enrollment-create'),
+                child: CreateHouseholdScreen(
+                  fromNidScan: extra?['fromNidScan'] == true,
+                  scannedNidNumber: extra?['nidNumber'] as String?,
+                  scannedName: extra?['name'] as String?,
+                  scannedDateOfBirth: extra?['dateOfBirth'] as String?,
+                ),
+              );
+            },
+          ),
+          GoRoute(
+            path: '/household/enrollment/success',
+            pageBuilder: (context, state) => const MaterialPage(
+              key: ValueKey('enrollment-success'),
+              child: HouseholdCreatedScreen(),
+            ),
+          ),
+          GoRoute(
+            path: '/household/enrollment/add-member',
+            pageBuilder: (context, state) => const MaterialPage(
+              key: ValueKey('enrollment-add-member'),
+              child: AddHouseholdMemberScreen(),
+            ),
+          ),
+        ],
+      ),
+
+      // ─────────────────────────────────────────────────────────────────────
       // Standalone feature routes (full-screen, outside the shell)
       // ─────────────────────────────────────────────────────────────────────
       GoRoute(
@@ -359,6 +415,8 @@ GoRouter buildRouter(AuthState auth) {
             child: CounsellingScreen(
               patientLabel: extra['patientLabel'] as String? ?? '',
               patientId: extra['patientId'] as String? ?? '',
+              whatsappMessage: extra['whatsappMessage'] as String?,
+              patientPhone: extra['patientPhone'] as String?,
             ),
           );
         },

@@ -308,28 +308,28 @@ abstract final class PathwayRulesV1 {
       rationaleKey: 'pathwayPncRationale',
     ),
 
+    // PILOT-SCOPE v1: TB pathway disabled — not in pilot (3 journeys: sick child / pregnancy / NCD).
+    // To restore: un-comment the PathwayRule block below and add Programme.tb to kPilotProgrammes.
     // ═════════════════════════════════════════════════════════════════════════
     // TB SCREEN (Priority 30)
     // Source: WHO 4-Symptom Screen
     // ═════════════════════════════════════════════════════════════════════════
-    PathwayRule(
-      programme: Programme.tb,
-      priority: 30,
-      anyOf: {
-        'cough_over_2_weeks',
-        'hemoptysis',
-        'tb_contact',
-      },
-      combinations: [
-        // Night sweats + weight loss combo
-        {'night_sweats', 'weight_loss'},
-        // Night sweats + fever combo
-        {'night_sweats', 'fever'},
-      ],
-      gate: DemographicGate.any,
-      historyTriggers: {'TB_SCREEN_DUE', 'TUBERCULOSIS', 'PRESUMPTIVE_TB'},
-      rationaleKey: 'pathwayTbScreenRationale',
-    ),
+    // PathwayRule(
+    //   programme: Programme.tb,
+    //   priority: 30,
+    //   anyOf: {
+    //     'cough_over_2_weeks',
+    //     'hemoptysis',
+    //     'tb_contact',
+    //   },
+    //   combinations: [
+    //     {'night_sweats', 'weight_loss'},
+    //     {'night_sweats', 'fever'},
+    //   ],
+    //   gate: DemographicGate.any,
+    //   historyTriggers: {'TB_SCREEN_DUE', 'TUBERCULOSIS', 'PRESUMPTIVE_TB'},
+    //   rationaleKey: 'pathwayTbScreenRationale',
+    // ),
 
     // ═════════════════════════════════════════════════════════════════════════
     // NCD-HTN (Priority 40)
@@ -395,74 +395,80 @@ abstract final class PathwayRulesV1 {
       rationaleKey: 'pathwayNutritionRationale',
     ),
 
+    // PILOT-SCOPE v1: Family Planning pathway disabled — not in pilot.
+    // To restore: un-comment below and add Programme.familyPlanning to kPilotProgrammes.
     // ═════════════════════════════════════════════════════════════════════════
     // FAMILY PLANNING (Priority 60)
     // Source: WHO Family Planning Guidelines 2022
     // ═════════════════════════════════════════════════════════════════════════
-    PathwayRule(
-      programme: Programme.familyPlanning,
-      priority: 60,
-      anyOf: {
-        'no_family_planning',
-        'wants_contraception',
-      },
-      gate: DemographicGate(
-        sex: Sex.female,
-        minAgeMonths: 180,  // 15 years
-        maxAgeMonths: 588,  // 49 years
-      ),
-      historyTriggers: {
-        'FP_COUNSELLING_DUE',
-        'PPFP_WINDOW',
-        'UNMET_FP_NEED',
-      },
-      rationaleKey: 'pathwayFamilyPlanningRationale',
-    ),
+    // PathwayRule(
+    //   programme: Programme.familyPlanning,
+    //   priority: 60,
+    //   anyOf: {
+    //     'no_family_planning',
+    //     'wants_contraception',
+    //   },
+    //   gate: DemographicGate(
+    //     sex: Sex.female,
+    //     minAgeMonths: 180,
+    //     maxAgeMonths: 588,
+    //   ),
+    //   historyTriggers: {
+    //     'FP_COUNSELLING_DUE',
+    //     'PPFP_WINDOW',
+    //     'UNMET_FP_NEED',
+    //   },
+    //   rationaleKey: 'pathwayFamilyPlanningRationale',
+    // ),
 
+    // PILOT-SCOPE v1: Cataract pathway disabled — not in pilot.
+    // To restore: un-comment below and add Programme.cataract to kPilotProgrammes.
     // ═════════════════════════════════════════════════════════════════════════
     // CATARACT (Priority 70)
     // Source: WHO VISION 2020
     // ═════════════════════════════════════════════════════════════════════════
-    PathwayRule(
-      programme: Programme.cataract,
-      priority: 70,
-      anyOf: {
-        'blurred_vision',
-        'eye_pain',
-        'gradual_vision_loss',
-      },
-      gate: DemographicGate.any,
-      historyTriggers: {
-        'CATARACT',
-        'EYE_DISEASE',
-        'VISUAL_IMPAIRMENT',
-      },
-      rationaleKey: 'pathwayCataractRationale',
-    ),
+    // PathwayRule(
+    //   programme: Programme.cataract,
+    //   priority: 70,
+    //   anyOf: {
+    //     'blurred_vision',
+    //     'eye_pain',
+    //     'gradual_vision_loss',
+    //   },
+    //   gate: DemographicGate.any,
+    //   historyTriggers: {
+    //     'CATARACT',
+    //     'EYE_DISEASE',
+    //     'VISUAL_IMPAIRMENT',
+    //   },
+    //   rationaleKey: 'pathwayCataractRationale',
+    // ),
 
+    // PILOT-SCOPE v1: Eye Care pathway disabled — not in pilot.
+    // To restore: un-comment below and add Programme.eyeCare to kPilotProgrammes.
     // ═════════════════════════════════════════════════════════════════════════
     // EYE CARE (Priority 75)
     // Source: WHO Primary Eye Care Guidelines
     // Suppressed by Cataract when both would activate (cataract more specific).
     // ═════════════════════════════════════════════════════════════════════════
-    PathwayRule(
-      programme: Programme.eyeCare,
-      priority: 75,
-      anyOf: {
-        'blurred_vision',
-        'reduced_vision',
-        'eye_pain',
-      },
-      gate: DemographicGate.any,
-      historyTriggers: {
-        'EYE_CARE',
-        'GLAUCOMA',
-        'REFRACTIVE_ERROR',
-        'POST_OP_EYE',
-      },
-      suppressedBy: Programme.cataract,
-      rationaleKey: 'pathwayEyeCareRationale',
-    ),
+    // PathwayRule(
+    //   programme: Programme.eyeCare,
+    //   priority: 75,
+    //   anyOf: {
+    //     'blurred_vision',
+    //     'reduced_vision',
+    //     'eye_pain',
+    //   },
+    //   gate: DemographicGate.any,
+    //   historyTriggers: {
+    //     'EYE_CARE',
+    //     'GLAUCOMA',
+    //     'REFRACTIVE_ERROR',
+    //     'POST_OP_EYE',
+    //   },
+    //   suppressedBy: Programme.cataract,
+    //   rationaleKey: 'pathwayEyeCareRationale',
+    // ),
 
     // ═════════════════════════════════════════════════════════════════════════
     // SCHEDULED: EPI (Priority 100)

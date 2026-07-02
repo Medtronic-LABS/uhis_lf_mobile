@@ -133,28 +133,103 @@ class ScribeJobResult {
   final String? errorMessage;
 
   factory ScribeJobResult.fromJson(Map<String, dynamic> j) {
+    final jobId = j['jobId'] as String? ?? '';
+    final statusStr = j['status'] as String?;
     final soapJson = j['soap'] as Map<String, dynamic>?;
-    debugPrint('[ScribeJobResult] fromJson - soapJson: ${soapJson?.keys.toList()}');
-    if (soapJson != null) {
-      debugPrint('[ScribeJobResult] fromJson - subjective: ${soapJson['subjective']?.toString().substring(0, (soapJson['subjective']?.toString().length ?? 0).clamp(0, 100))}');
-    }
     final ratJson = j['rationale'] as Map<String, dynamic>?;
     final errJson = j['error'] as Map<String, dynamic>?;
     final transcriptJson = j['transcript'] as Map<String, dynamic>?;
     final formPrefillJson = j['formPrefill'] as Map<String, dynamic>?;
     final triageJson = j['triage'] as Map<String, dynamic>?;
+    final detectedSymptoms = (j['detectedSymptoms'] as List?)
+            ?.whereType<String>()
+            .where((s) => s.isNotEmpty)
+            .toList() ??
+        const <String>[];
+
+    debugPrint(
+      '[AIScribe] poll parse: jobId=$jobId status=$statusStr '
+      'keys=${j.keys.toList()}',
+    );
 
     // Determine mode from response
     ScribeMode mode = ScribeMode.soap;
     if (formPrefillJson != null) {
       mode = ScribeMode.formPrefill;
-    } else if (triageJson != null) {
+    } else if (triageJson != null || detectedSymptoms.isNotEmpty) {
       mode = ScribeMode.triage;
     }
 
+    TriageExtractionResult? triageResult;
+    String triageSource = 'none';
+    if (triageJson != null) {
+      triageSource = 'triage.symptomCodes';
+      triageResult = TriageExtractionResult.fromJson({
+        ...triageJson,
+        'transcriptText': transcriptJson?['text'],
+        'noteId': j['noteId'],
+      });
+      debugPrint(
+        '[AIScribe] triage payload from server object '
+        '(keys=${triageJson.keys.toList()})',
+      );
+    } else if (detectedSymptoms.isNotEmpty) {
+      triageSource = 'detectedSymptoms fallback';
+      triageResult = TriageExtractionResult(
+        symptomCodes: detectedSymptoms
+            .map(
+              (code) => AIExtractedField(
+                fieldId: code,
+                value: true,
+                confidence: 0.8,
+                source: FieldSource.aiPending,
+                extractedAt: DateTime.now(),
+              ),
+            )
+            .toList(),
+        transcriptText: transcriptJson?['text'] as String?,
+        noteId: j['noteId'] as String?,
+      );
+      debugPrint(
+        '[AIScribe] triage payload from detectedSymptoms fallback '
+        '(codes=$detectedSymptoms, confidence=0.8 each)',
+      );
+    }
+
+    if (mode == ScribeMode.triage) {
+      final floor = AppConfig.scribeSymptomConfidenceFloor;
+      final count = triageResult?.symptomCodes.length ?? 0;
+      debugPrint(
+        '[AIScribe] triage resolved: source=$triageSource mode=$mode '
+        'symptoms=$count floor=$floor',
+      );
+      if (triageResult != null) {
+        for (final field in triageResult.symptomCodes) {
+          final passes = field.confidence >= floor;
+          debugPrint(
+            '[AIScribe]   → ${field.fieldId}: '
+            'confidence=${(field.confidence * 100).toStringAsFixed(0)}% '
+            'passesFloor=$passes',
+          );
+        }
+      } else {
+        debugPrint('[AIScribe] triage mode but no triageResult built');
+      }
+      final transcriptLen = transcriptJson?['text']?.toString().length ?? 0;
+      debugPrint('[AIScribe] transcript length=$transcriptLen chars');
+    }
+
+    if (soapJson != null) {
+      final subj = soapJson['subjective']?.toString() ?? '';
+      debugPrint(
+        '[AIScribe] soap subjective (${subj.length} chars): '
+        '${subj.substring(0, subj.length.clamp(0, 100))}',
+      );
+    }
+
     return ScribeJobResult(
-      jobId: j['jobId'] as String? ?? '',
-      status: _parseStatus(j['status'] as String?),
+      jobId: jobId,
+      status: _parseStatus(statusStr),
       mode: mode,
       soap: soapJson != null ? SoapNote.fromJson(soapJson) : null,
       formPrefill: formPrefillJson != null
@@ -164,13 +239,7 @@ class ScribeJobResult {
               'noteId': j['noteId'],
             })
           : null,
-      triageResult: triageJson != null
-          ? TriageExtractionResult.fromJson({
-              ...triageJson,
-              'transcriptText': transcriptJson?['text'],
-              'noteId': j['noteId'],
-            })
-          : null,
+      triageResult: triageResult,
       transcriptText: transcriptJson?['text'] as String?,
       transcriptTranslation: transcriptJson?['translation'] as String?,
       noteId: j['noteId'] as String?,
@@ -182,21 +251,57 @@ class ScribeJobResult {
 
 /// HTTP client for the ai-scribe-service.
 ///
-/// Routes to [AppConfig.scribeBaseUrl] which defaults to the local container
-/// (`http://10.0.2.2:8095/` from the Android emulator). The nginx gateway
-/// adds an `/ai-scribe-service/` routing prefix; the container itself does
-/// not. [_scribeUrl] strips that prefix before building the absolute URL.
+/// Uses a dedicated Dio instance — no UHIS auth interceptors or cookie jar.
+/// Base URL: [AppConfig.aiServiceBaseUrl] when set (via --dart-define
+/// AI_SERVICE_URL=http://10.0.2.2:8095), otherwise [AppConfig.scribeBaseUrl].
+/// The nginx gateway adds an `/ai-scribe-service/` routing prefix; the
+/// container itself does not. [_scribePath] strips that prefix so requests
+/// hit the service directly.
 class ScribeApiService extends ApiRepository {
-  ScribeApiService(super.api);
+  ScribeApiService(super.api) {
+    _dio = Dio(BaseOptions(
+      baseUrl: _effectiveBaseUrl(),
+      connectTimeout: const Duration(seconds: 60),
+      sendTimeout: const Duration(minutes: 3),
+      receiveTimeout: const Duration(minutes: 3),
+      validateStatus: (s) => s != null && s < 500,
+    ));
+  }
+
+  late final Dio _dio;
+
+  static String _effectiveBaseUrl() {
+    final ai = AppConfig.aiServiceBaseUrl;
+    return ai.isNotEmpty ? ai : AppConfig.scribeBaseUrl;
+  }
 
   static const int _chunkThresholdBytes = 1 * 1024 * 1024; // 1 MB
 
   static const String _nginxPrefix = '/ai-scribe-service';
 
-  static String _scribeUrl(String path) {
-    final p = path.startsWith(_nginxPrefix) ? path.substring(_nginxPrefix.length) : path;
-    final base = AppConfig.scribeBaseUrl;
-    return base.endsWith('/') ? '$base${p.startsWith('/') ? p.substring(1) : p}' : '$base$p';
+  static String _scribePath(String path) {
+    return path.startsWith(_nginxPrefix) ? path.substring(_nginxPrefix.length) : path;
+  }
+
+  /// Lower-cased file extension (without dot) of [path], defaulting to `wav`.
+  static String _extensionOf(String path) {
+    final dot = path.lastIndexOf('.');
+    if (dot < 0 || dot == path.length - 1) return 'wav';
+    return path.substring(dot + 1).toLowerCase();
+  }
+
+  Future<dynamic> _post(String path, {Object? data, String? action}) async {
+    final resp = await _dio.post(path, data: data);
+    final code = resp.statusCode ?? 0;
+    if (code < 200 || code >= 300) throw ApiException(action ?? path, code);
+    return resp.data;
+  }
+
+  Future<dynamic> _get(String path, {String? action}) async {
+    final resp = await _dio.get(path);
+    final code = resp.statusCode ?? 0;
+    if (code < 200 || code >= 300) throw ApiException(action ?? path, code);
+    return resp.data;
   }
 
   /// Submit audio for async transcription.
@@ -232,6 +337,7 @@ class ScribeApiService extends ApiRepository {
     String? encounterId,
     List<String> programmes = const [],
     String language = 'bn',
+    String? triageNotes,
   }) async {
     return submitAudioWithMode(
       audioFile,
@@ -241,6 +347,7 @@ class ScribeApiService extends ApiRepository {
       programmes: programmes,
       language: language,
       formSchema: formSchema,
+      triageNotes: triageNotes,
     );
   }
 
@@ -275,6 +382,7 @@ class ScribeApiService extends ApiRepository {
     String language = 'bn',
     List<FormFieldSchema>? formSchema,
     List<String>? symptomCatalog,
+    String? triageNotes,
   }) async {
     final size = await audioFile.length();
     if (size >= _chunkThresholdBytes) {
@@ -287,6 +395,7 @@ class ScribeApiService extends ApiRepository {
         language: language,
         formSchema: formSchema,
         symptomCatalog: symptomCatalog,
+        triageNotes: triageNotes,
       );
     }
     return _simpleUploadWithMode(
@@ -298,6 +407,7 @@ class ScribeApiService extends ApiRepository {
       language: language,
       formSchema: formSchema,
       symptomCatalog: symptomCatalog,
+      triageNotes: triageNotes,
     );
   }
 
@@ -309,6 +419,7 @@ class ScribeApiService extends ApiRepository {
     String language = 'bn',
     List<FormFieldSchema>? formSchema,
     List<String>? symptomCatalog,
+    String? triageNotes,
   }) {
     return {
       'mode': mode.name == 'formPrefill' ? 'form_prefill' : mode.name,
@@ -322,6 +433,8 @@ class ScribeApiService extends ApiRepository {
       if (formSchema != null)
         'formSchema': formSchema.map((f) => f.toJson()).toList(),
       'symptomCatalog': ?symptomCatalog,
+      if (triageNotes != null && triageNotes.isNotEmpty)
+        'triageNotes': triageNotes,
     };
   }
 
@@ -334,6 +447,7 @@ class ScribeApiService extends ApiRepository {
     String language = 'bn',
     List<FormFieldSchema>? formSchema,
     List<String>? symptomCatalog,
+    String? triageNotes,
   }) async {
     final metadata = _buildMetadata(
       mode: mode,
@@ -343,24 +457,30 @@ class ScribeApiService extends ApiRepository {
       language: language,
       formSchema: formSchema,
       symptomCatalog: symptomCatalog,
+      triageNotes: triageNotes,
+    );
+    debugPrint(
+      '[AIScribe] submit: mode=${metadata['mode']} '
+      'baseUrl=${_effectiveBaseUrl()} '
+      'catalogSize=${symptomCatalog?.length ?? 0} '
+      'language=$language',
     );
 
     final form = FormData.fromMap({
       'audio_file': await MultipartFile.fromFile(
         audioFile.path,
-        filename: 'consultation.aac',
+        filename: 'consultation.${_extensionOf(audioFile.path)}',
       ),
       'metadata': _jsonEncode(metadata),
     });
 
-    final resp = await api.dio.post(
-      _scribeUrl(Endpoints.scribeTranscribe),
-      data: form,
-    );
+    final resp = await _dio.post(_scribePath(Endpoints.scribeTranscribe), data: form);
     if ((resp.statusCode ?? 0) != 202) {
       throw ApiException('scribe submit', resp.statusCode ?? 0);
     }
-    return (resp.data as Map<String, dynamic>)['jobId'] as String;
+    final jobId = (resp.data as Map<String, dynamic>)['jobId'] as String;
+    debugPrint('[AIScribe] submit accepted jobId=$jobId');
+    return jobId;
   }
 
   /// JSON encode helper that handles nested structures.
@@ -389,21 +509,25 @@ class ScribeApiService extends ApiRepository {
     String language = 'bn',
     List<FormFieldSchema>? formSchema,
     List<String>? symptomCatalog,
+    String? triageNotes,
   }) async {
     final size = await audioFile.length();
     const chunkSize = 256 * 1024; // 256 KB
 
     // 1. Init
-    final initResp = await postOk(
-      _scribeUrl(Endpoints.scribeUploadInit),
-      data: {'filename': 'consultation.opus', 'size': size},
+    final initResp = await _post(
+      _scribePath(Endpoints.scribeUploadInit),
+      data: {
+        'filename': 'consultation.${_extensionOf(audioFile.path)}',
+        'size': size,
+      },
       action: 'scribe upload init',
     ) as Map<String, dynamic>;
     final uploadId = initResp['uploadId'] as String;
 
     // 2. Check existing chunks (resume support)
-    final statusResp = await getOk(
-      _scribeUrl(Endpoints.scribeUploadStatus(uploadId)),
+    final statusResp = await _get(
+      _scribePath(Endpoints.scribeUploadStatus(uploadId)),
       action: 'scribe upload status',
     ) as Map<String, dynamic>;
     final received = ((statusResp['receivedChunks'] as List?)
@@ -418,8 +542,8 @@ class ScribeApiService extends ApiRepository {
       if (!received.contains(chunkNum)) {
         final end = (offset + chunkSize).clamp(0, bytes.length);
         final chunk = bytes.sublist(offset, end);
-        final resp = await api.dio.put(
-          _scribeUrl(Endpoints.scribeUploadChunk(uploadId, chunkNum)),
+        final resp = await _dio.put(
+          _scribePath(Endpoints.scribeUploadChunk(uploadId, chunkNum)),
           data: chunk,
           options: Options(contentType: 'application/octet-stream'),
         );
@@ -439,9 +563,10 @@ class ScribeApiService extends ApiRepository {
       language: language,
       formSchema: formSchema,
       symptomCatalog: symptomCatalog,
+      triageNotes: triageNotes,
     );
-    final completeResp = await postOk(
-      _scribeUrl(Endpoints.scribeUploadComplete(uploadId)),
+    final completeResp = await _post(
+      _scribePath(Endpoints.scribeUploadComplete(uploadId)),
       data: {'metadata': metadata},
       action: 'scribe upload complete',
     ) as Map<String, dynamic>;
@@ -451,15 +576,24 @@ class ScribeApiService extends ApiRepository {
   /// Poll job status. Returns null if network fails (caller retries).
   Future<ScribeJobResult?> pollResult(String jobId) async {
     try {
-      final body = await getOk(
-        _scribeUrl(Endpoints.scribeResult(jobId)),
+      final body = await _get(
+        _scribePath(Endpoints.scribeResult(jobId)),
         action: 'scribe poll',
       );
-      return ScribeJobResult.fromJson(body as Map<String, dynamic>);
+      final result = ScribeJobResult.fromJson(body as Map<String, dynamic>);
+      if (result.status != ScribeJobStatus.processing &&
+          result.status != ScribeJobStatus.queued) {
+        debugPrint(
+          '[AIScribe] poll terminal: jobId=$jobId '
+          'status=${result.status.name} mode=${result.mode.name} '
+          'triageSymptoms=${result.triageResult?.symptomCodes.length ?? 0}',
+        );
+      }
+      return result;
     } on ApiException {
       rethrow;
     } catch (e) {
-      debugPrint('[scribe] pollResult failed, caller will retry: $e');
+      debugPrint('[AIScribe] pollResult failed, caller will retry: $e');
       return null;
     }
   }
@@ -467,8 +601,8 @@ class ScribeApiService extends ApiRepository {
   /// Fetch full note (includes rationale).
   Future<ScribeJobResult?> getNote(String noteId) async {
     try {
-      final body = await getOk(
-        _scribeUrl(Endpoints.scribeNote(noteId)),
+      final body = await _get(
+        _scribePath(Endpoints.scribeNote(noteId)),
         action: 'scribe get note',
       );
       debugPrint('[ScribeAPI] getNote response keys: ${body.keys.toList()}');
@@ -493,8 +627,8 @@ class ScribeApiService extends ApiRepository {
 
   /// Accept a draft note. [edits] overrides specific SOAP fields.
   Future<void> acceptNote(String noteId, {SoapNote? edits}) async {
-    await postOk(
-      _scribeUrl(Endpoints.scribeAccept(noteId)),
+    await _post(
+      _scribePath(Endpoints.scribeAccept(noteId)),
       data: {'edits': edits?.toJson() ?? {}},
       action: 'scribe accept',
     );
@@ -502,8 +636,8 @@ class ScribeApiService extends ApiRepository {
 
   /// Reject a draft note.
   Future<void> rejectNote(String noteId, {String? reason}) async {
-    await postOk(
-      _scribeUrl(Endpoints.scribeReject(noteId)),
+    await _post(
+      _scribePath(Endpoints.scribeReject(noteId)),
       data: {'reason': reason ?? ''},
       action: 'scribe reject',
     );

@@ -77,7 +77,7 @@ class _LockScreenState extends State<LockScreen> {
     final programTitle = _summary?.area ?? LockStrings.programName;
 
     return Scaffold(
-      backgroundColor: AppColors.cardSurface,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       body: Column(
         children: [
           LockProgramHeader(title: programTitle, pageCount: 8),
@@ -209,7 +209,7 @@ class _LockContentState extends State<LockContent>
               style: Theme.of(context)
                   .textTheme
                   .headlineLarge
-                  ?.copyWith(fontWeight: FontWeight.w900, color: AppColors.navy),
+                  ?.copyWith(fontWeight: FontWeight.w900, color: Theme.of(context).colorScheme.onSurface),
               textAlign: TextAlign.center,
             ),
           ),
@@ -221,7 +221,7 @@ class _LockContentState extends State<LockContent>
               style: Theme.of(context)
                   .textTheme
                   .bodyLarge
-                  ?.copyWith(color: AppColors.textMuted),
+                  ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
               textAlign: TextAlign.center,
             ),
           ),
@@ -262,7 +262,7 @@ class _LockContentState extends State<LockContent>
           child: TextButton(
             onPressed: widget.onPinUnlock,
             style: TextButton.styleFrom(
-              foregroundColor: AppColors.textMuted,
+              foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
               textStyle: const TextStyle(
                 fontFamily: 'NunitoSans',
                 fontSize: 12,
