@@ -7,8 +7,9 @@
 /// a composite back to its constituent key-value pairs.
 library;
 
-import 'field_kind.dart';
+import 'clinical_concept.dart';
 import 'condition_schema.dart';
+import 'field_kind.dart';
 
 /// A single selectable option (label + stored value).
 class FieldOption {
@@ -37,7 +38,8 @@ class FieldSchema {
     this.options = const [],
     this.conditions = const [],
     this.subFieldIds = const [],
-    this.raw = const {},
+    this.clinicalConcept = const [],
+    this.programmes = const [],
   });
 
   /// Stable identifier used as the key in [AssessmentDraftRow.fieldValues].
@@ -75,8 +77,13 @@ class FieldSchema {
   /// Used by [DynamicFormController] to expand composite values on save.
   final List<String> subFieldIds;
 
-  /// Original JSON item — preserved for extension points.
-  final Map<String, dynamic> raw;
+  /// Clinical terminology codings for this field (SNOMED CT, LOINC, etc.).
+  ///
+  /// Used when constructing FHIR Observations to annotate the coding element.
+  final List<ClinicalConcept> clinicalConcept;
+
+  /// Programme IDs this field belongs to (e.g. 'anc', 'ncd').
+  final List<String> programmes;
 
   @override
   String toString() => 'FieldSchema($fieldId, $kind)';

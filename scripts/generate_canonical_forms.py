@@ -35,6 +35,77 @@ INPUT_TYPE_MAP = {
     8192: "decimal",
 }
 
+# LOINC codes for clinical fields.
+# Maps field id → (loinc_code, loinc_display)
+LOINC_CODES = {
+    "temperature":         ("8310-5",  "Body temperature"),
+    "pulse":               ("8867-4",  "Heart rate"),
+    "breathsPerMinute":    ("9279-1",  "Respiratory rate"),
+    "respiratoryRate":     ("9279-1",  "Respiratory rate"),
+    "spo2":                ("59408-5", "Oxygen saturation in Arterial blood by Pulse oximetry"),
+    "SpO2":                ("59408-5", "Oxygen saturation in Arterial blood by Pulse oximetry"),
+    "systolic":            ("8480-6",  "Systolic blood pressure"),
+    "diastolic":           ("8462-4",  "Diastolic blood pressure"),
+    "bloodPressure":       ("8480-6",  "Systolic blood pressure"),
+    "height":              ("8302-2",  "Body height"),
+    "heightInFeet":        ("8302-2",  "Body height"),
+    "patientHeight":       ("8302-2",  "Body height"),
+    "weight":              ("29463-7", "Body weight"),
+    "patientWeight":       ("29463-7", "Body weight"),
+    "ancWeight":           ("29463-7", "Body weight"),
+    "bmi":                 ("39156-5", "Body mass index (BMI) [Ratio]"),
+    "bloodSugar":          ("2339-0",  "Glucose [Mass/volume] in Blood"),
+    "bloodSugarFasting":   ("2339-0",  "Glucose [Mass/volume] in Blood"),
+    "bloodSugarRandom":    ("2339-0",  "Glucose [Mass/volume] in Blood"),
+    "muac":                ("56072-2", "Mid upper arm circumference"),
+}
+
+# compositeGroup assignment per field id.
+# compositeRole "trigger" = first field in composite, "member" = rest.
+COMPOSITE_GROUP = {
+    "temperature":      ("vitalsBundle",      "trigger"),
+    "pulse":            ("vitalsBundle",      "member"),
+    "breathsPerMinute": ("vitalsBundle",      "member"),
+    "respiratoryRate":  ("vitalsBundle",      "member"),
+    "spo2":             ("vitalsBundle",      "member"),
+    "SpO2":             ("vitalsBundle",      "member"),
+    "height":           ("anthropometry",     "trigger"),
+    "heightInFeet":     ("anthropometry",     "trigger"),
+    "patientHeight":    ("anthropometry",     "trigger"),
+    "weight":           ("anthropometry",     "member"),
+    "patientWeight":    ("anthropometry",     "member"),
+    "ancWeight":        ("anthropometry",     "member"),
+    "gravida":          ("obstetricHistory",  "trigger"),
+    "parity":           ("obstetricHistory",  "member"),
+    "livingChildren":   ("obstetricHistory",  "member"),
+    "ageOfLastChild":   ("obstetricHistory",  "member"),
+}
+
+# Supply pair suffixes: consumed-side is trigger, provided-side is member.
+_SUPPLY_CONSUMED_SUFFIXES = ["Consumed", "consumed", "LastMonth"]
+_SUPPLY_PROVIDED_SUFFIXES = ["Provided", "provided", "Today"]
+
+
+def _supply_composite_role(field_id):
+    """Return (compositeGroup, compositeRole) for supply pair fields, or None.
+
+    For consumed-side fields the group is fieldId + "_pair".
+    For provided-side fields the group is derived by stripping the provided
+    suffix and appending "_pair" so it matches its consumed partner.
+    """
+    for suffix in _SUPPLY_CONSUMED_SUFFIXES:
+        if suffix in field_id:
+            return (f"{field_id}_pair", "trigger")
+    for suffix in _SUPPLY_PROVIDED_SUFFIXES:
+        if suffix in field_id:
+            # Build group name mirroring the consumed partner.
+            consumed_id = field_id.replace(suffix, "Consumed")
+            # Normalise: strip trailing "Consumed" and re-add
+            group = f"{consumed_id}_pair"
+            return (group, "member")
+    return None
+
+
 def _canonical_input_type(raw):
     """Convert Android InputType bitmask to canonical name."""
     if raw is None:
@@ -107,12 +178,33 @@ def build_field_library(questions, workflow_map):
         if "inputType" in item:
             canonical["inputType"] = _canonical_input_type(item["inputType"])
 
-        # clinicalConcept: lift snomedCode/snomedDisplay to structured array
+        # clinicalConcept: lift snomedCode/snomedDisplay to structured array,
+        # then append LOINC entry if this field has a known LOINC code.
         snomed_code = item.get("snomedCode")
         snomed_display = item.get("snomedDisplay")
-        cc = _snomed_to_clinical_concept(snomed_code, snomed_display)
+        cc = _snomed_to_clinical_concept(snomed_code, snomed_display) or []
+        loinc_entry = LOINC_CODES.get(field_id)
+        if loinc_entry:
+            cc.append({
+                "system": "LOINC",
+                "code": loinc_entry[0],
+                "display": loinc_entry[1],
+            })
         if cc:
             canonical["clinicalConcept"] = cc
+
+        # compositeGroup / compositeRole: static hint based on field id
+        if field_id in COMPOSITE_GROUP:
+            group, role = COMPOSITE_GROUP[field_id]
+            canonical["compositeGroup"] = group
+            canonical["compositeRole"] = role
+        else:
+            supply_pair = _supply_composite_role(field_id)
+            if supply_pair is not None:
+                group, role = supply_pair
+                if group is not None:
+                    canonical["compositeGroup"] = group
+                canonical["compositeRole"] = role
 
         # programmes: string[] → typed object[] using workflow_map for metadata
         raw_progs = item.get("programs") or []

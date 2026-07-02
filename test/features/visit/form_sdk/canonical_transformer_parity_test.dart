@@ -1,9 +1,14 @@
 /// Parity test: [CanonicalFormTransformer] must produce the same [FormSchema]
 /// as the legacy [FormSchemaParser] path for every formType in program_forms.json.
 ///
-/// Asserts that field IDs, section titles, field kinds, and required flags
-/// are identical between the two paths (per form_sdk_migration_plan.md CI
-/// validation algorithm).
+/// When program_forms.json still contains `formInput` entries, the test asserts
+/// that field IDs, section titles, field kinds, and required flags are identical
+/// between the two paths (per form_sdk_migration_plan.md CI validation algorithm).
+///
+/// After `formInput` has been stripped from program_forms.json (Phase 4), the
+/// legacy map is empty and the parity assertions are skipped — only the
+/// canonical-only assertions run, verifying that every formType loads at least
+/// one field and that vitals fields carry clinicalConcept entries.
 ///
 /// This test uses dart:io to read the assets directly — no Flutter widget
 /// harness needed, so it runs in `flutter test` without an emulator.
@@ -24,15 +29,18 @@ void main() {
 
   late Map<String, FormSchema> legacySchemas;
   late Map<String, FormSchema> canonicalSchemas;
+  late Map<String, Map<String, dynamic>> fieldLibrary;
 
   setUpAll(() {
     legacySchemas = _loadLegacySchemas(parser);
     canonicalSchemas = _loadCanonicalSchemas(parser);
+    fieldLibrary = _loadFieldLibrary();
   });
 
-  // ── Parity tests ──────────────────────────────────────────────────────────
+  // ── Parity tests (skipped when formInput has been stripped) ───────────────
 
   test('canonical and legacy paths cover the same formTypes', () {
+    if (legacySchemas.isEmpty) return; // formInput stripped — skip parity
     expect(
       canonicalSchemas.keys.toSet(),
       equals(legacySchemas.keys.toSet()),
@@ -111,11 +119,44 @@ void main() {
       }
     }
   });
+
+  // ── Canonical-only assertions ─────────────────────────────────────────────
+
+  test('canonical schemas load for all formTypes in layout_manifests.json', () {
+    expect(canonicalSchemas, isNotEmpty,
+        reason: 'canonical schemas must not be empty');
+    for (final entry in canonicalSchemas.entries) {
+      expect(entry.value.allFields, isNotEmpty,
+          reason: 'formType="${entry.key}" must have at least one field');
+    }
+  });
+
+  test('vitals fields in field_library.json carry LOINC clinicalConcept entries',
+      () {
+    const vitalsFieldIds = {
+      'temperature', 'pulse', 'breathsPerMinute',
+      'spo2', 'SpO2', 'respiratoryRate',
+    };
+    for (final fieldId in vitalsFieldIds) {
+      final entry = fieldLibrary[fieldId];
+      if (entry == null) continue; // field not in this app's library — skip
+      final cc = entry['clinicalConcept'] as List<dynamic>?;
+      expect(cc, isNotNull,
+          reason: 'field "$fieldId" must have clinicalConcept');
+      final hasLoinc = (cc ?? [])
+          .whereType<Map<String, dynamic>>()
+          .any((e) => e['system'] == 'LOINC');
+      expect(hasLoinc, isTrue,
+          reason: 'field "$fieldId" must have a LOINC entry in clinicalConcept');
+    }
+  });
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-/// Loads all FormSchemas from the legacy program_forms.json.
+/// Loads FormSchemas from the legacy program_forms.json.
+/// Returns an empty map when no entries have a `formInput` key (i.e. after
+/// Phase 4 strips the embedded layouts).
 Map<String, FormSchema> _loadLegacySchemas(FormSchemaParser parser) {
   final file = File('assets/forms/program_forms.json');
   final raw = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
@@ -127,8 +168,9 @@ Map<String, FormSchema> _loadLegacySchemas(FormSchemaParser parser) {
 
   final result = <String, FormSchema>{};
   for (final entry in forms) {
+    final formInput = entry['formInput'] as String?;
+    if (formInput == null) continue; // stripped — skip this entry
     final formType = entry['formType'] as String? ?? '';
-    final formInput = entry['formInput'] as String? ?? '{}';
     result[formType.toLowerCase()] = parser.parse(formType, formInput);
   }
   return result;
@@ -161,4 +203,11 @@ Map<String, FormSchema> _loadCanonicalSchemas(FormSchemaParser parser) {
     result[formType.toLowerCase()] = parser.parse(formType, formInput);
   }
   return result;
+}
+
+/// Loads the raw field_library.json entries for direct inspection.
+Map<String, Map<String, dynamic>> _loadFieldLibrary() {
+  final libFile = File('assets/forms/field_library.json');
+  final rawLib = jsonDecode(libFile.readAsStringSync()) as Map<String, dynamic>;
+  return rawLib.map((k, v) => MapEntry(k, v as Map<String, dynamic>));
 }

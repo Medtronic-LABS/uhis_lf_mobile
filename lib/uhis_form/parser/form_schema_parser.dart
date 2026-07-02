@@ -14,6 +14,7 @@ library;
 
 import 'dart:convert';
 
+import '../models/clinical_concept.dart';
 import '../models/condition_schema.dart';
 import '../models/field_kind.dart';
 import '../models/field_schema.dart';
@@ -155,6 +156,19 @@ class FormSchemaParser {
     final item = layout[i] as Map<String, dynamic>;
     final fieldId = _fieldId(item);
 
+    // ── compositeGroup path (canonical JSON) ─────────────────────────────
+    // When the item carries an explicit compositeGroup, use it to build the
+    // composite instead of relying on heuristic look-ahead.
+    final compositeGroup = item['compositeGroup'] as String?;
+    final compositeRole = item['compositeRole'] as String?;
+    if (compositeGroup != null && compositeRole == 'trigger') {
+      final (schema, consumed) =
+          _buildCompositeFromGroup(layout, i, compositeGroup);
+      if (schema != null) return (schema, consumed);
+    }
+
+    // ── Heuristic look-ahead (fallback for items without compositeGroup) ──
+
     // Vitals bundle: temperature is the trigger, look ahead for pulse+RR+SpO2
     if (_vitalFieldIds.contains(fieldId)) {
       final vitalItems = _collectVitals(layout, i);
@@ -194,6 +208,42 @@ class FormSchemaParser {
     return (_buildField(item, kind), 1);
   }
 
+  /// Build a composite FieldSchema by collecting all consecutive items that
+  /// share [compositeGroup] starting from [start] (the trigger item).
+  ///
+  /// Returns (null, 1) if no members are found so callers fall through to
+  /// heuristic detection.
+  (FieldSchema?, int) _buildCompositeFromGroup(
+      List<dynamic> layout, int start, String compositeGroup) {
+    // Collect trigger + all adjacent members with the same compositeGroup
+    final members = <Map<String, dynamic>>[];
+    for (int j = start; j < layout.length; j++) {
+      final it = layout[j] as Map<String, dynamic>;
+      if (it['viewType'] == 'CardView') break;
+      final grp = it['compositeGroup'] as String?;
+      if (grp != compositeGroup) break;
+      members.add(it);
+    }
+
+    if (members.length < 2) return (null, 1);
+
+    // Dispatch to the appropriate composite builder based on group name.
+    switch (compositeGroup) {
+      case 'vitalsBundle':
+        return (_buildVitalsBundle(members), members.length);
+      case 'anthropometry':
+        return (_buildAnthropometry(members.first, members[1]), members.length);
+      case 'obstetricHistory':
+        return (_buildObstetricHistory(members), members.length);
+      default:
+        // Supply pair or any custom group — treat as supply pair if 2 items
+        if (members.length == 2) {
+          return (_buildSupplyPair(members[0], members[1]), 2);
+        }
+        return (null, 1);
+    }
+  }
+
   // ── Composite builders ─────────────────────────────────────────────────────
 
   FieldSchema _buildVitalsBundle(List<Map<String, dynamic>> items) {
@@ -203,7 +253,6 @@ class FormSchemaParser {
       kind: FieldKind.vitalsBundle,
       subFieldIds: items.map(_fieldId).toList(),
       conditions: items.expand((it) => _parseConditions(it)).toList(),
-      raw: {'items': items},
     );
   }
 
@@ -218,7 +267,6 @@ class FormSchemaParser {
         ..._parseConditions(heightItem),
         ..._parseConditions(weightItem),
       ],
-      raw: {'heightItem': heightItem, 'weightItem': weightItem},
     );
   }
 
@@ -234,7 +282,6 @@ class FormSchemaParser {
         ..._parseConditions(consumedItem),
         ..._parseConditions(providedItem),
       ],
-      raw: {'consumedItem': consumedItem, 'providedItem': providedItem},
     );
   }
 
@@ -245,11 +292,17 @@ class FormSchemaParser {
       kind: FieldKind.obstetricHistory,
       subFieldIds: items.map(_fieldId).toList(),
       conditions: items.expand((it) => _parseConditions(it)).toList(),
-      raw: {'items': items},
     );
   }
 
   FieldSchema _buildCompositeOrDangerSigns(Map<String, dynamic> item) {
+    // compositeGroup path: explicit kind hint overrides heuristic
+    final compositeGroup = item['compositeGroup'] as String?;
+    if (compositeGroup != null) {
+      // Only a group name is provided here — treat as a chip multi-select
+      // since the composite builder handles grouping at EditText dispatch.
+      return _buildField(item, FieldKind.chipMultiSelect);
+    }
     // Heuristic: danger-signs fields typically have titles mentioning danger/signs
     final title = (item['title'] as String? ?? '').toLowerCase();
     if (title.contains('danger') || title.contains('sign')) {
@@ -322,7 +375,8 @@ class FormSchemaParser {
       hint: item['hint'] as String?,
       options: options ?? _parseOptions(item),
       conditions: _parseConditions(item),
-      raw: Map<String, dynamic>.from(item),
+      clinicalConcept: _parseClinicalConcept(item),
+      programmes: _parseProgrammes(item),
     );
   }
 
@@ -332,6 +386,28 @@ class FormSchemaParser {
       item['fieldName'] as String? ??
       item['id'] as String? ??
       'unknown';
+
+  static List<ClinicalConcept> _parseClinicalConcept(
+      Map<String, dynamic> item) {
+    final raw = item['clinicalConcept'];
+    if (raw == null) return const [];
+    if (raw is List) {
+      return raw
+          .whereType<Map<String, dynamic>>()
+          .map(ClinicalConcept.fromJson)
+          .toList();
+    }
+    return const [];
+  }
+
+  static List<String> _parseProgrammes(Map<String, dynamic> item) {
+    final raw = item['programs'];
+    if (raw == null) return const [];
+    if (raw is List) {
+      return raw.map((e) => e.toString()).toList();
+    }
+    return const [];
+  }
 
   static FieldKind _editTextKind(int inputType) {
     switch (inputType) {

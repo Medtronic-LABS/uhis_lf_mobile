@@ -97,9 +97,13 @@ class CanonicalFormTransformer {
     // label → title
     out['title'] = entry['label'] ?? '';
 
-    // clinicalConcept → snomedCode + snomedDisplay (first SNOMED entry)
+    // clinicalConcept: pass through the full structured array so the parser
+    // can populate FieldSchema.clinicalConcept directly.
+    // Also emit snomedCode/snomedDisplay for any legacy consumers that
+    // still look for those flat keys.
     final cc = entry['clinicalConcept'] as List<dynamic>?;
     if (cc != null) {
+      out['clinicalConcept'] = cc;
       final snomed = cc
           .whereType<Map<String, dynamic>>()
           .where((e) => e['system'] == 'SNOMED_CT')
@@ -152,6 +156,8 @@ class CanonicalFormTransformer {
       'localDataCache', 'isBooleanAnswer', 'optionType',
       'isInfo', 'infoTitle', 'isNeededDefault', 'isNotDefault',
       'applyDecimalFilter', 'condition',
+      // Composite grouping hints read by FormSchemaParser
+      'compositeGroup', 'compositeRole',
     };
     for (final key in passthroughKeys) {
       if (entry.containsKey(key)) {

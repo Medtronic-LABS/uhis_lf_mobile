@@ -281,6 +281,8 @@
         "display": "Gravida"
       }
     ],
+    "compositeGroup": "obstetricHistory",
+    "compositeRole": "trigger",
     "programmes": [
       {
         "id": "pncMother",
@@ -317,6 +319,8 @@
         "display": "Parity"
       }
     ],
+    "compositeGroup": "obstetricHistory",
+    "compositeRole": "member",
     "programmes": [
       {
         "id": "pncMother",
@@ -352,6 +356,8 @@
         "display": "Number of living children"
       }
     ],
+    "compositeGroup": "obstetricHistory",
+    "compositeRole": "member",
     "programmes": [
       {
         "id": "pncMother",
@@ -403,8 +409,15 @@
         "system": "SNOMED_CT",
         "code": "386725007",
         "display": "Body temperature"
+      },
+      {
+        "system": "LOINC",
+        "code": "8310-5",
+        "display": "Body temperature"
       }
     ],
+    "compositeGroup": "vitalsBundle",
+    "compositeRole": "trigger",
     "programmes": [
       {
         "id": "pncMother",
@@ -437,8 +450,15 @@
         "system": "SNOMED_CT",
         "code": "364075005",
         "display": "Heart rate"
+      },
+      {
+        "system": "LOINC",
+        "code": "8867-4",
+        "display": "Heart rate"
       }
     ],
+    "compositeGroup": "vitalsBundle",
+    "compositeRole": "member",
     "programmes": [
       {
         "id": "pncMother",
@@ -475,8 +495,15 @@
         "system": "SNOMED_CT",
         "code": "27113001",
         "display": "Body weight"
+      },
+      {
+        "system": "LOINC",
+        "code": "29463-7",
+        "display": "Body weight"
       }
     ],
+    "compositeGroup": "anthropometry",
+    "compositeRole": "member",
     "programmes": [
       {
         "id": "pncMother",
@@ -678,6 +705,11 @@
         "system": "SNOMED_CT",
         "code": "75367002",
         "display": "Blood pressure"
+      },
+      {
+        "system": "LOINC",
+        "code": "8480-6",
+        "display": "Systolic blood pressure"
       }
     ],
     "programmes": [
@@ -714,6 +746,11 @@
         "system": "SNOMED_CT",
         "code": "72313002",
         "display": "Systolic arterial pressure"
+      },
+      {
+        "system": "LOINC",
+        "code": "8480-6",
+        "display": "Systolic blood pressure"
       }
     ],
     "programmes": [
@@ -750,6 +787,11 @@
         "system": "SNOMED_CT",
         "code": "1091811000000102",
         "display": "Diastolic arterial pressure"
+      },
+      {
+        "system": "LOINC",
+        "code": "8462-4",
+        "display": "Diastolic blood pressure"
       }
     ],
     "programmes": [
@@ -1163,6 +1205,11 @@
         "system": "SNOMED_CT",
         "code": "87612001",
         "display": "Blood glucose"
+      },
+      {
+        "system": "LOINC",
+        "code": "2339-0",
+        "display": "Glucose [Mass/volume] in Blood"
       }
     ],
     "programmes": [
@@ -1427,6 +1474,8 @@
         "display": "Vitamin A capsule consumed"
       }
     ],
+    "compositeGroup": "vitaminAConsumed_pair",
+    "compositeRole": "trigger",
     "programmes": [
       {
         "id": "pncMother",
@@ -1511,6 +1560,8 @@
         "display": "IFA tablets consumed"
       }
     ],
+    "compositeGroup": "ifaTabletsConsumed_pair",
+    "compositeRole": "trigger",
     "programmes": [
       {
         "id": "pncMother",
@@ -1540,6 +1591,8 @@
         "display": "IFA tablets provided"
       }
     ],
+    "compositeGroup": "ifaTabletsConsumed_pair",
+    "compositeRole": "member",
     "programmes": [
       {
         "id": "pncMother",
@@ -1598,6 +1651,8 @@
         "display": "Calcium tablets consumed"
       }
     ],
+    "compositeGroup": "calciumTabletsConsumed_pair",
+    "compositeRole": "trigger",
     "programmes": [
       {
         "id": "pncMother",
@@ -1627,6 +1682,8 @@
         "display": "Calcium tablets provided"
       }
     ],
+    "compositeGroup": "calciumTabletsConsumed_pair",
+    "compositeRole": "member",
     "programmes": [
       {
         "id": "pncMother",
@@ -2160,6 +2217,8 @@
         "display": "Age of last child"
       }
     ],
+    "compositeGroup": "obstetricHistory",
+    "compositeRole": "member",
     "programmes": [
       {
         "id": "pwProfile",
@@ -4368,8 +4427,15 @@
         "system": "SNOMED_CT",
         "code": "50373000",
         "display": "Body height"
+      },
+      {
+        "system": "LOINC",
+        "code": "8302-2",
+        "display": "Body height"
       }
     ],
+    "compositeGroup": "anthropometry",
+    "compositeRole": "trigger",
     "programmes": [
       {
         "id": "anc",
@@ -4405,6 +4471,11 @@
         "system": "SNOMED_CT",
         "code": "60621009",
         "display": "Body mass index"
+      },
+      {
+        "system": "LOINC",
+        "code": "39156-5",
+        "display": "Body mass index (BMI) [Ratio]"
       }
     ],
     "programmes": [
@@ -4494,6 +4565,11 @@
         "system": "SNOMED_CT",
         "code": "271063001",
         "display": "Fasting blood glucose"
+      },
+      {
+        "system": "LOINC",
+        "code": "2339-0",
+        "display": "Glucose [Mass/volume] in Blood"
       }
     ],
     "programmes": [
@@ -4524,6 +4600,11 @@
         "system": "SNOMED_CT",
         "code": "271062006",
         "display": "Random blood glucose"
+      },
+      {
+        "system": "LOINC",
+        "code": "2339-0",
+        "display": "Glucose [Mass/volume] in Blood"
       }
     ],
     "programmes": [
@@ -4718,6 +4799,8 @@
         "display": "Folic acid tablets consumed"
       }
     ],
+    "compositeGroup": "folicAcidTotalConsumed_pair",
+    "compositeRole": "trigger",
     "programmes": [
       {
         "id": "anc",
@@ -4749,6 +4832,8 @@
         "display": "Folic acid provided this visit"
       }
     ],
+    "compositeGroup": "folicAcidConsumed_pair",
+    "compositeRole": "member",
     "programmes": [
       {
         "id": "anc",
@@ -4780,6 +4865,8 @@
         "display": "Iron tablets taken last month"
       }
     ],
+    "compositeGroup": "ifaTotalConsumed_pair",
+    "compositeRole": "trigger",
     "programmes": [
       {
         "id": "anc",
@@ -4809,6 +4896,8 @@
         "display": "IFA provided this visit"
       }
     ],
+    "compositeGroup": "ifaConsumed_pair",
+    "compositeRole": "member",
     "programmes": [
       {
         "id": "anc",
@@ -4838,6 +4927,8 @@
         "display": "Calcium tablets taken last month"
       }
     ],
+    "compositeGroup": "calciumTotalConsumed_pair",
+    "compositeRole": "trigger",
     "programmes": [
       {
         "id": "anc",
@@ -4867,6 +4958,8 @@
         "display": "Calcium provided this visit"
       }
     ],
+    "compositeGroup": "calciumConsumed_pair",
+    "compositeRole": "member",
     "programmes": [
       {
         "id": "anc",
@@ -7482,6 +7575,8 @@
         "display": "NCD service provided"
       }
     ],
+    "compositeGroup": "ncdServiceConsumed_pair",
+    "compositeRole": "member",
     "programmes": [
       {
         "id": "cataract",
