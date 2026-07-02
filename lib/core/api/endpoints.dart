@@ -60,6 +60,11 @@ class Endpoints {
   static const String programmeRecommendation =
       '/leapfrog-ai-services/programme-recommendation/recommend';
 
+  // ── AI Next Best Action: post-assessment care plan proposal ──────────────
+  /// POST /naba/generate on the unified ai-scribe-service (port 8095).
+  /// Routed through nginx in prod; direct via AppConfig.aiServiceBaseUrl in dev.
+  static const String nabaGenerate = '/ai-scribe-service/naba/generate';
+
   // Chunked upload — for audio files ≥ 1 MB (rural 2G path)
   static const String scribeUploadInit = '/ai-scribe-service/upload/init';
   static String scribeUploadChunk(String uploadId, int chunk) =>

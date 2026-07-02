@@ -2956,6 +2956,59 @@ abstract final class VisitFlowStrings {
   static const String discardConfirmCta = 'Yes, leave';
 }
 
+/// Strings for the AI Next Best Action (NABA) Step 3 screen.
+abstract final class NabaStrings {
+  NabaStrings._();
+
+  static const String loadingTitle = 'Generating care plan…';
+  static const String loadingSubtitle =
+      'AI is reviewing the assessment. This takes a few seconds.';
+
+  static const String errorTitle = 'Could not generate care plan';
+  static const String errorSubtitle =
+      'The assessment has been saved. Tap Retry to try again, or '
+      'continue without AI recommendations.';
+  static const String retryButton = 'Retry';
+  static const String skipButton = 'Skip — go to home';
+
+  static const String sectionDangerSigns = 'Danger signs to watch for';
+  static const String sectionFindings = 'Clinical findings';
+  static const String sectionNextActions = 'Next actions';
+  static const String sectionCounselling = 'Counselling points';
+  static const String sectionMedication = 'Medication advice';
+  static const String sectionFollowUp = 'Follow-up schedule';
+  static const String sectionReferral = 'Referral recommendation';
+  static const String sectionWhatsApp = 'WhatsApp counselling (Bangla)';
+  static const String sectionRationale = 'AI rationale';
+
+  static const String humanReviewBadge = 'Human review recommended';
+  static const String highConfidence = 'High confidence';
+  static const String referralRequired = 'Referral required';
+  static const String referralNotRequired = 'No referral needed';
+
+  static const String urgencyNow = 'NOW';
+  static const String urgencyToday = 'TODAY';
+  static const String urgencyThisWeek = 'THIS WEEK';
+  static const String urgencyRoutine = 'ROUTINE';
+
+  static const String severityHigh = 'High';
+  static const String severityMedium = 'Medium';
+  static const String severityLow = 'Low';
+
+  static const String copyWhatsApp = 'Copy';
+  static const String whatsAppCopied = 'Copied!';
+  static const String sendViaSms = 'Send via SMS';
+  static const String sendViaWhatsApp = 'Send via WhatsApp';
+  static const String whatsAppNotInstalled =
+      'WhatsApp is not installed on this device.';
+  static const String smsNotAvailable =
+      'SMS is not available on this device.';
+
+  static const String acceptProposal = 'Accept & continue';
+  static const String proposalNote =
+      'This is an AI proposal. Review and accept to proceed.';
+}
+
 /// Teleconsult placeholder screen strings.
 /// Used by [TeleconsultScreen].
 abstract final class TeleconsultStrings {

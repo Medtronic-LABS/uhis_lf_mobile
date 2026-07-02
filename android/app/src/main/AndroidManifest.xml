@@ -28,8 +28,12 @@
             <action android:name="android.intent.action.SENDTO" />
             <data android:scheme="sms" />
         </intent>
-        <!-- WhatsApp -->
+        <!-- WhatsApp — package for canLaunchUrl; scheme for whatsapp:// deep links -->
         <package android:name="com.whatsapp" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="whatsapp" />
+        </intent>
         <!-- Google Maps -->
         <package android:name="com.google.android.apps.maps" />
         <!-- Geo URI for any maps app -->
