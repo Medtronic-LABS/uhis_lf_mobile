@@ -28,6 +28,7 @@ import '../../core/constants/app_strings.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
+import '../../core/db/pregnancy_snapshot_dao.dart';
 import '../../core/models/programme.dart';
 import '../../core/theme/app_theme.dart';
 import 'naba/naba_models.dart';
@@ -53,6 +54,8 @@ class VisitFlowScreen extends StatefulWidget {
     this.patientName,
     this.patientGender,
     this.gestationalWeeks,
+    this.isPostpartum = false,
+    this.postpartumWeeks,
     this.origin,
     this.debugInitialStep,
   });
@@ -67,6 +70,8 @@ class VisitFlowScreen extends StatefulWidget {
   final String? patientName;
   final String? patientGender;
   final int? gestationalWeeks;
+  final bool isPostpartum;
+  final int? postpartumWeeks;
   final String? origin;
 
   /// Test-only hook: starts the wrapper at the given step so widget tests
@@ -96,15 +101,22 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   late String? _patientName = widget.patientName;
   late int? _patientAge = widget.patientAge;
 
+  /// Postpartum status — seeded from constructor; DB lookup fills in the
+  /// weeks value from [PregnancySnapshotDao] when not supplied by caller.
+  late bool _isPostpartum = widget.isPostpartum;
+  late final int? _postpartumWeeks = widget.postpartumWeeks;
+
   @override
   void initState() {
     super.initState();
-    // Defer DB lookup to after first frame so context.read works safely.
-    if (_patientName == null && widget.patientId.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_patientName == null && widget.patientId.isNotEmpty) {
         _loadPatientNameFromDb();
-      });
-    }
+      }
+      if (!_isPostpartum && widget.patientId.isNotEmpty) {
+        _loadPostpartumFromDb();
+      }
+    });
   }
 
   Future<void> _loadPatientNameFromDb() async {
@@ -118,6 +130,22 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       });
     } catch (e) {
       debugPrint('[VisitFlow] patient lookup failed: $e');
+    }
+  }
+
+  Future<void> _loadPostpartumFromDb() async {
+    try {
+      final dao = context.read<PregnancySnapshotDao>();
+      final all = await dao.getAll();
+      final facts = all[widget.patientId];
+      if (!mounted || facts == null) return;
+      if (facts.isPostpartumWindow) {
+        setState(() {
+          _isPostpartum = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('[VisitFlow] postpartum lookup failed: $e');
     }
   }
 
@@ -240,6 +268,8 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           patientName: widget.patientName,
           patientGender: widget.patientGender,
           gestationalWeeks: widget.gestationalWeeks,
+          isPostpartum: _isPostpartum,
+          postpartumWeeks: _postpartumWeeks,
           confirmedSymptoms: _confirmedSymptoms,
           sicknessDuration: _sicknessDuration,
           otherSymptoms: _otherSymptoms,
@@ -767,6 +797,8 @@ class _Step2ProgrammesThenForm extends StatefulWidget {
     this.patientName,
     this.patientGender,
     this.gestationalWeeks,
+    this.isPostpartum = false,
+    this.postpartumWeeks,
     this.origin,
   });
 
@@ -780,6 +812,8 @@ class _Step2ProgrammesThenForm extends StatefulWidget {
   final String? patientName;
   final String? patientGender;
   final int? gestationalWeeks;
+  final bool isPostpartum;
+  final int? postpartumWeeks;
   final Set<String> confirmedSymptoms;
   final String? sicknessDuration;
   final String? otherSymptoms;
@@ -841,6 +875,9 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
       'isPregnant': widget.gestationalWeeks != null,
       if (widget.gestationalWeeks != null)
         'gestationalWeeks': widget.gestationalWeeks,
+      'isPostpartum': widget.isPostpartum,
+      if (widget.postpartumWeeks != null)
+        'postpartumWeeks': widget.postpartumWeeks,
       'selectedSymptoms': widget.confirmedSymptoms.toList(),
       if (widget.sicknessDuration != null)
         'sicknessDuration': widget.sicknessDuration,
