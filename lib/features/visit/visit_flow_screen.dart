@@ -1304,6 +1304,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
                 _WhatsAppCard(
                   text: naba.whatsappSummary!,
                   patientPhone: _patientPhone,
+                  onShared: () => _onAccepted(naba),
                 ),
                 const SizedBox(height: 12),
               ],
@@ -2014,17 +2015,46 @@ class _FollowUpRows extends StatelessWidget {
 }
 
 class _WhatsAppCard extends StatefulWidget {
-  const _WhatsAppCard({required this.text, this.patientPhone});
+  const _WhatsAppCard({
+    required this.text,
+    this.patientPhone,
+    this.onShared,
+  });
   final String text;
   // Pre-loaded from MemberDao; pre-fills recipient in SMS and WhatsApp.
   final String? patientPhone;
+  // Called when the user returns to the app after launching SMS or WhatsApp.
+  final VoidCallback? onShared;
 
   @override
   State<_WhatsAppCard> createState() => _WhatsAppCardState();
 }
 
-class _WhatsAppCardState extends State<_WhatsAppCard> {
+class _WhatsAppCardState extends State<_WhatsAppCard>
+    with WidgetsBindingObserver {
   bool _copied = false;
+  // True after a launch so we fire onShared on the next app-resume event.
+  bool _launchedExternal = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _launchedExternal) {
+      _launchedExternal = false;
+      widget.onShared?.call();
+    }
+  }
 
   Future<void> _copy() async {
     await Clipboard.setData(ClipboardData(text: widget.text));
@@ -2049,6 +2079,7 @@ class _WhatsAppCardState extends State<_WhatsAppCard> {
       return;
     }
     await launchUrl(uri);
+    _launchedExternal = true;
   }
 
   Future<void> _sendWhatsApp(BuildContext context) async {
@@ -2063,6 +2094,7 @@ class _WhatsAppCardState extends State<_WhatsAppCard> {
     final nativeUri = Uri.parse('whatsapp://send?${phoneParam}text=$encoded');
     if (await canLaunchUrl(nativeUri)) {
       await launchUrl(nativeUri);
+      _launchedExternal = true;
       return;
     }
     // Fallback: wa.me/<phone>?text=<text> (browser universal link).
@@ -2070,6 +2102,7 @@ class _WhatsAppCardState extends State<_WhatsAppCard> {
     final webUri = Uri.parse('https://wa.me/$waPath?text=$encoded');
     if (await canLaunchUrl(webUri)) {
       await launchUrl(webUri, mode: LaunchMode.externalApplication);
+      _launchedExternal = true;
       return;
     }
     if (context.mounted) {
