@@ -7,16 +7,15 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_strings.dart';
 import 'enrollment_controller.dart';
 import 'models/household_enrollment_models.dart';
-import 'widgets/enrollment_section_header.dart';
 import 'widgets/enrollment_input_field.dart';
 import 'widgets/enrollment_segmented_buttons.dart';
-import 'widgets/enrollment_button.dart';
+import 'widgets/enrollment_dropdown.dart';
 
 /// Screen for adding a new household member.
 ///
-/// Collects member's personal details in 9 steps:
-/// NID scan CTA, birth registration, name, DOB picker + approx age, gender,
-/// marital status, disability, mobile + checkbox, village input (if external).
+/// Redesigned with numbered questions (Q1–Q9), sticky bottom CTA.
+/// NID scan is a purple gradient CTA button; after mock scan a green
+/// confirmation chip appears and name/DOB/gender fields are auto-filled.
 class AddHouseholdMemberScreen extends StatefulWidget {
   const AddHouseholdMemberScreen({super.key});
 
@@ -26,39 +25,38 @@ class AddHouseholdMemberScreen extends StatefulWidget {
 }
 
 class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
+  late TextEditingController _brnCtrl;
   late TextEditingController _nameCtrl;
-  late TextEditingController _idNumberCtrl;
-  late TextEditingController _mobileCtrl;
   late TextEditingController _dobCtrl;
   late TextEditingController _ageCtrl;
+  late TextEditingController _mobileCtrl;
   late TextEditingController _villageCtrl;
 
-  String? _idType = 'NID';
   String? _gender;
   String? _maritalStatus;
-  String? _disabilityStatus;
-  String? _relationshipToHead;
-  bool _mobileAvailable = true;
-  bool _isExternalMember = false;
+  String? _disabilityStatus = 'Absent';
+  bool _mobileNotAvailable = false;
+  bool _nidScanned = false;
+  bool _scanLoading = false;
 
   @override
   void initState() {
     super.initState();
+    _brnCtrl = TextEditingController();
     _nameCtrl = TextEditingController();
-    _idNumberCtrl = TextEditingController();
-    _mobileCtrl = TextEditingController();
     _dobCtrl = TextEditingController();
     _ageCtrl = TextEditingController();
+    _mobileCtrl = TextEditingController();
     _villageCtrl = TextEditingController();
   }
 
   @override
   void dispose() {
+    _brnCtrl.dispose();
     _nameCtrl.dispose();
-    _idNumberCtrl.dispose();
-    _mobileCtrl.dispose();
     _dobCtrl.dispose();
     _ageCtrl.dispose();
+    _mobileCtrl.dispose();
     _villageCtrl.dispose();
     super.dispose();
   }
@@ -69,6 +67,18 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       initialDate: DateTime.now(),
       firstDate: DateTime(1950),
       lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: AppColors.navy,
+              onPrimary: Colors.white,
+              surface: AppColors.cardSurface,
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
 
     if (picked != null) {
@@ -90,13 +100,26 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
     _ageCtrl.text = age.toString();
   }
 
-  void _handleAddMember(EnrollmentController controller) {
-    if (_nameCtrl.text.isEmpty ||
-        _idNumberCtrl.text.isEmpty ||
-        _dobCtrl.text.isEmpty ||
-        _gender == null ||
-        _maritalStatus == null ||
-        _relationshipToHead == null) {
+  Future<void> _performMockScan(EnrollmentController controller) async {
+    setState(() => _scanLoading = true);
+
+    final data = await controller.mockNidScan();
+
+    if (mounted) {
+      setState(() {
+        _scanLoading = false;
+        _nidScanned = true;
+        _nameCtrl.text = data['name'] as String? ?? '';
+        _dobCtrl.text = data['dateOfBirth'] as String? ?? '';
+        _gender = data['gender'] as String?;
+        final dob = DateTime.tryParse(data['dateOfBirth'] as String? ?? '');
+        if (dob != null) _calculateAge(dob);
+      });
+    }
+  }
+
+  void _handleSaveMember(EnrollmentController controller) {
+    if (_nameCtrl.text.isEmpty || _gender == null || _maritalStatus == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please fill all required fields'),
@@ -111,14 +134,16 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       age: int.tryParse(_ageCtrl.text) ?? 0,
       gender: _gender!,
       dateOfBirth: _dobCtrl.text,
-      idType: _idType ?? 'NID',
-      idNumber: _idNumberCtrl.text,
-      mobileNumber: _mobileAvailable ? _mobileCtrl.text : null,
-      mobileAvailable: _mobileAvailable,
+      idType: _nidScanned ? 'NID' : 'BRN',
+      idNumber: _brnCtrl.text.isNotEmpty ? _brnCtrl.text : null,
+      mobileNumber: _mobileNotAvailable ? null : _mobileCtrl.text,
+      mobileAvailable: !_mobileNotAvailable,
       maritalStatus: _maritalStatus!,
-      disabilityStatus: _disabilityStatus ?? 'None',
-      relationshipToHead: _relationshipToHead!,
-      villageId: _isExternalMember ? _villageCtrl.text : null,
+      disabilityStatus: _disabilityStatus ?? 'Absent',
+      relationshipToHead: 'Other',
+      villageId:
+          _villageCtrl.text.isNotEmpty ? _villageCtrl.text : null,
+      nidScanned: _nidScanned,
     );
 
     controller.addMember(member);
@@ -130,7 +155,6 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       ),
     );
 
-    // Navigate back to success screen
     context.pop();
   }
 
@@ -138,236 +162,378 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   Widget build(BuildContext context) {
     return Consumer<EnrollmentController>(
       builder: (context, controller, child) {
+        final hhNumber = controller.household?.householdNumber ?? '';
+
         return Scaffold(
-          backgroundColor: AppColors.canvas,
+          backgroundColor: const Color(0xFFF5F6FB),
           appBar: AppBar(
-            backgroundColor: AppColors.cardSurface,
+            backgroundColor: AppColors.navy,
             elevation: 0,
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back, color: AppColors.navy),
-              onPressed: () => context.pop(),
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Navigator.of(context).pop(),
             ),
-            title: const Text(
-              EnrollmentStrings.addMemberTitle,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: AppColors.navy,
-              ),
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Add Member',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+                if (hhNumber.isNotEmpty)
+                  Text(
+                    '${EnrollmentStrings.addMemberSubtitle} $hhNumber',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.7),
+                    ),
+                  ),
+              ],
             ),
           ),
           body: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  EnrollmentSectionHeader(
-                    title: EnrollmentStrings.addMemberTitle,
-                    subtitle: 'Add a new member to the household',
-                  ),
-                  const SizedBox(height: 20),
-                  Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: AppColors.aiSurfaceStart,
-                      borderRadius:
-                          BorderRadius.circular(AppRadius.card),
-                    ),
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.qr_code_scanner,
-                          size: 20,
-                          color: AppColors.aiPurple,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                EnrollmentStrings.nidScanCTA,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.aiPurple,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Scan ID to pre-fill fields (optional)',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.textMuted,
-                                ),
-                              ),
-                            ],
+            child: Stack(
+              children: [
+                ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 96),
+                  children: [
+                    // ── Q1: National ID ────────────────────────────────────
+                    _QuestionLabel(number: 'Q1', text: 'National ID'),
+                    const SizedBox(height: 10),
+
+                    // NID scan purple CTA
+                    Material(
+                      borderRadius: BorderRadius.circular(14),
+                      child: InkWell(
+                        onTap: _scanLoading
+                            ? null
+                            : () => _performMockScan(controller),
+                        borderRadius: BorderRadius.circular(14),
+                        child: Ink(
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF5B4FD9), Color(0xFF7B6FE9)],
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                            ),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: SizedBox(
+                            height: 52,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (_scanLoading)
+                                  const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor:
+                                          AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
+                                    ),
+                                  )
+                                else ...[
+                                  const Icon(
+                                    Icons.qr_code_scanner,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  const Text(
+                                    EnrollmentStrings.nidScanButtonLabel,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
                           ),
                         ),
-                        const Icon(
-                          Icons.arrow_forward_ios,
-                          size: 16,
-                          color: AppColors.aiPurple,
+                      ),
+                    ),
+
+                    // NID scanned confirmation chip
+                    if (_nidScanned) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF0FDF4),
+                          border: Border.all(color: const Color(0xFF14996A)),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Text(
+                          EnrollmentStrings.nidScannedConfirmation,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF14996A),
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+
+                    // NID fallback note
+                    Text(
+                      EnrollmentStrings.nidScanNoBrnHint,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // BRN input (optional)
+                    EnrollmentInputField(
+                      label: 'Birth Registration Number (BRN)',
+                      hint: 'Enter BRN if no NID',
+                      controller: _brnCtrl,
+                    ),
+                    const SizedBox(height: 20),
+
+                    // ── Q2: Name ───────────────────────────────────────────
+                    _QuestionLabel(number: 'Q2', text: 'Name'),
+                    const SizedBox(height: 10),
+                    EnrollmentInputField(
+                      label: EnrollmentStrings.memberNameLabel,
+                      hint: EnrollmentStrings.memberNameHint,
+                      controller: _nameCtrl,
+                      isRequired: true,
+                    ),
+                    const SizedBox(height: 20),
+
+                    // ── Q3: Date of Birth ──────────────────────────────────
+                    _QuestionLabel(number: 'Q3', text: 'Date of Birth'),
+                    const SizedBox(height: 10),
+                    GestureDetector(
+                      onTap: _selectDate,
+                      child: AbsorbPointer(
+                        child: EnrollmentInputField(
+                          label: EnrollmentStrings.dateOfBirthLabel,
+                          hint: EnrollmentStrings.dateOfBirthHint,
+                          controller: _dobCtrl,
+                          readOnly: true,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      EnrollmentStrings.dobHelperText,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Approximate Age
+                    EnrollmentInputField(
+                      label: EnrollmentStrings.approximateAgeLabel,
+                      hint: EnrollmentStrings.approximateAgeHint,
+                      controller: _ageCtrl,
+                      keyboardType: TextInputType.number,
+                    ),
+                    const SizedBox(height: 20),
+
+                    // ── Q4: Gender ─────────────────────────────────────────
+                    _QuestionLabel(number: 'Q4', text: 'Gender'),
+                    const SizedBox(height: 10),
+                    EnrollmentSegmentedButtons(
+                      label: EnrollmentStrings.genderLabel,
+                      options: EnrollmentStrings.gendersMember,
+                      selectedValue: _gender,
+                      onChanged: (v) => setState(() => _gender = v),
+                      isRequired: true,
+                    ),
+                    const SizedBox(height: 20),
+
+                    // ── Q6: Marital Status ─────────────────────────────────
+                    _QuestionLabel(number: 'Q6', text: 'Marital Status'),
+                    const SizedBox(height: 10),
+                    EnrollmentDropdown(
+                      label: EnrollmentStrings.maritalStatusLabel,
+                      options: EnrollmentStrings.maritalStatusesV2,
+                      value: _maritalStatus,
+                      onChanged: (v) =>
+                          setState(() => _maritalStatus = v),
+                      hint: 'Select status',
+                    ),
+                    const SizedBox(height: 20),
+
+                    // ── Q7: Disability ─────────────────────────────────────
+                    _QuestionLabel(number: 'Q7', text: 'Disability'),
+                    const SizedBox(height: 10),
+                    EnrollmentSegmentedButtons(
+                      label: EnrollmentStrings.disabilityStatusLabel,
+                      options: EnrollmentStrings.disabilityStatusesV2,
+                      selectedValue: _disabilityStatus,
+                      onChanged: (v) =>
+                          setState(() => _disabilityStatus = v),
+                      isRequired: true,
+                    ),
+                    const SizedBox(height: 20),
+
+                    // ── Q8: Mobile Number ──────────────────────────────────
+                    _QuestionLabel(number: 'Q8', text: 'Mobile Number'),
+                    const SizedBox(height: 10),
+                    if (!_mobileNotAvailable) ...[
+                      EnrollmentInputField(
+                        label: EnrollmentStrings.mobileNumberLabel,
+                        hint: EnrollmentStrings.mobileNumberHint,
+                        controller: _mobileCtrl,
+                        keyboardType: TextInputType.phone,
+                      ),
+                      const SizedBox(height: 6),
+                    ],
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: Checkbox(
+                            value: _mobileNotAvailable,
+                            onChanged: (v) => setState(
+                              () => _mobileNotAvailable = v ?? false,
+                            ),
+                            activeColor: AppColors.navy,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          EnrollmentStrings.mobileNotAvailableHint,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          EnrollmentStrings.otpHelperText,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: AppColors.textMuted,
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  EnrollmentInputField(
-                    label: EnrollmentStrings.memberNameLabel,
-                    hint: EnrollmentStrings.memberNameHint,
-                    controller: _nameCtrl,
-                    isRequired: true,
-                  ),
-                  const SizedBox(height: 16),
-                  GestureDetector(
-                    onTap: _selectDate,
-                    child: EnrollmentInputField(
-                      label: EnrollmentStrings.dateOfBirthLabel,
-                      hint: EnrollmentStrings.dateOfBirthHint,
-                      controller: _dobCtrl,
-                      isRequired: true,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  EnrollmentInputField(
-                    label: EnrollmentStrings.ageLabel,
-                    hint: EnrollmentStrings.approximateAgeHint,
-                    controller: _ageCtrl,
-                    keyboardType: TextInputType.number,
-                    isRequired: true,
-                  ),
-                  const SizedBox(height: 16),
-                  EnrollmentSegmentedButtons(
-                    label: EnrollmentStrings.genderLabel,
-                    options: EnrollmentStrings.genders,
-                    selectedValue: _gender,
-                    onChanged: (value) {
-                      setState(() => _gender = value);
-                    },
-                    isRequired: true,
-                  ),
-                  const SizedBox(height: 16),
-                  EnrollmentSegmentedButtons(
-                    label: EnrollmentStrings.idTypeLabel,
-                    options: EnrollmentStrings.idTypes,
-                    selectedValue: _idType,
-                    onChanged: (value) {
-                      setState(() => _idType = value);
-                    },
-                    isRequired: true,
-                  ),
-                  const SizedBox(height: 16),
-                  EnrollmentInputField(
-                    label: EnrollmentStrings.idNumberLabel,
-                    hint: EnrollmentStrings.idNumberHint,
-                    controller: _idNumberCtrl,
-                    isRequired: true,
-                  ),
-                  const SizedBox(height: 16),
-                  EnrollmentSegmentedButtons(
-                    label: EnrollmentStrings.maritalStatusLabel,
-                    options: EnrollmentStrings.maritalStatuses,
-                    selectedValue: _maritalStatus,
-                    onChanged: (value) {
-                      setState(() => _maritalStatus = value);
-                    },
-                    isRequired: true,
-                  ),
-                  const SizedBox(height: 16),
-                  EnrollmentSegmentedButtons(
-                    label: EnrollmentStrings.disabilityStatusLabel,
-                    options: EnrollmentStrings.disabilityStatuses,
-                    selectedValue: _disabilityStatus,
-                    onChanged: (value) {
-                      setState(() => _disabilityStatus = value);
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  EnrollmentSegmentedButtons(
-                    label: 'Relationship to Head',
-                    options: EnrollmentStrings.relationships,
-                    selectedValue: _relationshipToHead,
-                    onChanged: (value) {
-                      setState(() => _relationshipToHead = value);
-                    },
-                    isRequired: true,
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Checkbox(
-                        value: _mobileAvailable,
-                        onChanged: (value) {
-                          setState(() => _mobileAvailable = value ?? true);
-                        },
-                        activeColor: AppColors.navy,
-                      ),
-                      Expanded(
-                        child: Text(
-                          EnrollmentStrings.mobileNumberLabel,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (_mobileAvailable) ...[
-                    const SizedBox(height: 8),
-                    EnrollmentInputField(
-                      label: EnrollmentStrings.mobileNumberLabel,
-                      hint: EnrollmentStrings.mobileNumberHint,
-                      controller: _mobileCtrl,
-                      keyboardType: TextInputType.phone,
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Checkbox(
-                        value: _isExternalMember,
-                        onChanged: (value) {
-                          setState(() => _isExternalMember = value ?? false);
-                        },
-                        activeColor: AppColors.navy,
-                      ),
-                      Expanded(
-                        child: const Text(
-                          'From different village?',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (_isExternalMember) ...[
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 20),
+
+                    // ── Q9: Village Name ───────────────────────────────────
+                    _QuestionLabel(number: 'Q9', text: 'Village Name'),
+                    const SizedBox(height: 10),
                     EnrollmentInputField(
                       label: EnrollmentStrings.memberVillageLabel,
-                      hint: EnrollmentStrings.memberVillageHint,
+                      hint: EnrollmentStrings.villageMemberHint,
                       controller: _villageCtrl,
                     ),
+                    const SizedBox(height: 6),
+                    Text(
+                      EnrollmentStrings.villageHelperText,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                   ],
-                  const SizedBox(height: 32),
-                  EnrollmentButton(
-                    label: 'Add Member',
-                    onPressed: () => _handleAddMember(controller),
+                ),
+
+                // ── Sticky bottom CTA ──────────────────────────────────────
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    color: const Color(0xFFF5F6FB),
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: () => _handleSaveMember(controller),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.navy,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          EnrollmentStrings.saveMemberCTA,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         );
       },
+    );
+  }
+}
+
+/// Numbered question label prefix (e.g. "Q1 National ID").
+class _QuestionLabel extends StatelessWidget {
+  const _QuestionLabel({required this.number, required this.text});
+
+  final String number;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+          decoration: BoxDecoration(
+            color: AppColors.navy,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(
+            number,
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          text,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
+        ),
+      ],
     );
   }
 }

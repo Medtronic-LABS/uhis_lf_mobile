@@ -9,13 +9,13 @@ import 'enrollment_controller.dart';
 import 'widgets/enrollment_section_header.dart';
 import 'widgets/enrollment_input_field.dart';
 import 'widgets/enrollment_segmented_buttons.dart';
-import 'widgets/enrollment_button.dart';
+import 'widgets/enrollment_dropdown.dart';
 
 /// Step 2 of household enrollment: household head information.
 ///
-/// Collects head's personal details (name, age, DOB, gender, marital status,
-/// disability, contact info). Pre-fills from NID scan if available. Validates
-/// on blur and navigates to success screen or add member flow.
+/// Redesigned layout: navy AppBar, scrollable body with sticky bottom CTA.
+/// Collects head's name, ID type/number, mobile (with "Not Available" toggle),
+/// DOB (date picker), age (auto-calculated), gender, marital status, disability.
 class HouseholdHeadInfoScreen extends StatefulWidget {
   const HouseholdHeadInfoScreen({super.key, this.fromNidScan = false});
 
@@ -33,11 +33,11 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
   late TextEditingController _dobCtrl;
   late TextEditingController _ageCtrl;
 
-  String? _idType = 'NID';
+  String? _idType = 'BRN';
   String? _gender;
   String? _maritalStatus;
   String? _disabilityStatus;
-  bool _mobileAvailable = true;
+  bool _mobileNotAvailable = false;
 
   @override
   void initState() {
@@ -59,9 +59,9 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
         final scan = controller.nidScanResult;
         if (scan != null) {
           setState(() {
-            _nameCtrl.text = scan['name'] ?? '';
-            _idNumberCtrl.text = scan['idNumber'] ?? '';
-            _dobCtrl.text = scan['dateOfBirth'] ?? '';
+            _nameCtrl.text = scan['name'] as String? ?? '';
+            _idNumberCtrl.text = scan['idNumber'] as String? ?? '';
+            _dobCtrl.text = scan['dateOfBirth'] as String? ?? '';
             _gender = scan['gender'] as String?;
           });
         }
@@ -85,6 +85,18 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
       initialDate: DateTime.now(),
       firstDate: DateTime(1950),
       lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: AppColors.navy,
+              onPrimary: Colors.white,
+              surface: AppColors.cardSurface,
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
 
     if (picked != null) {
@@ -109,7 +121,6 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
   void _handleNext(EnrollmentController controller) {
     if (_nameCtrl.text.isEmpty ||
         _idNumberCtrl.text.isEmpty ||
-        _dobCtrl.text.isEmpty ||
         _gender == null ||
         _maritalStatus == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -126,15 +137,14 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
       age: int.tryParse(_ageCtrl.text) ?? 0,
       gender: _gender!,
       dateOfBirth: _dobCtrl.text,
-      idType: _idType ?? 'NID',
+      idType: _idType ?? 'BRN',
       idNumber: _idNumberCtrl.text,
-      mobileNumber: _mobileAvailable ? _mobileCtrl.text : null,
-      mobileAvailable: _mobileAvailable,
+      mobileNumber: _mobileNotAvailable ? null : _mobileCtrl.text,
+      mobileAvailable: !_mobileNotAvailable,
       maritalStatus: _maritalStatus!,
-      disabilityStatus: _disabilityStatus ?? 'None',
+      disabilityStatus: _disabilityStatus ?? 'Absent',
     );
 
-    // Navigate to success screen with option to add more members
     context.push('/household/enrollment/success');
   }
 
@@ -143,151 +153,192 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
     return Consumer<EnrollmentController>(
       builder: (context, controller, child) {
         return Scaffold(
-          backgroundColor: AppColors.canvas,
+          backgroundColor: const Color(0xFFF5F6FB),
           appBar: AppBar(
-            backgroundColor: AppColors.cardSurface,
+            backgroundColor: AppColors.navy,
             elevation: 0,
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back, color: AppColors.navy),
-              onPressed: () => context.pop(),
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Navigator.of(context).pop(),
             ),
             title: const Text(
-              EnrollmentStrings.householdHeadTitle,
+              'Household Head',
               style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: AppColors.navy,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
               ),
             ),
           ),
           body: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    EnrollmentStrings.householdHeadSubtitle,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textMuted,
+            child: Stack(
+              children: [
+                ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 96),
+                  children: [
+                    // ── Section header ─────────────────────────────────────
+                    const EnrollmentSectionHeader(
+                      title:
+                          EnrollmentStrings.householdHeadSectionHeader,
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  EnrollmentSectionHeader(
-                    title: EnrollmentStrings.householdHeadTitle,
-                    subtitle: 'Information about the household head',
-                  ),
-                  const SizedBox(height: 20),
-                  EnrollmentInputField(
-                    label: EnrollmentStrings.headNameLabel,
-                    hint: EnrollmentStrings.headNameHint,
-                    controller: _nameCtrl,
-                    isRequired: true,
-                  ),
-                  const SizedBox(height: 16),
-                  EnrollmentSegmentedButtons(
-                    label: EnrollmentStrings.idTypeLabel,
-                    options: EnrollmentStrings.idTypes,
-                    selectedValue: _idType,
-                    onChanged: (value) {
-                      setState(() => _idType = value);
-                    },
-                    isRequired: true,
-                  ),
-                  const SizedBox(height: 16),
-                  EnrollmentInputField(
-                    label: EnrollmentStrings.idNumberLabel,
-                    hint: EnrollmentStrings.idNumberHint,
-                    controller: _idNumberCtrl,
-                    isRequired: true,
-                  ),
-                  const SizedBox(height: 16),
-                  GestureDetector(
-                    onTap: _selectDate,
-                    child: EnrollmentInputField(
-                      label: EnrollmentStrings.dateOfBirthLabel,
-                      hint: EnrollmentStrings.dateOfBirthHint,
-                      controller: _dobCtrl,
+                    const SizedBox(height: 20),
+
+                    // Household Head's Name
+                    EnrollmentInputField(
+                      label: EnrollmentStrings.headNameLabel,
+                      hint: EnrollmentStrings.headNameHint,
+                      controller: _nameCtrl,
                       isRequired: true,
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  EnrollmentInputField(
-                    label: EnrollmentStrings.ageLabel,
-                    hint: EnrollmentStrings.ageHint,
-                    controller: _ageCtrl,
-                    keyboardType: TextInputType.number,
-                    isRequired: true,
-                  ),
-                  const SizedBox(height: 16),
-                  EnrollmentSegmentedButtons(
-                    label: EnrollmentStrings.genderLabel,
-                    options: EnrollmentStrings.genders,
-                    selectedValue: _gender,
-                    onChanged: (value) {
-                      setState(() => _gender = value);
-                    },
-                    isRequired: true,
-                  ),
-                  const SizedBox(height: 16),
-                  EnrollmentSegmentedButtons(
-                    label: EnrollmentStrings.maritalStatusLabel,
-                    options: EnrollmentStrings.maritalStatuses,
-                    selectedValue: _maritalStatus,
-                    onChanged: (value) {
-                      setState(() => _maritalStatus = value);
-                    },
-                    isRequired: true,
-                  ),
-                  const SizedBox(height: 16),
-                  EnrollmentSegmentedButtons(
-                    label: EnrollmentStrings.disabilityStatusLabel,
-                    options: EnrollmentStrings.disabilityStatuses,
-                    selectedValue: _disabilityStatus,
-                    onChanged: (value) {
-                      setState(() => _disabilityStatus = value);
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Checkbox(
-                        value: _mobileAvailable,
-                        onChanged: (value) {
-                          setState(() => _mobileAvailable = value ?? true);
-                        },
-                        activeColor: AppColors.navy,
+                    const SizedBox(height: 16),
+
+                    // ID Type
+                    EnrollmentSegmentedButtons(
+                      label: EnrollmentStrings.idTypeLabel,
+                      options: EnrollmentStrings.idTypesV2,
+                      selectedValue: _idType,
+                      onChanged: (v) => setState(() => _idType = v),
+                      isRequired: true,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // ID Number
+                    EnrollmentInputField(
+                      label: EnrollmentStrings.idNumberLabel,
+                      hint: EnrollmentStrings.idNumberHint,
+                      controller: _idNumberCtrl,
+                      isRequired: true,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Mobile Number + Not Available checkbox
+                    if (!_mobileNotAvailable) ...[
+                      EnrollmentInputField(
+                        label: EnrollmentStrings.mobileNumberLabel,
+                        hint: EnrollmentStrings.mobileNumberHint,
+                        controller: _mobileCtrl,
+                        keyboardType: TextInputType.phone,
                       ),
-                      Expanded(
-                        child: Text(
-                          EnrollmentStrings.mobileNumberLabel,
-                          style: const TextStyle(
-                            fontSize: 14,
+                      const SizedBox(height: 8),
+                    ],
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: Checkbox(
+                            value: _mobileNotAvailable,
+                            onChanged: (v) => setState(
+                              () => _mobileNotAvailable = v ?? false,
+                            ),
+                            activeColor: AppColors.navy,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          EnrollmentStrings.mobileNotAvailableHint,
+                          style: TextStyle(
+                            fontSize: 13,
                             fontWeight: FontWeight.w500,
-                            color: AppColors.textPrimary,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Date of Birth (date picker)
+                    GestureDetector(
+                      onTap: _selectDate,
+                      child: AbsorbPointer(
+                        child: EnrollmentInputField(
+                          label: EnrollmentStrings.dateOfBirthLabel,
+                          hint: EnrollmentStrings.dateOfBirthHint,
+                          controller: _dobCtrl,
+                          readOnly: true,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Age (auto-calculated from DOB, manually editable)
+                    EnrollmentInputField(
+                      label: EnrollmentStrings.ageLabel,
+                      hint: EnrollmentStrings.ageHint,
+                      controller: _ageCtrl,
+                      keyboardType: TextInputType.number,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Gender
+                    EnrollmentSegmentedButtons(
+                      label: EnrollmentStrings.genderLabel,
+                      options: EnrollmentStrings.gendersHead,
+                      selectedValue: _gender,
+                      onChanged: (v) => setState(() => _gender = v),
+                      isRequired: true,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Marital Status
+                    EnrollmentDropdown(
+                      label: EnrollmentStrings.maritalStatusLabel,
+                      options: EnrollmentStrings.maritalStatusesV2,
+                      value: _maritalStatus,
+                      onChanged: (v) => setState(() => _maritalStatus = v),
+                      hint: 'Select status',
+                      isRequired: true,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Disability
+                    EnrollmentSegmentedButtons(
+                      label: EnrollmentStrings.disabilityStatusLabel,
+                      options: EnrollmentStrings.disabilityStatusesV2,
+                      selectedValue: _disabilityStatus,
+                      onChanged: (v) =>
+                          setState(() => _disabilityStatus = v),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ),
+
+                // ── Sticky bottom CTA ──────────────────────────────────────
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    color: const Color(0xFFF5F6FB),
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: () => _handleNext(controller),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.navy,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          EnrollmentStrings.createHouseholdCTA,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                  if (_mobileAvailable) ...[
-                    const SizedBox(height: 8),
-                    EnrollmentInputField(
-                      label: EnrollmentStrings.mobileNumberLabel,
-                      hint: EnrollmentStrings.mobileNumberHint,
-                      controller: _mobileCtrl,
-                      keyboardType: TextInputType.phone,
                     ),
-                  ],
-                  const SizedBox(height: 32),
-                  EnrollmentButton(
-                    label: EnrollmentStrings.next,
-                    onPressed: () => _handleNext(controller),
                   ),
-                  const SizedBox(height: 12),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         );

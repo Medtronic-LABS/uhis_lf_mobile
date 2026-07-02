@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
 
+/// Pill-style segmented button group for enrollment forms.
+///
+/// Selected pill: navy background (#24356F) + white text.
+/// Unselected pill: white background + #E5E7EB border + #6B7280 text.
+/// Each pill has 10px border-radius. The wrapping row has 12px border-radius.
 class EnrollmentSegmentedButtons extends StatelessWidget {
   const EnrollmentSegmentedButtons({
     required this.label,
@@ -28,70 +33,83 @@ class EnrollmentSegmentedButtons extends StatelessWidget {
             Text(
               label,
               style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: AppColors.textPrimary,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textMuted,
               ),
             ),
             if (isRequired)
               const Padding(
-                padding: EdgeInsets.only(left: 4),
+                padding: EdgeInsets.only(left: 3),
                 child: Text(
                   '*',
                   style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.statusCritical,
                   ),
                 ),
               ),
           ],
         ),
-        const SizedBox(height: 8),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: List.generate(
-              options.length,
-              (index) {
-                final option = options[index];
-                final isSelected = selectedValue == option;
+        const SizedBox(height: 6),
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.cardSurface,
+            border: Border.all(color: AppColors.border, width: 1.5),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.all(4),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: List.generate(
+                options.length,
+                (index) {
+                  final option = options[index];
+                  final isSelected = selectedValue == option;
 
-                return Padding(
-                  padding: EdgeInsets.only(
-                    right: index < options.length - 1 ? 8 : 0,
-                  ),
-                  child: Material(
-                    child: InkWell(
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      right: index < options.length - 1 ? 4 : 0,
+                    ),
+                    child: GestureDetector(
                       onTap: () => onChanged(option),
-                      borderRadius: BorderRadius.circular(AppRadius.button),
-                      child: Container(
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
                         padding: const EdgeInsets.symmetric(
                           horizontal: 16,
-                          vertical: 10,
+                          vertical: 9,
                         ),
                         decoration: BoxDecoration(
                           color: isSelected
                               ? AppColors.navy
-                              : AppColors.border,
-                          borderRadius:
-                              BorderRadius.circular(AppRadius.button),
+                              : AppColors.cardSurface,
+                          border: isSelected
+                              ? null
+                              : Border.all(
+                                  color: AppColors.border,
+                                  width: 1,
+                                ),
+                          borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
                           option,
                           style: TextStyle(
                             fontSize: 13,
-                            fontWeight: FontWeight.w500,
+                            fontWeight: isSelected
+                                ? FontWeight.w600
+                                : FontWeight.w500,
                             color: isSelected
-                                ? AppColors.textOnNavy
+                                ? Colors.white
                                 : AppColors.textMuted,
                           ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
         ),

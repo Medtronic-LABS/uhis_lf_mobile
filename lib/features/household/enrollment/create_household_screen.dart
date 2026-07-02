@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_strings.dart';
 import 'enrollment_controller.dart';
-import 'household_enrollment_sheet.dart';
 import 'widgets/enrollment_section_header.dart';
 import 'widgets/enrollment_input_field.dart';
 import 'widgets/enrollment_segmented_buttons.dart';
-import 'widgets/enrollment_button.dart';
+import 'widgets/enrollment_dropdown.dart';
 
 /// Step 1 of household enrollment: household information.
 ///
-/// Collects household type, member count, house number, occupation, income,
-/// and disability question. Validates on blur and provides next action to
-/// continue to household head info (step 2).
+/// Redesigned layout: navy AppBar with subtitle, scrollable body with sticky
+/// bottom CTA, two grouped sections. Uses [EnrollmentDropdown] for health
+/// worker, village, and occupation selectors.
 class CreateHouseholdScreen extends StatefulWidget {
   const CreateHouseholdScreen({super.key});
 
@@ -24,22 +24,26 @@ class CreateHouseholdScreen extends StatefulWidget {
 
 class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
   late TextEditingController _houseNumberCtrl;
-  late TextEditingController _occupationCtrl;
-  late TextEditingController _disabilityDetailsCtrl;
+  late TextEditingController _totalMembersCtrl;
+  late TextEditingController _incomeCtrl;
+  late TextEditingController _disabilityCountCtrl;
+
+  String? _selectedHealthWorker;
+  String? _selectedVillage;
   String? _householdType;
-  String? _numberOfMembers;
-  String? _monthlyIncome;
-  bool _hasDisability = false;
+  String? _selectedOccupation;
+  String _hasDisability = 'No';
 
   @override
   void initState() {
     super.initState();
     _houseNumberCtrl = TextEditingController();
-    _occupationCtrl = TextEditingController();
-    _disabilityDetailsCtrl = TextEditingController();
+    _totalMembersCtrl = TextEditingController();
+    _incomeCtrl = TextEditingController();
+    _disabilityCountCtrl = TextEditingController();
 
-    // Defer initialization so ChangeNotifierProvider finishes its first build
-    // before notifyListeners() is called (avoids !_dirty assertion).
+    // Defer so ChangeNotifierProvider finishes its first build before
+    // notifyListeners() is called (avoids !_dirty assertion).
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final controller = context.read<EnrollmentController>();
@@ -55,20 +59,23 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
   @override
   void dispose() {
     _houseNumberCtrl.dispose();
-    _occupationCtrl.dispose();
-    _disabilityDetailsCtrl.dispose();
+    _totalMembersCtrl.dispose();
+    _incomeCtrl.dispose();
+    _disabilityCountCtrl.dispose();
     super.dispose();
   }
 
   void _handleNext(EnrollmentController controller) {
     controller.updateHousehold(
-      householdType: _householdType,
-      numberOfMembers: int.tryParse(_numberOfMembers ?? '') ?? 0,
+      householdType: _householdType ?? '',
+      numberOfMembers: int.tryParse(_totalMembersCtrl.text) ?? 0,
       houseNumber: _houseNumberCtrl.text,
-      occupation: _occupationCtrl.text,
-      monthlyIncome: _monthlyIncome,
-      disabilityQuestion: _hasDisability,
-      disabilityDetails: _disabilityDetailsCtrl.text,
+      occupation: _selectedOccupation ?? '',
+      monthlyIncome: _incomeCtrl.text.isEmpty ? '0' : _incomeCtrl.text,
+      disabilityQuestion: _hasDisability == 'Yes',
+      disabilityDetails: _hasDisability == 'Yes'
+          ? _disabilityCountCtrl.text
+          : null,
     );
 
     final errors = controller.validateHouseholdForm();
@@ -82,7 +89,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       return;
     }
 
-    Navigator.of(context).pushNamed('/head-info');
+    context.push('/household/enrollment/head-info');
   }
 
   @override
@@ -90,136 +97,209 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
     return Consumer<EnrollmentController>(
       builder: (context, controller, child) {
         return Scaffold(
-          backgroundColor: AppColors.canvas,
-          appBar: PreferredSize(
-            preferredSize: const Size.fromHeight(56),
-            child: EnrollmentOverlayHeader(
-              title: EnrollmentStrings.createHouseholdTitle,
+          backgroundColor: const Color(0xFFF5F6FB),
+          appBar: AppBar(
+            backgroundColor: AppColors.navy,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            title: const Text(
+              'Create Household',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+              ),
             ),
           ),
           body: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    EnrollmentStrings.createHouseholdSubtitle,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textMuted,
+            child: Stack(
+              children: [
+                ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 96),
+                  children: [
+                    // Subtitle banner beneath the AppBar
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(
+                        color: AppColors.navy.withValues(alpha: 0.07),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        EnrollmentStrings.createHouseholdAppBarSubtitle,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  EnrollmentSectionHeader(
-                    title: EnrollmentStrings.createHouseholdTitle,
-                    subtitle: 'Provide basic household details',
-                  ),
-                  const SizedBox(height: 20),
-                  if (controller.household != null)
-                    EnrollmentInputField(
-                      label: EnrollmentStrings.householdNumberLabel,
-                      initialValue: controller.household!.householdNumber,
-                      onChanged: (_) {},
+
+                    // ── Section: Household Information ─────────────────────
+                    const EnrollmentSectionHeader(
+                      title: EnrollmentStrings.householdInfoSectionHeader,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Health Worker
+                    EnrollmentDropdown(
+                      label: EnrollmentStrings.healthWorkerLabel,
+                      options: EnrollmentStrings.healthWorkerOptions,
+                      value: _selectedHealthWorker,
+                      onChanged: (v) =>
+                          setState(() => _selectedHealthWorker = v),
+                      hint: 'Select health worker',
                       isRequired: true,
                     ),
-                  const SizedBox(height: 16),
-                  EnrollmentSegmentedButtons(
-                    label: EnrollmentStrings.householdTypeLabel,
-                    options: EnrollmentStrings.householdTypes,
-                    selectedValue: _householdType,
-                    onChanged: (value) {
-                      setState(() => _householdType = value);
-                    },
-                    isRequired: true,
-                  ),
-                  const SizedBox(height: 16),
-                  EnrollmentInputField(
-                    label: EnrollmentStrings.numberOfMembersLabel,
-                    hint: EnrollmentStrings.numberOfMembersHint,
-                    initialValue: _numberOfMembers,
-                    onChanged: (value) {
-                      setState(() => _numberOfMembers = value);
-                    },
-                    keyboardType: TextInputType.number,
-                    isRequired: true,
-                  ),
-                  const SizedBox(height: 16),
-                  EnrollmentInputField(
-                    label: EnrollmentStrings.houseNumberLabel,
-                    hint: EnrollmentStrings.houseNumberHint,
-                    controller: _houseNumberCtrl,
-                    onChanged: (_) {},
-                    isRequired: true,
-                  ),
-                  const SizedBox(height: 16),
-                  EnrollmentInputField(
-                    label: EnrollmentStrings.occupationLabel,
-                    hint: EnrollmentStrings.occupationHint,
-                    controller: _occupationCtrl,
-                    onChanged: (_) {},
-                    isRequired: true,
-                  ),
-                  const SizedBox(height: 16),
-                  EnrollmentSegmentedButtons(
-                    label: EnrollmentStrings.monthlyIncomeLabel,
-                    options: EnrollmentStrings.incomeRanges,
-                    selectedValue: _monthlyIncome,
-                    onChanged: (value) {
-                      setState(() => _monthlyIncome = value);
-                    },
-                    isRequired: true,
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Checkbox(
-                        value: _hasDisability,
-                        onChanged: (value) {
-                          setState(() => _hasDisability = value ?? false);
-                        },
-                        activeColor: AppColors.navy,
-                      ),
-                      Expanded(
-                        child: Text(
-                          EnrollmentStrings.disabilityQuestionLabel,
-                          style: const TextStyle(
-                            fontSize: 14,
+                    const SizedBox(height: 16),
+
+                    // Village
+                    EnrollmentDropdown(
+                      label: EnrollmentStrings.villageLabel,
+                      options: EnrollmentStrings.villageOptions,
+                      value: _selectedVillage,
+                      onChanged: (v) => setState(() => _selectedVillage = v),
+                      hint: EnrollmentStrings.villageHint,
+                      isRequired: true,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Household Type
+                    EnrollmentSegmentedButtons(
+                      label: EnrollmentStrings.householdTypeLabel,
+                      options: EnrollmentStrings.householdTypesV2,
+                      selectedValue: _householdType,
+                      onChanged: (v) => setState(() => _householdType = v),
+                      isRequired: true,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Household Number (auto-generated, read-only)
+                    if (controller.household != null)
+                      EnrollmentInputField(
+                        label: EnrollmentStrings.householdNumberLabel,
+                        controller: TextEditingController(
+                          text: controller.household!.householdNumber,
+                        ),
+                        readOnly: true,
+                        customBorderColor: const Color(0xFFA7F3D0),
+                        customFillColor: const Color(0xFFECFDF5),
+                        customTextColor: const Color(0xFF059669),
+                        labelSuffix: const Text(
+                          EnrollmentStrings.autoGeneratedSuffix,
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Color(0xFF059669),
                             fontWeight: FontWeight.w500,
-                            color: AppColors.textPrimary,
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                  if (_hasDisability) ...[
                     const SizedBox(height: 16),
+
+                    // House Number
                     EnrollmentInputField(
-                      label: EnrollmentStrings.disabilityDetailsLabel,
-                      hint: EnrollmentStrings.disabilityDetailsHint,
-                      controller: _disabilityDetailsCtrl,
-                      onChanged: (_) {},
+                      label: EnrollmentStrings.houseNumberLabel,
+                      hint: EnrollmentStrings.houseNumberHint,
+                      controller: _houseNumberCtrl,
                       isRequired: true,
-                      maxLines: 2,
                     ),
+                    const SizedBox(height: 16),
+
+                    // Total Household Members
+                    EnrollmentInputField(
+                      label: EnrollmentStrings.totalMembersLabel,
+                      hint: EnrollmentStrings.totalMembersHint,
+                      controller: _totalMembersCtrl,
+                      keyboardType: TextInputType.number,
+                      isRequired: true,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Household Head Occupation
+                    EnrollmentDropdown(
+                      label: EnrollmentStrings.householdHeadOccupationLabel,
+                      options: EnrollmentStrings.occupationOptions,
+                      value: _selectedOccupation,
+                      onChanged: (v) =>
+                          setState(() => _selectedOccupation = v),
+                      hint: 'Select occupation',
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Monthly Household Income
+                    EnrollmentInputField(
+                      label: EnrollmentStrings.monthlyIncomeInputLabel,
+                      hint: EnrollmentStrings.monthlyIncomeInputHint,
+                      controller: _incomeCtrl,
+                      keyboardType: TextInputType.number,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Any person with disability?
+                    EnrollmentSegmentedButtons(
+                      label: EnrollmentStrings.disabilityAnyPersonLabel,
+                      options: EnrollmentStrings.disabilityYesNo,
+                      selectedValue: _hasDisability,
+                      onChanged: (v) => setState(() => _hasDisability = v),
+                    ),
+
+                    // Number of persons with disability (conditional)
+                    if (_hasDisability == 'Yes') ...[
+                      const SizedBox(height: 16),
+                      EnrollmentInputField(
+                        label:
+                            EnrollmentStrings.disabilityPersonCountLabel,
+                        hint: EnrollmentStrings.disabilityPersonCountHint,
+                        controller: _disabilityCountCtrl,
+                        keyboardType: TextInputType.number,
+                      ),
+                    ],
+                    const SizedBox(height: 8),
                   ],
-                  const SizedBox(height: 32),
-                  EnrollmentButton(
-                    label: EnrollmentStrings.next,
-                    onPressed: () => _handleNext(controller),
+                ),
+
+                // ── Sticky bottom CTA ──────────────────────────────────────
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    color: const Color(0xFFF5F6FB),
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: () => _handleNext(controller),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.navy,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          EnrollmentStrings.continueArrow,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         );
       },
     );
   }
-}
-
-extension _StringExtension on TextEditingController {
-  // Dummy extension to allow using 'controller' parameter in EnrollmentInputField
-  // In the actual implementation, use onChanged callback instead
 }

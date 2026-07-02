@@ -419,7 +419,7 @@ class _Viewfinder extends StatelessWidget {
               if (!isScanning)
                 AnimatedBuilder(
                   animation: sweep,
-                  builder: (_, __) => Positioned(
+                  builder: (context2, value) => Positioned(
                     top: sweep.value * h,
                     left: 0,
                     right: 0,

@@ -6,15 +6,14 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_strings.dart';
 import 'enrollment_controller.dart';
 import 'models/household_enrollment_models.dart';
-import 'widgets/enrollment_status_header.dart';
 import 'widgets/enrollment_member_card.dart';
-import 'widgets/enrollment_button.dart';
 
 /// Success screen: household has been enrolled.
 ///
-/// Displays the household details, list of enrolled members, and options to
-/// add more members or save and continue. Pre-populated with 2 mock members
-/// for demonstration.
+/// Redesigned layout:
+/// - Full-width green header (no AppBar) showing check icon, title, subtitle.
+/// - Body: household detail card (2-column grid) + members section + Add Member
+///   dashed button + Save navy button with sticky-bottom pattern.
 class HouseholdCreatedScreen extends StatefulWidget {
   const HouseholdCreatedScreen({super.key});
 
@@ -27,38 +26,41 @@ class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
   void initState() {
     super.initState();
     // Add pre-filled mock members on first build
-    final controller = context.read<EnrollmentController>();
-    if (controller.members.isEmpty) {
-      controller.addMember(
-        HouseholdMember(
-          name: 'Ajay Kumar',
-          age: 42,
-          gender: 'Male',
-          dateOfBirth: '1982-05-20',
-          idType: 'NID',
-          idNumber: '1234567890123',
-          relationshipToHead: 'Head',
-          maritalStatus: 'Married',
-          disabilityStatus: 'None',
-          nidScanned: true,
-        ),
-      );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final controller = context.read<EnrollmentController>();
+      if (controller.members.isEmpty) {
+        controller.addMember(
+          HouseholdMember(
+            name: 'Ajay Kumar',
+            age: 42,
+            gender: 'Male',
+            dateOfBirth: '1982-05-20',
+            idType: 'NID',
+            idNumber: '1234567890123',
+            relationshipToHead: 'Head',
+            maritalStatus: 'Married',
+            disabilityStatus: 'Absent',
+            nidScanned: true,
+          ),
+        );
 
-      controller.addMember(
-        HouseholdMember(
-          name: 'Asha Kumari',
-          age: 38,
-          gender: 'Female',
-          dateOfBirth: '1986-08-15',
-          idType: 'BRN',
-          idNumber: '9876543210987',
-          relationshipToHead: 'Spouse',
-          maritalStatus: 'Married',
-          disabilityStatus: 'None',
-          nidScanned: false,
-        ),
-      );
-    }
+        controller.addMember(
+          HouseholdMember(
+            name: 'Asha Kumari',
+            age: 38,
+            gender: 'Female',
+            dateOfBirth: '1986-08-15',
+            idType: 'BRN',
+            idNumber: '9876543210987',
+            relationshipToHead: 'Spouse',
+            maritalStatus: 'Married',
+            disabilityStatus: 'Absent',
+            nidScanned: false,
+          ),
+        );
+      }
+    });
   }
 
   Future<void> _handleSave(EnrollmentController controller) async {
@@ -73,7 +75,6 @@ class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
           ),
         );
 
-        // Navigate back to dashboard
         await Future.delayed(const Duration(seconds: 1));
         if (mounted) {
           context.go('/home');
@@ -81,7 +82,8 @@ class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(controller.error ?? EnrollmentStrings.enrollmentFailed),
+            content:
+                Text(controller.error ?? EnrollmentStrings.enrollmentFailed),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -96,223 +98,276 @@ class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
         final household = controller.household;
         final head = controller.householdHead;
         final members = controller.members;
+        final totalCount =
+            head != null ? members.length + 1 : members.length;
+        final hhNumber = household?.householdNumber ?? '';
 
         return Scaffold(
-          backgroundColor: AppColors.canvas,
-          appBar: AppBar(
-            backgroundColor: AppColors.cardSurface,
-            elevation: 0,
-            leading: IconButton(
-              icon: const Icon(Icons.close, color: AppColors.navy),
-              onPressed: () => context.pop(),
-            ),
-            title: const Text(
-              EnrollmentStrings.householdCreatedTitle,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: AppColors.navy,
-              ),
-            ),
-          ),
+          backgroundColor: const Color(0xFFF5F6FB),
           body: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  EnrollmentStatusHeader(
-                    title: EnrollmentStrings.householdCreatedTitle,
-                    subtitle: EnrollmentStrings.householdCreatedSubtitle,
-                    icon: Icons.check_circle,
-                  ),
-                  const SizedBox(height: 24),
-                  if (household != null) ...[
+            child: Stack(
+              children: [
+                ListView(
+                  padding: const EdgeInsets.only(bottom: 96),
+                  children: [
+                    // ── Green success header (no AppBar) ───────────────────
                     Container(
-                      decoration: BoxDecoration(
-                        color: AppColors.cardSurface,
-                        border: Border.all(color: AppColors.border),
-                        borderRadius:
-                            BorderRadius.circular(AppRadius.card),
+                      width: double.infinity,
+                      color: const Color(0xFF14996A),
+                      padding: const EdgeInsets.fromLTRB(24, 28, 24, 28),
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 56,
+                            height: 56,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.white,
+                                width: 2,
+                              ),
+                              color: Colors.white.withValues(alpha: 0.2),
+                            ),
+                            child: const Icon(
+                              Icons.check,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          const Text(
+                            EnrollmentStrings.householdCreatedTitle2,
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '$hhNumber · Char Bhadra',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.white.withValues(alpha: 0.7),
+                            ),
+                          ),
+                        ],
                       ),
-                      padding: const EdgeInsets.all(16),
+                    ),
+
+                    // ── Body ───────────────────────────────────────────────
+                    Padding(
+                      padding: const EdgeInsets.all(20),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            EnrollmentStrings.householdDetailsTitle,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
+                          // Household Details card
+                          if (household != null) ...[
+                            Container(
+                              decoration: BoxDecoration(
+                                color: AppColors.cardSurface,
+                                border: Border.all(color: AppColors.border),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    EnrollmentStrings.householdDetailsTitle,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.navy,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 14),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _DetailCell(
+                                          label: EnrollmentStrings
+                                              .detailLabelHouseholdNo,
+                                          value: household.householdNumber,
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: _DetailCell(
+                                          label: EnrollmentStrings
+                                              .detailLabelHouseNo,
+                                          value: household.houseNumber.isEmpty
+                                              ? '—'
+                                              : household.houseNumber,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 14),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _DetailCell(
+                                          label: EnrollmentStrings
+                                              .detailLabelVillage,
+                                          value: 'Char Bhadra',
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: _DetailCell(
+                                          label: EnrollmentStrings
+                                              .detailLabelTotalMembers,
+                                          value: household.numberOfMembers > 0
+                                              ? household.numberOfMembers
+                                                  .toString()
+                                              : totalCount.toString(),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 12),
+                            const SizedBox(height: 24),
+                          ],
+
+                          // Members section header + count badge
                           Row(
                             children: [
-                              Expanded(
-                                child: _buildDetailRow(
-                                  'Household #',
-                                  household.householdNumber,
-                                ),
-                              ),
-                              Expanded(
-                                child: _buildDetailRow(
-                                  'Type',
-                                  household.householdType,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildDetailRow(
-                                  'House #',
-                                  household.houseNumber,
-                                ),
-                              ),
-                              Expanded(
-                                child: _buildDetailRow(
-                                  'Income',
-                                  household.monthlyIncome,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          EnrollmentStrings.membersAddedLabel,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.statusSuccessSurface,
-                            borderRadius:
-                                BorderRadius.circular(AppRadius.button),
-                          ),
-                          child: Text(
-                            EnrollmentStrings.membersAddedCount(
-                              head != null ? members.length + 1 : members.length,
-                            ),
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.statusSuccessText,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    if (head != null)
-                      EnrollmentMemberCard(
-                        member: head,
-                      ),
-                    const SizedBox(height: 12),
-                    ...List.generate(
-                      members.length,
-                      (index) => Column(
-                        children: [
-                          EnrollmentMemberCard(
-                            member: members[index],
-                          ),
-                          if (index < members.length - 1)
-                            const SizedBox(height: 12),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: AppColors.cardSurfaceMuted,
-                        border: Border.all(
-                          color: AppColors.border,
-                          strokeAlign: BorderSide.strokeAlignCenter,
-                          width: 1,
-                        ),
-                        borderRadius:
-                            BorderRadius.circular(AppRadius.card),
-                      ),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () {
-                            context.push('/household/enrollment/add-member');
-                          },
-                          borderRadius: BorderRadius.circular(
-                            AppRadius.card,
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.add,
-                                  size: 20,
+                              const Text(
+                                EnrollmentStrings.householdMembersSectionHeader,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
                                   color: AppColors.navy,
                                 ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  EnrollmentStrings.addMoreMembers,
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.aiPurple,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  '$totalCount',
                                   style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.navy,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
                                   ),
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
-                        ),
+                          const SizedBox(height: 12),
+
+                          // Head card
+                          if (head != null) ...[
+                            _HeadMemberCard(head: head),
+                            const SizedBox(height: 10),
+                          ],
+
+                          // Other members
+                          ...List.generate(members.length, (index) {
+                            final member = members[index];
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: EnrollmentMemberCard(member: member),
+                            );
+                          }),
+
+                          const SizedBox(height: 6),
+
+                          // Add Member — dashed border button
+                          _DashedAddMemberButton(
+                            onTap: () => context
+                                .push('/household/enrollment/add-member'),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
                       ),
                     ),
                   ],
-                  const SizedBox(height: 24),
-                  EnrollmentButton(
-                    label: EnrollmentStrings.saveHousehold,
-                    onPressed: () => _handleSave(controller),
-                    isLoading: controller.loading,
+                ),
+
+                // ── Sticky bottom CTA ──────────────────────────────────────
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    color: const Color(0xFFF5F6FB),
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: controller.loading
+                            ? null
+                            : () => _handleSave(controller),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.navy,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor:
+                              AppColors.navy.withValues(alpha: 0.5),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: controller.loading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
+                                  ),
+                                ),
+                              )
+                            : const Text(
+                                EnrollmentStrings.saveHousehold,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         );
       },
     );
   }
+}
 
-  Widget _buildDetailRow(String label, String value) {
+// ── Private helper widgets ─────────────────────────────────────────────────
+
+class _DetailCell extends StatelessWidget {
+  const _DetailCell({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
           style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w400,
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
             color: AppColors.textMuted,
           ),
         ),
@@ -321,8 +376,8 @@ class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
           value,
           style: const TextStyle(
             fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w800,
+            color: AppColors.navy,
           ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -330,4 +385,185 @@ class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
       ],
     );
   }
+}
+
+class _HeadMemberCard extends StatelessWidget {
+  const _HeadMemberCard({required this.head});
+
+  final HouseholdHeadInfo head;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.cardSurface,
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Avatar with person icon
+          Container(
+            width: 44,
+            height: 44,
+            decoration: const BoxDecoration(
+              color: AppColors.aiSurfaceStart,
+              shape: BoxShape.circle,
+            ),
+            child: const Center(
+              child: Text(
+                '👤',
+                style: TextStyle(fontSize: 20),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  head.name,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '${head.age}y · ${head.gender}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // "Head" amber badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEF3C7),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const Text(
+              'Head',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF92400E),
+              ),
+            ),
+          ),
+          // NID scanned badge (if applicable)
+          if (head.nidScanned) ...[
+            const SizedBox(width: 6),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0FDF4),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                '📇 NID scan',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF14996A),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _DashedAddMemberButton extends StatelessWidget {
+  const _DashedAddMemberButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: CustomPaint(
+        painter: _DashedBorderPainter(
+          color: AppColors.navy,
+          radius: 12,
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.cardSurface,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.add, size: 18, color: AppColors.navy),
+              const SizedBox(width: 8),
+              Text(
+                EnrollmentStrings.addMoreMembers,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.navy,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DashedBorderPainter extends CustomPainter {
+  _DashedBorderPainter({required this.color, required this.radius});
+
+  final Color color;
+  final double radius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+
+    final rrect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      Radius.circular(radius),
+    );
+
+    const dashWidth = 6.0;
+    const dashSpace = 4.0;
+
+    final path = Path()..addRRect(rrect);
+    final metrics = path.computeMetrics();
+
+    for (final metric in metrics) {
+      double distance = 0;
+      while (distance < metric.length) {
+        final remaining = metric.length - distance;
+        final len = remaining < dashWidth ? remaining : dashWidth;
+        canvas.drawPath(metric.extractPath(distance, distance + len), paint);
+        distance += dashWidth + dashSpace;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedBorderPainter old) =>
+      old.color != color || old.radius != radius;
 }
