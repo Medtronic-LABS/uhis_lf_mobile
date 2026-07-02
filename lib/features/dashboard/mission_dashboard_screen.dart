@@ -1008,7 +1008,7 @@ class _EnrolNewFab extends StatelessWidget {
       elevation: 4,
       icon: const Icon(Icons.home_outlined, size: 20),
       label: const Text(
-        'Enroll Household',
+        'Enroll Now',
         style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
       ),
       onPressed: () => showEnrollmentEntrySheet(context),
