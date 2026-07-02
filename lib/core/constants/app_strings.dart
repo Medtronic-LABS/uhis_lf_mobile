@@ -3027,6 +3027,156 @@ abstract final class NcdScreeningStrings {
 
   static const String highSaltTitle = 'High salt in daily food?';
   static const String highSaltBn = 'খাবারে অতিরিক্ত লবণ?';
+}
+
+/// Household enrollment flow strings.
+abstract final class EnrollmentStrings {
+  EnrollmentStrings._();
+
+  // ── NID Scan Screen ──────────────────────────────────────────────────────
+  static const String nidScanTitle = 'Scan Head\'s ID';
+  static const String nidScanSubtitle = 'Position ID card in the frame';
+  static const String nidScanOrCreate = 'Or create household manually';
+  static const String nidScanCameraHint = 'Place ID card here';
+
+  // ── Create Household Screen (Step 1) ──────────────────────────────────────
+  static const String createHouseholdTitle = 'Household Information';
+  static const String createHouseholdSubtitle = 'Step 1 of 2';
+
+  static const String householdNumberLabel = 'Household Number';
+  static const String householdNumberHint = 'Auto-generated';
+
+  static const String healthWorkerLabel = 'Health Worker';
+  static const String healthWorkerHint = 'Your name';
+
+  static const String villageLabel = 'Village';
+  static const String villageHint = 'Select village';
+
+  static const String householdTypeLabel = 'Household Type';
+  static const List<String> householdTypes = [
+    'Single-family',
+    'Multi-family',
+    'Institutional',
+    'Other',
+  ];
+
+  static const String numberOfMembersLabel = 'Number of Members';
+  static const String numberOfMembersHint = 'Estimated count';
+
+  static const String houseNumberLabel = 'House Number';
+  static const String houseNumberHint = 'e.g., 123 A/B';
+
+  static const String occupationLabel = 'Primary Occupation';
+  static const String occupationHint = 'Farmer, Labour, Business, etc.';
+
+  static const String monthlyIncomeLabel = 'Monthly Income';
+  static const List<String> incomeRanges = [
+    '<10000',
+    '10000-25000',
+    '25000-50000',
+    '>50000',
+  ];
+
+  static const String disabilityQuestionLabel =
+      'Does any household member have a disability?';
+  static const String disabilityDetailsLabel = 'Please specify';
+  static const String disabilityDetailsHint = 'Type of disability';
+
+  // ── Household Head Info Screen (Step 2) ──────────────────────────────────
+  static const String householdHeadTitle = 'Household Head Information';
+  static const String householdHeadSubtitle = 'Step 2 of 2';
+
+  static const String headNameLabel = 'Full Name';
+  static const String headNameHint = 'Head\'s full name';
+
+  static const String idTypeLabel = 'ID Type';
+  static const List<String> idTypes = ['BRN', 'NID'];
+
+  static const String idNumberLabel = 'ID Number';
+  static const String idNumberHint = 'Birth Registration or NID number';
+
+  static const String mobileNumberLabel = 'Mobile Number';
+  static const String mobileNumberHint = '+880 1XXX XXXXXX';
+  static const String mobileNotAvailableLabel = 'Not Available';
+
+  static const String dateOfBirthLabel = 'Date of Birth';
+  static const String dateOfBirthHint = 'DD/MM/YYYY';
+  static const String approximateAgeLabel = 'Or Approximate Age';
+  static const String approximateAgeHint = 'Years';
+
+  static const String ageLabel = 'Age';
+  static const String ageHint = 'Calculated from DOB';
+
+  static const String genderLabel = 'Gender';
+  static const List<String> genders = ['Male', 'Female', 'Other'];
+
+  static const String maritalStatusLabel = 'Marital Status';
+  static const List<String> maritalStatuses = [
+    'Single',
+    'Married',
+    'Widowed',
+    'Divorced',
+  ];
+
+  static const String disabilityStatusLabel = 'Disability Status';
+  static const List<String> disabilityStatuses = [
+    'None',
+    'Physical',
+    'Sensory',
+    'Cognitive',
+    'Multiple',
+  ];
+
+  // ── Add Member Screen ────────────────────────────────────────────────────
+  static const String addMemberTitle = 'Add Household Member';
+  static const String memberNameLabel = 'Full Name';
+  static const String memberNameHint = 'Member\'s full name';
+
+  static const String relationshipToHeadLabel = 'Relationship to Head';
+  static const List<String> relationships = [
+    'Spouse',
+    'Child',
+    'Parent',
+    'Sibling',
+    'Other',
+  ];
+
+  static const String memberVillageLabel = 'Village (if different)';
+  static const String memberVillageHint = 'For external members';
+
+  static const String nidScanCTA = 'Scan ID (Optional)';
+
+  // ── Success Screen ───────────────────────────────────────────────────────
+  static const String householdCreatedTitle = 'Household Enrolled!';
+  static const String householdCreatedSubtitle =
+      'Your household has been created successfully.';
+
+  static const String householdDetailsTitle = 'Household Details';
+
+  static const String membersAddedLabel = 'Members Added';
+  static String membersAddedCount(int count) => '$count members';
+
+  static const String addMoreMembers = 'Add Member';
+  static const String saveHousehold = 'Save & Continue';
+
+  // ── Shared validation messages ───────────────────────────────────────────
+  static const String fieldRequired = 'This field is required';
+  static const String invalidEmail = 'Please enter a valid email';
+  static const String invalidPhone = 'Please enter a valid phone number';
+  static const String invalidAge = 'Please enter a valid age';
+  static const String invalidDate = 'Please enter a valid date';
+
+  static const String enrollmentFailed = 'Enrollment failed';
+  static const String enrollmentSuccess = 'Household enrolled successfully';
+
+  // ── Common CTA buttons ───────────────────────────────────────────────────
+  static const String next = 'Next';
+  static const String previous = 'Previous';
+  static const String save = 'Save';
+  static const String cancel = 'Cancel';
+  static const String submit = 'Submit';
+  static const String createHousehold = 'Create Household';
+  static const String scanAgain = 'Scan Again';
 
   static const String familyHistoryTitle = 'Family history of high BP?';
   static const String familyHistoryBn = 'বাবা-মায়ের / পরিবারে উচ্চ রক্তচাপ?';
