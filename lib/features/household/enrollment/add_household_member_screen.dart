@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_strings.dart';
 import 'enrollment_controller.dart';
+import 'nid_ocr_service.dart';
 import 'models/household_enrollment_models.dart';
 import 'widgets/enrollment_input_field.dart';
 import 'widgets/enrollment_segmented_buttons.dart';
@@ -32,6 +33,8 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   late TextEditingController _ageCtrl;
   late TextEditingController _mobileCtrl;
   late TextEditingController _villageCtrl;
+
+  final NidOcrService _ocr = NidOcrService();
 
   String? _gender;
   String? _maritalStatus;
@@ -101,22 +104,33 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
     _ageCtrl.text = age.toString();
   }
 
-  Future<void> _performMockScan(EnrollmentController controller) async {
+  /// Capture the member's NID card and read the NID number into the ID field.
+  /// Only the number is extracted — the health worker fills the rest.
+  Future<void> _scanNid() async {
     setState(() => _scanLoading = true);
+    final result = await _ocr.captureNidNumber();
+    if (!mounted) return;
+    setState(() => _scanLoading = false);
 
-    final data = await controller.mockNidScan();
-
-    if (mounted) {
-      setState(() {
-        _scanLoading = false;
-        _nidScanned = true;
-        _nameCtrl.text = data['name'] as String? ?? '';
-        _dobCtrl.text = data['dateOfBirth'] as String? ?? '';
-        _gender = data['gender'] as String?;
-        final dob = DateTime.tryParse(data['dateOfBirth'] as String? ?? '');
-        if (dob != null) _calculateAge(dob);
-      });
+    switch (result.status) {
+      case NidScanStatus.success:
+        setState(() {
+          _nidScanned = true;
+          _brnCtrl.text = result.nidNumber!;
+        });
+      case NidScanStatus.notFound:
+        _showSnack(EnrollmentStrings.nidScanNotFound);
+      case NidScanStatus.error:
+        _showSnack(EnrollmentStrings.nidScanError);
+      case NidScanStatus.cancelled:
+        break;
     }
+  }
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
+    );
   }
 
   void _handleSaveMember(EnrollmentController controller) {
@@ -211,9 +225,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     Material(
                       borderRadius: BorderRadius.circular(14),
                       child: InkWell(
-                        onTap: _scanLoading
-                            ? null
-                            : () => _performMockScan(controller),
+                        onTap: _scanLoading ? null : _scanNid,
                         borderRadius: BorderRadius.circular(14),
                         child: Ink(
                           decoration: BoxDecoration(
@@ -277,9 +289,9 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                           border: Border.all(color: const Color(0xFF14996A)),
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: const Text(
-                          EnrollmentStrings.nidScannedConfirmation,
-                          style: TextStyle(
+                        child: Text(
+                          EnrollmentStrings.nidNumberCaptured(_brnCtrl.text),
+                          style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
                             color: Color(0xFF14996A),

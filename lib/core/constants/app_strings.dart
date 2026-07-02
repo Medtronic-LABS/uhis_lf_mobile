@@ -3246,11 +3246,15 @@ abstract final class EnrollmentStrings {
 
   static const String mobileNotAvailableHint = 'Not Available';
 
-  static const String nidScanButtonLabel = 'Scan NID to auto-fill (Q1–4)';
+  static const String nidScanButtonLabel = 'Scan NID card to read number';
   static const String nidScanNoBrnHint =
       'If member has no NID, enter Birth Registration ID instead.';
-  static const String nidScannedConfirmation =
-      '✓ NID scanned · Name, DOB, Gender auto-filled below';
+  static String nidNumberCaptured(String number) =>
+      '✓ NID number captured: $number';
+  static const String nidScanNotFound =
+      'Could not read the NID number. Try again or type it in below.';
+  static const String nidScanError =
+      'Camera unavailable. Please type the NID number below.';
 
   static const String dobHelperText =
       'If exact DOB is unknown, leave blank and enter approximate age below.';
