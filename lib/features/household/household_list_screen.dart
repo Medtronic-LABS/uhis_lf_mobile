@@ -8,9 +8,11 @@ import '../../core/constants/app_strings.dart';
 import '../../core/db/household_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/models/dashboard_tier.dart';
+import '../../core/models/mission_queue_item.dart';
 import '../../core/widgets/location_filter_sheet.dart';
 import '../dashboard/dashboard_repository.dart';
 import '../dashboard/mission_dashboard_repository.dart';
+import '../visit/widgets/mission_queue_card.dart';
 import 'household_detail_screen.dart';
 
 /// View mode for the list screen.
@@ -63,6 +65,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
   // 5-tier filter state (null = All)
   DashboardTier? _selectedTier;
   Map<String, DashboardTier>? _patientTiers;
+  Map<String, MissionQueueItem> _queueItems = {};
 
   // Location / SS filter state (null = show all)
   String? _selectedVillageId;
@@ -95,12 +98,17 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
       final queue = await missionRepo.loadQueue();
       if (!mounted) return;
       final tiers = <String, DashboardTier>{};
+      final queueMap = <String, MissionQueueItem>{};
       for (final item in queue) {
         if (item.patientId != null) {
           tiers[item.patientId!] = item.tier;
+          queueMap[item.patientId!] = item;
         }
       }
-      setState(() => _patientTiers = tiers);
+      setState(() {
+        _patientTiers = tiers;
+        _queueItems = queueMap;
+      });
     } catch (e) {
       debugPrint('[HouseholdList] Failed to load patient tiers: $e');
     }
@@ -691,9 +699,36 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
                   controller: _scrollController,
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   itemCount: members.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1, indent: 72),
+                  separatorBuilder: (context, index) {
+                    final member = members[index];
+                    final pid = member.patientId ?? member.id;
+                    final hasCard = pid != null && _queueItems.containsKey(pid);
+                    return hasCard
+                        ? const SizedBox.shrink()
+                        : const Divider(height: 1, indent: 72);
+                  },
                   itemBuilder: (context, index) {
                     final member = members[index];
+                    final pid = member.patientId ?? member.id;
+                    debugPrint('[MembersList] member=${member.name} pid=$pid queueKeys=${_queueItems.keys.take(3).toList()} hit=${_queueItems.containsKey(pid)}');
+                    final queueItem = pid != null ? _queueItems[pid] : null;
+                    if (queueItem != null) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: MissionQueueCard(
+                          item: queueItem,
+                          compact: true,
+                          onTap: () {
+                            final navId = queueItem.patientId;
+                            if (navId != null && navId.isNotEmpty &&
+                                navId != 'household' && navId != 'households') {
+                              context.go('/patients/$navId',
+                                  extra: {'name': queueItem.patientName});
+                            }
+                          },
+                        ),
+                      );
+                    }
                     return _MemberTile(
                       member: member,
                       onTap: () => _navigateToMemberDetail(context, member),

@@ -455,6 +455,7 @@ abstract final class WorklistStrings {
   static const String programmeCataract = 'Cataract';
   static const String programmeEyeCare = 'Eye Care';
   static const String programmeUnknown = 'General';
+  static const String selectService = '📋  Select service';
 
   // Chip filters.
   static const String filterAll = 'All';
@@ -1260,6 +1261,8 @@ abstract final class BottomNavStrings {
   static const String assistantTitle = 'Assistant';
   static const String assistantPlaceholderHeading = 'AI Assistant';
   static const String assistantPlaceholderSubheading = 'Coming soon';
+
+  static const String pressBackAgainToExit = 'Press back again to exit';
 }
 
 /// Symptom triage picker screen strings.
@@ -2922,7 +2925,7 @@ abstract final class SymptomPickerStrings {
   static const String otherSymptomsAddFromList = 'Add from list';
 
   // ── AI-driven symptom list (replaces the hardcoded cluster grid) ─────────
-  static const String detectedSymptomsTitle = 'Symptoms detected by AI';
+  static const String detectedSymptomsTitle = 'AI-Detected Symptoms';
   static const String detectedSymptomsSubtitleEmpty =
       'Tap the mic above to record the patient. AI-detected symptoms will appear here for you to review.';
   static const String detectedSymptomsSubtitleFilled =

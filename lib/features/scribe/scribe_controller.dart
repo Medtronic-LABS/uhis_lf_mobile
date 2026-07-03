@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:audio_waveforms/audio_waveforms.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart';
 
 import '../../core/api/scribe_api_service.dart';
 import '../../core/constants/app_strings.dart';
@@ -28,10 +29,14 @@ class ScribeController extends ChangeNotifier {
 
   final ScribeApiService _api;
   final ScribePermissionService _perm;
-  /// Records the consultation audio AND drives the live recording waveform.
+  /// Drives the live recording waveform visualization only.
   /// Recycled after each session — [RecorderController] can hang on reuse after
   /// stop() on Android (audio_waveforms native quirk).
   RecorderController _recorder = RecorderController();
+
+  /// Captures the actual audio file using the `record` package, which produces
+  /// a standard WAV decodable by the backend. [_recorder] handles waveform only.
+  final AudioRecorder _audioRecorder = AudioRecorder();
 
   ScribeSession _session = const ScribeSession();
   ScribeSession get session => _session;
@@ -59,7 +64,7 @@ class ScribeController extends ChangeNotifier {
   );
 
   /// File extension for captured audio — kept in sync with [_recorderSettings].
-  static const String _recordingExtension = 'wav';
+  static const String _recordingExtension = 'm4a';
 
   Timer? _elapsedTimer;
   Timer? _pollTimer;
@@ -124,12 +129,22 @@ class ScribeController extends ChangeNotifier {
       _prepareFreshRecorder();
 
       final dir = await getTemporaryDirectory();
-      _recordingPath =
-          '${dir.path}/scribe_${DateTime.now().millisecondsSinceEpoch}.$_recordingExtension';
+      final ts = DateTime.now().millisecondsSinceEpoch;
+      _recordingPath = '${dir.path}/scribe_$ts.$_recordingExtension';
+      final waveformPath = '${dir.path}/scribe_wave_$ts.$_recordingExtension';
 
       await _recorder.record(
-        path: _recordingPath,
+        path: waveformPath,
         recorderSettings: _recorderSettings,
+      );
+      await _audioRecorder.start(
+        const RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          sampleRate: 16000,
+          numChannels: 1,
+          bitRate: 64000,
+        ),
+        path: _recordingPath!,
       );
 
       _session = const ScribeSession(state: ScribeState.recording);
@@ -227,12 +242,26 @@ class ScribeController extends ChangeNotifier {
       _prepareFreshRecorder();
 
       final dir = await getTemporaryDirectory();
-      _recordingPath =
-          '${dir.path}/scribe_${DateTime.now().millisecondsSinceEpoch}.$_recordingExtension';
+      final ts = DateTime.now().millisecondsSinceEpoch;
+      _recordingPath = '${dir.path}/scribe_$ts.$_recordingExtension';
+      // Waveform visualization recorder writes to a separate dummy path.
+      final waveformPath = '${dir.path}/scribe_wave_$ts.$_recordingExtension';
 
+      // Start waveform recorder (audio_waveforms) for UI animation only.
       await _recorder.record(
-        path: _recordingPath,
+        path: waveformPath,
         recorderSettings: _recorderSettings,
+      );
+
+      // Start actual audio capture via record package — produces standard WAV.
+      await _audioRecorder.start(
+        const RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          sampleRate: 16000,
+          numChannels: 1,
+          bitRate: 64000,
+        ),
+        path: _recordingPath!,
       );
 
       _session = ScribeSession(state: ScribeState.recording, mode: mode);
@@ -602,26 +631,34 @@ class ScribeController extends ChangeNotifier {
   /// hang even though the native writer completes, so we fire stop() but gate
   /// on the file actually being finalized (moov atom present + size stable).
   Future<String?> _stopRecorderSafely() async {
-    final presetPath = _recordingPath;
-
-    // Fire stop() but do not block solely on its Future — it can hang.
+    // Stop waveform recorder (fire-and-forget — may hang on audio_waveforms).
     unawaited(
       _recorder
           .stop()
-          .then((p) => debugPrint('[AIScribe] stop() returned path=$p'))
+          .then((p) => debugPrint('[AIScribe] waveform stop() path=$p'))
           .catchError((Object e) {
-        debugPrint('[AIScribe] stop() error: $e');
+        debugPrint('[AIScribe] waveform stop() error: $e');
         return null;
       }),
     );
 
-    final finalized = await _awaitFinalizedRecording(presetPath);
+    // Stop actual audio capture — record package awaits proper finalization.
+    final String? capturedPath = await _audioRecorder
+        .stop()
+        .catchError((Object e) {
+      debugPrint('[AIScribe] audioRecorder stop() error: $e');
+      return null;
+    });
 
-    // Recycle only after finalization — disposing mid-finalize aborts the
-    // header/trailer write and corrupts the file.
+    final path = capturedPath ?? _recordingPath;
+    if (path != null) {
+      final size = File(path).existsSync() ? File(path).lengthSync() : 0;
+      debugPrint('[AIScribe] audio captured: path=$path size=${size}B');
+    }
+
     _recycleRecorder();
     notifyListeners();
-    return finalized;
+    return path;
   }
 
   /// Polls [path] until the file is finalized (WAV header / MP4 trailer present)
@@ -1056,6 +1093,7 @@ class ScribeController extends ChangeNotifier {
     try {
       _recorder.dispose();
     } catch (_) {}
+    _audioRecorder.dispose();
     super.dispose();
   }
 

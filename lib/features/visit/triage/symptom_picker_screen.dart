@@ -1768,13 +1768,13 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                     color: AppColors.aiPurple,
                   ),
                   const SizedBox(width: 6),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       SymptomPickerStrings.detectedSymptomsTitle,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.navy,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.aiPurple,
                       ),
                     ),
                   ),

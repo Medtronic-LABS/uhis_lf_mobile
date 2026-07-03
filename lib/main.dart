@@ -91,11 +91,9 @@ Future<void> _clearSeededTestData(AppDatabase db) async {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SemanticsBinding.instance.ensureSemantics();
-  // Prevent app from drawing behind the status bar and system nav bar.
-  SystemChrome.setEnabledSystemUIMode(
-    SystemUiMode.manual,
-    overlays: [SystemUiOverlay.top, SystemUiOverlay.bottom],
-  );
+  // Draw behind status bar and navigation bar — true edge-to-edge.
+  // SafeArea / Scaffold remain responsible for inset-aware content layout.
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   if (kIsWeb) {
     databaseFactoryOrNull = databaseFactoryFfiWebNoWebWorker;
   }

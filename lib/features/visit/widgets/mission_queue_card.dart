@@ -29,13 +29,16 @@ class MissionQueueCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
-    final borderColor = isCompleted
+    final programmeColor = isCompleted
+        ? tokens.statusSuccess
+        : _programmeColor(item);
+    final tierBorderColor = isCompleted
         ? tokens.statusSuccess
         : _borderColorForTier(item.tier, tokens);
-    final avatarColor = _avatarColorForProgramme(item, tokens);
-    final (actionLabel, actionBg, actionFg) = isCompleted
-        ? ('Done', tokens.statusSuccess.withValues(alpha: 0.15), tokens.statusSuccess)
-        : _statusPillStyle(item.tier, tokens);
+    final hasTierBorder = tierBorderColor != const Color(0xFFE5E7EB);
+    final (dotLabel, dotColor) = isCompleted
+        ? ('Done', tokens.statusSuccess)
+        : _statusDotStyle(item.tier, tokens);
 
     return Opacity(
       opacity: isCompleted ? 0.6 : 1.0,
@@ -46,188 +49,236 @@ class MissionQueueCard extends StatelessWidget {
         child: Semantics(
           label: 'View patient ${item.patientName}',
           button: true,
-          child: Material(
-          color: tokens.cardSurface,
-          borderRadius: BorderRadius.circular(compact ? LeapfrogColors.radiusLg : 12),
-          child: InkWell(
-            key: const Key('visit_queue_card_tap'),
-            onTap: isCompleted
-                ? () => ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          MissionDashboardStrings.completedVisitToast(
-                              item.patientName),
-                        ),
-                        duration: const Duration(seconds: 2),
-                      ),
-                    )
-                : onTap,
-            borderRadius: BorderRadius.circular(compact ? LeapfrogColors.radiusLg : 12),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(compact ? LeapfrogColors.radiusLg : 12),
-                border: Border(
-                  left: BorderSide(color: borderColor, width: 4),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              color: tokens.cardSurface,
+              boxShadow: [
+                // Subtle programme-colour glow on the left
+                BoxShadow(
+                  color: programmeColor.withValues(alpha: 0.22),
+                  offset: const Offset(-5, 0),
+                  blurRadius: 12,
+                  spreadRadius: 0,
                 ),
-              ),
-              padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
-              child: Row(
-                children: [
-                  // Avatar colour-coded by programme (pink=ANC, yellow=NCD)
-                  CircleAvatar(
-                    radius: 22,
-                    backgroundColor: isCompleted
-                        ? tokens.statusSuccess.withValues(alpha: 0.18)
-                        : avatarColor.withValues(alpha: 0.15),
-                    child: isCompleted
-                        ? Icon(
-                            Icons.check,
-                            color: tokens.statusSuccess,
-                            size: 24,
+                // Standard card drop shadow
+                BoxShadow(
+                  color: const Color(0xFF000000).withValues(alpha: 0.06),
+                  offset: const Offset(0, 2),
+                  blurRadius: 6,
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              child: InkWell(
+                key: const Key('visit_queue_card_tap'),
+                onTap: isCompleted
+                    ? () => ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              MissionDashboardStrings.completedVisitToast(
+                                  item.patientName),
+                            ),
+                            duration: const Duration(seconds: 2),
+                          ),
+                        )
+                    : onTap,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: hasTierBorder
+                        ? Border(
+                            left: BorderSide(color: tierBorderColor, width: 4),
                           )
-                        : Text(
-                            _initials(item.patientName),
-                            style: TextStyle(
-                              color: isCompleted
-                                  ? tokens.statusSuccess
-                                  : avatarColor,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 14,
+                        : Border(
+                            left: BorderSide(
+                              color: programmeColor.withValues(alpha: 0.5),
+                              width: 3,
                             ),
                           ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                item.patientName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w800,
-                                  color: isCompleted
-                                      ? tokens.textMuted
-                                      : tokens.textPrimary,
-                                  decoration: isCompleted
-                                      ? TextDecoration.lineThrough
-                                      : null,
-                                ),
-                              ),
-                            ),
-                            if (isCompleted)
-                              Container(
-                                margin: const EdgeInsets.only(left: 8),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: tokens.statusSuccess.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.check_circle,
-                                      size: 12,
-                                      color: tokens.statusSuccess,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      'Visited',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w700,
-                                        color: tokens.statusSuccess,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        MissionReasonBadge(item: item),
-                        if (item.drivers.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          _DriverChip(
-                            label: MissionDashboardStrings
-                                .driverLabel(item.drivers.first),
-                            color: borderColor,
-                          ),
-                        ],
-                        const SizedBox(height: 6),
-                        Text(
-                          _subtitle(item),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: tokens.textMuted,
-                          ),
-                        ),
-                      ],
+                  padding: const EdgeInsets.fromLTRB(13, 13, 12, 13),
+                  child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // ── Avatar ──────────────────────────────────────────
+                    _ProgrammeAvatar(
+                      item: item,
+                      isCompleted: isCompleted,
+                      avatarColor: programmeColor,
+                      tokens: tokens,
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  if (!isCompleted && showActionButton)
-                    Semantics(
-                      label: 'Start visit for ${item.patientName}',
-                      button: true,
-                      child: Material(
-                      color: actionBg,
-                      borderRadius: BorderRadius.circular(20),
-                      child: InkWell(
-                        key: const Key('visit_queue_card_action_tap'),
-                        borderRadius: BorderRadius.circular(20),
-                        onTap: onAction,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
-                          child: Text(
-                            actionLabel,
+                    const SizedBox(width: 12),
+
+                    // ── Content ──────────────────────────────────────────
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Row 1: Name
+                          Text(
+                            item.patientName,
                             style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: actionFg,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: isCompleted
+                                  ? tokens.textMuted
+                                  : tokens.textPrimary,
+                              decoration: isCompleted
+                                  ? TextDecoration.lineThrough
+                                  : null,
                             ),
                           ),
-                        ),
+                          const SizedBox(height: 4),
+
+                          // Row 2: Service badge
+                          if (isCompleted)
+                            _VisitedBadge(tokens: tokens)
+                          else
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: MissionReasonBadge(item: item),
+                            ),
+                          const SizedBox(height: 5),
+
+                          // Row 2: Age · Village
+                          _MetaLine(item: item, tokens: tokens),
+                          const SizedBox(height: 3),
+
+                          // Row 3: Programme registered (emoji + label)
+                          _ProgrammeLine(item: item, tokens: tokens),
+                        ],
                       ),
                     ),
-                    )
-                  else if (isCompleted)
-                    Icon(
-                      Icons.check_circle_rounded,
-                      color: tokens.statusSuccess,
-                      size: 28,
-                    ),
-                ],
+                    const SizedBox(width: 10),
+
+                    // ── Status dot + label ───────────────────────────────
+                    _StatusDot(label: dotLabel, color: dotColor),
+                  ],
+                ),
               ),
             ),
           ),
-          ),
         ),
+      ),
+    ),
+  );
+  }
+
+
+  /// Programme accent colour — drives avatar, left shadow, and soft border.
+  static Color _programmeColor(MissionQueueItem item) {
+    if (item.programmes.contains(Programme.anc) ||
+        item.programmes.contains(Programme.pnc)) {
+      return const Color(0xFF831843); // deep rose — pregnancy
+    }
+    if (item.programmes.contains(Programme.imci) ||
+        item.programmes.contains(Programme.epi)) {
+      return const Color(0xFF1B2B5E); // navy — child / immunisation
+    }
+    if (item.programmes.contains(Programme.ncd)) {
+      return const Color(0xFF854F0B); // deep amber — NCD
+    }
+    if (item.programmes.contains(Programme.tb)) {
+      return AppColors.aiPurple;
+    }
+    return const Color(0xFF6B7280); // grey — unenrolled / unknown
+  }
+
+  /// Tier border overrides programme color for urgent states (overdue / CCE).
+  Color _borderColorForTier(DashboardTier tier, LeapfrogColors tokens) {
+    if (tier == DashboardTier.overdue) return AppColors.statusWarning;
+    if (tier == DashboardTier.critical) {
+      final cceOrDanger = item.drivers.any((d) =>
+          d == 'sla-breached' ||
+          d == 'danger-sign' ||
+          d == 'stroke-sign' ||
+          d == 'eclampsia');
+      return cceOrDanger ? tokens.statusCritical : const Color(0xFFE5E7EB);
+    }
+    return const Color(0xFFE5E7EB);
+  }
+
+  /// Status dot style: (label, dotColor) keyed by tier.
+  (String, Color) _statusDotStyle(DashboardTier tier, LeapfrogColors tokens) {
+    switch (tier) {
+      case DashboardTier.critical:
+        return (MissionDashboardStrings.statusPillForTier(tier), tokens.statusCritical);
+      case DashboardTier.overdue:
+        return (MissionDashboardStrings.statusPillForTier(tier), AppColors.statusWarning);
+      case DashboardTier.dueToday:
+        return (MissionDashboardStrings.statusPillForTier(tier), tokens.brandNavy);
+      case DashboardTier.thisWeek:
+        return (MissionDashboardStrings.statusPillForTier(tier), tokens.textMuted);
+      case DashboardTier.upcoming:
+        return (MissionDashboardStrings.statusPillForTier(tier), tokens.textMuted);
+    }
+  }
+}
+
+// ─── Avatar ──────────────────────────────────────────────────────────────────
+
+class _ProgrammeAvatar extends StatelessWidget {
+  const _ProgrammeAvatar({
+    required this.item,
+    required this.isCompleted,
+    required this.avatarColor,
+    required this.tokens,
+  });
+
+  final MissionQueueItem item;
+  final bool isCompleted;
+  final Color avatarColor;
+  final LeapfrogColors tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    if (isCompleted) {
+      return CircleAvatar(
+        radius: 22,
+        backgroundColor: tokens.statusSuccess.withValues(alpha: 0.15),
+        child: Icon(Icons.check, color: tokens.statusSuccess, size: 22),
+      );
+    }
+    return CircleAvatar(
+      radius: 22,
+      backgroundColor: avatarColor.withValues(alpha: 0.15),
+      child: Icon(
+        _iconForProgramme(item.programmes),
+        color: avatarColor,
+        size: 22,
       ),
     );
   }
 
-  static String _initials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty || parts.first.isEmpty) return '?';
-    if (parts.length == 1) return parts.first[0].toUpperCase();
-    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+  static IconData _iconForProgramme(Set<Programme> programmes) {
+    if (programmes.contains(Programme.anc) ||
+        programmes.contains(Programme.pnc)) {
+      return Icons.pregnant_woman_rounded;
+    }
+    if (programmes.contains(Programme.imci) ||
+        programmes.contains(Programme.epi)) {
+      return Icons.child_care_rounded;
+    }
+    if (programmes.contains(Programme.ncd)) return Icons.monitor_heart_rounded;
+    if (programmes.contains(Programme.tb)) return Icons.air_rounded;
+    return Icons.person_rounded;
   }
+}
 
-  String _subtitle(MissionQueueItem item) {
+// ─── Meta line: Age · Village ────────────────────────────────────────────────
+
+class _MetaLine extends StatelessWidget {
+  const _MetaLine({required this.item, required this.tokens});
+
+  final MissionQueueItem item;
+  final LeapfrogColors tokens;
+
+  @override
+  Widget build(BuildContext context) {
     final parts = <String>[];
     if (item.age != null) parts.add(WorklistStrings.ageFmt(item.age!));
     final house = item.householdDisplay;
@@ -235,96 +286,81 @@ class MissionQueueCard extends StatelessWidget {
     if (item.village != null && item.village!.isNotEmpty) {
       parts.add(item.village!);
     }
+    if (parts.isEmpty) return const SizedBox.shrink();
+    return Text(
+      parts.join(' · '),
+      style: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+        color: tokens.textMuted,
+      ),
+    );
+  }
+}
+
+// ─── Programme line: emoji + label ───────────────────────────────────────────
+
+class _ProgrammeLine extends StatelessWidget {
+  const _ProgrammeLine({required this.item, required this.tokens});
+
+  final MissionQueueItem item;
+  final LeapfrogColors tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    final knownProgrammes = item.programmes
+        .where((p) => p != Programme.unknown)
+        .toList();
+
+    if (knownProgrammes.isEmpty) {
+      return const Text(
+        WorklistStrings.selectService,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: AppColors.textMuted,
+        ),
+      );
+    }
+
+    final programmeName = knownProgrammes
+        .map((p) => _displayName(p))
+        .join(' · ');
     final diagnosis = item.diagnosisLabel;
-    if (diagnosis != null && diagnosis.isNotEmpty) {
-      parts.add('${item.programmeEmoji} $diagnosis');
-    } else if (item.programmes.isNotEmpty &&
-        !item.programmes.every((p) => p == Programme.unknown)) {
-      parts.add(item.programmeEmoji);
-    }
-    if (parts.isEmpty) return item.reason;
-    return parts.join(' · ');
+    final label = (diagnosis != null && diagnosis.isNotEmpty)
+        ? '${item.programmeEmoji}  $programmeName · $diagnosis'
+        : '${item.programmeEmoji}  $programmeName';
+
+    return Text(
+      label,
+      style: const TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+        color: AppColors.textMid,
+      ),
+    );
   }
 
-  /// Border colour rule — Apon Sushashthya V1 §2.6.
-  ///
-  /// Default: neutral grey (#E5E7EB) — reduces visual noise on routine
-  /// visits. Red border applies ONLY to Band 1 cards when a CCE alert is
-  /// active (driver `sla-breached`) OR a clinical danger sign is present
-  /// (driver `danger-sign`, `stroke-sign`, or `eclampsia`). A Band 1 patient
-  /// flagged purely on labs (severe anaemia, BP ≥ 160/110) without a
-  /// danger-sign driver keeps the grey border so the worklist stays calm.
-  Color _borderColorForTier(DashboardTier tier, LeapfrogColors tokens) {
-    if (tier != DashboardTier.critical) return AppColors.border;
-    final drivers = item.drivers;
-    final cceOrDanger = drivers.contains('sla-breached') ||
-        drivers.contains('danger-sign') ||
-        drivers.contains('stroke-sign') ||
-        drivers.contains('eclampsia');
-    return cceOrDanger ? tokens.statusCritical : AppColors.border;
-  }
-
-  /// Programme-coded avatar colour.
-  static Color _avatarColorForProgramme(
-      MissionQueueItem item, LeapfrogColors tokens) {
-    if (item.programmes.contains(Programme.anc) ||
-        item.programmes.contains(Programme.pnc)) {
-      return tokens.brandPink;
-    }
-    if (item.programmes.contains(Programme.ncd)) {
-      return AppColors.statusWarning;
-    }
-    if (item.programmes.contains(Programme.imci) ||
-        item.programmes.contains(Programme.epi)) {
-      return AppColors.statusInfo;
-    }
-    if (item.programmes.contains(Programme.tb)) {
-      return AppColors.aiPurple;
-    }
-    return tokens.textMuted;
-  }
-
-  /// Status pill style: (label, background, foreground) keyed by tier.
-  (String, Color, Color) _statusPillStyle(
-    DashboardTier tier,
-    LeapfrogColors tokens,
-  ) {
-    switch (tier) {
-      case DashboardTier.critical:
-        return (
-          MissionDashboardStrings.statusPillForTier(tier),
-          tokens.statusCritical,
-          Colors.white,
-        );
-      case DashboardTier.overdue:
-        return (
-          MissionDashboardStrings.statusPillForTier(tier),
-          AppColors.statusWarning,
-          Colors.white,
-        );
-      case DashboardTier.dueToday:
-        return (
-          MissionDashboardStrings.statusPillForTier(tier),
-          tokens.brandNavy,
-          Colors.white,
-        );
-      case DashboardTier.thisWeek:
-        return (
-          MissionDashboardStrings.statusPillForTier(tier),
-          tokens.cardSurfaceMuted,
-          tokens.brandNavy,
-        );
-      case DashboardTier.upcoming:
-        return (
-          MissionDashboardStrings.statusPillForTier(tier),
-          tokens.cardSurfaceMuted,
-          tokens.textMuted,
-        );
+  static String _displayName(Programme p) {
+    switch (p) {
+      case Programme.anc:            return WorklistStrings.programmeAnc;
+      case Programme.pnc:            return WorklistStrings.programmePnc;
+      case Programme.ncd:            return WorklistStrings.programmeNcd;
+      case Programme.imci:           return WorklistStrings.programmeImci;
+      case Programme.tb:             return WorklistStrings.programmeTb;
+      case Programme.epi:            return WorklistStrings.programmeEpi;
+      case Programme.nutrition:      return WorklistStrings.programmeNutrition;
+      case Programme.familyPlanning: return WorklistStrings.programmeFamilyPlanning;
+      case Programme.cataract:       return WorklistStrings.programmeCataract;
+      case Programme.eyeCare:        return WorklistStrings.programmeEyeCare;
+      case Programme.unknown:        return '';
     }
   }
 }
 
-/// Reason badge for mission queue items.
+// ─── Reason badge ─────────────────────────────────────────────────────────────
+
+/// Service-needed pill shown next to patient name.
 class MissionReasonBadge extends StatelessWidget {
   const MissionReasonBadge({super.key, required this.item});
 
@@ -346,7 +382,7 @@ class MissionReasonBadge extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: 10,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w700,
           color: fg,
         ),
       ),
@@ -367,35 +403,73 @@ class MissionReasonBadge extends StatelessWidget {
   }
 }
 
-/// Small chip rendering the first driver tag on a [MissionQueueItem] so the
-/// SK can see *why* the card landed in its tier (e.g. `'Referral pending
-/// arrival'`, `'Neonate (under 28 days)'`, `'Lost-to-follow-up streak'`).
-/// Borrowed color from the card's border so it visually inherits the tier
-/// urgency cue.
-class _DriverChip extends StatelessWidget {
-  const _DriverChip({required this.label, required this.color});
+// ─── Status dot ───────────────────────────────────────────────────────────────
+
+/// Dot + label status indicator.
+class _StatusDot extends StatelessWidget {
+  const _StatusDot({required this.label, required this.color});
 
   final String label;
   final Color color;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withValues(alpha: 0.35), width: 0.8),
-      ),
-      child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-          color: color,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+          ],
         ),
+      ],
+    );
+  }
+}
+
+// ─── Visited badge ────────────────────────────────────────────────────────────
+
+class _VisitedBadge extends StatelessWidget {
+  const _VisitedBadge({required this.tokens});
+  final LeapfrogColors tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: tokens.statusSuccess.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_circle, size: 11, color: tokens.statusSuccess),
+          const SizedBox(width: 3),
+          Text(
+            'Visited',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: tokens.statusSuccess,
+            ),
+          ),
+        ],
       ),
     );
   }

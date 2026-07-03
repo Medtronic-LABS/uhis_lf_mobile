@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -496,13 +497,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // Check if a refresh is pending (e.g., assessment completed while on another tab)
     _checkPendingRefresh();
 
-    return Scaffold(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+      ),
+      child: Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
       // Pink "+ Enrol new" FAB — fixed bottom-right per spec §2.1. Opens
       // QR enrolment flow when the route lands; for now surfaces a snackbar
       // so the SK gets clear feedback rather than silent taps.
       floatingActionButton: _EnrolNewFab(),
       body: SafeArea(
+        top: false,
         bottom: false,
         child: Column(
           children: [
@@ -696,16 +704,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             child: MissionQueueCard(
                               item: item,
                               compact: true,
-                              onTap: () {
-                                final pid = item.patientId;
-                                if (pid != null && pid.isNotEmpty &&
-                                    pid != 'household' && pid != 'households') {
-                                  context.go('/patients/$pid',
-                                      extra: {'name': item.patientName});
-                                } else if (item.referralId != null) {
-                                  context.push('/referral/${item.referralId}');
-                                }
-                              },
+                              onTap: () => _startVisitFromQueue(item),
                               onAction: () => _startVisitFromQueue(item),
                             ),
                           ));
@@ -741,6 +740,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -1080,9 +1080,10 @@ class _DashboardHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    final topPadding = MediaQuery.of(context).padding.top;
     return Container(
       color: tokens.brandNavy,
-      padding: const EdgeInsets.fromLTRB(16, 12, 8, 14),
+      padding: EdgeInsets.fromLTRB(16, topPadding + 10, 8, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1138,7 +1139,7 @@ class _DashboardHeader extends StatelessWidget {
               settingsMenu,
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           const GlobalSearchBar(),
         ],
       ),

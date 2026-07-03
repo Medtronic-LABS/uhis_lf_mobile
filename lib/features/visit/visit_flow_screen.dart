@@ -174,7 +174,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: _step == 0,
+      canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
         if (_step > 0) {
@@ -304,13 +304,18 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     }
   }
 
-  Future<bool?> _confirmExit() async {
-    return showDialog<bool>(
-      context: context,
-      barrierColor: Theme.of(context).colorScheme.scrim,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.card)),
-        insetPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.h8xl, vertical: AppSpacing.h6xl),
+  Future<bool?> _confirmExit() => showLeaveVisitDialog(context);
+}
+
+/// Shared leave-visit confirmation dialog.
+/// Returns true if the user chose to leave, false/null to stay.
+Future<bool?> showLeaveVisitDialog(BuildContext context) {
+  return showDialog<bool>(
+    context: context,
+    barrierColor: Colors.black54,
+    builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(AppSpacing.h5xl, 22, AppSpacing.h5xl, AppSpacing.xxxl),
           child: Column(
@@ -400,7 +405,6 @@ class _VisitFlowState extends State<VisitFlowScreen> {
         ),
       ),
     );
-  }
 }
 
 /// Visit flow header — single navy header that replaces every per-screen
