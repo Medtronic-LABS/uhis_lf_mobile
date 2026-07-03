@@ -49,7 +49,7 @@ class MissionQueueCard extends StatelessWidget {
           button: true,
           child: Material(
             color: tokens.cardSurface,
-            borderRadius: BorderRadius.circular(compact ? LeapfrogColors.radiusLg : 12),
+            borderRadius: BorderRadius.circular(12),
             child: InkWell(
               key: const Key('visit_queue_card_tap'),
               onTap: isCompleted
@@ -63,34 +63,24 @@ class MissionQueueCard extends StatelessWidget {
                         ),
                       )
                   : onTap,
-              borderRadius: BorderRadius.circular(compact ? LeapfrogColors.radiusLg : 12),
+              borderRadius: BorderRadius.circular(12),
               child: Container(
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(compact ? LeapfrogColors.radiusLg : 12),
+                  borderRadius: BorderRadius.circular(12),
                   border: hasBorder
                       ? Border(left: BorderSide(color: borderColor, width: 4))
-                      : null,
+                      : Border.all(color: const Color(0xFFE5E7EB), width: 1),
                 ),
-                padding: EdgeInsets.fromLTRB(hasBorder ? 14 : 16, 12, 12, 12),
+                padding: EdgeInsets.fromLTRB(hasBorder ? 12 : 14, 13, 12, 13),
                 child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     // ── Avatar ──────────────────────────────────────────
-                    CircleAvatar(
-                      radius: 22,
-                      backgroundColor: isCompleted
-                          ? tokens.statusSuccess.withValues(alpha: 0.18)
-                          : avatarColor.withValues(alpha: 0.15),
-                      child: isCompleted
-                          ? Icon(Icons.check, color: tokens.statusSuccess, size: 22)
-                          : Text(
-                              _initials(item.patientName),
-                              style: TextStyle(
-                                color: avatarColor,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 14,
-                              ),
-                            ),
+                    _ProgrammeAvatar(
+                      item: item,
+                      isCompleted: isCompleted,
+                      avatarColor: avatarColor,
+                      tokens: tokens,
                     ),
                     const SizedBox(width: 12),
 
@@ -99,7 +89,7 @@ class MissionQueueCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Name + reason badge inline
+                          // Row 1: Name + service badge
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
@@ -109,8 +99,8 @@ class MissionQueueCard extends StatelessWidget {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w800,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
                                     color: isCompleted
                                         ? tokens.textMuted
                                         : tokens.textPrimary,
@@ -128,28 +118,20 @@ class MissionQueueCard extends StatelessWidget {
                             ],
                           ),
                           const SizedBox(height: 5),
-                          // Subtitle: age · house · village · programme emoji
-                          Text(
-                            _subtitle(item),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: tokens.textMuted,
-                              height: 1.4,
-                            ),
-                          ),
+
+                          // Row 2: Age · Village
+                          _MetaLine(item: item, tokens: tokens),
+                          const SizedBox(height: 3),
+
+                          // Row 3: Programme registered (emoji + label)
+                          _ProgrammeLine(item: item, tokens: tokens),
                         ],
                       ),
                     ),
                     const SizedBox(width: 10),
 
                     // ── Status dot + label ───────────────────────────────
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: _StatusDot(label: dotLabel, color: dotColor),
-                    ),
+                    _StatusDot(label: dotLabel, color: dotColor),
                   ],
                 ),
               ),
@@ -160,36 +142,7 @@ class MissionQueueCard extends StatelessWidget {
     );
   }
 
-  static String _initials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty || parts.first.isEmpty) return '?';
-    if (parts.length == 1) return parts.first[0].toUpperCase();
-    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
-  }
-
-  String _subtitle(MissionQueueItem item) {
-    final parts = <String>[];
-    if (item.age != null) parts.add(WorklistStrings.ageFmt(item.age!));
-    final house = item.householdDisplay;
-    if (house.isNotEmpty) parts.add(house);
-    if (item.village != null && item.village!.isNotEmpty) {
-      parts.add(item.village!);
-    }
-    final diagnosis = item.diagnosisLabel;
-    if (diagnosis != null && diagnosis.isNotEmpty) {
-      parts.add('${item.programmeEmoji} $diagnosis');
-    } else if (item.programmes.isNotEmpty &&
-        !item.programmes.every((p) => p == Programme.unknown)) {
-      parts.add(item.programmeEmoji);
-    }
-    if (parts.isEmpty) return item.reason;
-    return parts.join(' · ');
-  }
-
-  /// Border colour — left accent shown only for urgent tiers.
-  ///
-  /// Overdue → amber. Critical + danger/CCE driver → red. All others →
-  /// neutral grey (visually absent) so routine cards stay calm.
+  /// Border colour — left accent shown only for urgent/new tiers.
   Color _borderColorForTier(DashboardTier tier, LeapfrogColors tokens) {
     if (tier == DashboardTier.overdue) return AppColors.statusWarning;
     if (tier == DashboardTier.critical) {
@@ -240,7 +193,123 @@ class MissionQueueCard extends StatelessWidget {
   }
 }
 
-/// Reason badge for mission queue items.
+// ─── Avatar ──────────────────────────────────────────────────────────────────
+
+class _ProgrammeAvatar extends StatelessWidget {
+  const _ProgrammeAvatar({
+    required this.item,
+    required this.isCompleted,
+    required this.avatarColor,
+    required this.tokens,
+  });
+
+  final MissionQueueItem item;
+  final bool isCompleted;
+  final Color avatarColor;
+  final LeapfrogColors tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    if (isCompleted) {
+      return CircleAvatar(
+        radius: 22,
+        backgroundColor: tokens.statusSuccess.withValues(alpha: 0.15),
+        child: Icon(Icons.check, color: tokens.statusSuccess, size: 22),
+      );
+    }
+    return CircleAvatar(
+      radius: 22,
+      backgroundColor: avatarColor.withValues(alpha: 0.15),
+      child: Icon(
+        _iconForProgramme(item.programmes),
+        color: avatarColor,
+        size: 22,
+      ),
+    );
+  }
+
+  static IconData _iconForProgramme(Set<Programme> programmes) {
+    if (programmes.contains(Programme.anc) ||
+        programmes.contains(Programme.pnc)) {
+      return Icons.pregnant_woman_rounded;
+    }
+    if (programmes.contains(Programme.imci) ||
+        programmes.contains(Programme.epi)) {
+      return Icons.child_care_rounded;
+    }
+    if (programmes.contains(Programme.ncd)) return Icons.monitor_heart_rounded;
+    if (programmes.contains(Programme.tb)) return Icons.air_rounded;
+    return Icons.person_rounded;
+  }
+}
+
+// ─── Meta line: Age · Village ────────────────────────────────────────────────
+
+class _MetaLine extends StatelessWidget {
+  const _MetaLine({required this.item, required this.tokens});
+
+  final MissionQueueItem item;
+  final LeapfrogColors tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    final parts = <String>[];
+    if (item.age != null) parts.add(WorklistStrings.ageFmt(item.age!));
+    final house = item.householdDisplay;
+    if (house.isNotEmpty) parts.add(house);
+    if (item.village != null && item.village!.isNotEmpty) {
+      parts.add(item.village!);
+    }
+    if (parts.isEmpty) return const SizedBox.shrink();
+    return Text(
+      parts.join(' · '),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+        color: tokens.textMuted,
+      ),
+    );
+  }
+}
+
+// ─── Programme line: emoji + label ───────────────────────────────────────────
+
+class _ProgrammeLine extends StatelessWidget {
+  const _ProgrammeLine({required this.item, required this.tokens});
+
+  final MissionQueueItem item;
+  final LeapfrogColors tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    final diagnosis = item.diagnosisLabel;
+    final hasContent = (diagnosis != null && diagnosis.isNotEmpty) ||
+        (item.programmes.isNotEmpty &&
+            !item.programmes.every((p) => p == Programme.unknown));
+    if (!hasContent) return const SizedBox.shrink();
+
+    final label = (diagnosis != null && diagnosis.isNotEmpty)
+        ? '${item.programmeEmoji}  $diagnosis'
+        : item.programmeEmoji;
+
+    return Text(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+        color: AppColors.textMid,
+      ),
+    );
+  }
+}
+
+// ─── Reason badge ─────────────────────────────────────────────────────────────
+
+/// Service-needed pill shown next to patient name.
 class MissionReasonBadge extends StatelessWidget {
   const MissionReasonBadge({super.key, required this.item});
 
@@ -262,7 +331,7 @@ class MissionReasonBadge extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: 10,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w700,
           color: fg,
         ),
       ),
@@ -283,8 +352,9 @@ class MissionReasonBadge extends StatelessWidget {
   }
 }
 
-/// Dot + label status indicator (replaces filled pill).
-/// Matches the Apon Sushashthya V1 worklist design.
+// ─── Status dot ───────────────────────────────────────────────────────────────
+
+/// Dot + label status indicator.
 class _StatusDot extends StatelessWidget {
   const _StatusDot({required this.label, required this.color});
 
@@ -293,29 +363,36 @@ class _StatusDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        Container(
-          width: 7,
-          height: 7,
-          decoration: BoxDecoration(shape: BoxShape.circle, color: color),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: color,
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+          ],
         ),
       ],
     );
   }
 }
 
-/// "Visited" badge shown on completed cards.
+// ─── Visited badge ────────────────────────────────────────────────────────────
+
 class _VisitedBadge extends StatelessWidget {
   const _VisitedBadge({required this.tokens});
   final LeapfrogColors tokens;
