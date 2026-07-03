@@ -1,9 +1,8 @@
 /// Household follow-up prompt shown after accepting the Step 3 care plan.
 ///
-/// Lets the SK quickly check whether other household members need care
-/// while they are already at the household. Tapping a patient card navigates
-/// to [PatientContextScreen] via [onViewPatient]; the "Done" button fires
-/// [onDone] which takes the SK to the dashboard or task list.
+/// Lets the SK check whether other household members need care while they
+/// are already at the household. Uses [WorklistCard] — same card widget as
+/// the main worklist — so the UI is immediately familiar.
 library;
 
 import 'package:flutter/material.dart';
@@ -15,27 +14,9 @@ import '../../core/db/patient_programmes_dao.dart';
 import '../../core/models/patient.dart';
 import '../../core/models/programme.dart';
 import '../../core/models/risk.dart';
+import '../../core/models/worklist_entry.dart';
 import '../../core/theme/app_theme.dart';
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-typedef _MemberEntry = ({Patient patient, Set<Programme> programmes});
-
-String _programmeLabel(Programme p) => switch (p) {
-      Programme.anc => 'ANC Check',
-      Programme.pnc => 'PNC Visit',
-      Programme.ncd => 'NCD Check',
-      Programme.imci => 'Child Health',
-      Programme.tb => 'TB Follow-up',
-      Programme.epi => 'Immunisation',
-      Programme.nutrition => 'Nutrition',
-      Programme.familyPlanning => 'Family Planning',
-      Programme.cataract => 'Cataract',
-      Programme.eyeCare => 'Eye Care',
-      _ => p.wireTag,
-    };
-
-// ── Screen ────────────────────────────────────────────────────────────────────
+import '../worklist/widgets/worklist_card.dart';
 
 class HouseholdFollowUpScreen extends StatefulWidget {
   const HouseholdFollowUpScreen({
@@ -61,7 +42,7 @@ class HouseholdFollowUpScreen extends StatefulWidget {
 }
 
 class _HouseholdFollowUpScreenState extends State<HouseholdFollowUpScreen> {
-  List<_MemberEntry>? _entries;
+  List<WorklistEntry>? _entries;
 
   @override
   void initState() {
@@ -80,24 +61,40 @@ class _HouseholdFollowUpScreenState extends State<HouseholdFollowUpScreen> {
         .where((p) => p.isActive != false)
         .toList();
 
-    final progMap = await progDao.programmesForMany(
-      members.map((p) => p.id).toList(),
-    );
+    final ids = members.map((p) => p.id).toList();
+    final progMap = await progDao.programmesForMany(ids);
 
-    final entries = members
-        .map((p) => (patient: p, programmes: progMap[p.id] ?? <Programme>{}))
-        .toList()
+    final entries = members.map((p) {
+      final progs = progMap[p.id] ?? <Programme>{};
+      final due = p.nextDueAt != null
+          ? DateTime.fromMillisecondsSinceEpoch(p.nextDueAt!)
+          : null;
+      final last = p.lastVisitAt != null
+          ? DateTime.fromMillisecondsSinceEpoch(p.lastVisitAt!)
+          : null;
+      return WorklistEntry(
+        patientId: p.id,
+        displayName: p.name ?? '—',
+        age: p.age,
+        householdNo: p.householdId,
+        programmes: progs,
+        band: p.riskBand ?? Band.band4,
+        modifier: p.riskModifier ?? Modifier.none,
+        reasons: p.riskReasons,
+        nextDueAt: due,
+        lastVisitAt: last,
+      );
+    }).toList()
       ..sort(_byUrgency);
 
     if (mounted) setState(() => _entries = entries);
   }
 
-  static int _byUrgency(_MemberEntry a, _MemberEntry b) {
-    final bandA = a.patient.riskBand?.index ?? Band.band4.index;
-    final bandB = b.patient.riskBand?.index ?? Band.band4.index;
-    if (bandA != bandB) return bandA.compareTo(bandB);
-    final dueA = a.patient.nextDueAt ?? double.maxFinite.toInt();
-    final dueB = b.patient.nextDueAt ?? double.maxFinite.toInt();
+  static int _byUrgency(WorklistEntry a, WorklistEntry b) {
+    final bandCmp = a.band.index.compareTo(b.band.index);
+    if (bandCmp != 0) return bandCmp;
+    final dueA = a.nextDueAt?.millisecondsSinceEpoch ?? double.maxFinite.toInt();
+    final dueB = b.nextDueAt?.millisecondsSinceEpoch ?? double.maxFinite.toInt();
     return dueA.compareTo(dueB);
   }
 
@@ -140,14 +137,12 @@ class _HouseholdFollowUpScreenState extends State<HouseholdFollowUpScreen> {
                 ? const Center(child: CircularProgressIndicator())
                 : entries.isEmpty
                     ? _EmptyState(onDone: widget.onDone)
-                    : ListView.separated(
-                        padding: const EdgeInsets.all(16),
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
                         itemCount: entries.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 10),
-                        itemBuilder: (_, i) => _MemberCard(
+                        itemBuilder: (_, i) => WorklistCard(
                           entry: entries[i],
-                          onView: () =>
-                              widget.onViewPatient(entries[i].patient.id),
+                          onTap: () => widget.onViewPatient(entries[i].patientId),
                         ),
                       ),
           ),
@@ -213,198 +208,6 @@ class _EmptyState extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ── Member card ───────────────────────────────────────────────────────────────
-
-class _MemberCard extends StatelessWidget {
-  const _MemberCard({required this.entry, required this.onView});
-  final _MemberEntry entry;
-  final VoidCallback onView;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
-    final patient = entry.patient;
-    final programmes = entry.programmes
-        .where((p) => p != Programme.unknown)
-        .toList();
-    final urgencyChip = _urgencyChip(patient);
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: tokens.cardSurface,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: tokens.divider),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Top row: avatar + name/age/urgency + CTA
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor:
-                    _bandColor(patient.riskBand).withValues(alpha: 0.15),
-                child: Text(
-                  (patient.name ?? '?').characters.first.toUpperCase(),
-                  style: TextStyle(
-                    color: _bandColor(patient.riskBand),
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      patient.name ?? '—',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        if (patient.age != null)
-                          Text(
-                            '${patient.age}y',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textMuted,
-                            ),
-                          ),
-                        if (patient.age != null && urgencyChip != null)
-                          const SizedBox(width: 6),
-                        if (urgencyChip != null) urgencyChip,
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              TextButton(
-                onPressed: onView,
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColors.navy,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                ),
-                child: const Text(
-                  HouseholdFollowUpStrings.viewPatient,
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                ),
-              ),
-            ],
-          ),
-
-          // Programme pills — shown when the patient has enrolled programmes
-          if (programmes.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
-              runSpacing: 4,
-              children: programmes
-                  .map((p) => _ProgrammePill(programme: p))
-                  .toList(),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Color _bandColor(Band? band) => switch (band) {
-        Band.band1 => AppColors.rangeCritical,
-        Band.band2 => AppColors.statusWarning,
-        Band.band3 => AppColors.navy,
-        _ => AppColors.textMuted,
-      };
-
-  Widget? _urgencyChip(Patient p) {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final due = p.nextDueAt;
-
-    String? label;
-    Color? bg;
-    Color? fg;
-
-    if (p.riskBand == Band.band1 || p.riskBand == Band.band2) {
-      label = HouseholdFollowUpStrings.urgentLabel;
-      bg = AppColors.rangeCritical.withValues(alpha: 0.12);
-      fg = AppColors.rangeCritical;
-    } else if (due != null && due < now) {
-      label = HouseholdFollowUpStrings.overdue;
-      bg = AppColors.statusWarning.withValues(alpha: 0.12);
-      fg = AppColors.statusWarning;
-    } else if (due != null &&
-        due < now + const Duration(days: 1).inMilliseconds) {
-      label = HouseholdFollowUpStrings.dueToday;
-      bg = AppColors.navy.withValues(alpha: 0.10);
-      fg = AppColors.navy;
-    } else if (due != null &&
-        due < now + const Duration(days: 7).inMilliseconds) {
-      label = HouseholdFollowUpStrings.dueSoon;
-      bg = AppColors.border;
-      fg = AppColors.textMuted;
-    }
-
-    if (label == null || bg == null || fg == null) return null;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: fg),
-      ),
-    );
-  }
-}
-
-// ── Programme pill ────────────────────────────────────────────────────────────
-
-class _ProgrammePill extends StatelessWidget {
-  const _ProgrammePill({required this.programme});
-  final Programme programme;
-
-  Color _pillColor(Programme p) => switch (p) {
-        Programme.anc || Programme.pnc => AppColors.ancHeader,
-        Programme.ncd => AppColors.ncdHeader,
-        Programme.imci => AppColors.imciHeader,
-        Programme.tb => AppColors.tbHeader,
-        _ => AppColors.navy,
-      };
-
-  @override
-  Widget build(BuildContext context) {
-    final color = _pillColor(programme);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Text(
-        _programmeLabel(programme),
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: color,
-        ),
       ),
     );
   }
