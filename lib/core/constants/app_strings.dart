@@ -15,6 +15,8 @@
 ///   * Keep the rendered value stable — e2e selectors match on these strings.
 library;
 
+import 'package:intl/intl.dart';
+
 import '../models/dashboard_tier.dart';
 
 /// App-wide identity strings.
@@ -184,6 +186,40 @@ abstract final class SettingsStrings {
   static const String lightMode = 'Light Mode';
   static const String systemMode = 'System Mode';
   static const String appearance = 'Appearance';
+}
+
+/// Real-Time ASR screen — live streaming transcription + live clinical
+/// extraction against the ai-scribe-service, triggered from Settings.
+abstract final class RealtimeAsrStrings {
+  RealtimeAsrStrings._();
+
+  static const String title = 'Real-Time ASR (Beta)';
+  static const String subtitle =
+      'Live transcript and detected symptoms while you talk. Not saved as a '
+      'visit note — use AI Scribe during the visit for that.';
+  static const String start = 'Start Listening';
+  static const String stop = 'Stop';
+  static const String connecting = 'Connecting…';
+  static const String listening = 'Listening…';
+  static const String stopping = 'Stopping…';
+  static const String idle = 'Idle';
+  static const String transcriptEmpty =
+      'Tap Start Listening and speak — the live transcript appears here.';
+  static const String extractNow = 'Extract Now';
+  static const String extracting = 'Extracting…';
+  static const String symptomsEmpty = 'No extraction yet.';
+  static const String notSupportedOnWeb =
+      'Real-time ASR is not available in the web preview — use the Android '
+      'or iOS app.';
+  static const String micPermissionDenied =
+      'Microphone permission is required for real-time ASR.';
+  static const String diagnosis = 'Diagnosis';
+  static const String bloodPressure = 'Blood Pressure';
+  static const String bloodGlucose = 'Blood Glucose';
+  static const String clinicalNotes = 'Clinical Notes';
+  static const String chiefComplaints = 'Chief Complaints';
+  static const String comorbidities = 'Comorbidities';
+  static const String complications = 'Complications';
 }
 
 /// Global search bar, scopes, result sections, and detail snackbars.
@@ -1168,8 +1204,7 @@ abstract final class ScribeStrings {
   static const String triageConsentDeny = 'Not now';
 
   static const String transcriptionFailed = 'Transcription failed.';
-  static const String pollTimeout =
-      'AI is taking too long. Tap to try again.';
+  static const String pollTimeout = 'AI is taking too long. Tap to try again.';
   static const String pollUnreachable =
       'Could not reach AI Scribe. Tap to try again.';
   static const String recordingNotFinalized =
@@ -1184,13 +1219,31 @@ abstract final class ScribeStrings {
 abstract final class ScribeBannerStrings {
   ScribeBannerStrings._();
 
-  static const String idle = 'AI Scribe — Tap to start listening';
-  static const String idleSub = 'SK talks to family — AI fills the form';
+  static const String idle = 'AI Scribe';
+  static const String idleSub = 'Tap a mode to start';
   static const String recording = 'Recording…';
   static const String uploading = 'Uploading…';
   static const String processing = 'AI processing note…';
   static const String ready = 'AI note ready — tap to review';
   static const String error = 'Upload failed — tap to retry';
+
+  /// Mode-chooser buttons shown only at idle (see [ScribeBanner]).
+  static const String modeAsr = 'ASR';
+  static const String modeOther = 'Other';
+
+  /// Badge shown once the "Other" (standard/batch) mode is active, so it's
+  /// always clear which engine — this or Real-Time ASR — is running.
+  static const String modeOtherBadge = 'OTHER';
+
+  static const String modeGemini = 'Gemini';
+  static const String modeGeminiFull = 'AI Scribe · Gemini';
+  static const String modeAsrFull = 'Live ASR · Sarvam';
+  static const String modeSheetTitle = 'AI Scribe mode';
+  static const String modeGeminiTitle = 'AI Scribe (Gemini)';
+  static const String modeGeminiDesc = 'Records full consultation. AI analyzes after recording ends.';
+  static const String modeAsrTitle = 'Live ASR (Sarvam)';
+  static const String modeAsrDesc = 'Real-time Bengali transcript + live detected symptoms.';
+  static const String modeGeminiDefault = 'Default';
 }
 
 /// Bottom-nav tab labels + placeholder copy.
@@ -2687,6 +2740,13 @@ abstract final class SymptomPickerStrings {
       isFemale
           ? 'Symptoms appear automatically as she talks'
           : 'Symptoms appear automatically as he talks';
+  // Legacy non-gendered variants — kept for the realtime-ASR triage banner
+  // (feat/asr-bruger) which does not thread patient sex into the banner copy.
+  static const String scribeBannerTitle =
+      '🎙 AI Scribe — tap to fill the form by voice';
+  static const String scribeBannerSubtitle =
+      'SK talks to her/him — fields fill automatically';
+  static const String scribeBannerDone = 'Voice capture complete';
   static const String scribeBannerRecording = 'Listening… tap to stop';
   static const String scribeBannerProcessing = 'AI is reviewing the recording';
   static const String scribeBannerTriageProcessing = 'Analysing symptoms…';
@@ -2863,9 +2923,8 @@ abstract final class ProgrammeSelectionStrings {
 
   // ── Review-before-continue sheet ─────────────────────────────────────────
   /// Title — "Review N programme(s)".
-  static String reviewSheetTitle(int count) => count == 1
-      ? 'Review 1 programme'
-      : 'Review $count programmes';
+  static String reviewSheetTitle(int count) =>
+      count == 1 ? 'Review 1 programme' : 'Review $count programmes';
   static const String reviewSheetSubtitle =
       'Confirm the assessments below. You can add or remove before continuing.';
   static const String reviewSheetEmpty =
@@ -3053,6 +3112,43 @@ abstract final class TrainingStrings {
       'Complete modules to earn programme certificates';
 }
 
+/// Micro-coaching pilot strings — three-loop system:
+/// Learn (morning cards + quiz) → Apply (visit-triggered) → Measure (telemetry).
+abstract final class CoachingStrings {
+  CoachingStrings._();
+
+  static const String sectionTodayFocus = "TODAY'S FOCUS";
+  static const String sectionAllModules = 'ALL MODULES';
+  static const String minLabel = 'min';
+  static const String passedLabel = 'Passed';
+  static const String startLabel = 'Start';
+  static const String reviewLabel = 'Review';
+  static const String cardOf = 'of';
+  static const String nextCard = 'Next';
+  static const String prevCard = 'Back';
+  static const String startQuiz = 'Take Quiz';
+  static const String quizTitle = 'Quick Quiz';
+  static const String questionOf = 'Question';
+  static const String checkAnswer = 'Check Answer';
+  static const String nextQuestion = 'Next';
+  static const String quizResult = 'Quiz Complete';
+  static const String quizPassed = 'You passed!';
+  static const String quizFailed = 'Not quite — review the module and try again.';
+  static const String tryAgain = 'Try Again';
+  static const String backToModules = 'Back to Training';
+  static const String rationaleLabel = 'Why?';
+  static const String domainAnc = 'ANC';
+  static const String domainNcd = 'NCD';
+  static const String domainImci = 'IMCI';
+  static const String domainTb = 'TB';
+  static const String domainEpi = 'EPI';
+  static const String domainNutrition = 'Nutrition';
+
+  static String quizScore(int correct, int total) => '$correct / $total correct';
+  static String cardProgress(int current, int total) => '$current of $total';
+  static String questionProgress(int current, int total) => 'Question $current of $total';
+}
+
 /// NCD assessment form copy — spec §5.2.2 Hypertension Screening section.
 ///
 /// Bengali secondary labels mirror the spec wording so the SK can match the
@@ -3082,6 +3178,39 @@ abstract final class NcdScreeningStrings {
 
   static const String familyHistoryTitle = 'Family history of high BP?';
   static const String familyHistoryBn = 'বাবা-মায়ের / পরিবারে উচ্চ রক্তচাপ?';
+}
+
+abstract final class PerformanceStrings {
+  static const String title = 'My Performance';
+  static const String periodWeek = 'Week';
+  static const String periodMonth = 'Month';
+  static const String heroSubline = 'visits this period';
+  static const String weeklyTarget = 'Weekly target';
+  static const String statVisitsToday = 'Visits today';
+  static const String statVisitsTodaySub = 'so far';
+  static const String statHouseholds = 'Households';
+  static const String statHouseholdsSub = 'enrolled';
+  static const String statReferrals = 'Referrals';
+  static const String statReferralsSub = 'this week';
+  static const String statThisWeek = 'Visits';
+  static const String statThisMonth = 'Visits';
+  static const String statTotalVisitsSub = 'this period';
+  static const String sectionProgramme = 'VISITS BY PROGRAMME';
+  static const String sectionRecent = 'RECENT ACTIVITY';
+  static const String today = 'Today';
+  static const String yesterday = 'Yesterday';
+  static const String badgeCompleted = 'Completed';
+  static const String badgeReferred = 'Referred';
+  static const String loadError = 'Could not load performance data';
+  static const String iconTooltip = 'My performance';
+
+  static String periodLabelWeek(DateTime start, DateTime end) {
+    final fmt = DateFormat('MMM d');
+    return '${fmt.format(start)} – ${DateFormat('d').format(end)}';
+  }
+
+  static String periodLabelMonth(DateTime date) =>
+      DateFormat('MMMM yyyy').format(date);
 }
 
 /// Household enrollment flow strings.

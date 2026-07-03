@@ -27,9 +27,10 @@ class VisitBriefingRepository {
   final AiResponseCacheDao? _cache;
 
   // Cache namespace — bump when the API response shape changes so rows
-  // written by the old client are ignored. Last bump: greeting block added.
-  static const String _kindBriefing = 'visit-briefing.v3';
-  static const String _kindSummary = 'patient-summary.v2';
+  // written by the old client are ignored. Last bump: invalidate DEV_SKIP_AUTH
+  // mock responses cached while the backend ignored client-supplied context.
+  static const String _kindBriefing = 'visit-briefing.v4';
+  static const String _kindSummary = 'patient-summary.v3';
 
   /// Returns the Dio instance and path pair to use for a given remote path.
   (Dio, String) _resolve(String gatewayPath, String directPath) {

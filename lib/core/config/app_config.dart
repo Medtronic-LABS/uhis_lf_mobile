@@ -106,25 +106,35 @@ class AppConfig {
     return raw == 4 ? 4 : 6;
   }
 
-  /// Base URL for the AI Scribe service.
-  /// Bypasses the main nginx gateway so the scribe container can be run
-  /// locally independently of the UHIS backend. Nginx strips the
-  /// `/ai-scribe-service/` routing prefix; direct calls omit it.
-  /// Android emulator → `http://10.0.2.2:8095/`
-  /// When deployed behind nginx, set this to the same value as [apiBaseUrl].
-  static const String scribeBaseUrl = String.fromEnvironment(
-    'SCRIBE_BASE_URL',
-    defaultValue: 'http://10.0.2.2:8095/',
-  );
-
-  /// Base URL for the AI Visit Briefing / Programme Recommendation service.
+  /// Base URL for the unified `leapfrog-ai-services` container — AI Visit
+  /// Briefing, Programme Recommendation, NABA, AI Scribe, and realtime ASR all
+  /// live behind this one service/port now.
+  ///
   /// Empty = route through the nginx gateway (production path).
-  /// Set to e.g. http://10.0.2.2:8096 to hit a locally-running service
-  /// while keeping BASE_URL pointed at the remote backend.
+  /// Set to e.g. `http://10.0.2.2:8095` to hit a locally-running service while
+  /// keeping [apiBaseUrl] pointed at the remote backend.
+  ///
+  /// This is the single AI dart-define: [scribeBaseUrl] derives from it, so one
+  /// `--dart-define=AI_SERVICE_URL=...` drives every AI call.
   static const String aiServiceBaseUrl = String.fromEnvironment(
     'AI_SERVICE_URL',
     defaultValue: '',
   );
+
+  /// Base URL for the AI Scribe HTTP calls + realtime ASR WebSocket.
+  ///
+  /// Derives from [aiServiceBaseUrl] (`AI_SERVICE_URL`) when set, so a single
+  /// define drives all AI routing. Falls back to the optional legacy
+  /// `SCRIBE_BASE_URL` define (default: local emulator) for back-compat.
+  /// Nginx strips the `/ai-scribe-service/` routing prefix; direct calls omit
+  /// it. When deployed behind nginx, set `AI_SERVICE_URL` to [apiBaseUrl].
+  static String get scribeBaseUrl {
+    if (aiServiceBaseUrl.isNotEmpty) return aiServiceBaseUrl;
+    return const String.fromEnvironment(
+      'SCRIBE_BASE_URL',
+      defaultValue: 'http://10.0.2.2:8095/',
+    );
+  }
 
   /// Transcription model for AI Scribe.
   /// Options: 'gpt-4o-mini-transcribe', 'whisper-1', 'gemini-2.5-flash'

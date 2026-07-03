@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
@@ -14,10 +16,8 @@ class SkPerformanceScreen extends StatefulWidget {
 }
 
 class _SkPerformanceScreenState extends State<SkPerformanceScreen> {
-  bool _weekView = true;
-  SkPerformanceStats? _stats;
-  bool _loading = true;
-  Object? _error;
+  bool _showMonth = false;
+  late Future<SkPerformanceStats> _statsFuture;
 
   @override
   void initState() {
@@ -25,84 +25,101 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen> {
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final repo = SkPerformanceRepository(context.read<AppDatabase>());
-      final stats = await repo.load();
-      if (mounted) setState(() => _stats = stats);
-    } catch (e) {
-      if (mounted) setState(() => _error = e);
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+  void _load() {
+    final db = context.read<AppDatabase>();
+    _statsFuture = SkPerformanceRepository(db).load();
   }
+
+  void _retry() => setState(_load);
 
   @override
   Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
-
     return Scaffold(
       backgroundColor: AppColors.canvas,
       appBar: AppBar(
-        backgroundColor: tokens.brandNavy,
+        backgroundColor: AppColors.navy,
         foregroundColor: Colors.white,
         elevation: 0,
         title: const Text(
           PerformanceStrings.title,
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-        ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: _PeriodToggle(
-              weekView: _weekView,
-              onChanged: (v) => setState(() => _weekView = v),
-            ),
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+            fontSize: 17,
           ),
-        ],
+        ),
+        centerTitle: false,
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? _ErrorView(onRetry: _load)
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: _Body(stats: _stats!, weekView: _weekView),
-                ),
+      body: FutureBuilder<SkPerformanceStats>(
+        future: _statsFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError || !snapshot.hasData) {
+            return _ErrorView(onRetry: _retry);
+          }
+          final stats = snapshot.data!;
+          final visitCount =
+              _showMonth ? stats.visitsThisMonth : stats.visitsThisWeek;
+          return ListView(
+            physics: const ClampingScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+            children: [
+              _PeriodToggle(
+                showMonth: _showMonth,
+                onToggle: (v) => setState(() => _showMonth = v),
+              ),
+              const SizedBox(height: 14),
+              _HeroCard(
+                visitCount: visitCount,
+                showMonth: _showMonth,
+                stats: stats,
+              ),
+              const SizedBox(height: 14),
+              _StatGrid(stats: stats, showMonth: _showMonth),
+              const SizedBox(height: 20),
+              _ProgrammeStrip(stats: stats),
+              const SizedBox(height: 20),
+              _RecentActivity(items: stats.recentActivity),
+            ],
+          );
+        },
+      ),
     );
   }
 }
 
-class _PeriodToggle extends StatelessWidget {
-  const _PeriodToggle({required this.weekView, required this.onChanged});
+// ── Period toggle ──────────────────────────────────────────────────────────────
 
-  final bool weekView;
-  final ValueChanged<bool> onChanged;
+class _PeriodToggle extends StatelessWidget {
+  const _PeriodToggle({
+    required this.showMonth,
+    required this.onToggle,
+  });
+
+  final bool showMonth;
+  final ValueChanged<bool> onToggle;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(20),
+        color: AppColors.navy,
+        borderRadius: BorderRadius.circular(10),
       ),
-      padding: const EdgeInsets.all(2),
+      padding: const EdgeInsets.all(3),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
           _Tab(
             label: PerformanceStrings.periodWeek,
-            active: weekView,
-            onTap: () => onChanged(true),
+            active: !showMonth,
+            onTap: () => onToggle(false),
           ),
           _Tab(
             label: PerformanceStrings.periodMonth,
-            active: !weekView,
-            onTap: () => onChanged(false),
+            active: showMonth,
+            onTap: () => onToggle(true),
           ),
         ],
       ),
@@ -111,7 +128,11 @@ class _PeriodToggle extends StatelessWidget {
 }
 
 class _Tab extends StatelessWidget {
-  const _Tab({required this.label, required this.active, required this.onTap});
+  const _Tab({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
 
   final String label;
   final bool active;
@@ -119,199 +140,137 @@ class _Tab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        decoration: BoxDecoration(
-          color: active ? Colors.white : Colors.transparent,
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: active
-                ? AppColors.aiPurpleDark
-                : Colors.white.withValues(alpha: 0.7),
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeInOut,
+          decoration: BoxDecoration(
+            color: active ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 9),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: active ? AppColors.navy : Colors.white70,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
           ),
         ),
       ),
     );
   }
-}
-
-class _Body extends StatelessWidget {
-  const _Body({required this.stats, required this.weekView});
-
-  final SkPerformanceStats stats;
-  final bool weekView;
-
-  @override
-  Widget build(BuildContext context) {
-    final visits = weekView ? stats.visitsThisWeek : stats.visitsThisMonth;
-    final target = weekView ? stats.weekTarget : stats.weekTarget * 4;
-    final progress = (visits / target).clamp(0.0, 1.0);
-
-    final now = DateTime.now();
-    final weekday = now.weekday;
-    final weekStart = now.subtract(Duration(days: weekday - 1));
-    final periodLabel = weekView
-        ? PerformanceStrings.periodLabelWeek(weekStart, now)
-        : PerformanceStrings.periodLabelMonth(now);
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 32),
-      children: [
-        _HeroCard(
-          visits: visits,
-          target: target,
-          progress: progress,
-          periodLabel: periodLabel,
-          streak: _computeStreak(),
-        ),
-        const SizedBox(height: 12),
-        _StatGrid(stats: stats, weekView: weekView),
-        const SizedBox(height: 12),
-        _ProgrammeStrip(byProgramme: stats.visitsByProgramme, weekView: weekView),
-        const SizedBox(height: 12),
-        _RecentActivity(items: stats.recentActivity),
-      ],
-    );
-  }
-
-  // Naive streak: count consecutive days with ≥1 visit back from today.
-  // Real implementation would query per-day counts; for now returns a fixed
-  // placeholder since daily-bucketed counts require an extra query.
-  int _computeStreak() => 0;
 }
 
 // ── Hero card ─────────────────────────────────────────────────────────────────
 
 class _HeroCard extends StatelessWidget {
   const _HeroCard({
-    required this.visits,
-    required this.target,
-    required this.progress,
-    required this.periodLabel,
-    required this.streak,
+    required this.visitCount,
+    required this.showMonth,
+    required this.stats,
   });
 
-  final int visits;
-  final int target;
-  final double progress;
-  final String periodLabel;
-  final int streak;
+  final int visitCount;
+  final bool showMonth;
+  final SkPerformanceStats stats;
 
   @override
   Widget build(BuildContext context) {
+    final progress =
+        (visitCount / SkPerformanceStats.weeklyTarget).clamp(0.0, 1.0);
+    final periodLabel = showMonth
+        ? PerformanceStrings.periodLabelMonth(stats.monthStartDate)
+        : PerformanceStrings.periodLabelWeek(
+            stats.weekStartDate,
+            stats.weekStartDate.add(const Duration(days: 6)),
+          );
+
     return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppColors.aiPurpleDark, Color(0xFF5448C8)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [AppColors.aiPurpleDark, Color(0xFF5448C8)],
         ),
-        borderRadius: BorderRadius.all(Radius.circular(16)),
+        borderRadius: BorderRadius.circular(16),
       ),
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             periodLabel,
             style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1,
               color: Colors.white70,
-            ),
-          ),
-          const SizedBox(height: 4),
-          RichText(
-            text: TextSpan(
-              children: [
-                TextSpan(
-                  text: '$visits',
-                  style: const TextStyle(
-                    fontSize: 40,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                    letterSpacing: -2,
-                    height: 1,
-                  ),
-                ),
-                const TextSpan(
-                  text: '  visits',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white54,
-                    letterSpacing: 0,
-                    height: 1,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 2),
-          const Text(
-            PerformanceStrings.heroSubline,
-            style: TextStyle(
               fontSize: 12,
-              color: Colors.white70,
-              fontWeight: FontWeight.w500,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 6),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                PerformanceStrings.weeklyTarget,
+                '$visitCount',
                 style: const TextStyle(
-                  fontSize: 10,
-                  color: Colors.white60,
-                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                  fontSize: 52,
+                  fontWeight: FontWeight.w900,
+                  height: 1,
                 ),
               ),
-              Text(
-                '$visits / $target',
-                style: const TextStyle(
-                  fontSize: 10,
-                  color: Colors.white60,
-                  fontWeight: FontWeight.w600,
+              const SizedBox(width: 8),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  PerformanceStrings.heroSubline,
+                  style: const TextStyle(
+                    color: Colors.white60,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 5),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(3),
-            child: LinearProgressIndicator(
-              value: progress,
-              backgroundColor: Colors.white24,
-              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.pink),
-              minHeight: 5,
-            ),
-          ),
-          if (streak > 0) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                PerformanceStrings.streak(streak),
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
+          const SizedBox(height: 14),
+          if (!showMonth) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  PerformanceStrings.weeklyTarget,
+                  style: const TextStyle(
+                    color: Colors.white60,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
+                Text(
+                  '$visitCount / ${SkPerformanceStats.weeklyTarget}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 6,
+                backgroundColor: Colors.white24,
+                valueColor:
+                    AlwaysStoppedAnimation<Color>(AppColors.pink),
               ),
             ),
           ],
@@ -321,13 +280,13 @@ class _HeroCard extends StatelessWidget {
   }
 }
 
-// ── 2×2 stat grid ─────────────────────────────────────────────────────────────
+// ── Stat grid ─────────────────────────────────────────────────────────────────
 
 class _StatGrid extends StatelessWidget {
-  const _StatGrid({required this.stats, required this.weekView});
+  const _StatGrid({required this.stats, required this.showMonth});
 
   final SkPerformanceStats stats;
-  final bool weekView;
+  final bool showMonth;
 
   @override
   Widget build(BuildContext context) {
@@ -343,30 +302,29 @@ class _StatGrid extends StatelessWidget {
           value: '${stats.visitsToday}',
           label: PerformanceStrings.statVisitsToday,
           subline: PerformanceStrings.statVisitsTodaySub,
-          accent: AppColors.aiPurpleDark,
-          pulsing: true,
+          accentColor: AppColors.aiPurpleDark,
         ),
         _StatCard(
-          value: '${stats.householdsTotal}',
+          value: '${stats.totalHouseholds}',
           label: PerformanceStrings.statHouseholds,
           subline: PerformanceStrings.statHouseholdsSub,
-          accent: AppColors.statusSuccess,
+          accentColor: AppColors.navy,
         ),
         _StatCard(
           value: '${stats.referralsThisWeek}',
           label: PerformanceStrings.statReferrals,
           subline: PerformanceStrings.statReferralsSub,
-          accent: AppColors.statusWarning,
+          accentColor: AppColors.statusWarning,
         ),
         _StatCard(
-          value: weekView
-              ? '${stats.visitsThisWeek}'
-              : '${stats.visitsThisMonth}',
-          label: weekView
-              ? PerformanceStrings.statThisWeek
-              : PerformanceStrings.statThisMonth,
+          value: showMonth
+              ? '${stats.visitsThisMonth}'
+              : '${stats.visitsThisWeek}',
+          label: showMonth
+              ? PerformanceStrings.statThisMonth
+              : PerformanceStrings.statThisWeek,
           subline: PerformanceStrings.statTotalVisitsSub,
-          accent: AppColors.pink,
+          accentColor: AppColors.statusSuccess,
         ),
       ],
     );
@@ -378,95 +336,62 @@ class _StatCard extends StatelessWidget {
     required this.value,
     required this.label,
     required this.subline,
-    required this.accent,
-    this.pulsing = false,
+    required this.accentColor,
   });
 
   final String value;
   final String label;
   final String subline;
-  final Color accent;
-  final bool pulsing;
+  final Color accentColor;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      elevation: 0,
-      child: Stack(
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border(top: BorderSide(color: accentColor, width: 3)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A000000),
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              height: 3,
-              decoration: BoxDecoration(
-                color: accent,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(14),
-                ),
-              ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w900,
+              color: accentColor,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 11, 8, 10),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            value,
-                            style: TextStyle(
-                              fontSize: 26,
-                              fontWeight: FontWeight.w900,
-                              color: accent,
-                              height: 1,
-                              fontFeatures: const [
-                                FontFeature.tabularFigures(),
-                              ],
-                            ),
-                          ),
-                          if (pulsing) ...[
-                            const SizedBox(width: 4),
-                            _PulseDot(color: accent),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        label,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF374151),
-                        ),
-                      ),
-                      const SizedBox(height: 1),
-                      Text(
-                        subline,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: accent,
-                        ),
-                      ),
-                    ],
-                  ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF374151),
                 ),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  size: 14,
-                  color: accent.withValues(alpha: 0.4),
+              ),
+              Text(
+                subline,
+                style: const TextStyle(
+                  fontSize: 10,
+                  color: Color(0xFF9CA3AF),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ],
       ),
@@ -474,100 +399,54 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-class _PulseDot extends StatefulWidget {
-  const _PulseDot({required this.color});
-
-  final Color color;
-
-  @override
-  State<_PulseDot> createState() => _PulseDotState();
-}
-
-class _PulseDotState extends State<_PulseDot>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-  late final Animation<double> _anim;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1400),
-    )..repeat(reverse: true);
-    _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut);
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _anim,
-      child: Container(
-        width: 6,
-        height: 6,
-        decoration: BoxDecoration(
-          color: widget.color,
-          shape: BoxShape.circle,
-        ),
-      ),
-    );
-  }
-}
-
-// ── Programme strip ───────────────────────────────────────────────────────────
+// ── Programme strip ────────────────────────────────────────────────────────────
 
 class _ProgrammeStrip extends StatelessWidget {
-  const _ProgrammeStrip({
-    required this.byProgramme,
-    required this.weekView,
-  });
+  const _ProgrammeStrip({required this.stats});
 
-  final Map<String, int> byProgramme;
-  final bool weekView;
-
-  static const _programmes = [
-    (key: 'IMCI', color: AppColors.imciHeader),
-    (key: 'ANC', color: AppColors.ancHeader),
-    (key: 'NCD', color: AppColors.ncdHeader),
-  ];
+  final SkPerformanceStats stats;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Text(
-            PerformanceStrings.sectionProgramme,
-            style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.8,
-              color: Color(0xFF6B7280),
-            ),
+        Text(
+          PerformanceStrings.sectionProgramme,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF6B7280),
+            letterSpacing: 0.8,
           ),
         ),
+        const SizedBox(height: 10),
         Row(
-          children: _programmes.map((p) {
-            final count = byProgramme[p.key] ?? 0;
-            return Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: _ProgCard(
-                  label: p.key,
-                  count: count,
-                  color: p.color,
-                ),
+          children: [
+            Expanded(
+              child: _ProgCard(
+                label: 'IMCI',
+                count: stats.visitsByProgramme['IMCI'] ?? 0,
+                color: AppColors.imciHeader,
               ),
-            );
-          }).toList(),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _ProgCard(
+                label: 'ANC',
+                count: stats.visitsByProgramme['ANC'] ?? 0,
+                color: AppColors.ancHeader,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _ProgCard(
+                label: 'NCD',
+                count: stats.visitsByProgramme['NCD'] ?? 0,
+                color: AppColors.ncdHeader,
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -587,48 +466,63 @@ class _ProgCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 0,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        child: Column(
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A000000),
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha:0.12),
+              borderRadius: BorderRadius.circular(5),
             ),
-            const SizedBox(height: 5),
-            Text(
-              '$count',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w900,
-                color: color,
-                height: 1,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-            const SizedBox(height: 3),
-            Text(
+            child: Text(
               label,
               style: TextStyle(
-                fontSize: 9,
+                fontSize: 10,
                 fontWeight: FontWeight.w800,
+                color: color,
                 letterSpacing: 0.5,
-                color: color.withValues(alpha: 0.65),
               ),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '$count',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+              color: color,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+          Text(
+            'visits',
+            style: TextStyle(
+              fontSize: 10,
+              color: color.withValues(alpha:0.7),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-// ── Recent activity ───────────────────────────────────────────────────────────
+// ── Recent activity ────────────────────────────────────────────────────────────
 
 class _RecentActivity extends StatelessWidget {
   const _RecentActivity({required this.items});
@@ -639,77 +533,78 @@ class _RecentActivity extends StatelessWidget {
   Widget build(BuildContext context) {
     if (items.isEmpty) return const SizedBox.shrink();
 
-    final today = DateTime.now();
-    final todayStart = DateTime(today.year, today.month, today.day);
-    final yesterday = todayStart.subtract(const Duration(days: 1));
-
     String dateHeader(DateTime dt) {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
       final d = DateTime(dt.year, dt.month, dt.day);
-      if (!d.isBefore(todayStart)) return PerformanceStrings.today;
-      if (!d.isBefore(yesterday)) return PerformanceStrings.yesterday;
-      return '${dt.day}/${dt.month}/${dt.year}';
+      if (d == today) return PerformanceStrings.today;
+      if (d == today.subtract(const Duration(days: 1))) {
+        return PerformanceStrings.yesterday;
+      }
+      return DateFormat('MMM d').format(dt);
     }
 
-    String? lastHeader;
-    final rows = <Widget>[];
+    final grouped = <String, List<RecentVisitActivity>>{};
     for (final item in items) {
-      final header = dateHeader(item.createdAt);
-      if (header != lastHeader) {
-        lastHeader = header;
-        rows.add(_ActivitySectionHeader(label: header));
-      }
-      rows.add(_ActivityRow(item: item));
+      final key = dateHeader(item.createdAt);
+      grouped.putIfAbsent(key, () => []).add(item);
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Text(
-            PerformanceStrings.sectionRecent,
-            style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.8,
-              color: Color(0xFF6B7280),
-            ),
+        Text(
+          PerformanceStrings.sectionRecent,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF6B7280),
+            letterSpacing: 0.8,
           ),
         ),
-        Card(
-          margin: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+        const SizedBox(height: 10),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x0A000000),
+                blurRadius: 4,
+                offset: Offset(0, 2),
+              ),
+            ],
           ),
-          elevation: 0,
-          child: Column(children: rows),
+          child: Column(
+            children: [
+              for (final entry in grouped.entries) ...[
+                Padding(
+                  padding:
+                      const EdgeInsets.fromLTRB(14, 12, 14, 4),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      entry.key,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF9CA3AF),
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ),
+                for (int i = 0; i < entry.value.length; i++) ...[
+                  if (i > 0)
+                    const Divider(
+                        height: 1, indent: 56, endIndent: 14, thickness: 0.5),
+                  _ActivityRow(item: entry.value[i]),
+                ],
+              ],
+            ],
+          ),
         ),
       ],
-    );
-  }
-}
-
-class _ActivitySectionHeader extends StatelessWidget {
-  const _ActivitySectionHeader({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Color(0xFFF0F2F8))),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          color: Color(0xFF374151),
-        ),
-      ),
     );
   }
 }
@@ -719,109 +614,105 @@ class _ActivityRow extends StatelessWidget {
 
   final RecentVisitActivity item;
 
-  Color _progColor(String prog) {
-    switch (prog) {
-      case 'IMCI':
-        return AppColors.imciHeader;
-      case 'ANC':
-        return AppColors.ancHeader;
-      case 'NCD':
-        return AppColors.ncdHeader;
-      default:
-        return AppColors.aiPurpleDark;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final color = _progColor(item.programme);
-    final badge = item.isReferred
-        ? (
-            label: PerformanceStrings.badgeReferred,
-            bg: const Color(0xFFFEF3C7),
-            fg: const Color(0xFF92400E),
-          )
-        : (
-            label: PerformanceStrings.badgeCompleted,
-            bg: const Color(0xFFD1FAE5),
-            fg: const Color(0xFF065F46),
-          );
+    final initial =
+        item.patientName.isNotEmpty ? item.patientName[0].toUpperCase() : '?';
+    final canNavigate = item.patientId != null;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Color(0xFFF9FAFB))),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Center(
+    return InkWell(
+      onTap: canNavigate
+          ? () => context.push('/patients/${item.patientId}')
+          : null,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 17,
+              backgroundColor: AppColors.aiPurpleDark.withValues(alpha: 0.12),
               child: Text(
-                item.programme.isNotEmpty ? item.programme[0] : '?',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w900,
-                  color: color,
+                initial,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.aiPurpleDark,
                 ),
               ),
             ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.patientName,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1F2937),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    '${item.programme}  ·  ${item.villageName}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFF9CA3AF),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(
-                  item.patientName,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF1F2937),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: item.isReferred
+                        ? AppColors.statusWarning.withValues(alpha: 0.12)
+                        : AppColors.statusSuccess.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    item.isReferred
+                        ? PerformanceStrings.badgeReferred
+                        : PerformanceStrings.badgeCompleted,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: item.isReferred
+                          ? AppColors.statusWarning
+                          : AppColors.statusSuccess,
+                    ),
                   ),
                 ),
-                Text(
-                  [
-                    item.programme,
-                    if (item.villageName != null) item.villageName!,
-                  ].join(' · '),
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: Color(0xFF9CA3AF),
-                    fontWeight: FontWeight.w500,
+                if (canNavigate)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 2),
+                    child: Icon(
+                      Icons.chevron_right_rounded,
+                      size: 16,
+                      color: Color(0xFFD1D5DB),
+                    ),
                   ),
-                ),
               ],
             ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-            decoration: BoxDecoration(
-              color: badge.bg,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              badge.label,
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w700,
-                color: badge.fg,
-                letterSpacing: 0.3,
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
-// ── Error view ────────────────────────────────────────────────────────────────
+// ── Error view ─────────────────────────────────────────────────────────────────
 
 class _ErrorView extends StatelessWidget {
   const _ErrorView({required this.onRetry});
@@ -834,11 +725,16 @@ class _ErrorView extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text(PerformanceStrings.loadError),
+          const Icon(Icons.error_outline, size: 40, color: Color(0xFF9CA3AF)),
           const SizedBox(height: 12),
+          Text(
+            PerformanceStrings.loadError,
+            style: const TextStyle(color: Color(0xFF6B7280)),
+          ),
+          const SizedBox(height: 16),
           FilledButton.tonal(
             onPressed: onRetry,
-            child: const Text(CommonStrings.retry),
+            child: const Text('Retry'),
           ),
         ],
       ),

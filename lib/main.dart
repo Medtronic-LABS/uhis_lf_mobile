@@ -14,6 +14,9 @@ import 'app/router.dart';
 import 'app/theme.dart';
 import 'app/theme_provider.dart';
 import 'core/api/api_client.dart';
+import 'core/api/realtime_asr_service.dart';
+import 'core/preferences/scribe_engine_notifier.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'core/api/scribe_api_service.dart';
 import 'core/auth/auth_repository.dart';
 import 'core/auth/auth_state.dart';
@@ -407,6 +410,14 @@ class _UhisNextAppState extends State<UhisNextApp>
         // AI Scribe API service
         Provider<ScribeApiService>(
             create: (_) => ScribeApiService(widget.api)),
+        // Real-Time ASR (Beta) — live streaming transcription + extraction
+        Provider<RealtimeAsrService>(
+            create: (_) => RealtimeAsrService(widget.api)),
+        // Persisted scribe engine preference (Gemini vs Live ASR)
+        ChangeNotifierProvider<ScribeEngineNotifier>(
+          create: (_) =>
+              ScribeEngineNotifier(const FlutterSecureStorage())..load(),
+        ),
         // SK → SS → sub-village hierarchy (session cache, invalidated on logout)
         ChangeNotifierProvider<UserHierarchyService>.value(
             value: _userHierarchy),

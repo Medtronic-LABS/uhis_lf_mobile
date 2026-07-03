@@ -3,10 +3,12 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/theme.dart';
+import '../../core/api/realtime_asr_service.dart';
 import '../../core/api/scribe_api_service.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../features/dashboard/mission_dashboard_repository.dart';
+import '../../features/realtime_asr/realtime_asr_controller.dart';
 import '../../features/scribe/scribe_controller.dart';
 import '../../features/scribe/scribe_permission_service.dart';
 import '../../features/scribe/scribe_session.dart';
@@ -65,6 +67,9 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
   bool _isSubmitting = false;
 
   late final ScribeController _scribeCtrl;
+  // Independent "Live" ASR mode — see ScribeModeFab/ScribeStatusPill docs.
+  // Never runs at the same time as the batch flow above.
+  late final RealtimeAsrController _liveCtrl;
 
   @override
   void initState() {
@@ -73,11 +78,16 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
       api: context.read<ScribeApiService>(),
       permissionService: ScribePermissionService(),
     );
+    _liveCtrl = RealtimeAsrController(
+      service: context.read<RealtimeAsrService>(),
+      permissionService: ScribePermissionService(),
+    );
   }
 
   @override
   void dispose() {
     _scribeCtrl.dispose();
+    _liveCtrl.dispose();
     super.dispose();
   }
   
@@ -152,6 +162,7 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
 
     // Bind context so ScribeController can show permission rationale sheet.
     _scribeCtrl.bindContext(context);
+    _liveCtrl.bindContext(context);
 
     return ChangeNotifierProvider<ScribeController>.value(
       value: _scribeCtrl,
@@ -193,9 +204,11 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
             body: Column(
               children: [
                 // Scribe pill — appears during recording / upload / processing / ready
+                // (or the live ASR status panel, when that mode is active).
                 Padding(
                   padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
-                  child: ScribePill(
+                  child: ScribeStatusPill(
+                    liveController: _liveCtrl,
                     onStop: () => _scribeCtrl.stopRecording(
                       patientId: widget.patientId,
                       encounterId: widget.visitId,
@@ -206,7 +219,8 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
                 Expanded(child: _buildForm()),
               ],
             ),
-            floatingActionButton: ScribeFab(
+            floatingActionButton: ScribeModeFab(
+              liveController: _liveCtrl,
               onStartRecording: () => _scribeCtrl.startRecording(
                 patientId: widget.patientId,
                 encounterId: widget.visitId,
