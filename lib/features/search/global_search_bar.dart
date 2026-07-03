@@ -29,7 +29,9 @@ class _GlobalSearchBarState extends State<GlobalSearchBar> {
 
   @override
   Widget build(BuildContext context) {
-    return SearchAnchor.bar(
+    return SizedBox(
+      height: 44,
+      child: SearchAnchor.bar(
       searchController: _controller,
       barHintText: SearchStrings.barHint,
       barBackgroundColor: WidgetStateProperty.all(Colors.white),
@@ -91,6 +93,7 @@ class _GlobalSearchBarState extends State<GlobalSearchBar> {
           ),
         ];
       },
+      ),
     );
   }
 }
