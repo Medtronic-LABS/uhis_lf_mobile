@@ -63,3 +63,6 @@ flutter:
     - family: NunitoSans
       fonts:
         - asset: assets/fonts/NunitoSans-Variable.ttf
+    - family: NotoSansBengali
+      fonts:
+        - asset: assets/fonts/NotoSansBengali-Variable.ttf

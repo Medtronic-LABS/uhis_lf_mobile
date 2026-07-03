@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../app/theme.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/widgets/phi_screen.dart';
 import '../../core/db/assessment_dao.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
@@ -102,7 +103,7 @@ class PatientOrMemberData {
 
 /// Patient/Member Context Screen — shows health details when tapping on a
 /// patient from the worklist or a member from household details.
-class PatientContextScreen extends StatefulWidget {
+class PatientContextScreen extends PhiScreen {
   const PatientContextScreen({
     super.key,
     required this.patientId,
@@ -118,10 +119,12 @@ class PatientContextScreen extends StatefulWidget {
   final String? origin;
 
   @override
-  State<PatientContextScreen> createState() => _PatientContextScreenState();
+  PhiScreenState<PatientContextScreen> createState() =>
+      _PatientContextScreenState();
 }
 
-class _PatientContextScreenState extends State<PatientContextScreen> {
+class _PatientContextScreenState
+    extends PhiScreenState<PatientContextScreen> {
   Future<PatientOrMemberData>? _future;
   bool _refreshing = false;
 
@@ -464,7 +467,7 @@ class _PatientContextScreenState extends State<PatientContextScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget buildPhi(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     return Scaffold(
       backgroundColor: tokens.canvas,

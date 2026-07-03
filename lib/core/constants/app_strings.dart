@@ -3255,6 +3255,14 @@ abstract final class NcdScreeningStrings {
   static const String familyHistoryBn = 'বাবা-মায়ের / পরিবারে উচ্চ রক্তচাপ?';
 }
 
+/// Visit form host screen (fallback, non-sectioned mode).
+abstract final class VisitFormStrings {
+  VisitFormStrings._();
+
+  static const String saveFailed =
+      'Could not save the assessment. It is kept on this device — please try again.';
+}
+
 abstract final class FormGalleryStrings {
   FormGalleryStrings._();
   static const String tabLabel     = 'Gallery';

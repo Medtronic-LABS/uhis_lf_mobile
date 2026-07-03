@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/api/scribe_api_service.dart';
+import '../../core/constants/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/patient_dao.dart';
@@ -332,9 +333,10 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         }
       }
     } catch (e) {
+      debugPrint('VisitFormScreen: assessment save failed: $e');
       if (!ctx.mounted) return;
       ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-        content: Text('Failed to save assessment: $e'),
+        content: const Text(VisitFormStrings.saveFailed),
         backgroundColor: Theme.of(ctx).colorScheme.error,
       ));
     }
