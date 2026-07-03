@@ -196,7 +196,10 @@ class _ScribeBannerState extends State<ScribeBanner> {
                           // Live mode active: only its own stop control shows.
                           if (liveActive) ...[
                             const SizedBox(width: 8),
-                            _LiveStopButton(controller: _liveCtrl),
+                            _LiveStopButton(
+                              controller: _liveCtrl,
+                              state: _liveCtrl.state,
+                            ),
                           ],
                           // Batch mode active: badge makes the active engine
                           // explicit at a glance.
@@ -869,33 +872,59 @@ class _ModeBadge extends StatelessWidget {
 }
 
 /// Stop control shown only while the "ASR" (live streaming) mode is active.
+///
+/// While [state] is connecting or stopping it becomes a non-interactive
+/// spinner+label so the tap that triggered it gives immediate feedback — the
+/// underlying start/stop transitions can each take a few seconds.
 class _LiveStopButton extends StatelessWidget {
-  const _LiveStopButton({required this.controller});
+  const _LiveStopButton({required this.controller, required this.state});
 
   final RealtimeAsrController controller;
+  final RealtimeAsrState state;
 
   @override
   Widget build(BuildContext context) {
+    final busy = state == RealtimeAsrState.connecting ||
+        state == RealtimeAsrState.stopping;
+    final label = state == RealtimeAsrState.stopping
+        ? RealtimeAsrStrings.stopping
+        : state == RealtimeAsrState.connecting
+            ? RealtimeAsrStrings.connecting
+            : ScribeBannerStrings.modeAsr;
     return Semantics(
-      label: 'Stop live ASR',
-      button: true,
+      label: busy ? label : 'Stop live ASR',
+      button: !busy,
       child: GestureDetector(
         key: const Key('scribe_banner_live_stop'),
-        onTap: controller.stop,
+        onTap: busy ? null : controller.stop,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.28),
+            color: Colors.white.withValues(alpha: busy ? 0.18 : 0.28),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: const Row(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.stop_circle_outlined, color: Colors.white, size: 16),
-              SizedBox(width: 4),
+              if (busy)
+                const SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              else
+                const Icon(
+                  Icons.stop_circle_outlined,
+                  color: Colors.white,
+                  size: 16,
+                ),
+              const SizedBox(width: 4),
               Text(
-                ScribeBannerStrings.modeAsr,
-                style: TextStyle(
+                label,
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 10,
                   fontWeight: FontWeight.w800,
@@ -920,6 +949,7 @@ class _LiveBannerText extends StatelessWidget {
     final label = switch (state) {
       RealtimeAsrState.connecting => RealtimeAsrStrings.connecting,
       RealtimeAsrState.listening => RealtimeAsrStrings.listening,
+      RealtimeAsrState.stopping => RealtimeAsrStrings.stopping,
       RealtimeAsrState.error => 'Live ASR error',
       RealtimeAsrState.idle => RealtimeAsrStrings.idle,
     };
@@ -1013,7 +1043,10 @@ class _LiveAsrPanel extends StatelessWidget {
                 ),
                 GestureDetector(
                   key: const Key('scribe_banner_live_extract_now'),
-                  onTap: controller.isExtracting ? null : controller.extractNow,
+                  onTap: controller.isExtracting ||
+                          controller.state == RealtimeAsrState.stopping
+                      ? null
+                      : controller.extractNow,
                   child: Text(
                     controller.isExtracting
                         ? RealtimeAsrStrings.extracting

@@ -13,7 +13,7 @@ import 'models/realtime_clinical_fields.dart';
 import 'realtime_asr_channel_io.dart'
     if (dart.library.html) 'realtime_asr_channel_web.dart';
 
-enum RealtimeAsrState { idle, connecting, listening, error }
+enum RealtimeAsrState { idle, connecting, listening, stopping, error }
 
 /// Drives one live-listening session against `/scribe/realtime/transcribe`:
 /// mic -> WAV chunks -> WebSocket -> live transcript, plus on-demand
@@ -88,7 +88,9 @@ class RealtimeAsrController extends ChangeNotifier {
   String? _lastExtractedTranscript;
 
   bool get isActive =>
-      _state == RealtimeAsrState.connecting || _state == RealtimeAsrState.listening;
+      _state == RealtimeAsrState.connecting ||
+      _state == RealtimeAsrState.listening ||
+      _state == RealtimeAsrState.stopping;
 
   Future<void> start({String language = 'bn-IN'}) async {
     if (isActive) return;
@@ -101,12 +103,10 @@ class RealtimeAsrController extends ChangeNotifier {
     final ctx = _context;
     if (ctx == null || !ctx.mounted) return;
 
-    final granted = await _perm.ensureMicPermission(ctx);
-    if (!granted) {
-      _setError(RealtimeAsrStrings.micPermissionDenied);
-      return;
-    }
-
+    // Flip to "connecting" and reset session state up-front so the banner
+    // reacts the instant the button is tapped — the permission prompt and
+    // network handshake below can otherwise take a noticeable moment with no
+    // visible feedback.
     _segments.clear();
     _fields = null;
     _errorMessage = null;
@@ -117,6 +117,12 @@ class RealtimeAsrController extends ChangeNotifier {
     _recentAmplitudes.clear();
     _state = RealtimeAsrState.connecting;
     notifyListeners();
+
+    final granted = await _perm.ensureMicPermission(ctx);
+    if (!granted) {
+      _setError(RealtimeAsrStrings.micPermissionDenied);
+      return;
+    }
 
     try {
       final info = await _service.connectionInfo(language: language);
@@ -166,7 +172,16 @@ class RealtimeAsrController extends ChangeNotifier {
   /// server's receive loop hit "stop" first and cancel the in-flight
   /// extraction task before the LLM call finishes.
   Future<void> stop() async {
-    if (_state == RealtimeAsrState.idle) return;
+    if (_state == RealtimeAsrState.idle ||
+        _state == RealtimeAsrState.stopping) {
+      return;
+    }
+    // Surface "stopping" immediately — the flush + final-extraction wait below
+    // can take several seconds, during which the banner would otherwise look
+    // unchanged and the Stop tap would appear to do nothing.
+    _state = RealtimeAsrState.stopping;
+    notifyListeners();
+
     _autoExtractTimer?.cancel();
     _autoExtractTimer = null;
 

@@ -142,9 +142,11 @@ class _LiveAsrStatusPanel extends StatelessWidget {
               const Icon(Icons.podcasts, color: Colors.white, size: 18),
               const SizedBox(width: 8),
               Text(
-                controller.state == RealtimeAsrState.connecting
-                    ? RealtimeAsrStrings.connecting
-                    : RealtimeAsrStrings.listening,
+                switch (controller.state) {
+                  RealtimeAsrState.connecting => RealtimeAsrStrings.connecting,
+                  RealtimeAsrState.stopping => RealtimeAsrStrings.stopping,
+                  _ => RealtimeAsrStrings.listening,
+                },
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w700,
@@ -153,7 +155,10 @@ class _LiveAsrStatusPanel extends StatelessWidget {
               ),
               const Spacer(),
               GestureDetector(
-                onTap: controller.isExtracting ? null : controller.extractNow,
+                onTap: controller.isExtracting ||
+                        controller.state == RealtimeAsrState.stopping
+                    ? null
+                    : controller.extractNow,
                 child: Text(
                   controller.isExtracting
                       ? RealtimeAsrStrings.extracting

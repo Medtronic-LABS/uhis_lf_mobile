@@ -1467,9 +1467,11 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
         : SymptomPickerStrings.scribeBannerTitle;
 
     final subtitle = liveActive
-        ? (_liveCtrl.state == RealtimeAsrState.connecting
-              ? RealtimeAsrStrings.connecting
-              : RealtimeAsrStrings.listening)
+        ? (switch (_liveCtrl.state) {
+            RealtimeAsrState.connecting => RealtimeAsrStrings.connecting,
+            RealtimeAsrState.stopping => RealtimeAsrStrings.stopping,
+            _ => RealtimeAsrStrings.listening,
+          })
         : _showDone
         ? SymptomPickerStrings.scribeBannerDoneSubtitle
         : isError
@@ -1659,6 +1661,11 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
     required bool liveActive,
   }) {
     if (liveActive) {
+      // Spinner while the socket is coming up or the session is winding down,
+      // so tapping start/stop gives immediate feedback; podcast icon while the
+      // session is actively listening.
+      final busy = _liveCtrl.state == RealtimeAsrState.connecting ||
+          _liveCtrl.state == RealtimeAsrState.stopping;
       return Container(
         width: 44,
         height: 44,
@@ -1667,7 +1674,16 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
           shape: BoxShape.circle,
         ),
         alignment: Alignment.center,
-        child: const Icon(Icons.podcasts, color: Colors.white, size: 22),
+        child: busy
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Icon(Icons.podcasts, color: Colors.white, size: 22),
       );
     }
     if (showDone) {

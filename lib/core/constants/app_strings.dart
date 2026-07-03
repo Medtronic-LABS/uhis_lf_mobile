@@ -201,6 +201,7 @@ abstract final class RealtimeAsrStrings {
   static const String stop = 'Stop';
   static const String connecting = 'Connecting…';
   static const String listening = 'Listening…';
+  static const String stopping = 'Stopping…';
   static const String idle = 'Idle';
   static const String transcriptEmpty =
       'Tap Start Listening and speak — the live transcript appears here.';
