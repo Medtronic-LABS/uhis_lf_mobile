@@ -2853,6 +2853,8 @@ abstract final class SymptomPickerStrings {
   static const String detectedSymptomsSubtitleFilled =
       'Review each symptom. Tap × to remove anything incorrect, or add what is missing.';
   static const String addSymptomSearchHint = 'Search or type symptom…';
+  static const String addSymptomListExpand = 'Show symptom list';
+  static const String addSymptomListCollapse = 'Hide symptom list';
   static const String addSymptomCta = 'Add symptoms';
   static const String addSymptomFromList = 'Add from list';
   static const String addSymptomSheetTitle = 'Add symptoms';

@@ -1687,14 +1687,19 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
   final _searchCtrl = TextEditingController();
   late final TextEditingController _otherCtrl;
   String _query = '';
+  bool _listOpen = false;
 
   @override
   void initState() {
     super.initState();
     _otherCtrl = TextEditingController(text: widget.vm.customSymptomText);
-    _searchCtrl.addListener(
-      () => setState(() => _query = _searchCtrl.text.trim().toLowerCase()),
-    );
+    _searchCtrl.addListener(() {
+      final q = _searchCtrl.text.trim().toLowerCase();
+      setState(() {
+        _query = q;
+        if (q.isNotEmpty) _listOpen = true;
+      });
+    });
   }
 
   @override
@@ -1793,7 +1798,35 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                   ),
                 ),
               ),
-              if (filtered.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              // Toggle button — opens/closes the symptom chip list.
+              GestureDetector(
+                onTap: () => setState(() => _listOpen = !_listOpen),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _listOpen
+                          ? Icons.expand_less_rounded
+                          : Icons.expand_more_rounded,
+                      size: 18,
+                      color: AppColors.navy,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      _listOpen
+                          ? SymptomPickerStrings.addSymptomListCollapse
+                          : SymptomPickerStrings.addSymptomListExpand,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.navy,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (_listOpen && filtered.isNotEmpty) ...[
                 const SizedBox(height: 10),
                 Wrap(
                   spacing: 8,
@@ -1817,6 +1850,17 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                       .toList(),
                 ),
               ],
+              if (_listOpen && filtered.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    SymptomPickerStrings.addSymptomSheetEmpty,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ),
               const SizedBox(height: 14),
               const Divider(height: 1, thickness: 0.5),
               const SizedBox(height: 12),
