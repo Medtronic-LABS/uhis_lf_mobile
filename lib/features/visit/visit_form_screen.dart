@@ -291,11 +291,13 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     VisitController visitCtrl,
     VisitSession session,
   ) async {
+    debugPrint('[VisitForm] _onSectionedSubmit — visitId=${widget.visitId}');
     try {
       final draftDao = ctx.read<AssessmentDraftDao>();
       final orchestrator = ctx.read<UnifiedSubmissionOrchestrator>();
 
       final draft = await draftDao.getDraft(widget.visitId);
+      debugPrint('[VisitForm] draft=${draft != null ? "found" : "null"}');
       if (draft != null) {
         await orchestrator.submit(
           draft,
@@ -304,6 +306,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
           householdId: widget.householdId,
           villageId: widget.villageId,
         );
+        debugPrint('[VisitForm] orchestrator.submit done');
       }
 
       if (widget.patientId != null && ctx.mounted) {
@@ -314,14 +317,18 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
           nextDueAt: _nextDueForProgramme(_getPrimaryProgramme(), now),
           missedVisitCount: 0,
         );
+        debugPrint('[VisitForm] schedule updated');
         if (ctx.mounted) {
           await ctx.read<WorklistRepository>().recomputeAllAfterSync();
+          debugPrint('[VisitForm] worklist recomputed');
         }
       }
 
+      debugPrint('[VisitForm] mounted=$mounted ctx.mounted=${ctx.mounted}');
       if (mounted && ctx.mounted) {
         final onAdvance = widget.onAdvance;
         if (onAdvance != null) {
+          debugPrint('[VisitForm] calling onAdvance');
           onAdvance(_getPrimaryProgramme(), _referralRecommended);
         } else {
           ctx.go(
@@ -337,12 +344,12 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
           );
         }
       }
-    } catch (e) {
-      debugPrint('VisitFormScreen: assessment save failed: $e');
-      if (!ctx.mounted) return;
-      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+    } catch (e, st) {
+      debugPrint('[VisitForm] assessment save failed: $e\n$st');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: const Text(VisitFormStrings.saveFailed),
-        backgroundColor: Theme.of(ctx).colorScheme.error,
+        backgroundColor: Theme.of(context).colorScheme.error,
       ));
     }
   }

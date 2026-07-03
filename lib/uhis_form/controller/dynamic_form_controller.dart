@@ -13,7 +13,6 @@ import 'dart:collection';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:sqflite/sqflite.dart' show DatabaseException;
 
 import '../../core/db/local_assessment_dao.dart';
 import '../models/field_kind.dart';
@@ -145,8 +144,9 @@ class DynamicFormController extends ChangeNotifier {
         sectionStatus: jsonEncode(_buildSectionStatus()),
       );
       await _draftDao.saveDraft(draft);
-    } on DatabaseException catch (e) {
+    } catch (e) {
       _errorMessage = 'Failed to save draft: ${e.toString()}';
+      debugPrint('[DynamicFormController] saveDraft error: $e');
     } finally {
       _isSaving = false;
       notifyListeners();

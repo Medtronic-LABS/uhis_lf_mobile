@@ -152,8 +152,22 @@ class _DynamicAssessmentScreenState extends State<DynamicAssessmentScreen> {
     final ctrl = _controller;
     if (ctrl == null) return;
     final errors = ctrl.validate();
-    if (errors.isNotEmpty) return;
-    await ctrl.submit(widget.onSubmit);
+    if (errors.isNotEmpty) {
+      debugPrint('[DynamicAssessment] validate() blocked submit: $errors');
+      return;
+    }
+    try {
+      await ctrl.submit(widget.onSubmit);
+    } catch (e, st) {
+      debugPrint('[DynamicAssessment] submit error: $e\n$st');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Submit failed: $e'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
   }
 
   @override
