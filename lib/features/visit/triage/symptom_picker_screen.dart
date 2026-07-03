@@ -1801,52 +1801,48 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                 ),
               ],
               if (selected.isNotEmpty) const SizedBox(height: 12),
-              // Browse full list → bottom sheet
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  key: const Key('triage_add_symptom_tap'),
-                  onPressed: () => _openAddSheet(context),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text(SymptomPickerStrings.addSymptomCta),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.navy,
-                    side: const BorderSide(color: AppColors.border),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+              // Inline row: type-to-search field + "+ Add" button (opens sheet)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _inputCtrl,
+                      decoration: const InputDecoration(
+                        hintText: SymptomPickerStrings.addSymptomInlineHint,
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                      ),
+                      maxLines: 1,
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              const Divider(height: 1, thickness: 0.5),
-              const SizedBox(height: 12),
-              // Dual-purpose field: live-search vocab → suggestion chips,
-              // or free-text note when no vocab match.
-              const Text(
-                SymptomPickerStrings.otherSymptomsLabel,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.navy,
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _inputCtrl,
-                decoration: const InputDecoration(
-                  hintText: SymptomPickerStrings.otherSymptomsHint,
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    key: const Key('triage_add_symptom_tap'),
+                    onPressed: () => _openAddSheet(context),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.navy,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: const Text(
+                      SymptomPickerStrings.addSymptomInlineButton,
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
                   ),
-                ),
-                maxLines: 2,
+                ],
               ),
-              // Suggestion chips — appear inline below the field while typing
+              // Live vocab suggestion chips — shown below the row while typing
               if (suggestions.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Wrap(
