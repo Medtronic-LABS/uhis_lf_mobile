@@ -266,6 +266,19 @@ class ScribeApiService extends ApiRepository {
       receiveTimeout: const Duration(minutes: 3),
       validateStatus: (s) => s != null && s < 500,
     ));
+    // Inject Bearer token + tenantId at request time so scribe HTTP calls
+    // are authenticated the same way RealtimeAsrService authenticates WS.
+    _dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) {
+        final token = api.exportAuthToken();
+        if (token != null && token.isNotEmpty) {
+          options.headers['Authorization'] = token;
+        }
+        final tid = api.tenantId;
+        if (tid != null) options.headers['tenantId'] = tid;
+        handler.next(options);
+      },
+    ));
   }
 
   late final Dio _dio;
