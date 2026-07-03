@@ -793,7 +793,7 @@ class _GreetWarmlyCard extends StatelessWidget {
   final String? fallbackOpeningLine;
 
   static const Color _navyBg = AppColors.navy;
-  static const Color _navyHint = Color(0xFF243C7A);
+  static const Color _navyHint = AppColors.navyMid;
 
   String _resolveBangla() {
     final g = greeting;
@@ -1089,16 +1089,10 @@ class _DurationPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0D000000), // TODO: add AppColors token
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
+      decoration: const BoxDecoration(
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.all(Radius.circular(AppRadius.patRow)),
+        boxShadow: AppShadows.card,
       ),
       padding: const EdgeInsets.all(14),
       child: Column(
@@ -1306,12 +1300,12 @@ class _AiScribeTriageBanner extends StatefulWidget {
 }
 
 class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
-  static const Color _gradStart = Color(0xFF4F3FBA);
-  static const Color _gradEnd = Color(0xFF6E54E0);
-  static const Color _iconBg = Color(0xFF5E47C9);
-  static const Color _recordingIconBg = Color(0xFF7A63E8);
-  static const Color _errorGradStart = Color(0xFF8B3A3A);
-  static const Color _errorGradEnd = Color(0xFFB84A4A);
+  static const Color _gradStart = AppColors.aiPurpleDark;
+  static const Color _gradEnd = AppColors.aiPurple;
+  static const Color _iconBg = AppColors.aiPurple;
+  static const Color _recordingIconBg = AppColors.aiPurpleLight;
+  static const Color _errorGradStart = AppColors.statusCriticalText;
+  static const Color _errorGradEnd = AppColors.rangeCritical;
 
   bool _showDone = false;
   bool _triageResultConsumed = false;
@@ -1527,7 +1521,10 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
                 colors: liveActive
                     ? const [_gradStart, _gradEnd]
                     : _showDone
-                    ? const [Color(0xFF3D7A52), Color(0xFF2F9E62)]
+                    ? const [
+                        AppColors.statusSuccessAction,
+                        AppColors.statusSuccess,
+                      ]
                     : isError
                     ? const [_errorGradStart, _errorGradEnd]
                     : const [_gradStart, _gradEnd],
@@ -1543,7 +1540,7 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
                   : null,
               boxShadow: [
                 BoxShadow(
-                  color: (_showDone ? const Color(0xFF2F9E62) : _gradStart)
+                  color: (_showDone ? AppColors.statusSuccess : _gradStart)
                       .withValues(alpha: 0.25),
                   blurRadius: 14,
                   offset: const Offset(0, 6),
