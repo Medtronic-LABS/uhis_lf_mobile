@@ -20,6 +20,7 @@ import '../search/global_search_bar.dart';
 import '../visit/visit_controller.dart';
 import '../visit/widgets/widgets.dart';
 import 'dashboard_repository.dart';
+import 'sk_performance_screen.dart';
 import 'mission_dashboard_repository.dart';
 import '../household/enrollment/enrollment_entry_sheet.dart';
 
@@ -228,9 +229,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ..sort();
 
     // Derive available programmes from the queue (for dynamic programme chips).
+    // PILOT-SCOPE v1: only pilot programmes shown as filter chips.
+    // To restore all programmes: remove the `.where((p) => p.isPilot)` filter.
     final allProgrammes = withoutCompleted
         .expand((i) => i.programmes)
-        .where((p) => p != Programme.unknown)
+        .where((p) => p != Programme.unknown && p.isPilot)
         .toSet()
         .toList()
       ..sort((a, b) => a.name.compareTo(b.name));
@@ -425,15 +428,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (item.programmes.any((p) => p == Programme.anc || p == Programme.pnc)) {
         available.add(_NeedFilter.ancMnch);
       }
-      if (item.programmes.any((p) => p == Programme.imci || p == Programme.epi)) {
+      // PILOT-SCOPE v1: child chip matches imci only (epi not in pilot).
+      // To restore epi: change to `p == Programme.imci || p == Programme.epi`.
+      if (item.programmes.contains(Programme.imci)) {
         available.add(_NeedFilter.childImmunisation);
       }
       if (item.programmes.contains(Programme.ncd)) {
         available.add(_NeedFilter.ncd);
       }
-      if (item.programmes.any((p) => p == Programme.eyeCare || p == Programme.cataract)) {
-        available.add(_NeedFilter.eyeCare);
-      }
+      // PILOT-SCOPE v1: eyeCare/cataract chip disabled (not in pilot).
+      // To restore: un-comment the block below.
+      // if (item.programmes.any((p) => p == Programme.eyeCare || p == Programme.cataract)) {
+      //   available.add(_NeedFilter.eyeCare);
+      // }
       if (item.daysOverdue != null && item.daysOverdue! > 0) {
         available.add(_NeedFilter.missedFollowUp);
       }
@@ -462,10 +469,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         case _NeedFilter.ancMnch:
           if (item.programmes.any((p) => p == Programme.anc || p == Programme.pnc)) { return true; }
         case _NeedFilter.childImmunisation:
-          if (item.programmes.any((p) => p == Programme.imci || p == Programme.epi)) { return true; }
+          // PILOT-SCOPE v1: imci only (epi not in pilot).
+          if (item.programmes.contains(Programme.imci)) { return true; }
         case _NeedFilter.ncd:
           if (item.programmes.contains(Programme.ncd)) { return true; }
         case _NeedFilter.eyeCare:
+          // PILOT-SCOPE v1: eyeCare/cataract not in pilot — chip never added to availableNeeds.
           if (item.programmes.any((p) => p == Programme.eyeCare || p == Programme.cataract)) { return true; }
         case _NeedFilter.missedFollowUp:
           if (item.daysOverdue != null && item.daysOverdue! > 0) { return true; }
@@ -501,6 +510,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               greeting: _greeting(),
               locationLine: _locationLine(),
               onNotifications: () => context.push('/referrals'),
+              onPerformance: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const SkPerformanceScreen(),
+                ),
+              ),
               settingsMenu: _SettingsMenu(onOfferBiometric: _offerBiometric),
             ),
             Expanded(
@@ -1003,28 +1017,47 @@ class _ReferralNotificationButtonState
 // "Today's visits" priority-ordered patient cards with colored left border.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Pink "+ Enrol new" FAB — Apon Sushashthya V1 §2.1.
-///
-/// Opens the QR enrolment flow when it ships; until then we surface a clear
-/// snackbar so the SK gets feedback instead of a silent tap. Lives at the
-/// bottom-right of the dashboard scaffold.
+/// Pink "Enroll new" compact pill FAB — Apon Sushashthya V1 §2.1.
 class _EnrolNewFab extends StatelessWidget {
   const _EnrolNewFab();
 
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
-    return FloatingActionButton.extended(
-      key: const Key('dashboard_enrol_new_fab'),
-      backgroundColor: tokens.brandPink,
-      foregroundColor: Colors.white,
-      elevation: 4,
-      icon: const Icon(Icons.home_outlined, size: 20),
-      label: const Text(
-        'Enroll Now',
-        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+    return Semantics(
+      button: true,
+      label: MissionDashboardStrings.enrolNewCta,
+      child: Material(
+        key: const Key('dashboard_enrol_new_fab'),
+        color: tokens.brandPink,
+        borderRadius: BorderRadius.circular(24),
+        elevation: 2,
+        shadowColor: tokens.brandPink.withValues(alpha: 0.4),
+        child: InkWell(
+          onTap: () => showEnrollmentEntrySheet(context),
+          borderRadius: BorderRadius.circular(24),
+          splashColor: Colors.white.withValues(alpha: 0.15),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.person_add_alt_1_rounded, size: 15, color: Colors.white),
+                SizedBox(width: 6),
+                Text(
+                  MissionDashboardStrings.enrolNewCta,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
-      onPressed: () => showEnrollmentEntrySheet(context),
     );
   }
 }
@@ -1034,12 +1067,14 @@ class _DashboardHeader extends StatelessWidget {
     required this.greeting,
     required this.locationLine,
     required this.onNotifications,
+    required this.onPerformance,
     required this.settingsMenu,
   });
 
   final String greeting;
   final String? locationLine;
   final VoidCallback onNotifications;
+  final VoidCallback onPerformance;
   final Widget settingsMenu;
 
   @override
@@ -1091,6 +1126,15 @@ class _DashboardHeader extends StatelessWidget {
                 ),
               ),
               _ReferralNotificationButton(onTap: onNotifications),
+              IconButton(
+                icon: const Icon(
+                  Icons.leaderboard_rounded,
+                  color: Colors.white,
+                ),
+                iconSize: 22,
+                tooltip: PerformanceStrings.iconTooltip,
+                onPressed: onPerformance,
+              ),
               settingsMenu,
             ],
           ),
@@ -1217,84 +1261,90 @@ class _DashboardStatCard extends StatelessWidget {
         onTap: isLoading ? null : onTap,
         borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
         child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (isLoading)
-                    SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 3,
-                        color: accent,
-                      ),
-                    )
-                  else
-                    Text(
-                      value,
-                      style: TextStyle(
-                        fontSize: 30,
-                        fontWeight: FontWeight.w900,
-                        color: accent,
-                        height: 1,
-                      ),
-                    ),
-                  if (showPulse && !isLoading) ...[
-                    const SizedBox(width: 6),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: accent,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: accent.withValues(alpha: 0.4),
-                              blurRadius: 6,
-                              spreadRadius: 1,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isLoading)
+                      SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2.5, color: accent),
+                      )
+                    else
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Text(
+                            value,
+                            style: TextStyle(
+                              fontSize: 26,
+                              fontWeight: FontWeight.w900,
+                              color: accent,
+                              height: 1,
+                            ),
+                          ),
+                          if (showPulse) ...[
+                            const SizedBox(width: 5),
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                color: accent,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: accent.withValues(alpha: 0.4),
+                                    blurRadius: 5,
+                                    spreadRadius: 1,
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
-                        ),
+                        ],
+                      ),
+                    const SizedBox(height: 3),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Theme.of(context).colorScheme.onSurface,
+                        height: 1.2,
                       ),
                     ),
+                    const SizedBox(height: 1),
+                    Text(
+                      subline,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: accent,
+                        height: 1.2,
+                      ),
+                    ),
+                    if (footnote != null) ...[
+                      const SizedBox(height: 1),
+                      Text(
+                        footnote!,
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w500,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          height: 1.2,
+                        ),
+                      ),
+                    ],
                   ],
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
-              const SizedBox(height: 2),
-              Text(
-                subline,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: accent,
-                ),
-              ),
-              if (footnote != null) ...[
-                const SizedBox(height: 3),
-                Text(
-                  footnote!,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
+              Icon(Icons.chevron_right_rounded, size: 14, color: accent.withValues(alpha: 0.4)),
             ],
           ),
         ),
@@ -1463,19 +1513,19 @@ class _AiSortedInfoCard extends StatelessWidget {
           ('🚨', MissionDashboardStrings.aiSortedTagCce),
         ];
         return Container(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               colors: [AppColors.navy, AppColors.navyMid],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
                 color: AppColors.navy.withValues(alpha: 0.18),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
               ),
             ],
           ),
@@ -1486,61 +1536,49 @@ class _AiSortedInfoCard extends StatelessWidget {
               Row(
                 children: [
                   Container(
-                    width: 26,
-                    height: 26,
+                    width: 22,
+                    height: 22,
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.16),
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: const Icon(Icons.auto_awesome,
-                        size: 14, color: Colors.white),
+                    child: const Icon(Icons.auto_awesome, size: 12, color: Colors.white),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       isLoading
                           ? 'AI sorted your visits overnight'
                           : MissionDashboardStrings.aiSortedVisits(count),
                       style: const TextStyle(
-                        fontSize: 13,
+                        fontSize: 12,
                         fontWeight: FontWeight.w800,
                         color: Colors.white,
-                        height: 1.25,
+                        height: 1.2,
                       ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
+              const SizedBox(height: 8),
+              Row(
                 children: tags
                     .map(
                       (t) => Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
+                        margin: const EdgeInsets.only(right: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.14),
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.18),
-                          ),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(t.$1, style: const TextStyle(fontSize: 11)),
-                            const SizedBox(width: 4),
-                            Text(
-                              t.$2,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
+                        child: Text(
+                          '${t.$1} ${t.$2}',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
                     )

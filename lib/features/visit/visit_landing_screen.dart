@@ -110,6 +110,7 @@ class _VisitLandingScreenState extends State<VisitLandingScreen> {
           'memberId': null,
           'householdId': widget.data?.householdId,
           'patientAge': widget.data?.patientAge,
+          'patientGender': widget.data?.patientGender,
         },
       );
     } else {

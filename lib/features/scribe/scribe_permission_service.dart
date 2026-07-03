@@ -127,10 +127,6 @@ class _RationaleSheet extends StatelessWidget {
             text: 'Records consultation audio',
           ),
           _BulletItem(
-            icon: Icons.auto_awesome,
-            text: 'AI drafts a SOAP note automatically',
-          ),
-          _BulletItem(
             icon: Icons.check_circle_outline,
             text: 'You review and accept before it saves',
           ),

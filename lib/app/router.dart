@@ -284,6 +284,10 @@ GoRouter buildRouter(AuthState auth) {
                           patientGender: extra?['patientGender'] as String?,
                           gestationalWeeks:
                               extra?['gestationalWeeks'] as int?,
+                          isPostpartum:
+                              extra?['isPostpartum'] as bool? ?? false,
+                          postpartumWeeks:
+                              extra?['postpartumWeeks'] as int?,
                           origin: origin,
                         ),
                       );

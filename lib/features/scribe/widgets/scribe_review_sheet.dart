@@ -308,14 +308,6 @@ class _SheetHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'AI Draft Note',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
-              ),
-              Text(
                 '$confidencePct% confidence · $model',
                 style: TextStyle(
                   fontSize: 11,
