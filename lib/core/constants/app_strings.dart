@@ -3580,3 +3580,177 @@ abstract final class EnrollmentStrings {
   static const String detailLabelTotalMembers = 'Total Members';
 }
 
+/// Visit landing screen — patient header, last-seen line, household co-flags,
+/// and the "Start Visit" CTA. (`Start Visit` itself and the patient-name
+/// fallback are shared with [PatientContextStrings].)
+abstract final class VisitLandingStrings {
+  VisitLandingStrings._();
+
+  static const String startFailed = 'Failed to start visit';
+  static const String firstVisit = 'First visit for this patient';
+  static const String alsoInHousehold = 'Also in this household';
+  static const String startingButton = 'Starting...';
+
+  /// Patient age line, e.g. `42 years`.
+  static String ageYears(int age) => '$age years';
+
+  // ── Last-seen relative time ────────────────────────────────────────────────
+  static const String seenToday = 'today';
+  static const String seenYesterday = 'yesterday';
+
+  /// e.g. `3 days ago`.
+  static String seenDaysAgo(int days) => '$days days ago';
+
+  /// e.g. `2 weeks ago`.
+  static String seenWeeksAgo(int weeks) => '$weeks weeks ago';
+
+  /// e.g. `Last seen yesterday — ANC`.
+  static String lastSeen(String timeAgo, String programme) =>
+      'Last seen $timeAgo — $programme';
+}
+
+/// Three-card pre-visit AI briefing screen shown between encounter creation
+/// and triage. (Card 1 title is shared with
+/// [SymptomPickerStrings.briefCard1Title]; `Next` is shared with
+/// [ComposerStrings.nextButton].)
+abstract final class VisitBriefingStrings {
+  VisitBriefingStrings._();
+
+  static const String fallbackTitle = 'Pre-Visit Briefing';
+
+  // ── Card 1: Before You Knock ──────────────────────────────────────────────
+  static const String card1Subtitle =
+      'AI-generated briefing based on patient history';
+  static const String briefingUnavailable =
+      'AI briefing unavailable — check patient record manually.';
+
+  // ── Card 2: Conversation Guide ────────────────────────────────────────────
+  static const String card2Title = 'Conversation Guide';
+  static const String card2Subtitle =
+      'Personalised for this patient\'s programmes and history';
+  static const String guideUnavailable = 'Conversation guide unavailable.';
+
+  // ── Card 3: Transition ────────────────────────────────────────────────────
+  static const String card3Title = 'Begin the Consultation';
+  static const String card3Subtitle =
+      'Ask the patient how they are feeling — the AI Scribe will start listening';
+  static const String transitionFallback =
+      'Ask the patient how she is feeling today and begin the consultation.';
+  static const String scribeBadgeLabel = 'Ambient AI Scribe';
+  static const String scribeBadgeDescription =
+      'Automatically transcribes and structures clinical information as you speak.';
+  static const String autofillBadgeLabel = 'Auto-fill Assessment';
+  static const String autofillBadgeDescription =
+      'Relevant fields in the assessment form are populated from the conversation.';
+  static const String reviewBadgeLabel = 'You Review Everything';
+  static const String reviewBadgeDescription =
+      'All AI suggestions are proposals — you accept or edit before submitting.';
+
+  // ── Bottom bar ────────────────────────────────────────────────────────────
+  static const String beginAssessment = 'Begin Assessment';
+  static const String skipBriefing = 'Skip briefing';
+}
+
+/// Visit details screen — per-encounter drill-down with section cards,
+/// detail-row labels, and rawJson-derived additional details.
+/// (`Diagnosis` is shared with [RealtimeAsrStrings.diagnosis].)
+abstract final class VisitDetailsStrings {
+  VisitDetailsStrings._();
+
+  static const String fallbackTitle = 'Visit Details';
+  static const String headerVisitFallback = 'Visit';
+
+  // ── Visit Information section ─────────────────────────────────────────────
+  static const String sectionVisitInformation = 'Visit Information';
+  static const String labelService = 'Service';
+  static const String generalVisitFallback = 'General Visit';
+  static const String labelVisitDate = 'Visit Date';
+  static const String labelReviewDate = 'Review Date';
+  static const String labelVisitNumber = 'Visit Number';
+  static const String labelStatus = 'Status';
+  static const String labelVisitType = 'Visit Type';
+  static const String labelPatientStatus = 'Patient Status';
+  static const String labelEncounterId = 'Encounter ID';
+
+  // ── Clinical section titles ───────────────────────────────────────────────
+  static const String sectionPresentingComplaints = 'Presenting Complaints';
+  static const String sectionSystemicExaminations = 'Systemic Examinations';
+  static const String sectionObstetricExaminations = 'Obstetric Examinations';
+  static const String sectionComplaints = 'Complaints';
+  static const String sectionPhysicalExaminations = 'Physical Examinations';
+  static const String sectionComorbidities = 'Comorbidities';
+  static const String sectionComplications = 'Complications';
+  static const String sectionInvestigations = 'Investigations';
+  static const String sectionClinicalNotes = 'Clinical Notes';
+  static const String notesLabel = 'Notes';
+
+  // ── Visit history section ─────────────────────────────────────────────────
+  static const String sectionVisitHistory = 'Visit History';
+  static const String unknownVisitType = 'Unknown';
+
+  /// e.g. `Encounter ID: enc-123`.
+  static String encounterIdLine(String id) => '$labelEncounterId: $id';
+
+  // ── Prescriptions section ─────────────────────────────────────────────────
+  static const String sectionPrescriptions = 'Prescriptions';
+  static const String unknownMedication = 'Unknown Medication';
+  static const String labelDosage = 'Dosage';
+  static const String labelFrequency = 'Frequency';
+  static const String labelDuration = 'Duration';
+  static const String labelInstructions = 'Instructions';
+
+  // ── Provider section ──────────────────────────────────────────────────────
+  static const String sectionProviderInformation = 'Provider Information';
+  static const String labelProvider = 'Provider';
+  static const String labelFacility = 'Facility';
+
+  // ── Labour & Delivery section ─────────────────────────────────────────────
+  static const String sectionLabourDelivery = 'Labour & Delivery';
+  static const String labelDeliveryType = 'Delivery Type';
+  static const String labelDeliveryAt = 'Delivery At';
+  static const String labelDeliveryBy = 'Delivery By';
+  static const String labelDeliveryStatus = 'Delivery Status';
+  static const String labelDeliveryDateTime = 'Delivery Date/Time';
+  static const String labelLabourOnset = 'Labour Onset';
+
+  // ── Neonate / Baby section ────────────────────────────────────────────────
+  static const String sectionNeonate = 'Neonate / Baby';
+  static const String labelMotherAlive = 'Mother Alive';
+  static const String yes = 'Yes';
+  static const String no = 'No';
+  static const String labelNeonateOutcome = 'Neonate Outcome';
+  static const String labelStateOfBaby = 'State of Baby';
+  static const String labelBirthWeight = 'Birth Weight';
+  static const String labelBreastCondition = 'Breast Condition';
+  static const String labelBreastNotes = 'Breast Notes';
+  static const String labelInvolutionOfUterus = 'Involution of Uterus';
+  static const String labelSigns = 'Signs';
+
+  // ── Additional details section ────────────────────────────────────────────
+  static const String sectionAdditionalDetails = 'Additional Details';
+
+  /// Display labels for rawJson fields surfaced in the Additional Details
+  /// section, keyed by the wire field name (keys are not user-facing).
+  static const Map<String, String> additionalDetailLabels = {
+    'referralStatus': 'Referral Status',
+    'referralReason': 'Referral Reason',
+    'nextFollowUpDate': 'Next Follow-up',
+    'diagnosis': RealtimeAsrStrings.diagnosis,
+    'prescription': 'Prescription',
+    'labTests': 'Lab Tests',
+    'symptoms': 'Symptoms',
+    'riskLevel': 'Risk Level',
+    'programType': 'Program Type',
+    'encounterClass': 'Encounter Type',
+    'reasonCode': 'Reason',
+    'bloodPressureSystolic': 'BP Systolic',
+    'bloodPressureDiastolic': 'BP Diastolic',
+    'weight': 'Weight',
+    'height': 'Height',
+    'bmi': 'BMI',
+    'temperature': 'Temperature',
+    'pulseRate': 'Pulse Rate',
+    'respiratoryRate': 'Respiratory Rate',
+  };
+}
+
