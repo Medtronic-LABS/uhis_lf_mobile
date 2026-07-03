@@ -249,7 +249,7 @@ class ScribeJobResult {
   }
 }
 
-/// HTTP client for the ai-scribe-service.
+/// HTTP client for the AI Scribe service.
 ///
 /// Uses a dedicated Dio instance — no UHIS auth interceptors or cookie jar.
 /// Base URL: [AppConfig.aiServiceBaseUrl] when set (via --dart-define
@@ -277,7 +277,7 @@ class ScribeApiService extends ApiRepository {
 
   static const int _chunkThresholdBytes = 1 * 1024 * 1024; // 1 MB
 
-  static const String _nginxPrefix = '/ai-scribe-service';
+  static const String _nginxPrefix = '/ai-scribe';
 
   static String _scribePath(String path) {
     return path.startsWith(_nginxPrefix) ? path.substring(_nginxPrefix.length) : path;
