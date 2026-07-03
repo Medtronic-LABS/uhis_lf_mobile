@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 
 import '../../../core/models/programme.dart';
+import '../pathway/pathway_engine.dart';
+import '../triage/patient_context_builder.dart';
 import 'programme_recommendation_models.dart';
 import 'programme_recommendation_repository.dart';
 
@@ -84,12 +86,67 @@ class ProgrammeSelectionViewModel extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     } catch (e, stack) {
-      debugPrint('[ProgrammeSelection] recommend failed: $e\n$stack');
+      debugPrint('[ProgrammeSelection] recommend failed — using rule-based fallback: $e\n$stack');
       if (_disposed) return;
+      _response = _ruleBasedFallback(request, currentProgrammes);
+      _autoAcceptHighConfidence();
       _isLoading = false;
-      _error = e.toString();
+      _error = null;
       notifyListeners();
     }
+  }
+
+  /// Derives programme recommendations from [PathwayEngine] when the AI
+  /// service is unreachable. Confidence is 1.0 (rule fired = certain).
+  static ProgrammeRecommendationResponse _ruleBasedFallback(
+    Map<String, dynamic> request,
+    Set<Programme> currentProgrammes,
+  ) {
+    final ageMonths = (request['ageMonths'] as int?) ?? 0;
+    final isPregnant = (request['isPregnant'] as bool?) ?? false;
+    final gestationalWeeks = request['gestationalWeeks'] as int?;
+    final rawSymptoms = request['selectedSymptoms'];
+    final symptoms = <String>{
+      if (rawSymptoms is List)
+        for (final s in rawSymptoms)
+          if (s is String) s,
+    };
+    final gender = (request['gender'] as String?)?.toLowerCase();
+
+    final ctx = PatientContext(
+      patientId: (request['patientId'] as String?) ?? '',
+      ageMonths: ageMonths,
+      sex: gender == 'female'
+          ? Sex.female
+          : gender == 'male'
+              ? Sex.male
+              : Sex.unknown,
+      isPregnant: isPregnant,
+      gestationalWeeks: gestationalWeeks,
+      activeProgrammes: currentProgrammes,
+    );
+
+    final pathways = PathwayEngine.activate(symptoms, ctx);
+
+    final recommendations = pathways
+        .where((p) => p.programme != Programme.unknown)
+        .map((p) => ProgrammeRecommendation(
+              programme: p.programme,
+              confidence: 1.0,
+              rationale: const [
+                ProgrammeRationaleBullet(
+                  text: 'Activated by symptom screening rules',
+                  source: RationaleSource.general,
+                ),
+              ],
+              isCurrent: currentProgrammes.contains(p.programme),
+            ))
+        .toList(growable: false);
+
+    return ProgrammeRecommendationResponse(
+      recommendations: recommendations,
+      modelVersion: 'rule-based-fallback',
+    );
   }
 
   @override
