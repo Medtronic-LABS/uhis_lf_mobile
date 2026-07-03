@@ -20,7 +20,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 15;
+  static const int schemaVersion = 16;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -42,6 +42,8 @@ class AppDatabase {
   static const String tableAiSuggestions = 'ai_suggestions';
   static const String tableEvalLog = 'eval_log';
   static const String tableAiResponseCache = 'ai_response_cache';
+  static const String tableCoachingModules = 'coaching_modules';
+  static const String tableCoachingProgress = 'coaching_progress';
 
   /// Opens (creating if needed) the on-device database, encrypted with
   /// a per-device key stored in Android EncryptedSharedPreferences.
@@ -451,6 +453,27 @@ class AppDatabase {
         'CREATE INDEX idx_ai_cache_kind ON $tableAiResponseCache(kind)');
     await db.execute(
         'CREATE INDEX idx_ai_cache_expires ON $tableAiResponseCache(expires_at)');
+
+    // v16 — Micro-coaching module cache + progress tables.
+    await db.execute('''
+      CREATE TABLE $tableCoachingModules (
+        id TEXT PRIMARY KEY,
+        domain TEXT NOT NULL,
+        title_en TEXT NOT NULL,
+        title_bn TEXT NOT NULL,
+        estimated_minutes INTEGER NOT NULL DEFAULT 5,
+        raw_json TEXT NOT NULL,
+        priority_today INTEGER NOT NULL DEFAULT 0,
+        synced_at INTEGER NOT NULL
+      )''');
+    await db.execute('''
+      CREATE TABLE $tableCoachingProgress (
+        module_id TEXT PRIMARY KEY,
+        passed INTEGER NOT NULL DEFAULT 0,
+        quiz_score REAL NOT NULL DEFAULT 0.0,
+        last_card_viewed INTEGER NOT NULL DEFAULT -1,
+        updated_at INTEGER NOT NULL
+      )''');
   }
 
   static Future<void> _onUpgrade(Database db, int from, int to) async {
@@ -917,6 +940,33 @@ class AppDatabase {
           'CREATE INDEX IF NOT EXISTS idx_ai_cache_kind ON $tableAiResponseCache(kind)');
       await addIdx15(
           'CREATE INDEX IF NOT EXISTS idx_ai_cache_expires ON $tableAiResponseCache(expires_at)');
+    }
+    if (from < 16) {
+      // v16 — Micro-coaching module cache + progress tables.
+      Future<void> addTbl16(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* table already present */}
+      }
+      await addTbl16('''
+        CREATE TABLE IF NOT EXISTS $tableCoachingModules (
+          id TEXT PRIMARY KEY,
+          domain TEXT NOT NULL,
+          title_en TEXT NOT NULL,
+          title_bn TEXT NOT NULL,
+          estimated_minutes INTEGER NOT NULL DEFAULT 5,
+          raw_json TEXT NOT NULL,
+          priority_today INTEGER NOT NULL DEFAULT 0,
+          synced_at INTEGER NOT NULL
+        )''');
+      await addTbl16('''
+        CREATE TABLE IF NOT EXISTS $tableCoachingProgress (
+          module_id TEXT PRIMARY KEY,
+          passed INTEGER NOT NULL DEFAULT 0,
+          quiz_score REAL NOT NULL DEFAULT 0.0,
+          last_card_viewed INTEGER NOT NULL DEFAULT -1,
+          updated_at INTEGER NOT NULL
+        )''');
     }
   }
 

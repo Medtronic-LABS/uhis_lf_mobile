@@ -106,6 +106,13 @@ class AppConfig {
     return raw == 4 ? 4 : 6;
   }
 
+  /// Base URL for the spice-coaching micro-coaching service.
+  /// Default: Android emulator loopback to port 8000.
+  static const String coachingServiceUrl = String.fromEnvironment(
+    'COACHING_SERVICE_URL',
+    defaultValue: 'http://10.0.2.2:8000',
+  );
+
   /// Base URL for the unified `leapfrog-ai-services` container — AI Visit
   /// Briefing, Programme Recommendation, NABA, AI Scribe, and realtime ASR all
   /// live behind this one service/port now.

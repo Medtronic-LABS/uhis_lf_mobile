@@ -10,10 +10,12 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import 'coaching_models.dart';
+import 'coaching_repository.dart';
 import 'quiz_screen.dart';
 
 class ModulePlayerScreen extends StatefulWidget {
@@ -31,6 +33,7 @@ class _ModulePlayerScreenState extends State<ModulePlayerScreen> {
   bool get _isLast => _cardIndex == widget.module.cards.length - 1;
 
   void _next() {
+    context.read<CoachingRepository>().markCardViewed(widget.module.id, _cardIndex);
     if (_isLast) {
       _launchQuiz();
       return;

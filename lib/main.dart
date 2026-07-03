@@ -67,6 +67,8 @@ import 'features/visit/submission/unified_submission_orchestrator.dart';
 import 'features/visit/briefing/visit_briefing_repository.dart';
 import 'features/visit/programme_selection/programme_recommendation_repository.dart';
 import 'features/visit/visit_controller.dart';
+import 'features/training/coaching_dao.dart';
+import 'features/training/coaching_repository.dart';
 import 'features/worklist/worklist_repository.dart';
 
 /// Remove any legacy seeded/demo test data from local SQLite.
@@ -248,6 +250,11 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final UnifiedSubmissionOrchestrator _submissionOrchestrator =
       UnifiedSubmissionOrchestrator(_localAssessmentDao);
 
+  // ── Micro-coaching ────────────────────────────────────────────────────────
+  late final CoachingDao _coachingDao = CoachingDao(widget.appDb);
+  late final CoachingRepository _coachingRepo =
+      CoachingRepository(_coachingDao, widget.api, widget.authRepo);
+
   @override
   void initState() {
     super.initState();
@@ -255,6 +262,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     // Register notification channels + rehydrate any pending repeat alarms
     // from the last session. Both are idempotent.
     unawaited(_bootstrapNotifications());
+    unawaited(_coachingRepo.initialize());
   }
 
   Future<void> _bootstrapNotifications() async {
@@ -421,6 +429,8 @@ class _UhisNextAppState extends State<UhisNextApp>
         // SK → SS → sub-village hierarchy (session cache, invalidated on logout)
         ChangeNotifierProvider<UserHierarchyService>.value(
             value: _userHierarchy),
+        // Micro-coaching: module library + progress (offline-first, syncs from spice-coaching)
+        ChangeNotifierProvider<CoachingRepository>.value(value: _coachingRepo),
       ],
       child: Builder(
         builder: (context) {

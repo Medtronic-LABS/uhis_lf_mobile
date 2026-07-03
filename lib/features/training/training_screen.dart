@@ -15,9 +15,12 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
 import '../../core/constants/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import 'coaching_models.dart';
+import 'coaching_repository.dart';
 import 'module_player_screen.dart';
 
 class TrainingScreen extends StatelessWidget {
@@ -26,8 +29,9 @@ class TrainingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final priorities = MockCoachingData.todaysPriorities;
-    final all = MockCoachingData.allModules;
+    final repo = context.watch<CoachingRepository>();
+    final priorities = repo.todaysPriorities;
+    final all = repo.modules;
 
     return Scaffold(
       backgroundColor: AppColors.canvas,
