@@ -11,9 +11,31 @@ import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
 import '../../core/db/patient_dao.dart';
+import '../../core/db/patient_programmes_dao.dart';
 import '../../core/models/patient.dart';
+import '../../core/models/programme.dart';
 import '../../core/models/risk.dart';
 import '../../core/theme/app_theme.dart';
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+typedef _MemberEntry = ({Patient patient, Set<Programme> programmes});
+
+String _programmeLabel(Programme p) => switch (p) {
+      Programme.anc => 'ANC Check',
+      Programme.pnc => 'PNC Visit',
+      Programme.ncd => 'NCD Check',
+      Programme.imci => 'Child Health',
+      Programme.tb => 'TB Follow-up',
+      Programme.epi => 'Immunisation',
+      Programme.nutrition => 'Nutrition',
+      Programme.familyPlanning => 'Family Planning',
+      Programme.cataract => 'Cataract',
+      Programme.eyeCare => 'Eye Care',
+      _ => p.wireTag,
+    };
+
+// ── Screen ────────────────────────────────────────────────────────────────────
 
 class HouseholdFollowUpScreen extends StatefulWidget {
   const HouseholdFollowUpScreen({
@@ -39,7 +61,7 @@ class HouseholdFollowUpScreen extends StatefulWidget {
 }
 
 class _HouseholdFollowUpScreenState extends State<HouseholdFollowUpScreen> {
-  List<Patient>? _members;
+  List<_MemberEntry>? _entries;
 
   @override
   void initState() {
@@ -48,29 +70,40 @@ class _HouseholdFollowUpScreenState extends State<HouseholdFollowUpScreen> {
   }
 
   Future<void> _load() async {
-    final dao = context.read<PatientDao>();
-    final rows = await dao.getByHouseholdId(widget.householdId);
+    final patientDao = context.read<PatientDao>();
+    final progDao = context.read<PatientProgrammesDao>();
+
+    final rows = await patientDao.getByHouseholdId(widget.householdId);
     final members = rows
         .map(Patient.fromDb)
         .where((p) => p.id != widget.excludePatientId)
         .where((p) => p.isActive != false)
+        .toList();
+
+    final progMap = await progDao.programmesForMany(
+      members.map((p) => p.id).toList(),
+    );
+
+    final entries = members
+        .map((p) => (patient: p, programmes: progMap[p.id] ?? <Programme>{}))
         .toList()
       ..sort(_byUrgency);
-    if (mounted) setState(() => _members = members);
+
+    if (mounted) setState(() => _entries = entries);
   }
 
-  static int _byUrgency(Patient a, Patient b) {
-    final bandA = a.riskBand?.index ?? Band.band4.index;
-    final bandB = b.riskBand?.index ?? Band.band4.index;
+  static int _byUrgency(_MemberEntry a, _MemberEntry b) {
+    final bandA = a.patient.riskBand?.index ?? Band.band4.index;
+    final bandB = b.patient.riskBand?.index ?? Band.band4.index;
     if (bandA != bandB) return bandA.compareTo(bandB);
-    final dueA = a.nextDueAt ?? double.maxFinite.toInt();
-    final dueB = b.nextDueAt ?? double.maxFinite.toInt();
+    final dueA = a.patient.nextDueAt ?? double.maxFinite.toInt();
+    final dueB = b.patient.nextDueAt ?? double.maxFinite.toInt();
     return dueA.compareTo(dueB);
   }
 
   @override
   Widget build(BuildContext context) {
-    final members = _members;
+    final entries = _entries;
 
     return Scaffold(
       backgroundColor: AppColors.canvas,
@@ -103,23 +136,24 @@ class _HouseholdFollowUpScreenState extends State<HouseholdFollowUpScreen> {
 
           // Member list
           Expanded(
-            child: members == null
+            child: entries == null
                 ? const Center(child: CircularProgressIndicator())
-                : members.isEmpty
+                : entries.isEmpty
                     ? _EmptyState(onDone: widget.onDone)
                     : ListView.separated(
                         padding: const EdgeInsets.all(16),
-                        itemCount: members.length,
+                        itemCount: entries.length,
                         separatorBuilder: (_, _) => const SizedBox(height: 10),
                         itemBuilder: (_, i) => _MemberCard(
-                          patient: members[i],
-                          onView: () => widget.onViewPatient(members[i].id),
+                          entry: entries[i],
+                          onView: () =>
+                              widget.onViewPatient(entries[i].patient.id),
                         ),
                       ),
           ),
 
           // Done footer
-          if (members != null && members.isNotEmpty)
+          if (entries != null && entries.isNotEmpty)
             SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -187,13 +221,17 @@ class _EmptyState extends StatelessWidget {
 // ── Member card ───────────────────────────────────────────────────────────────
 
 class _MemberCard extends StatelessWidget {
-  const _MemberCard({required this.patient, required this.onView});
-  final Patient patient;
+  const _MemberCard({required this.entry, required this.onView});
+  final _MemberEntry entry;
   final VoidCallback onView;
 
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    final patient = entry.patient;
+    final programmes = entry.programmes
+        .where((p) => p != Programme.unknown)
+        .toList();
     final urgencyChip = _urgencyChip(patient);
 
     return Container(
@@ -203,68 +241,83 @@ class _MemberCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.card),
         border: Border.all(color: tokens.divider),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Avatar
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: _bandColor(patient.riskBand).withValues(alpha: 0.15),
-            child: Text(
-              (patient.name ?? '?').characters.first.toUpperCase(),
-              style: TextStyle(
-                color: _bandColor(patient.riskBand),
-                fontWeight: FontWeight.w700,
-                fontSize: 16,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-
-          // Name + age + urgency
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  patient.name ?? '—',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                    color: AppColors.textPrimary,
+          // Top row: avatar + name/age/urgency + CTA
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 20,
+                backgroundColor:
+                    _bandColor(patient.riskBand).withValues(alpha: 0.15),
+                child: Text(
+                  (patient.name ?? '?').characters.first.toUpperCase(),
+                  style: TextStyle(
+                    color: _bandColor(patient.riskBand),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Row(
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (patient.age != null)
-                      Text(
-                        '${patient.age}y',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textMuted,
-                        ),
+                    Text(
+                      patient.name ?? '—',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: AppColors.textPrimary,
                       ),
-                    if (patient.age != null && urgencyChip != null)
-                      const SizedBox(width: 6),
-                    if (urgencyChip != null) urgencyChip,
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        if (patient.age != null)
+                          Text(
+                            '${patient.age}y',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                        if (patient.age != null && urgencyChip != null)
+                          const SizedBox(width: 6),
+                        if (urgencyChip != null) urgencyChip,
+                      ],
+                    ),
                   ],
                 ),
-              ],
-            ),
+              ),
+              TextButton(
+                onPressed: onView,
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.navy,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                child: const Text(
+                  HouseholdFollowUpStrings.viewPatient,
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+              ),
+            ],
           ),
 
-          // CTA
-          TextButton(
-            onPressed: onView,
-            style: TextButton.styleFrom(
-              foregroundColor: AppColors.navy,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          // Programme pills — shown when the patient has enrolled programmes
+          if (programmes.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: programmes
+                  .map((p) => _ProgrammePill(programme: p))
+                  .toList(),
             ),
-            child: const Text(
-              HouseholdFollowUpStrings.viewPatient,
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-            ),
-          ),
+          ],
         ],
       ),
     );
@@ -293,11 +346,13 @@ class _MemberCard extends StatelessWidget {
       label = HouseholdFollowUpStrings.overdue;
       bg = AppColors.statusWarning.withValues(alpha: 0.12);
       fg = AppColors.statusWarning;
-    } else if (due != null && due < now + const Duration(days: 1).inMilliseconds) {
+    } else if (due != null &&
+        due < now + const Duration(days: 1).inMilliseconds) {
       label = HouseholdFollowUpStrings.dueToday;
       bg = AppColors.navy.withValues(alpha: 0.10);
       fg = AppColors.navy;
-    } else if (due != null && due < now + const Duration(days: 7).inMilliseconds) {
+    } else if (due != null &&
+        due < now + const Duration(days: 7).inMilliseconds) {
       label = HouseholdFollowUpStrings.dueSoon;
       bg = AppColors.border;
       fg = AppColors.textMuted;
@@ -313,10 +368,42 @@ class _MemberCard extends StatelessWidget {
       ),
       child: Text(
         label,
+        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: fg),
+      ),
+    );
+  }
+}
+
+// ── Programme pill ────────────────────────────────────────────────────────────
+
+class _ProgrammePill extends StatelessWidget {
+  const _ProgrammePill({required this.programme});
+  final Programme programme;
+
+  Color _pillColor(Programme p) => switch (p) {
+        Programme.anc || Programme.pnc => AppColors.ancHeader,
+        Programme.ncd => AppColors.ncdHeader,
+        Programme.imci => AppColors.imciHeader,
+        Programme.tb => AppColors.tbHeader,
+        _ => AppColors.navy,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _pillColor(programme);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Text(
+        _programmeLabel(programme),
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w600,
-          color: fg,
+          color: color,
         ),
       ),
     );
