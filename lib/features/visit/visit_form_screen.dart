@@ -83,6 +83,10 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
   /// fires a referral recommendation.
   bool _sectionedReferralTriggered = false;
 
+  /// True after [DynamicAssessmentScreen] signals a load failure via onError —
+  /// causes an automatic fallback to [SectionedAssessmentScreen].
+  bool _sdkFormFailed = false;
+
   bool get _hasActivatedPathways =>
       widget.activatedPathways != null && widget.activatedPathways!.isNotEmpty;
 
@@ -251,7 +255,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     debugPrint(
         '[VisitForm] Sectioned mode — programmes: ${widget.activatedPathways?.join(', ')}');
 
-    if (AppConfig.useDynamicForms) {
+    if (AppConfig.useDynamicForms && !_sdkFormFailed) {
       final allProgrammes = (widget.activatedPathways ?? const [])
           .map(Programme.fromString)
           .where((p) => p != Programme.unknown)
@@ -266,6 +270,10 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         onSubmit: () => _onSectionedSubmit(ctx, visitCtrl, session),
         onReferNow: () => setState(() => _sectionedReferralTriggered = true),
         embedded: embedded,
+        onError: () {
+          debugPrint('[VisitForm] SDK form failed — falling back to SectionedAssessmentScreen');
+          setState(() => _sdkFormFailed = true);
+        },
       );
     }
 

@@ -41,6 +41,7 @@ class DynamicAssessmentScreen extends StatefulWidget {
     this.onReferNow,
     this.restoredDraft,
     this.embedded = false,
+    this.onError,
   });
 
   /// Single programme identifier (e.g. 'anc', 'ncd').
@@ -73,6 +74,10 @@ class DynamicAssessmentScreen extends StatefulWidget {
   /// When true, suppresses the internal AppBar — caller owns the navigation
   /// chrome (e.g. [VisitFlowScreen] already shows patient header + step bar).
   final bool embedded;
+
+  /// Called when the schema fails to load — lets the parent fall back to the
+  /// legacy [SectionedAssessmentScreen] rather than showing an error wall.
+  final VoidCallback? onError;
 
   @override
   State<DynamicAssessmentScreen> createState() =>
@@ -111,11 +116,11 @@ class _DynamicAssessmentScreenState extends State<DynamicAssessmentScreen> {
       }
 
       if (schema == null) {
-        setState(() {
-          _loadError = 'No form schema for '
-              '"${widget.programmes?.map((p) => p.name).join(', ') ?? widget.formType}"';
-          _loading = false;
-        });
+        debugPrint('[DynamicAssessment] no schema — triggering fallback');
+        _triggerFallback(
+          'No form schema for '
+          '"${widget.programmes?.map((p) => p.name).join(', ') ?? widget.formType}"',
+        );
         return;
       }
 
@@ -141,8 +146,18 @@ class _DynamicAssessmentScreenState extends State<DynamicAssessmentScreen> {
         _loading = false;
       });
     } catch (e) {
+      debugPrint('[DynamicAssessment] _loadSchema error — triggering fallback: $e');
+      _triggerFallback('Failed to load form: $e');
+    }
+  }
+
+  void _triggerFallback(String reason) {
+    if (widget.onError != null) {
+      // Parent handles fallback — no need to render an error wall here.
+      if (mounted) widget.onError!();
+    } else {
       setState(() {
-        _loadError = 'Failed to load form: $e';
+        _loadError = reason;
         _loading = false;
       });
     }
