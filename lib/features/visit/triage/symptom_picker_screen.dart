@@ -1684,17 +1684,24 @@ class _UnifiedSymptomPicker extends StatefulWidget {
 }
 
 class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
-  late final TextEditingController _otherCtrl;
+  final _inputCtrl = TextEditingController();
+  String _query = '';
 
   @override
   void initState() {
     super.initState();
-    _otherCtrl = TextEditingController(text: widget.vm.customSymptomText);
+    _inputCtrl.text = widget.vm.customSymptomText ?? '';
+    _inputCtrl.addListener(() {
+      final q = _inputCtrl.text.trim().toLowerCase();
+      setState(() => _query = q);
+      // Always sync free text so non-vocab notes are preserved.
+      widget.vm.setCustomSymptomText(_inputCtrl.text);
+    });
   }
 
   @override
   void dispose() {
-    _otherCtrl.dispose();
+    _inputCtrl.dispose();
     super.dispose();
   }
 
@@ -1710,6 +1717,12 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
     );
   }
 
+  void _pickSuggestion(String code) {
+    widget.vm.addSymptom(code);
+    _inputCtrl.clear();
+    widget.vm.setCustomSymptomText('');
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -1717,6 +1730,19 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
       builder: (context, _) {
         final vm = widget.vm;
         final selected = vm.selectedSymptoms;
+
+        // Vocab suggestions: matches query, not already selected.
+        final suggestions = _query.isEmpty
+            ? const <String>[]
+            : vm.applicableVocabCodes
+                  .where(
+                    (code) =>
+                        !selected.contains(code) &&
+                        TriageStrings.symptomLabel(code)
+                            .toLowerCase()
+                            .contains(_query),
+                  )
+                  .toList();
 
         return Container(
           decoration: BoxDecoration(
@@ -1757,7 +1783,7 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                     : SymptomPickerStrings.detectedSymptomsSubtitleFilled,
                 style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
               ),
-              // AI-detected chips
+              // AI-detected / manually-added chips
               if (selected.isNotEmpty) ...[
                 const SizedBox(height: 10),
                 Wrap(
@@ -1775,7 +1801,7 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                 ),
               ],
               if (selected.isNotEmpty) const SizedBox(height: 12),
-              // Add symptoms button → bottom sheet
+              // Browse full list → bottom sheet
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
@@ -1796,7 +1822,8 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
               const SizedBox(height: 14),
               const Divider(height: 1, thickness: 0.5),
               const SizedBox(height: 12),
-              // Other symptoms free-text
+              // Dual-purpose field: live-search vocab → suggestion chips,
+              // or free-text note when no vocab match.
               const Text(
                 SymptomPickerStrings.otherSymptomsLabel,
                 style: TextStyle(
@@ -1807,7 +1834,7 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
               ),
               const SizedBox(height: 8),
               TextField(
-                controller: _otherCtrl,
+                controller: _inputCtrl,
                 decoration: const InputDecoration(
                   hintText: SymptomPickerStrings.otherSymptomsHint,
                   border: OutlineInputBorder(),
@@ -1818,8 +1845,52 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                   ),
                 ),
                 maxLines: 2,
-                onChanged: vm.setCustomSymptomText,
               ),
+              // Suggestion chips — appear inline below the field while typing
+              if (suggestions.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: suggestions
+                      .map(
+                        (code) => GestureDetector(
+                          onTap: () => _pickSuggestion(code),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.aiSurfaceStart,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: AppColors.aiBorder),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.add_rounded,
+                                  size: 14,
+                                  color: AppColors.aiPurple,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  TriageStrings.symptomLabel(code),
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.navy,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ],
             ],
           ),
         );
