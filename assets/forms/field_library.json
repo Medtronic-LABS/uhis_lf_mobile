@@ -5655,7 +5655,7 @@
     "id": "dangerSignsDuringPregnancy",
     "label": "Danger Signs During Pregnancy",
     "widgetHint": "Instruction",
-    "fieldName": "Care during Antenatal period",
+    "fieldName": "Danger Signs During Pregnancy",
     "family": "counselling",
     "orderId": 2,
     "isMandatory": false,

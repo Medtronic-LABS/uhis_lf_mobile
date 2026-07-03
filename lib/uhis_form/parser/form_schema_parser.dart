@@ -383,8 +383,8 @@ class FormSchemaParser {
   // ── Utilities ──────────────────────────────────────────────────────────────
 
   static String _fieldId(Map<String, dynamic> item) =>
-      item['fieldName'] as String? ??
       item['id'] as String? ??
+      item['fieldName'] as String? ??
       'unknown';
 
   static List<ClinicalConcept> _parseClinicalConcept(
