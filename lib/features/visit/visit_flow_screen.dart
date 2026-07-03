@@ -174,7 +174,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: _step == 0,
+      canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
         if (_step > 0) {

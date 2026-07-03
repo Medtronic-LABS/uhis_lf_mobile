@@ -1260,6 +1260,8 @@ abstract final class BottomNavStrings {
   static const String assistantTitle = 'Assistant';
   static const String assistantPlaceholderHeading = 'AI Assistant';
   static const String assistantPlaceholderSubheading = 'Coming soon';
+
+  static const String pressBackAgainToExit = 'Press back again to exit';
 }
 
 /// Symptom triage picker screen strings.
