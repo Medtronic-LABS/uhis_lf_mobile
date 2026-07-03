@@ -130,10 +130,9 @@ class AppConfig {
   /// it. When deployed behind nginx, set `AI_SERVICE_URL` to [apiBaseUrl].
   static String get scribeBaseUrl {
     if (aiServiceBaseUrl.isNotEmpty) return aiServiceBaseUrl;
-    return const String.fromEnvironment(
-      'SCRIBE_BASE_URL',
-      defaultValue: 'http://10.0.2.2:8095/',
-    );
+    // No AI_SERVICE_URL → route through the main API gateway (nginx).
+    final explicit = const String.fromEnvironment('SCRIBE_BASE_URL', defaultValue: '');
+    return explicit.isNotEmpty ? explicit : apiBaseUrl;
   }
 
   /// Transcription model for AI Scribe.

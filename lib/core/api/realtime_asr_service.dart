@@ -26,15 +26,19 @@ class RealtimeAsrService {
 
   final ApiClient api;
 
-  static const String _nginxPrefix = '/ai-scribe-service';
+  static const String _nginxPrefix = '/ai-scribe';
 
   Future<RealtimeAsrConnectionInfo> connectionInfo({
     required String language,
     String model = 'saarika:v2.5',
   }) async {
-    final path = Endpoints.scribeRealtimeTranscribe.startsWith(_nginxPrefix)
-        ? Endpoints.scribeRealtimeTranscribe.substring(_nginxPrefix.length)
-        : Endpoints.scribeRealtimeTranscribe;
+    // Strip /ai-scribe prefix only when AI_SERVICE_URL targets the local
+    // service directly. Through nginx the full path is required.
+    final endpoint = Endpoints.scribeRealtimeTranscribe;
+    final path = AppConfig.aiServiceBaseUrl.isNotEmpty &&
+            endpoint.startsWith(_nginxPrefix)
+        ? endpoint.substring(_nginxPrefix.length)
+        : endpoint;
 
     final base = Uri.parse(AppConfig.scribeBaseUrl);
     final wsScheme = base.scheme == 'https' ? 'wss' : 'ws';

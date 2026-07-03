@@ -38,7 +38,7 @@ class VisitBriefingRepository {
     if (aiUrl.isNotEmpty) {
       final direct = Dio(BaseOptions(
         baseUrl: aiUrl,
-        connectTimeout: const Duration(seconds: 30),
+        connectTimeout: const Duration(seconds: 5),
         receiveTimeout: const Duration(minutes: 1),
       ));
       return (direct, directPath);
@@ -73,18 +73,26 @@ class VisitBriefingRepository {
       Endpoints.visitBriefingGenerate,
       '/briefing/generate',
     );
-    final response = await dio.post<Map<String, dynamic>>(path, data: patientContext);
-    final data = response.data ?? const <String, dynamic>{};
+    final response = await dio.post<dynamic>(path, data: patientContext);
+    final raw = response.data;
+    if (raw is! Map<String, dynamic>) {
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+        type: DioExceptionType.badResponse,
+        error: 'Expected JSON object, got ${raw.runtimeType}',
+      );
+    }
 
     if (cache != null) {
       await cache.put(
         cacheKey: cacheKey,
         kind: _kindBriefing,
         contentHash: hash,
-        payload: jsonEncode(data),
+        payload: jsonEncode(raw),
       );
     }
-    return VisitBriefingResponse.fromJson(data);
+    return VisitBriefingResponse.fromJson(raw);
   }
 
   /// Short 2-3 sentence summary for the patient context screen header.
@@ -105,17 +113,25 @@ class VisitBriefingRepository {
       Endpoints.visitBriefingSummary,
       '/briefing/summary',
     );
-    final response = await dio.post<Map<String, dynamic>>(path, data: patientContext);
-    final data = response.data ?? const <String, dynamic>{};
+    final response = await dio.post<dynamic>(path, data: patientContext);
+    final raw = response.data;
+    if (raw is! Map<String, dynamic>) {
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+        type: DioExceptionType.badResponse,
+        error: 'Expected JSON object, got ${raw.runtimeType}',
+      );
+    }
 
     if (cache != null) {
       await cache.put(
         cacheKey: cacheKey,
         kind: _kindSummary,
         contentHash: hash,
-        payload: jsonEncode(data),
+        payload: jsonEncode(raw),
       );
     }
-    return (data['summary'] as String?) ?? '';
+    return (raw['summary'] as String?) ?? '';
   }
 }

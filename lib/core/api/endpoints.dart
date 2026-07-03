@@ -36,47 +36,41 @@ class Endpoints {
       '/fhir-server/fhir/Observation?encounter=Encounter/$encounterId&_count=$count';
 
   // ── AI Scribe: voice → SOAP note ─────────────────────────────────────────
+  // nginx prefix on prod backend: /ai-scribe/ (not /ai-scribe-service/)
   static const String scribeTranscribe =
-      '/ai-scribe-service/scribe/transcribe';
+      '/ai-scribe/scribe/transcribe';
   static String scribeResult(String jobId) =>
-      '/ai-scribe-service/scribe/results/$jobId';
+      '/ai-scribe/scribe/results/$jobId';
   static String scribeNote(String noteId) =>
-      '/ai-scribe-service/scribe/notes/$noteId';
+      '/ai-scribe/scribe/notes/$noteId';
   static String scribeAccept(String noteId) =>
-      '/ai-scribe-service/scribe/notes/$noteId/accept';
+      '/ai-scribe/scribe/notes/$noteId/accept';
   static String scribeReject(String noteId) =>
-      '/ai-scribe-service/scribe/notes/$noteId/reject';
+      '/ai-scribe/scribe/notes/$noteId/reject';
 
-  /// Live streaming ASR + on-demand clinical extraction (WebSocket). See
-  /// RealtimeAsrService for URL scheme conversion + auth header handling —
-  /// this is a live-listening aid, not a replacement for scribeTranscribe.
+  /// Live streaming ASR + on-demand clinical extraction (WebSocket).
   static const String scribeRealtimeTranscribe =
-      '/ai-scribe-service/scribe/realtime/transcribe';
+      '/ai-scribe/scribe/realtime/transcribe';
 
   // ── AI Visit Briefing: pre-visit guidance cards ───────────────────────────
   static const String visitBriefingGenerate =
-      '/ai-visit-briefing-service/briefing/generate';
+      '/ai-scribe/briefing/generate';
   static const String visitBriefingSummary =
-      '/ai-visit-briefing-service/briefing/summary';
+      '/ai-scribe/briefing/summary';
 
   // ── AI Programme Recommendation: Step-2 programme picker ─────────────────
-  /// POST /programme-recommendation/recommend on the unified
-  /// leapfrog-ai-services. Routed through nginx in prod; direct via
-  /// AppConfig.aiServiceBaseUrl override in dev (see ProgrammeRecommendationRepository).
   static const String programmeRecommendation =
-      '/leapfrog-ai-services/programme-recommendation/recommend';
+      '/ai-scribe/programme-recommendation/recommend';
 
   // ── AI Next Best Action: post-assessment care plan proposal ──────────────
-  /// POST /naba/generate on the unified ai-scribe-service (port 8095).
-  /// Routed through nginx in prod; direct via AppConfig.aiServiceBaseUrl in dev.
-  static const String nabaGenerate = '/ai-scribe-service/naba/generate';
+  static const String nabaGenerate = '/ai-scribe/naba/generate';
 
   // Chunked upload — for audio files ≥ 1 MB (rural 2G path)
-  static const String scribeUploadInit = '/ai-scribe-service/upload/init';
+  static const String scribeUploadInit = '/ai-scribe/upload/init';
   static String scribeUploadChunk(String uploadId, int chunk) =>
-      '/ai-scribe-service/upload/$uploadId/chunk/$chunk';
+      '/ai-scribe/upload/$uploadId/chunk/$chunk';
   static String scribeUploadStatus(String uploadId) =>
-      '/ai-scribe-service/upload/$uploadId/status';
+      '/ai-scribe/upload/$uploadId/status';
   static String scribeUploadComplete(String uploadId) =>
-      '/ai-scribe-service/upload/$uploadId/complete';
+      '/ai-scribe/upload/$uploadId/complete';
 }
