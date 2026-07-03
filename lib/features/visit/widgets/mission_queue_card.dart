@@ -278,15 +278,18 @@ class _ProgrammeLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final diagnosis = item.diagnosisLabel;
-    final hasContent = (diagnosis != null && diagnosis.isNotEmpty) ||
-        (item.programmes.isNotEmpty &&
-            !item.programmes.every((p) => p == Programme.unknown));
-    if (!hasContent) return const SizedBox.shrink();
+    final knownProgrammes = item.programmes
+        .where((p) => p != Programme.unknown)
+        .toList();
+    if (knownProgrammes.isEmpty) return const SizedBox.shrink();
 
+    final programmeName = knownProgrammes
+        .map((p) => _displayName(p))
+        .join(' · ');
+    final diagnosis = item.diagnosisLabel;
     final label = (diagnosis != null && diagnosis.isNotEmpty)
-        ? '${item.programmeEmoji}  $diagnosis'
-        : item.programmeEmoji;
+        ? '${item.programmeEmoji}  $programmeName · $diagnosis'
+        : '${item.programmeEmoji}  $programmeName';
 
     return Text(
       label,
@@ -296,6 +299,22 @@ class _ProgrammeLine extends StatelessWidget {
         color: AppColors.textMid,
       ),
     );
+  }
+
+  static String _displayName(Programme p) {
+    switch (p) {
+      case Programme.anc:           return 'ANC';
+      case Programme.pnc:           return 'PNC';
+      case Programme.ncd:           return 'NCD';
+      case Programme.imci:          return 'IMCI';
+      case Programme.tb:            return 'TB';
+      case Programme.epi:           return 'EPI';
+      case Programme.nutrition:     return 'Nutrition';
+      case Programme.familyPlanning:return 'Family Planning';
+      case Programme.cataract:      return 'Cataract';
+      case Programme.eyeCare:       return 'Eye Care';
+      case Programme.unknown:       return '';
+    }
   }
 }
 
