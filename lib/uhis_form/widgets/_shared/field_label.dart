@@ -27,7 +27,8 @@ class SdkFieldLabel extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        RichText(
+        Expanded(
+          child: RichText(
           text: TextSpan(
             style: const TextStyle(
               fontFamily: 'Nunito',
@@ -44,6 +45,7 @@ class SdkFieldLabel extends StatelessWidget {
                     ),
                   ]
                 : null,
+          ),
           ),
         ),
         if (trailing != null) ...[

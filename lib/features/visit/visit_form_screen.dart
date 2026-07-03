@@ -251,6 +251,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     debugPrint(
         '[VisitForm] Sectioned mode — programmes: ${widget.activatedPathways?.join(', ')}');
 
+    debugPrint('[VisitForm] useDynamicForms=${AppConfig.useDynamicForms}');
     if (AppConfig.useDynamicForms) {
       final allProgrammes = (widget.activatedPathways ?? const [])
           .map(Programme.fromString)

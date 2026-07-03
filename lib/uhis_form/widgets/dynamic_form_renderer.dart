@@ -40,7 +40,7 @@ class DynamicFormRenderer extends StatelessWidget {
               title: section.title,
               children: section.fields
                   .map((f) => AnimatedSize(
-                        key: ValueKey(f.fieldId),
+                        key: ValueKey('${section.sectionId}:${f.fieldId}'),
                         duration: const Duration(milliseconds: 200),
                         curve: Curves.easeInOut,
                         child: controller.isVisible(f.fieldId)
