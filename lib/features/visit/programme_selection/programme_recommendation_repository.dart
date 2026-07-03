@@ -72,8 +72,18 @@ class ProgrammeRecommendationRepository {
     }
 
     final (dio, path) = _resolve();
-    final response = await dio.post<Map<String, dynamic>>(path, data: request);
-    final data = response.data ?? const <String, dynamic>{};
+    final response = await dio.post<dynamic>(path, data: request);
+    final raw = response.data;
+    if (raw is! Map<String, dynamic>) {
+      // Server returned non-JSON (404 page, plain-text error, etc.)
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+        type: DioExceptionType.badResponse,
+        error: 'Expected JSON object, got ${raw.runtimeType}',
+      );
+    }
+    final data = raw;
 
     if (cache != null) {
       await cache.put(
