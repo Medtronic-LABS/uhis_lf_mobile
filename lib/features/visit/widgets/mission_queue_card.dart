@@ -29,14 +29,16 @@ class MissionQueueCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
-    final borderColor = isCompleted
+    final programmeColor = isCompleted
+        ? tokens.statusSuccess
+        : _programmeColor(item);
+    final tierBorderColor = isCompleted
         ? tokens.statusSuccess
         : _borderColorForTier(item.tier, tokens);
-    final avatarColor = _avatarColorForProgramme(item, tokens);
+    final hasTierBorder = tierBorderColor != const Color(0xFFE5E7EB);
     final (dotLabel, dotColor) = isCompleted
         ? ('Done', tokens.statusSuccess)
         : _statusDotStyle(item.tier, tokens);
-    final hasBorder = borderColor != const Color(0xFFE5E7EB);
 
     return Opacity(
       opacity: isCompleted ? 0.6 : 1.0,
@@ -47,39 +49,66 @@ class MissionQueueCard extends StatelessWidget {
         child: Semantics(
           label: 'View patient ${item.patientName}',
           button: true,
-          child: Material(
-            color: tokens.cardSurface,
-            borderRadius: BorderRadius.circular(12),
-            child: InkWell(
-              key: const Key('visit_queue_card_tap'),
-              onTap: isCompleted
-                  ? () => ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            MissionDashboardStrings.completedVisitToast(
-                                item.patientName),
-                          ),
-                          duration: const Duration(seconds: 2),
-                        ),
-                      )
-                  : onTap,
+          child: Container(
+            decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  border: hasBorder
-                      ? Border(left: BorderSide(color: borderColor, width: 4))
-                      : Border.all(color: const Color(0xFFE5E7EB), width: 1),
+              color: tokens.cardSurface,
+              boxShadow: [
+                // Subtle programme-colour glow on the left
+                BoxShadow(
+                  color: programmeColor.withValues(alpha: 0.22),
+                  offset: const Offset(-5, 0),
+                  blurRadius: 12,
+                  spreadRadius: 0,
                 ),
-                padding: EdgeInsets.fromLTRB(hasBorder ? 12 : 14, 13, 12, 13),
-                child: Row(
+                // Standard card drop shadow
+                BoxShadow(
+                  color: const Color(0xFF000000).withValues(alpha: 0.06),
+                  offset: const Offset(0, 2),
+                  blurRadius: 6,
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              child: InkWell(
+                key: const Key('visit_queue_card_tap'),
+                onTap: isCompleted
+                    ? () => ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              MissionDashboardStrings.completedVisitToast(
+                                  item.patientName),
+                            ),
+                            duration: const Duration(seconds: 2),
+                          ),
+                        )
+                    : onTap,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: hasTierBorder
+                        ? Border(
+                            left: BorderSide(color: tierBorderColor, width: 4),
+                          )
+                        : Border(
+                            left: BorderSide(
+                              color: programmeColor.withValues(alpha: 0.5),
+                              width: 3,
+                            ),
+                          ),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(13, 13, 12, 13),
+                  child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     // ── Avatar ──────────────────────────────────────────
                     _ProgrammeAvatar(
                       item: item,
                       isCompleted: isCompleted,
-                      avatarColor: avatarColor,
+                      avatarColor: programmeColor,
                       tokens: tokens,
                     ),
                     const SizedBox(width: 12),
@@ -135,10 +164,31 @@ class MissionQueueCard extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 
-  /// Border colour — left accent shown only for urgent/new tiers.
+
+  /// Programme accent colour — drives avatar, left shadow, and soft border.
+  static Color _programmeColor(MissionQueueItem item) {
+    if (item.programmes.contains(Programme.anc) ||
+        item.programmes.contains(Programme.pnc)) {
+      return const Color(0xFF831843); // deep rose — pregnancy
+    }
+    if (item.programmes.contains(Programme.imci) ||
+        item.programmes.contains(Programme.epi)) {
+      return const Color(0xFF1B2B5E); // navy — child / immunisation
+    }
+    if (item.programmes.contains(Programme.ncd)) {
+      return const Color(0xFF854F0B); // deep amber — NCD
+    }
+    if (item.programmes.contains(Programme.tb)) {
+      return AppColors.aiPurple;
+    }
+    return const Color(0xFF6B7280); // grey — unenrolled / unknown
+  }
+
+  /// Tier border overrides programme color for urgent states (overdue / CCE).
   Color _borderColorForTier(DashboardTier tier, LeapfrogColors tokens) {
     if (tier == DashboardTier.overdue) return AppColors.statusWarning;
     if (tier == DashboardTier.critical) {
@@ -150,26 +200,6 @@ class MissionQueueCard extends StatelessWidget {
       return cceOrDanger ? tokens.statusCritical : const Color(0xFFE5E7EB);
     }
     return const Color(0xFFE5E7EB);
-  }
-
-  /// Programme-coded avatar colour.
-  static Color _avatarColorForProgramme(
-      MissionQueueItem item, LeapfrogColors tokens) {
-    if (item.programmes.contains(Programme.anc) ||
-        item.programmes.contains(Programme.pnc)) {
-      return tokens.brandPink;
-    }
-    if (item.programmes.contains(Programme.ncd)) {
-      return AppColors.statusWarning;
-    }
-    if (item.programmes.contains(Programme.imci) ||
-        item.programmes.contains(Programme.epi)) {
-      return AppColors.statusInfo;
-    }
-    if (item.programmes.contains(Programme.tb)) {
-      return AppColors.aiPurple;
-    }
-    return tokens.textMuted;
   }
 
   /// Status dot style: (label, dotColor) keyed by tier.
