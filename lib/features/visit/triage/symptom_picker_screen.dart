@@ -472,32 +472,12 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                     ),
                   ),
 
-                // AI-detected symptom list — populated by the scribe response.
-                // Replaces the previous hardcoded cluster grid; SK reviews,
-                // removes incorrect picks, or adds missed ones via the sheet.
+                // Unified symptom section: AI chips + search/type-to-add
+                // inline list + other symptoms free-text — all in one card.
                 SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                   sliver: SliverToBoxAdapter(
-                    child: _DetectedSymptomList(
-                      vm: vm,
-                      onAddTap: () => _openAddSymptomSheet(context, vm),
-                    ),
-                  ),
-                ),
-
-                // Gap 3 — Duration picker (below symptoms list)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                    child: _DurationPicker(vm: vm),
-                  ),
-                ),
-
-                // Gap 4 — Other symptoms free-text input
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                    child: _OtherSymptomsField(vm: vm),
+                    child: _UnifiedSymptomPicker(vm: vm),
                   ),
                 ),
               ],
@@ -550,20 +530,6 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     );
   }
 
-  Future<void> _openAddSymptomSheet(
-    BuildContext context,
-    TriageViewModel vm,
-  ) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) => _AddSymptomSheet(vm: vm),
-    );
-  }
 }
 
 // ── AI Briefing Section: 3 stacked cards ─────────────────────────────────────
@@ -1072,207 +1038,6 @@ class _BriefingFallbackContent extends StatelessWidget {
               .toList(),
         ),
       ],
-    );
-  }
-}
-
-// ── Gap 3: Duration picker ────────────────────────────────────────────────────
-
-/// Three-option duration selector rendered below the symptom clusters.
-///
-/// Stores selection via [TriageViewModel.setDuration].
-class _DurationPicker extends StatelessWidget {
-  const _DurationPicker({required this.vm});
-
-  final TriageViewModel vm;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0D000000), // TODO: add AppColors token
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            SymptomPickerStrings.durationTitle,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: AppColors.navy,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _DurationButton(
-                  label: SymptomPickerStrings.duration1Day,
-                  value: SymptomPickerStrings.durationValue1,
-                  selected: vm.sicknessDuration,
-                  onTap: (v) =>
-                      vm.setDuration(vm.sicknessDuration == v ? null : v),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _DurationButton(
-                  label: SymptomPickerStrings.duration2To3Days,
-                  value: SymptomPickerStrings.durationValue2to3,
-                  selected: vm.sicknessDuration,
-                  onTap: (v) =>
-                      vm.setDuration(vm.sicknessDuration == v ? null : v),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _DurationButton(
-                  label: SymptomPickerStrings.duration4Plus,
-                  value: SymptomPickerStrings.durationValue4plus,
-                  selected: vm.sicknessDuration,
-                  onTap: (v) =>
-                      vm.setDuration(vm.sicknessDuration == v ? null : v),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Single duration option button.
-class _DurationButton extends StatelessWidget {
-  const _DurationButton({
-    required this.label,
-    required this.value,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final String value;
-  final String? selected;
-  final ValueChanged<String> onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final isSelected = selected == value;
-    final isHighRisk = value == SymptomPickerStrings.durationValue4plus;
-
-    final bgColor = isSelected
-        ? (isHighRisk ? AppColors.statusCriticalSurface : AppColors.navy)
-        : Colors.white;
-    final borderColor = isSelected
-        ? (isHighRisk ? AppColors.statusCritical : AppColors.navy)
-        : AppColors.border;
-    final textColor = isSelected
-        ? (isHighRisk ? AppColors.statusCriticalText : Colors.white)
-        : AppColors.navy;
-
-    return Semantics(
-      label: 'Select duration: $label',
-      button: true,
-      selected: isSelected,
-      child: GestureDetector(
-        key: const Key('triage_answer_option_tap'),
-        onTap: () => onTap(value),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: bgColor,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: borderColor),
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: textColor,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Gap 4: Other symptoms free-text field ────────────────────────────────────
-
-/// Free-text field for symptoms not covered by the tile grid.
-class _OtherSymptomsField extends StatefulWidget {
-  const _OtherSymptomsField({required this.vm});
-  final TriageViewModel vm;
-
-  @override
-  State<_OtherSymptomsField> createState() => _OtherSymptomsFieldState();
-}
-
-class _OtherSymptomsFieldState extends State<_OtherSymptomsField> {
-  late final TextEditingController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = TextEditingController(text: widget.vm.customSymptomText);
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-      ),
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            SymptomPickerStrings.otherSymptomsLabel,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: AppColors.navy,
-            ),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _ctrl,
-            decoration: const InputDecoration(
-              hintText: SymptomPickerStrings.otherSymptomsHint,
-              border: OutlineInputBorder(),
-              isDense: true,
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
-              ),
-            ),
-            maxLines: 2,
-            onChanged: widget.vm.setCustomSymptomText,
-          ),
-        ],
-      ),
     );
   }
 }
@@ -1900,99 +1665,189 @@ class _TriageLiveAsrPanel extends StatelessWidget {
   }
 }
 
-// ── AI-detected symptom list ─────────────────────────────────────────────────
+// ── Unified symptom section ───────────────────────────────────────────────────
 //
-// Replaces the legacy hardcoded cluster grid. The list is initially empty;
-// the AI Scribe response populates it via [TriageViewModel.applyScribeTriageResult].
-// The SK can:
-//   - tap × on any chip → [TriageViewModel.removeSymptom]
-//   - tap "+ Add symptom" → opens [_AddSymptomSheet] with the full vocab.
-// Source-of-truth for the available codes: [AiScribeTriageVocab.codes].
+// Single card that combines:
+//   • AI-detected chips (pre-ticked by Scribe — tap × to remove)
+//   • Search/type-to-filter inline symptom list (tap to add/remove)
+//   • Other symptoms free-text at the bottom
+//
+// Replaces the separate _DetectedSymptomList, _DurationPicker, and
+// _OtherSymptomsField widgets, and the _AddSymptomSheet modal.
 
-class _DetectedSymptomList extends StatelessWidget {
-  const _DetectedSymptomList({required this.vm, required this.onAddTap});
-
+class _UnifiedSymptomPicker extends StatefulWidget {
+  const _UnifiedSymptomPicker({required this.vm});
   final TriageViewModel vm;
-  final VoidCallback onAddTap;
+
+  @override
+  State<_UnifiedSymptomPicker> createState() => _UnifiedSymptomPickerState();
+}
+
+class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
+  final _searchCtrl = TextEditingController();
+  late final TextEditingController _otherCtrl;
+  String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _otherCtrl = TextEditingController(text: widget.vm.customSymptomText);
+    _searchCtrl.addListener(
+      () => setState(() => _query = _searchCtrl.text.trim().toLowerCase()),
+    );
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    _otherCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final selected = vm.selectedSymptoms.toList();
-    final isEmpty = selected.isEmpty;
+    return AnimatedBuilder(
+      animation: widget.vm,
+      builder: (context, _) {
+        final vm = widget.vm;
+        final selected = vm.selectedSymptoms;
+        final applicableCodes = vm.applicableVocabCodes;
+        final filtered = _query.isEmpty
+            ? applicableCodes
+            : applicableCodes
+                  .where(
+                    (code) => TriageStrings.symptomLabel(code)
+                        .toLowerCase()
+                        .contains(_query),
+                  )
+                  .toList();
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-      ),
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.border),
+          ),
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.auto_awesome,
-                size: 16,
-                color: AppColors.aiPurple,
+              // Section header
+              Row(
+                children: [
+                  const Icon(
+                    Icons.auto_awesome,
+                    size: 16,
+                    color: AppColors.aiPurple,
+                  ),
+                  const SizedBox(width: 6),
+                  const Expanded(
+                    child: Text(
+                      SymptomPickerStrings.detectedSymptomsTitle,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.navy,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  SymptomPickerStrings.detectedSymptomsTitle,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.navy,
+              const SizedBox(height: 6),
+              Text(
+                selected.isEmpty
+                    ? SymptomPickerStrings.detectedSymptomsSubtitleEmpty
+                    : SymptomPickerStrings.detectedSymptomsSubtitleFilled,
+                style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+              ),
+              // AI-detected chips
+              if (selected.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: selected
+                      .map(
+                        (code) => _SymptomChip(
+                          code: code,
+                          isAi: vm.isScribePreTick(code),
+                          onRemove: () => vm.removeSymptom(code),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ],
+              const SizedBox(height: 12),
+              // Inline search + vocab list
+              TextField(
+                controller: _searchCtrl,
+                decoration: const InputDecoration(
+                  hintText: SymptomPickerStrings.addSymptomSearchHint,
+                  prefixIcon: Icon(Icons.search_rounded, size: 18),
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
                   ),
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            isEmpty
-                ? SymptomPickerStrings.detectedSymptomsSubtitleEmpty
-                : SymptomPickerStrings.detectedSymptomsSubtitleFilled,
-            style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-          ),
-          const SizedBox(height: 10),
-          if (!isEmpty)
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: selected
-                  .map(
-                    (code) => _SymptomChip(
-                      code: code,
-                      isAi: vm.isScribePreTick(code),
-                      onRemove: () => vm.removeSymptom(code),
-                    ),
-                  )
-                  .toList(),
-            ),
-          if (!isEmpty) const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              key: const Key('triage_add_symptom_tap'),
-              onPressed: onAddTap,
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text(SymptomPickerStrings.addSymptomCta),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.navy,
-                side: const BorderSide(color: AppColors.border),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+              if (filtered.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: filtered
+                      .map(
+                        (code) => _AddSymptomTile(
+                          key: ValueKey('sym_$code'),
+                          code: code,
+                          isSelected: selected.contains(code),
+                          isAi: vm.isScribePreTick(code),
+                          onTap: () {
+                            if (selected.contains(code)) {
+                              vm.removeSymptom(code);
+                            } else {
+                              vm.addSymptom(code);
+                            }
+                          },
+                        ),
+                      )
+                      .toList(),
+                ),
+              ],
+              const SizedBox(height: 14),
+              const Divider(height: 1, thickness: 0.5),
+              const SizedBox(height: 12),
+              // Other symptoms free-text
+              const Text(
+                SymptomPickerStrings.otherSymptomsLabel,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.navy,
                 ),
               ),
-            ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _otherCtrl,
+                decoration: const InputDecoration(
+                  hintText: SymptomPickerStrings.otherSymptomsHint,
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                ),
+                maxLines: 2,
+                onChanged: vm.setCustomSymptomText,
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -2066,137 +1921,9 @@ class _SymptomChip extends StatelessWidget {
   }
 }
 
-/// Bottom-sheet picker for symptoms the AI Scribe did not detect.
-///
-/// Multi-select: tapping a tile adds it to the visit immediately, the tile is
-/// removed from the sheet (since selected codes are filtered out), and the
-/// sheet stays open until the SK taps Done. Rebuild is driven by listening to
-/// the [TriageViewModel] so the available list updates as taps land.
-class _AddSymptomSheet extends StatelessWidget {
-  const _AddSymptomSheet({required this.vm});
-
-  final TriageViewModel vm;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: vm,
-      builder: (context, _) {
-        final selected = vm.selectedSymptoms;
-        final applicableCodes = vm.applicableVocabCodes;
-        final applicableCodesSet = applicableCodes.toSet();
-        final addedCount = selected.where(applicableCodesSet.contains).length;
-
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.border,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  SymptomPickerStrings.addSymptomSheetTitle,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.navy,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  SymptomPickerStrings.addSymptomSheetSubtitle,
-                  style: TextStyle(fontSize: 12, color: AppColors.textMuted),
-                ),
-                const SizedBox(height: 12),
-                Flexible(
-                  child: applicableCodes.isEmpty
-                      ? const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 24),
-                          child: Center(
-                            child: Text(
-                              SymptomPickerStrings.addSymptomSheetEmpty,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: AppColors.textMuted,
-                              ),
-                            ),
-                          ),
-                        )
-                      : SingleChildScrollView(
-                          child: Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: applicableCodes
-                                .map(
-                                  (code) => _AddSymptomTile(
-                                    code: code,
-                                    isSelected: selected.contains(code),
-                                    isAi: vm.isScribePreTick(code),
-                                    onTap: () {
-                                      if (selected.contains(code)) {
-                                        vm.removeSymptom(code);
-                                      } else {
-                                        vm.addSymptom(code);
-                                      }
-                                    },
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                        ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        SymptomPickerStrings.addSymptomSheetCounter(addedCount),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textMuted,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    FilledButton(
-                      key: const Key('triage_add_symptom_done'),
-                      onPressed: () => Navigator.of(context).pop(),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.navy,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 18,
-                          vertical: 10,
-                        ),
-                      ),
-                      child: const Text(
-                        SymptomPickerStrings.addSymptomSheetDone,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
 class _AddSymptomTile extends StatelessWidget {
   const _AddSymptomTile({
+    super.key,
     required this.code,
     required this.isSelected,
     required this.isAi,
