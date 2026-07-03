@@ -54,13 +54,13 @@ class Endpoints {
 
   // ── AI Visit Briefing: pre-visit guidance cards ───────────────────────────
   static const String visitBriefingGenerate =
-      '/ai-visit-briefing-service/briefing/generate';
+      '/ai-scribe/briefing/generate';
   static const String visitBriefingSummary =
-      '/ai-visit-briefing-service/briefing/summary';
+      '/ai-scribe/briefing/summary';
 
   // ── AI Programme Recommendation: Step-2 programme picker ─────────────────
   static const String programmeRecommendation =
-      '/leapfrog-ai-services/programme-recommendation/recommend';
+      '/ai-scribe/programme-recommendation/recommend';
 
   // ── AI Next Best Action: post-assessment care plan proposal ──────────────
   static const String nabaGenerate = '/ai-scribe/naba/generate';
