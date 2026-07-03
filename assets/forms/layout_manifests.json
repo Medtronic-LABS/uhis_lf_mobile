@@ -15,19 +15,19 @@
           {
             "fieldName": "Other Signs",
             "inputType": 96,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "otherPncNeonateSigns"
           },
           {
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "newbornReferredToSBCU"
           },
           {
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "lowBirthWeight"
           },
           {
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "deathOfNewborn"
           }
         ]
@@ -45,17 +45,17 @@
         "fieldRefs": [
           {
             "inputType": 2,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "gravida"
           },
           {
             "inputType": 2,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "parity"
           },
           {
             "inputType": 2,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "livingChildren"
           }
         ]
@@ -66,29 +66,29 @@
         "fieldRefs": [
           {
             "inputType": 8192,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "temperature"
           },
           {
             "inputType": 3,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "pulse"
           },
           {
             "inputType": 8192,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "weight"
           },
           {
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "htnPatient"
           },
           {
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "eclampsia"
           },
           {
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "onTreatmentHtnEclampsia"
           },
           {
@@ -97,24 +97,24 @@
           },
           {
             "inputType": 3,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "systolic"
           },
           {
             "inputType": 3,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "diastolic"
           },
           {
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "edema"
           },
           {
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "urinaryAlbumin"
           },
           {
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "urinaryBilirubin"
           },
           {
@@ -123,15 +123,15 @@
             "id": "hemoglobin"
           },
           {
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "dmPatient"
           },
           {
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "gdmPatient"
           },
           {
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "onTreatmentDmGdm"
           },
           {
@@ -149,33 +149,33 @@
             "id": "randomBloodSugar"
           },
           {
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "postpartumDangerSigns"
           },
           {
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "vitaminAConsumed"
           },
           "ifaTablets",
           {
             "inputType": 3,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "ifaTabletsConsumed"
           },
           {
             "inputType": 3,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "ifaTabletsProvided"
           },
           "calciumTablets",
           {
             "inputType": 3,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "calciumTabletsConsumed"
           },
           {
             "inputType": 3,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "calciumTabletsProvided"
           }
         ]
@@ -185,7 +185,7 @@
         "title": "Postpartum Contraception",
         "fieldRefs": [
           {
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "familyPlanningMethods"
           }
         ]
@@ -216,7 +216,7 @@
         "title": "Pregnancy Details & History",
         "fieldRefs": [
           {
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "lmp"
           },
           "TooEarlyTitle",
@@ -227,22 +227,22 @@
           "gestationalWeekTitle",
           "gestationalWeek",
           {
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "pregnancyTest"
           },
           {
             "inputType": 2,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "gravida"
           },
           {
             "inputType": 2,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "parity"
           },
           {
             "inputType": 2,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "livingChildren"
           },
           {
@@ -269,12 +269,12 @@
           {
             "fieldName": "Gestation month at the time of death",
             "inputType": 2,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "gestationMonthAtDeath"
           },
           {
             "fieldName": "Cause of death",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "causeOfDeath"
           }
         ]
@@ -290,7 +290,7 @@
           },
           {
             "fieldName": "Type of Abortion",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "typeOfAbortion"
           }
         ]
@@ -307,43 +307,43 @@
           {
             "fieldName": "Live Birth Numbers",
             "inputType": 2,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "liveBirthNumbers"
           },
           {
             "fieldName": "Stillbirth Numbers",
             "inputType": 2,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "stillbirthNumbers"
           },
           {
             "fieldName": "Place of delivery",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "placeOfDelivery"
           },
           {
             "fieldName": "Date of delivery",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "dateOfDelivery"
           },
           {
             "fieldName": "Mode of Delivery",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "modeOfDelivery"
           },
           {
             "fieldName": "Birth Attendant",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "birthAttendant"
           },
           {
             "fieldName": "Any complications during delivery?",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "anyComplicationsDuringDelivery"
           },
           {
             "fieldName": "Complications during delivery",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "complicationsDuringDelivery"
           }
         ]
@@ -506,12 +506,12 @@
         "fieldRefs": [
           {
             "fieldName": "Any complication during all previous pregnancies",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "previousPregnancyComplications"
           },
           {
             "fieldName": "Pregnant woman has any existing illness",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "pregnantWomanExistingIllness"
           },
           {
@@ -522,13 +522,13 @@
           {
             "fieldName": "Height",
             "inputType": 8192,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "height"
           },
           {
             "fieldName": "Weight",
             "inputType": 8192,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "weight"
           },
           "bmi",
@@ -540,36 +540,36 @@
           {
             "fieldName": "Systolic",
             "inputType": 3,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "systolic"
           },
           {
             "fieldName": "Diastolic",
             "inputType": 3,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "diastolic"
           },
           {
             "fieldName": "Edema",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "edema"
           },
           {
             "fieldName": "Temperature",
             "inputType": 8192,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "temperature"
           },
           {
             "fieldName": "Pulse",
             "inputType": 8192,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "pulse"
           },
           {
             "fieldName": "Fundal Height",
             "inputType": 8192,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "fundalHeight"
           }
         ]
@@ -581,39 +581,39 @@
           {
             "fieldName": "Hemoglobin",
             "inputType": 8192,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "hemoglobin"
           },
           {
             "fieldName": "Blood Sugar",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "bloodSugar"
           },
           {
             "fieldName": "Blood Sugar Fasting",
             "inputType": 8192,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "bloodSugarFasting"
           },
           {
             "fieldName": "Blood Sugar Random",
             "inputType": 8192,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "bloodSugarRandom"
           },
           {
             "fieldName": "Urinary Albumin",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "urinaryAlbumin"
           },
           {
             "fieldName": "Urinary Sugar",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "urinarySugar"
           },
           {
             "fieldName": "Urinary Bilirubin",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "urinaryBilirubin"
           }
         ]
@@ -624,7 +624,7 @@
         "fieldRefs": [
           {
             "fieldName": "TT/TD completed",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "ttTdCompleted"
           },
           {
@@ -635,13 +635,13 @@
           {
             "fieldName": "Folic Acid Tablets Total Consumed",
             "inputType": 3,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "folicAcidTotalConsumed"
           },
           {
             "fieldName": "Folic Acid Tablets Provided",
             "inputType": 3,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "folicAcidProvided"
           },
           {
@@ -652,13 +652,13 @@
           {
             "fieldName": "IFA Tablets Total Consumed",
             "inputType": 3,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "ifaTotalConsumed"
           },
           {
             "fieldName": "IFA Tablets Provided",
             "inputType": 3,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "ifaProvided"
           },
           {
@@ -669,13 +669,13 @@
           {
             "fieldName": "Calcium Tablets Total Consumed",
             "inputType": 3,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "calciumTotalConsumed"
           },
           {
             "fieldName": "Calcium Tablets Provided",
             "inputType": 3,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "calciumProvided"
           }
         ]
@@ -687,22 +687,22 @@
           {
             "fieldName": "No.of ANC visits conducted with other providers",
             "inputType": 3,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "ancVisitsOtherProviders"
           },
           {
             "fieldName": "PW received atleast one ANC from a medical doctor",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "ancFromMedicalDoctor"
           },
           {
             "fieldName": "Ultrasound",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "ultrasound"
           },
           {
             "fieldName": "Has the PW identified a health facility for institutional delivery",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "facilityIdentifiedForDelivery"
           }
         ]
@@ -712,18 +712,18 @@
         "title": "Danger Signs/Risk identification",
         "fieldRefs": [
           {
-            "fieldName": "Has the PW experienced any of the following (Gestation age ≤ 12 weeks)",
-            "isMandatory": true,
+            "fieldName": "Has the PW experienced any of the following (Gestation age \u2264 12 weeks)",
+            "isMandatory": false,
             "id": "dangerSignsExperienced12"
           },
           {
             "fieldName": "Has the PW experienced any of the following (Gestation age 13-27 weeks)",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "dangerSignsExperienced13To27"
           },
           {
             "fieldName": "Has the PW experienced any of the following (Gestation age 28-40 weeks)",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "dangerSignsExperienced28To40"
           },
           {
@@ -792,71 +792,71 @@
         "fieldRefs": [
           {
             "fieldName": "Congenital defect",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "congenitalDefect"
           },
           {
             "fieldName": "Weight",
             "inputType": 8192,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "weight"
           },
           {
             "fieldName": "What was fed in the last 24 hours",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "childFeedLast24Hrs"
           },
           {
             "fieldName": "Other Feed",
             "inputType": 96,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "otherChildFeed"
           },
           {
             "fieldName": "Breast feed after birth in hrs",
             "inputType": 2,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "hrsBreastFed"
           },
           {
             "fieldName": "Additional food started month",
             "inputType": 2,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "monthAdditionalFeedGiven"
           },
           {
             "fieldName": "Breast feeding",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "childBreastFeeding"
           },
           {
             "fieldName": "Additional Food in 24 Hrs",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "additionalFood24Hrs"
           },
           {
             "fieldName": "Received vaccines",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "receivedVaccine"
           },
           {
             "fieldName": "Deworming medication",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "dewormingMedicine"
           },
           {
             "fieldName": "Illness/Complications",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "anyIllness"
           },
           {
             "fieldName": "Specify Complications",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "childIllnessType"
           },
           {
             "fieldName": "Referred",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "childReferral"
           },
           {
@@ -880,22 +880,22 @@
           {
             "fieldName": "Number of Living Children",
             "inputType": 3,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "numberOfLivingChildren"
           },
           {
             "fieldName": "Age of last child",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "ageOfLastChild"
           },
           {
             "fieldName": "Desire for children in future",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "desireForChildrenInFuture"
           },
           {
             "fieldName": "Current use of modern methods of Family Planning",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "familyPlanningMethods"
           }
         ]
@@ -913,67 +913,67 @@
         "fieldRefs": [
           {
             "fieldName": "Types of Eye Diseases",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "eyeDisease"
           },
           {
             "fieldName": "Glass Power",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "glassPower"
           },
           {
             "fieldName": "Have the glasses been sold?",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "haveTheGlassesBeenSold"
           },
           {
             "fieldName": "Type of Glass",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "typeOfGlass"
           },
           {
             "fieldName": "Type of Frame",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "typeOfFrame"
           },
           {
             "fieldName": "First time user?",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "firstTimeUser"
           },
           {
             "fieldName": "Refer place",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "referPlace"
           },
           {
             "fieldName": "History of other Diseases",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "historyOfOtherDiseases"
           },
           {
             "fieldName": "Has the patient is referred for operation?",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "patientReferredForOperation"
           },
           {
             "fieldName": "Operation Name",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "operationName"
           },
           {
             "fieldName": "Reason",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "reason"
           },
           {
             "fieldName": "Pseudophakia/ Post-cataract surgery ",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "pseudophakiaPostCataractSurgery"
           },
           {
             "fieldName": "Has NCD service been provided?",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "ncdServiceProvided"
           }
         ]
@@ -985,34 +985,34 @@
           {
             "fieldName": "Height",
             "inputType": 8192.0,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "height"
           },
           {
             "fieldName": "Weight",
             "inputType": 8192.0,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "weight"
           },
           "bmi",
           {
             "fieldName": "Have you been diagnosed with High Blood Pressure or Hypertension before?",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "isBeforeHtnDiagnosis"
           },
           {
             "fieldName": "Are you taking medication regularly?",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "medicationFrequencyBp"
           },
           {
             "fieldName": "Blood Pressure",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "bpLogDetails"
           },
           {
             "fieldName": "Are you smoking or consuming tobacco in the past 12 months?",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "isRegularSmoker"
           },
           "cvdRisk"
@@ -1024,23 +1024,23 @@
         "fieldRefs": [
           {
             "fieldName": "Have you been diagnosed with High Blood Sugar or Diabetes before?",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "isBeforeDiabetesDiagnosis"
           },
           {
             "fieldName": "Are you taking medication regularly?",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "medicationFrequencyBg"
           },
           {
             "fieldName": "Name of Investigation",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "glucoseType"
           },
           {
             "fieldName": "Blood Glucose",
             "inputType": 8192.0,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "glucose"
           }
         ]
@@ -1051,7 +1051,7 @@
         "fieldRefs": [
           {
             "fieldName": "Who referred this person",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "whoReferredThisPerson"
           }
         ]
@@ -1069,23 +1069,23 @@
         "fieldRefs": [
           {
             "fieldName": "Has the Patient had any symptoms since the last follow up?",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "hasSymptoms"
           },
           {
             "fieldName": "Select Symptoms",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "ncdSymptoms"
           },
           {
             "fieldName": "Any new or worsening symptoms",
             "inputType": 96.0,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "newWorseningSymptoms"
           },
           {
             "fieldName": "Are you taking medication regularly?",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "compliance"
           }
         ]
@@ -1097,24 +1097,24 @@
           {
             "fieldName": "Height",
             "inputType": 8192.0,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "height"
           },
           {
             "fieldName": "Weight (in kg)",
             "inputType": 8192.0,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "weight"
           },
           "bmi",
           {
             "fieldName": "Blood Pressure",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "bpLogDetails"
           },
           {
             "fieldName": "Are you a regular smoker or have you been a regular smoker in the past 12 months?",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "isRegularSmoker"
           }
         ]
@@ -1125,13 +1125,13 @@
         "fieldRefs": [
           {
             "fieldName": "Name of Investigation",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "glucoseType"
           },
           {
             "fieldName": "Blood Glucose",
             "inputType": 8192.0,
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "glucose"
           },
           {
@@ -1155,37 +1155,37 @@
         "fieldRefs": [
           {
             "fieldName": "Eye Test Outcome",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "eyeTestOutcome"
           },
           {
             "fieldName": "Glass Power",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "glassPower"
           },
           {
             "fieldName": "Have the glasses been sold?",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "haveTheGlassesBeenSold"
           },
           {
             "fieldName": "Type of Glass",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "typeOfGlass"
           },
           {
             "fieldName": "Type of Frame",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "typeOfFrame"
           },
           {
             "fieldName": "First time user?",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "firstTimeUser"
           },
           {
             "fieldName": "Refer Place",
-            "isMandatory": true,
+            "isMandatory": false,
             "id": "referPlace"
           }
         ]

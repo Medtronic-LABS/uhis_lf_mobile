@@ -169,6 +169,17 @@ class _DynamicAssessmentScreenState extends State<DynamicAssessmentScreen> {
     final errors = ctrl.validate();
     if (errors.isNotEmpty) {
       debugPrint('[DynamicAssessment] validate() blocked submit: $errors');
+      if (!mounted) return;
+      final names = errors.values.take(3).join('\n• ');
+      final overflow =
+          errors.length > 3 ? '\n(+${errors.length - 3} more)' : '';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Required fields missing:\n• $names$overflow'),
+          duration: const Duration(seconds: 4),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
       return;
     }
     try {
