@@ -3148,6 +3148,10 @@ abstract final class NabaStrings {
   static const String acceptProposal = 'Accept & continue';
   static const String proposalNote =
       'This is an AI proposal. Review and accept to proceed.';
+
+  static const String fallbackNotice =
+      'AI service was unavailable. Care plan is based on clinical guidelines. '
+      'Review and adjust based on your assessment.';
 }
 
 /// Teleconsult placeholder screen strings.
@@ -3755,5 +3759,21 @@ abstract final class VisitDetailsStrings {
     'pulseRate': 'Pulse Rate',
     'respiratoryRate': 'Respiratory Rate',
   };
+}
+
+/// Strings for [HouseholdFollowUpScreen].
+abstract final class HouseholdFollowUpStrings {
+  HouseholdFollowUpStrings._();
+
+  static const String title = 'Others in this household';
+  static const String subtitle =
+      'Check if any family members need care today.';
+  static const String emptyState = 'No other household members need a visit.';
+  static const String viewPatient = 'View patient';
+  static const String doneButton = 'Done — go to home';
+  static const String overdue = 'Overdue';
+  static const String dueToday = 'Due today';
+  static const String dueSoon = 'Due soon';
+  static const String urgentLabel = 'Urgent';
 }
 
