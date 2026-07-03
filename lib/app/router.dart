@@ -334,7 +334,7 @@ GoRouter buildRouter(AuthState auth) {
                 name: 'map',
                 pageBuilder: (context, state) => const MaterialPage(
                   key: ValueKey('assistant-page'),
-                  child: AssistantPlaceholderScreen(),
+                  child: TrainingScreen(),
                 ),
               ),
             ],
