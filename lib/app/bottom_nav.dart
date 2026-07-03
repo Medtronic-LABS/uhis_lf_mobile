@@ -19,23 +19,31 @@ class BottomNavShell extends StatefulWidget {
   State<BottomNavShell> createState() => _BottomNavShellState();
 }
 
-class _BottomNavShellState extends State<BottomNavShell> {
+class _BottomNavShellState extends State<BottomNavShell>
+    with WidgetsBindingObserver {
   DateTime? _lastBackPress;
 
-  void _onTap(BuildContext context, int index) {
-    widget.navigationShell.goBranch(
-      index,
-      initialLocation: index == widget.navigationShell.currentIndex,
-    );
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
   }
 
-  Future<bool> _onBackPressed(BuildContext context) async {
-    // If not on the home tab, jump to home.
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Called by Android when back is pressed and no child navigator consumed it.
+  /// Return true = we handled it (suppress exit), false = let system exit.
+  @override
+  Future<bool> didPopRoute() async {
+    if (!mounted) return false;
     if (widget.navigationShell.currentIndex != 0) {
       widget.navigationShell.goBranch(0, initialLocation: true);
-      return false;
+      return true;
     }
-    // On home tab: double-tap to exit.
     final now = DateTime.now();
     final last = _lastBackPress;
     if (last != null && now.difference(last) < const Duration(seconds: 2)) {
@@ -51,17 +59,21 @@ class _BottomNavShellState extends State<BottomNavShell> {
           duration: Duration(seconds: 2),
         ),
       );
-    return false;
+    return true;
+  }
+
+  void _onTap(BuildContext context, int index) {
+    widget.navigationShell.goBranch(
+      index,
+      initialLocation: index == widget.navigationShell.currentIndex,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
 
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) => _onBackPressed(context),
-      child: Scaffold(
+    return Scaffold(
         body: widget.navigationShell,
         bottomNavigationBar: DecoratedBox(
           decoration: BoxDecoration(
@@ -95,7 +107,6 @@ class _BottomNavShellState extends State<BottomNavShell> {
             ],
           ),
         ),
-      ),
     );
   }
 }
