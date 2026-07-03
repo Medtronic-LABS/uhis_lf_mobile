@@ -304,11 +304,16 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     }
   }
 
-  Future<bool?> _confirmExit() async {
-    return showDialog<bool>(
-      context: context,
-      barrierColor: Colors.black54,
-      builder: (ctx) => Dialog(
+  Future<bool?> _confirmExit() => showLeaveVisitDialog(context);
+}
+
+/// Shared leave-visit confirmation dialog.
+/// Returns true if the user chose to leave, false/null to stay.
+Future<bool?> showLeaveVisitDialog(BuildContext context) {
+  return showDialog<bool>(
+    context: context,
+    barrierColor: Colors.black54,
+    builder: (ctx) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
         child: Padding(
@@ -400,7 +405,6 @@ class _VisitFlowState extends State<VisitFlowScreen> {
         ),
       ),
     );
-  }
 }
 
 /// Visit flow header — single navy header that replaces every per-screen
