@@ -1,11 +1,13 @@
 /// Drop-in replacement for [SectionedAssessmentScreen].
 ///
-/// Loads the appropriate [FormSchema] from [FormDataService], creates a
-/// [DynamicFormController] via Provider, and renders [DynamicFormRenderer].
+/// Loads the appropriate [FormSchema] via [SdkFormCompositor] (multi-programme)
+/// or [FormDataService] (single-programme fallback), creates a
+/// [VisitFormController] via Provider, and renders [DynamicFormRenderer]
+/// with live CDS banners above the form.
 ///
 /// The Scribe AI banner and the submit button are wired to the same contracts
 /// as [SectionedAssessmentScreen] — [onSubmit] is called after a successful
-/// [DynamicFormController.saveDraft].
+/// [VisitFormController.saveDraft].
 library;
 
 import 'package:flutter/material.dart';
@@ -13,16 +15,24 @@ import 'package:provider/provider.dart';
 
 import '../core/constants/app_strings.dart';
 import '../core/db/local_assessment_dao.dart';
+import '../core/models/programme.dart';
 import '../core/theme/app_theme.dart';
+import '../features/visit/composer/cds_banner.dart';
+import '../features/visit/composer/cds_rules.dart';
+import '../features/visit/composer/sdk_form_compositor.dart';
+import '../features/visit/composer/visit_form_controller.dart';
 import 'controller/dynamic_form_controller.dart';
 import 'form_data_service.dart';
+import 'models/field_schema.dart';
 import 'models/form_schema.dart';
+import 'models/section_schema.dart';
 import 'widgets/dynamic_form_renderer.dart';
 
 class DynamicAssessmentScreen extends StatefulWidget {
   const DynamicAssessmentScreen({
     super.key,
-    required this.formType,
+    this.formType = '',
+    this.programmes,
     required this.encounterId,
     required this.patientId,
     required this.draftDao,
@@ -32,8 +42,13 @@ class DynamicAssessmentScreen extends StatefulWidget {
     this.restoredDraft,
   });
 
-  /// Programme name (e.g. 'anc', 'ncd') — used to select the form schema.
+  /// Single programme identifier (e.g. 'anc', 'ncd').
+  /// Used as fallback when [programmes] is null or empty.
   final String formType;
+
+  /// Full list of activated programmes — enables multi-programme form
+  /// composition via [SdkFormCompositor]. Preferred over [formType].
+  final List<Programme>? programmes;
 
   /// Encounter UUID — PK in [AssessmentDraftRow].
   final String encounterId;
@@ -48,7 +63,7 @@ class DynamicAssessmentScreen extends StatefulWidget {
   /// Called after a successful submit + draft save.
   final VoidCallback onSubmit;
 
-  /// Optional: called when a CDS-driven referral is triggered.
+  /// Optional: called when a CDS-driven urgent referral alert fires.
   final VoidCallback? onReferNow;
 
   /// Restored draft from a previous session (pre-populates field values).
@@ -63,7 +78,7 @@ class _DynamicAssessmentScreenState extends State<DynamicAssessmentScreen> {
   FormSchema? _schema;
   bool _loading = true;
   String? _loadError;
-  DynamicFormController? _controller;
+  VisitFormController? _controller;
 
   @override
   void initState() {
@@ -79,25 +94,42 @@ class _DynamicAssessmentScreenState extends State<DynamicAssessmentScreen> {
 
   Future<void> _loadSchema() async {
     try {
-      final service = FormDataService();
-      final schema = await service.schemaForType(widget.formType);
+      FormSchema? schema;
+      final progs = widget.programmes;
+
+      if (progs != null && progs.isNotEmpty) {
+        schema = await SdkFormCompositor.compose(progs);
+      }
+
+      if (schema == null && widget.formType.isNotEmpty) {
+        schema = await FormDataService().schemaForType(widget.formType);
+      }
+
       if (schema == null) {
         setState(() {
-          _loadError =
-              'No form schema found for programme "${widget.formType}"';
+          _loadError = 'No form schema for '
+              '"${widget.programmes?.map((p) => p.name).join(', ') ?? widget.formType}"';
           _loading = false;
         });
         return;
       }
-      final ctrl = DynamicFormController(
+
+      final activePathways = (progs ?? const [])
+          .where((p) => p.isPilot)
+          .toSet();
+
+      final ctrl = VisitFormController(
         formSchema: schema,
         encounterId: widget.encounterId,
         patientId: widget.patientId,
         memberId: widget.memberId,
         draftDao: widget.draftDao,
-        formType: widget.formType,
+        formType: schema.formType,
         restoredDraft: widget.restoredDraft,
+        activePathways: activePathways,
+        onReferNow: widget.onReferNow,
       );
+
       setState(() {
         _schema = schema;
         _controller = ctrl;
@@ -114,6 +146,8 @@ class _DynamicAssessmentScreenState extends State<DynamicAssessmentScreen> {
   Future<void> _submit() async {
     final ctrl = _controller;
     if (ctrl == null) return;
+    final errors = ctrl.validate();
+    if (errors.isNotEmpty) return;
     await ctrl.submit(widget.onSubmit);
   }
 
@@ -152,13 +186,16 @@ class _DynamicAssessmentScreenState extends State<DynamicAssessmentScreen> {
                 IconButton(
                   icon: const Icon(Icons.save_outlined),
                   tooltip: 'Save draft',
-                  onPressed: () => ctx.read<DynamicFormController>().saveDraft(),
+                  onPressed: () =>
+                      ctx.read<DynamicFormController>().saveDraft(),
                 ),
               ],
             ),
-            body: DynamicFormRenderer(
+            body: _FormBody(
               schema: _schema!,
               controller: _controller!,
+              onAddPathway: _handleAddPathway,
+              onReferNow: widget.onReferNow,
             ),
             bottomNavigationBar: _SubmitBar(onSubmit: _submit),
           );
@@ -167,12 +204,115 @@ class _DynamicAssessmentScreenState extends State<DynamicAssessmentScreen> {
     );
   }
 
+  Future<void> _handleAddPathway(Programme programme) async {
+    final ctrl = _controller;
+    if (ctrl == null) return;
+    try {
+      final schema = await FormDataService()
+          .schemaForType(programme.name.toLowerCase());
+      if (schema == null) return;
+      for (final section in schema.sections) {
+        ctrl.addInjectedSection(section);
+      }
+    } catch (_) {}
+  }
+
   String get _programmeLabel {
+    final progs = widget.programmes;
+    if (progs != null && progs.isNotEmpty) {
+      return progs
+          .where((p) => p.isPilot)
+          .map((p) {
+            final n = p.name;
+            return n.substring(0, 1).toUpperCase() + n.substring(1);
+          })
+          .join(' + ');
+    }
     final t = widget.formType;
     if (t.isEmpty) return 'Assessment';
     return t.substring(0, 1).toUpperCase() + t.substring(1);
   }
 }
+
+// ── Form body with CDS banners + renderer ─────────────────────────────────────
+
+class _FormBody extends StatelessWidget {
+  const _FormBody({
+    required this.schema,
+    required this.controller,
+    required this.onAddPathway,
+    this.onReferNow,
+  });
+
+  final FormSchema schema;
+  final VisitFormController controller;
+  final Future<void> Function(Programme) onAddPathway;
+  final VoidCallback? onReferNow;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (ctx, _) {
+        final alerts = controller.alerts;
+        final injected = controller.injectedSections;
+
+        // Build combined schema: base sections + CDS-injected sections
+        final combinedSchema = injected.isEmpty
+            ? schema
+            : _merge(schema, injected);
+
+        return Column(
+          children: [
+            // CDS alert banners
+            if (alerts.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Column(
+                  children: alerts.map((alert) {
+                    return CdsBanner(
+                      key: ValueKey(alert.alertId),
+                      alert: alert,
+                      onDismiss: () => controller.dismissAlert(alert.alertId),
+                      onReferNow: alert.action == CdsAction.referNow
+                          ? onReferNow
+                          : null,
+                      onAddPathway: alert.action == CdsAction.addPathway &&
+                              alert.addPathway != null
+                          ? () => onAddPathway(alert.addPathway!)
+                          : null,
+                    );
+                  }).toList(),
+                ),
+              ),
+
+            // Form renderer
+            Expanded(
+              child: DynamicFormRenderer(
+                schema: combinedSchema,
+                controller: controller,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  static FormSchema _merge(FormSchema base, List<SectionSchema> injected) {
+    final sections = [...base.sections, ...injected];
+    final allFields = <FieldSchema>[
+      for (final s in sections) ...s.fields,
+    ];
+    return FormSchema(
+      formType: base.formType,
+      sections: sections,
+      allFields: allFields,
+    );
+  }
+}
+
+// ── Submit bar ────────────────────────────────────────────────────────────────
 
 class _SubmitBar extends StatelessWidget {
   const _SubmitBar({required this.onSubmit});
@@ -188,42 +328,42 @@ class _SubmitBar extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-                if (ctrl.hasError)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Text(
-                      ctrl.errorMessage ?? '',
-                      style: const TextStyle(color: AppColors.rangeCritical),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: ctrl.isSaving ? null : onSubmit,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.navy,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    child: ctrl.isSaving
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : Text(
-                            ComposerStrings.submitButton,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
+              if (ctrl.hasError)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    ctrl.errorMessage ?? '',
+                    style: const TextStyle(color: AppColors.rangeCritical),
+                    textAlign: TextAlign.center,
                   ),
                 ),
-              ],
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: ctrl.isSaving ? null : onSubmit,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.navy,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: ctrl.isSaving
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(
+                          ComposerStrings.submitButton,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                ),
+              ),
+            ],
           ),
         );
       },

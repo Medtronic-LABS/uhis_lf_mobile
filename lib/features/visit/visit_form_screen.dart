@@ -252,9 +252,13 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         '[VisitForm] Sectioned mode — programmes: ${widget.activatedPathways?.join(', ')}');
 
     if (AppConfig.useDynamicForms) {
-      final primaryPathway = _getPrimaryProgramme();
+      final allProgrammes = (widget.activatedPathways ?? const [])
+          .map(Programme.fromString)
+          .where((p) => p != Programme.unknown)
+          .toList();
       return DynamicAssessmentScreen(
-        formType: primaryPathway.name.toLowerCase(),
+        programmes: allProgrammes,
+        formType: _getPrimaryProgramme().name.toLowerCase(),
         encounterId: widget.visitId,
         patientId: widget.patientId ?? '',
         memberId: widget.memberId,

@@ -211,6 +211,14 @@ class DynamicFormController extends ChangeNotifier {
     return true;
   }
 
+  /// Flat key-value map of all field values, with composite fields expanded.
+  ///
+  /// e.g. `{bloodPressure: {systolic:120, diastolic:80}}` → `{systolic:120, diastolic:80}`
+  ///
+  /// Exposed for subclasses (e.g. [VisitFormController]) that need a flat map
+  /// for CDS evaluation without triggering a full save.
+  Map<String, dynamic> get flatFieldValues => _flattenValues();
+
   static bool _isComposite(FieldKind kind) {
     const composites = {
       FieldKind.bloodPressure,
