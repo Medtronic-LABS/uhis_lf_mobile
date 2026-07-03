@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -21,7 +22,6 @@ import '../visit/widgets/widgets.dart';
 import 'dashboard_repository.dart';
 import 'sk_performance_screen.dart';
 import 'mission_dashboard_repository.dart';
-import 'sk_performance_screen.dart';
 import '../household/enrollment/enrollment_entry_sheet.dart';
 
 enum _NeedFilter {
@@ -496,13 +496,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // Check if a refresh is pending (e.g., assessment completed while on another tab)
     _checkPendingRefresh();
 
-    return Scaffold(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+      ),
+      child: Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
       // Pink "+ Enrol new" FAB — fixed bottom-right per spec §2.1. Opens
       // QR enrolment flow when the route lands; for now surfaces a snackbar
       // so the SK gets clear feedback rather than silent taps.
       floatingActionButton: _EnrolNewFab(),
       body: SafeArea(
+        top: false,
         bottom: false,
         child: Column(
           children: [
@@ -732,6 +739,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -1059,9 +1067,10 @@ class _DashboardHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    final topPadding = MediaQuery.of(context).padding.top;
     return Container(
       color: tokens.brandNavy,
-      padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+      padding: EdgeInsets.fromLTRB(16, topPadding + 10, 8, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
