@@ -281,7 +281,17 @@ class _ProgrammeLine extends StatelessWidget {
     final knownProgrammes = item.programmes
         .where((p) => p != Programme.unknown)
         .toList();
-    if (knownProgrammes.isEmpty) return const SizedBox.shrink();
+
+    if (knownProgrammes.isEmpty) {
+      return const Text(
+        WorklistStrings.selectService,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: AppColors.textMuted,
+        ),
+      );
+    }
 
     final programmeName = knownProgrammes
         .map((p) => _displayName(p))
@@ -303,16 +313,16 @@ class _ProgrammeLine extends StatelessWidget {
 
   static String _displayName(Programme p) {
     switch (p) {
-      case Programme.anc:           return 'ANC';
-      case Programme.pnc:           return 'PNC';
-      case Programme.ncd:           return 'NCD';
-      case Programme.imci:          return 'IMCI';
-      case Programme.tb:            return 'TB';
-      case Programme.epi:           return 'EPI';
-      case Programme.nutrition:     return 'Nutrition';
-      case Programme.familyPlanning:return 'Family Planning';
-      case Programme.cataract:      return 'Cataract';
-      case Programme.eyeCare:       return 'Eye Care';
+      case Programme.anc:           return WorklistStrings.programmeAnc;
+      case Programme.pnc:           return WorklistStrings.programmePnc;
+      case Programme.ncd:           return WorklistStrings.programmeNcd;
+      case Programme.imci:          return WorklistStrings.programmeImci;
+      case Programme.tb:            return WorklistStrings.programmeTb;
+      case Programme.epi:           return WorklistStrings.programmeEpi;
+      case Programme.nutrition:     return WorklistStrings.programmeNutrition;
+      case Programme.familyPlanning:return WorklistStrings.programmeFamilyPlanning;
+      case Programme.cataract:      return WorklistStrings.programmeCataract;
+      case Programme.eyeCare:       return WorklistStrings.programmeEyeCare;
       case Programme.unknown:       return '';
     }
   }
