@@ -1262,6 +1262,13 @@ abstract final class BottomNavStrings {
   static const String assistantPlaceholderSubheading = 'Coming soon';
 
   static const String pressBackAgainToExit = 'Press back again to exit';
+
+  // Leave-visit confirmation dialog
+  static const String leaveVisitTitle = 'Leave this visit?';
+  static const String leaveVisitBody =
+      'Progress on the current step will not be saved.';
+  static const String leaveVisitAction = 'Leave';
+  static const String resumeVisitAction = 'Stay';
 }
 
 /// Symptom triage picker screen strings.

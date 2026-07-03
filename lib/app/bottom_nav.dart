@@ -62,11 +62,41 @@ class _BottomNavShellState extends State<BottomNavShell>
     return true;
   }
 
-  void _onTap(BuildContext context, int index) {
-    widget.navigationShell.goBranch(
-      index,
-      initialLocation: index == widget.navigationShell.currentIndex,
-    );
+  Future<void> _onTap(BuildContext context, int index) async {
+    // Same tab tapped — just reset to root of that branch.
+    if (index == widget.navigationShell.currentIndex) {
+      widget.navigationShell.goBranch(index, initialLocation: true);
+      return;
+    }
+    // If an active visit flow is running, ask before leaving.
+    final path =
+        GoRouter.of(context).routeInformationProvider.value.uri.path;
+    final inVisitFlow =
+        path.contains('/patients/visit/') && path.endsWith('/flow');
+    if (inVisitFlow) {
+      final leave = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text(BottomNavStrings.leaveVisitTitle),
+          content: const Text(BottomNavStrings.leaveVisitBody),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text(BottomNavStrings.resumeVisitAction),
+            ),
+            TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(ctx).colorScheme.error,
+              ),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text(BottomNavStrings.leaveVisitAction),
+            ),
+          ],
+        ),
+      );
+      if (leave != true || !mounted) return;
+    }
+    widget.navigationShell.goBranch(index, initialLocation: true);
   }
 
   @override
