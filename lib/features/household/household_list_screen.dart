@@ -710,6 +710,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
                   itemBuilder: (context, index) {
                     final member = members[index];
                     final pid = member.patientId ?? member.id;
+                    debugPrint('[MembersList] member=${member.name} pid=$pid queueKeys=${_queueItems.keys.take(3).toList()} hit=${_queueItems.containsKey(pid)}');
                     final queueItem = pid != null ? _queueItems[pid] : null;
                     if (queueItem != null) {
                       return Padding(
