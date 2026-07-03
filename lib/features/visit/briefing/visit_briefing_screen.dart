@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/constants/app_strings.dart';
 import '../../../core/models/programme.dart';
 import '../../patient/followup_repository.dart';
 import '../../patient/vitals_repository.dart';
@@ -177,7 +178,7 @@ class _VisitBriefingScreenState extends State<VisitBriefingScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.patientName ?? 'Pre-Visit Briefing'),
+        title: Text(widget.patientName ?? VisitBriefingStrings.fallbackTitle),
         centerTitle: false,
       ),
       body: FutureBuilder<VisitBriefingResponse?>(
@@ -233,17 +234,15 @@ class _BeforeYouKnockCard extends StatelessWidget {
           _CardHeader(
             icon: Icons.psychology_outlined,
             iconColor: theme.colorScheme.primary,
-            title: 'Before You Knock',
-            subtitle:
-                'AI-generated briefing based on patient history',
+            title: SymptomPickerStrings.briefCard1Title,
+            subtitle: VisitBriefingStrings.card1Subtitle,
           ),
           const SizedBox(height: 16),
           if (snap.connectionState == ConnectionState.waiting)
             const _LoadingSkeleton(lines: 4)
           else if (snap.data == null)
             _ErrorFallback(
-              message:
-                  'AI briefing unavailable — check patient record manually.',
+              message: VisitBriefingStrings.briefingUnavailable,
             )
           else ...[
             _HeadlineBanner(text: snap.data!.briefingCard.headline),
@@ -277,15 +276,15 @@ class _ConversationGuideCard extends StatelessWidget {
           _CardHeader(
             icon: Icons.chat_bubble_outline,
             iconColor: Colors.teal,
-            title: 'Conversation Guide',
-            subtitle: 'Personalised for this patient\'s programmes and history',
+            title: VisitBriefingStrings.card2Title,
+            subtitle: VisitBriefingStrings.card2Subtitle,
           ),
           const SizedBox(height: 16),
           if (snap.connectionState == ConnectionState.waiting)
             const _LoadingSkeleton(lines: 6)
           else if (snap.data == null)
             _ErrorFallback(
-              message: 'Conversation guide unavailable.',
+              message: VisitBriefingStrings.guideUnavailable,
             )
           else ...[
             Card(
@@ -403,7 +402,7 @@ class _TransitionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final prompt = snap.data?.transitionPrompt ??
-        'Ask the patient how she is feeling today and begin the consultation.';
+        VisitBriefingStrings.transitionFallback;
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -413,9 +412,8 @@ class _TransitionCard extends StatelessWidget {
           _CardHeader(
             icon: Icons.mic_none,
             iconColor: Colors.deepPurple,
-            title: 'Begin the Consultation',
-            subtitle:
-                'Ask the patient how they are feeling — the AI Scribe will start listening',
+            title: VisitBriefingStrings.card3Title,
+            subtitle: VisitBriefingStrings.card3Subtitle,
           ),
           const SizedBox(height: 24),
           Card(
@@ -443,23 +441,20 @@ class _TransitionCard extends StatelessWidget {
           const SizedBox(height: 24),
           _FeatureBadge(
             icon: Icons.mic,
-            label: 'Ambient AI Scribe',
-            description:
-                'Automatically transcribes and structures clinical information as you speak.',
+            label: VisitBriefingStrings.scribeBadgeLabel,
+            description: VisitBriefingStrings.scribeBadgeDescription,
           ),
           const SizedBox(height: 12),
           _FeatureBadge(
             icon: Icons.assignment_outlined,
-            label: 'Auto-fill Assessment',
-            description:
-                'Relevant fields in the assessment form are populated from the conversation.',
+            label: VisitBriefingStrings.autofillBadgeLabel,
+            description: VisitBriefingStrings.autofillBadgeDescription,
           ),
           const SizedBox(height: 12),
           _FeatureBadge(
             icon: Icons.verified_outlined,
-            label: 'You Review Everything',
-            description:
-                'All AI suggestions are proposals — you accept or edit before submitting.',
+            label: VisitBriefingStrings.reviewBadgeLabel,
+            description: VisitBriefingStrings.reviewBadgeDescription,
           ),
         ],
       ),
@@ -524,7 +519,7 @@ class _BottomBar extends StatelessWidget {
                     ? FilledButton.icon(
                         onPressed: onBeginAssessment,
                         icon: const Icon(Icons.play_arrow),
-                        label: const Text('Begin Assessment'),
+                        label: const Text(VisitBriefingStrings.beginAssessment),
                         style: FilledButton.styleFrom(
                           minimumSize: const Size.fromHeight(52),
                         ),
@@ -537,7 +532,7 @@ class _BottomBar extends StatelessWidget {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Text('Next'),
+                            const Text(ComposerStrings.nextButton),
                             const SizedBox(width: 6),
                             const Icon(Icons.arrow_forward, size: 18),
                           ],
@@ -548,7 +543,7 @@ class _BottomBar extends StatelessWidget {
                 const SizedBox(height: 8),
                 TextButton(
                   onPressed: onBeginAssessment,
-                  child: const Text('Skip briefing'),
+                  child: const Text(VisitBriefingStrings.skipBriefing),
                 ),
               ],
             ],

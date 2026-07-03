@@ -70,9 +70,7 @@ class _ProgrammeSelectionScreenState extends State<ProgrammeSelectionScreen> {
           child: Consumer<ProgrammeSelectionViewModel>(
             builder: (context, vm, _) {
               return Column(
-                children: [
-                  Expanded(child: _buildBody(context, vm)),
-                ],
+                children: [Expanded(child: _buildBody(context, vm))],
               );
             },
           ),
@@ -92,7 +90,12 @@ class _ProgrammeSelectionScreenState extends State<ProgrammeSelectionScreen> {
     final recs = resp?.recommendations ?? const <ProgrammeRecommendation>[];
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.xxxl,
+        AppSpacing.xxxl,
+        AppSpacing.xxxl,
+        AppSpacing.xxxl,
+      ),
       children: [
         // Cross-program notice (callout)
         if (notice != null) _CrossProgrammeNoticeCard(notice: notice),
@@ -145,9 +148,9 @@ class _ProgrammeSelectionScreenState extends State<ProgrammeSelectionScreen> {
           style: OutlinedButton.styleFrom(
             foregroundColor: Theme.of(context).colorScheme.onSurface,
             side: const BorderSide(color: AppColors.border),
-            padding: const EdgeInsets.symmetric(vertical: 12),
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(AppRadius.field),
             ),
           ),
         ),
@@ -214,7 +217,9 @@ Future<bool> _confirmAdd(BuildContext context, Programme programme) async {
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.patRow),
+      ),
       title: Row(
         children: [
           Container(
@@ -222,7 +227,7 @@ Future<bool> _confirmAdd(BuildContext context, Programme programme) async {
             height: 32,
             decoration: BoxDecoration(
               color: AppColors.statusSuccess.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(AppRadius.rxIcon),
             ),
             alignment: Alignment.center,
             child: const Icon(
@@ -235,9 +240,7 @@ Future<bool> _confirmAdd(BuildContext context, Programme programme) async {
           Expanded(
             child: Text(
               ProgrammeSelectionStrings.addConfirmTitle(programme.wireTag),
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
+              style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
                 color: Theme.of(ctx).colorScheme.onSurface,
               ),
             ),
@@ -246,9 +249,18 @@ Future<bool> _confirmAdd(BuildContext context, Programme programme) async {
       ),
       content: Text(
         ProgrammeSelectionStrings.addConfirmBody,
-        style: TextStyle(fontSize: 13, color: Theme.of(ctx).colorScheme.onSurfaceVariant, height: 1.4),
+        style: TextStyle(
+          fontSize: 13,
+          color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+          height: 1.4,
+        ),
       ),
-      actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      actionsPadding: const EdgeInsets.fromLTRB(
+        AppSpacing.xxxl,
+        0,
+        AppSpacing.xxxl,
+        AppSpacing.xl,
+      ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(false),
@@ -274,7 +286,9 @@ Future<bool> _confirmSkip(BuildContext context, Programme programme) async {
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.patRow),
+      ),
       title: Row(
         children: [
           Container(
@@ -282,7 +296,7 @@ Future<bool> _confirmSkip(BuildContext context, Programme programme) async {
             height: 32,
             decoration: BoxDecoration(
               color: AppColors.statusCritical.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(AppRadius.rxIcon),
             ),
             alignment: Alignment.center,
             child: const Icon(
@@ -295,9 +309,7 @@ Future<bool> _confirmSkip(BuildContext context, Programme programme) async {
           Expanded(
             child: Text(
               ProgrammeSelectionStrings.skipConfirmTitle(programme.wireTag),
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
+              style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
                 color: Theme.of(ctx).colorScheme.onSurface,
               ),
             ),
@@ -306,9 +318,18 @@ Future<bool> _confirmSkip(BuildContext context, Programme programme) async {
       ),
       content: Text(
         ProgrammeSelectionStrings.skipConfirmBody,
-        style: TextStyle(fontSize: 13, color: Theme.of(ctx).colorScheme.onSurfaceVariant, height: 1.4),
+        style: TextStyle(
+          fontSize: 13,
+          color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+          height: 1.4,
+        ),
       ),
-      actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      actionsPadding: const EdgeInsets.fromLTRB(
+        AppSpacing.xxxl,
+        0,
+        AppSpacing.xxxl,
+        AppSpacing.xl,
+      ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(false),
@@ -333,9 +354,9 @@ Future<bool> _confirmSkip(BuildContext context, Programme programme) async {
 /// recommendations or the add-programme sheet.
 void _showProgrammeToast(
   BuildContext context,
-  Programme programme,
-  {required bool added}
-) {
+  Programme programme, {
+  required bool added,
+}) {
   if (programme == Programme.unknown) return;
   final messenger = ScaffoldMessenger.maybeOf(context);
   if (messenger == null) return;
@@ -375,13 +396,17 @@ class _LoadingSkeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.xxxl),
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
           child: Row(
             children: [
-              const Icon(Icons.auto_awesome, size: 18, color: AppColors.aiPurple),
+              const Icon(
+                Icons.auto_awesome,
+                size: 18,
+                color: AppColors.aiPurple,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -405,19 +430,22 @@ class _LoadingSkeleton extends StatelessWidget {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.only(bottom: AppSpacing.xxxl),
           child: Text(
             ProgrammeSelectionStrings.loadingSubtitle,
-            style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ),
         for (var i = 0; i < 3; i++)
           Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(14),
+            margin: const EdgeInsets.only(bottom: AppSpacing.xl),
+            padding: const EdgeInsets.all(AppSpacing.xxl),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(AppRadius.patRow),
               border: Border.all(color: AppColors.border),
             ),
             child: Column(
@@ -448,7 +476,8 @@ class _SkeletonBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final w = width ??
+        final w =
+            width ??
             (widthFraction != null
                 ? constraints.maxWidth * widthFraction!
                 : constraints.maxWidth);
@@ -475,12 +504,15 @@ class _ErrorState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(AppSpacing.h6xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.wifi_off_rounded,
-                size: 36, color: Theme.of(context).colorScheme.onSurfaceVariant),
+            Icon(
+              Icons.wifi_off_rounded,
+              size: 36,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(height: 12),
             Text(
               ProgrammeSelectionStrings.failedTitle,
@@ -494,7 +526,10 @@ class _ErrorState extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               ProgrammeSelectionStrings.failedSubtitle,
-              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
@@ -540,10 +575,10 @@ class _CurrentProgrammeCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.patRow),
         border: Border.all(color: AppColors.border),
       ),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(AppSpacing.xxl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -560,7 +595,10 @@ class _CurrentProgrammeCard extends StatelessWidget {
           if (!hasCurrent)
             Text(
               ProgrammeSelectionStrings.currentProgrammeNone,
-              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             )
           else
             Wrap(
@@ -570,18 +608,18 @@ class _CurrentProgrammeCard extends StatelessWidget {
                   .map(
                     (p) => Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
+                        horizontal: AppSpacing.lg,
+                        vertical: AppSpacing.xs,
+                      ),
                       decoration: BoxDecoration(
                         color: AppColors.navy,
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(AppRadius.pill),
                       ),
                       child: Text(
                         p.wireTag,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
+                        style: Theme.of(
+                          context,
+                        ).textTheme.labelLarge?.copyWith(color: Colors.white),
                       ),
                     ),
                   )
@@ -628,15 +666,18 @@ class _CrossProgrammeNoticeCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.statusWarningSurface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.patRow),
         border: Border.all(color: AppColors.statusWarning),
       ),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.xl),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.warning_amber_rounded,
-              size: 18, color: AppColors.statusWarning),
+          const Icon(
+            Icons.warning_amber_rounded,
+            size: 18,
+            color: AppColors.statusWarning,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
@@ -654,7 +695,9 @@ class _CrossProgrammeNoticeCard extends StatelessWidget {
                 Text(
                   notice.message,
                   style: const TextStyle(
-                      fontSize: 12, color: AppColors.statusWarningText),
+                    fontSize: 12,
+                    color: AppColors.statusWarningText,
+                  ),
                 ),
               ],
             ),
@@ -692,15 +735,17 @@ class _RecommendationCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final accent = _confidenceColor();
     final borderColor = isSelected ? AppColors.aiBorder : AppColors.border;
-    final surfaceColor = isSelected ? AppColors.aiSurfaceStart : Theme.of(context).colorScheme.surface;
+    final surfaceColor = isSelected
+        ? AppColors.aiSurfaceStart
+        : Theme.of(context).colorScheme.surface;
 
     return Container(
       decoration: BoxDecoration(
         color: surfaceColor,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.patRow),
         border: Border.all(color: borderColor),
       ),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(AppSpacing.xxl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -709,10 +754,12 @@ class _RecommendationCard extends StatelessWidget {
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 4),
+                  horizontal: AppSpacing.lg,
+                  vertical: AppSpacing.xs,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.navy,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
                 ),
                 child: Text(
                   recommendation.programme.wireTag,
@@ -727,10 +774,12 @@ class _RecommendationCard extends StatelessWidget {
               if (recommendation.isCurrent)
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
+                    horizontal: AppSpacing.md,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.navy.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
                   ),
                   child: Text(
                     ProgrammeSelectionStrings.currentBadge,
@@ -743,21 +792,20 @@ class _RecommendationCard extends StatelessWidget {
                 ),
               const Spacer(),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.md,
+                  vertical: AppSpacing.xs,
+                ),
                 decoration: BoxDecoration(
                   color: accent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
                   border: Border.all(color: accent),
                 ),
                 child: Text(
                   ProgrammeSelectionStrings.confidenceChip(
-                      recommendation.confidencePct),
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    color: accent,
+                    recommendation.confidencePct,
                   ),
+                  style: AppTextStyles.scorePill.copyWith(color: accent),
                 ),
               ),
             ],
@@ -765,13 +813,20 @@ class _RecommendationCard extends StatelessWidget {
           const SizedBox(height: 10),
           for (final bullet in recommendation.rationale)
             Padding(
-              padding: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.only(top: 6, right: 6),
-                    child: Icon(Icons.circle, size: 4, color: Theme.of(context).colorScheme.onSurface),
+                    padding: const EdgeInsets.only(
+                      top: AppSpacing.sm,
+                      right: AppSpacing.sm,
+                    ),
+                    child: Icon(
+                      Icons.circle,
+                      size: 4,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
                   ),
                   Expanded(
                     child: Column(
@@ -789,7 +844,9 @@ class _RecommendationCard extends StatelessWidget {
                             padding: const EdgeInsets.only(top: 2),
                             child: Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 1),
+                                horizontal: AppSpacing.sm,
+                                vertical: 1,
+                              ),
                               decoration: BoxDecoration(
                                 color: AppColors.aiSurfaceStart,
                                 borderRadius: BorderRadius.circular(4),
@@ -826,11 +883,14 @@ class _RecommendationCard extends StatelessWidget {
                           ? AppColors.statusCritical
                           : AppColors.border,
                     ),
-                    disabledForegroundColor:
-                        AppColors.textMuted.withValues(alpha: 0.5),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    disabledForegroundColor: AppColors.textMuted.withValues(
+                      alpha: 0.5,
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: AppSpacing.lg,
+                    ),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(AppRadius.field),
                     ),
                   ),
                 ),
@@ -840,9 +900,7 @@ class _RecommendationCard extends StatelessWidget {
                 child: FilledButton.icon(
                   onPressed: isSelected ? null : onAccept,
                   icon: Icon(
-                    isSelected
-                        ? Icons.check_circle_rounded
-                        : Icons.add_rounded,
+                    isSelected ? Icons.check_circle_rounded : Icons.add_rounded,
                     size: 18,
                   ),
                   label: Text(
@@ -853,12 +911,15 @@ class _RecommendationCard extends StatelessWidget {
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.statusSuccess,
                     foregroundColor: Colors.white,
-                    disabledBackgroundColor:
-                        AppColors.statusSuccess.withValues(alpha: 0.85),
+                    disabledBackgroundColor: AppColors.statusSuccess.withValues(
+                      alpha: 0.85,
+                    ),
                     disabledForegroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: AppSpacing.lg,
+                    ),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(AppRadius.field),
                     ),
                   ),
                 ),
@@ -895,12 +956,18 @@ class _AddProgrammeSheet extends StatelessWidget {
       animation: vm,
       builder: (context, _) {
         final selected = vm.selectedProgrammes;
-        final available =
-            _allProgrammes.where((p) => !selected.contains(p)).toList();
+        final available = _allProgrammes
+            .where((p) => !selected.contains(p))
+            .toList();
 
         return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.xxxl,
+              AppSpacing.xl,
+              AppSpacing.xxxl,
+              AppSpacing.xxxl,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -918,22 +985,24 @@ class _AddProgrammeSheet extends StatelessWidget {
                 const SizedBox(height: 12),
                 Text(
                   ProgrammeSelectionStrings.addProgrammeSheetTitle,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   ProgrammeSelectionStrings.addProgrammeSheetSubtitle,
-                  style:
-                      TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 if (available.isEmpty)
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: AppSpacing.h6xl,
+                    ),
                     child: Center(
                       child: Text(
                         ProgrammeSelectionStrings.addProgrammeSheetEmpty,
@@ -952,7 +1021,7 @@ class _AddProgrammeSheet extends StatelessWidget {
                         .map(
                           (p) => Material(
                             color: Theme.of(context).colorScheme.surface,
-                            borderRadius: BorderRadius.circular(20),
+                            borderRadius: BorderRadius.circular(AppRadius.pill),
                             child: InkWell(
                               onTap: () async {
                                 final ok = await _confirmAdd(context, p);
@@ -962,28 +1031,39 @@ class _AddProgrammeSheet extends StatelessWidget {
                                 Navigator.of(context).pop();
                                 onAdded(p);
                               },
-                              borderRadius: BorderRadius.circular(20),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.pill,
+                              ),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 8),
+                                  horizontal: AppSpacing.xl,
+                                  vertical: AppSpacing.md,
+                                ),
                                 decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(20),
-                                  border:
-                                      Border.all(color: AppColors.border),
+                                  borderRadius: BorderRadius.circular(
+                                    AppRadius.pill,
+                                  ),
+                                  border: Border.all(color: AppColors.border),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(Icons.add_rounded,
-                                        size: 14,
-                                        color: Theme.of(context).colorScheme.onSurfaceVariant),
+                                    Icon(
+                                      Icons.add_rounded,
+                                      size: 14,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                                    ),
                                     const SizedBox(width: 4),
                                     Text(
                                       p.wireTag,
                                       style: TextStyle(
                                         fontSize: 13,
                                         fontWeight: FontWeight.w700,
-                                        color: Theme.of(context).colorScheme.onSurface,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurface,
                                       ),
                                     ),
                                   ],
@@ -1028,7 +1108,12 @@ class _ReviewBeforeContinueSheet extends StatelessWidget {
 
         return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.xxxl,
+              AppSpacing.xl,
+              AppSpacing.xxxl,
+              AppSpacing.xxxl,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1053,7 +1138,7 @@ class _ReviewBeforeContinueSheet extends StatelessWidget {
                       height: 32,
                       decoration: BoxDecoration(
                         color: AppColors.pink.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(AppRadius.rxIcon),
                       ),
                       alignment: Alignment.center,
                       child: const Icon(
@@ -1069,19 +1154,23 @@ class _ReviewBeforeContinueSheet extends StatelessWidget {
                         children: [
                           Text(
                             ProgrammeSelectionStrings.reviewSheetTitle(
-                                selected.length),
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              color: Theme.of(context).colorScheme.onSurface,
+                              selected.length,
                             ),
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface,
+                                ),
                           ),
                           const SizedBox(height: 2),
                           Text(
                             ProgrammeSelectionStrings.reviewSheetSubtitle,
                             style: TextStyle(
                               fontSize: 12,
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
                             ),
                           ),
                         ],
@@ -1094,23 +1183,30 @@ class _ReviewBeforeContinueSheet extends StatelessWidget {
                 if (selected.isEmpty)
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 16),
+                      horizontal: AppSpacing.xl,
+                      vertical: AppSpacing.xxxl,
+                    ),
                     decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.surfaceContainer,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(AppRadius.field),
                       border: Border.all(color: AppColors.border),
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.info_outline_rounded,
-                            size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                        Icon(
+                          Icons.info_outline_rounded,
+                          size: 16,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             ProgrammeSelectionStrings.reviewSheetEmpty,
                             style: TextStyle(
                               fontSize: 12,
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
                             ),
                           ),
                         ),
@@ -1136,13 +1232,16 @@ class _ReviewBeforeContinueSheet extends StatelessWidget {
                   onPressed: onAdd,
                   icon: const Icon(Icons.add, size: 16),
                   label: const Text(
-                      ProgrammeSelectionStrings.reviewSheetAddMore),
+                    ProgrammeSelectionStrings.reviewSheetAddMore,
+                  ),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Theme.of(context).colorScheme.onSurface,
                     side: const BorderSide(color: AppColors.border),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: AppSpacing.lg,
+                    ),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(AppRadius.field),
                     ),
                   ),
                 ),
@@ -1160,20 +1259,22 @@ class _ReviewBeforeContinueSheet extends StatelessWidget {
                         child: OutlinedButton(
                           onPressed: () => Navigator.of(context).pop(false),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: Theme.of(context).colorScheme.onSurface,
+                            foregroundColor: Theme.of(
+                              context,
+                            ).colorScheme.onSurface,
                             side: const BorderSide(color: AppColors.border),
                             minimumSize: const Size.fromHeight(52),
                             padding: EdgeInsets.zero,
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.button,
+                              ),
                             ),
-                            textStyle: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                            ),
+                            textStyle: Theme.of(context).textTheme.titleSmall,
                           ),
                           child: const Text(
-                              ProgrammeSelectionStrings.reviewSheetBack),
+                            ProgrammeSelectionStrings.reviewSheetBack,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -1185,9 +1286,13 @@ class _ReviewBeforeContinueSheet extends StatelessWidget {
                             backgroundColor: AppColors.pink,
                             foregroundColor: Colors.white,
                             minimumSize: const Size.fromHeight(52),
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.xl,
+                            ),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.button,
+                              ),
                             ),
                             textStyle: const TextStyle(
                               fontSize: 14,
@@ -1201,16 +1306,16 @@ class _ReviewBeforeContinueSheet extends StatelessWidget {
                                 child: Text(
                                   selected.isEmpty
                                       ? ProgrammeSelectionStrings
-                                          .continueCtaEmpty
-                                      : ProgrammeSelectionStrings
-                                          .continueCta(selected.length),
+                                            .continueCtaEmpty
+                                      : ProgrammeSelectionStrings.continueCta(
+                                          selected.length,
+                                        ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              const Icon(Icons.arrow_forward_rounded,
-                                  size: 18),
+                              const Icon(Icons.arrow_forward_rounded, size: 18),
                             ],
                           ),
                         ),
@@ -1237,9 +1342,14 @@ class _ReviewChip extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.navy,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
       ),
-      padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        AppSpacing.sm,
+        AppSpacing.sm,
+        AppSpacing.sm,
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1253,7 +1363,7 @@ class _ReviewChip extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           InkWell(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(AppRadius.pill),
             onTap: onRemove,
             child: Container(
               width: 22,
@@ -1288,7 +1398,12 @@ class _ContinueBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.xxxl,
+          AppSpacing.md,
+          AppSpacing.xxxl,
+          AppSpacing.xxxl,
+        ),
         child: SizedBox(
           width: double.infinity,
           child: FilledButton(
@@ -1296,7 +1411,7 @@ class _ContinueBar extends StatelessWidget {
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.pink,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxl),
             ),
             child: Text(
               selectedCount == 0

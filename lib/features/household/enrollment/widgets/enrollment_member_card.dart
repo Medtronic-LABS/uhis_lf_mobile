@@ -25,7 +25,7 @@ class EnrollmentMemberCard extends StatelessWidget {
         border: Border.all(color: AppColors.border),
         borderRadius: BorderRadius.circular(AppRadius.card),
       ),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.xl),
       child: Column(
         children: [
           Row(
@@ -69,27 +69,18 @@ class EnrollmentMemberCard extends StatelessWidget {
                       children: [
                         Text(
                           '${member.age}y',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textMuted,
-                          ),
+                          style: AppTextStyles.vitalUnit,
                         ),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 6),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
                           child: Text(
                             '•',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textMuted,
-                            ),
+                            style: AppTextStyles.vitalUnit,
                           ),
                         ),
                         Text(
                           member.gender,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textMuted,
-                          ),
+                          style: AppTextStyles.vitalUnit,
                         ),
                       ],
                     ),
@@ -99,8 +90,8 @@ class EnrollmentMemberCard extends StatelessWidget {
               if (member.relationshipToHead.isNotEmpty)
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
+                    horizontal: AppSpacing.md,
+                    vertical: AppSpacing.xs,
                   ),
                   decoration: BoxDecoration(
                     color: AppColors.statusSuccessSurface,
@@ -120,7 +111,10 @@ class EnrollmentMemberCard extends StatelessWidget {
           if (member.nidScanned) ...[
             const SizedBox(height: 8),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.xs,
+              ),
               decoration: BoxDecoration(
                 color: AppColors.statusSuccessSurface,
                 borderRadius: BorderRadius.circular(AppRadius.button),
@@ -156,8 +150,8 @@ class EnrollmentMemberCard extends StatelessWidget {
                     onTap: onRemove,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
+                        horizontal: AppSpacing.xl,
+                        vertical: AppSpacing.sm,
                       ),
                       decoration: BoxDecoration(
                         color: AppColors.statusCriticalSurface,

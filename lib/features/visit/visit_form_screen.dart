@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/api/scribe_api_service.dart';
+import '../../core/constants/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/patient_dao.dart';
@@ -13,7 +14,9 @@ import '../scribe/scribe_permission_service.dart';
 import '../scribe/scribe_session.dart';
 import '../scribe/widgets/scribe_review_sheet.dart';
 import '../worklist/worklist_repository.dart';
+import '../../core/config/app_config.dart';
 import 'composer/sectioned_assessment_screen.dart';
+import '../../uhis_form/dynamic_assessment_screen.dart';
 import 'pathway/pathway_engine.dart';
 import 'submission/unified_submission_orchestrator.dart';
 import 'triage/patient_context_builder.dart';
@@ -247,6 +250,20 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
   ) {
     debugPrint(
         '[VisitForm] Sectioned mode — programmes: ${widget.activatedPathways?.join(', ')}');
+
+    if (AppConfig.useDynamicForms) {
+      final primaryPathway = _getPrimaryProgramme();
+      return DynamicAssessmentScreen(
+        formType: primaryPathway.name.toLowerCase(),
+        encounterId: widget.visitId,
+        patientId: widget.patientId ?? '',
+        memberId: widget.memberId,
+        draftDao: ctx.read<AssessmentDraftDao>(),
+        onSubmit: () => _onSectionedSubmit(ctx, visitCtrl, session),
+        onReferNow: () => setState(() => _sectionedReferralTriggered = true),
+      );
+    }
+
     return SectionedAssessmentScreen(
       pathways: _buildPathways(),
       patientContext: _buildPatientContext(),
@@ -316,9 +333,10 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         }
       }
     } catch (e) {
+      debugPrint('VisitFormScreen: assessment save failed: $e');
       if (!ctx.mounted) return;
       ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-        content: Text('Failed to save assessment: $e'),
+        content: const Text(VisitFormStrings.saveFailed),
         backgroundColor: Theme.of(ctx).colorScheme.error,
       ));
     }

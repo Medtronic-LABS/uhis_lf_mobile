@@ -242,7 +242,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
         final hhNumber = controller.household?.householdNumber ?? '';
 
         return Scaffold(
-          backgroundColor: const Color(0xFFF5F6FB),
+          backgroundColor: AppColors.pageBackground,
           appBar: AppBar(
             backgroundColor: AppColors.navy,
             elevation: 0,
@@ -277,7 +277,12 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
             child: Stack(
               children: [
                 ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 96),
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.h5xl,
+                    AppSpacing.h5xl,
+                    AppSpacing.h5xl,
+                    AppSpacing.stickyBarClearance,
+                  ),
                   children: [
                     // ── Q1: National ID ────────────────────────────────────
                     _QuestionLabel(number: 'Q1', text: 'National ID'),
@@ -285,18 +290,21 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
 
                     // NID scan purple CTA
                     Material(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(AppRadius.patRow),
                       child: InkWell(
                         onTap: _scanLoading ? null : _scanNid,
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(AppRadius.patRow),
                         child: Ink(
                           decoration: BoxDecoration(
                             gradient: const LinearGradient(
-                              colors: [Color(0xFF5B4FD9), Color(0xFF7B6FE9)],
+                              colors: [
+                                AppColors.aiPurple,
+                                AppColors.aiPurpleLight,
+                              ],
                               begin: Alignment.centerLeft,
                               end: Alignment.centerRight,
                             ),
-                            borderRadius: BorderRadius.circular(14),
+                            borderRadius: BorderRadius.circular(AppRadius.patRow),
                           ),
                           child: SizedBox(
                             height: 52,
@@ -343,20 +351,20 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       const SizedBox(height: 10),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
+                          horizontal: AppSpacing.xl,
+                          vertical: AppSpacing.md,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF0FDF4),
-                          border: Border.all(color: const Color(0xFF14996A)),
-                          borderRadius: BorderRadius.circular(10),
+                          color: AppColors.tbSurface,
+                          border: Border.all(color: AppColors.enrollmentSuccess),
+                          borderRadius: BorderRadius.circular(AppRadius.field),
                         ),
                         child: Text(
                           EnrollmentStrings.nidDetailsCaptured(_brnCtrl.text),
                           style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFF14996A),
+                            color: AppColors.enrollmentSuccess,
                           ),
                         ),
                       ),
@@ -368,13 +376,13 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
+                          horizontal: AppSpacing.xl,
+                          vertical: AppSpacing.lg,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFEFF6FF),
-                          border: Border.all(color: const Color(0xFF3B82F6)),
-                          borderRadius: BorderRadius.circular(10),
+                          color: AppColors.childSurface,
+                          border: Border.all(color: AppColors.infoAccent),
+                          borderRadius: BorderRadius.circular(AppRadius.field),
                         ),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -382,7 +390,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                             const Icon(
                               Icons.badge_outlined,
                               size: 16,
-                              color: Color(0xFF1D4ED8),
+                              color: AppColors.infoAccentDark,
                             ),
                             const SizedBox(width: 8),
                             Expanded(
@@ -397,7 +405,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                                     style: const TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w700,
-                                      color: Color(0xFF1D4ED8),
+                                      color: AppColors.infoAccentDark,
                                     ),
                                   ),
                                   const SizedBox(height: 3),
@@ -405,7 +413,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                                     EnrollmentStrings.existingPatientHint,
                                     style: TextStyle(
                                       fontSize: 11,
-                                      color: Color(0xFF1D4ED8),
+                                      color: AppColors.infoAccentDark,
                                     ),
                                   ),
                                 ],
@@ -620,7 +628,7 @@ class _QuestionLabel extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
           decoration: BoxDecoration(
             color: AppColors.navy,
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
           ),
           child: Text(
             number,

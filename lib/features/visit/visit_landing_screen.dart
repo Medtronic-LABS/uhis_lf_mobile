@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/constants/app_strings.dart';
 import '../../core/models/programme.dart';
 import 'encounter_repository.dart';
 import 'household_repository.dart';
@@ -116,7 +117,9 @@ class _VisitLandingScreenState extends State<VisitLandingScreen> {
     } else {
       setState(() => _starting = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(controller.error ?? 'Failed to start visit')),
+        SnackBar(
+          content: Text(controller.error ?? VisitLandingStrings.startFailed),
+        ),
       );
     }
   }
@@ -128,7 +131,7 @@ class _VisitLandingScreenState extends State<VisitLandingScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Start Visit'),
+        title: const Text(PatientContextStrings.startVisit),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -141,7 +144,7 @@ class _VisitLandingScreenState extends State<VisitLandingScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    data?.patientName ?? 'Patient',
+                    data?.patientName ?? PatientContextStrings.fallbackTitle,
                     style: theme.textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -149,7 +152,8 @@ class _VisitLandingScreenState extends State<VisitLandingScreen> {
                   const SizedBox(height: 4),
                   Text(
                     [
-                      if (data?.patientAge != null) '${data!.patientAge} years',
+                      if (data?.patientAge != null)
+                        VisitLandingStrings.ageYears(data!.patientAge!),
                       if (data?.patientGender != null) data!.patientGender,
                     ].join(' • '),
                     style: theme.textTheme.bodyMedium?.copyWith(
@@ -191,7 +195,7 @@ class _VisitLandingScreenState extends State<VisitLandingScreen> {
                       children: [
                         Icon(Icons.info_outline),
                         SizedBox(width: 12),
-                        Text('First visit for this patient'),
+                        Text(VisitLandingStrings.firstVisit),
                       ],
                     ),
                   ),
@@ -199,12 +203,13 @@ class _VisitLandingScreenState extends State<VisitLandingScreen> {
               }
               final daysSince = DateTime.now().difference(lastVisit.date).inDays;
               final timeAgo = daysSince == 0
-                  ? 'today'
+                  ? VisitLandingStrings.seenToday
                   : daysSince == 1
-                      ? 'yesterday'
+                      ? VisitLandingStrings.seenYesterday
                       : daysSince < 7
-                          ? '$daysSince days ago'
-                          : '${(daysSince / 7).floor()} weeks ago';
+                          ? VisitLandingStrings.seenDaysAgo(daysSince)
+                          : VisitLandingStrings.seenWeeksAgo(
+                              (daysSince / 7).floor());
               return Card(
                 color: theme.colorScheme.surfaceContainerHighest,
                 child: Padding(
@@ -215,7 +220,8 @@ class _VisitLandingScreenState extends State<VisitLandingScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'Last seen $timeAgo — ${lastVisit.programme.wireTag}',
+                          VisitLandingStrings.lastSeen(
+                              timeAgo, lastVisit.programme.wireTag),
                           style: theme.textTheme.bodyMedium,
                         ),
                       ),
@@ -242,7 +248,7 @@ class _VisitLandingScreenState extends State<VisitLandingScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Also in this household',
+                      VisitLandingStrings.alsoInHousehold,
                       style: theme.textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.w600,
                         color: theme.colorScheme.onSurfaceVariant,
@@ -287,7 +293,9 @@ class _VisitLandingScreenState extends State<VisitLandingScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.play_arrow),
-            label: Text(_starting ? 'Starting...' : 'Start Visit'),
+            label: Text(_starting
+                ? VisitLandingStrings.startingButton
+                : PatientContextStrings.startVisit),
             style: FilledButton.styleFrom(
               minimumSize: const Size.fromHeight(56),
             ),

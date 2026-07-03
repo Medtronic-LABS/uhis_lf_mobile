@@ -1,0 +1,1368 @@
+[
+  {
+    "formType": "pncNeonatal",
+    "workflowName": "RMNCH",
+    "clinicalWorkflowId": 4,
+    "sections": [
+      {
+        "sectionId": "pncNeonatal",
+        "title": "PNC Visit - Neonate",
+        "fieldRefs": [
+          {
+            "isMandatory": false,
+            "id": "pncNeonateSigns"
+          },
+          {
+            "fieldName": "Other Signs",
+            "inputType": 96,
+            "isMandatory": true,
+            "id": "otherPncNeonateSigns"
+          },
+          {
+            "isMandatory": true,
+            "id": "newbornReferredToSBCU"
+          },
+          {
+            "isMandatory": true,
+            "id": "lowBirthWeight"
+          },
+          {
+            "isMandatory": true,
+            "id": "deathOfNewborn"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "formType": "pncMother",
+    "workflowName": "RMNCH",
+    "clinicalWorkflowId": 4,
+    "sections": [
+      {
+        "sectionId": "pregnancyHistory",
+        "title": "Pregnancy History",
+        "fieldRefs": [
+          {
+            "inputType": 2,
+            "isMandatory": true,
+            "id": "gravida"
+          },
+          {
+            "inputType": 2,
+            "isMandatory": true,
+            "id": "parity"
+          },
+          {
+            "inputType": 2,
+            "isMandatory": true,
+            "id": "livingChildren"
+          }
+        ]
+      },
+      {
+        "sectionId": "maternalHealthAssessment",
+        "title": "Maternal Health Assessment",
+        "fieldRefs": [
+          {
+            "inputType": 8192,
+            "isMandatory": true,
+            "id": "temperature"
+          },
+          {
+            "inputType": 3,
+            "isMandatory": true,
+            "id": "pulse"
+          },
+          {
+            "inputType": 8192,
+            "isMandatory": true,
+            "id": "weight"
+          },
+          {
+            "isMandatory": true,
+            "id": "htnPatient"
+          },
+          {
+            "isMandatory": true,
+            "id": "eclampsia"
+          },
+          {
+            "isMandatory": true,
+            "id": "onTreatmentHtnEclampsia"
+          },
+          {
+            "isMandatory": false,
+            "id": "bloodPressure"
+          },
+          {
+            "inputType": 3,
+            "isMandatory": true,
+            "id": "systolic"
+          },
+          {
+            "inputType": 3,
+            "isMandatory": true,
+            "id": "diastolic"
+          },
+          {
+            "isMandatory": true,
+            "id": "edema"
+          },
+          {
+            "isMandatory": true,
+            "id": "urinaryAlbumin"
+          },
+          {
+            "isMandatory": true,
+            "id": "urinaryBilirubin"
+          },
+          {
+            "inputType": 8192,
+            "isMandatory": false,
+            "id": "hemoglobin"
+          },
+          {
+            "isMandatory": true,
+            "id": "dmPatient"
+          },
+          {
+            "isMandatory": true,
+            "id": "gdmPatient"
+          },
+          {
+            "isMandatory": true,
+            "id": "onTreatmentDmGdm"
+          },
+          {
+            "isMandatory": false,
+            "id": "bloodSugar"
+          },
+          {
+            "inputType": 8192,
+            "isMandatory": false,
+            "id": "fastingBloodSugar"
+          },
+          {
+            "inputType": 8192,
+            "isMandatory": false,
+            "id": "randomBloodSugar"
+          },
+          {
+            "isMandatory": true,
+            "id": "postpartumDangerSigns"
+          },
+          {
+            "isMandatory": true,
+            "id": "vitaminAConsumed"
+          },
+          "ifaTablets",
+          {
+            "inputType": 3,
+            "isMandatory": true,
+            "id": "ifaTabletsConsumed"
+          },
+          {
+            "inputType": 3,
+            "isMandatory": true,
+            "id": "ifaTabletsProvided"
+          },
+          "calciumTablets",
+          {
+            "inputType": 3,
+            "isMandatory": true,
+            "id": "calciumTabletsConsumed"
+          },
+          {
+            "inputType": 3,
+            "isMandatory": true,
+            "id": "calciumTabletsProvided"
+          }
+        ]
+      },
+      {
+        "sectionId": "postpartumContraception",
+        "title": "Postpartum Contraception",
+        "fieldRefs": [
+          {
+            "isMandatory": true,
+            "id": "familyPlanningMethods"
+          }
+        ]
+      },
+      {
+        "sectionId": "counselling",
+        "title": "COUNSELING & EDUCATION",
+        "fieldRefs": [
+          "counsellingMotherCare",
+          "motherCare",
+          "newbornCare",
+          {
+            "fieldName": "Referral Facility",
+            "isMandatory": false,
+            "id": "referralFacility"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "formType": "pwProfile",
+    "workflowName": "PW Profile",
+    "clinicalWorkflowId": 101,
+    "sections": [
+      {
+        "sectionId": "pregnancyDetailsAndHistory",
+        "title": "Pregnancy Details & History",
+        "fieldRefs": [
+          {
+            "isMandatory": true,
+            "id": "lmp"
+          },
+          "TooEarlyTitle",
+          "TooEarlyDesc1",
+          "TooEarlyDesc2",
+          "EDDTitle",
+          "EDD",
+          "gestationalWeekTitle",
+          "gestationalWeek",
+          {
+            "isMandatory": true,
+            "id": "pregnancyTest"
+          },
+          {
+            "inputType": 2,
+            "isMandatory": true,
+            "id": "gravida"
+          },
+          {
+            "inputType": 2,
+            "isMandatory": true,
+            "id": "parity"
+          },
+          {
+            "inputType": 2,
+            "isMandatory": true,
+            "id": "livingChildren"
+          },
+          {
+            "isMandatory": false,
+            "id": "ageOfLastChild"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "formType": "pregnancyOutcome",
+    "workflowName": "Pregnancy Outcome",
+    "clinicalWorkflowId": 102,
+    "sections": [
+      {
+        "sectionId": "maternalDeath",
+        "title": "Maternal Death",
+        "fieldRefs": [
+          {
+            "fieldName": "Time of death",
+            "id": "timeOfDeath"
+          },
+          {
+            "fieldName": "Gestation month at the time of death",
+            "inputType": 2,
+            "isMandatory": true,
+            "id": "gestationMonthAtDeath"
+          },
+          {
+            "fieldName": "Cause of death",
+            "isMandatory": true,
+            "id": "causeOfDeath"
+          }
+        ]
+      },
+      {
+        "sectionId": "abortion",
+        "title": "Abortion",
+        "fieldRefs": [
+          {
+            "fieldName": "Gestation month at the time of abortion",
+            "inputType": 2,
+            "id": "gestationMonthAtAbortion"
+          },
+          {
+            "fieldName": "Type of Abortion",
+            "isMandatory": true,
+            "id": "typeOfAbortion"
+          }
+        ]
+      },
+      {
+        "sectionId": "deliveryOutcomes",
+        "title": "Delivery outcomes",
+        "fieldRefs": [
+          {
+            "fieldName": "Delivery outcome",
+            "isMandatory": false,
+            "id": "deliveryOutcome"
+          },
+          {
+            "fieldName": "Live Birth Numbers",
+            "inputType": 2,
+            "isMandatory": true,
+            "id": "liveBirthNumbers"
+          },
+          {
+            "fieldName": "Stillbirth Numbers",
+            "inputType": 2,
+            "isMandatory": true,
+            "id": "stillbirthNumbers"
+          },
+          {
+            "fieldName": "Place of delivery",
+            "isMandatory": true,
+            "id": "placeOfDelivery"
+          },
+          {
+            "fieldName": "Date of delivery",
+            "isMandatory": true,
+            "id": "dateOfDelivery"
+          },
+          {
+            "fieldName": "Mode of Delivery",
+            "isMandatory": true,
+            "id": "modeOfDelivery"
+          },
+          {
+            "fieldName": "Birth Attendant",
+            "isMandatory": true,
+            "id": "birthAttendant"
+          },
+          {
+            "fieldName": "Any complications during delivery?",
+            "isMandatory": true,
+            "id": "anyComplicationsDuringDelivery"
+          },
+          {
+            "fieldName": "Complications during delivery",
+            "isMandatory": true,
+            "id": "complicationsDuringDelivery"
+          }
+        ]
+      },
+      {
+        "sectionId": "counsellingAdverseEvent",
+        "title": "Counselling in case of adverse event",
+        "fieldRefs": [
+          {
+            "fieldName": "Emotional Support",
+            "isMandatory": false,
+            "id": "counsellingEmotionalSupport"
+          },
+          {
+            "fieldName": "Future Pregnancy Planning",
+            "isMandatory": false,
+            "id": "counsellingFuturePregnancyPlanning"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "formType": "household_member_registration",
+    "sections": [
+      {
+        "sectionId": "bioData",
+        "title": "Bio Data",
+        "fieldRefs": [
+          {
+            "fieldName": "idType",
+            "isMandatory": true,
+            "id": "id_type"
+          },
+          {
+            "fieldName": "National ID",
+            "inputType": 96,
+            "isMandatory": true,
+            "id": "national_id"
+          },
+          {
+            "fieldName": "Name",
+            "inputType": 96,
+            "isMandatory": true,
+            "id": "name"
+          },
+          {
+            "fieldName": "Mobile Number",
+            "inputType": 3,
+            "isMandatory": true,
+            "id": "phone_number"
+          },
+          {
+            "fieldName": "Age",
+            "isMandatory": true,
+            "id": "date_of_birth"
+          },
+          {
+            "fieldName": "Gender",
+            "isMandatory": true,
+            "id": "gender"
+          },
+          {
+            "isMandatory": true,
+            "id": "guardian"
+          },
+          {
+            "fieldName": "Marital Status",
+            "isMandatory": true,
+            "id": "maritalStatus"
+          },
+          {
+            "fieldName": "Disability",
+            "isMandatory": true,
+            "id": "disability"
+          },
+          {
+            "fieldName": "Is Household Head",
+            "isMandatory": false,
+            "id": "is_house_hold_head"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "formType": "household_registration",
+    "sections": [
+      {
+        "sectionId": "householdInformation",
+        "title": "Household Information",
+        "fieldRefs": [
+          {
+            "fieldName": "Union",
+            "isMandatory": true,
+            "id": "village_id"
+          },
+          {
+            "fieldName": "SS Name",
+            "isMandatory": true,
+            "id": "shasthya_shebika_id"
+          },
+          {
+            "fieldName": "Village",
+            "isMandatory": true,
+            "id": "sub_village_id"
+          },
+          {
+            "fieldName": "Household Type",
+            "isMandatory": false,
+            "id": "household_type"
+          },
+          {
+            "fieldName": "Household Number",
+            "inputType": 96,
+            "isMandatory": false,
+            "id": "household_number"
+          },
+          {
+            "fieldName": "Total Members",
+            "inputType": 3,
+            "isMandatory": true,
+            "id": "total_members"
+          },
+          {
+            "fieldName": "Household Head's Occupation",
+            "isMandatory": false,
+            "id": "householdHeadOccupation"
+          },
+          {
+            "fieldName": "If Other Occupation",
+            "inputType": 1,
+            "isMandatory": false,
+            "id": "otherOccupation"
+          },
+          {
+            "fieldName": "Monthly Income",
+            "inputType": 3,
+            "isMandatory": true,
+            "id": "monthly_income"
+          },
+          {
+            "fieldName": "Persons with disability in the HH",
+            "inputType": 3,
+            "isMandatory": true,
+            "id": "disability_persons_count"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "formType": "anc",
+    "workflowName": "RMNCH",
+    "clinicalWorkflowId": 4,
+    "sections": [
+      {
+        "sectionId": "medicalHistoryPhysicalExamination",
+        "title": "Medical History, Physical Examination & Vitals",
+        "fieldRefs": [
+          {
+            "fieldName": "Any complication during all previous pregnancies",
+            "isMandatory": true,
+            "id": "previousPregnancyComplications"
+          },
+          {
+            "fieldName": "Pregnant woman has any existing illness",
+            "isMandatory": true,
+            "id": "pregnantWomanExistingIllness"
+          },
+          {
+            "fieldName": "Pregnant woman on treatment for any existing illness",
+            "isMandatory": false,
+            "id": "pregnantWomanOnTreatment"
+          },
+          {
+            "fieldName": "Height",
+            "inputType": 8192,
+            "isMandatory": true,
+            "id": "height"
+          },
+          {
+            "fieldName": "Weight",
+            "inputType": 8192,
+            "isMandatory": true,
+            "id": "weight"
+          },
+          "bmi",
+          {
+            "fieldName": "Blood Pressure",
+            "isMandatory": false,
+            "id": "bloodPressure"
+          },
+          {
+            "fieldName": "Systolic",
+            "inputType": 3,
+            "isMandatory": true,
+            "id": "systolic"
+          },
+          {
+            "fieldName": "Diastolic",
+            "inputType": 3,
+            "isMandatory": true,
+            "id": "diastolic"
+          },
+          {
+            "fieldName": "Edema",
+            "isMandatory": true,
+            "id": "edema"
+          },
+          {
+            "fieldName": "Temperature",
+            "inputType": 8192,
+            "isMandatory": true,
+            "id": "temperature"
+          },
+          {
+            "fieldName": "Pulse",
+            "inputType": 8192,
+            "isMandatory": true,
+            "id": "pulse"
+          },
+          {
+            "fieldName": "Fundal Height",
+            "inputType": 8192,
+            "isMandatory": true,
+            "id": "fundalHeight"
+          }
+        ]
+      },
+      {
+        "sectionId": "pointOfCareInvestigations",
+        "title": "Point-of-Care Investigations",
+        "fieldRefs": [
+          {
+            "fieldName": "Hemoglobin",
+            "inputType": 8192,
+            "isMandatory": true,
+            "id": "hemoglobin"
+          },
+          {
+            "fieldName": "Blood Sugar",
+            "isMandatory": true,
+            "id": "bloodSugar"
+          },
+          {
+            "fieldName": "Blood Sugar Fasting",
+            "inputType": 8192,
+            "isMandatory": true,
+            "id": "bloodSugarFasting"
+          },
+          {
+            "fieldName": "Blood Sugar Random",
+            "inputType": 8192,
+            "isMandatory": true,
+            "id": "bloodSugarRandom"
+          },
+          {
+            "fieldName": "Urinary Albumin",
+            "isMandatory": true,
+            "id": "urinaryAlbumin"
+          },
+          {
+            "fieldName": "Urinary Sugar",
+            "isMandatory": true,
+            "id": "urinarySugar"
+          },
+          {
+            "fieldName": "Urinary Bilirubin",
+            "isMandatory": true,
+            "id": "urinaryBilirubin"
+          }
+        ]
+      },
+      {
+        "sectionId": "vaccinationAndSupplements",
+        "title": "Vaccination and Supplements",
+        "fieldRefs": [
+          {
+            "fieldName": "TT/TD completed",
+            "isMandatory": true,
+            "id": "ttTdCompleted"
+          },
+          {
+            "fieldName": "Folic Acid Tablets",
+            "isMandatory": false,
+            "id": "folicAcidTablets"
+          },
+          {
+            "fieldName": "Folic Acid Tablets Total Consumed",
+            "inputType": 3,
+            "isMandatory": true,
+            "id": "folicAcidTotalConsumed"
+          },
+          {
+            "fieldName": "Folic Acid Tablets Provided",
+            "inputType": 3,
+            "isMandatory": true,
+            "id": "folicAcidProvided"
+          },
+          {
+            "fieldName": "IFA Tablets",
+            "isMandatory": false,
+            "id": "ifaTablets"
+          },
+          {
+            "fieldName": "IFA Tablets Total Consumed",
+            "inputType": 3,
+            "isMandatory": true,
+            "id": "ifaTotalConsumed"
+          },
+          {
+            "fieldName": "IFA Tablets Provided",
+            "inputType": 3,
+            "isMandatory": true,
+            "id": "ifaProvided"
+          },
+          {
+            "fieldName": "Calcium Tablets",
+            "isMandatory": false,
+            "id": "calciumTablets"
+          },
+          {
+            "fieldName": "Calcium Tablets Total Consumed",
+            "inputType": 3,
+            "isMandatory": true,
+            "id": "calciumTotalConsumed"
+          },
+          {
+            "fieldName": "Calcium Tablets Provided",
+            "inputType": 3,
+            "isMandatory": true,
+            "id": "calciumProvided"
+          }
+        ]
+      },
+      {
+        "sectionId": "ancServicesBirthPreparedness",
+        "title": "ANC services and Birth Preparedness",
+        "fieldRefs": [
+          {
+            "fieldName": "No.of ANC visits conducted with other providers",
+            "inputType": 3,
+            "isMandatory": true,
+            "id": "ancVisitsOtherProviders"
+          },
+          {
+            "fieldName": "PW received atleast one ANC from a medical doctor",
+            "isMandatory": true,
+            "id": "ancFromMedicalDoctor"
+          },
+          {
+            "fieldName": "Ultrasound",
+            "isMandatory": true,
+            "id": "ultrasound"
+          },
+          {
+            "fieldName": "Has the PW identified a health facility for institutional delivery",
+            "isMandatory": true,
+            "id": "facilityIdentifiedForDelivery"
+          }
+        ]
+      },
+      {
+        "sectionId": "dangerSignsRiskIdentification",
+        "title": "Danger Signs/Risk identification",
+        "fieldRefs": [
+          {
+            "fieldName": "Has the PW experienced any of the following (Gestation age ≤ 12 weeks)",
+            "isMandatory": true,
+            "id": "dangerSignsExperienced12"
+          },
+          {
+            "fieldName": "Has the PW experienced any of the following (Gestation age 13-27 weeks)",
+            "isMandatory": true,
+            "id": "dangerSignsExperienced13To27"
+          },
+          {
+            "fieldName": "Has the PW experienced any of the following (Gestation age 28-40 weeks)",
+            "isMandatory": true,
+            "id": "dangerSignsExperienced28To40"
+          },
+          {
+            "fieldName": "High risk pregnant woman",
+            "isMandatory": false,
+            "id": "highRiskPregnantWoman"
+          },
+          {
+            "fieldName": "Gaps in ANC",
+            "isMandatory": false,
+            "id": "gapsInAnc"
+          }
+        ]
+      },
+      {
+        "sectionId": "counselling",
+        "title": "Counselling",
+        "fieldRefs": [
+          {
+            "fieldName": "Nutrition Counselling",
+            "isMandatory": false,
+            "id": "nutritionCounselling"
+          },
+          {
+            "fieldName": "Care during Antenatal period",
+            "isMandatory": false,
+            "id": "careDuringAntenatalPeriod"
+          },
+          {
+            "fieldName": "Care during Antenatal period",
+            "isMandatory": false,
+            "id": "dangerSignsDuringPregnancy"
+          },
+          {
+            "fieldName": "Birth Preparedness",
+            "isMandatory": false,
+            "id": "birthPreparedness"
+          },
+          {
+            "fieldName": "Newborn Care Education",
+            "isMandatory": false,
+            "id": "newbornCareEducation"
+          },
+          {
+            "fieldName": "Referral Facility",
+            "isMandatory": false,
+            "id": "referralFacility"
+          },
+          {
+            "fieldName": "Follow up Visit",
+            "isMandatory": false,
+            "id": "followUpVisit"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "formType": "pncChild",
+    "workflowName": "RMNCH",
+    "clinicalWorkflowId": 4,
+    "sections": [
+      {
+        "sectionId": "pncChild",
+        "title": "Child Details",
+        "fieldRefs": [
+          {
+            "fieldName": "Congenital defect",
+            "isMandatory": true,
+            "id": "congenitalDefect"
+          },
+          {
+            "fieldName": "Weight",
+            "inputType": 8192,
+            "isMandatory": true,
+            "id": "weight"
+          },
+          {
+            "fieldName": "What was fed in the last 24 hours",
+            "isMandatory": true,
+            "id": "childFeedLast24Hrs"
+          },
+          {
+            "fieldName": "Other Feed",
+            "inputType": 96,
+            "isMandatory": true,
+            "id": "otherChildFeed"
+          },
+          {
+            "fieldName": "Breast feed after birth in hrs",
+            "inputType": 2,
+            "isMandatory": true,
+            "id": "hrsBreastFed"
+          },
+          {
+            "fieldName": "Additional food started month",
+            "inputType": 2,
+            "isMandatory": true,
+            "id": "monthAdditionalFeedGiven"
+          },
+          {
+            "fieldName": "Breast feeding",
+            "isMandatory": true,
+            "id": "childBreastFeeding"
+          },
+          {
+            "fieldName": "Additional Food in 24 Hrs",
+            "isMandatory": true,
+            "id": "additionalFood24Hrs"
+          },
+          {
+            "fieldName": "Received vaccines",
+            "isMandatory": true,
+            "id": "receivedVaccine"
+          },
+          {
+            "fieldName": "Deworming medication",
+            "isMandatory": true,
+            "id": "dewormingMedicine"
+          },
+          {
+            "fieldName": "Illness/Complications",
+            "isMandatory": true,
+            "id": "anyIllness"
+          },
+          {
+            "fieldName": "Specify Complications",
+            "isMandatory": true,
+            "id": "childIllnessType"
+          },
+          {
+            "fieldName": "Referred",
+            "isMandatory": true,
+            "id": "childReferral"
+          },
+          {
+            "fieldName": "Referral place",
+            "isMandatory": false,
+            "id": "childReferralFacilityType"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "formType": "family_planning",
+    "workflowName": "Family Planning",
+    "clinicalWorkflowId": 100,
+    "sections": [
+      {
+        "sectionId": "clientProfileAssessment",
+        "title": "Client Profile & Assessment",
+        "fieldRefs": [
+          {
+            "fieldName": "Number of Living Children",
+            "inputType": 3,
+            "isMandatory": true,
+            "id": "numberOfLivingChildren"
+          },
+          {
+            "fieldName": "Age of last child",
+            "isMandatory": true,
+            "id": "ageOfLastChild"
+          },
+          {
+            "fieldName": "Desire for children in future",
+            "isMandatory": true,
+            "id": "desireForChildrenInFuture"
+          },
+          {
+            "fieldName": "Current use of modern methods of Family Planning",
+            "isMandatory": true,
+            "id": "familyPlanningMethods"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "formType": "cataract",
+    "workflowName": "Cataract",
+    "clinicalWorkflowId": 23,
+    "sections": [
+      {
+        "sectionId": "cataract",
+        "title": "Eye Problems",
+        "fieldRefs": [
+          {
+            "fieldName": "Types of Eye Diseases",
+            "isMandatory": true,
+            "id": "eyeDisease"
+          },
+          {
+            "fieldName": "Glass Power",
+            "isMandatory": true,
+            "id": "glassPower"
+          },
+          {
+            "fieldName": "Have the glasses been sold?",
+            "isMandatory": true,
+            "id": "haveTheGlassesBeenSold"
+          },
+          {
+            "fieldName": "Type of Glass",
+            "isMandatory": true,
+            "id": "typeOfGlass"
+          },
+          {
+            "fieldName": "Type of Frame",
+            "isMandatory": true,
+            "id": "typeOfFrame"
+          },
+          {
+            "fieldName": "First time user?",
+            "isMandatory": true,
+            "id": "firstTimeUser"
+          },
+          {
+            "fieldName": "Refer place",
+            "isMandatory": true,
+            "id": "referPlace"
+          },
+          {
+            "fieldName": "History of other Diseases",
+            "isMandatory": true,
+            "id": "historyOfOtherDiseases"
+          },
+          {
+            "fieldName": "Has the patient is referred for operation?",
+            "isMandatory": true,
+            "id": "patientReferredForOperation"
+          },
+          {
+            "fieldName": "Operation Name",
+            "isMandatory": true,
+            "id": "operationName"
+          },
+          {
+            "fieldName": "Reason",
+            "isMandatory": true,
+            "id": "reason"
+          },
+          {
+            "fieldName": "Pseudophakia/ Post-cataract surgery ",
+            "isMandatory": true,
+            "id": "pseudophakiaPostCataractSurgery"
+          },
+          {
+            "fieldName": "Has NCD service been provided?",
+            "isMandatory": true,
+            "id": "ncdServiceProvided"
+          }
+        ]
+      },
+      {
+        "sectionId": "bpLog",
+        "title": "Blood Pressure & Vitals",
+        "fieldRefs": [
+          {
+            "fieldName": "Height",
+            "inputType": 8192.0,
+            "isMandatory": true,
+            "id": "height"
+          },
+          {
+            "fieldName": "Weight",
+            "inputType": 8192.0,
+            "isMandatory": true,
+            "id": "weight"
+          },
+          "bmi",
+          {
+            "fieldName": "Have you been diagnosed with High Blood Pressure or Hypertension before?",
+            "isMandatory": true,
+            "id": "isBeforeHtnDiagnosis"
+          },
+          {
+            "fieldName": "Are you taking medication regularly?",
+            "isMandatory": true,
+            "id": "medicationFrequencyBp"
+          },
+          {
+            "fieldName": "Blood Pressure",
+            "isMandatory": true,
+            "id": "bpLogDetails"
+          },
+          {
+            "fieldName": "Are you smoking or consuming tobacco in the past 12 months?",
+            "isMandatory": true,
+            "id": "isRegularSmoker"
+          },
+          "cvdRisk"
+        ]
+      },
+      {
+        "sectionId": "glucoseLog",
+        "title": "Blood Glucose",
+        "fieldRefs": [
+          {
+            "fieldName": "Have you been diagnosed with High Blood Sugar or Diabetes before?",
+            "isMandatory": true,
+            "id": "isBeforeDiabetesDiagnosis"
+          },
+          {
+            "fieldName": "Are you taking medication regularly?",
+            "isMandatory": true,
+            "id": "medicationFrequencyBg"
+          },
+          {
+            "fieldName": "Name of Investigation",
+            "isMandatory": true,
+            "id": "glucoseType"
+          },
+          {
+            "fieldName": "Blood Glucose",
+            "inputType": 8192.0,
+            "isMandatory": true,
+            "id": "glucose"
+          }
+        ]
+      },
+      {
+        "sectionId": "referralInformation",
+        "title": "Referral Information",
+        "fieldRefs": [
+          {
+            "fieldName": "Who referred this person",
+            "isMandatory": true,
+            "id": "whoReferredThisPerson"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "formType": "ncd",
+    "workflowName": "NCD",
+    "clinicalWorkflowId": 21,
+    "sections": [
+      {
+        "sectionId": "symptomsLog",
+        "title": "Symptoms",
+        "fieldRefs": [
+          {
+            "fieldName": "Has the Patient had any symptoms since the last follow up?",
+            "isMandatory": true,
+            "id": "hasSymptoms"
+          },
+          {
+            "fieldName": "Select Symptoms",
+            "isMandatory": true,
+            "id": "ncdSymptoms"
+          },
+          {
+            "fieldName": "Any new or worsening symptoms",
+            "inputType": 96.0,
+            "isMandatory": true,
+            "id": "newWorseningSymptoms"
+          },
+          {
+            "fieldName": "Are you taking medication regularly?",
+            "isMandatory": true,
+            "id": "compliance"
+          }
+        ]
+      },
+      {
+        "sectionId": "bpLog",
+        "title": "Blood Pressure & Vitals",
+        "fieldRefs": [
+          {
+            "fieldName": "Height",
+            "inputType": 8192.0,
+            "isMandatory": true,
+            "id": "height"
+          },
+          {
+            "fieldName": "Weight (in kg)",
+            "inputType": 8192.0,
+            "isMandatory": true,
+            "id": "weight"
+          },
+          "bmi",
+          {
+            "fieldName": "Blood Pressure",
+            "isMandatory": true,
+            "id": "bpLogDetails"
+          },
+          {
+            "fieldName": "Are you a regular smoker or have you been a regular smoker in the past 12 months?",
+            "isMandatory": true,
+            "id": "isRegularSmoker"
+          }
+        ]
+      },
+      {
+        "sectionId": "glucoseLog",
+        "title": "Blood Glucose",
+        "fieldRefs": [
+          {
+            "fieldName": "Name of Investigation",
+            "isMandatory": true,
+            "id": "glucoseType"
+          },
+          {
+            "fieldName": "Blood Glucose",
+            "inputType": 8192.0,
+            "isMandatory": true,
+            "id": "glucose"
+          },
+          {
+            "fieldName": "HbA1c",
+            "inputType": 8192.0,
+            "isMandatory": false,
+            "id": "hba1c"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "formType": "eye_care",
+    "workflowName": "Eye Care",
+    "clinicalWorkflowId": 22,
+    "sections": [
+      {
+        "sectionId": "eyeCare",
+        "title": "Eye Care",
+        "fieldRefs": [
+          {
+            "fieldName": "Eye Test Outcome",
+            "isMandatory": true,
+            "id": "eyeTestOutcome"
+          },
+          {
+            "fieldName": "Glass Power",
+            "isMandatory": true,
+            "id": "glassPower"
+          },
+          {
+            "fieldName": "Have the glasses been sold?",
+            "isMandatory": true,
+            "id": "haveTheGlassesBeenSold"
+          },
+          {
+            "fieldName": "Type of Glass",
+            "isMandatory": true,
+            "id": "typeOfGlass"
+          },
+          {
+            "fieldName": "Type of Frame",
+            "isMandatory": true,
+            "id": "typeOfFrame"
+          },
+          {
+            "fieldName": "First time user?",
+            "isMandatory": true,
+            "id": "firstTimeUser"
+          },
+          {
+            "fieldName": "Refer Place",
+            "isMandatory": true,
+            "id": "referPlace"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "formType": "enrollment",
+    "workflowName": "Confirm Diagnosis",
+    "clinicalWorkflowId": 103,
+    "sections": [
+      {
+        "sectionId": "bioData",
+        "title": "Bio Data",
+        "fieldRefs": [
+          {
+            "fieldName": "idType",
+            "isMandatory": true,
+            "id": "identityType"
+          },
+          {
+            "fieldName": "National ID",
+            "inputType": 96,
+            "isMandatory": true,
+            "id": "identityValue"
+          },
+          {
+            "fieldName": "Full Name",
+            "inputType": 96,
+            "isMandatory": true,
+            "id": "fullName"
+          },
+          {
+            "fieldName": "Mobile Number",
+            "inputType": 3,
+            "isMandatory": true,
+            "id": "phoneNumber"
+          },
+          {
+            "isMandatory": true,
+            "id": "phoneNumberCategory"
+          },
+          {
+            "fieldName": "Upazila",
+            "isMandatory": true,
+            "id": "chiefdom"
+          },
+          {
+            "fieldName": "Union",
+            "isMandatory": true,
+            "id": "village"
+          },
+          {
+            "fieldName": "Village/Area",
+            "isMandatory": true,
+            "id": "subVillage"
+          },
+          {
+            "fieldName": "Village Name",
+            "inputType": -1,
+            "isMandatory": true,
+            "id": "otherVillage"
+          },
+          {
+            "fieldName": "House and Road Number",
+            "inputType": -1,
+            "isMandatory": false,
+            "id": "houseNumber"
+          }
+        ]
+      },
+      {
+        "sectionId": "bioMetrics",
+        "title": "Bio metrics",
+        "fieldRefs": [
+          {
+            "fieldName": "Gender",
+            "isMandatory": true,
+            "id": "gender"
+          },
+          {
+            "fieldName": "Is patient pregnant?",
+            "isMandatory": true,
+            "id": "isPregnant"
+          },
+          {
+            "fieldName": "Age",
+            "isMandatory": true,
+            "id": "dateOfBirth"
+          },
+          {
+            "fieldName": "Height",
+            "inputType": 8192,
+            "isMandatory": false,
+            "id": "height"
+          },
+          {
+            "fieldName": "Weight",
+            "inputType": 8192,
+            "isMandatory": false,
+            "id": "weight"
+          },
+          "bmi",
+          {
+            "fieldName": "Are you smoking or consuming tobacco in the past 12 months?",
+            "isMandatory": true,
+            "id": "isRegularSmoker"
+          }
+        ]
+      },
+      {
+        "sectionId": "patientDiagnosisStatus",
+        "title": "Patient Status",
+        "fieldRefs": [
+          {
+            "fieldName": "Hypertension Diagnosis",
+            "isMandatory": true,
+            "id": "isHtnDiagnosis"
+          },
+          {
+            "fieldName": "Patient Type",
+            "isMandatory": true,
+            "id": "hypertensionStatus"
+          },
+          {
+            "fieldName": "Diabetes Diagnosis",
+            "isMandatory": true,
+            "id": "isDiabetesDiagnosis"
+          },
+          {
+            "fieldName": "Patient Type",
+            "isMandatory": true,
+            "id": "diabetesStatus"
+          },
+          {
+            "fieldName": "Diagnosis",
+            "isMandatory": true,
+            "id": "diabetesDiagnosis"
+          }
+        ]
+      },
+      {
+        "sectionId": "patientHealthHistory",
+        "title": "Health History",
+        "fieldRefs": [
+          {
+            "fieldName": "Heart Attack",
+            "isMandatory": true,
+            "id": "heartAttack"
+          },
+          {
+            "fieldName": "Stroke",
+            "isMandatory": true,
+            "id": "stroke"
+          },
+          {
+            "fieldName": "Kidney Disease",
+            "isMandatory": true,
+            "id": "kidneyDisease"
+          },
+          {
+            "fieldName": "COPD",
+            "isMandatory": true,
+            "id": "copd"
+          }
+        ]
+      },
+      {
+        "sectionId": "qrCard",
+        "title": "Scan QR Code",
+        "fieldRefs": [
+          {
+            "isMandatory": true,
+            "id": "qrCode"
+          }
+        ]
+      }
+    ]
+  }
+]

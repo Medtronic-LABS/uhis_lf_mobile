@@ -34,11 +34,13 @@ class _LockScreenState extends State<LockScreen> {
 
   Future<void> _checkConnectivity() async {
     try {
-      final result = await InternetAddress.lookup('google.com')
-          .timeout(const Duration(seconds: 3));
+      final result = await InternetAddress.lookup(
+        'google.com',
+      ).timeout(const Duration(seconds: 3));
       if (!mounted) return;
       setState(
-          () => _isOnline = result.isNotEmpty && result[0].rawAddress.isNotEmpty);
+        () => _isOnline = result.isNotEmpty && result[0].rawAddress.isNotEmpty,
+      );
     } catch (_) {
       if (!mounted) return;
       setState(() => _isOnline = false);
@@ -59,8 +61,8 @@ class _LockScreenState extends State<LockScreen> {
     final ok = await auth.biometricUnlock();
     if (!mounted) return;
     if (ok) {
-      context.go('/dashboard');
-    } else if (!auth.biometricEnabled) {
+      context.go('/home');
+    } else if (!auth.biometricEnabled || !auth.biometricAvailable) {
       context.go('/login?from=lock');
     } else {
       setState(() => _failed = true);
@@ -70,8 +72,12 @@ class _LockScreenState extends State<LockScreen> {
   @override
   Widget build(BuildContext context) {
     final busy = context.select<AuthState, bool>((a) => a.busy);
-    final biometricEnabled = context.select<AuthState, bool>((a) => a.biometricEnabled);
-    final biometricAvailable = context.select<AuthState, bool>((a) => a.biometricAvailable);
+    final biometricEnabled = context.select<AuthState, bool>(
+      (a) => a.biometricEnabled,
+    );
+    final biometricAvailable = context.select<AuthState, bool>(
+      (a) => a.biometricAvailable,
+    );
     final pinEnabled = context.select<AuthState, bool>((a) => a.pinEnabled);
 
     final programTitle = _summary?.area ?? LockStrings.programName;
@@ -248,14 +254,15 @@ class _LockContentState extends State<LockContent>
         ),
         const SizedBox(height: 8),
       ],
-      _enter(
-        4,
-        _FingerprintCard(
-          onTap: widget.busy ? () {} : widget.onUnlock,
-          busy: widget.busy,
-          failed: widget.failed,
+      if (widget.biometricEnabled)
+        _enter(
+          4,
+          _FingerprintCard(
+            onTap: widget.busy ? () {} : widget.onUnlock,
+            busy: widget.busy,
+            failed: widget.failed,
+          ),
         ),
-      ),
       if (widget.pinEnabled && !widget.busy) ...[
         const SizedBox(height: 12),
         Center(
@@ -341,10 +348,6 @@ class _UserProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ignore: avoid_print
-    print('[ProfileCard] firstName=${summary.firstName} lastName=${summary.lastName} '
-        'fullName=${_fullName()} nidOrPhone=${summary.nidOrPhone} '
-        'upazila=${summary.upazila} skId=${summary.skId}');
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -394,7 +397,7 @@ class _UserProfileCard extends StatelessWidget {
                     fontFamily: 'NunitoSans',
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
-                    color: Color(0x80FFFFFF),
+                    color: AppColors.onDarkFaint,
                     letterSpacing: 0.80,
                   ),
                 ),
@@ -408,7 +411,9 @@ class _UserProfileCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            _fullName().isNotEmpty ? _fullName() : LockStrings.profileLoading,
+                            _fullName().isNotEmpty
+                                ? _fullName()
+                                : LockStrings.profileLoading,
                             style: const TextStyle(
                               fontFamily: 'Nunito',
                               fontSize: 16,
@@ -468,7 +473,7 @@ class _InitialsAvatar extends StatelessWidget {
       width: 44,
       height: 44,
       decoration: const BoxDecoration(
-        color: Color(0x26FFFFFF), // rgba(255,255,255,0.15)
+        color: AppColors.onDarkSurface,
         shape: BoxShape.circle,
       ),
       alignment: Alignment.center,
@@ -508,7 +513,7 @@ class _InfoPanel extends StatelessWidget {
               fontFamily: 'NunitoSans',
               fontSize: 9,
               fontWeight: FontWeight.w700,
-              color: Color(0x80FFFFFF),
+              color: AppColors.onDarkFaint,
               letterSpacing: 0.5,
             ),
           ),
@@ -553,18 +558,29 @@ class _FingerprintCardState extends State<_FingerprintCard>
   bool _verified = false;
 
   static const _navy = AppColors.navy;
-  static const _iconBoxIdle   = Color(0x1FFFFFFF); // white 12%
-  static const _iconBoxScan   = Color(0x33E8356D); // pink 20%
+  static const _iconBoxIdle = Color(0x1FFFFFFF); // white 12%
+  static const _iconBoxScan = Color(0x33E8356D); // pink 20%
   static const _iconBoxVerify = Color(0x3310B981); // green 20%
 
   @override
   void initState() {
     super.initState();
-    _glowCtrl = AnimationController(vsync: this, duration: AppAnimations.idleGlow)
-      ..repeat(reverse: true);
-    _scanCtrl  = AnimationController(vsync: this, duration: AppAnimations.scanPulse);
-    _verifyCtrl = AnimationController(vsync: this, duration: AppAnimations.verifyBounce);
-    _springAnim = CurvedAnimation(parent: _verifyCtrl, curve: AppAnimations.spring);
+    _glowCtrl = AnimationController(
+      vsync: this,
+      duration: AppAnimations.idleGlow,
+    )..repeat(reverse: true);
+    _scanCtrl = AnimationController(
+      vsync: this,
+      duration: AppAnimations.scanPulse,
+    );
+    _verifyCtrl = AnimationController(
+      vsync: this,
+      duration: AppAnimations.verifyBounce,
+    );
+    _springAnim = CurvedAnimation(
+      parent: _verifyCtrl,
+      curve: AppAnimations.spring,
+    );
   }
 
   @override
@@ -605,8 +621,8 @@ class _FingerprintCardState extends State<_FingerprintCard>
         final Color boxColor = _verified
             ? _iconBoxVerify
             : widget.busy
-                ? _iconBoxScan
-                : _iconBoxIdle;
+            ? _iconBoxScan
+            : _iconBoxIdle;
         final Color iconColor = _verified
             ? AppColors.statusSuccess
             : Colors.white;
@@ -651,13 +667,13 @@ class _FingerprintCardState extends State<_FingerprintCard>
         final String title = _verified
             ? LockStrings.fingerprintVerified
             : widget.busy
-                ? LockStrings.readingFingerprint
-                : LockStrings.verifyFingerprint;
+            ? LockStrings.readingFingerprint
+            : LockStrings.verifyFingerprint;
         final String subtitle = _verified
             ? ''
             : widget.busy
-                ? LockStrings.tapToPlaceFinger
-                : LockStrings.tapToPlaceFingerSubtitle;
+            ? LockStrings.tapToPlaceFinger
+            : LockStrings.tapToPlaceFingerSubtitle;
         final double opacity = widget.busy ? 0.5 + 0.5 * _scanCtrl.value : 1.0;
         return Opacity(
           opacity: opacity,
@@ -707,33 +723,33 @@ class _FingerprintCardState extends State<_FingerprintCard>
           },
           onTapCancel: () => setState(() => _isPressed = false),
           child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-          decoration: BoxDecoration(
-            color: _navy,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: _navy.withValues(alpha: 0.25),
-                blurRadius: 16,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              _buildIconBox(),
-              const SizedBox(width: 14),
-              Expanded(child: _buildLabels()),
-              Icon(
-                Icons.chevron_right,
-                size: 20,
-                color: Colors.white.withValues(alpha: 0.5),
-              ),
-            ],
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            decoration: BoxDecoration(
+              color: _navy,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: _navy.withValues(alpha: 0.25),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                _buildIconBox(),
+                const SizedBox(width: 14),
+                Expanded(child: _buildLabels()),
+                Icon(
+                  Icons.chevron_right,
+                  size: 20,
+                  color: Colors.white.withValues(alpha: 0.5),
+                ),
+              ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }

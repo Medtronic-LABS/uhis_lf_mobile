@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../core/constants/app_strings.dart';
 import 'theme.dart';
 
-/// Shell widget for the persistent 4-tab bottom navigation.
+/// Shell widget for the persistent 5-tab bottom navigation.
 /// Each tab maintains its own navigation stack.
 class BottomNavShell extends StatelessWidget {
   const BottomNavShell({
@@ -48,6 +48,11 @@ class BottomNavShell extends StatelessWidget {
               icon: Icon(Icons.chat_outlined),
               selectedIcon: Icon(Icons.chat),
               label: BottomNavStrings.assistant,
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.grid_view_outlined),
+              selectedIcon: Icon(Icons.grid_view),
+              label: FormGalleryStrings.tabLabel,
             ),
           ],
         ),

@@ -191,7 +191,7 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
     return Consumer<EnrollmentController>(
       builder: (context, controller, child) {
         return Scaffold(
-          backgroundColor: const Color(0xFFF5F6FB),
+          backgroundColor: AppColors.pageBackground,
           appBar: AppBar(
             backgroundColor: AppColors.navy,
             elevation: 0,
@@ -202,6 +202,7 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
             title: const Text(
               'Household Head',
               style: TextStyle(
+                fontFamily: 'Nunito',
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
                 color: Colors.white,
@@ -212,7 +213,12 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
             child: Stack(
               children: [
                 ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 96),
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.h5xl,
+                    AppSpacing.xxxl,
+                    AppSpacing.h5xl,
+                    AppSpacing.stickyBarClearance,
+                  ),
                   children: [
                     // ── Section header ─────────────────────────────────────
                     const EnrollmentSectionHeader(
@@ -226,13 +232,13 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
+                          horizontal: AppSpacing.xl,
+                          vertical: AppSpacing.lg,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFECFDF5),
-                          border: Border.all(color: const Color(0xFFA7F3D0)),
-                          borderRadius: BorderRadius.circular(10),
+                          color: AppColors.tbSurface,
+                          border: Border.all(color: AppColors.statusSuccessBorder),
+                          borderRadius: BorderRadius.circular(AppRadius.field),
                         ),
                         child: const Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -240,7 +246,7 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
                             Icon(
                               Icons.auto_awesome,
                               size: 15,
-                              color: Color(0xFF059669),
+                              color: AppColors.statusSuccessAction,
                             ),
                             SizedBox(width: 8),
                             Expanded(
@@ -248,7 +254,7 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
                                 EnrollmentStrings.headPrefilledFromScan,
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: Color(0xFF047857),
+                                  color: AppColors.statusSuccessActionDark,
                                 ),
                               ),
                             ),
