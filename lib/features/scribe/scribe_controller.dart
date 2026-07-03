@@ -64,7 +64,7 @@ class ScribeController extends ChangeNotifier {
   );
 
   /// File extension for captured audio — kept in sync with [_recorderSettings].
-  static const String _recordingExtension = 'wav';
+  static const String _recordingExtension = 'm4a';
 
   Timer? _elapsedTimer;
   Timer? _pollTimer;
@@ -139,9 +139,10 @@ class ScribeController extends ChangeNotifier {
       );
       await _audioRecorder.start(
         const RecordConfig(
-          encoder: AudioEncoder.wav,
+          encoder: AudioEncoder.aacLc,
           sampleRate: 16000,
           numChannels: 1,
+          bitRate: 64000,
         ),
         path: _recordingPath!,
       );
@@ -255,9 +256,10 @@ class ScribeController extends ChangeNotifier {
       // Start actual audio capture via record package — produces standard WAV.
       await _audioRecorder.start(
         const RecordConfig(
-          encoder: AudioEncoder.wav,
+          encoder: AudioEncoder.aacLc,
           sampleRate: 16000,
           numChannels: 1,
+          bitRate: 64000,
         ),
         path: _recordingPath!,
       );
