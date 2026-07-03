@@ -25,7 +25,7 @@ class NabaRepository {
     if (aiUrl.isNotEmpty) {
       final direct = Dio(BaseOptions(
         baseUrl: aiUrl,
-        connectTimeout: const Duration(seconds: 30),
+        connectTimeout: const Duration(seconds: 5),
         receiveTimeout: const Duration(minutes: 2),
       ));
       return (direct, '/naba/generate');
@@ -35,12 +35,19 @@ class NabaRepository {
 
   Future<NabaResponse> generate(NabaRequest request) async {
     final (dio, path) = _resolve();
-    final response = await dio.post<Map<String, dynamic>>(
+    final response = await dio.post<dynamic>(
       path,
       data: request.toJson(),
     );
-    final data = response.data;
-    if (data == null) throw Exception('NABA: empty response');
-    return NabaResponse.fromJson(data);
+    final raw = response.data;
+    if (raw is! Map<String, dynamic>) {
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+        type: DioExceptionType.badResponse,
+        error: 'Expected JSON object, got ${raw.runtimeType}',
+      );
+    }
+    return NabaResponse.fromJson(raw);
   }
 }
