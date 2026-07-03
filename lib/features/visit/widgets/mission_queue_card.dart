@@ -92,8 +92,6 @@ class MissionQueueCard extends StatelessWidget {
                           // Row 1: Name
                           Text(
                             item.patientName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w700,
@@ -261,8 +259,6 @@ class _MetaLine extends StatelessWidget {
     if (parts.isEmpty) return const SizedBox.shrink();
     return Text(
       parts.join(' · '),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
       style: TextStyle(
         fontSize: 12,
         fontWeight: FontWeight.w500,
@@ -294,8 +290,6 @@ class _ProgrammeLine extends StatelessWidget {
 
     return Text(
       label,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
       style: const TextStyle(
         fontSize: 12,
         fontWeight: FontWeight.w500,
