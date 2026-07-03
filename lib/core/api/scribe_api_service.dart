@@ -280,6 +280,9 @@ class ScribeApiService extends ApiRepository {
   static const String _nginxPrefix = '/ai-scribe';
 
   static String _scribePath(String path) {
+    // Strip nginx prefix only when hitting the local service directly
+    // (AI_SERVICE_URL set). Through nginx the full path is needed.
+    if (AppConfig.aiServiceBaseUrl.isEmpty) return path;
     return path.startsWith(_nginxPrefix) ? path.substring(_nginxPrefix.length) : path;
   }
 
