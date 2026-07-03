@@ -32,12 +32,54 @@ class _GlobalSearchBarState extends State<GlobalSearchBar> {
     return SearchAnchor.bar(
       searchController: _controller,
       barHintText: SearchStrings.barHint,
-      barLeading: const Icon(Icons.search),
+      barBackgroundColor: WidgetStateProperty.all(Colors.white),
+      barElevation: WidgetStateProperty.all(0),
+      barSide: WidgetStateProperty.all(BorderSide.none),
+      barShape: WidgetStateProperty.all(
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+      ),
+      barPadding: WidgetStateProperty.all(
+        const EdgeInsets.symmetric(horizontal: 4),
+      ),
+      barHintStyle: WidgetStateProperty.all(
+        const TextStyle(
+          color: Color(0xFF9CA3AF),
+          fontSize: 14,
+          fontWeight: FontWeight.w400,
+        ),
+      ),
+      barTextStyle: WidgetStateProperty.all(
+        const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+      ),
+      barLeading: const Icon(
+        Icons.search_rounded,
+        color: Color(0xFF9CA3AF),
+        size: 20,
+      ),
       barTrailing: [
-        IconButton(
-          icon: const Icon(Icons.qr_code_scanner_rounded),
-          tooltip: SearchStrings.scanNidTooltip,
-          onPressed: () => showEnrollmentEntrySheet(context),
+        // Divider + QR button
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 1,
+              height: 22,
+              color: const Color(0xFFE5E7EB),
+            ),
+            IconButton(
+              icon: const Icon(
+                Icons.qr_code_2_rounded,
+                color: Color(0xFFE8356D),
+                size: 22,
+              ),
+              tooltip: SearchStrings.scanNidTooltip,
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              onPressed: () => showEnrollmentEntrySheet(context),
+            ),
+          ],
         ),
       ],
       isFullScreen: true,
