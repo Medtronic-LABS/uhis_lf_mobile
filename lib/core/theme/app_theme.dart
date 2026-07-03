@@ -6,6 +6,7 @@
 // lib/app/theme.dart re-exports this file so existing imports keep working.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/programme.dart';
 
@@ -899,6 +900,14 @@ ThemeData buildAppTheme() {
       ),
       iconTheme: const IconThemeData(color: AppColors.textOnNavy),
       actionsIconTheme: const IconThemeData(color: AppColors.textOnNavy),
+      systemOverlayStyle: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarIconBrightness: Brightness.dark,
+        systemNavigationBarDividerColor: Colors.transparent,
+      ),
     ),
     cardTheme: CardThemeData(
       color: AppColors.cardSurface,
@@ -1141,6 +1150,14 @@ ThemeData buildDarkTheme() {
       ),
       iconTheme: const IconThemeData(color: AppColors.textPrimaryDark),
       actionsIconTheme: const IconThemeData(color: AppColors.textPrimaryDark),
+      systemOverlayStyle: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarIconBrightness: Brightness.light,
+        systemNavigationBarDividerColor: Colors.transparent,
+      ),
     ),
     cardTheme: CardThemeData(
       color: AppColors.cardSurfaceDark, elevation: 0,
