@@ -1082,7 +1082,7 @@ class _DashboardHeader extends StatelessWidget {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     return Container(
       color: tokens.brandNavy,
-      padding: const EdgeInsets.fromLTRB(16, 12, 8, 14),
+      padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1138,7 +1138,7 @@ class _DashboardHeader extends StatelessWidget {
               settingsMenu,
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           const GlobalSearchBar(),
         ],
       ),
