@@ -25,7 +25,7 @@ class NabaRepository {
     if (aiUrl.isNotEmpty) {
       final direct = Dio(BaseOptions(
         baseUrl: aiUrl,
-        connectTimeout: const Duration(seconds: 30),
+        connectTimeout: const Duration(seconds: 5),
         receiveTimeout: const Duration(minutes: 2),
       ));
       return (direct, '/naba/generate');

@@ -40,8 +40,8 @@ class ProgrammeRecommendationRepository {
     if (aiUrl.isNotEmpty) {
       final direct = Dio(BaseOptions(
         baseUrl: aiUrl,
-        connectTimeout: const Duration(seconds: 30),
-        receiveTimeout: const Duration(minutes: 1),
+        connectTimeout: const Duration(seconds: 5),
+        receiveTimeout: const Duration(seconds: 45),
       ));
       return (direct, '/programme-recommendation/recommend');
     }
