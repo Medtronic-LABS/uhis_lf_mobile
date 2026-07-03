@@ -265,6 +265,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         draftDao: ctx.read<AssessmentDraftDao>(),
         onSubmit: () => _onSectionedSubmit(ctx, visitCtrl, session),
         onReferNow: () => setState(() => _sectionedReferralTriggered = true),
+        embedded: embedded,
       );
     }
 

@@ -40,6 +40,7 @@ class DynamicAssessmentScreen extends StatefulWidget {
     this.memberId,
     this.onReferNow,
     this.restoredDraft,
+    this.embedded = false,
   });
 
   /// Single programme identifier (e.g. 'anc', 'ncd').
@@ -68,6 +69,10 @@ class DynamicAssessmentScreen extends StatefulWidget {
 
   /// Restored draft from a previous session (pre-populates field values).
   final AssessmentDraftRow? restoredDraft;
+
+  /// When true, suppresses the internal AppBar — caller owns the navigation
+  /// chrome (e.g. [VisitFlowScreen] already shows patient header + step bar).
+  final bool embedded;
 
   @override
   State<DynamicAssessmentScreen> createState() =>
@@ -153,16 +158,18 @@ class _DynamicAssessmentScreenState extends State<DynamicAssessmentScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final embedded = widget.embedded;
+
     if (_loading) {
       return Scaffold(
-        appBar: AppBar(title: Text(_programmeLabel)),
+        appBar: embedded ? null : AppBar(title: Text(_programmeLabel)),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_loadError != null || _schema == null || _controller == null) {
       return Scaffold(
-        appBar: AppBar(title: Text(_programmeLabel)),
+        appBar: embedded ? null : AppBar(title: Text(_programmeLabel)),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -180,17 +187,19 @@ class _DynamicAssessmentScreenState extends State<DynamicAssessmentScreen> {
       child: Builder(
         builder: (ctx) {
           return Scaffold(
-            appBar: AppBar(
-              title: Text(_programmeLabel),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.save_outlined),
-                  tooltip: 'Save draft',
-                  onPressed: () =>
-                      ctx.read<DynamicFormController>().saveDraft(),
-                ),
-              ],
-            ),
+            appBar: embedded
+                ? null
+                : AppBar(
+                    title: Text(_programmeLabel),
+                    actions: [
+                      IconButton(
+                        icon: const Icon(Icons.save_outlined),
+                        tooltip: 'Save draft',
+                        onPressed: () =>
+                            ctx.read<DynamicFormController>().saveDraft(),
+                      ),
+                    ],
+                  ),
             body: _FormBody(
               schema: _schema!,
               controller: _controller!,
