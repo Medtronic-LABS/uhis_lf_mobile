@@ -482,10 +482,18 @@ class ScribeApiService extends ApiRepository {
       'language=$language',
     );
 
+    final ext = _extensionOf(audioFile.path);
+    final mimeType = ext == 'wav' ? 'audio/wav'
+        : ext == 'mp4' || ext == 'm4a' ? 'audio/mp4'
+        : ext == 'mp3' ? 'audio/mpeg'
+        : 'audio/octet-stream';
+    final fileSize = await audioFile.length();
+    debugPrint('[AIScribe] audio file: ext=$ext size=${fileSize}B mime=$mimeType');
     final form = FormData.fromMap({
       'audio_file': await MultipartFile.fromFile(
         audioFile.path,
-        filename: 'consultation.${_extensionOf(audioFile.path)}',
+        filename: 'consultation.$ext',
+        contentType: DioMediaType.parse(mimeType),
       ),
       'metadata': _jsonEncode(metadata),
     });
