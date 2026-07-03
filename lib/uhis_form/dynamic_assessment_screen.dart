@@ -200,11 +200,24 @@ class _DynamicAssessmentScreenState extends State<DynamicAssessmentScreen> {
                       ),
                     ],
                   ),
-            body: _FormBody(
-              schema: _schema!,
-              controller: _controller!,
-              onAddPathway: _handleAddPathway,
-              onReferNow: widget.onReferNow,
+            body: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (embedded)
+                  _EmbeddedFormHeader(
+                    label: _programmeLabel,
+                    onSave: () =>
+                        ctx.read<DynamicFormController>().saveDraft(),
+                  ),
+                Expanded(
+                  child: _FormBody(
+                    schema: _schema!,
+                    controller: _controller!,
+                    onAddPathway: _handleAddPathway,
+                    onReferNow: widget.onReferNow,
+                  ),
+                ),
+              ],
             ),
             bottomNavigationBar: _SubmitBar(onSubmit: _submit),
           );
@@ -376,6 +389,53 @@ class _SubmitBar extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+// ── Embedded form header ──────────────────────────────────────────────────────
+
+/// Slim label + save-icon row shown when [DynamicAssessmentScreen.embedded]
+/// is true and the outer AppBar is suppressed.
+class _EmbeddedFormHeader extends StatelessWidget {
+  const _EmbeddedFormHeader({
+    required this.label,
+    required this.onSave,
+  });
+
+  final String label;
+  final VoidCallback onSave;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: tokens.cardSurface,
+        border: Border(
+          bottom: BorderSide(color: tokens.divider),
+        ),
+      ),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: tokens.brandNavy,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          const Spacer(),
+          IconButton(
+            icon: Icon(Icons.save_outlined, color: tokens.brandNavy),
+            tooltip: 'Save draft',
+            onPressed: onSave,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+        ],
+      ),
     );
   }
 }
