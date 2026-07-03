@@ -1222,17 +1222,35 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     setState(() => _future = nextFuture);
   }
 
-  void _onAccepted(NabaResponse naba) {
+  Future<void> _onAccepted(NabaResponse naba) async {
     if (_accepted) return;
     setState(() => _accepted = true);
     if (!mounted) return;
-    // If visit is household-scoped, offer a follow-up prompt for other members.
-    final hid = widget.householdId;
+
+    // Prefer householdId from widget (passed via navigation extra).
+    // If null (e.g. visit started from a screen that didn't set it), fall back
+    // to a DB lookup on the patient row — same data, different code path.
+    String? hid = widget.householdId;
+    if ((hid == null || hid.isEmpty) && mounted) {
+      try {
+        final patient =
+            await context.read<PatientDao>().byId(widget.patientId);
+        hid = patient?.householdId;
+        debugPrint(
+          '[Step3] householdId from widget=${widget.householdId} '
+          'DB fallback=$hid patientId=${widget.patientId}',
+        );
+      } on Object catch (e) {
+        debugPrint('[Step3] householdId DB lookup failed: $e');
+      }
+    }
+
+    if (!mounted) return;
     if (hid != null && hid.isNotEmpty) {
       Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => HouseholdFollowUpScreen(
-            householdId: hid,
+            householdId: hid!,
             excludePatientId: widget.patientId,
             onDone: () => context.go(_returnPath),
             onViewPatient: (patientId) => context.push('/patients/$patientId'),
@@ -1240,6 +1258,9 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         ),
       );
     } else {
+      debugPrint(
+        '[Step3] No householdId for patient ${widget.patientId} — skipping follow-up screen',
+      );
       context.go(_returnPath);
     }
   }

@@ -443,18 +443,18 @@ abstract final class HouseholdDetailStrings {
 abstract final class WorklistStrings {
   WorklistStrings._();
 
-  // Programme labels.
-  static const String programmeImci = 'IMCI';
-  static const String programmeAnc = 'ANC';
-  static const String programmePnc = 'PNC';
-  static const String programmeNcd = 'NCD';
-  static const String programmeTb = 'TB';
-  static const String programmeEpi = 'EPI';
+  // Programme labels — descriptive visit-type labels shown on patient cards.
+  static const String programmeImci = 'Child Visit';
+  static const String programmeAnc = 'ANC Visit';
+  static const String programmePnc = 'PNC Visit';
+  static const String programmeNcd = 'NCD Check';
+  static const String programmeTb = 'TB Check';
+  static const String programmeEpi = 'Vaccination';
   static const String programmeNutrition = 'Nutrition';
   static const String programmeFamilyPlanning = 'Family Planning';
   static const String programmeCataract = 'Cataract';
   static const String programmeEyeCare = 'Eye Care';
-  static const String programmeUnknown = 'General';
+  static const String programmeUnknown = 'Scheduled Visit';
   static const String selectService = '📋  Select service';
 
   // Chip filters.
