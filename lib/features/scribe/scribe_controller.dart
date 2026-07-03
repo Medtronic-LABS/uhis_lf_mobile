@@ -129,12 +129,21 @@ class ScribeController extends ChangeNotifier {
       _prepareFreshRecorder();
 
       final dir = await getTemporaryDirectory();
-      _recordingPath =
-          '${dir.path}/scribe_${DateTime.now().millisecondsSinceEpoch}.$_recordingExtension';
+      final ts = DateTime.now().millisecondsSinceEpoch;
+      _recordingPath = '${dir.path}/scribe_$ts.$_recordingExtension';
+      final waveformPath = '${dir.path}/scribe_wave_$ts.$_recordingExtension';
 
       await _recorder.record(
-        path: _recordingPath,
+        path: waveformPath,
         recorderSettings: _recorderSettings,
+      );
+      await _audioRecorder.start(
+        const RecordConfig(
+          encoder: AudioEncoder.wav,
+          sampleRate: 16000,
+          numChannels: 1,
+        ),
+        path: _recordingPath!,
       );
 
       _session = const ScribeSession(state: ScribeState.recording);
