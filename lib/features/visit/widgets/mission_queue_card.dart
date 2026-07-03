@@ -89,34 +89,32 @@ class MissionQueueCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Row 1: Name + service badge
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  item.patientName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700,
-                                    color: isCompleted
-                                        ? tokens.textMuted
-                                        : tokens.textPrimary,
-                                    decoration: isCompleted
-                                        ? TextDecoration.lineThrough
-                                        : null,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              if (isCompleted)
-                                _VisitedBadge(tokens: tokens)
-                              else
-                                MissionReasonBadge(item: item),
-                            ],
+                          // Row 1: Name
+                          Text(
+                            item.patientName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: isCompleted
+                                  ? tokens.textMuted
+                                  : tokens.textPrimary,
+                              decoration: isCompleted
+                                  ? TextDecoration.lineThrough
+                                  : null,
+                            ),
                           ),
+                          const SizedBox(height: 4),
+
+                          // Row 2: Service badge
+                          if (isCompleted)
+                            _VisitedBadge(tokens: tokens)
+                          else
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: MissionReasonBadge(item: item),
+                            ),
                           const SizedBox(height: 5),
 
                           // Row 2: Age · Village
