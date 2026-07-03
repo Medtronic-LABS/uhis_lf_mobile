@@ -140,7 +140,7 @@ class DynamicFormController extends ChangeNotifier {
         encounterId: encounterId,
         patientId: patientId,
         memberId: memberId,
-        activatedProgrammes: jsonEncode([formType]),
+        activatedProgrammes: jsonEncode(activatedProgrammeTags()),
         fieldValues: jsonEncode(flat),
         sectionStatus: jsonEncode(_buildSectionStatus()),
       );
@@ -159,6 +159,13 @@ class DynamicFormController extends ChangeNotifier {
       onSuccess();
     }
   }
+
+  /// Returns the programme wire-tag strings written to [AssessmentDraftRow.activatedProgrammes].
+  ///
+  /// Default: `[formType]`. Override in subclasses (e.g. [VisitFormController])
+  /// to include all activated pathway wire tags for multi-programme visits.
+  @protected
+  List<String> activatedProgrammeTags() => [formType];
 
   // ── Private helpers ─────────────────────────────────────────────────────────
 

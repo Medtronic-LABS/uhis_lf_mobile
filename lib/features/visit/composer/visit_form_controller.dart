@@ -11,6 +11,7 @@ import '../../../core/models/programme.dart';
 import '../../../uhis_form/controller/dynamic_form_controller.dart';
 import '../../../uhis_form/models/section_schema.dart';
 import 'cds_rules.dart';
+import 'sdk_field_projector.dart';
 
 class VisitFormController extends DynamicFormController {
   VisitFormController({
@@ -37,6 +38,19 @@ class VisitFormController extends DynamicFormController {
   List<CdsAlert> get alerts => List.unmodifiable(_alerts);
   List<SectionSchema> get injectedSections =>
       List.unmodifiable(_injectedSections);
+
+  @override
+  List<String> activatedProgrammeTags() =>
+      _activePathways.map((p) => p.wireTag).toList();
+
+  /// Project flat field values to only the fields owned by [programme] in
+  /// layout_manifests.json. Used by [UnifiedSubmissionOrchestrator] to build
+  /// per-programme payloads without depending on legacy [SectionRegistry] IDs.
+  Map<String, dynamic> projectForProgramme(
+    Programme programme,
+    Map<String, dynamic> allFields,
+  ) =>
+      SdkFieldProjector.project(programme, allFields);
 
   @override
   void setValue(String fieldId, dynamic value) {
