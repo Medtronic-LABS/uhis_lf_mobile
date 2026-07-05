@@ -201,7 +201,14 @@ class LocalAssessmentEntity {
     Map<String, dynamic>? provenance,
     int? peerSupervisorId,
   }) {
-    final details = jsonDecode(assessmentDetails);
+    final details =
+        jsonDecode(assessmentDetails) as Map<String, dynamic>;
+
+    // Inject bpLog / glucoseLog sub-objects that the backend offline-service
+    // extracts from assessmentDetails to create vitals records server-side.
+    // Mirrors Android AssessmentUtil.kt — flat projection fields → nested shape.
+    _injectVitalLogs(details);
+
     return {
       'referenceId': householdMemberLocalId,
       'assessmentType': assessmentType.toUpperCase(),
@@ -226,6 +233,50 @@ class LocalAssessmentEntity {
       if (followUpId != null) 'followUpId': followUpId,
       'updatedAt': updatedAt?.millisecondsSinceEpoch ?? 0,
     };
+  }
+
+  /// Build bpLog / glucoseLog nested objects from flat projection fields so
+  /// the backend offline-service can extract and store them as vitals records.
+  /// Matches Android AssessmentDefinedParams + AssessmentUtil field names.
+  static void _injectVitalLogs(Map<String, dynamic> d) {
+    double? asDouble(Object? v) {
+      if (v is num) return v.toDouble();
+      if (v is String) return double.tryParse(v);
+      return null;
+    }
+
+    // ── bpLog ────────────────────────────────────────────────────────────────
+    if (!d.containsKey('bpLog')) {
+      final sys = asDouble(d['systolic'] ?? d['systolicBp'] ?? d['bloodPressureSystolic']);
+      final dia = asDouble(d['diastolic'] ?? d['diastolicBp'] ?? d['bloodPressureDiastolic']);
+      if (sys != null && dia != null) {
+        d['bpLog'] = {
+          'avgSystolic': sys.toInt(),
+          'avgDiastolic': dia.toInt(),
+          'avgBloodPressure': '${sys.toInt()}/${dia.toInt()}',
+          'bpLogDetails': [
+            {'systolic': sys.toInt(), 'diastolic': dia.toInt()}
+          ],
+        };
+      }
+    }
+
+    // ── glucoseLog ───────────────────────────────────────────────────────────
+    if (!d.containsKey('glucoseLog')) {
+      final glucose = asDouble(
+          d['glucoseValue'] ?? d['glucose'] ?? d['bloodGlucose'] ?? d['fbs'] ?? d['rbs']);
+      if (glucose != null) {
+        final type = d['glucoseType'] as String? ??
+            (d.containsKey('fbs') ? 'fbs' : d.containsKey('rbs') ? 'rbs' : 'rbs');
+        final unit = d['glucoseUnit'] as String? ?? 'mg/dL';
+        d['glucoseLog'] = {
+          'glucose': glucose,
+          'glucoseValue': glucose,
+          'glucoseType': type,
+          'glucoseUnit': unit,
+        };
+      }
+    }
   }
 }
 

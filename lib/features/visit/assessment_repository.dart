@@ -171,6 +171,8 @@ class AssessmentRepository extends ChangeNotifier {
       final a = assessmentPayloads[i];
       debugPrint('    [$i] type=${a['assessmentType']} patient=${a['encounter']?['patientId']} referred=${a['encounter']?['referred']}');
       debugPrint('    [$i] provenance=${a['encounter']?['provenance']}');
+      final det = a['assessmentDetails'] as Map<String, dynamic>?;
+      debugPrint('    [$i] bpLog=${det?['bpLog']} glucoseLog=${det?['glucoseLog']}');
     }
 
     final request = {
