@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -18,6 +20,7 @@ import '../../core/config/app_config.dart';
 import 'composer/sectioned_assessment_screen.dart';
 import '../../uhis_form/dynamic_assessment_screen.dart';
 import 'pathway/pathway_engine.dart';
+import 'assessment_repository.dart';
 import 'submission/unified_submission_orchestrator.dart';
 import 'triage/patient_context_builder.dart';
 import 'visit_controller.dart';
@@ -315,6 +318,16 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
           villageId: widget.villageId,
         );
         debugPrint('[VisitForm] orchestrator.submit done');
+
+        // Kick off backend sync for all pending assessments now saved by orchestrator
+        if (ctx.mounted) {
+          final assessmentRepo = ctx.read<AssessmentRepository>();
+          debugPrint('[VisitForm] triggering syncPendingAssessments');
+          unawaited(assessmentRepo.syncPendingAssessments().then(
+            (n) => debugPrint('[VisitForm] syncPendingAssessments → synced $n'),
+            onError: (e) => debugPrint('[VisitForm] syncPendingAssessments ✗ $e'),
+          ));
+        }
       }
 
       if (widget.patientId != null && ctx.mounted) {
