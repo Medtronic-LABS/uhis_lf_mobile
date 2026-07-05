@@ -908,6 +908,12 @@ abstract final class MissionDashboardStrings {
   static const String startRoute = 'Start Route';
   static const String continueTodaysWork = "Continue Today's Work";
 
+  // ── Household Enrollment CTA ─────────────────────────────────────────────
+  static const String enrollHouseholdTitle = 'Enrol a new household';
+  static const String enrollHouseholdSubtitle =
+      'Register a family not yet in the programme';
+  static const String enrollHouseholdAction = 'Enrol now';
+
   // ── Referral Operations Widget ───────────────────────────────────────────
   static const String referralStatus = 'Referral Status';
   static const String active = 'Active';
@@ -3060,6 +3066,21 @@ abstract final class VisitCompleteStrings {
   static const String sendCounsellingMessage = 'Send Counselling Message';
   static const String createReferral = 'Create Referral';
   static const String backToHome = 'Back to Home';
+
+  static const String householdMembersTitle = 'Members in this household';
+
+  static const String ancFirstVisitCounsellingTitle =
+      'First ANC Visit — Key Messages';
+  static const String ancFirstVisitCounselling =
+      'Congratulations on this pregnancy! Today we:\n'
+      '• Registered you in the ANC programme\n'
+      '• Measured your blood pressure and weight\n'
+      '• Scheduled your next visit in 4 weeks\n\n'
+      'Remember to:\n'
+      '• Take your iron-folate tablet every day\n'
+      '• Eat nutritious food — dal, eggs, leafy vegetables\n'
+      '• Rest and avoid heavy lifting\n'
+      '• Come immediately if you have heavy bleeding, severe headache, or blurred vision';
 }
 
 /// Strings for the unified 3-step visit flow (spec §3.1).

@@ -9,6 +9,7 @@
 ///   - Programme header color resolved via [_headerColor].
 library;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -151,6 +152,15 @@ class VisitCompleteScreen extends StatelessWidget {
 
               const SizedBox(height: AppSpacing.h8xl),
 
+              // ── Household members (demo only) ───────────────────────────
+              if (kDebugMode && householdId?.startsWith('DEMO-') == true) ...[
+                _HouseholdMembersSection(
+                  householdId: householdId!,
+                  currentMemberId: memberId,
+                ),
+                const SizedBox(height: AppSpacing.h8xl),
+              ],
+
               // ── Action buttons ──────────────────────────────────────────
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -218,6 +228,67 @@ class VisitCompleteScreen extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ─── Demo-only household members section ──────────────────────────────────────
+
+class _HouseholdMembersSection extends StatelessWidget {
+  const _HouseholdMembersSection({
+    required this.householdId,
+    this.currentMemberId,
+  });
+
+  final String householdId;
+  final String? currentMemberId;
+
+  static const _demoMembers = <Map<String, String>>[
+    {'id': 'DEMO-PAT-001', 'name': 'Nasrin Begum', 'role': 'Mother'},
+    {'id': 'DEMO-PAT-002', 'name': 'Priya Rani Das', 'role': 'Daughter-in-law'},
+    {'id': 'DEMO-PAT-003', 'name': 'Rahim Hossain', 'role': 'Child (2 y)'},
+    {'id': 'DEMO-PAT-004', 'name': 'Md. Karim Uddin', 'role': 'Head of household'},
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final others = _demoMembers
+        .where((m) => m['id'] != currentMemberId)
+        .toList();
+    if (others.isEmpty) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          VisitCompleteStrings.householdMembersTitle,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: AppColors.navy,
+          ),
+        ),
+        const SizedBox(height: 8),
+        ...others.map(
+          (m) => ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: CircleAvatar(
+              radius: 18,
+              backgroundColor: AppColors.navy.withValues(alpha: 0.1),
+              child: const Icon(Icons.person, size: 18, color: AppColors.navy),
+            ),
+            title: Text(m['name']!,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            subtitle: Text(m['role']!,
+                style: const TextStyle(fontSize: 11, color: AppColors.textMid)),
+            trailing: TextButton(
+              onPressed: () => context.push('/patients/${m['id']}'),
+              child: const Text('View', style: TextStyle(fontSize: 12)),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

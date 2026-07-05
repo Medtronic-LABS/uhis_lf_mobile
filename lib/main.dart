@@ -70,6 +70,8 @@ import 'features/visit/visit_controller.dart';
 import 'features/training/coaching_dao.dart';
 import 'features/training/coaching_repository.dart';
 import 'features/worklist/worklist_repository.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
+import 'core/debug/prototype_demo_seeder.dart';
 
 /// Remove any legacy seeded/demo test data from local SQLite.
 /// This ensures only real API data is shown in the worklist.
@@ -118,6 +120,10 @@ Future<void> main() async {
   });
   // Clear any legacy seeded test data (PAT-SEED-* entries)
   await _clearSeededTestData(appDb);
+  // Seed fixed prototype demo patients in debug builds
+  if (kDebugMode) {
+    await PrototypeDemoSeeder(appDb).seedDemoPatients();
+  }
   runApp(UhisNextApp(
     api: api,
     authRepo: authRepo,
