@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -368,6 +370,12 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
 
       debugPrint('Assessment saved locally with ID: $localId');
       debugPrint('Referral recommended: $_referralRecommended');
+
+      // Fire-and-forget sync to backend — non-blocking so UI isn't delayed
+      unawaited(repo.syncPendingAssessments().then(
+        (n) => debugPrint('Synced $n assessment(s) to backend'),
+        onError: (e) => debugPrint('Assessment sync failed (will retry): $e'),
+      ));
 
       // Mark the encounter as completed so it shows in Tasks completed section
       if (!mounted) return;

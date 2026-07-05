@@ -242,6 +242,7 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final AssessmentRepository _assessmentRepo = AssessmentRepository(
     dao: _localAssessmentDao,
     api: widget.api,
+    auth: widget.authRepo,
   );
   late final AssessmentDraftDao _draftDao = AssessmentDraftDao(widget.appDb);
   late final AiResponseCacheDao _aiCacheDao = AiResponseCacheDao(widget.appDb);

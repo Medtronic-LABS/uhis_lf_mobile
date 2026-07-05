@@ -5,6 +5,8 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart' show Endpoints;
+import '../../core/auth/auth_repository.dart';
+import '../../core/config/app_config.dart';
 import '../../core/db/local_assessment_dao.dart';
 
 /// Repository for offline-first assessment management.
@@ -20,11 +22,14 @@ class AssessmentRepository extends ChangeNotifier {
   AssessmentRepository({
     required LocalAssessmentDao dao,
     required ApiClient api,
+    required AuthRepository auth,
   })  : _dao = dao,
-        _api = api;
+        _api = api,
+        _auth = auth;
 
   final LocalAssessmentDao _dao;
   final ApiClient _api;
+  final AuthRepository _auth;
 
   bool _isSyncing = false;
   bool get isSyncing => _isSyncing;
@@ -125,16 +130,37 @@ class AssessmentRepository extends ChangeNotifier {
     // Mark as in-progress
     await _dao.updateSyncStatus(ids, AssessmentSyncStatus.inProgress);
 
-    // Build batch request matching Android's format
+    // Resolve provenance from auth once for the whole batch
+    final userId = await _auth.userId();
+    final orgId = await _auth.organizationFhirId();
+    final deviceId = await _auth.deviceId();
+    final provenance = <String, dynamic>{
+      'modifiedDate': DateTime.now().toUtc().toIso8601String(),
+      'organizationId': ?orgId,
+      'spiceUserId': ?userId,
+      if (userId != null) 'userId': userId.toString(),
+    };
+
+    // Build batch request matching Android's offline-sync/create format
     final requestId = const Uuid().v4();
     final request = {
       'requestId': requestId,
       'tenantId': _api.tenantIdAsNum,
+      'appVersionName': AppConfig.appVersionName,
+      'appVersionCode': AppConfig.appVersionCode,
+      'appType': AppConfig.appType,
+      'syncMode': 'create',
+      if (deviceId.isNotEmpty) 'deviceId': deviceId,
       'households': <Map<String, dynamic>>[],
       'householdMembers': <Map<String, dynamic>>[],
-      'assessments': assessments.map((e) => e.toApiRequest()).toList(),
-      'followups': <Map<String, dynamic>>[],
-      'householdMemberLink': <Map<String, dynamic>>[],
+      'assessments': assessments
+          .map((e) => e.toApiRequest(
+                provenance: provenance,
+                peerSupervisorId: userId,
+              ))
+          .toList(),
+      'followUps': <Map<String, dynamic>>[],
+      'householdMemberLinks': <Map<String, dynamic>>[],
     };
 
     final response = await _api.dio.post<Map<String, dynamic>>(

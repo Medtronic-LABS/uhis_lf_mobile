@@ -193,7 +193,14 @@ class LocalAssessmentEntity {
       );
 
   /// Convert to API request format matching Android's Assessment model.
-  Map<String, dynamic> toApiRequest() {
+  ///
+  /// [provenance] — map with `organizationId`, `spiceUserId`, `userId`,
+  /// `modifiedDate` from the logged-in user session.
+  /// [peerSupervisorId] — numeric user ID used as `peerSupervisorId`.
+  Map<String, dynamic> toApiRequest({
+    Map<String, dynamic>? provenance,
+    int? peerSupervisorId,
+  }) {
     final details = jsonDecode(assessmentDetails);
     return {
       'referenceId': householdMemberLocalId,
@@ -202,13 +209,15 @@ class LocalAssessmentEntity {
       'villageId': villageId,
       'assessmentDate': createdAt?.toUtc().toIso8601String(),
       'patientStatus': referralStatus ?? 'Recovered',
-      if (referredReasons != null) 'referredReasons': referredReasons,
+      'peerSupervisorId': ?peerSupervisorId,
+      'referredReasons': ?referredReasons,
       if (otherDetails != null) 'summary': jsonDecode(otherDetails!),
       'encounter': {
         'householdId': householdId,
         'memberId': memberId,
         'referred': isReferred,
         'patientId': patientId,
+        'provenance': ?provenance,
         'latitude': latitude,
         'longitude': longitude,
         'startTime': createdAt?.toUtc().toIso8601String(),
