@@ -118,38 +118,35 @@ class MissionQueueCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Row 1: Name
-                          Text(
-                            item.patientName,
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: isCompleted
-                                  ? tokens.textMuted
-                                  : tokens.textPrimary,
-                              decoration: isCompleted
-                                  ? TextDecoration.lineThrough
-                                  : null,
-                            ),
+                          // Row 1: Name + badge inline (Wrap handles overflow)
+                          Wrap(
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 8,
+                            runSpacing: 3,
+                            children: [
+                              Text(
+                                item.patientName,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: isCompleted
+                                      ? tokens.textMuted
+                                      : tokens.textPrimary,
+                                  decoration: isCompleted
+                                      ? TextDecoration.lineThrough
+                                      : null,
+                                ),
+                              ),
+                              if (isCompleted)
+                                _VisitedBadge(tokens: tokens)
+                              else
+                                MissionReasonBadge(item: item),
+                            ],
                           ),
-                          const SizedBox(height: 4),
-
-                          // Row 2: Service badge
-                          if (isCompleted)
-                            _VisitedBadge(tokens: tokens)
-                          else
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: MissionReasonBadge(item: item),
-                            ),
                           const SizedBox(height: 5),
 
-                          // Row 2: Age · Village
-                          _MetaLine(item: item, tokens: tokens),
-                          const SizedBox(height: 3),
-
-                          // Row 3: Programme registered (emoji + label)
-                          _ProgrammeLine(item: item, tokens: tokens),
+                          // Row 2: Age · House · Village · Programme + emoji
+                          _CombinedMetaLine(item: item, tokens: tokens),
                         ],
                       ),
                     ),
@@ -169,7 +166,7 @@ class MissionQueueCard extends StatelessWidget {
   }
 
 
-  /// Programme accent colour — drives avatar, left shadow, and soft border.
+  /// Programme accent colour — drives avatar tint only (left border stays grey).
   static Color _programmeColor(MissionQueueItem item) {
     if (item.programmes.contains(Programme.anc) ||
         item.programmes.contains(Programme.pnc)) {
@@ -182,9 +179,7 @@ class MissionQueueCard extends StatelessWidget {
     if (item.programmes.contains(Programme.ncd)) {
       return const Color(0xFF854F0B); // deep amber — NCD
     }
-    if (item.programmes.contains(Programme.tb)) {
-      return AppColors.aiPurple;
-    }
+    if (item.programmes.contains(Programme.tb)) return AppColors.aiPurple;
     return const Color(0xFF6B7280); // grey — unenrolled / unknown
   }
 
@@ -269,10 +264,10 @@ class _ProgrammeAvatar extends StatelessWidget {
   }
 }
 
-// ─── Meta line: Age · Village ────────────────────────────────────────────────
+// ─── Combined meta: Age · House · Village · Programme description + emoji ─────
 
-class _MetaLine extends StatelessWidget {
-  const _MetaLine({required this.item, required this.tokens});
+class _CombinedMetaLine extends StatelessWidget {
+  const _CombinedMetaLine({required this.item, required this.tokens});
 
   final MissionQueueItem item;
   final LeapfrogColors tokens;
@@ -286,7 +281,20 @@ class _MetaLine extends StatelessWidget {
     if (item.village != null && item.village!.isNotEmpty) {
       parts.add(item.village!);
     }
-    if (parts.isEmpty) return const SizedBox.shrink();
+
+    // Programme description: diagnosis label if available, else programme name
+    final knownProgrammes =
+        item.programmes.where((p) => p != Programme.unknown).toList();
+    if (knownProgrammes.isNotEmpty) {
+      final diagnosis = item.diagnosisLabel;
+      final progLabel = (diagnosis != null && diagnosis.isNotEmpty)
+          ? diagnosis
+          : knownProgrammes.map(_displayName).join(' · ');
+      parts.add('$progLabel ${item.programmeEmoji}');
+    } else {
+      parts.add('${WorklistStrings.selectService} ${item.programmeEmoji}');
+    }
+
     return Text(
       parts.join(' · '),
       style: TextStyle(
@@ -294,50 +302,8 @@ class _MetaLine extends StatelessWidget {
         fontWeight: FontWeight.w500,
         color: tokens.textMuted,
       ),
-    );
-  }
-}
-
-// ─── Programme line: emoji + label ───────────────────────────────────────────
-
-class _ProgrammeLine extends StatelessWidget {
-  const _ProgrammeLine({required this.item, required this.tokens});
-
-  final MissionQueueItem item;
-  final LeapfrogColors tokens;
-
-  @override
-  Widget build(BuildContext context) {
-    final knownProgrammes = item.programmes
-        .where((p) => p != Programme.unknown)
-        .toList();
-
-    if (knownProgrammes.isEmpty) {
-      return const Text(
-        WorklistStrings.selectService,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-          color: AppColors.textMuted,
-        ),
-      );
-    }
-
-    final programmeName = knownProgrammes
-        .map((p) => _displayName(p))
-        .join(' · ');
-    final diagnosis = item.diagnosisLabel;
-    final label = (diagnosis != null && diagnosis.isNotEmpty)
-        ? '${item.programmeEmoji}  $programmeName · $diagnosis'
-        : '${item.programmeEmoji}  $programmeName';
-
-    return Text(
-      label,
-      style: const TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w500,
-        color: AppColors.textMid,
-      ),
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
     );
   }
 

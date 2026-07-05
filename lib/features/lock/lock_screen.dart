@@ -1,15 +1,15 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
-import '../../app/theme.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
-import 'lock_header.dart';
 
 class LockScreen extends StatefulWidget {
   const LockScreen({super.key});
@@ -80,13 +80,13 @@ class _LockScreenState extends State<LockScreen> {
     );
     final pinEnabled = context.select<AuthState, bool>((a) => a.pinEnabled);
 
-    final programTitle = _summary?.area ?? LockStrings.programName;
-
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       body: Column(
         children: [
-          LockProgramHeader(title: programTitle, pageCount: 8),
+          // ── Dark navy header ────────────────────────────────────────────
+          _LockHeader(),
+          // ── Scrollable body ─────────────────────────────────────────────
           Expanded(
             child: SingleChildScrollView(
               child: Center(
@@ -101,7 +101,6 @@ class _LockScreenState extends State<LockScreen> {
                     isOnline: _isOnline,
                     onUnlock: _trigger,
                     onPinUnlock: () => context.go('/pin-unlock'),
-                    onPassword: () => context.go('/login?from=lock'),
                   ),
                 ),
               ),
@@ -112,6 +111,8 @@ class _LockScreenState extends State<LockScreen> {
     );
   }
 }
+
+// ── Main content ──────────────────────────────────────────────────────────────
 
 class LockContent extends StatefulWidget {
   const LockContent({
@@ -124,7 +125,6 @@ class LockContent extends StatefulWidget {
     required this.isOnline,
     required this.onUnlock,
     required this.onPinUnlock,
-    required this.onPassword,
   });
 
   final UserProfileSummary? summary;
@@ -135,7 +135,6 @@ class LockContent extends StatefulWidget {
   final bool isOnline;
   final VoidCallback onUnlock;
   final VoidCallback onPinUnlock;
-  final VoidCallback onPassword;
 
   @override
   State<LockContent> createState() => _LockContentState();
@@ -151,17 +150,15 @@ class _LockContentState extends State<LockContent>
     super.initState();
     _entranceCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 500),
+      duration: const Duration(milliseconds: 600),
     )..forward();
-    // 6 slots: stagger step = 60 ms, each slot animates for 200 ms.
-    // Total window = 5 × 60 + 200 = 500 ms.
     _slots = List.generate(
       6,
       (i) => CurvedAnimation(
         parent: _entranceCtrl,
         curve: Interval(
-          (i * 60) / 500,
-          ((i * 60) + 200) / 500,
+          (i * 60) / 600,
+          ((i * 60) + 240) / 600,
           curve: AppAnimations.standard,
         ),
       ),
@@ -174,26 +171,17 @@ class _LockContentState extends State<LockContent>
     super.dispose();
   }
 
-  Widget _enter(int index, Widget child) {
-    final anim = _slots[index];
+  Widget _enter(int slot, Widget child) {
+    final anim = _slots[slot];
     return AnimatedBuilder(
       animation: anim,
       child: child,
       builder: (_, c) => Opacity(
         opacity: anim.value,
         child: Transform.translate(
-          offset: Offset(0, 6 * (1 - anim.value)),
+          offset: Offset(0, 8 * (1 - anim.value)),
           child: c,
         ),
-      ),
-    );
-  }
-
-  void _showOfflineMessage(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(LockStrings.offlinePasswordDisabled),
-        duration: Duration(seconds: 3),
       ),
     );
   }
@@ -201,126 +189,196 @@ class _LockContentState extends State<LockContent>
   @override
   Widget build(BuildContext context) {
     final s = widget.summary;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+      padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _enter(0, const _UserAvatar()),
-          const SizedBox(height: 18),
+          // ── Pink avatar ────────────────────────────────────────────────
+          _enter(
+            0,
+            Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                color: AppColors.pink,
+                borderRadius: BorderRadius.circular(26),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.pink.withValues(alpha: 0.35),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: const Icon(Icons.person, size: 54, color: Colors.white),
+            ),
+          ),
+          const SizedBox(height: 28),
+
+          // ── Welcome copy ───────────────────────────────────────────────
           _enter(
             1,
-            Text(
-              LockStrings.welcomeBack,
-              style: Theme.of(context)
-                  .textTheme
-                  .headlineLarge
-                  ?.copyWith(fontWeight: FontWeight.w900, color: Theme.of(context).colorScheme.onSurface),
-              textAlign: TextAlign.center,
+            Column(
+              children: [
+                Text(
+                  LockStrings.welcomeBack,
+                  style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    color: Theme.of(context).colorScheme.onSurface,
+                    letterSpacing: -0.5,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  LockStrings.signInToStartYourDay,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 4),
-          _enter(
-            2,
-            Text(
-              LockStrings.signInToStartYourDay,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyLarge
-                  ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 28),
+
+          // ── Profile card ───────────────────────────────────────────────
           if (s != null) ...[
-            _enter(3, _UserProfileCard(summary: s)),
-            const SizedBox(height: 16),
+            _enter(2, _ProfileCard(summary: s)),
+            const SizedBox(height: 20),
+          ] else ...[
+            const SizedBox(height: 20),
           ],
-          ..._actionWidgets(context),
-          const SizedBox(height: 8),
+
+          // ── Biometric verify button ────────────────────────────────────
+          if (widget.biometricEnabled) ...[
+            _enter(
+              3,
+              _FingerprintCard(
+                onTap: widget.busy ? () {} : widget.onUnlock,
+                busy: widget.busy,
+                failed: widget.failed,
+              ),
+            ),
+          ],
+
+          // ── OR + PIN ───────────────────────────────────────────────────
+          if (widget.pinEnabled) ...[
+            const SizedBox(height: 20),
+            _enter(4, const _OrDivider()),
+            const SizedBox(height: 16),
+            _enter(
+              5,
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: widget.onPinUnlock,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.navy,
+                    backgroundColor: Colors.white,
+                    side: BorderSide(
+                      color: AppColors.navy.withValues(alpha: 0.2),
+                      width: 1.2,
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    textStyle: const TextStyle(
+                      fontFamily: 'NunitoSans',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('🔢 ', style: TextStyle(fontSize: 16)),
+                      Text(LockStrings.orUsePin(AppConfig.pinLength)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
-
-  List<Widget> _actionWidgets(BuildContext context) {
-    return [
-      if (widget.failed) ...[
-        Center(
-          child: Text(
-            LockStrings.biometricCancelled,
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-        ),
-        const SizedBox(height: 8),
-      ],
-      if (widget.biometricEnabled)
-        _enter(
-          4,
-          _FingerprintCard(
-            onTap: widget.busy ? () {} : widget.onUnlock,
-            busy: widget.busy,
-            failed: widget.failed,
-          ),
-        ),
-      if (widget.pinEnabled && !widget.busy) ...[
-        const SizedBox(height: 12),
-        Center(
-          child: TextButton(
-            onPressed: widget.onPinUnlock,
-            style: TextButton.styleFrom(
-              foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
-              textStyle: const TextStyle(
-                fontFamily: 'NunitoSans',
-                fontSize: 12,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-            child: Text(LockStrings.orUsePin(AppConfig.pinLength)),
-          ),
-        ),
-      ],
-      if (!widget.busy) ...[
-        const SizedBox(height: 4),
-        Center(
-          child: TextButton.icon(
-            onPressed: widget.isOnline
-                ? widget.onPassword
-                : () => _showOfflineMessage(context),
-            icon: const Icon(Icons.lock_outline, size: 16),
-            label: Text(CommonStrings.usePassword),
-            style: TextButton.styleFrom(
-              foregroundColor: widget.isOnline
-                  ? Theme.of(context).colorScheme.onSurfaceVariant
-                  : Theme.of(context).disabledColor,
-            ),
-          ),
-        ),
-      ],
-    ];
-  }
 }
 
-class _UserAvatar extends StatelessWidget {
-  const _UserAvatar();
+// ── Dark navy header (app branding + stepper dots) ────────────────────────────
+
+class _LockHeader extends StatelessWidget {
+  const _LockHeader();
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 64,
-      height: 64,
-      decoration: BoxDecoration(
-        color: AppColors.pink,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: AppShadows.pinkIcon,
+      width: double.infinity,
+      color: AppColors.navy,
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + 20,
+        left: 24,
+        right: 24,
+        bottom: 20,
       ),
-      child: const Icon(Icons.person_rounded, color: Colors.white, size: 34),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            LockStrings.aponSushashthya,
+            style: const TextStyle(
+              fontFamily: 'Nunito',
+              fontSize: 26,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            LockStrings.programSubtitle,
+            style: TextStyle(
+              fontFamily: 'NunitoSans',
+              fontSize: 13,
+              color: Colors.white.withValues(alpha: 0.65),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Stepper dots
+          Row(
+            children: List.generate(7, (i) {
+              final active = i == 0;
+              return Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: active ? 24 : 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: active
+                        ? Colors.white
+                        : Colors.white.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _UserProfileCard extends StatelessWidget {
-  const _UserProfileCard({required this.summary});
+// ── Simplified profile card ───────────────────────────────────────────────────
+
+class _ProfileCard extends StatelessWidget {
+  const _ProfileCard({required this.summary});
 
   final UserProfileSummary summary;
 
@@ -339,119 +397,72 @@ class _UserProfileCard extends StatelessWidget {
     return [f, l].where((e) => e.isNotEmpty).join(' ');
   }
 
-  String _idLine() {
-    final parts = <String>[];
-    if (summary.skId != null) parts.add(summary.skId!);
-    if (summary.ward != null) parts.add(summary.ward!);
-    return parts.join(' · ');
-  }
-
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.navy, AppColors.navyMid],
-        ),
-        borderRadius: BorderRadius.circular(16),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.navy.withValues(alpha: 0.07),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      clipBehavior: Clip.hardEdge,
-      child: Stack(
+      child: Row(
         children: [
-          // Decorative ghost circles
-          Positioned(
-            right: -20,
-            top: -20,
-            child: Container(
-              width: 80,
-              height: 80,
-              decoration: const BoxDecoration(
-                color: Color(0x0DFFFFFF),
-                shape: BoxShape.circle,
+          // Initials avatar — pink background
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: AppColors.pink.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              _initials(),
+              style: TextStyle(
+                fontFamily: 'Nunito',
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: AppColors.pink,
               ),
             ),
           ),
-          Positioned(
-            right: 10,
-            bottom: -10,
-            child: Container(
-              width: 50,
-              height: 50,
-              decoration: const BoxDecoration(
-                color: Color(0x0AFFFFFF),
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-          // Card content
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+          const SizedBox(width: 14),
+
+          // Name + role
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   LockStrings.shasthyaKormi,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'NunitoSans',
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.onDarkFaint,
-                    letterSpacing: 0.80,
+                    color: AppColors.navy.withValues(alpha: 0.45),
+                    letterSpacing: 1.0,
                   ),
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    _InitialsAvatar(initials: _initials()),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _fullName().isNotEmpty
-                                ? _fullName()
-                                : LockStrings.profileLoading,
-                            style: const TextStyle(
-                              fontFamily: 'Nunito',
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                            ),
-                          ),
-                          if (_idLine().isNotEmpty)
-                            Text(
-                              _idLine(),
-                              style: TextStyle(
-                                fontFamily: 'NunitoSans',
-                                fontSize: 11,
-                                color: Colors.white.withValues(alpha: 0.60),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _InfoPanel(
-                        label: LockStrings.nidLabel,
-                        value: summary.nidOrPhone ?? '—',
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: _InfoPanel(
-                        label: LockStrings.upazilaLabel,
-                        value: summary.upazila?.toUpperCase() ?? '—',
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 4),
+                Text(
+                  _fullName().isNotEmpty
+                      ? _fullName()
+                      : LockStrings.profileLoading,
+                  style: const TextStyle(
+                    fontFamily: 'Nunito',
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.navy,
+                    letterSpacing: -0.2,
+                  ),
                 ),
               ],
             ),
@@ -462,76 +473,46 @@ class _UserProfileCard extends StatelessWidget {
   }
 }
 
-class _InitialsAvatar extends StatelessWidget {
-  const _InitialsAvatar({required this.initials});
+// ── OR divider ────────────────────────────────────────────────────────────────
 
-  final String initials;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: const BoxDecoration(
-        color: AppColors.onDarkSurface,
-        shape: BoxShape.circle,
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        initials,
-        style: const TextStyle(
-          fontFamily: 'Nunito',
-          fontSize: 16,
-          fontWeight: FontWeight.w800,
-          color: Colors.white,
-        ),
-      ),
-    );
-  }
-}
-
-class _InfoPanel extends StatelessWidget {
-  const _InfoPanel({required this.label, required this.value});
-
-  final String label;
-  final String value;
+class _OrDivider extends StatelessWidget {
+  const _OrDivider();
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: const Color(0x1AFFFFFF), // rgba(255,255,255,0.10)
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontFamily: 'NunitoSans',
-              fontSize: 9,
-              fontWeight: FontWeight.w700,
-              color: AppColors.onDarkFaint,
-              letterSpacing: 0.5,
-            ),
+    return Row(
+      children: [
+        Expanded(
+          child: Divider(
+            color: Theme.of(context).colorScheme.outlineVariant,
+            thickness: 1,
           ),
-          const SizedBox(height: 1),
-          Text(
-            value,
-            style: const TextStyle(
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            'OR',
+            style: TextStyle(
               fontFamily: 'NunitoSans',
               fontSize: 11,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              letterSpacing: 1.0,
             ),
           ),
-        ],
-      ),
+        ),
+        Expanded(
+          child: Divider(
+            color: Theme.of(context).colorScheme.outlineVariant,
+            thickness: 1,
+          ),
+        ),
+      ],
     );
   }
 }
+
+// ── Fingerprint / biometric card (unchanged from original) ────────────────────
 
 class _FingerprintCard extends StatefulWidget {
   const _FingerprintCard({
@@ -558,9 +539,9 @@ class _FingerprintCardState extends State<_FingerprintCard>
   bool _verified = false;
 
   static const _navy = AppColors.navy;
-  static const _iconBoxIdle = Color(0x1FFFFFFF); // white 12%
-  static const _iconBoxScan = Color(0x33E8356D); // pink 20%
-  static const _iconBoxVerify = Color(0x3310B981); // green 20%
+  static const _iconBoxIdle = Color(0x1FFFFFFF);
+  static const _iconBoxScan = Color(0x33E8356D);
+  static const _iconBoxVerify = Color(0x3310B981);
 
   @override
   void initState() {
@@ -623,12 +604,10 @@ class _FingerprintCardState extends State<_FingerprintCard>
             : widget.busy
             ? _iconBoxScan
             : _iconBoxIdle;
-        final Color iconColor = _verified
-            ? AppColors.statusSuccess
-            : Colors.white;
-        final double glowSpread = widget.busy
-            ? 4 * _scanCtrl.value
-            : 3 * _glowCtrl.value;
+        final Color iconColor =
+            _verified ? AppColors.statusSuccess : Colors.white;
+        final double glowSpread =
+            widget.busy ? 4 * _scanCtrl.value : 3 * _glowCtrl.value;
         final Color glowColor = widget.busy
             ? AppColors.pink.withValues(alpha: 0.35 * _scanCtrl.value)
             : Colors.white.withValues(alpha: 0.15 * _glowCtrl.value);
@@ -674,7 +653,8 @@ class _FingerprintCardState extends State<_FingerprintCard>
             : widget.busy
             ? LockStrings.tapToPlaceFinger
             : LockStrings.tapToPlaceFingerSubtitle;
-        final double opacity = widget.busy ? 0.5 + 0.5 * _scanCtrl.value : 1.0;
+        final double opacity =
+            widget.busy ? 0.5 + 0.5 * _scanCtrl.value : 1.0;
         return Opacity(
           opacity: opacity,
           child: Column(

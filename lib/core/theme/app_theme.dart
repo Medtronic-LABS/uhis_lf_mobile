@@ -1725,7 +1725,7 @@ ThemeData buildAppTheme() {
     ],
     scaffoldBackgroundColor: AppColors.canvas,
     appBarTheme: AppBarTheme(
-      backgroundColor: AppColors.navy,
+      backgroundColor: const Color(0xFF831843),
       foregroundColor: AppColors.textOnNavy,
       elevation: 0,
       scrolledUnderElevation: 0,
@@ -1799,13 +1799,13 @@ ThemeData buildAppTheme() {
         elevation: 0,
         shadowColor: AppShadows.fab.first.color,
         padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.h5xl, vertical: AppSpacing.xl + 1,
+          horizontal: AppSpacing.xxxl, vertical: AppSpacing.xl, // 16×12
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.button),
         ),
         textStyle: const TextStyle(
-          fontFamily: 'Nunito', fontSize: 15, fontWeight: FontWeight.w800,
+          fontFamily: 'Nunito', fontSize: 13, fontWeight: FontWeight.w800,
         ),
       ).copyWith(
         overlayColor: WidgetStateProperty.resolveWith((states) =>
@@ -1817,13 +1817,13 @@ ThemeData buildAppTheme() {
         backgroundColor: AppColors.navy,
         foregroundColor: AppColors.textOnNavy,
         padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.h5xl, vertical: AppSpacing.xl + 1,
+          horizontal: AppSpacing.xxxl, vertical: AppSpacing.xl, // 16×12
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.button),
         ),
         textStyle: const TextStyle(
-          fontFamily: 'Nunito', fontSize: 15, fontWeight: FontWeight.w700,
+          fontFamily: 'Nunito', fontSize: 13, fontWeight: FontWeight.w700,
         ),
       ).copyWith(
         overlayColor: WidgetStateProperty.resolveWith((states) =>
@@ -1835,13 +1835,13 @@ ThemeData buildAppTheme() {
         foregroundColor: AppColors.navy,
         side: const BorderSide(color: AppColors.navy, width: 1.5),
         padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.h5xl, vertical: AppSpacing.xl,
+          horizontal: AppSpacing.xxxl, vertical: AppSpacing.xl, // 16×12
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.button),
         ),
         textStyle: const TextStyle(
-          fontFamily: 'Nunito', fontSize: 14, fontWeight: FontWeight.w700,
+          fontFamily: 'Nunito', fontSize: 13, fontWeight: FontWeight.w700,
         ),
       ),
     ),
@@ -1849,7 +1849,7 @@ ThemeData buildAppTheme() {
       style: TextButton.styleFrom(
         foregroundColor: AppColors.aiPurple,
         textStyle: const TextStyle(
-          fontFamily: 'Nunito', fontSize: 14, fontWeight: FontWeight.w700,
+          fontFamily: 'Nunito', fontSize: 13, fontWeight: FontWeight.w700,
         ),
       ),
     ),
@@ -2073,13 +2073,13 @@ ThemeData buildDarkTheme() {
         foregroundColor: AppColors.canvasDark,
         elevation: 0,
         padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.h5xl, vertical: AppSpacing.xl + 1,
+          horizontal: AppSpacing.xxxl, vertical: AppSpacing.xl, // 16×12
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.button),
         ),
         textStyle: const TextStyle(
-          fontFamily: 'Nunito', fontSize: 15, fontWeight: FontWeight.w800,
+          fontFamily: 'Nunito', fontSize: 13, fontWeight: FontWeight.w800,
         ),
       ).copyWith(
         overlayColor: WidgetStateProperty.resolveWith((states) =>
@@ -2091,13 +2091,13 @@ ThemeData buildDarkTheme() {
         backgroundColor: AppColors.navy,
         foregroundColor: AppColors.textPrimaryDark,
         padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.h5xl, vertical: AppSpacing.xl + 1,
+          horizontal: AppSpacing.xxxl, vertical: AppSpacing.xl, // 16×12
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.button),
         ),
         textStyle: const TextStyle(
-          fontFamily: 'Nunito', fontSize: 15, fontWeight: FontWeight.w700,
+          fontFamily: 'Nunito', fontSize: 13, fontWeight: FontWeight.w700,
         ),
       ).copyWith(
         overlayColor: WidgetStateProperty.resolveWith((states) =>
@@ -2109,13 +2109,13 @@ ThemeData buildDarkTheme() {
         foregroundColor: AppColors.textPrimaryDark,
         side: const BorderSide(color: AppColors.aiPurpleLight, width: 1.5),
         padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.h5xl, vertical: AppSpacing.xl,
+          horizontal: AppSpacing.xxxl, vertical: AppSpacing.xl, // 16×12
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.button),
         ),
         textStyle: const TextStyle(
-          fontFamily: 'Nunito', fontSize: 14, fontWeight: FontWeight.w700,
+          fontFamily: 'Nunito', fontSize: 13, fontWeight: FontWeight.w700,
         ),
       ),
     ),
@@ -2123,7 +2123,7 @@ ThemeData buildDarkTheme() {
       style: TextButton.styleFrom(
         foregroundColor: AppColors.aiPurpleLight,
         textStyle: const TextStyle(
-          fontFamily: 'Nunito', fontSize: 14, fontWeight: FontWeight.w700,
+          fontFamily: 'Nunito', fontSize: 13, fontWeight: FontWeight.w700,
         ),
       ),
     ),

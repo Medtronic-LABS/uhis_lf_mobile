@@ -68,13 +68,6 @@ class _LockBarrierState extends State<LockBarrier> {
     setState(() => _failed = true);
   }
 
-  Future<void> _usePassword() async {
-    final auth = context.read<AuthState>();
-    await auth.requestPasswordFallback();
-    if (!mounted) return;
-    context.read<GoRouter>().go('/login?from=lock');
-  }
-
   @override
   Widget build(BuildContext context) {
     // Use select to only rebuild on specific field changes, not all auth changes
@@ -106,7 +99,6 @@ class _LockBarrierState extends State<LockBarrier> {
                       isOnline: _isOnline,
                       onUnlock: _trigger,
                       onPinUnlock: () => context.read<GoRouter>().go('/pin-unlock'),
-                      onPassword: _usePassword,
                     ),
                   ),
                 ),

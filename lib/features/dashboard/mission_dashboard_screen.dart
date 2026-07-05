@@ -1508,10 +1508,10 @@ class _AiSortedInfoCard extends StatelessWidget {
       builder: (context, snap) {
         final count = snap.data?.length ?? 0;
         final isLoading = snap.connectionState == ConnectionState.waiting;
-        const tags = <(String, String)>[
-          ('🎯', MissionDashboardStrings.aiSortedTagRisk),
-          ('⏰', MissionDashboardStrings.aiSortedTagOverdue),
-          ('🚨', MissionDashboardStrings.aiSortedTagCce),
+        const tags = <String>[
+          MissionDashboardStrings.aiSortedTagRisk,
+          MissionDashboardStrings.aiSortedTagOverdue,
+          MissionDashboardStrings.aiSortedTagCce,
         ];
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1574,7 +1574,7 @@ class _AiSortedInfoCard extends StatelessWidget {
                           border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
                         ),
                         child: Text(
-                          '${t.$1} ${t.$2}',
+                          t,
                           style: const TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,

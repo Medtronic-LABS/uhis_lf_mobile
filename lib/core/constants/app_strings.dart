@@ -94,7 +94,7 @@ abstract final class LockStrings {
   static const String communityHealth = 'Community Health';
   static const String programName = 'Apon Sushashthya';
   static const String programSubtitle = 'আপন সুস্বাস্থ্য · Community Health';
-  static String orUsePin(int len) => 'Or use $len-digit PIN';
+  static String orUsePin(int len) => 'Use $len-digit PIN';
 }
 
 /// Android `BiometricPrompt` copy + biometric unlock messages.
@@ -1059,9 +1059,9 @@ abstract final class MissionDashboardStrings {
       "$name's visit already done today ✓";
 
   // ── AI sorted info card tags ──────────────────────────────────────────────
-  static const String aiSortedTagRisk = 'Risk scoring';
-  static const String aiSortedTagOverdue = 'Overdue flags';
-  static const String aiSortedTagCce = 'CCE alerts';
+  static const String aiSortedTagRisk = '✦Risk scoring';
+  static const String aiSortedTagOverdue = '✦Overdue flags';
+  static const String aiSortedTagCce = '✦CCE alerts';
 
   // ── "+ Enrol new" FAB ────────────────────────────────────────────────────
   static const String enrolNewCta = 'Enroll new';
