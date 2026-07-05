@@ -730,8 +730,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   context.go(route);
                                 },
                               ),
-                            const SizedBox(height: 8),
-                            const _HouseholdEnrollmentCard(),
                           ],
                         );
                       },
@@ -1973,86 +1971,6 @@ class _VillageChip extends StatelessWidget {
                 fontWeight: FontWeight.w600,
                 color: isActive ? Colors.white : Theme.of(context).colorScheme.onSurface,
               ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Household enrollment CTA card ────────────────────────────────────────────
-
-class _HouseholdEnrollmentCard extends StatelessWidget {
-  const _HouseholdEnrollmentCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
-    return Container(
-      decoration: BoxDecoration(
-        color: tokens.cardSurface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: AppColors.ancHeader.withValues(alpha: 0.35),
-          width: 1.5,
-          strokeAlign: BorderSide.strokeAlignInside,
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () => context.push('/patients/households'),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 22,
-                  backgroundColor: AppColors.ancHeader.withValues(alpha: 0.12),
-                  child: const Icon(Icons.home_rounded,
-                      color: AppColors.ancHeader, size: 22),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        MissionDashboardStrings.enrollHouseholdTitle,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: tokens.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        MissionDashboardStrings.enrollHouseholdSubtitle,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: tokens.textMuted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                FilledButton(
-                  onPressed: () => context.push('/patients/households'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.ancHeader,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 8),
-                    textStyle: const TextStyle(
-                        fontSize: 12, fontWeight: FontWeight.w700),
-                  ),
-                  child: const Text(
-                      MissionDashboardStrings.enrollHouseholdAction),
-                ),
-              ],
             ),
           ),
         ),

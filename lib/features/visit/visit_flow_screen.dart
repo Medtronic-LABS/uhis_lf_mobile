@@ -443,7 +443,7 @@ class _VisitFlowHeader extends StatelessWidget {
   final String? patientGender;
   final Programme primaryProgramme;
 
-  static const Color _headerColor = AppColors.navy; // Navy
+  static const Color _headerColor = Color(0xFF831843);
 
   String get _initials {
     final name = (patientName ?? '').trim();

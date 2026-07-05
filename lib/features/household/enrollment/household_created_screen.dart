@@ -77,10 +77,10 @@ class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
                     bottom: AppSpacing.stickyBarClearance,
                   ),
                   children: [
-                    // ── Green success header (no AppBar) ───────────────────
+                    // ── Maroon success header ───────────────────────────────
                     Container(
                       width: double.infinity,
-                      color: AppColors.enrollmentSuccess,
+                      color: const Color(0xFF831843),
                       padding: const EdgeInsets.fromLTRB(
                         AppSpacing.h6xl,
                         AppSpacing.h7xl,
@@ -88,36 +88,25 @@ class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
                         AppSpacing.h7xl,
                       ),
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            width: 56,
-                            height: 56,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: Colors.white,
-                                width: 2,
-                              ),
-                              color: Colors.white.withValues(alpha: 0.2),
-                            ),
-                            child: const Icon(
-                              Icons.check,
-                              color: Colors.white,
-                              size: 28,
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          const Text(
-                            EnrollmentStrings.householdCreatedTitle2,
-                            style: TextStyle(
-                              fontSize: 22,
+                          Text(
+                            '✓ ${EnrollmentStrings.householdCreatedTitle2}',
+                            style: const TextStyle(
+                              fontSize: 26,
                               fontWeight: FontWeight.w800,
                               color: Colors.white,
                             ),
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            '$hhNumber · Char Bhadra',
+                            [
+                              if (hhNumber.isNotEmpty) hhNumber,
+                              if ((household?.subVillageName ?? '').isNotEmpty)
+                                household!.subVillageName!
+                              else if ((household?.villageName ?? '').isNotEmpty)
+                                household!.villageName!,
+                            ].join(' · '),
                             style: TextStyle(
                               fontSize: 13,
                               color: Colors.white.withValues(alpha: 0.7),

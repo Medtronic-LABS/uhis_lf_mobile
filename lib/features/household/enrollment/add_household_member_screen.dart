@@ -9,6 +9,7 @@ import '../../../core/models/patient.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_strings.dart';
 import 'enrollment_controller.dart';
+import 'enrollment_entry_sheet.dart';
 import 'nid_ocr_service.dart';
 import 'patient_lookup_repository.dart';
 import 'models/household_enrollment_models.dart';
@@ -38,14 +39,12 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   late TextEditingController _mobileCtrl;
   late TextEditingController _villageCtrl;
 
-  final NidOcrService _ocr = NidOcrService();
 
   String? _gender;
   String? _maritalStatus;
   String? _disabilityStatus = 'Absent';
   bool _mobileNotAvailable = false;
   bool _nidScanned = false;
-  bool _scanLoading = false;
 
   /// Set when the scanned NID matches a patient already registered on the
   /// server — surfaces a de-duplication banner and loads authoritative details.
@@ -112,13 +111,9 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
     _ageCtrl.text = age.toString();
   }
 
-  /// Capture the member's NID card and read the NID number into the ID field.
-  /// Only the number is extracted — the health worker fills the rest.
   Future<void> _scanNid() async {
-    setState(() => _scanLoading = true);
-    final result = await _ocr.captureNidNumber();
-    if (!mounted) return;
-    setState(() => _scanLoading = false);
+    final result = await showNidScannerForMember(context);
+    if (!mounted || result == null) return;
 
     switch (result.status) {
       case NidScanStatus.success:
@@ -292,7 +287,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                     Material(
                       borderRadius: BorderRadius.circular(AppRadius.patRow),
                       child: InkWell(
-                        onTap: _scanLoading ? null : _scanNid,
+                        onTap: _scanNid,
                         borderRadius: BorderRadius.circular(AppRadius.patRow),
                         child: Ink(
                           decoration: BoxDecoration(
@@ -311,19 +306,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                if (_scanLoading)
-                                  const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor:
-                                          AlwaysStoppedAnimation<Color>(
-                                        Colors.white,
-                                      ),
-                                    ),
-                                  )
-                                else ...[
+                                ...[
                                   const Icon(
                                     Icons.qr_code_scanner,
                                     color: Colors.white,

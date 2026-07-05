@@ -24,6 +24,19 @@ import 'patient_lookup_repository.dart';
 ///      card and two household linking options.
 ///
 /// Rest of enrollment (form screens) uses GoRouter routes.
+/// Shows the NID scanner overlay for adding a household member.
+/// Returns the scanned [NidScanResult] when the user captures, or null on cancel.
+Future<NidScanResult?> showNidScannerForMember(BuildContext context) {
+  return showModalBottomSheet<NidScanResult>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    barrierColor: Colors.transparent,
+    enableDrag: false,
+    builder: (_) => const _MemberNidScanOverlay(),
+  );
+}
+
 void showEnrollmentEntrySheet(BuildContext context) {
   showModalBottomSheet<void>(
     context: context,
@@ -234,6 +247,147 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
   }
 }
 
+// ─── Member NID scan overlay ──────────────────────────────────────────────────
+
+/// Simplified NID scanner overlay used when adding a household member.
+/// On capture success, pops with [NidScanResult]; cancel pops with null.
+class _MemberNidScanOverlay extends StatefulWidget {
+  const _MemberNidScanOverlay();
+
+  @override
+  State<_MemberNidScanOverlay> createState() => _MemberNidScanOverlayState();
+}
+
+class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
+    with SingleTickerProviderStateMixin {
+  bool _isScanning = false;
+  final NidOcrService _ocr = NidOcrService();
+  CameraController? _cameraController;
+  bool _cameraReady = false;
+  bool _cameraUnavailable = false;
+
+  late final AnimationController _sweepCtrl;
+  late final Animation<double> _sweep;
+
+  @override
+  void initState() {
+    super.initState();
+    _sweepCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat(reverse: true);
+    _sweep = Tween<double>(begin: 0.06, end: 0.92).animate(
+      CurvedAnimation(parent: _sweepCtrl, curve: Curves.easeInOut),
+    );
+    _initCamera();
+  }
+
+  Future<void> _initCamera() async {
+    final status = await Permission.camera.request();
+    if (!mounted) return;
+    if (!status.isGranted) {
+      setState(() => _cameraUnavailable = true);
+      return;
+    }
+    try {
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        if (mounted) setState(() => _cameraUnavailable = true);
+        return;
+      }
+      final back = cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.back,
+        orElse: () => cameras.first,
+      );
+      final controller = CameraController(back, ResolutionPreset.high, enableAudio: false);
+      await controller.initialize();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      setState(() {
+        _cameraController = controller;
+        _cameraReady = true;
+      });
+    } on CameraException catch (e) {
+      debugPrint('MemberNidScan: camera init failed: $e');
+      if (mounted) setState(() => _cameraUnavailable = true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _cameraController?.dispose();
+    _sweepCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleCapture() async {
+    final controller = _cameraController;
+    if (_isScanning || controller == null || !_cameraReady) return;
+    setState(() => _isScanning = true);
+    NidScanResult result;
+    try {
+      final frame = await controller.takePicture();
+      result = await _ocr.extractNidFromImage(frame.path);
+    } on CameraException catch (e) {
+      debugPrint('MemberNidScan: takePicture failed: $e');
+      result = const NidScanResult(NidScanStatus.error);
+    }
+    if (!mounted) return;
+    setState(() => _isScanning = false);
+
+    switch (result.status) {
+      case NidScanStatus.success:
+        if (mounted) Navigator.of(context).pop(result);
+      case NidScanStatus.notFound:
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(EnrollmentStrings.nidScanNotFound),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      case NidScanStatus.error:
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(EnrollmentStrings.nidScanError),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      case NidScanStatus.cancelled:
+        break;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screenH = MediaQuery.of(context).size.height;
+    return SizedBox(
+      height: screenH,
+      child: Material(
+        color: Colors.black.withValues(alpha: 0.92),
+        child: SafeArea(
+          child: _ScannerBody(
+            isScanning: _isScanning,
+            sweep: _sweep,
+            readingCard: false,
+            cameraController: _cameraReady ? _cameraController : null,
+            cameraUnavailable: _cameraUnavailable,
+            onCapture: _handleCapture,
+            onCreateHousehold: () {},
+            onCancel: () => Navigator.of(context).pop(null),
+            showCreateHousehold: false,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ─── Scanner body ─────────────────────────────────────────────────────────────
 
 class _ScannerBody extends StatelessWidget {
@@ -246,6 +400,7 @@ class _ScannerBody extends StatelessWidget {
     required this.onCapture,
     required this.onCreateHousehold,
     required this.onCancel,
+    this.showCreateHousehold = true,
   });
 
   final bool isScanning;
@@ -258,31 +413,81 @@ class _ScannerBody extends StatelessWidget {
   final VoidCallback onCapture;
   final VoidCallback onCreateHousehold;
   final VoidCallback onCancel;
+  /// When false, hides the "Create Household" card and "or" divider.
+  final bool showCreateHousehold;
 
   bool get _canCapture =>
       !isScanning && !readingCard && cameraController != null;
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.h5xl,
-        AppSpacing.h5xl,
-        AppSpacing.h5xl,
-        AppSpacing.h6xl,
-      ),
-      child: Column(
-        children: [
-          // Title
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+          // ── Create Household (primary) ─────────────────────────────────
+          if (showCreateHousehold) ...[
+          GestureDetector(
+            onTap: onCreateHousehold,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.12),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.25),
+                  width: 1.5,
+                ),
+                borderRadius: BorderRadius.circular(AppRadius.patRow),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.home_outlined, color: Colors.white, size: 18),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Create Household',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Register a new household manually',
+                          style: TextStyle(fontSize: 10, color: AppColors.onDarkLow),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right, color: AppColors.onDarkFaint, size: 16),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          // Or divider
+          Row(
+            children: [
+              Expanded(child: Container(height: 1, color: Colors.white.withValues(alpha: 0.15))),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12),
+                child: Text('or', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.onDarkFaint)),
+              ),
+              Expanded(child: Container(height: 1, color: Colors.white.withValues(alpha: 0.15))),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ], // end if (showCreateHousehold)
+          // ── Camera scanner (secondary) ─────────────────────────────────
           Text(
             readingCard
                 ? '🔍 Reading card details…'
                 : 'Take a Photo of NID Card',
-            style: const TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 16,
-              color: Colors.white,
-            ),
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: Colors.white),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 6),
@@ -290,13 +495,12 @@ class _ScannerBody extends StatelessWidget {
             readingCard
                 ? 'Reading the NID number…'
                 : cameraUnavailable
-                ? 'Camera unavailable — use Create Household below'
+                ? 'Camera unavailable'
                 : 'Position the card within the frame',
             style: const TextStyle(fontSize: 12, color: AppColors.onDarkLow),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 20),
-          // Viewfinder with live camera preview
+          const SizedBox(height: 16),
           _Viewfinder(
             isScanning: isScanning,
             sweep: sweep,
@@ -319,10 +523,7 @@ class _ScannerBody extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: Colors.white,
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.3),
-                  width: 4,
-                ),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 4),
               ),
               child: Center(
                 child: Container(
@@ -339,110 +540,16 @@ class _ScannerBody extends StatelessWidget {
                   child: (isScanning || readingCard)
                       ? const Padding(
                           padding: EdgeInsets.all(AppSpacing.xxxl),
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppColors.textPrimary,
-                          ),
+                          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textPrimary),
                         )
-                      : const Icon(
-                          Icons.camera_alt,
-                          color: AppColors.textPrimary,
-                          size: 24,
-                        ),
+                      : const Icon(Icons.camera_alt, color: AppColors.textPrimary, size: 24),
                 ),
               ),
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Tap to capture',
-            style: TextStyle(fontSize: 11, color: AppColors.onDarkFaint),
-          ),
+          const Text('Tap to capture', style: TextStyle(fontSize: 11, color: AppColors.onDarkFaint)),
           const SizedBox(height: 20),
-          // Or divider
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  height: 1,
-                  color: Colors.white.withValues(alpha: 0.15),
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12),
-                child: Text(
-                  'or',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.onDarkFaint,
-                  ),
-                ),
-              ),
-              Expanded(
-                child: Container(
-                  height: 1,
-                  color: Colors.white.withValues(alpha: 0.15),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          // Create Household card
-          GestureDetector(
-            onTap: onCreateHousehold,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.12),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.25),
-                  width: 1.5,
-                ),
-                borderRadius: BorderRadius.circular(AppRadius.patRow),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.home_outlined,
-                    color: Colors.white,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 10),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Create Household',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                          ),
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          'Register a new household manually',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: AppColors.onDarkLow,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Icon(
-                    Icons.chevron_right,
-                    color: AppColors.onDarkFaint,
-                    size: 16,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
           // Cancel
           GestureDetector(
             onTap: onCancel,
@@ -466,7 +573,24 @@ class _ScannerBody extends StatelessWidget {
               ),
             ),
           ),
-        ],
+      ],
+    );
+
+    final screenH = MediaQuery.of(context).size.height;
+    final vPad = AppSpacing.h5xl + AppSpacing.h6xl;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.h5xl,
+        AppSpacing.h5xl,
+        AppSpacing.h5xl,
+        AppSpacing.h6xl,
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: screenH - vPad),
+        child: Align(
+          alignment: Alignment.center,
+          child: content,
+        ),
       ),
     );
   }
