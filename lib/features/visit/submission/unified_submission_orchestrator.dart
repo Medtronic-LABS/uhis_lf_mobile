@@ -133,6 +133,8 @@ class UnifiedSubmissionOrchestrator {
       );
 
       await _localAssessmentDao.insert(entity);
+      // ignore: avoid_print
+      print('[Orchestrator] saved leg: type=${programme.wireTag} patientId=${draft.patientId} memberId=$memberId householdMemberLocalId=$householdMemberLocalId');
     }
 
     // Phase 6: shadow-log the completed assessment for eval dataset capture.

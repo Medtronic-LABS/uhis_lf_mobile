@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../../core/api/scribe_api_service.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/db/encounter_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/models/programme.dart';
@@ -133,6 +135,32 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         interval = const Duration(days: 30);
     }
     return now.add(interval).millisecondsSinceEpoch;
+  }
+
+  /// Extract vital signs from raw field values so they can be persisted to
+  /// the encounter row for offline display in VitalsRepository.
+  static Map<String, dynamic> _extractVitals(Map<String, dynamic> fv) {
+    final out = <String, dynamic>{};
+    void pick(String outKey, List<String> aliases) {
+      for (final k in aliases) {
+        if (fv.containsKey(k) && fv[k] != null) {
+          out[outKey] = fv[k];
+          return;
+        }
+      }
+    }
+
+    pick('systolic', ['systolic', 'systolicBp', 'bloodPressureSystolic']);
+    pick('diastolic', ['diastolic', 'diastolicBp', 'bloodPressureDiastolic']);
+    pick('pulse', ['pulse', 'heartRate', 'pulseRate']);
+    pick('glucose', ['glucose', 'bloodGlucose', 'glucoseValue', 'bg', 'fbs', 'rbs']);
+    pick('weight', ['weight', 'weightInKg']);
+    pick('height', ['height', 'heightInCm']);
+    pick('bmi', ['bmi', 'bodyMassIndex']);
+    pick('temperature', ['temperature', 'temp', 'bodyTemperature']);
+    pick('spO2', ['spO2', 'spo2', 'oxygenSaturation', 'oxygenLevel']);
+    pick('respiratoryRate', ['respiratoryRate', 'respiratoryRateValue', 'rr']);
+    return out;
   }
 
   Programme _getPrimaryProgramme() {
@@ -318,6 +346,20 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
           villageId: widget.villageId,
         );
         debugPrint('[VisitForm] orchestrator.submit done');
+
+        // Write vitals to the encounter row so VitalsRepository.recentByVisit()
+        // can display them on PatientContextScreen without a server round-trip.
+        if (ctx.mounted) {
+          final fieldValues =
+              jsonDecode(draft.fieldValues) as Map<String, dynamic>;
+          final vitalsMap = _extractVitals(fieldValues);
+          if (vitalsMap.isNotEmpty) {
+            await ctx
+                .read<EncounterDao>()
+                .updateVitals(draft.encounterId, vitalsMap);
+            debugPrint('[VisitForm] encounter vitals written: $vitalsMap');
+          }
+        }
 
         // Kick off backend sync for all pending assessments now saved by orchestrator
         if (ctx.mounted) {

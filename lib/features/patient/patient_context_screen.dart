@@ -221,7 +221,11 @@ class _PatientContextScreenState
 
     try {
       final drafts = await localDrafts.getByPatientId(stripped);
+      // ignore: avoid_print
+      print('[PatientContextScreen] localDrafts for patientId=$stripped count=${drafts.length}');
       for (final d in drafts) {
+        // ignore: avoid_print
+        print('[PatientContextScreen]   draft id=${d.id} type=${d.assessmentType} syncStatus=${d.syncStatus.name} storedPatientId=${d.patientId}');
         out.add(MemberAssessment(
           id: d.id.toString(),
           type: d.assessmentType.toUpperCase(),
