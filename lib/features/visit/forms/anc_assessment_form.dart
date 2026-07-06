@@ -349,7 +349,7 @@ class _AncAssessmentFormState extends State<AncAssessmentForm> {
     final d = dia ?? 0;
     if (s >= 160 || d >= 110) return '🚨 Urgent';
     if (s >= 140 || d >= 90) return '⚠ High';
-    if (s >= 130 || d >= 85) return 'Elevated';
+    if (s >= 130 || d >= 85) return 'Slightly elevated';
     return '✓ Normal';
   }
 
@@ -611,7 +611,22 @@ class _AncAssessmentFormState extends State<AncAssessmentForm> {
 
   Widget _buildPregnancyOverviewCard() {
     final weeks = widget.gestationalWeeks;
-    final weeksLabel = weeks != null ? '$weeks' : '—';
+    // Display as "Xw 0d" when only weeks known (no sub-week precision available).
+    final weeksLabel = weeks != null ? '${weeks}w 0d' : '—';
+
+    // Derive LMP and EDD from gestational weeks.
+    // LMP ≈ today − (weeks × 7) days; EDD ≈ LMP + 280 days.
+    String lmpLabel = '—';
+    String eddLabel = '—';
+    if (weeks != null) {
+      final today = DateTime.now();
+      final lmp = today.subtract(Duration(days: weeks * 7));
+      final edd = lmp.add(const Duration(days: 280));
+      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      lmpLabel = '${lmp.day} ${months[lmp.month - 1]} ${lmp.year}';
+      eddLabel = '${edd.day} ${months[edd.month - 1]} ${edd.year}';
+    }
 
     return Container(
       decoration: BoxDecoration(
@@ -672,14 +687,14 @@ class _AncAssessmentFormState extends State<AncAssessmentForm> {
                               weeksLabel,
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 28,
+                                fontSize: 26,
                                 fontWeight: FontWeight.w900,
                                 height: 1,
                               ),
                             ),
                             const SizedBox(width: 4),
                             const Text(
-                              'wks',
+                              '',
                               style: TextStyle(
                                 color: Color(0xB3FFFFFF),
                                 fontSize: 14,
@@ -708,13 +723,13 @@ class _AncAssessmentFormState extends State<AncAssessmentForm> {
                 Row(
                   children: [
                     Expanded(
-                      child: _navySubBox(label: '📅 LMP', value: '—'),
+                      child: _navySubBox(label: '📅 LMP', value: lmpLabel),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: _navySubBox(
                         label: '🍼 EDD',
-                        value: '—',
+                        value: eddLabel,
                         valueColor: const Color(0xFFFDE68A),
                       ),
                     ),
@@ -886,23 +901,47 @@ class _AncAssessmentFormState extends State<AncAssessmentForm> {
       const SizedBox(height: 8),
 
       // Fundal height
-      _vitalCard(
-        iconEmoji: '📏',
-        iconBg: AppColors.ancSurface,
-        label: 'Fundal height',
-        banglaHint: weeks != null
-            ? 'ফান্ডাল হাইট · expected ~$weeks cm at $weeks wks'
-            : 'ফান্ডাল হাইট · cm',
-        child: _numInputSuffixed(
-          controller: _fundalHeightController,
-          hint: 'e.g. 28',
-          suffix: 'cm',
-          onChanged: (_) {
-            setState(() {});
-            _updateData();
-          },
-        ),
-      ),
+      Builder(builder: (_) {
+        final entered = double.tryParse(_fundalHeightController.text);
+        final expectedCm = weeks?.toDouble();
+        Widget? lagWidget;
+        if (entered != null && expectedCm != null && entered <= expectedCm - 2) {
+          final lag = (expectedCm - entered).toStringAsFixed(0);
+          lagWidget = Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            decoration: BoxDecoration(
+              color: AppColors.statusWarningSurface,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              '⚠ $lag cm behind',
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: AppColors.statusWarningText,
+              ),
+            ),
+          );
+        }
+        return _vitalCard(
+          iconEmoji: '📏',
+          iconBg: AppColors.ancSurface,
+          label: 'Fundal height',
+          banglaHint: weeks != null
+              ? 'ফান্ডাল হাইট · expected ~$weeks cm at ${weeks}w'
+              : 'ফান্ডাল হাইট · cm',
+          statusWidget: lagWidget,
+          child: _numInputSuffixed(
+            controller: _fundalHeightController,
+            hint: 'e.g. 28',
+            suffix: 'cm',
+            onChanged: (_) {
+              setState(() {});
+              _updateData();
+            },
+          ),
+        );
+      }),
       const SizedBox(height: 8),
 
       // Fetal movement

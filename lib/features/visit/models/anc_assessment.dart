@@ -510,6 +510,7 @@ class AncDangerSignsOptions {
     'Severe abdominal pain',
     'Persistent vomiting',
     'Fever',
+    'Fever / burning while urinating',
     'Headache',
     'Convulsions',
   ];
@@ -520,6 +521,7 @@ class AncDangerSignsOptions {
     'Severe abdominal pain',
     'Leaking fluid',
     'Fever',
+    'Fever / burning while urinating',
     'Severe headache',
     'Blurred vision',
     'Convulsions',
@@ -533,6 +535,7 @@ class AncDangerSignsOptions {
     'Leaking fluid',
     'Reduced fetal movement',
     'Fever',
+    'Fever / burning while urinating',
     'Severe headache',
     'Blurred vision',
     'Convulsions',
