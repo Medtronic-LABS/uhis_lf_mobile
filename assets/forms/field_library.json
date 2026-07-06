@@ -251,7 +251,7 @@
     "widgetHint": "CardView",
     "familyOrder": 1,
     "visibility": "gone",
-    "titleCulture": "\u0997\u09b0\u09cd\u09ad\u09be\u09ac\u09b8\u09cd\u09a5\u09be\u09b0 \u0987\u09a4\u09bf\u09b9\u09be\u09b8",
+    "titleCulture": "গর্ভাবস্থার ইতিহাস",
     "programmes": [
       {
         "id": "pncMother",
@@ -270,8 +270,8 @@
     "isEnabled": true,
     "visibility": "gone",
     "hint": "[Enter number]",
-    "hintCulture": "[\u09b8\u0982\u0996\u09cd\u09af\u09be \u09b2\u09bf\u0996\u09c1\u09a8]",
-    "titleCulture": "\u09b8\u09b0\u09cd\u09ac\u09ae\u09cb\u099f \u0997\u09b0\u09cd\u09ad\u09b8\u0982\u0996\u09cd\u09af\u09be (\u098f\u0987 \u0997\u09b0\u09cd\u09ad \u09b8\u09b9)",
+    "hintCulture": "[সংখ্যা লিখুন]",
+    "titleCulture": "সর্বমোট গর্ভসংখ্যা (এই গর্ভ সহ)",
     "minValue": 1,
     "inputType": "integer",
     "clinicalConcept": [
@@ -306,8 +306,8 @@
     "isEnabled": true,
     "visibility": "gone",
     "hint": "[Enter number]",
-    "hintCulture": "[\u09b8\u0982\u0996\u09cd\u09af\u09be \u09b2\u09bf\u0996\u09c1\u09a8]",
-    "titleCulture": "\u099c\u09a8\u09cd\u09ae \u09b8\u0982\u0996\u09cd\u09af\u09be (\u09ae\u09cb\u099f \u09b8\u09a8\u09cd\u09a4\u09be\u09a8 \u099c\u09a8\u09cd\u09ae\u09a6\u09be\u09a8\u09c7\u09b0 \u09b8\u0982\u0996\u09cd\u09af\u09be)",
+    "hintCulture": "[সংখ্যা লিখুন]",
+    "titleCulture": "জন্ম সংখ্যা (মোট সন্তান জন্মদানের সংখ্যা)",
     "minValue": 1,
     "isInfo": "visible",
     "infoTitle": "Includes current pregnancy outcome",
@@ -344,8 +344,8 @@
     "isEnabled": true,
     "visibility": "gone",
     "hint": "[Enter number]",
-    "hintCulture": "[\u09b8\u0982\u0996\u09cd\u09af\u09be \u09b2\u09bf\u0996\u09c1\u09a8]",
-    "titleCulture": "\u099c\u09c0\u09ac\u09bf\u09a4 \u09b8\u09a8\u09cd\u09a4\u09be\u09a8 \u09b8\u0982\u0996\u09cd\u09af\u09be",
+    "hintCulture": "[সংখ্যা লিখুন]",
+    "titleCulture": "জীবিত সন্তান সংখ্যা",
     "minValue": 1,
     "infoTitle": "Includes current pregnancy outcome-newborn",
     "inputType": "integer",
@@ -377,7 +377,7 @@
     "widgetHint": "CardView",
     "familyOrder": 2,
     "visibility": "visible",
-    "titleCulture": "\u09ae\u09be\u09a4\u09c3\u09b8\u09cd\u09ac\u09be\u09b8\u09cd\u09a5\u09cd\u09af \u09ae\u09c2\u09b2\u09cd\u09af\u09be\u09af\u09bc\u09a8",
+    "titleCulture": "মাতৃস্বাস্থ্য মূল্যায়ন",
     "programmes": [
       {
         "id": "pncMother",
@@ -396,12 +396,12 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "[Enter number]",
-    "hintCulture": "[\u09b8\u0982\u0996\u09cd\u09af\u09be \u09b2\u09bf\u0996\u09c1\u09a8]",
-    "titleCulture": "\u09a4\u09be\u09aa\u09ae\u09be\u09a4\u09cd\u09b0\u09be (\u09ab\u09be\u09b0\u09c7\u09a8\u09b9\u09be\u0987\u099f)",
-    "unitMeasurement": "\u00b0F",
+    "hintCulture": "[সংখ্যা লিখুন]",
+    "titleCulture": "তাপমাত্রা (ফারেনহাইট)",
+    "unitMeasurement": "°F",
     "minValue": 0,
     "isInfo": "visible",
-    "infoTitle": "0 \u2013 If temperature could not be measured",
+    "infoTitle": "0 – If temperature could not be measured",
     "applyDecimalFilter": true,
     "inputType": "decimal",
     "clinicalConcept": [
@@ -441,8 +441,8 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "[Enter number]",
-    "hintCulture": "[\u09b8\u0982\u0996\u09cd\u09af\u09be \u09b2\u09bf\u0996\u09c1\u09a8]",
-    "titleCulture": "\u09a8\u09be\u09dc\u09bf\u09b0 \u0997\u09a4\u09bf (\u09aa\u09cd\u09b0\u09a4\u09bf \u09ae\u09bf\u09a8\u09bf\u099f\u09c7)",
+    "hintCulture": "[সংখ্যা লিখুন]",
+    "titleCulture": "নাড়ির গতি (প্রতি মিনিটে)",
     "unitMeasurement": "per minute",
     "inputType": "integer",
     "clinicalConcept": [
@@ -482,12 +482,12 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "[Enter number]",
-    "hintCulture": "[\u09b8\u0982\u0996\u09cd\u09af\u09be \u09b2\u09bf\u0996\u09c1\u09a8]",
-    "titleCulture": "\u0993\u099c\u09a8(\u0995\u09c7\u099c\u09bf)",
+    "hintCulture": "[সংখ্যা লিখুন]",
+    "titleCulture": "ওজন(কেজি)",
     "unitMeasurement": "kg",
     "minValue": 0,
     "isInfo": "visible",
-    "infoTitle": "0 \u2013 If the weight could not be measured",
+    "infoTitle": "0 – If the weight could not be measured",
     "applyDecimalFilter": true,
     "inputType": "decimal",
     "clinicalConcept": [
@@ -546,7 +546,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0986\u0997\u09c7 \u09a5\u09c7\u0995\u09c7\u0987 \u0989\u099a\u09cd\u099a \u09b0\u0995\u09cd\u09a4\u099a\u09be\u09aa \u0986\u099b\u09c7 \u0995\u09bf\u09a8\u09be?",
+    "titleCulture": "আগে থেকেই উচ্চ রক্তচাপ আছে কিনা?",
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -563,7 +563,7 @@
     ],
     "optionsList": [
       {
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "id": "yes",
         "name": "Yes",
         "clinicalConcept": [
@@ -575,7 +575,7 @@
         ]
       },
       {
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "id": "no",
         "name": "No",
         "clinicalConcept": [
@@ -597,7 +597,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09ac\u09b0\u09cd\u09a4\u09ae\u09be\u09a8 \u0997\u09b0\u09cd\u09ad\u09be\u09ac\u09b8\u09cd\u09a5\u09be\u09af\u09bc \u09aa\u09cd\u09b0\u09bf-\u098f\u0995\u09cd\u09b2\u09cd\u09af\u09be\u09ae\u09cd\u09aa\u09b8\u09bf\u09af\u09bc\u09be / \u098f\u0995\u09cd\u09b2\u09cd\u09af\u09be\u09ae\u09cd\u09aa\u09b8\u09bf\u09af\u09bc\u09be \u099b\u09bf\u09b2 \u0995\u09bf \u09a8\u09be?",
+    "titleCulture": "বর্তমান গর্ভাবস্থায় প্রি-এক্ল্যাম্পসিয়া / এক্ল্যাম্পসিয়া ছিল কি না?",
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -614,7 +614,7 @@
     ],
     "optionsList": [
       {
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "id": "yes",
         "name": "Yes",
         "clinicalConcept": [
@@ -626,7 +626,7 @@
         ]
       },
       {
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "id": "no",
         "name": "No",
         "clinicalConcept": [
@@ -648,7 +648,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0989\u099a\u09cd\u099a \u09b0\u0995\u09cd\u09a4\u099a\u09be\u09aa\u09c7\u09b0 /  \u09aa\u09cd\u09b0\u09bf-\u098f\u0995\u09cd\u09b2\u09cd\u09af\u09be\u09ae\u09cd\u09aa\u09b8\u09bf\u09af\u09bc\u09be / \u098f\u0995\u09cd\u09b2\u09cd\u09af\u09be\u09ae\u09cd\u09aa\u09b8\u09bf\u09af\u09bc\u09be \u099a\u09bf\u0995\u09bf\u09ce\u09b8\u09be \u09a8\u09bf\u099a\u09cd\u099b\u09c7\u09a8 \u0995\u09bf \u09a8\u09be?",
+    "titleCulture": "উচ্চ রক্তচাপের /  প্রি-এক্ল্যাম্পসিয়া / এক্ল্যাম্পসিয়া চিকিৎসা নিচ্ছেন কি না?",
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -665,7 +665,7 @@
     ],
     "optionsList": [
       {
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "id": "yes",
         "name": "Yes",
         "clinicalConcept": [
@@ -677,7 +677,7 @@
         ]
       },
       {
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "id": "no",
         "name": "No",
         "clinicalConcept": [
@@ -699,7 +699,7 @@
     "isMandatory": false,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09b0\u0995\u09cd\u09a4\u099a\u09be\u09aa",
+    "titleCulture": "রক্তচাপ",
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -735,11 +735,11 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "[Enter number]",
-    "hintCulture": "[\u09b8\u0982\u0996\u09cd\u09af\u09be \u09b2\u09bf\u0996\u09c1\u09a8]",
-    "titleCulture": "\u09b8\u09bf\u09b8\u09cd\u099f\u09cb\u09b2\u09bf\u0995",
+    "hintCulture": "[সংখ্যা লিখুন]",
+    "titleCulture": "সিস্টোলিক",
     "unitMeasurement": "mmHg",
     "isInfo": "visible",
-    "infoTitle": "0 \u2013If BP could not be measured",
+    "infoTitle": "0 –If BP could not be measured",
     "inputType": "integer",
     "clinicalConcept": [
       {
@@ -776,11 +776,11 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "[Enter number]",
-    "hintCulture": "[\u09b8\u0982\u0996\u09cd\u09af\u09be \u09b2\u09bf\u0996\u09c1\u09a8]",
-    "titleCulture": "\u09a1\u09be\u09af\u09bc\u09be\u09b8\u09cd\u099f\u09cb\u09b2\u09bf\u0995",
+    "hintCulture": "[সংখ্যা লিখুন]",
+    "titleCulture": "ডায়াস্টোলিক",
     "unitMeasurement": "mmHg",
     "isInfo": "visible",
-    "infoTitle": "0 \u2013If BP could not be measured",
+    "infoTitle": "0 –If BP could not be measured",
     "inputType": "integer",
     "clinicalConcept": [
       {
@@ -816,7 +816,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0987\u09a1\u09bf\u09ae\u09be",
+    "titleCulture": "ইডিমা",
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -838,7 +838,7 @@
     ],
     "optionsList": [
       {
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "id": "present",
         "name": "Present",
         "clinicalConcept": [
@@ -850,7 +850,7 @@
         ]
       },
       {
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "id": "absent",
         "name": "Absent",
         "clinicalConcept": [
@@ -872,7 +872,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09aa\u09cd\u09b0\u09b8\u09cd\u09b0\u09be\u09ac \u09aa\u09b0\u09c0\u0995\u09cd\u09b7\u09be\u09af\u09bc \u0985\u09cd\u09af\u09be\u09b2\u09ac\u09c1\u09ae\u09bf\u09a8 \u0986\u099b\u09c7 \u0995\u09bf \u09a8\u09be?",
+    "titleCulture": "প্রস্রাব পরীক্ষায় অ্যালবুমিন আছে কি না?",
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -894,7 +894,7 @@
     ],
     "optionsList": [
       {
-        "cultureValue": "\u09e7\u0964\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "১।হ্যাঁ",
         "id": "Present",
         "name": "Present",
         "clinicalConcept": [
@@ -906,7 +906,7 @@
         ]
       },
       {
-        "cultureValue": "\u09e8\u0964 \u09a8\u09be",
+        "cultureValue": "২। না",
         "id": "Absent",
         "name": "Absent",
         "clinicalConcept": [
@@ -940,7 +940,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09aa\u09cd\u09b0\u09b8\u09cd\u09b0\u09be\u09ac \u09aa\u09b0\u09c0\u0995\u09cd\u09b7\u09be\u09af\u09bc \u09ac\u09bf\u09b2\u09bf\u09b0\u09c1\u09ac\u09bf\u09a8 \u0986\u099b\u09c7 \u0995\u09bf \u09a8\u09be?",
+    "titleCulture": "প্রস্রাব পরীক্ষায় বিলিরুবিন আছে কি না?",
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -962,7 +962,7 @@
     ],
     "optionsList": [
       {
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "id": "present",
         "name": "Present",
         "clinicalConcept": [
@@ -974,7 +974,7 @@
         ]
       },
       {
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "id": "absent",
         "name": "Absent",
         "clinicalConcept": [
@@ -1009,12 +1009,12 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "[Enter number]",
-    "hintCulture": "[\u09b8\u0982\u0996\u09cd\u09af\u09be \u09b2\u09bf\u0996\u09c1\u09a8]",
-    "titleCulture": "\u09b9\u09bf\u09ae\u09cb\u0997\u09cd\u09b2\u09cb\u09ac\u09bf\u09a8 (Hb)- \u09b0\u0995\u09cd\u09a4 \u09aa\u09b0\u09c0\u0995\u09cd\u09b7\u09be",
+    "hintCulture": "[সংখ্যা লিখুন]",
+    "titleCulture": "হিমোগ্লোবিন (Hb)- রক্ত পরীক্ষা",
     "unitMeasurement": "g/dL",
     "minValue": 0,
     "isInfo": "visible",
-    "infoTitle": "0 \u2013 If Hb could not be measured",
+    "infoTitle": "0 – If Hb could not be measured",
     "applyDecimalFilter": true,
     "inputType": "decimal",
     "clinicalConcept": [
@@ -1046,7 +1046,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0986\u0997\u09c7 \u09a5\u09c7\u0995\u09c7\u0987 \u09a1\u09be\u09af\u09bc\u09be\u09ac\u09c7\u099f\u09bf\u09b8 \u0986\u099b\u09c7 \u0995\u09bf\u09a8\u09be?",
+    "titleCulture": "আগে থেকেই ডায়াবেটিস আছে কিনা?",
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -1063,7 +1063,7 @@
     ],
     "optionsList": [
       {
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "id": "yes",
         "name": "Yes",
         "clinicalConcept": [
@@ -1075,7 +1075,7 @@
         ]
       },
       {
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "id": "no",
         "name": "No",
         "clinicalConcept": [
@@ -1097,7 +1097,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0997\u09b0\u09cd\u09ad\u0995\u09be\u09b2\u09c0\u09a8/  \u0997\u09b0\u09cd\u09ad\u09be\u09ac\u09b8\u09cd\u09a5\u09be\u09af\u09bc \u09a1\u09be\u09af\u09bc\u09be\u09ac\u09c7\u099f\u09bf\u09b8 \u099b\u09bf\u09b2 \u0995\u09bf\u09a8\u09be?",
+    "titleCulture": "গর্ভকালীন/  গর্ভাবস্থায় ডায়াবেটিস ছিল কিনা?",
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -1114,7 +1114,7 @@
     ],
     "optionsList": [
       {
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "id": "yes",
         "name": "Yes",
         "clinicalConcept": [
@@ -1126,7 +1126,7 @@
         ]
       },
       {
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "id": "no",
         "name": "No",
         "clinicalConcept": [
@@ -1148,7 +1148,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09a1\u09be\u09af\u09bc\u09be\u09ac\u09c7\u099f\u09bf\u09b8 / \u0997\u09b0\u09cd\u09ad\u0995\u09be\u09b2\u09c0\u09a8 \u09a1\u09be\u09af\u09bc\u09be\u09ac\u09c7\u099f\u09bf\u09b8\u09c7\u09b0 \u099a\u09bf\u0995\u09bf\u09ce\u09b8\u09be \u09a8\u09bf\u099a\u09cd\u099b\u09c7\u09a8 \u0995\u09bf \u09a8\u09be?",
+    "titleCulture": "ডায়াবেটিস / গর্ভকালীন ডায়াবেটিসের চিকিৎসা নিচ্ছেন কি না?",
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -1165,7 +1165,7 @@
     ],
     "optionsList": [
       {
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "id": "yes",
         "name": "Yes",
         "clinicalConcept": [
@@ -1177,7 +1177,7 @@
         ]
       },
       {
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "id": "no",
         "name": "No",
         "clinicalConcept": [
@@ -1199,7 +1199,7 @@
     "isMandatory": false,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09aa\u09cd\u09b0\u09b8\u09cd\u09b0\u09be\u09ac \u09aa\u09b0\u09c0\u0995\u09cd\u09b7\u09be\u09af\u09bc \u09ac\u09bf\u09b2\u09bf\u09b0\u09c1\u09ac\u09bf\u09a8 \u0986\u099b\u09c7 \u0995\u09bf \u09a8\u09be?",
+    "titleCulture": "প্রস্রাব পরীক্ষায় বিলিরুবিন আছে কি না?",
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -1226,12 +1226,12 @@
     ],
     "optionsList": [
       {
-        "cultureValue": "\u09ab\u09be\u09b8\u09cd\u099f\u09bf\u0982",
+        "cultureValue": "ফাস্টিং",
         "id": "fasting",
         "name": "Fasting"
       },
       {
-        "cultureValue": "\u09ac\u09be \u09b0\u200d\u09cd\u09af\u09be\u09a8\u09cd\u09a1\u09ae",
+        "cultureValue": "বা র‍্যান্ডম",
         "id": "random",
         "name": "Random"
       }
@@ -1259,12 +1259,12 @@
     "isEnabled": true,
     "visibility": "gone",
     "hint": "[Enter number]",
-    "hintCulture": "[\u09b8\u0982\u0996\u09cd\u09af\u09be \u09b2\u09bf\u0996\u09c1\u09a8]",
-    "titleCulture": "\u09ab\u09be\u09b8\u09cd\u099f\u09bf\u0982",
+    "hintCulture": "[সংখ্যা লিখুন]",
+    "titleCulture": "ফাস্টিং",
     "unitMeasurement": "mmol/L",
     "minValue": 0,
     "isInfo": "visible",
-    "infoTitle": "0 \u2013If  Blood sugar could not be measured",
+    "infoTitle": "0 –If  Blood sugar could not be measured",
     "applyDecimalFilter": true,
     "inputType": "decimal",
     "clinicalConcept": [
@@ -1292,12 +1292,12 @@
     "isEnabled": true,
     "visibility": "gone",
     "hint": "[Enter number]",
-    "hintCulture": "[\u09b8\u0982\u0996\u09cd\u09af\u09be \u09b2\u09bf\u0996\u09c1\u09a8]",
-    "titleCulture": "\u09ac\u09be \u09b0\u200d\u09cd\u09af\u09be\u09a8\u09cd\u09a1\u09ae",
+    "hintCulture": "[সংখ্যা লিখুন]",
+    "titleCulture": "বা র‍্যান্ডম",
     "unitMeasurement": "mmol/L",
     "minValue": 0,
     "isInfo": "visible",
-    "infoTitle": "0 \u2013If  Blood sugar could not be measured",
+    "infoTitle": "0 –If  Blood sugar could not be measured",
     "applyDecimalFilter": true,
     "inputType": "decimal",
     "clinicalConcept": [
@@ -1325,8 +1325,8 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "Danger signs",
-    "hintCulture": "\u09ac\u09bf\u09aa\u09a6 \u099a\u09bf\u09b9\u09cd\u09a8",
-    "titleCulture": "\u09aa\u09cd\u09b0\u09b8\u09ac\u09c7\u09b0 \u09aa\u09b0 \u0995\u09cb\u09a8\u09cb \u099c\u099f\u09bf\u09b2\u09a4\u09be \u0986\u099b\u09c7 \u0995\u09bf?",
+    "hintCulture": "বিপদ চিহ্ন",
+    "titleCulture": "প্রসবের পর কোনো জটিলতা আছে কি?",
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -1343,7 +1343,7 @@
     ],
     "optionsList": [
       {
-        "cultureValue": "\u0985\u09a4\u09bf\u09b0\u09bf\u0995\u09cd\u09a4 \u09b0\u0995\u09cd\u09a4\u0995\u09cd\u09b7\u09b0\u09a3 (\u09e9\u09e6 \u09ae\u09bf\u09a8\u09bf\u099f\u09c7 \u09e8\u099f\u09be \u09aa\u09cd\u09af\u09be\u09a1 \u09ad\u09bf\u099c\u09c7 \u09af\u09be\u099a\u09cd\u099b\u09c7 )",
+        "cultureValue": "অতিরিক্ত রক্তক্ষরণ (৩০ মিনিটে ২টা প্যাড ভিজে যাচ্ছে )",
         "displayOrder": 1,
         "id": 1,
         "name": "Heavy bleeding",
@@ -1358,7 +1358,7 @@
         ]
       },
       {
-        "cultureValue": "\u09a6\u09c1\u09b0\u09cd\u0997\u09a8\u09cd\u09a7\u09af\u09c1\u0995\u09cd\u09a4 \u09b8\u09cd\u09b0\u09be\u09ac",
+        "cultureValue": "দুর্গন্ধযুক্ত স্রাব",
         "displayOrder": 2,
         "id": 2,
         "name": "Foul-smelling discharge",
@@ -1373,7 +1373,7 @@
         ]
       },
       {
-        "cultureValue": "\u09a4\u09c0\u09ac\u09cd\u09b0 \u09a4\u09b2 \u09aa\u09c7\u099f\u09c7\u09b0/ \u09a4\u09b2 \u09aa\u09c7\u099f\u09c7\u09b0 \u09ac\u09cd\u09af\u09a5\u09be",
+        "cultureValue": "তীব্র তল পেটের/ তল পেটের ব্যথা",
         "displayOrder": 3,
         "id": 3,
         "name": "Severe abdominal pain",
@@ -1388,7 +1388,7 @@
         ]
       },
       {
-        "cultureValue": "\u09a4\u09c0\u09ac\u09cd\u09b0 \u09ae\u09be\u09a5\u09be\u09ac\u09cd\u09af\u09a5\u09be / \u09a6\u09c3\u09b7\u09cd\u099f\u09bf \u09b8\u09ae\u09b8\u09cd\u09af\u09be / \u0996\u09bf\u0981\u099a\u09c1\u09a8\u09bf",
+        "cultureValue": "তীব্র মাথাব্যথা / দৃষ্টি সমস্যা / খিঁচুনি",
         "displayOrder": 4,
         "id": 4,
         "name": "Severe headache/vision/convulsions",
@@ -1403,7 +1403,7 @@
         ]
       },
       {
-        "cultureValue": "\u09aa\u09be\u09b0\u09bf\u09a8\u09bf\u09af\u09bc\u09be\u09b2 \u0995\u09cd\u09b7\u09a4\u09c7\u09b0 \u09b8\u09cd\u09b0\u09be\u09ac/ \u09aa\u09c7\u09b0\u09bf\u09a8\u09bf\u09af\u09bc\u09be\u09ae \u099f\u09bf\u09af\u09bc\u09be\u09b0/ \u099b\u09c7\u0981\u09a1\u09bc\u09be",
+        "cultureValue": "পারিনিয়াল ক্ষতের স্রাব/ পেরিনিয়াম টিয়ার/ ছেঁড়া",
         "displayOrder": 5,
         "id": 5,
         "name": "Perineal wound discharge",
@@ -1418,7 +1418,7 @@
         ]
       },
       {
-        "cultureValue": "\u09b8\u09cd\u09a4\u09a8\u09c7\u09b0 \u09ac\u09cd\u09af\u09a5\u09be \u09ac\u09be \u09ab\u09cb\u09b2\u09be \u09b8\u09b9 \u099c\u09cd\u09ac\u09b0",
+        "cultureValue": "স্তনের ব্যথা বা ফোলা সহ জ্বর",
         "displayOrder": 6,
         "id": 6,
         "name": "Breast pain/swelling with fever",
@@ -1426,7 +1426,7 @@
         "value": "breastPainSwellingFever"
       },
       {
-        "cultureValue": "\u0995\u09cb\u09a8\u09cb\u099f\u09bf\u0987 \u09a8\u09c7\u0987",
+        "cultureValue": "কোনোটিই নেই",
         "displayOrder": 7,
         "id": 7,
         "name": "None",
@@ -1441,7 +1441,7 @@
         ]
       },
       {
-        "cultureValue": "\u0995\u09cb\u09a8\u09cb\u099f\u09bf\u0987 \u09a8\u09c7\u0987",
+        "cultureValue": "কোনোটিই নেই",
         "displayOrder": 8,
         "id": 8,
         "name": "Other",
@@ -1466,7 +1466,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09ad\u09bf\u099f\u09be\u09ae\u09bf\u09a8 \u098f \u0995\u09cd\u09af\u09be\u09aa\u09b8\u09c1\u09b2 \u09a6\u09c7\u09af\u09bc\u09be \u09b9\u09af\u09bc\u09c7\u099b\u09c7 \u0995\u09bf\u09a8\u09be?",
+    "titleCulture": "ভিটামিন এ ক্যাপসুল দেয়া হয়েছে কিনা?",
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -1485,7 +1485,7 @@
     ],
     "optionsList": [
       {
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "id": "yes",
         "name": "Yes",
         "clinicalConcept": [
@@ -1497,7 +1497,7 @@
         ]
       },
       {
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "id": "no",
         "name": "No",
         "clinicalConcept": [
@@ -1518,7 +1518,7 @@
     "orderId": 21,
     "isEnabled": false,
     "visibility": "visible",
-    "titleCulture": "\u0995\u09a4\u099f\u09bf \u0986\u09af\u09bc\u09b0\u09a8 \u09ac\u09a1\u09bc\u09bf \u0996\u09c7\u09af\u09bc\u09c7\u099b\u09c7\u09a8?",
+    "titleCulture": "কতটি আয়রন বড়ি খেয়েছেন?",
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -1549,8 +1549,8 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "[Enter number]",
-    "hintCulture": "[\u09b8\u0982\u0996\u09cd\u09af\u09be \u09b2\u09bf\u0996\u09c1\u09a8]",
-    "titleCulture": "\u098f \u09aa\u09b0\u09cd\u09af\u09a8\u09cd\u09a4 \u09ae\u09cb\u099f \u09b8\u09c7\u09ac\u09a8",
+    "hintCulture": "[সংখ্যা লিখুন]",
+    "titleCulture": "এ পর্যন্ত মোট সেবন",
     "minValue": 0,
     "inputType": "integer",
     "clinicalConcept": [
@@ -1580,8 +1580,8 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "[Enter number]",
-    "hintCulture": "[\u09b8\u0982\u0996\u09cd\u09af\u09be \u09b2\u09bf\u0996\u09c1\u09a8]",
-    "titleCulture": "\u09aa\u09cd\u09b0\u09a6\u09a4\u09cd\u09a4 \u0994\u09b7\u09a7 / \u09b8\u09be\u09aa\u09cd\u09b2\u09bf\u09ae\u09c7\u09a8\u09cd\u099f",
+    "hintCulture": "[সংখ্যা লিখুন]",
+    "titleCulture": "প্রদত্ত ঔষধ / সাপ্লিমেন্ট",
     "minValue": 0,
     "inputType": "integer",
     "clinicalConcept": [
@@ -1609,7 +1609,7 @@
     "orderId": 24,
     "isEnabled": false,
     "visibility": "visible",
-    "titleCulture": "\u0995\u09a4\u099f\u09bf \u0995\u09cd\u09af\u09be\u09b2\u09b8\u09bf\u09af\u09bc\u09be\u09ae \u09ac\u09a1\u09bc\u09bf \u0996\u09c7\u09af\u09bc\u09c7\u099b\u09c7\u09a8?",
+    "titleCulture": "কতটি ক্যালসিয়াম বড়ি খেয়েছেন?",
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -1640,8 +1640,8 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "[Enter number]",
-    "hintCulture": "[\u09b8\u0982\u0996\u09cd\u09af\u09be \u09b2\u09bf\u0996\u09c1\u09a8]",
-    "titleCulture": "\u098f \u09aa\u09b0\u09cd\u09af\u09a8\u09cd\u09a4 \u09ae\u09cb\u099f \u09b8\u09c7\u09ac\u09a8",
+    "hintCulture": "[সংখ্যা লিখুন]",
+    "titleCulture": "এ পর্যন্ত মোট সেবন",
     "minValue": 0,
     "inputType": "integer",
     "clinicalConcept": [
@@ -1671,8 +1671,8 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "[Enter number]",
-    "hintCulture": "[\u09b8\u0982\u0996\u09cd\u09af\u09be \u09b2\u09bf\u0996\u09c1\u09a8]",
-    "titleCulture": "\u09aa\u09cd\u09b0\u09a6\u09a4\u09cd\u09a4 \u0994\u09b7\u09a7 / \u09b8\u09be\u09aa\u09cd\u09b2\u09bf\u09ae\u09c7\u09a8\u09cd\u099f",
+    "hintCulture": "[সংখ্যা লিখুন]",
+    "titleCulture": "প্রদত্ত ঔষধ / সাপ্লিমেন্ট",
     "minValue": 0,
     "inputType": "integer",
     "clinicalConcept": [
@@ -1697,7 +1697,7 @@
     "label": "Postpartum Contraception",
     "widgetHint": "CardView",
     "familyOrder": 3,
-    "titleCulture": "\u09aa\u09cd\u09b0\u09b8\u09ac \u09aa\u09b0\u09ac\u09b0\u09cd\u09a4\u09c0 \u09aa\u09b0\u09bf\u09ac\u09be\u09b0 \u09aa\u09b0\u09bf\u0995\u09b2\u09cd\u09aa\u09a8\u09be \u09aa\u09a6\u09cd\u09a7\u09a4\u09bf\u09b0 \u09ac\u09cd\u09af\u09ac\u09b9\u09be\u09b0",
+    "titleCulture": "প্রসব পরবর্তী পরিবার পরিকল্পনা পদ্ধতির ব্যবহার",
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -1722,7 +1722,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0995\u09cb\u09a8 \u09a7\u09b0\u09a8\u09c7\u09b0 \u09aa\u09b0\u09bf\u09ac\u09be\u09b0 \u09aa\u09b0\u09bf\u0995\u09b2\u09cd\u09aa\u09a8\u09be \u09aa\u09a6\u09cd\u09a7\u09a4\u09bf \u09ac\u09cd\u09af\u09ac\u09b9\u09be\u09b0 \u0995\u09b0\u099b\u09c7\u09a8?",
+    "titleCulture": "কোন ধরনের পরিবার পরিকল্পনা পদ্ধতি ব্যবহার করছেন?",
     "localDataCache": "familyPlanningMethods",
     "clinicalConcept": [
       {
@@ -1745,7 +1745,7 @@
     ],
     "optionsList": [
       {
-        "cultureValue": "\u09aa\u09bf\u09b2",
+        "cultureValue": "পিল",
         "id": "pills",
         "name": "Pills",
         "clinicalConcept": [
@@ -1757,7 +1757,7 @@
         ]
       },
       {
-        "cultureValue": "\u0987\u099e\u09cd\u099c\u09c7\u0995\u09b6\u09be\u09a8",
+        "cultureValue": "ইঞ্জেকশান",
         "id": "injectables",
         "name": "Injectables",
         "clinicalConcept": [
@@ -1769,7 +1769,7 @@
         ]
       },
       {
-        "cultureValue": "\u09a8\u09b0\u09aa\u09cd\u09b2\u09be\u09a8\u09cd\u099f",
+        "cultureValue": "নরপ্লান্ট",
         "id": "implant",
         "name": "Implant",
         "clinicalConcept": [
@@ -1781,7 +1781,7 @@
         ]
       },
       {
-        "cultureValue": "\u0986\u0987 \u0987\u0989 \u09a1\u09bf  (\u0997\u09b0\u09cd\u09ad\u09a8\u09bf\u09b0\u09cb\u09a7\u0995 \u09af\u09a8\u09cd\u09a4\u09cd\u09b0)",
+        "cultureValue": "আই ইউ ডি  (গর্ভনিরোধক যন্ত্র)",
         "id": "iud",
         "name": "IUD",
         "clinicalConcept": [
@@ -1793,7 +1793,7 @@
         ]
       },
       {
-        "cultureValue": "\u0995\u09a8\u09cd\u09a1\u09ae",
+        "cultureValue": "কন্ডম",
         "id": "condoms",
         "name": "Condoms",
         "clinicalConcept": [
@@ -1805,17 +1805,17 @@
         ]
       },
       {
-        "cultureValue": "\u09ae\u09b9\u09bf\u09b2\u09be \u09ac\u09a8\u09cd\u09a7\u09cd\u09af\u09be\u0995\u09b0\u09a3",
+        "cultureValue": "মহিলা বন্ধ্যাকরণ",
         "id": "sterilizationFemale",
         "name": "Sterilization (F)"
       },
       {
-        "cultureValue": "\u09aa\u09c1\u09b0\u09c1\u09b7 \u09ac\u09a8\u09cd\u09a7\u09cd\u09af\u09be\u0995\u09b0\u09a3",
+        "cultureValue": "পুরুষ বন্ধ্যাকরণ",
         "id": "sterilizationMale",
         "name": "Sterilization (M)"
       },
       {
-        "cultureValue": "\u0995\u09cb\u09a8\u09cb\u099f\u09bf \u09a8\u09af\u09bc",
+        "cultureValue": "কোনোটি নয়",
         "id": "none",
         "name": "None",
         "clinicalConcept": [
@@ -1834,7 +1834,7 @@
     "widgetHint": "CardView",
     "familyOrder": 4,
     "visibility": "gone",
-    "titleCulture": "\u09aa\u09b0\u09be\u09ae\u09b0\u09cd\u09b6",
+    "titleCulture": "পরামর্শ",
     "isSummary": true,
     "programmes": [
       {
@@ -1856,7 +1856,7 @@
     "family": "counselling",
     "orderId": 1,
     "visibility": "gone",
-    "titleCulture": "\u09ae\u09be\u09af\u09bc\u09c7\u09b0 \u09af\u09a4\u09cd\u09a8",
+    "titleCulture": "মায়ের যত্ন",
     "isSummary": true,
     "programmes": [
       {
@@ -1873,7 +1873,7 @@
     "family": "counselling",
     "orderId": 2,
     "visibility": "gone",
-    "titleCulture": "\u09b8\u09ac \u09aa\u09b0\u09ac\u09b0\u09cd\u09a4\u09c0 \u09ae\u09be\u09df\u09c7\u09b0 \u09aa\u09b0\u09bf\u099a\u09b0\u09cd\u09af\u09be\u0983",
+    "titleCulture": "সব পরবর্তী মায়ের পরিচর্যাঃ",
     "isSummary": true,
     "programmes": [
       {
@@ -1890,7 +1890,7 @@
     "family": "counselling",
     "orderId": 3,
     "visibility": "gone",
-    "titleCulture": "\u09a8\u09ac\u099c\u09be\u09a4\u0995\u09c7\u09b0 \u09af\u09a4\u09cd\u09a8",
+    "titleCulture": "নবজাতকের যত্ন",
     "isSummary": true,
     "programmes": [
       {
@@ -1909,7 +1909,7 @@
     "orderId": 0,
     "isMandatory": false,
     "visibility": "gone",
-    "titleCulture": "\u09b0\u09c7\u09ab\u09be\u09b0\u09c7\u09b2 \u09b8\u09cd\u09ac\u09be\u09b8\u09cd\u09a5\u09cd\u09af\u09b8\u09c7\u09ac\u09be \u0995\u09c7\u09a8\u09cd\u09a6\u09cd\u09b0",
+    "titleCulture": "রেফারেল স্বাস্থ্যসেবা কেন্দ্র",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "clinicalConcept": [
@@ -1933,22 +1933,22 @@
     ],
     "optionsList": [
       {
-        "cultureValue": "\u0987\u0989\u09a8\u09bf\u09af\u09bc\u09a8 \u09b8\u09cd\u09ac\u09be\u09b8\u09cd\u09a5\u09cd\u09af \u0993 \u09aa\u09b0\u09bf\u09ac\u09be\u09b0 \u0995\u09b2\u09cd\u09af\u09be\u09a3 \u0995\u09c7\u09a8\u09cd\u09a6\u09cd\u09b0",
+        "cultureValue": "ইউনিয়ন স্বাস্থ্য ও পরিবার কল্যাণ কেন্দ্র",
         "id": "uhfwc",
         "name": "UHFWC (Union health and family welfare center)"
       },
       {
-        "cultureValue": "\u09ae\u09be\u09a4\u09c3 \u0993 \u09b6\u09bf\u09b6\u09c1 \u0995\u09b2\u09cd\u09af\u09be\u09a3 \u0995\u09c7\u09a8\u09cd\u09a6\u09cd\u09b0",
+        "cultureValue": "মাতৃ ও শিশু কল্যাণ কেন্দ্র",
         "id": "mcwc",
         "name": "MCWC (Mother and Child Welfare Center)"
       },
       {
-        "cultureValue": "\u0989\u09aa\u099c\u09c7\u09b2\u09be \u09b8\u09cd\u09ac\u09be\u09b8\u09cd\u09a5\u09cd\u09af \u0995\u09ae\u09aa\u09cd\u09b2\u09c7\u0995\u09cd\u09b8",
+        "cultureValue": "উপজেলা স্বাস্থ্য কমপ্লেক্স",
         "id": "uhc",
         "name": "UHC (Upazila Health complex)"
       },
       {
-        "cultureValue": "\u099c\u09c7\u09b2\u09be \u09b8\u09a6\u09b0 \u09b9\u09be\u09b8\u09aa\u09be\u09a4\u09be\u09b2",
+        "cultureValue": "জেলা সদর হাসপাতাল",
         "id": "districtHospital",
         "name": "District Hospital",
         "clinicalConcept": [
@@ -1960,7 +1960,7 @@
         ]
       },
       {
-        "cultureValue": "\u09ae\u09c7\u09a1\u09bf\u0995\u09c7\u09b2 \u0995\u09b2\u09c7\u099c \u09b9\u09be\u09b8\u09aa\u09be\u09a4\u09be\u09b2",
+        "cultureValue": "মেডিকেল কলেজ হাসপাতাল",
         "id": "medicalCollegeHospital",
         "name": "Medical College Hospital",
         "clinicalConcept": [
@@ -1978,7 +1978,7 @@
     "label": "Pregnancy Details & History",
     "widgetHint": "CardView",
     "familyOrder": 0,
-    "titleCulture": "\u0997\u09b0\u09cd\u09ad\u09be\u09ac\u09b8\u09cd\u09a5\u09be\u09b0 \u09ac\u09bf\u09ac\u09b0\u09a3 \u098f\u09ac\u0982 \u0987\u09a4\u09bf\u09b9\u09be\u09b8",
+    "titleCulture": "গর্ভাবস্থার বিবরণ এবং ইতিহাস",
     "programmes": [
       {
         "id": "pwProfile",
@@ -1997,8 +1997,8 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "DD-MM-YYYY",
-    "hintCulture": "\u09a6\u09bf\u09a8-\u09ae\u09be\u09b8-\u09ac\u099b\u09b0",
-    "titleCulture": "\u09b6\u09c7\u09b7 \u09ae\u09be\u09b8\u09bf\u0995 \u09b6\u09c1\u09b0\u09c1\u09b0 \u09a4\u09be\u09b0\u09bf\u0996",
+    "hintCulture": "দিন-মাস-বছর",
+    "titleCulture": "শেষ মাসিক শুরুর তারিখ",
     "errorMessage": "This field is required",
     "clinicalConcept": [
       {
@@ -2017,12 +2017,12 @@
   },
   "TooEarlyTitle": {
     "id": "TooEarlyTitle",
-    "label": "\u26a0\ufe0f Pregnancy Too Early to Assess",
+    "label": "⚠️ Pregnancy Too Early to Assess",
     "widgetHint": "TextLabel",
     "family": "pregnancyDetailsAndHistory",
     "orderId": 2,
     "visibility": "gone",
-    "titleCulture": "\u26a0\ufe0f \u0997\u09b0\u09cd\u09ad\u09be\u09ac\u09b8\u09cd\u09a5\u09be \u09ae\u09c2\u09b2\u09cd\u09af\u09be\u09af\u09bc\u09a8\u09c7\u09b0 \u099c\u09a8\u09cd\u09af \u0996\u09c1\u09ac \u09aa\u09cd\u09b0\u09be\u09a5\u09ae\u09bf\u0995 \u09aa\u09b0\u09cd\u09af\u09be\u09af\u09bc",
+    "titleCulture": "⚠️ গর্ভাবস্থা মূল্যায়নের জন্য খুব প্রাথমিক পর্যায়",
     "programmes": [
       {
         "id": "pwProfile",
@@ -2038,7 +2038,7 @@
     "family": "pregnancyDetailsAndHistory",
     "orderId": 3,
     "visibility": "gone",
-    "titleCulture": "\u098f\u09b2\u098f\u09ae\u09aa\u09bf \u09a5\u09c7\u0995\u09c7 \u09ec \u09b8\u09aa\u09cd\u09a4\u09be\u09b9 \u09aa\u09b0\u09c7\u0987 \u0995\u09c7\u09ac\u09b2 \u0997\u09b0\u09cd\u09ad\u09be\u09ac\u09b8\u09cd\u09a5\u09be \u09ae\u09c2\u09b2\u09cd\u09af\u09be\u09af\u09bc\u09a8 \u0995\u09b0\u09be \u09b8\u09ae\u09cd\u09ad\u09ac\u0964",
+    "titleCulture": "এলএমপি থেকে ৬ সপ্তাহ পরেই কেবল গর্ভাবস্থা মূল্যায়ন করা সম্ভব।",
     "programmes": [
       {
         "id": "pwProfile",
@@ -2054,7 +2054,7 @@
     "family": "pregnancyDetailsAndHistory",
     "orderId": 4,
     "visibility": "gone",
-    "titleCulture": "\u09b8\u09ae\u09cd\u09aa\u09c2\u09b0\u09cd\u09a3 \u0997\u09b0\u09cd\u09ad\u09be\u09ac\u09b8\u09cd\u09a5\u09be \u09aa\u09cd\u09b0\u09cb\u09ab\u09be\u0987\u09b2 \u09ae\u09c2\u09b2\u09cd\u09af\u09be\u09af\u09bc\u09a8\u09c7\u09b0 \u099c\u09a8\u09cd\u09af \u09a6\u09af\u09bc\u09be \u0995\u09b0\u09c7 \u09ec \u09b8\u09aa\u09cd\u09a4\u09be\u09b9 \u09aa\u09b0\u09c7 \u0986\u09ac\u09be\u09b0 \u0986\u09b8\u09c1\u09a8\u0964",
+    "titleCulture": "সম্পূর্ণ গর্ভাবস্থা প্রোফাইল মূল্যায়নের জন্য দয়া করে ৬ সপ্তাহ পরে আবার আসুন।",
     "programmes": [
       {
         "id": "pwProfile",
@@ -2065,15 +2065,15 @@
   },
   "EDDTitle": {
     "id": "EDDTitle",
-    "label": "\ud83d\udc76 EDD (Expected Date of Delivery)",
+    "label": "👶 EDD (Expected Date of Delivery)",
     "widgetHint": "TextLabel",
     "family": "pregnancyDetailsAndHistory",
     "orderId": 5,
     "isEnabled": false,
     "visibility": "gone",
     "hint": "[Auto-calculate]\nDD-MM-YYYY",
-    "hintCulture": "\u09a6\u09bf\u09a8-\u09ae\u09be\u09b8-\u09ac\u099b\u09b0",
-    "titleCulture": "\u09b8\u09ae\u09cd\u09ad\u09be\u09ac\u09cd\u09af \u09aa\u09cd\u09b0\u09b8\u09ac\u09c7\u09b0 \u09a4\u09be\u09b0\u09bf\u0996",
+    "hintCulture": "দিন-মাস-বছর",
+    "titleCulture": "সম্ভাব্য প্রসবের তারিখ",
     "programmes": [
       {
         "id": "pwProfile",
@@ -2107,15 +2107,15 @@
   },
   "gestationalWeekTitle": {
     "id": "gestationalWeekTitle",
-    "label": "\ud83d\udcc5 Gestational Week",
+    "label": "📅 Gestational Week",
     "widgetHint": "TextLabel",
     "family": "pregnancyDetailsAndHistory",
     "orderId": 6,
     "isEnabled": false,
     "visibility": "gone",
     "hint": "[Auto-calculate]\n_______ weeks",
-    "hintCulture": "[\u09b8\u09cd\u09ac\u09af\u09bc\u0982\u0995\u09cd\u09b0\u09bf\u09af\u09bc\u09ad\u09be\u09ac\u09c7 \u0997\u09a3\u09a8\u09be]\n_______ \u09b8\u09aa\u09cd\u09a4\u09be\u09b9",
-    "titleCulture": "\u0997\u09b0\u09cd\u09ad \u09b8\u09aa\u09cd\u09a4\u09be\u09b9",
+    "hintCulture": "[স্বয়ংক্রিয়ভাবে গণনা]\n_______ সপ্তাহ",
+    "titleCulture": "গর্ভ সপ্তাহ",
     "programmes": [
       {
         "id": "pwProfile",
@@ -2156,7 +2156,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u0997\u09b0\u09cd\u09ad\u09ac\u09a4\u09c0 \u09aa\u09b0\u09c0\u0995\u09cd\u09b7\u09be \u0995\u09bf \u0995\u09b0\u09c7\u099b\u09c7\u09a8?",
+    "titleCulture": "গর্ভবতী পরীক্ষা কি করেছেন?",
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -2173,7 +2173,7 @@
     ],
     "optionsList": [
       {
-        "cultureValue": "\u09e7. \u09b9\u09cd\u09af\u09be\u0981 \u2013 \u0997\u09b0\u09cd\u09ad\u09ac\u09a4\u09c0",
+        "cultureValue": "১. হ্যাঁ – গর্ভবতী",
         "id": "Positive",
         "name": "Done- Positive",
         "clinicalConcept": [
@@ -2185,7 +2185,7 @@
         ]
       },
       {
-        "cultureValue": "\u09e8. \u09a8\u09be",
+        "cultureValue": "২. না",
         "id": "NotDoneYet",
         "name": "Not done yet",
         "clinicalConcept": [
@@ -2208,8 +2208,8 @@
     "isEnabled": true,
     "visibility": "gone",
     "hint": "[Enter number]\n______ Yrs______Months\nIf child is < 1year old then show in months only (enter as 0 yrs and no.of months)",
-    "hintCulture": "[\u09b8\u0982\u0996\u09cd\u09af\u09be \u09b2\u09bf\u0996\u09c1\u09a8]\n______ \u09ac\u099b\u09b0 ______ \u09ae\u09be\u09b8\n\u09b6\u09bf\u09b6\u09c1\u09b0 \u09ac\u09df\u09b8 \u09e7 \u09ac\u099b\u09b0\u09c7\u09b0 \u0995\u09ae \u09b9\u09b2\u09c7 \u09b6\u09c1\u09a7\u09c1\u09ae\u09be\u09a4\u09cd\u09b0 \u09ae\u09be\u09b8\u09c7 \u09a6\u09c7\u0996\u09be\u09a8\u09cb \u09b9\u09ac\u09c7 (\u09e6 \u09ac\u099b\u09b0 \u098f\u09ac\u0982 \u09ae\u09cb\u099f \u09ae\u09be\u09b8 \u09b2\u09bf\u0996\u09c1\u09a8)\u0964",
-    "titleCulture": "\u09b8\u09ac\u099a\u09c7\u09df\u09c7 \u099b\u09cb\u099f \u09b8\u09a8\u09cd\u09a4\u09be\u09a8\u09c7\u09b0 \u09ac\u09df\u09b8 \u0995\u09a4?",
+    "hintCulture": "[সংখ্যা লিখুন]\n______ বছর ______ মাস\nশিশুর বয়স ১ বছরের কম হলে শুধুমাত্র মাসে দেখানো হবে (০ বছর এবং মোট মাস লিখুন)।",
+    "titleCulture": "সবচেয়ে ছোট সন্তানের বয়স কত?",
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -2237,7 +2237,7 @@
     "label": "Maternal Death",
     "widgetHint": "CardView",
     "familyOrder": 0,
-    "titleCulture": "\u09ae\u09be\u09a4\u09c3\u09ae\u09c3\u09a4\u09cd\u09af\u09c1",
+    "titleCulture": "মাতৃমৃত্যু",
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -2262,9 +2262,9 @@
     "orderId": 1,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09ae\u09c3\u09a4\u09cd\u09af\u09c1\u09b0 \u09b8\u09ae\u09af\u09bc",
+    "titleCulture": "মৃত্যুর সময়",
     "errorMessage": "Please select time of death",
-    "errorMessageCulture": "\u0985\u09a8\u09c1\u0997\u09cd\u09b0\u09b9 \u0995\u09b0\u09c7 \u09ae\u09c3\u09a4\u09cd\u09af\u09c1\u09b0 \u09b8\u09ae\u09af\u09bc \u09a8\u09bf\u09b0\u09cd\u09ac\u09be\u099a\u09a8 \u0995\u09b0\u09c1\u09a8",
+    "errorMessageCulture": "অনুগ্রহ করে মৃত্যুর সময় নির্বাচন করুন",
     "isSummary": false,
     "clinicalConcept": [
       {
@@ -2284,7 +2284,7 @@
       {
         "id": "beforeDelivery",
         "name": "Before delivery",
-        "cultureValue": "\u09aa\u09cd\u09b0\u09b8\u09ac\u09c7\u09b0 \u09aa\u09c2\u09b0\u09cd\u09ac\u09c7",
+        "cultureValue": "প্রসবের পূর্বে",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -2296,7 +2296,7 @@
       {
         "id": "duringChildbirth",
         "name": "During childbirth",
-        "cultureValue": "\u09aa\u09cd\u09b0\u09b8\u09ac\u09c7\u09b0 \u09b8\u09ae\u09af\u09bc",
+        "cultureValue": "প্রসবের সময়",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -2308,12 +2308,12 @@
       {
         "id": "within42DaysAfterDelivery",
         "name": "Within 42 days after Delivery",
-        "cultureValue": "\u09aa\u09cd\u09b0\u09b8\u09ac\u09c7\u09b0 \u09ea\u09e8 \u09a6\u09bf\u09a8\u09c7\u09b0 \u09ae\u09a7\u09cd\u09af\u09c7",
+        "cultureValue": "প্রসবের ৪২ দিনের মধ্যে",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
             "code": "237364002",
-            "display": "Postpartum \u226442 days"
+            "display": "Postpartum ≤42 days"
           }
         ]
       }
@@ -2443,10 +2443,10 @@
     "isEnabled": true,
     "visibility": "gone",
     "hint": "Enter gestation month",
-    "hintCulture": "\u0997\u09b0\u09cd\u09ad\u0995\u09be\u09b2 (\u09ae\u09be\u09b8) \u09b2\u09bf\u0996\u09c1\u09a8",
-    "titleCulture": "\u09ae\u09c3\u09a4\u09cd\u09af\u09c1\u09b0 \u09b8\u09ae\u09af\u09bc \u0997\u09b0\u09cd\u09ad\u0995\u09be\u09b2 (\u09ae\u09be\u09b8)",
+    "hintCulture": "গর্ভকাল (মাস) লিখুন",
+    "titleCulture": "মৃত্যুর সময় গর্ভকাল (মাস)",
     "errorMessage": "Please enter gestation month",
-    "errorMessageCulture": "\u0985\u09a8\u09c1\u0997\u09cd\u09b0\u09b9 \u0995\u09b0\u09c7 \u0997\u09b0\u09cd\u09ad\u0995\u09be\u09b2 (\u09ae\u09be\u09b8) \u09b2\u09bf\u0996\u09c1\u09a8",
+    "errorMessageCulture": "অনুগ্রহ করে গর্ভকাল (মাস) লিখুন",
     "minValue": 1,
     "maxValue": 10,
     "isSummary": false,
@@ -2477,10 +2477,10 @@
     "isEnabled": true,
     "visibility": "gone",
     "hint": "Cause of death",
-    "hintCulture": "\u09ae\u09be\u09a4\u09c3\u09ae\u09c3\u09a4\u09cd\u09af\u09c1\u09b0 \u0995\u09be\u09b0\u09a3 \u09a8\u09bf\u09b0\u09cd\u09ac\u09be\u099a\u09a8 \u0995\u09b0\u09c1\u09a8",
-    "titleCulture": "\u09ae\u09be\u09a4\u09c3\u09ae\u09c3\u09a4\u09cd\u09af\u09c1\u09b0 \u0995\u09be\u09b0\u09a3",
+    "hintCulture": "মাতৃমৃত্যুর কারণ নির্বাচন করুন",
+    "titleCulture": "মাতৃমৃত্যুর কারণ",
     "errorMessage": "Please select cause of death",
-    "errorMessageCulture": "\u0985\u09a8\u09c1\u0997\u09cd\u09b0\u09b9 \u0995\u09b0\u09c7 \u09ae\u09be\u09a4\u09c3\u09ae\u09c3\u09a4\u09cd\u09af\u09c1\u09b0 \u0995\u09be\u09b0\u09a3 \u09a8\u09bf\u09b0\u09cd\u09ac\u09be\u099a\u09a8 \u0995\u09b0\u09c1\u09a8",
+    "errorMessageCulture": "অনুগ্রহ করে মাতৃমৃত্যুর কারণ নির্বাচন করুন",
     "isSummary": false,
     "clinicalConcept": [
       {
@@ -2500,7 +2500,7 @@
       {
         "id": "excessiveBleeding",
         "name": "Excessive bleeding",
-        "cultureValue": "\u0985\u09a4\u09bf\u09b0\u09bf\u0995\u09cd\u09a4 \u09b0\u0995\u09cd\u09a4\u0995\u09cd\u09b7\u09b0\u09a3",
+        "cultureValue": "অতিরিক্ত রক্তক্ষরণ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -2512,7 +2512,7 @@
       {
         "id": "infection",
         "name": "Infection",
-        "cultureValue": "\u09b8\u0982\u0995\u09cd\u09b0\u09ae\u09a3",
+        "cultureValue": "সংক্রমণ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -2524,7 +2524,7 @@
       {
         "id": "hypertensiveDisorder",
         "name": "Hypertensive disorder (Eclampsia)",
-        "cultureValue": "\u0989\u099a\u09cd\u099a \u09b0\u0995\u09cd\u09a4\u099a\u09be\u09aa\u099c\u09a8\u09bf\u09a4 \u099c\u099f\u09bf\u09b2\u09a4\u09be (\u0987\u0995\u09cd\u09b2\u09cd\u09af\u09be\u09ae\u09cd\u09aa\u09b8\u09bf\u09af\u09bc\u09be)",
+        "cultureValue": "উচ্চ রক্তচাপজনিত জটিলতা (ইক্ল্যাম্পসিয়া)",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -2536,7 +2536,7 @@
       {
         "id": "obstructedLabor",
         "name": "Obstructed labor",
-        "cultureValue": "\u09ac\u09be\u09a7\u09be\u0997\u09cd\u09b0\u09b8\u09cd\u09a5 \u09aa\u09cd\u09b0\u09b8\u09ac",
+        "cultureValue": "বাধাগ্রস্থ প্রসব",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -2548,7 +2548,7 @@
       {
         "id": "uterineRupture",
         "name": "Uterine rupture",
-        "cultureValue": "\u099c\u09b0\u09be\u09af\u09bc\u09c1 \u09ab\u09c7\u099f\u09c7 \u09af\u09be\u0993\u09af\u09bc\u09be",
+        "cultureValue": "জরায়ু ফেটে যাওয়া",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -2560,17 +2560,17 @@
       {
         "id": "unsafeAbortion",
         "name": "Unsafe abortion",
-        "cultureValue": "\u0985\u09a8\u09bf\u09b0\u09be\u09aa\u09a6 \u0997\u09b0\u09cd\u09ad\u09aa\u09be\u09a4"
+        "cultureValue": "অনিরাপদ গর্ভপাত"
       },
       {
         "id": "severeAnemia",
         "name": "Severe Anemia",
-        "cultureValue": "\u09ae\u09be\u09b0\u09be\u09a4\u09cd\u09ae\u0995 \u09b0\u0995\u09cd\u09a4\u09b8\u09cd\u09ac\u09b2\u09cd\u09aa\u09a4\u09be"
+        "cultureValue": "মারাত্মক রক্তস্বল্পতা"
       },
       {
         "id": "otherMedicalComplications",
         "name": "Other medical complications",
-        "cultureValue": "\u0985\u09a8\u09cd\u09af\u09be\u09a8\u09cd\u09af \u099a\u09bf\u0995\u09bf\u09ce\u09b8\u09be\u099c\u09a8\u09bf\u09a4 \u099c\u099f\u09bf\u09b2\u09a4\u09be"
+        "cultureValue": "অন্যান্য চিকিৎসাজনিত জটিলতা"
       }
     ],
     "condition": []
@@ -2580,7 +2580,7 @@
     "label": "Abortion",
     "widgetHint": "CardView",
     "familyOrder": 1,
-    "titleCulture": "\u0997\u09b0\u09cd\u09ad\u09aa\u09be\u09a4",
+    "titleCulture": "গর্ভপাত",
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -2606,10 +2606,10 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "Enter gestation month",
-    "hintCulture": "\u0997\u09b0\u09cd\u09ad\u0995\u09be\u09b2 (\u09ae\u09be\u09b8) \u09b2\u09bf\u0996\u09c1\u09a8",
-    "titleCulture": "\u0997\u09b0\u09cd\u09ad\u09aa\u09be\u09a4\u09c7\u09b0 \u09b8\u09ae\u09af\u09bc \u0997\u09b0\u09cd\u09ad\u0995\u09be\u09b2 (\u09ae\u09be\u09b8)",
+    "hintCulture": "গর্ভকাল (মাস) লিখুন",
+    "titleCulture": "গর্ভপাতের সময় গর্ভকাল (মাস)",
     "errorMessage": "Please enter gestation month (must be less than 6 months)",
-    "errorMessageCulture": "\u0985\u09a8\u09c1\u0997\u09cd\u09b0\u09b9 \u0995\u09b0\u09c7 \u0997\u09b0\u09cd\u09ad\u0995\u09be\u09b2 (\u09ae\u09be\u09b8) \u09b2\u09bf\u0996\u09c1\u09a8 (\u09ec \u09ae\u09be\u09b8\u09c7\u09b0 \u0995\u09ae \u09b9\u09a4\u09c7 \u09b9\u09ac\u09c7)",
+    "errorMessageCulture": "অনুগ্রহ করে গর্ভকাল (মাস) লিখুন (৬ মাসের কম হতে হবে)",
     "minValue": 1,
     "maxValue": 5,
     "isSummary": false,
@@ -2716,9 +2716,9 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u0997\u09b0\u09cd\u09ad\u09aa\u09be\u09a4\u09c7\u09b0 \u09a7\u09b0\u09a8",
+    "titleCulture": "গর্ভপাতের ধরন",
     "errorMessage": "Please select type of abortion",
-    "errorMessageCulture": "\u0985\u09a8\u09c1\u0997\u09cd\u09b0\u09b9 \u0995\u09b0\u09c7 \u0997\u09b0\u09cd\u09ad\u09aa\u09be\u09a4\u09c7\u09b0 \u09a7\u09b0\u09a8 \u09a8\u09bf\u09b0\u09cd\u09ac\u09be\u099a\u09a8 \u0995\u09b0\u09c1\u09a8",
+    "errorMessageCulture": "অনুগ্রহ করে গর্ভপাতের ধরন নির্বাচন করুন",
     "isSummary": false,
     "clinicalConcept": [
       {
@@ -2738,7 +2738,7 @@
       {
         "id": "spontaneous",
         "name": "Spontaneous",
-        "cultureValue": "\u0985\u09a8\u09be\u0995\u09be\u0999\u09cd\u0996\u09bf\u09a4 \u0997\u09b0\u09cd\u09ad\u09aa\u09be\u09a4",
+        "cultureValue": "অনাকাঙ্খিত গর্ভপাত",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -2750,7 +2750,7 @@
       {
         "id": "induced",
         "name": "Induced",
-        "cultureValue": "\u0987\u099a\u09cd\u099b\u09be\u0995\u09c3\u09a4\u09ad\u09be\u09ac\u09c7/\u099a\u09bf\u0995\u09bf\u09ce\u09b8\u09be\u09b0 \u09ae\u09be\u09a7\u09cd\u09af\u09ae\u09c7 \u0997\u09b0\u09cd\u09ad\u09aa\u09be\u09a4",
+        "cultureValue": "ইচ্ছাকৃতভাবে/চিকিৎসার মাধ্যমে গর্ভপাত",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -2767,7 +2767,7 @@
     "label": "Delivery outcomes",
     "widgetHint": "CardView",
     "familyOrder": 2,
-    "titleCulture": "\u09aa\u09cd\u09b0\u09b8\u09ac\u09c7\u09b0 \u09ab\u09b2\u09be\u09ab\u09b2",
+    "titleCulture": "প্রসবের ফলাফল",
     "programmes": [
       {
         "id": "pregnancyOutcome",
@@ -2786,7 +2786,7 @@
     "isMandatory": false,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09aa\u09cd\u09b0\u09b8\u09ac\u09c7\u09b0 \u09ab\u09b2\u09be\u09ab\u09b2",
+    "titleCulture": "প্রসবের ফলাফল",
     "isSummary": false,
     "clinicalConcept": [
       {
@@ -2814,10 +2814,10 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "Enter number",
-    "hintCulture": "\u09b8\u0982\u0996\u09cd\u09af\u09be \u09b2\u09bf\u0996\u09c1\u09a8",
-    "titleCulture": "\u099c\u09c0\u09ac\u09bf\u09a4 \u099c\u09a8\u09cd\u09ae",
+    "hintCulture": "সংখ্যা লিখুন",
+    "titleCulture": "জীবিত জন্ম",
     "errorMessage": "Please enter number of live births",
-    "errorMessageCulture": "\u0985\u09a8\u09c1\u0997\u09cd\u09b0\u09b9 \u0995\u09b0\u09c7 \u099c\u09c0\u09ac\u09bf\u09a4 \u099c\u09a8\u09cd\u09ae\u09c7\u09b0 \u09b8\u0982\u0996\u09cd\u09af\u09be \u09b2\u09bf\u0996\u09c1\u09a8",
+    "errorMessageCulture": "অনুগ্রহ করে জীবিত জন্মের সংখ্যা লিখুন",
     "minValue": 0,
     "maxValue": 5,
     "isSummary": false,
@@ -2849,10 +2849,10 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "Enter number",
-    "hintCulture": "\u09b8\u0982\u0996\u09cd\u09af\u09be \u09b2\u09bf\u0996\u09c1\u09a8",
-    "titleCulture": "\u09ae\u09c3\u09a4 \u099c\u09a8\u09cd\u09ae",
+    "hintCulture": "সংখ্যা লিখুন",
+    "titleCulture": "মৃত জন্ম",
     "errorMessage": "Please enter number of stillbirths",
-    "errorMessageCulture": "\u0985\u09a8\u09c1\u0997\u09cd\u09b0\u09b9 \u0995\u09b0\u09c7 \u09ae\u09c3\u09a4 \u099c\u09a8\u09cd\u09ae\u09c7\u09b0 \u09b8\u0982\u0996\u09cd\u09af\u09be \u09b2\u09bf\u0996\u09c1\u09a8",
+    "errorMessageCulture": "অনুগ্রহ করে মৃত জন্মের সংখ্যা লিখুন",
     "minValue": 0,
     "isSummary": false,
     "inputType": "integer",
@@ -2881,9 +2881,9 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09aa\u09cd\u09b0\u09b8\u09ac\u09c7\u09b0 \u09b8\u09cd\u09a5\u09be\u09a8",
+    "titleCulture": "প্রসবের স্থান",
     "errorMessage": "Please select place of delivery",
-    "errorMessageCulture": "\u0985\u09a8\u09c1\u0997\u09cd\u09b0\u09b9 \u0995\u09b0\u09c7 \u09aa\u09cd\u09b0\u09b8\u09ac\u09c7\u09b0 \u09b8\u09cd\u09a5\u09be\u09a8 \u09a8\u09bf\u09b0\u09cd\u09ac\u09be\u099a\u09a8 \u0995\u09b0\u09c1\u09a8",
+    "errorMessageCulture": "অনুগ্রহ করে প্রসবের স্থান নির্বাচন করুন",
     "isSummary": false,
     "clinicalConcept": [
       {
@@ -2903,7 +2903,7 @@
       {
         "id": "home",
         "name": "Home",
-        "cultureValue": "\u09ac\u09be\u09a1\u09bc\u09bf\u09a4\u09c7",
+        "cultureValue": "বাড়িতে",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -2915,7 +2915,7 @@
       {
         "id": "govtHealthFacility",
         "name": "Government Health Facility",
-        "cultureValue": "\u09b8\u09b0\u0995\u09be\u09b0\u09bf \u09b8\u09cd\u09ac\u09be\u09b8\u09cd\u09a5\u09cd\u09af\u0995\u09c7\u09a8\u09cd\u09a6\u09cd\u09b0\u09c7",
+        "cultureValue": "সরকারি স্বাস্থ্যকেন্দ্রে",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -2927,7 +2927,7 @@
       {
         "id": "privateFacility",
         "name": "Private facility",
-        "cultureValue": "\u09ac\u09c7\u09b8\u09b0\u0995\u09be\u09b0\u09bf \u09b8\u09cd\u09ac\u09be\u09b8\u09cd\u09a5\u09cd\u09af\u0995\u09c7\u09a8\u09cd\u09a6\u09cd\u09b0\u09c7",
+        "cultureValue": "বেসরকারি স্বাস্থ্যকেন্দ্রে",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -2956,10 +2956,10 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "Select date",
-    "hintCulture": "\u09a4\u09be\u09b0\u09bf\u0996 \u09a8\u09bf\u09b0\u09cd\u09ac\u09be\u099a\u09a8 \u0995\u09b0\u09c1\u09a8",
-    "titleCulture": "\u09aa\u09cd\u09b0\u09b8\u09ac\u09c7\u09b0 \u09a4\u09be\u09b0\u09bf\u0996",
+    "hintCulture": "তারিখ নির্বাচন করুন",
+    "titleCulture": "প্রসবের তারিখ",
     "errorMessage": "Please select date of delivery",
-    "errorMessageCulture": "\u0985\u09a8\u09c1\u0997\u09cd\u09b0\u09b9 \u0995\u09b0\u09c7 \u09aa\u09cd\u09b0\u09b8\u09ac\u09c7\u09b0 \u09a4\u09be\u09b0\u09bf\u0996 \u09a8\u09bf\u09b0\u09cd\u09ac\u09be\u099a\u09a8 \u0995\u09b0\u09c1\u09a8",
+    "errorMessageCulture": "অনুগ্রহ করে প্রসবের তারিখ নির্বাচন করুন",
     "isSummary": false,
     "clinicalConcept": [
       {
@@ -2986,9 +2986,9 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09aa\u09cd\u09b0\u09b8\u09ac\u09c7\u09b0 \u09aa\u09a6\u09cd\u09a7\u09a4\u09bf",
+    "titleCulture": "প্রসবের পদ্ধতি",
     "errorMessage": "Please select mode of delivery",
-    "errorMessageCulture": "\u0985\u09a8\u09c1\u0997\u09cd\u09b0\u09b9 \u0995\u09b0\u09c7 \u09aa\u09cd\u09b0\u09b8\u09ac\u09c7\u09b0 \u09aa\u09a6\u09cd\u09a7\u09a4\u09bf \u09a8\u09bf\u09b0\u09cd\u09ac\u09be\u099a\u09a8 \u0995\u09b0\u09c1\u09a8",
+    "errorMessageCulture": "অনুগ্রহ করে প্রসবের পদ্ধতি নির্বাচন করুন",
     "isSummary": false,
     "clinicalConcept": [
       {
@@ -3008,7 +3008,7 @@
       {
         "id": "normalDelivery",
         "name": "Normal Delivery",
-        "cultureValue": "\u09b8\u09cd\u09ac\u09be\u09ad\u09be\u09ac\u09bf\u0995",
+        "cultureValue": "স্বাভাবিক",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -3020,7 +3020,7 @@
       {
         "id": "assistedDelivery",
         "name": "Assisted Delivery",
-        "cultureValue": "\u09aa\u09cd\u09b0\u09b8\u09ac\u09c7 \u09b8\u09b9\u09be\u09af\u09bc\u09a4\u09be \u09a8\u09bf\u09af\u09bc\u09c7 \u09aa\u09cd\u09b0\u09b8\u09ac \u0995\u09b0\u09be\u09a4\u09c7 \u09b9\u09af\u09bc\u09c7\u099b\u09c7 (\u09ad\u09cd\u09af\u09be\u0995\u09c1\u09af\u09bc\u09be\u09ae \u0995\u09be\u09aa \u09ac\u09be \u09ab\u09cb\u09b0\u09b8\u09c7\u09aa \u09ac\u09cd\u09af\u09ac\u09b9\u09be\u09b0 \u0995\u09b0\u09c7 \u09aa\u09cd\u09b0\u09b8\u09ac)",
+        "cultureValue": "প্রসবে সহায়তা নিয়ে প্রসব করাতে হয়েছে (ভ্যাকুয়াম কাপ বা ফোরসেপ ব্যবহার করে প্রসব)",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -3032,7 +3032,7 @@
       {
         "id": "cesareanSection",
         "name": "Cesarean Section",
-        "cultureValue": "\u09b8\u09bf\u099c\u09be\u09b0\u09bf\u09af\u09bc\u09be\u09a8",
+        "cultureValue": "সিজারিয়ান",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -3053,9 +3053,9 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u09aa\u09cd\u09b0\u09b8\u09ac\u09c7\u09b0 \u09b8\u09b9\u09be\u09af\u09bc\u09a4\u09be\u0995\u09be\u09b0\u09c0",
+    "titleCulture": "প্রসবের সহায়তাকারী",
     "errorMessage": "Please select birth attendant",
-    "errorMessageCulture": "\u0985\u09a8\u09c1\u0997\u09cd\u09b0\u09b9 \u0995\u09b0\u09c7 \u09aa\u09cd\u09b0\u09b8\u09ac\u09c7\u09b0 \u09b8\u09b9\u09be\u09af\u09bc\u09a4\u09be\u0995\u09be\u09b0\u09c0 \u09a8\u09bf\u09b0\u09cd\u09ac\u09be\u099a\u09a8 \u0995\u09b0\u09c1\u09a8",
+    "errorMessageCulture": "অনুগ্রহ করে প্রসবের সহায়তাকারী নির্বাচন করুন",
     "isSummary": false,
     "clinicalConcept": [
       {
@@ -3075,7 +3075,7 @@
       {
         "id": "fwv",
         "name": "FWV (Family welfare visitor)",
-        "cultureValue": "\u098f\u09ab \u09a1\u09be\u09ac\u09cd\u09b2\u09bf\u0989 \u09ad\u09bf",
+        "cultureValue": "এফ ডাব্লিউ ভি",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -3087,17 +3087,17 @@
       {
         "id": "csbaBrac",
         "name": "CSBA-BRAC (Community based Skilled birth attendant)",
-        "cultureValue": "\u09b8\u09bf \u098f\u09b8 \u09ac\u09bf \u098f (\u09ac\u09cd\u09b0\u09cd\u09af\u09be\u0995)"
+        "cultureValue": "সি এস বি এ (ব্র্যাক)"
       },
       {
         "id": "csbaOther",
         "name": "CSBA-Other (Community based Skilled birth attendant)",
-        "cultureValue": "\u09b8\u09bf \u098f\u09b8 \u09ac\u09bf \u098f (\u0985\u09a8\u09cd\u09af\u09be\u09a8\u09cd\u09af)"
+        "cultureValue": "সি এস বি এ (অন্যান্য)"
       },
       {
         "id": "healthWorker",
         "name": "Health worker",
-        "cultureValue": "\u09b8\u09cd\u09ac\u09be\u09b8\u09cd\u09a5\u09cd\u09af\u0995\u09b0\u09cd\u09ae\u09c0",
+        "cultureValue": "স্বাস্থ্যকর্মী",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -3109,7 +3109,7 @@
       {
         "id": "nurse",
         "name": "Nurse",
-        "cultureValue": "\u09a8\u09be\u09b0\u09cd\u09b8",
+        "cultureValue": "নার্স",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -3121,22 +3121,22 @@
       {
         "id": "midwife",
         "name": "Midwife",
-        "cultureValue": "\u09ae\u09bf\u09a1\u0993\u09af\u09bc\u09be\u0987\u09ab"
+        "cultureValue": "মিডওয়াইফ"
       },
       {
         "id": "doctor",
         "name": "Doctor",
-        "cultureValue": "\u09a1\u09be\u0995\u09cd\u09a4\u09be\u09b0"
+        "cultureValue": "ডাক্তার"
       },
       {
         "id": "untrainedBirthAttendant",
         "name": "Untrained Birth attendant",
-        "cultureValue": "\u0985\u09aa\u09cd\u09b0\u09b6\u09bf\u0995\u09cd\u09b7\u09bf\u09a4 \u09a7\u09be\u09a4\u09cd\u09b0\u09c0"
+        "cultureValue": "অপ্রশিক্ষিত ধাত্রী"
       },
       {
         "id": "other",
         "name": "Other",
-        "cultureValue": "\u0985\u09a8\u09cd\u09af\u09be\u09a8\u09cd\u09af",
+        "cultureValue": "অন্যান্য",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -3157,9 +3157,9 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09aa\u09cd\u09b0\u09b8\u09ac \u0995\u09be\u09b2\u09c0\u09a8 \u0995\u09cb\u09a8 \u099c\u099f\u09bf\u09b2\u09a4\u09be \u09b9\u09af\u09bc\u09c7\u099b\u09bf\u09b2 \u0995\u09bf\u09a8\u09be",
+    "titleCulture": "প্রসব কালীন কোন জটিলতা হয়েছিল কিনা",
     "errorMessage": "Please select if there were any complications",
-    "errorMessageCulture": "\u0985\u09a8\u09c1\u0997\u09cd\u09b0\u09b9 \u0995\u09b0\u09c7 \u09a8\u09bf\u09b0\u09cd\u09ac\u09be\u099a\u09a8 \u0995\u09b0\u09c1\u09a8 \u09af\u09c7 \u0995\u09cb\u09a8 \u099c\u099f\u09bf\u09b2\u09a4\u09be \u099b\u09bf\u09b2 \u0995\u09bf\u09a8\u09be",
+    "errorMessageCulture": "অনুগ্রহ করে নির্বাচন করুন যে কোন জটিলতা ছিল কিনা",
     "isSummary": false,
     "optionType": "boolean",
     "clinicalConcept": [
@@ -3180,7 +3180,7 @@
       {
         "id": "yes",
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -3192,7 +3192,7 @@
       {
         "id": "no",
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -3221,10 +3221,10 @@
     "isEnabled": true,
     "visibility": "gone",
     "hint": "complications",
-    "hintCulture": "\u099c\u099f\u09bf\u09b2\u09a4\u09be \u09a8\u09bf\u09b0\u09cd\u09ac\u09be\u099a\u09a8 \u0995\u09b0\u09c1\u09a8",
-    "titleCulture": "\u09aa\u09cd\u09b0\u09b8\u09ac\u0995\u09be\u09b2\u09c0\u09a8 \u099c\u099f\u09bf\u09b2\u09a4\u09be",
+    "hintCulture": "জটিলতা নির্বাচন করুন",
+    "titleCulture": "প্রসবকালীন জটিলতা",
     "errorMessage": "Please select complications",
-    "errorMessageCulture": "\u0985\u09a8\u09c1\u0997\u09cd\u09b0\u09b9 \u0995\u09b0\u09c7 \u099c\u099f\u09bf\u09b2\u09a4\u09be \u09a8\u09bf\u09b0\u09cd\u09ac\u09be\u099a\u09a8 \u0995\u09b0\u09c1\u09a8",
+    "errorMessageCulture": "অনুগ্রহ করে জটিলতা নির্বাচন করুন",
     "isSummary": false,
     "clinicalConcept": [
       {
@@ -3244,7 +3244,7 @@
       {
         "id": "excessiveBleeding",
         "name": "Excessive bleeding",
-        "cultureValue": "\u0985\u09a4\u09bf\u09b0\u09bf\u0995\u09cd\u09a4 \u09b0\u0995\u09cd\u09a4\u0995\u09cd\u09b7\u09b0\u09a3",
+        "cultureValue": "অতিরিক্ত রক্তক্ষরণ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -3256,7 +3256,7 @@
       {
         "id": "convulsions",
         "name": "Convulsions",
-        "cultureValue": "\u0996\u09bf\u0981\u099a\u09c1\u09a8\u09bf",
+        "cultureValue": "খিঁচুনি",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -3268,12 +3268,12 @@
       {
         "id": "prolongedLabor",
         "name": "Prolonged labor",
-        "cultureValue": "\u09ac\u09bf\u09b2\u09ae\u09cd\u09ac\u09bf\u09a4 \u09aa\u09cd\u09b0\u09b8\u09ac"
+        "cultureValue": "বিলম্বিত প্রসব"
       },
       {
         "id": "obstructedLabor",
         "name": "Obstructed labor",
-        "cultureValue": "\u09ac\u09be\u09a7\u09be\u0997\u09cd\u09b0\u09b8\u09cd\u09a4 \u09aa\u09cd\u09b0\u09b8\u09ac",
+        "cultureValue": "বাধাগ্রস্ত প্রসব",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -3285,17 +3285,17 @@
       {
         "id": "multipleBirths",
         "name": "Multiple births",
-        "cultureValue": "\u099c\u09ae\u099c \u09aa\u09cd\u09b0\u09b8\u09ac"
+        "cultureValue": "জমজ প্রসব"
       },
       {
         "id": "retainedPlacenta",
         "name": "Retained Placenta",
-        "cultureValue": "\u0997\u09b0\u09cd\u09ad\u09ab\u09c1\u09b2 \u0986\u099f\u0995\u09c7 \u0997\u09bf\u09af\u09bc\u09c7\u099b\u09bf\u09b2"
+        "cultureValue": "গর্ভফুল আটকে গিয়েছিল"
       },
       {
         "id": "other",
         "name": "Other",
-        "cultureValue": "\u0985\u09a8\u09cd\u09af\u09be\u09a8\u09cd\u09af",
+        "cultureValue": "অন্যান্য",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -3307,7 +3307,7 @@
       {
         "id": "dontKnow",
         "name": "Don't know",
-        "cultureValue": "\u099c\u09be\u09a8\u09be \u09a8\u09c7\u0987"
+        "cultureValue": "জানা নেই"
       }
     ]
   },
@@ -3316,7 +3316,7 @@
     "label": "Counselling in case of adverse event",
     "widgetHint": "CardView",
     "familyOrder": 4,
-    "titleCulture": "\u09aa\u09cd\u09b0\u09a4\u09bf\u0995\u09c2\u09b2 \u0998\u099f\u09a8\u09be\u09b0 \u0995\u09cd\u09b7\u09c7\u09a4\u09cd\u09b0\u09c7 \u0995\u09be\u0989\u09a8\u09cd\u09b8\u09c7\u09b2\u09bf\u0982",
+    "titleCulture": "প্রতিকূল ঘটনার ক্ষেত্রে কাউন্সেলিং",
     "isSummary": true,
     "programmes": [
       {
@@ -3336,7 +3336,7 @@
     "isMandatory": false,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09ae\u09be\u09a8\u09b8\u09bf\u0995 \u09b8\u09b9\u09be\u09af\u09bc\u09a4\u09be",
+    "titleCulture": "মানসিক সহায়তা",
     "isSummary": true,
     "programmes": [
       {
@@ -3356,7 +3356,7 @@
     "isMandatory": false,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09ad\u09ac\u09bf\u09b7\u09cd\u09af\u09a4 \u0997\u09b0\u09cd\u09ad\u09be\u09ac\u09b8\u09cd\u09a5\u09be\u09b0 \u09aa\u09b0\u09bf\u0995\u09b2\u09cd\u09aa\u09a8\u09be",
+    "titleCulture": "ভবিষ্যত গর্ভাবস্থার পরিকল্পনা",
     "isSummary": true,
     "programmes": [
       {
@@ -3371,7 +3371,7 @@
     "label": "Bio Data",
     "widgetHint": "CardView",
     "familyOrder": 0,
-    "titleCulture": "\u09ac\u09cd\u09af\u0995\u09cd\u09a4\u09bf\u0997\u09a4 \u09a4\u09a5\u09cd\u09af",
+    "titleCulture": "ব্যক্তিগত তথ্য",
     "programmes": [
       {
         "id": "household_member_registration"
@@ -3393,7 +3393,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0986\u0987\u09a1\u09bf\u09b0 \u09a7\u09b0\u09a8",
+    "titleCulture": "আইডির ধরন",
     "errorMessage": "Please select ID Type",
     "isNeededDefault": true,
     "clinicalConcept": [
@@ -3412,7 +3412,7 @@
       {
         "id": "nid",
         "name": "National ID",
-        "cultureValue": "\u099c\u09be\u09a4\u09c0\u09af\u09bc \u09aa\u09b0\u09bf\u099a\u09af\u09bc\u09aa\u09a4\u09cd\u09b0 (NID) (\u2265\u09e7\u09ee \u09ac\u099b\u09b0)",
+        "cultureValue": "জাতীয় পরিচয়পত্র (NID) (≥১৮ বছর)",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -3424,7 +3424,7 @@
       {
         "id": "brn",
         "name": "BRN",
-        "cultureValue": "\u099c\u09a8\u09cd\u09ae \u09a8\u09bf\u09ac\u09a8\u09cd\u09a7\u09a8 \u0986\u0987\u09a1\u09bf (Birth Reg ID) (<\u09e7\u09ee \u09ac\u099b\u09b0)",
+        "cultureValue": "জন্ম নিবন্ধন আইডি (Birth Reg ID) (<১৮ বছর)",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -3436,7 +3436,7 @@
       {
         "id": "na",
         "name": "Not Available",
-        "cultureValue": "\u099c\u09a8\u09cd\u09ae \u09a8\u09bf\u09ac\u09a8\u09cd\u09a7\u09a8 \u09a8\u09ae\u09cd\u09ac\u09b0",
+        "cultureValue": "জন্ম নিবন্ধন নম্বর",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -3468,8 +3468,8 @@
     "isEnabled": true,
     "visibility": "gone",
     "hint": "Enter National ID",
-    "hintCulture": "\u099c\u09be\u09a4\u09c0\u09af\u09bc \u09aa\u09b0\u09bf\u099a\u09af\u09bc\u09aa\u09a4\u09cd\u09b0 \u09a8\u09ae\u09cd\u09ac\u09b0 \u09b2\u09bf\u0996\u09c1\u09a8",
-    "titleCulture": "\u099c\u09be\u09a4\u09c0\u09af\u09bc \u09aa\u09b0\u09bf\u099a\u09af\u09bc\u09aa\u09a4\u09cd\u09b0 (NID) (\u2265\u09e7\u09ee \u09ac\u099b\u09b0)",
+    "hintCulture": "জাতীয় পরিচয়পত্র নম্বর লিখুন",
+    "titleCulture": "জাতীয় পরিচয়পত্র (NID) (≥১৮ বছর)",
     "isNeededDefault": true,
     "inputType": "text",
     "clinicalConcept": [
@@ -3496,8 +3496,8 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "Enter Name",
-    "hintCulture": "\u09a8\u09be\u09ae \u09b2\u09bf\u0996\u09c1\u09a8",
-    "titleCulture": "\u09a8\u09be\u09ae",
+    "hintCulture": "নাম লিখুন",
+    "titleCulture": "নাম",
     "isNeededDefault": true,
     "inputType": "text",
     "clinicalConcept": [
@@ -3524,8 +3524,8 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "Enter Mobile Number",
-    "hintCulture": "\u09ae\u09cb\u09ac\u09be\u0987\u09b2 \u09a8\u09ae\u09cd\u09ac\u09b0 \u09b2\u09bf\u0996\u09c1\u09a8",
-    "titleCulture": "\u09ae\u09cb\u09ac\u09be\u0987\u09b2 \u09a8\u09ae\u09cd\u09ac\u09b0",
+    "hintCulture": "মোবাইল নম্বর লিখুন",
+    "titleCulture": "মোবাইল নম্বর",
     "optionType": "phoneNumberWithoutCountryCode",
     "isNeededDefault": true,
     "inputType": "integer",
@@ -3553,8 +3553,8 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "DD/MM/YYYY",
-    "hintCulture": "\u09a6\u09bf\u09a8/\u09ae\u09be\u09b8/\u09ac\u099b\u09b0",
-    "titleCulture": "\u099c\u09a8\u09cd\u09ae \u09a4\u09be\u09b0\u09bf\u0996",
+    "hintCulture": "দিন/মাস/বছর",
+    "titleCulture": "জন্ম তারিখ",
     "isSummary": true,
     "isNeededDefault": true,
     "clinicalConcept": [
@@ -3580,7 +3580,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09b2\u09bf\u0999\u09cd\u0997",
+    "titleCulture": "লিঙ্গ",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "isNeededDefault": true,
@@ -3604,7 +3604,7 @@
     "optionsList": [
       {
         "name": "Male",
-        "cultureValue": "\u09aa\u09c1\u09b0\u09c1\u09b7",
+        "cultureValue": "পুরুষ",
         "id": "male",
         "clinicalConcept": [
           {
@@ -3616,7 +3616,7 @@
       },
       {
         "name": "Female",
-        "cultureValue": "\u09ae\u09b9\u09bf\u09b2\u09be",
+        "cultureValue": "মহিলা",
         "id": "female",
         "clinicalConcept": [
           {
@@ -3629,7 +3629,7 @@
       {
         "id": "Other",
         "name": "Other",
-        "cultureValue": "\u0985\u09a8\u09cd\u09af\u09be\u09a8\u09cd\u09af",
+        "cultureValue": "অন্যান্য",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -3650,8 +3650,8 @@
     "isEnabled": true,
     "visibility": "gone",
     "hint": "Drop down list of all registered members from the house",
-    "hintCulture": "\u0998\u09b0\u09c7\u09b0 \u09b8\u0995\u09b2 \u09a8\u09bf\u09ac\u09a8\u09cd\u09a7\u09bf\u09a4 \u09b8\u09a6\u09b8\u09cd\u09af\u09a6\u09c7\u09b0 \u09a1\u09cd\u09b0\u09aa\u09a1\u09be\u0989\u09a8 \u09a4\u09be\u09b2\u09bf\u0995\u09be",
-    "titleCulture": "\u09ae\u09be\u09a4\u09be/ \u0985\u09ad\u09bf\u09ad\u09be\u09ac\u0995\u09c7\u09b0 \u09a8\u09be\u09ae",
+    "hintCulture": "ঘরের সকল নিবন্ধিত সদস্যদের ড্রপডাউন তালিকা",
+    "titleCulture": "মাতা/ অভিভাবকের নাম",
     "localDataCache": "guardian",
     "clinicalConcept": [
       {
@@ -3676,7 +3676,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09ac\u09c8\u09ac\u09be\u09b9\u09bf\u0995 \u0985\u09ac\u09b8\u09cd\u09a5\u09be",
+    "titleCulture": "বৈবাহিক অবস্থা",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "isInfo": "visible",
@@ -3697,7 +3697,7 @@
     "optionsList": [
       {
         "name": "Married",
-        "cultureValue": "\u09ac\u09bf\u09ac\u09be\u09b9\u09bf\u09a4",
+        "cultureValue": "বিবাহিত",
         "id": "married",
         "clinicalConcept": [
           {
@@ -3709,7 +3709,7 @@
       },
       {
         "name": "Single",
-        "cultureValue": "\u098f\u0995\u0995 (\u09ac\u09bf\u099a\u09cd\u099b\u09bf\u09a8\u09cd\u09a8/\u09ac\u09bf\u09ac\u09be\u09b9\u09ac\u09bf\u099a\u09cd\u099b\u09c7\u09a6/\u09b8\u0999\u09cd\u0997\u09c0 \u09ae\u09c3\u09a4)",
+        "cultureValue": "একক (বিচ্ছিন্ন/বিবাহবিচ্ছেদ/সঙ্গী মৃত)",
         "id": "single",
         "clinicalConcept": [
           {
@@ -3722,7 +3722,7 @@
       {
         "id": "unmarried",
         "name": "Unmarried",
-        "cultureValue": "\u0985\u09ac\u09bf\u09ac\u09be\u09b9\u09bf\u09a4"
+        "cultureValue": "অবিবাহিত"
       }
     ]
   },
@@ -3736,7 +3736,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09ac\u09bf\u0995\u09b2\u09be\u0999\u09cd\u0997\u09a4\u09be",
+    "titleCulture": "বিকলাঙ্গতা",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "isInfo": "visible",
@@ -3791,7 +3791,7 @@
     "isMandatory": false,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u09aa\u09b0\u09bf\u09ac\u09be\u09b0\u09c7\u09b0 \u09aa\u09cd\u09b0\u09a7\u09be\u09a8 \u0995\u09bf \u09a8\u09be",
+    "titleCulture": "পরিবারের প্রধান কি না",
     "isNeededDefault": true,
     "clinicalConcept": [
       {
@@ -3811,7 +3811,7 @@
     "label": "Household Information",
     "widgetHint": "CardView",
     "familyOrder": 0,
-    "titleCulture": "\u09aa\u09b0\u09bf\u09ac\u09be\u09b0\u09c7\u09b0 \u09a4\u09a5\u09cd\u09af",
+    "titleCulture": "পরিবারের তথ্য",
     "programmes": [
       {
         "id": "household_registration"
@@ -3828,7 +3828,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u0987\u0989\u09a8\u09bf\u09af\u09bc\u09a8",
+    "titleCulture": "ইউনিয়ন",
     "errorMessage": "Please select Union",
     "localDataCache": "village_id",
     "isNeededDefault": true,
@@ -3856,7 +3856,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09b8\u09cd\u09ac\u09be\u09b8\u09cd\u09a5\u09cd\u09af \u09b8\u09c7\u09ac\u09bf\u0995\u09be\u09b0 \u09a8\u09be\u09ae\u0983",
+    "titleCulture": "স্বাস্থ্য সেবিকার নামঃ",
     "errorMessage": "Please select SS",
     "localDataCache": "shasthya_shebika_id",
     "isNeededDefault": true,
@@ -3884,7 +3884,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0997\u09cd\u09b0\u09be\u09ae",
+    "titleCulture": "গ্রাম",
     "errorMessage": "Please select Village",
     "localDataCache": "sub_village_id",
     "isNeededDefault": true,
@@ -3912,7 +3912,7 @@
     "isMandatory": false,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0996\u09be\u09a8\u09be\u09b0 \u09a7\u09b0\u09a3",
+    "titleCulture": "খানার ধরণ",
     "errorMessage": "Please select Household Type",
     "isNeededDefault": true,
     "clinicalConcept": [
@@ -3966,7 +3966,7 @@
     "isEnabled": false,
     "visibility": "visible",
     "hint": "Enter Household Number",
-    "titleCulture": "\u0996\u09be\u09a8\u09be \u09a8\u09be\u09ae\u09cd\u09ac\u09be\u09b0",
+    "titleCulture": "খানা নাম্বার",
     "isNeededDefault": true,
     "isNotDefault": false,
     "inputType": "text",
@@ -3994,8 +3994,8 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "Enter Total Members",
-    "hintCulture": "\u09ae\u09cb\u099f \u09b8\u09a6\u09b8\u09cd\u09af \u09b8\u0982\u0996\u09cd\u09af\u09be \u09b2\u09bf\u0996\u09c1\u09a8",
-    "titleCulture": "\u0996\u09be\u09a8\u09be\u09b0 \u09ae\u09cb\u099f \u09b8\u09a6\u09b8\u09cd\u09af \u09b8\u0982\u0996\u09cd\u09af\u09be",
+    "hintCulture": "মোট সদস্য সংখ্যা লিখুন",
+    "titleCulture": "খানার মোট সদস্য সংখ্যা",
     "minValue": 1,
     "isSummary": true,
     "isNeededDefault": true,
@@ -4024,7 +4024,7 @@
     "isMandatory": false,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0996\u09be\u09a8\u09be \u09aa\u09cd\u09b0\u09a7\u09be\u09a8\u09c7\u09b0 \u09aa\u09c7\u09b6\u09be",
+    "titleCulture": "খানা প্রধানের পেশা",
     "errorMessage": "Please select Occupation",
     "isNeededDefault": true,
     "clinicalConcept": [
@@ -4043,57 +4043,57 @@
       {
         "id": "Agriculture",
         "name": "Agriculture",
-        "cultureValue": "\u0995\u09c3\u09b7\u09bf"
+        "cultureValue": "কৃষি"
       },
       {
         "id": "Garments worker",
         "name": "Garments worker",
-        "cultureValue": "\u0997\u09be\u09b0\u09cd\u09ae\u09c7\u09a8\u09cd\u099f\u09b8 \u0995\u09b0\u09cd\u09ae\u09c0"
+        "cultureValue": "গার্মেন্টস কর্মী"
       },
       {
         "id": "Service/Job",
         "name": "Service/Job",
-        "cultureValue": "\u099a\u09be\u0995\u09b0\u09bf"
+        "cultureValue": "চাকরি"
       },
       {
         "id": "Technical worker",
         "name": "Technical worker",
-        "cultureValue": "\u0995\u09be\u09b0\u09bf\u0997\u09b0\u09bf \u0995\u09b0\u09cd\u09ae\u09c0"
+        "cultureValue": "কারিগরি কর্মী"
       },
       {
         "id": "Day laborer",
         "name": "Day laborer",
-        "cultureValue": "\u09a6\u09bf\u09a8\u09ae\u099c\u09c1\u09b0"
+        "cultureValue": "দিনমজুর"
       },
       {
         "id": "Vendor/Shopkeeper/Vegetable",
         "name": "Vendor/Shopkeeper/Vegetable",
-        "cultureValue": "\u09ac\u09bf\u0995\u09cd\u09b0\u09c7\u09a4\u09be/\u09a6\u09cb\u0995\u09be\u09a8\u09a6\u09be\u09b0/\u09b8\u09ac\u099c\u09bf \u09ac\u09be \u09ae\u09be\u099b \u09ac\u09bf\u0995\u09cd\u09b0\u09c7\u09a4\u09be"
+        "cultureValue": "বিক্রেতা/দোকানদার/সবজি বা মাছ বিক্রেতা"
       },
       {
         "id": "Businessman",
         "name": "Businessman",
-        "cultureValue": "\u09ac\u09cd\u09af\u09ac\u09b8\u09be\u09af\u09bc\u09c0"
+        "cultureValue": "ব্যবসায়ী"
       },
       {
         "id": "Foreign worker",
         "name": "Foreign worker",
-        "cultureValue": "\u09ac\u09bf\u09a6\u09c7\u09b6\u09c7 \u0995\u09b0\u09cd\u09ae\u09b0\u09a4"
+        "cultureValue": "বিদেশে কর্মরত"
       },
       {
         "id": "Self-employed",
         "name": "Self-employed",
-        "cultureValue": "\u09b8\u09cd\u09ac-\u0995\u09b0\u09cd\u09ae\u09b8\u0982\u09b8\u09cd\u09a5\u09be\u09a8"
+        "cultureValue": "স্ব-কর্মসংস্থান"
       },
       {
         "id": "Unemployed",
         "name": "Unemployed",
-        "cultureValue": "\u09ac\u09c7\u0995\u09be\u09b0"
+        "cultureValue": "বেকার"
       },
       {
         "id": "Other",
         "name": "Other",
-        "cultureValue": "\u0985\u09a8\u09cd\u09af\u09be\u09a8\u09cd\u09af",
+        "cultureValue": "অন্যান্য",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -4122,8 +4122,8 @@
     "isEnabled": true,
     "visibility": "gone",
     "hint": "Enter other occupation",
-    "hintCulture": "\u0985\u09a8\u09cd\u09af \u09aa\u09c7\u09b6\u09be \u09b2\u09bf\u0996\u09c1\u09a8",
-    "titleCulture": "\u0985\u09a8\u09cd\u09af \u09aa\u09c7\u09b6\u09be \u09b9\u09b2\u09c7 \u0989\u09b2\u09cd\u09b2\u09c7\u0996 \u0995\u09b0\u09c1\u09a8",
+    "hintCulture": "অন্য পেশা লিখুন",
+    "titleCulture": "অন্য পেশা হলে উল্লেখ করুন",
     "isNeededDefault": true,
     "isNotDefault": false,
     "inputType": "text",
@@ -4152,8 +4152,8 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "Enter Monthly Income",
-    "hintCulture": "\u09ae\u09be\u09b8\u09bf\u0995 \u0986\u09af\u09bc \u09b2\u09bf\u0996\u09c1\u09a8",
-    "titleCulture": "\u0996\u09be\u09a8\u09be\u09b0 \u09ae\u09be\u09b8\u09bf\u0995 \u0986\u09df (\u099f\u09be\u0995\u09be\u09df)",
+    "hintCulture": "মাসিক আয় লিখুন",
+    "titleCulture": "খানার মাসিক আয় (টাকায়)",
     "minValue": 0,
     "isSummary": true,
     "isNeededDefault": true,
@@ -4182,8 +4182,8 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "hintCulture": "\u09b8\u0982\u0996\u09cd\u09af\u09be \u09af\u09cb\u0997 \u0995\u09b0\u09c1\u09a8",
-    "titleCulture": "\u0996\u09be\u09a8\u09be\u09af\u09bc \u09aa\u09cd\u09b0\u09a4\u09bf\u09ac\u09a8\u09cd\u09a7\u09c0 \u09ac\u09cd\u09af\u0995\u09cd\u09a4\u09bf\u09b0 \u09b8\u0982\u0996\u09cd\u09af\u09be",
+    "hintCulture": "সংখ্যা যোগ করুন",
+    "titleCulture": "খানায় প্রতিবন্ধী ব্যক্তির সংখ্যা",
     "minValue": 0,
     "isSummary": true,
     "isInfo": "visible",
@@ -4209,7 +4209,7 @@
     "label": "Medical History, Physical Examination & Vitals",
     "widgetHint": "CardView",
     "familyOrder": 0,
-    "titleCulture": "\u099a\u09bf\u0995\u09bf\u09ce\u09b8\u09be\u09b0 \u0987\u09a4\u09bf\u09b9\u09be\u09b8, \u09b6\u09be\u09b0\u09c0\u09b0\u09bf\u0995 \u09aa\u09b0\u09c0\u0995\u09cd\u09b7\u09be \u098f\u09ac\u0982 \u0997\u09c1\u09b0\u09c1\u09a4\u09cd\u09ac\u09aa\u09c2\u09b0\u09cd\u09a3 \u09b2\u0995\u09cd\u09b7\u09a3",
+    "titleCulture": "চিকিৎসার ইতিহাস, শারীরিক পরীক্ষা এবং গুরুত্বপূর্ণ লক্ষণ",
     "programmes": [
       {
         "id": "anc",
@@ -4229,7 +4229,7 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "Complications",
-    "titleCulture": "\u0997\u09b0\u09cd\u09ad\u09ac\u09a4\u09c0 \u09ae\u09be \u0995\u09bf \u09a8\u09bf\u099a\u09c7\u09b0 \u0995\u09cb\u09a8\u09cb \u09b8\u09ae\u09b8\u09cd\u09af\u09be\u09df \u09ad\u09c1\u0997\u099b\u09c7?",
+    "titleCulture": "গর্ভবতী মা কি নিচের কোনো সমস্যায় ভুগছে?",
     "errorMessage": "Please select a valid option",
     "isSummary": false,
     "clinicalConcept": [
@@ -4250,7 +4250,7 @@
       {
         "id": "abortion_mr",
         "name": "Abortion/MR",
-        "cultureValue": "\u0997\u09b0\u09cd\u09ad\u09aa\u09be\u09a4/\u098f\u09ae \u0986\u09b0",
+        "cultureValue": "গর্ভপাত/এম আর",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -4262,7 +4262,7 @@
       {
         "id": "stillbirth",
         "name": "Stillbirth",
-        "cultureValue": "\u09ae\u09c3\u09a4 \u09aa\u09cd\u09b0\u09b8\u09ac",
+        "cultureValue": "মৃত প্রসব",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -4274,7 +4274,7 @@
       {
         "id": "caesarean_operation",
         "name": "Caesarean operation",
-        "cultureValue": "\u09b8\u09bf\u099c\u09be\u09b0\u09bf\u09af\u09bc\u09be\u09a8 \u0985\u09aa\u09be\u09b0\u09c7\u09b6\u09a8",
+        "cultureValue": "সিজারিয়ান অপারেশন",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -4286,7 +4286,7 @@
       {
         "id": "convulsions",
         "name": "Convulsions",
-        "cultureValue": "\u0996\u09bf\u099a\u09c1\u09a8\u09bf",
+        "cultureValue": "খিচুনি",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -4298,7 +4298,7 @@
       {
         "id": "postpartum_hemorrhage",
         "name": "Postpartum hemorrhage",
-        "cultureValue": "\u09aa\u09cd\u09b0\u09b8\u09ac \u09aa\u09b0\u09ac\u09b0\u09cd\u09a4\u09bf \u09b0\u0995\u09cd\u09a4 \u0995\u09cd\u09b7\u09b0\u09a3",
+        "cultureValue": "প্রসব পরবর্তি রক্ত ক্ষরণ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -4310,7 +4310,7 @@
       {
         "id": "assisted_delivery",
         "name": "Assisted Delivery",
-        "cultureValue": "\u09aa\u09cd\u09b0\u09b8\u09ac\u09c7 \u09b8\u09b9\u09be\u09af\u09bc\u09a4\u09be \u09a8\u09bf\u09af\u09bc\u09c7 \u09aa\u09cd\u09b0\u09b8\u09ac \u0995\u09b0\u09be\u09a4\u09c7 \u09b9\u09af\u09bc\u09c7\u099b\u09c7",
+        "cultureValue": "প্রসবে সহায়তা নিয়ে প্রসব করাতে হয়েছে",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -4322,22 +4322,22 @@
       {
         "id": "preterm_birth",
         "name": "Preterm birth",
-        "cultureValue": "\u09a8\u09bf\u09b0\u09cd\u09a7\u09be\u09b0\u09bf\u09a4 \u09b8\u09ae\u09af\u09bc\u09c7\u09b0 \u0986\u0997\u09c7\u0987 \u09aa\u09cd\u09b0\u09b8\u09ac \u09b9\u09af\u09bc\u09c7\u099b\u09c7"
+        "cultureValue": "নির্ধারিত সময়ের আগেই প্রসব হয়েছে"
       },
       {
         "id": "gestational_diabetes",
         "name": "Gestational diabetes",
-        "cultureValue": "\u0997\u09b0\u09cd\u09ad\u0995\u09be\u09b2\u09c0\u09a8 \u09a1\u09be\u09af\u09bc\u09be\u09ac\u09c7\u099f\u09bf\u09b8"
+        "cultureValue": "গর্ভকালীন ডায়াবেটিস"
       },
       {
         "id": "severe_anemia",
         "name": "Severe anemia",
-        "cultureValue": "\u09ae\u09be\u09b0\u09be\u09a4\u09cd\u09ae\u0995 \u09b0\u0995\u09cd\u09a4\u09b8\u09cd\u09ac\u09b2\u09cd\u09aa\u09a4\u09be"
+        "cultureValue": "মারাত্মক রক্তস্বল্পতা"
       },
       {
         "id": "none",
         "name": "None",
-        "cultureValue": "\u09a8\u09be (\u0989\u09aa\u09b0\u09c7\u09b0 \u0995\u09cb\u09a8\u09cb\u099f\u09bf \u09a8\u09df)",
+        "cultureValue": "না (উপরের কোনোটি নয়)",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -4359,7 +4359,7 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "Illness",
-    "titleCulture": "\u0997\u09b0\u09cd\u09ad\u09ac\u09a4\u09c0 \u09ae\u09be\u09df\u09c7\u09b0 \u0986\u0997\u09c7 \u09a5\u09c7\u0995\u09c7 \u0995\u09cb\u09a8\u09cb \u0985\u09b8\u09c1\u0996 \u0986\u099b\u09c7 \u0995\u09bf?",
+    "titleCulture": "গর্ভবতী মায়ের আগে থেকে কোনো অসুখ আছে কি?",
     "errorMessage": "Please select a valid option",
     "isSummary": false,
     "localDataCache": "illness",
@@ -4427,7 +4427,7 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "Illness",
-    "titleCulture": "\u0997\u09b0\u09cd\u09ad\u09ac\u09a4\u09c0 \u09ae\u09be \u0995\u09cb\u09a8\u09cb \u0986\u0997\u09c7\u09b0 \u0985\u09b8\u09c1\u0996\u09c7\u09b0 \u099c\u09a8\u09cd\u09af \u099a\u09bf\u0995\u09bf\u09ce\u09b8\u09be \u09a8\u09bf\u099a\u09cd\u099b\u09c7\u09a8 \u0995\u09bf?",
+    "titleCulture": "গর্ভবতী মা কোনো আগের অসুখের জন্য চিকিৎসা নিচ্ছেন কি?",
     "errorMessage": "Please select a valid option",
     "isSummary": false,
     "clinicalConcept": [
@@ -4455,7 +4455,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0989\u099a\u09cd\u099a\u09a4\u09be",
+    "titleCulture": "উচ্চতা",
     "errorMessage": "Please enter a valid height",
     "unitMeasurement": "cm",
     "isSummary": false,
@@ -4502,7 +4502,7 @@
     "label": "BMI",
     "widgetHint": "InformationLabel",
     "family": "medicalHistoryPhysicalExamination",
-    "titleCulture": "\u09ac\u09bf.\u098f\u09ae.\u0986\u0987",
+    "titleCulture": "বি.এম.আই",
     "isSummary": false,
     "clinicalConcept": [
       {
@@ -4549,7 +4549,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u099c\u09b0\u09be\u09df\u09c1\u09b0 \u098a\u099a\u099a\u09a4\u09be (\u09b8\u09c7\u09ae\u09bf)",
+    "titleCulture": "জরায়ুর ঊচচতা (সেমি)",
     "errorMessage": "Please enter a valid fundal height",
     "unitMeasurement": "cm",
     "isSummary": false,
@@ -4574,7 +4574,7 @@
     "label": "Point-of-Care Investigations",
     "widgetHint": "CardView",
     "familyOrder": 1,
-    "titleCulture": "\u09aa\u09af\u09bc\u09c7\u09a8\u09cd\u099f-\u0985\u09ab-\u0995\u09c7\u09af\u09bc\u09be\u09b0 \u09aa\u09b0\u09c0\u0995\u09cd\u09b7\u09be",
+    "titleCulture": "পয়েন্ট-অফ-কেয়ার পরীক্ষা",
     "programmes": [
       {
         "id": "anc",
@@ -4593,7 +4593,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u09ab\u09be\u09b8\u09cd\u099f\u09bf\u0982",
+    "titleCulture": "ফাস্টিং",
     "errorMessage": "Please enter a valid fasting blood sugar value",
     "unitMeasurement": "mmol/L",
     "isSummary": false,
@@ -4628,7 +4628,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u09b0\u09c7\u09a8\u09cd\u09a1\u09ae",
+    "titleCulture": "রেন্ডম",
     "errorMessage": "Please enter a valid random blood sugar value",
     "unitMeasurement": "mmol/L",
     "isSummary": false,
@@ -4663,7 +4663,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09aa\u09cd\u09b0\u09b8\u09cd\u09b0\u09be\u09ac \u09aa\u09b0\u09c0\u0995\u09cd\u09b7\u09be\u09af\u09bc \u0997\u09cd\u09b2\u09c1\u0995\u09cb\u099c \u0986\u099b\u09c7 \u0995\u09bf\u09a8\u09be",
+    "titleCulture": "প্রস্রাব পরীক্ষায় গ্লুকোজ আছে কিনা",
     "errorMessage": "Please select a valid option",
     "isSummary": false,
     "clinicalConcept": [
@@ -4684,7 +4684,7 @@
       {
         "id": "present",
         "name": "Present",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -4696,7 +4696,7 @@
       {
         "id": "absent",
         "name": "Absent",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -4724,7 +4724,7 @@
     "label": "Vaccination and Supplements",
     "widgetHint": "CardView",
     "familyOrder": 2,
-    "titleCulture": "\u099f\u09bf\u0995\u09be \u098f\u09ac\u0982 \u09b8\u09ae\u09cd\u09aa\u09c2\u09b0\u0995",
+    "titleCulture": "টিকা এবং সম্পূরক",
     "programmes": [
       {
         "id": "anc",
@@ -4743,7 +4743,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0986\u09aa\u09a8\u09be\u09b0 \u0995\u09bf \u099f\u09bf\u099f\u09bf \u099f\u09bf\u0995\u09be \u09a1\u09cb\u099c \u09b8\u09ae\u09cd\u09aa\u09c2\u09b0\u09cd\u09a3 \u0995\u09b0\u09be \u0986\u099b\u09c7?",
+    "titleCulture": "আপনার কি টিটি টিকা ডোজ সম্পূর্ণ করা আছে?",
     "errorMessage": "Please select a valid option",
     "isSummary": false,
     "clinicalConcept": [
@@ -4764,7 +4764,7 @@
       {
         "id": "yes",
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -4776,7 +4776,7 @@
       {
         "id": "no",
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -4825,8 +4825,8 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "Total Consumed last month",
-    "hintCulture": "\u0997\u09a4\u09ae\u09be\u09b8\u09c7 \u09ae\u09cb\u099f \u0996\u09be\u0993\u09af\u09bc\u09be \u09b9\u09af\u09bc\u09c7\u099b\u09c7",
-    "titleCulture": "\u0997\u09a4\u09ae\u09be\u09b8\u09c7 \u0995\u09df\u099f\u09bf \u09ab\u09b2\u09bf\u0995 \u098f\u09b8\u09bf\u09a1 \u09ac\u09dc\u09bf \u0996\u09c7\u09df\u09c7\u099b\u09c7\u09a8?",
+    "hintCulture": "গতমাসে মোট খাওয়া হয়েছে",
+    "titleCulture": "গতমাসে কয়টি ফলিক এসিড বড়ি খেয়েছেন?",
     "errorMessage": "Please enter a valid number",
     "isSummary": false,
     "inputType": "integer",
@@ -4858,8 +4858,8 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "Enter number of tablets",
-    "hintCulture": "\u098f\u0987 \u09ad\u09bf\u099c\u09bf\u099f\u09c7\u09b0 \u09b8\u09ae\u09af\u09bc \u09aa\u09cd\u09b0\u09a6\u09be\u09a8\u0995\u09c3\u09a4",
-    "titleCulture": "\u098f\u0987 \u09ad\u09bf\u099c\u09bf\u099f\u09c7\u09b0 \u09b8\u09ae\u09af\u09bc \u09aa\u09cd\u09b0\u09a6\u09be\u09a8\u0995\u09c3\u09a4 \u2013",
+    "hintCulture": "এই ভিজিটের সময় প্রদানকৃত",
+    "titleCulture": "এই ভিজিটের সময় প্রদানকৃত –",
     "errorMessage": "Please enter a valid number",
     "isSummary": false,
     "inputType": "integer",
@@ -4891,8 +4891,8 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "Total Consumed last month",
-    "hintCulture": "\u0997\u09a4\u09ae\u09be\u09b8\u09c7 \u09ae\u09cb\u099f \u0996\u09be\u0993\u09af\u09bc\u09be \u09b9\u09af\u09bc\u09c7\u099b\u09c7",
-    "titleCulture": "\u0997\u09a4\u09ae\u09be\u09b8\u09c7 \u0995\u09df\u099f\u09bf \u0986\u09df\u09b0\u09a8 \u09ac\u09dc\u09bf \u0996\u09c7\u09df\u09c7\u099b\u09c7\u09a8?",
+    "hintCulture": "গতমাসে মোট খাওয়া হয়েছে",
+    "titleCulture": "গতমাসে কয়টি আয়রন বড়ি খেয়েছেন?",
     "errorMessage": "Please enter a valid number",
     "isSummary": false,
     "inputType": "integer",
@@ -4923,7 +4923,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u098f\u0987 \u09ad\u09bf\u099c\u09bf\u099f\u09c7\u09b0 \u09b8\u09ae\u09af\u09bc \u09aa\u09cd\u09b0\u09a6\u09be\u09a8\u0995\u09c3\u09a4 \u2013",
+    "titleCulture": "এই ভিজিটের সময় প্রদানকৃত –",
     "errorMessage": "Please enter a valid number",
     "isSummary": false,
     "inputType": "integer",
@@ -4954,7 +4954,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0997\u09a4\u09ae\u09be\u09b8\u09c7 \u0995\u09df\u099f\u09bf \u0995\u09cd\u09af\u09be\u09b2\u09b8\u09bf\u09df\u09be\u09ae \u09ac\u09dc\u09bf \u0996\u09c7\u09df\u09c7\u099b\u09c7\u09a8?",
+    "titleCulture": "গতমাসে কয়টি ক্যালসিয়াম বড়ি খেয়েছেন?",
     "errorMessage": "Please enter a valid number",
     "isSummary": false,
     "inputType": "integer",
@@ -4985,7 +4985,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u098f\u0987 \u09ad\u09bf\u099c\u09bf\u099f\u09c7\u09b0 \u09b8\u09ae\u09af\u09bc \u09aa\u09cd\u09b0\u09a6\u09be\u09a8 \u0995\u09b0\u09be \u09b9\u09af\u09bc\u09c7\u099b\u09c7 \u2013",
+    "titleCulture": "এই ভিজিটের সময় প্রদান করা হয়েছে –",
     "errorMessage": "Please enter a valid number",
     "isSummary": false,
     "inputType": "integer",
@@ -5011,7 +5011,7 @@
     "label": "ANC services and Birth Preparedness",
     "widgetHint": "CardView",
     "familyOrder": 3,
-    "titleCulture": "ANC \u09b8\u09c7\u09ac\u09be \u098f\u09ac\u0982 \u09aa\u09cd\u09b0\u09b8\u09ac\u09c7\u09b0 \u09aa\u09cd\u09b0\u09b8\u09cd\u09a4\u09c1\u09a4\u09bf",
+    "titleCulture": "ANC সেবা এবং প্রসবের প্রস্তুতি",
     "programmes": [
       {
         "id": "anc",
@@ -5030,7 +5030,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0985\u09a8\u09cd\u09af \u09b8\u09c7\u09ac\u09be\u09a6\u09be\u09a4\u09be\u09a6\u09c7\u09b0 \u09b8\u0999\u09cd\u0997\u09c7 \u0995\u09a4\u09ac\u09be\u09b0 ANC (\u0997\u09b0\u09cd\u09ad\u0995\u09be\u09b2\u09c0\u09a8 \u09b8\u09cd\u09ac\u09be\u09b8\u09cd\u09a5\u09cd\u09af\u09aa\u09b0\u09bf\u099a\u09b0\u09cd\u09af\u09be) \u09ad\u09bf\u099c\u09bf\u099f \u0995\u09b0\u09be \u09b9\u09df\u09c7\u099b\u09c7?",
+    "titleCulture": "অন্য সেবাদাতাদের সঙ্গে কতবার ANC (গর্ভকালীন স্বাস্থ্যপরিচর্যা) ভিজিট করা হয়েছে?",
     "errorMessage": "Please enter a valid number",
     "minValue": 0,
     "isSummary": false,
@@ -5060,7 +5060,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0997\u09b0\u09cd\u09ad\u09ac\u09a4\u09c0 \u09ae\u09be \u0995\u09ae\u09aa\u0995\u09cd\u09b7\u09c7 \u098f\u0995\u09ac\u09be\u09b0 \u0995\u09cb\u09a8\u09cb \u099a\u09bf\u0995\u09bf\u09ce\u09b8\u0995 \u09a5\u09c7\u0995\u09c7 ANC \u09aa\u09c7\u09df\u09c7\u099b\u09c7\u09a8 \u0995\u09bf \u09a8\u09be?",
+    "titleCulture": "গর্ভবতী মা কমপক্ষে একবার কোনো চিকিৎসক থেকে ANC পেয়েছেন কি না?",
     "errorMessage": "Please select a valid option",
     "isSummary": false,
     "clinicalConcept": [
@@ -5081,7 +5081,7 @@
       {
         "id": "yes",
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -5093,7 +5093,7 @@
       {
         "id": "no",
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -5115,7 +5115,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0986\u09b2\u09cd\u099f\u09cd\u09b0\u09be\u09b8\u09be\u0989\u09a8\u09cd\u09a1 \u0995\u09b0\u09be \u09b9\u09df\u09c7\u099b\u09c7 \u0995\u09bf?",
+    "titleCulture": "আল্ট্রাসাউন্ড করা হয়েছে কি?",
     "errorMessage": "Please select a valid option",
     "isSummary": false,
     "clinicalConcept": [
@@ -5136,7 +5136,7 @@
       {
         "id": "done",
         "name": "Done",
-        "cultureValue": "\u09b8\u09ae\u09cd\u09aa\u09a8\u09cd\u09a8 \u09b9\u09af\u09bc\u09c7\u099b\u09c7",
+        "cultureValue": "সম্পন্ন হয়েছে",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -5148,7 +5148,7 @@
       {
         "id": "notDone",
         "name": "Not done yet",
-        "cultureValue": "\u098f\u0996\u09a8\u0993 \u09b8\u09ae\u09cd\u09aa\u09a8\u09cd\u09a8 \u09b9\u09af\u09bc\u09a8\u09bf",
+        "cultureValue": "এখনও সম্পন্ন হয়নি",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -5169,7 +5169,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0997\u09b0\u09cd\u09ad\u09ac\u09a4\u09c0 \u09ae\u09be \u0995\u09bf \u09aa\u09cd\u09b0\u09b8\u09ac\u09c7\u09b0 \u099c\u09a8\u09cd\u09af \u0995\u09cb\u09a8\u09cb \u09b8\u09cd\u09ac\u09be\u09b8\u09cd\u09a5\u09cd\u09af\u0995\u09c7\u09a8\u09cd\u09a6\u09cd\u09b0 \u09a0\u09bf\u0995 \u0995\u09b0\u09c7\u099b\u09c7\u09a8?",
+    "titleCulture": "গর্ভবতী মা কি প্রসবের জন্য কোনো স্বাস্থ্যকেন্দ্র ঠিক করেছেন?",
     "errorMessage": "Please select a valid option",
     "isSummary": false,
     "clinicalConcept": [
@@ -5190,22 +5190,22 @@
       {
         "id": "uhfwc",
         "name": "UHFWC (Union health and family welfare center)",
-        "cultureValue": "\u0987\u0989\u09a8\u09bf\u09af\u09bc\u09a8 \u09b8\u09cd\u09ac\u09be\u09b8\u09cd\u09a5\u09cd\u09af \u0993 \u09aa\u09b0\u09bf\u09ac\u09be\u09b0\u0995\u09b2\u09cd\u09af\u09be\u09a3 \u0995\u09c7\u09a8\u09cd\u09a6\u09cd\u09b0 (UHFWC)"
+        "cultureValue": "ইউনিয়ন স্বাস্থ্য ও পরিবারকল্যাণ কেন্দ্র (UHFWC)"
       },
       {
         "id": "mcwc",
         "name": "MCWC (Mother and Child Welfare Center)",
-        "cultureValue": "\u09ae\u09be \u0993 \u09b6\u09bf\u09b6\u09c1 \u0995\u09b2\u09cd\u09af\u09be\u09a3 \u0995\u09c7\u09a8\u09cd\u09a6\u09cd\u09b0 (MCWC)"
+        "cultureValue": "মা ও শিশু কল্যাণ কেন্দ্র (MCWC)"
       },
       {
         "id": "uhc",
         "name": "UHC (Upazila Health complex)",
-        "cultureValue": "\u0989\u09aa\u099c\u09c7\u09b2\u09be \u09b8\u09cd\u09ac\u09be\u09b8\u09cd\u09a5\u09cd\u09af \u0995\u09ae\u09aa\u09cd\u09b2\u09c7\u0995\u09cd\u09b8 (UHC)"
+        "cultureValue": "উপজেলা স্বাস্থ্য কমপ্লেক্স (UHC)"
       },
       {
         "id": "districtHospital",
         "name": "District Hospital",
-        "cultureValue": "\u099c\u09c7\u09b2\u09be \u09b8\u09a6\u09b0 \u09b9\u09be\u09b8\u09aa\u09be\u09a4\u09be\u09b2",
+        "cultureValue": "জেলা সদর হাসপাতাল",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -5217,7 +5217,7 @@
       {
         "id": "medicalCollegeHospital",
         "name": "Medical College Hospital",
-        "cultureValue": "\u09ae\u09c7\u09a1\u09bf\u0995\u09c7\u09b2 \u0995\u09b2\u09c7\u099c \u09b9\u09be\u09b8\u09aa\u09be\u09a4\u09be\u09b2",
+        "cultureValue": "মেডিকেল কলেজ হাসপাতাল",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -5229,22 +5229,22 @@
       {
         "id": "ngoFacility",
         "name": "NGO facility",
-        "cultureValue": "\u098f\u09a8\u099c\u09bf\u0993 \u09b8\u09cd\u09ac\u09be\u09b8\u09cd\u09a5\u09cd\u09af\u09b8\u09c7\u09ac\u09be \u0995\u09c7\u09a8\u09cd\u09a6\u09cd\u09b0"
+        "cultureValue": "এনজিও স্বাস্থ্যসেবা কেন্দ্র"
       },
       {
         "id": "privateFacility",
         "name": "Private Facility",
-        "cultureValue": "\u09aa\u09cd\u09b0\u09be\u0987\u09ad\u09c7\u099f \u09b9\u09be\u09b8\u09aa\u09be\u09a4\u09be\u09b2"
+        "cultureValue": "প্রাইভেট হাসপাতাল"
       },
       {
         "id": "notIdentified",
         "name": "Not identified yet",
-        "cultureValue": "\u098f\u0996\u09a8\u0993 \u09a0\u09bf\u0995 \u09b9\u09af\u09bc\u09a8\u09bf"
+        "cultureValue": "এখনও ঠিক হয়নি"
       },
       {
         "id": "homeDelivery",
         "name": "Planned for home delivery",
-        "cultureValue": "\u0998\u09b0\u09c7 \u09aa\u09cd\u09b0\u09b8\u09ac\u09c7\u09b0 \u09aa\u09b0\u09bf\u0995\u09b2\u09cd\u09aa\u09a8\u09be \u0995\u09b0\u09be \u09b9\u09af\u09bc\u09c7\u099b\u09c7"
+        "cultureValue": "ঘরে প্রসবের পরিকল্পনা করা হয়েছে"
       }
     ]
   },
@@ -5253,7 +5253,7 @@
     "label": "Danger Signs/Risk identification",
     "widgetHint": "CardView",
     "familyOrder": 4,
-    "titleCulture": "\u09ac\u09bf\u09aa\u09a6\u099a\u09bf\u09b9\u09cd\u09a8/\u099d\u09c1\u0981\u0995\u09bf \u09b6\u09a8\u09be\u0995\u09cd\u09a4\u0995\u09b0\u09a3",
+    "titleCulture": "বিপদচিহ্ন/ঝুঁকি শনাক্তকরণ",
     "programmes": [
       {
         "id": "anc",
@@ -5266,14 +5266,14 @@
     "id": "dangerSignsExperienced12",
     "label": "Has the PW experienced any of the following",
     "widgetHint": "DialogCheckbox",
-    "fieldName": "Has the PW experienced any of the following (Gestation age \u2264 12 weeks)",
+    "fieldName": "Has the PW experienced any of the following (Gestation age ≤ 12 weeks)",
     "family": "dangerSignsRiskIdentification",
     "orderId": 1,
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
     "hint": "Danger Signs",
-    "titleCulture": "\u0997\u09b0\u09cd\u09ad\u09ac\u09a4\u09c0 \u09ae\u09be \u0995\u09bf \u09a8\u09bf\u099a\u09c7\u09b0 \u0995\u09cb\u09a8\u09cb \u09b8\u09ae\u09b8\u09cd\u09af\u09be\u09df \u09ad\u09c1\u0997\u099b\u09c7?",
+    "titleCulture": "গর্ভবতী মা কি নিচের কোনো সমস্যায় ভুগছে?",
     "errorMessage": "Please select a valid option",
     "isSummary": false,
     "clinicalConcept": [
@@ -5294,7 +5294,7 @@
       {
         "id": "vaginalBleeding",
         "name": "Vaginal bleeding",
-        "cultureValue": "\u09ae\u09be\u09b8\u09bf\u0995\u09c7\u09b0 \u09b0\u09be\u09b8\u09cd\u09a4\u09be \u09a6\u09bf\u09df\u09c7 \u09b0\u0995\u09cd\u09a4\u09aa\u09be\u09a4",
+        "cultureValue": "মাসিকের রাস্তা দিয়ে রক্তপাত",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -5306,7 +5306,7 @@
       {
         "id": "severeAbdominalPain",
         "name": "Severe abdominal pain",
-        "cultureValue": "\u09a4\u09c0\u09ac\u09cd\u09b0 \u09aa\u09c7\u099f \u09ac\u09cd\u09af\u09a5\u09be",
+        "cultureValue": "তীব্র পেট ব্যথা",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -5318,27 +5318,27 @@
       {
         "id": "severeHeadaches",
         "name": "Severe headaches/blurred vision/sudden swelling of face/ hands",
-        "cultureValue": "\u09a4\u09c0\u09ac\u09cd\u09b0 \u09ae\u09be\u09a5\u09be\u09ac\u09cd\u09af\u09a5\u09be / \u099a\u09cb\u0996\u09c7 \u099d\u09be\u09aa\u09b8\u09be \u09a6\u09c7\u0996\u09be / \u09ae\u09c1\u0996 \u09ac\u09be \u09b9\u09be\u09a4\u09c7 \u09b9\u09a0\u09be\u09ce \u09ab\u09c1\u09b2\u09c7 \u09af\u09be\u0993\u09df\u09be ( \u09b8\u09ae\u09cd\u09ad\u09be\u09ac\u09cd\u09af \u09aa\u09cd\u09b0\u09bf-\u0987\u0995\u09cd\u09b2\u09be\u09ae\u09cd\u09aa\u09b8\u09bf\u09af\u09bc\u09be)"
+        "cultureValue": "তীব্র মাথাব্যথা / চোখে ঝাপসা দেখা / মুখ বা হাতে হঠাৎ ফুলে যাওয়া ( সম্ভাব্য প্রি-ইক্লাম্পসিয়া)"
       },
       {
         "id": "severeVomiting",
         "name": "Severe vomiting",
-        "cultureValue": "\u09a4\u09c0\u09ac\u09cd\u09b0 \u09ac\u09ae\u09bf"
+        "cultureValue": "তীব্র বমি"
       },
       {
         "id": "highFever",
-        "name": "High Fever/ Pain or burining while urinating",
-        "cultureValue": "\u09a4\u09c0\u09ac\u09cd\u09b0 \u099c\u09cd\u09ac\u09b0/ \u09aa\u09cd\u09b0\u09b8\u09cd\u09b0\u09be\u09ac\u09c7\u09b0 \u09b8\u09ae\u09af\u09bc \u09ac\u09cd\u09af\u09a5\u09be \u09ac\u09be \u09aa\u09cd\u09b0\u09b8\u09cd\u09b0\u09be\u09ac\u09c7 \u099c\u09cd\u09ac\u09be\u09b2\u09be-\u09aa\u09cb\u09dc\u09be \u0985\u09a8\u09c1\u09ad\u09c2\u09a4\u09bf"
+        "name": "High Fever/ Pain or burning while urinating",
+        "cultureValue": "তীব্র জ্বর/ প্রস্রাবের সময় ব্যথা বা প্রস্রাবে জ্বালা-পোড়া অনুভূতি"
       },
       {
         "id": "shortnessOfBreath",
         "name": "Shortness of breath/dizziness",
-        "cultureValue": "\u09b6\u09cd\u09ac\u09be\u09b8 \u09a8\u09bf\u09a4\u09c7 \u0995\u09b7\u09cd\u099f"
+        "cultureValue": "শ্বাস নিতে কষ্ট"
       },
       {
         "id": "none",
         "name": "None",
-        "cultureValue": "(\u0989\u09aa\u09b0\u09c7\u09b0 \u0995\u09cb\u09a8\u09cb\u099f\u09bf \u09a8\u09df)",
+        "cultureValue": "(উপরের কোনোটি নয়)",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -5350,7 +5350,7 @@
       {
         "id": "other",
         "name": "Other",
-        "cultureValue": "\u0985\u09a8\u09cd\u09af\u09be\u09a8\u09cd\u09af",
+        "cultureValue": "অন্যান্য",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -5373,7 +5373,7 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "Danger Signs",
-    "titleCulture": "\u0997\u09b0\u09cd\u09ad\u09ac\u09a4\u09c0 \u09ae\u09be \u0995\u09bf \u09a8\u09bf\u099a\u09c7\u09b0 \u0995\u09cb\u09a8\u09cb \u09b8\u09ae\u09b8\u09cd\u09af\u09be\u09df \u09ad\u09c1\u0997\u099b\u09c7?",
+    "titleCulture": "গর্ভবতী মা কি নিচের কোনো সমস্যায় ভুগছে?",
     "errorMessage": "Please select a valid option",
     "isSummary": false,
     "clinicalConcept": [
@@ -5394,7 +5394,7 @@
       {
         "id": "vaginalBleeding",
         "name": "Vaginal bleeding",
-        "cultureValue": "\u09ae\u09be\u09b8\u09bf\u0995\u09c7\u09b0 \u09b0\u09be\u09b8\u09cd\u09a4\u09be \u09a6\u09bf\u09df\u09c7 \u09b0\u0995\u09cd\u09a4\u09aa\u09be\u09a4",
+        "cultureValue": "মাসিকের রাস্তা দিয়ে রক্তপাত",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -5406,37 +5406,37 @@
       {
         "id": "leakingFluid",
         "name": "Leaking of fluid from vagina",
-        "cultureValue": "\u09ae\u09be\u09b8\u09bf\u0995\u09c7\u09b0 \u09b0\u09be\u09b8\u09cd\u09a4\u09be \u09a6\u09bf\u09df\u09c7 \u09aa\u09be\u09a8\u09bf \u09ac\u09be \u09a4\u09b0\u09b2 \u0995\u09bf\u099b\u09c1 \u09ac\u09c7\u09b0 \u09b9\u0993\u09df\u09be"
+        "cultureValue": "মাসিকের রাস্তা দিয়ে পানি বা তরল কিছু বের হওয়া"
       },
       {
         "id": "regularContractions",
         "name": "Regular/painful contractions",
-        "cultureValue": "\u09a4\u09b2\u09aa\u09c7\u099f\u09c7 \u0985\u09a4\u09bf\u09b0\u09bf\u0995\u09cd\u09a4 \u09ac\u09cd\u09af\u09be\u09a5\u09be/ \u09aa\u09c7\u099f \u09b6\u0995\u09cd\u09a4 \u09b9\u0993\u09df\u09be"
+        "cultureValue": "তলপেটে অতিরিক্ত ব্যাথা/ পেট শক্ত হওয়া"
       },
       {
         "id": "persistentHeadache",
         "name": "Persistent headache or visual disturbances/  swelling of face/ hands",
-        "cultureValue": "\u09a6\u09c0\u09b0\u09cd\u0998\u09b8\u09ae\u09df \u09ae\u09be\u09a5\u09be\u09ac\u09cd\u09af\u09a5\u09be, \u099a\u09cb\u0996\u09c7 \u099d\u09be\u09aa\u09b8\u09be \u09a6\u09c7\u0996\u09be, \u09ac\u09be \u09ae\u09c1\u0996/\u09b9\u09be\u09a4 \u09ab\u09c1\u09b2\u09c7 \u09af\u09be\u0993\u09df\u09be"
+        "cultureValue": "দীর্ঘসময় মাথাব্যথা, চোখে ঝাপসা দেখা, বা মুখ/হাত ফুলে যাওয়া"
       },
       {
         "id": "epigastricPain",
         "name": "Epigastric pain (severe pain below ribs)",
-        "cultureValue": "\u09ac\u09c1\u0995\u09c7\u09b0 \u09aa\u09be\u0981\u099c\u09b0\u09c7\u09b0 \u09a8\u09bf\u099a\u09c7 \u09a4\u09c0\u09ac\u09cd\u09b0 \u09ac\u09cd\u09af\u09a5\u09be"
+        "cultureValue": "বুকের পাঁজরের নিচে তীব্র ব্যথা"
       },
       {
         "id": "highFever",
-        "name": "High fever/ Pain or burining while urinating",
-        "cultureValue": "\u09a4\u09c0\u09ac\u09cd\u09b0 \u099c\u09cd\u09ac\u09b0/ \u09aa\u09cd\u09b0\u09b8\u09cd\u09b0\u09be\u09ac\u09c7\u09b0 \u09b8\u09ae\u09af\u09bc \u09ac\u09cd\u09af\u09a5\u09be \u09ac\u09be \u09aa\u09cd\u09b0\u09b8\u09cd\u09b0\u09be\u09ac\u09c7 \u099c\u09cd\u09ac\u09be\u09b2\u09be-\u09aa\u09cb\u09dc\u09be \u0985\u09a8\u09c1\u09ad\u09c2\u09a4\u09bf"
+        "name": "High fever/ Pain or burning while urinating",
+        "cultureValue": "তীব্র জ্বর/ প্রস্রাবের সময় ব্যথা বা প্রস্রাবে জ্বালা-পোড়া অনুভূতি"
       },
       {
         "id": "reducedFetalMovements",
         "name": "Reduced fetal movements",
-        "cultureValue": "\u09ac\u09be\u099a\u09cd\u099a\u09be\u09b0 \u09a8\u09dc\u09be\u099a\u09dc\u09be \u0995\u09ae\u09c7 \u09af\u09be\u0993\u09df\u09be"
+        "cultureValue": "বাচ্চার নড়াচড়া কমে যাওয়া"
       },
       {
         "id": "none",
         "name": "None",
-        "cultureValue": "\u09a8\u09be (\u0989\u09aa\u09b0\u09c7\u09b0 \u0995\u09cb\u09a8\u09cb\u099f\u09bf \u09a8\u09df)",
+        "cultureValue": "না (উপরের কোনোটি নয়)",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -5448,7 +5448,7 @@
       {
         "id": "other",
         "name": "Other",
-        "cultureValue": "\u0985\u09a8\u09cd\u09af\u09be\u09a8\u09cd\u09af",
+        "cultureValue": "অন্যান্য",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -5471,7 +5471,7 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "Danger Signs",
-    "titleCulture": "\u0997\u09b0\u09cd\u09ad\u09ac\u09a4\u09c0 \u09ae\u09be \u0995\u09bf \u09a8\u09bf\u099a\u09c7\u09b0 \u0995\u09cb\u09a8\u09cb \u09b8\u09ae\u09b8\u09cd\u09af\u09be\u09df \u09ad\u09c1\u0997\u099b\u09c7?",
+    "titleCulture": "গর্ভবতী মা কি নিচের কোনো সমস্যায় ভুগছে?",
     "errorMessage": "Please select a valid option",
     "isSummary": false,
     "clinicalConcept": [
@@ -5492,17 +5492,17 @@
       {
         "id": "decreasedFetalMovements",
         "name": "Decreased or absent fetal movements",
-        "cultureValue": "\u09ac\u09be\u099a\u09cd\u099a\u09be\u09b0 \u09a8\u09dc\u09be\u099a\u09dc\u09be \u0995\u09ae\u09c7 \u09af\u09be\u0993\u09df\u09be \u09ac\u09be \u09ac\u09a8\u09cd\u09a7 \u09b9\u09df\u09c7 \u09af\u09be\u0993\u09df\u09be"
+        "cultureValue": "বাচ্চার নড়াচড়া কমে যাওয়া বা বন্ধ হয়ে যাওয়া"
       },
       {
         "id": "severeAbdominalPain",
         "name": "Severe abdominal pain or regular, painful contractions",
-        "cultureValue": "\u09a4\u09b2\u09aa\u09c7\u099f\u09c7 \u0985\u09a4\u09bf\u09b0\u09bf\u0995\u09cd\u09a4 \u09ac\u09cd\u09af\u09be\u09a5\u09be/ \u09aa\u09c7\u099f \u09b6\u0995\u09cd\u09a4 \u09b9\u0993\u09df\u09be"
+        "cultureValue": "তলপেটে অতিরিক্ত ব্যাথা/ পেট শক্ত হওয়া"
       },
       {
         "id": "vaginalBleeding",
         "name": "Vaginal bleeding",
-        "cultureValue": "\u09ae\u09be\u09b8\u09bf\u0995\u09c7\u09b0 \u09b0\u09be\u09b8\u09cd\u09a4\u09be \u09a6\u09bf\u09df\u09c7 \u09b0\u0995\u09cd\u09a4\u09aa\u09be\u09a4",
+        "cultureValue": "মাসিকের রাস্তা দিয়ে রক্তপাত",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -5514,27 +5514,27 @@
       {
         "id": "leakingFluid",
         "name": "Leaking of fluid from vagina",
-        "cultureValue": "\u09ae\u09be\u09b8\u09bf\u0995\u09c7\u09b0 \u09b0\u09be\u09b8\u09cd\u09a4\u09be \u09a6\u09bf\u09df\u09c7 \u09aa\u09be\u09a8\u09bf \u09ac\u09be \u09a4\u09b0\u09b2 \u0995\u09bf\u099b\u09c1 \u09ac\u09c7\u09b0 \u09b9\u0993\u09df\u09be"
+        "cultureValue": "মাসিকের রাস্তা দিয়ে পানি বা তরল কিছু বের হওয়া"
       },
       {
         "id": "severeHeadaches",
         "name": "Severe headaches/ visual disturbances/ epigastric pain/ sudden swelling of face or hands",
-        "cultureValue": " \u09a4\u09c0\u09ac\u09cd\u09b0 \u09ae\u09be\u09a5\u09be\u09ac\u09cd\u09af\u09a5\u09be/\u099a\u09cb\u0996\u09c7 \u099d\u09be\u09aa\u09b8\u09be/\u09aa\u09be\u0981\u099c\u09b0\u09c7\u09b0 \u09a8\u09bf\u099a\u09c7 \u09ac\u09cd\u09af\u09a5\u09be/\u09b9\u09a0\u09be\u09ce \u09ae\u09c1\u0996 \u09ac\u09be \u09b9\u09be\u09a4 \u09ab\u09c1\u09b2\u09c7 \u09af\u09be\u0993\u09df\u09be"
+        "cultureValue": " তীব্র মাথাব্যথা/চোখে ঝাপসা/পাঁজরের নিচে ব্যথা/হঠাৎ মুখ বা হাত ফুলে যাওয়া"
       },
       {
-        "id": "fever",
-        "name": "Fever/ Foul semlling vaginal discharge",
-        "cultureValue": "\u099c\u09cd\u09ac\u09b0/\u09a6\u09c1\u09b0\u09cd\u0997\u09a8\u09cd\u09a7\u09af\u09c1\u0995\u09cd\u09a4 \u09ae\u09be\u09b8\u09bf\u0995\u09c7\u09b0 \u09b0\u09be\u09b8\u09cd\u09a4\u09be \u09a6\u09bf\u09df\u09c7 \u09b8\u09cd\u09b0\u09be\u09ac \u09ac\u09c7\u09b0 \u09b9\u0993\u09df\u09be"
+        "id": "feverBurningUrination",
+        "name": "Fever / burning while urinating",
+        "cultureValue": "জ্বর/দুর্গন্ধযুক্ত মাসিকের রাস্তা দিয়ে স্রাব বের হওয়া"
       },
       {
         "id": "fits",
         "name": "Fits/Convulsions",
-        "cultureValue": " \u0996\u09bf\u0981\u099a\u09c1\u09a8\u09bf"
+        "cultureValue": " খিঁচুনি"
       },
       {
         "id": "none",
         "name": "None",
-        "cultureValue": "(\u0989\u09aa\u09b0\u09c7\u09b0 \u0995\u09cb\u09a8\u09cb\u099f\u09bf \u09a8\u09df)",
+        "cultureValue": "(উপরের কোনোটি নয়)",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -5546,7 +5546,7 @@
       {
         "id": "other",
         "name": "Other",
-        "cultureValue": "\u0985\u09a8\u09cd\u09af\u09be\u09a8\u09cd\u09af",
+        "cultureValue": "অন্যান্য",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -5569,7 +5569,7 @@
     "isEnabled": true,
     "readOnly": true,
     "visibility": "visible",
-    "titleCulture": "\u0989\u099a\u09cd\u099a \u099d\u09c1\u0981\u0995\u09bf\u09aa\u09c2\u09b0\u09cd\u09a3 \u0997\u09b0\u09cd\u09ad\u09ac\u09a4\u09c0 \u09ae\u09be",
+    "titleCulture": "উচ্চ ঝুঁকিপূর্ণ গর্ভবতী মা",
     "isSummary": true,
     "clinicalConcept": [
       {
@@ -5597,7 +5597,7 @@
     "isEnabled": true,
     "readOnly": true,
     "visibility": "visible",
-    "titleCulture": "\u0997\u09b0\u09cd\u09ad\u0995\u09be\u09b2\u09c0\u09a8 \u09aa\u09b0\u09bf\u099a\u09b0\u09cd\u09af\u09be\u09af\u09bc (ANC) \u0985\u09b8\u09ae\u09cd\u09aa\u09c2\u09b0\u09cd\u09a3\u09a4\u09be",
+    "titleCulture": "গর্ভকালীন পরিচর্যায় (ANC) অসম্পূর্ণতা",
     "isSummary": true,
     "programmes": [
       {
@@ -5617,7 +5617,7 @@
     "isMandatory": false,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09aa\u09c1\u09b7\u09cd\u099f\u09bf \u09aa\u09b0\u09be\u09ae\u09b0\u09cd\u09b6",
+    "titleCulture": "পুষ্টি পরামর্শ",
     "isSummary": true,
     "programmes": [
       {
@@ -5629,43 +5629,43 @@
     "optionsList": [
       {
         "id": "underWeight",
-        "name": "Your current weight is well below normal. According to your BMI, you should gain 12.5\u201318 kg throughout pregnancy. Weight usually starts increasing regularly from the 4th month. Therefore, maintaining a balanced diet, adequate rest, and regular weight monitoring from this stage is essential. Gaining too much or too little weight can be risky for both mother and baby.",
-        "cultureValue": "\u0986\u09aa\u09a8\u09be\u09b0 \u09ac\u09b0\u09cd\u09a4\u09ae\u09be\u09a8 \u0993\u099c\u09a8 \u09b8\u09cd\u09ac\u09be\u09ad\u09be\u09ac\u09bf\u0995\u09c7\u09b0 \u09a4\u09c1\u09b2\u09a8\u09be\u09df \u0985\u09a8\u09c7\u0995 \u0995\u09ae\u0964 BMI \u0985\u09a8\u09c1\u09af\u09be\u09df\u09c0 \u09aa\u09c1\u09b0\u09cb \u0997\u09b0\u09cd\u09ad\u0995\u09be\u09b2\u09c0\u09a8 \u09b8\u09ae\u09df\u09c7 \u09e7\u09e8.\u09eb\u2013\u09e7\u09ee \u0995\u09c7\u099c\u09bf \u0993\u099c\u09a8 \u09ac\u09c3\u09a6\u09cd\u09a7\u09bf \u09aa\u09cd\u09b0\u09df\u09cb\u099c\u09a8\u0964 \u09b8\u09be\u09a7\u09be\u09b0\u09a3\u09a4 \u09ea\u09b0\u09cd\u09a5 \u09ae\u09be\u09b8 \u09a5\u09c7\u0995\u09c7 \u09a8\u09bf\u09df\u09ae\u09bf\u09a4 \u0993\u099c\u09a8 \u09ac\u09be\u09dc\u09be \u09b6\u09c1\u09b0\u09c1 \u09b9\u09df\u0964 \u09a4\u09be\u0987 \u098f\u0987 \u09b8\u09ae\u09df \u09a5\u09c7\u0995\u09c7 \u09b8\u09c1\u09b7\u09ae \u0996\u09be\u09ac\u09be\u09b0, \u09aa\u09b0\u09cd\u09af\u09be\u09aa\u09cd\u09a4 \u09ac\u09bf\u09b6\u09cd\u09b0\u09be\u09ae \u098f\u09ac\u0982 \u09a8\u09bf\u09df\u09ae\u09bf\u09a4 \u0993\u099c\u09a8 \u09aa\u09b0\u09cd\u09af\u09ac\u09c7\u0995\u09cd\u09b7\u09a3 \u099c\u09b0\u09c1\u09b0\u09bf\u0964 \u0996\u09c1\u09ac \u09ac\u09c7\u09b6\u09bf \u09ac\u09be \u0996\u09c1\u09ac \u0995\u09ae \u0993\u099c\u09a8 \u09ac\u09c3\u09a6\u09cd\u09a7\u09bf \u0989\u09ad\u09df\u0987 \u09ae\u09be \u0993 \u09b6\u09bf\u09b6\u09c1\u09b0 \u099c\u09a8\u09cd\u09af \u099d\u09c1\u0981\u0995\u09bf\u09aa\u09c2\u09b0\u09cd\u09a3\u0964"
+        "name": "Your current weight is well below normal. According to your BMI, you should gain 12.5–18 kg throughout pregnancy. Weight usually starts increasing regularly from the 4th month. Therefore, maintaining a balanced diet, adequate rest, and regular weight monitoring from this stage is essential. Gaining too much or too little weight can be risky for both mother and baby.",
+        "cultureValue": "আপনার বর্তমান ওজন স্বাভাবিকের তুলনায় অনেক কম। BMI অনুযায়ী পুরো গর্ভকালীন সময়ে ১২.৫–১৮ কেজি ওজন বৃদ্ধি প্রয়োজন। সাধারণত ৪র্থ মাস থেকে নিয়মিত ওজন বাড়া শুরু হয়। তাই এই সময় থেকে সুষম খাবার, পর্যাপ্ত বিশ্রাম এবং নিয়মিত ওজন পর্যবেক্ষণ জরুরি। খুব বেশি বা খুব কম ওজন বৃদ্ধি উভয়ই মা ও শিশুর জন্য ঝুঁকিপূর্ণ।"
       },
       {
         "id": "normalWeight",
-        "name": "Your weight is within the normal range. According to your BMI, you should gain 11.5\u201316 kg throughout pregnancy. Weight usually starts increasing regularly from the 4th month. Maintaining a balanced diet and monitoring your weight regularly is essential. Gaining too much or too little weight can be risky for both mother and baby.",
-        "cultureValue": "\u0986\u09aa\u09a8\u09be\u09b0 \u0993\u099c\u09a8 \u09b8\u09cd\u09ac\u09be\u09ad\u09be\u09ac\u09bf\u0995 \u09b8\u09c0\u09ae\u09be\u09b0 \u09ae\u09a7\u09cd\u09af\u09c7 \u0986\u099b\u09c7\u0964 BMI \u0985\u09a8\u09c1\u09af\u09be\u09af\u09bc\u09c0 \u09aa\u09c1\u09b0\u09cb \u0997\u09b0\u09cd\u09ad\u0995\u09be\u09b2\u09c0\u09a8 \u09b8\u09ae\u09af\u09bc\u09c7 \u09e7\u09e7.\u09eb\u2013\u09e7\u09ec \u0995\u09c7\u099c\u09bf \u0993\u099c\u09a8 \u09ac\u09c3\u09a6\u09cd\u09a7\u09bf \u09aa\u09cd\u09b0\u09af\u09bc\u09cb\u099c\u09a8\u0964 \u09b8\u09be\u09a7\u09be\u09b0\u09a3\u09a4 \u09ea\u09b0\u09cd\u09a5 \u09ae\u09be\u09b8 \u09a5\u09c7\u0995\u09c7 \u09a8\u09bf\u09af\u09bc\u09ae\u09bf\u09a4 \u0993\u099c\u09a8 \u09ac\u09be\u09a1\u09bc\u09a4\u09c7 \u09b6\u09c1\u09b0\u09c1 \u0995\u09b0\u09c7\u0964 \u09a4\u09be\u0987 \u09b8\u09c1\u09b7\u09ae \u0996\u09be\u09ac\u09be\u09b0 \u0997\u09cd\u09b0\u09b9\u09a3 \u0993 \u09a8\u09bf\u09af\u09bc\u09ae\u09bf\u09a4 \u0993\u099c\u09a8 \u09aa\u09b0\u09cd\u09af\u09be\u09b2\u09cb\u099a\u09a8\u09be \u099c\u09b0\u09c1\u09b0\u09bf\u0964 \u0996\u09c1\u09ac \u09ac\u09c7\u09b6\u09bf \u09ac\u09be \u0996\u09c1\u09ac \u0995\u09ae \u0993\u099c\u09a8 \u09ac\u09c3\u09a6\u09cd\u09a7\u09bf \u0989\u09ad\u09af\u09bc\u0987 \u09ae\u09be \u0993 \u09b6\u09bf\u09b6\u09c1\u09b0 \u099c\u09a8\u09cd\u09af \u099d\u09c1\u0981\u0995\u09bf\u09aa\u09c2\u09b0\u09cd\u09a3\u0964"
+        "name": "Your weight is within the normal range. According to your BMI, you should gain 11.5–16 kg throughout pregnancy. Weight usually starts increasing regularly from the 4th month. Maintaining a balanced diet and monitoring your weight regularly is essential. Gaining too much or too little weight can be risky for both mother and baby.",
+        "cultureValue": "আপনার ওজন স্বাভাবিক সীমার মধ্যে আছে। BMI অনুযায়ী পুরো গর্ভকালীন সময়ে ১১.৫–১৬ কেজি ওজন বৃদ্ধি প্রয়োজন। সাধারণত ৪র্থ মাস থেকে নিয়মিত ওজন বাড়তে শুরু করে। তাই সুষম খাবার গ্রহণ ও নিয়মিত ওজন পর্যালোচনা জরুরি। খুব বেশি বা খুব কম ওজন বৃদ্ধি উভয়ই মা ও শিশুর জন্য ঝুঁকিপূর্ণ।"
       },
       {
         "id": "overWeight",
-        "name": "Your current weight is above the normal range. According to your BMI, you should aim to gain a total of 7\u201311.5 kg throughout your pregnancy. Gaining more than the recommended range can pose risks for both the mother and the baby, so it is important to monitor your weight regularly.",
-        "cultureValue": "\u0986\u09aa\u09a8\u09be\u09b0 \u09ac\u09b0\u09cd\u09a4\u09ae\u09be\u09a8 \u0993\u099c\u09a8 \u09b8\u09cd\u09ac\u09be\u09ad\u09be\u09ac\u09bf\u0995\u09c7\u09b0 \u09a4\u09c1\u09b2\u09a8\u09be\u09af\u09bc \u09ac\u09c7\u09b6\u09bf\u0964 BMI \u0985\u09a8\u09c1\u09af\u09be\u09af\u09bc\u09c0 \u09aa\u09c1\u09b0\u09cb \u0997\u09b0\u09cd\u09ad\u0995\u09be\u09b2\u09c0\u09a8 \u09b8\u09ae\u09af\u09bc\u09c7 \u0986\u09aa\u09a8\u09be\u09b0 \u09ae\u09cb\u099f \u09ed\u2013\u09e7\u09e7.\u09eb \u0995\u09c7\u099c\u09bf \u0993\u099c\u09a8 \u09ac\u09c3\u09a6\u09cd\u09a7\u09bf \u09b9\u0993\u09af\u09bc\u09be \u0989\u099a\u09bf\u09a4\u0964 \u09a8\u09bf\u09b0\u09cd\u09a7\u09be\u09b0\u09bf\u09a4 \u09b8\u09c0\u09ae\u09be\u09b0 \u099a\u09c7\u09af\u09bc\u09c7 \u09ac\u09c7\u09b6\u09bf \u0993\u099c\u09a8 \u09ac\u09c3\u09a6\u09cd\u09a7\u09bf \u09ae\u09be \u0993 \u09b6\u09bf\u09b6\u09c1\u09b0 \u099c\u09a8\u09cd\u09af \u099d\u09c1\u0981\u0995\u09bf\u09b0 \u0995\u09be\u09b0\u09a3 \u09b9\u09a4\u09c7 \u09aa\u09be\u09b0\u09c7, \u09a4\u09be\u0987 \u09a8\u09bf\u09af\u09bc\u09ae\u09bf\u09a4 \u0993\u099c\u09a8 \u09aa\u09b0\u09cd\u09af\u09ac\u09c7\u0995\u09cd\u09b7\u09a3 \u0995\u09b0\u09be \u0997\u09c1\u09b0\u09c1\u09a4\u09cd\u09ac\u09aa\u09c2\u09b0\u09cd\u09a3\u0964"
+        "name": "Your current weight is above the normal range. According to your BMI, you should aim to gain a total of 7–11.5 kg throughout your pregnancy. Gaining more than the recommended range can pose risks for both the mother and the baby, so it is important to monitor your weight regularly.",
+        "cultureValue": "আপনার বর্তমান ওজন স্বাভাবিকের তুলনায় বেশি। BMI অনুযায়ী পুরো গর্ভকালীন সময়ে আপনার মোট ৭–১১.৫ কেজি ওজন বৃদ্ধি হওয়া উচিত। নির্ধারিত সীমার চেয়ে বেশি ওজন বৃদ্ধি মা ও শিশুর জন্য ঝুঁকির কারণ হতে পারে, তাই নিয়মিত ওজন পর্যবেক্ষণ করা গুরুত্বপূর্ণ।"
       },
       {
         "id": "obsess",
-        "name": "Your current weight is significantly above the normal range. According to your BMI, you should aim to gain a total of 5\u20139 kg throughout your pregnancy. Gaining more than the recommended range can be risky for both you and your baby. Therefore, it is very important to monitor your weight regularly during pregnancy.",
-        "cultureValue": "\u0986\u09aa\u09a8\u09be\u09b0 \u09ac\u09b0\u09cd\u09a4\u09ae\u09be\u09a8 \u0993\u099c\u09a8 \u09b8\u09cd\u09ac\u09be\u09ad\u09be\u09ac\u09bf\u0995\u09c7\u09b0 \u09a4\u09c1\u09b2\u09a8\u09be\u09af\u09bc \u0985\u09a8\u09c7\u0995 \u09ac\u09c7\u09b6\u09bf\u0964 BMI \u0985\u09a8\u09c1\u09af\u09be\u09af\u09bc\u09c0 \u09aa\u09c1\u09b0\u09cb \u0997\u09b0\u09cd\u09ad\u0995\u09be\u09b2\u09c0\u09a8 \u09b8\u09ae\u09af\u09bc\u09c7 \u0986\u09aa\u09a8\u09be\u09b0 \u09ae\u09cb\u099f \u09eb\u2013\u09ef \u0995\u09c7\u099c\u09bf \u0993\u099c\u09a8 \u09ac\u09c3\u09a6\u09cd\u09a7\u09bf \u09b9\u0993\u09af\u09bc\u09be \u0989\u099a\u09bf\u09a4\u0964 \u09a8\u09bf\u09b0\u09cd\u09a7\u09be\u09b0\u09bf\u09a4 \u09b8\u09c0\u09ae\u09be\u09b0 \u099a\u09c7\u09af\u09bc\u09c7 \u09ac\u09c7\u09b6\u09bf \u0993\u099c\u09a8 \u09ac\u09c3\u09a6\u09cd\u09a7\u09bf \u09ae\u09be \u0993 \u09b6\u09bf\u09b6\u09c1\u09b0 \u099c\u09a8\u09cd\u09af \u099d\u09c1\u0981\u0995\u09bf\u09aa\u09c2\u09b0\u09cd\u09a3 \u09b9\u09a4\u09c7 \u09aa\u09be\u09b0\u09c7\u0964 \u09a4\u09be\u0987 \u0997\u09b0\u09cd\u09ad\u0995\u09be\u09b2\u09c0\u09a8 \u09b8\u09ae\u09af\u09bc\u09c7 \u09a8\u09bf\u09af\u09bc\u09ae\u09bf\u09a4\u09ad\u09be\u09ac\u09c7 \u0993\u099c\u09a8 \u09aa\u09b0\u09cd\u09af\u09ac\u09c7\u0995\u09cd\u09b7\u09a3 \u0995\u09b0\u09be \u0996\u09c1\u09ac\u0987 \u0997\u09c1\u09b0\u09c1\u09a4\u09cd\u09ac\u09aa\u09c2\u09b0\u09cd\u09a3\u0964"
+        "name": "Your current weight is significantly above the normal range. According to your BMI, you should aim to gain a total of 5–9 kg throughout your pregnancy. Gaining more than the recommended range can be risky for both you and your baby. Therefore, it is very important to monitor your weight regularly during pregnancy.",
+        "cultureValue": "আপনার বর্তমান ওজন স্বাভাবিকের তুলনায় অনেক বেশি। BMI অনুযায়ী পুরো গর্ভকালীন সময়ে আপনার মোট ৫–৯ কেজি ওজন বৃদ্ধি হওয়া উচিত। নির্ধারিত সীমার চেয়ে বেশি ওজন বৃদ্ধি মা ও শিশুর জন্য ঝুঁকিপূর্ণ হতে পারে। তাই গর্ভকালীন সময়ে নিয়মিতভাবে ওজন পর্যবেক্ষণ করা খুবই গুরুত্বপূর্ণ।"
       },
       {
         "id": "mildAnemia",
         "name": "You have mild anemia, which is common during pregnancy. Continue eating nutritious, iron-rich foods. Keep taking your iron tablets daily as advised.",
-        "cultureValue": "\u0986\u09aa\u09a8\u09be\u09b0 \u09b9\u09be\u09b2\u0995\u09be \u09b0\u0995\u09cd\u09a4\u09b8\u09cd\u09ac\u09b2\u09cd\u09aa\u09a4\u09be \u0986\u099b\u09c7, \u09af\u09be \u0997\u09b0\u09cd\u09ad\u09be\u09ac\u09b8\u09cd\u09a5\u09be\u09af\u09bc \u0996\u09c1\u09ac\u0987 \u09b8\u09be\u09a7\u09be\u09b0\u09a3\u0964 \u09aa\u09c1\u09b7\u09cd\u099f\u09bf\u0995\u09b0 \u0993 \u0986\u09af\u09bc\u09b0\u09a8\u09b8\u09ae\u09c3\u09a6\u09cd\u09a7 \u0996\u09be\u09ac\u09be\u09b0 \u0996\u09c7\u09a4\u09c7 \u09a5\u09be\u0995\u09c1\u09a8\u0964 \u09b2\u09c7\u09ac\u09c1 \u09ac\u09be \u0986\u09ae\u09b2\u0995\u09bf\u09b0 \u09ae\u09a4\u09cb \u09ad\u09bf\u099f\u09be\u09ae\u09bf\u09a8 C \u09af\u09c1\u0995\u09cd\u09a4 \u0996\u09be\u09ac\u09be\u09b0 \u0996\u09be\u09a8, \u098f\u09a4\u09c7 \u0986\u09af\u09bc\u09b0\u09a8 \u09ad\u09be\u09b2\u09cb \u0995\u09be\u099c \u0995\u09b0\u09c7\u0964 \u09aa\u09cd\u09b0\u09a4\u09bf\u09a6\u09bf\u09a8 \u09a8\u09bf\u09af\u09bc\u09ae\u09bf\u09a4 \u0986\u09af\u09bc\u09b0\u09a8 \u099f\u09cd\u09af\u09be\u09ac\u09b2\u09c7\u099f \u0997\u09cd\u09b0\u09b9\u09a3 \u0995\u09b0\u09c1\u09a8\u0964"
+        "cultureValue": "আপনার হালকা রক্তস্বল্পতা আছে, যা গর্ভাবস্থায় খুবই সাধারণ। পুষ্টিকর ও আয়রনসমৃদ্ধ খাবার খেতে থাকুন। লেবু বা আমলকির মতো ভিটামিন C যুক্ত খাবার খান, এতে আয়রন ভালো কাজ করে। প্রতিদিন নিয়মিত আয়রন ট্যাবলেট গ্রহণ করুন।"
       },
       {
         "id": "moderateAnemia",
-        "name": "In moderate anemia, eat more iron-rich foods such as meat, liver, eggs, green leafy vegetables, lentils, green plantain, and jaggery. Do not discard the water used for cooking rice or vegetables. Take vitamin C\u2013rich foods (like lemon or amla) to improve iron absorption. Consult a doctor to adjust your iron tablet dose.",
-        "cultureValue": "\u0986\u09aa\u09a8\u09be\u09b0 \u09ae\u09be\u099d\u09be\u09b0\u09bf \u09b0\u0995\u09cd\u09a4\u09b8\u09cd\u09ac\u09b2\u09cd\u09aa\u09a4\u09be \u09b0\u09af\u09bc\u09c7\u099b\u09c7 \u09ae\u09be\u0982\u09b8, \u0995\u09b2\u09bf\u099c\u09be, \u09a1\u09bf\u09ae, \u09b8\u09ac\u09c1\u099c \u09b6\u09be\u0995\u09b8\u09ac\u099c\u09bf, \u09a1\u09be\u09b2, \u0995\u09be\u0981\u099a\u09be\u0995\u09b2\u09be \u0993 \u0997\u09c1\u09a1\u09bc \u09ac\u09c7\u09b6\u09bf \u0995\u09b0\u09c7 \u0996\u09be\u09ac\u09c7\u09a8\u0964 \u09ad\u09be\u09a4 \u09ac\u09be \u09b8\u09ac\u099c\u09bf \u09b0\u09be\u09a8\u09cd\u09a8\u09be\u09b0 \u09aa\u09be\u09a8\u09bf \u09ab\u09c7\u09b2\u09c7 \u09a6\u09c7\u09ac\u09c7\u09a8 \u09a8\u09be\u0964 \u0986\u09af\u09bc\u09b0\u09a8 \u099f\u09cd\u09af\u09be\u09ac\u09b2\u09c7\u099f\u09c7\u09b0 \u09ae\u09be\u09a4\u09cd\u09b0\u09be \u09a0\u09bf\u0995 \u0995\u09b0\u09a4\u09c7 \u09a1\u09be\u0995\u09cd\u09a4\u09be\u09b0\u09c7\u09b0 \u09aa\u09b0\u09be\u09ae\u09b0\u09cd\u09b6 \u09a8\u09bf\u09a8\u0964"
+        "name": "In moderate anemia, eat more iron-rich foods such as meat, liver, eggs, green leafy vegetables, lentils, green plantain, and jaggery. Do not discard the water used for cooking rice or vegetables. Take vitamin C–rich foods (like lemon or amla) to improve iron absorption. Consult a doctor to adjust your iron tablet dose.",
+        "cultureValue": "আপনার মাঝারি রক্তস্বল্পতা রয়েছে মাংস, কলিজা, ডিম, সবুজ শাকসবজি, ডাল, কাঁচাকলা ও গুড় বেশি করে খাবেন। ভাত বা সবজি রান্নার পানি ফেলে দেবেন না। আয়রন ট্যাবলেটের মাত্রা ঠিক করতে ডাক্তারের পরামর্শ নিন।"
       },
       {
         "id": "severeAnemia",
-        "name": "You have severe anemia. Kindly visit a hospital or doctor as soon as possible for further management. Only Iron-rich diet and iron tablets won\u2019t be sufficient for you.",
-        "cultureValue": "\u0986\u09aa\u09a8\u09be\u09b0 \u09ae\u09be\u09b0\u09be\u09a4\u09cd\u09ae\u0995 \u09b0\u0995\u09cd\u09a4\u09b8\u09cd\u09ac\u09b2\u09cd\u09aa\u09a4\u09be \u09b0\u09af\u09bc\u09c7\u099b\u09c7\u0964 \u09a6\u09cd\u09b0\u09c1\u09a4 \u09b9\u09be\u09b8\u09aa\u09be\u09a4\u09be\u09b2\u09c7 \u09ac\u09be \u099a\u09bf\u0995\u09bf\u09ce\u09b8\u0995\u09c7\u09b0 \u0995\u09be\u099b\u09c7 \u09af\u09be\u09a8\u0964 \u098f\u09ac\u0982 \u09a1\u09be\u0995\u09cd\u09a4\u09be\u09b0\u09c7\u09b0 \u09aa\u09b0\u09be\u09ae\u09b0\u09cd\u09b6 \u0985\u09a8\u09c1\u09af\u09be\u09af\u09bc\u09c0 \u099a\u09bf\u0995\u09bf\u09ce\u09b8\u09be \u0997\u09cd\u09b0\u09b9\u09a3 \u0995\u09b0\u09c1\u09a8\u0964 \u09b6\u09c1\u09a7\u09c1\u09ae\u09be\u09a4\u09cd\u09b0 \u0986\u09af\u09bc\u09b0\u09a8\u09b8\u09ae\u09c3\u09a6\u09cd\u09a7 \u0996\u09be\u09ac\u09be\u09b0 \u0993 \u099f\u09cd\u09af\u09be\u09ac\u09b2\u09c7\u099f \u0986\u09aa\u09a8\u09be\u09b0 \u099c\u09a8\u09cd\u09af \u09af\u09a5\u09c7\u09b7\u09cd\u099f \u09a8\u09af\u09bc\u0964"
+        "name": "You have severe anemia. Kindly visit a hospital or doctor as soon as possible for further management. Only Iron-rich diet and iron tablets won’t be sufficient for you.",
+        "cultureValue": "আপনার মারাত্মক রক্তস্বল্পতা রয়েছে। দ্রুত হাসপাতালে বা চিকিৎসকের কাছে যান। এবং ডাক্তারের পরামর্শ অনুযায়ী চিকিৎসা গ্রহণ করুন। শুধুমাত্র আয়রনসমৃদ্ধ খাবার ও ট্যাবলেট আপনার জন্য যথেষ্ট নয়।"
       },
       {
         "id": "lowSugar",
         "name": "Your blood sugar level is low. Take a sweet drink or something sugary, such as sugar, immediately and consult a doctor.",
-        "cultureValue": "\u0986\u09aa\u09a8\u09be\u09b0 \u09b0\u0995\u09cd\u09a4\u09c7 \u099a\u09bf\u09a8\u09bf\u09b0 \u09aa\u09b0\u09bf\u09ae\u09be\u09a8 \u0995\u09ae\u09c7 \u0997\u09c7\u099b\u09c7\u0964 \u09b8\u0999\u09cd\u0997\u09c7 \u09b8\u0999\u09cd\u0997\u09c7 \u09ae\u09bf\u09b7\u09cd\u099f\u09bf \u09aa\u09be\u09a8\u09c0\u09af\u09bc \u09ac\u09be \u0995\u09cb\u09a8\u09cb \u09ae\u09bf\u09b7\u09cd\u099f\u09bf \u0996\u09be\u09ac\u09be\u09b0 \u09af\u09c7\u09ae\u09a8 \u099a\u09bf\u09a8\u09bf \u09ac\u09be \u099a\u09bf\u09a8\u09bf \u09a6\u09bf\u09af\u09bc\u09c7 \u09b8\u09b0\u09ac\u09a4 \u0996\u09be\u09a8 \u098f\u09ac\u0982 \u09a1\u09be\u0995\u09cd\u09a4\u09be\u09b0\u09c7\u09b0 \u09aa\u09b0\u09be\u09ae\u09b0\u09cd\u09b6 \u09a8\u09bf\u09a8\u0964"
+        "cultureValue": "আপনার রক্তে চিনির পরিমান কমে গেছে। সঙ্গে সঙ্গে মিষ্টি পানীয় বা কোনো মিষ্টি খাবার যেমন চিনি বা চিনি দিয়ে সরবত খান এবং ডাক্তারের পরামর্শ নিন।"
       }
     ]
   },
@@ -5679,7 +5679,7 @@
     "isMandatory": false,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0997\u09b0\u09cd\u09ad\u0995\u09be\u09b2\u09c0\u09a8 \u09b8\u09ae\u09af\u09bc\u09c7 \u09af\u09a4\u09cd\u09a8",
+    "titleCulture": "গর্ভকালীন সময়ে যত্ন",
     "isSummary": true,
     "programmes": [
       {
@@ -5699,7 +5699,7 @@
     "isMandatory": false,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0997\u09b0\u09cd\u09ad\u0995\u09be\u09b2\u09c0\u09a8 \u09b8\u09ae\u09af\u09bc\u09c7 \u09af\u09a4\u09cd\u09a8",
+    "titleCulture": "গর্ভকালীন সময়ে যত্ন",
     "isSummary": true,
     "programmes": [
       {
@@ -5719,7 +5719,7 @@
     "isMandatory": false,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09aa\u09cd\u09b0\u09b8\u09ac \u09aa\u09b0\u09bf\u0995\u09b2\u09cd\u09aa\u09a8\u09be \u0993 \u09aa\u09cd\u09b0\u09be\u09a4\u09bf\u09b7\u09cd\u09a0\u09be\u09a8\u09bf\u0995 \u09aa\u09cd\u09b0\u09b8\u09ac",
+    "titleCulture": "প্রসব পরিকল্পনা ও প্রাতিষ্ঠানিক প্রসব",
     "isSummary": true,
     "programmes": [
       {
@@ -5739,7 +5739,7 @@
     "isMandatory": false,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09a8\u09ac\u099c\u09be\u09a4\u0995\u09c7\u09b0 \u09af\u09a4\u09cd\u09a8",
+    "titleCulture": "নবজাতকের যত্ন",
     "isSummary": true,
     "programmes": [
       {
@@ -5760,7 +5760,7 @@
     "isEnabled": true,
     "readOnly": true,
     "visibility": "visible",
-    "titleCulture": "\u09aa\u09b0\u09ac\u09b0\u09cd\u09a4\u09c0 \u09aa\u09b0\u09bf\u09a6\u09b0\u09cd\u09b6\u09a8",
+    "titleCulture": "পরবর্তী পরিদর্শন",
     "isSummary": true,
     "clinicalConcept": [
       {
@@ -5803,7 +5803,7 @@
     "isEnabled": true,
     "readOnly": true,
     "visibility": "visible",
-    "titleCulture": "\u09b6\u09bf\u09b6\u09c1\u09b0 \u0995\u09bf \u0995\u09cb\u09a8\u09cb \u099c\u09a8\u09cd\u09ae\u0997\u09a4 \u09a4\u09cd\u09b0\u09c1\u099f\u09bf \u0986\u099b\u09c7 \u0995\u09bf\u09a8\u09be?",
+    "titleCulture": "শিশুর কি কোনো জন্মগত ত্রুটি আছে কিনা?",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "optionType": "boolean",
@@ -5826,7 +5826,7 @@
       {
         "id": "yes",
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -5838,7 +5838,7 @@
       {
         "id": "no",
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -5861,7 +5861,7 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "Food",
-    "titleCulture": "\u0997\u09a4 \u09e8\u09ea \u0998\u09a8\u09cd\u099f\u09be\u09af\u09bc \u09b6\u09bf\u09b6\u09c1\u0995\u09c7 \u0995\u09bf \u0995\u09bf \u0996\u09be\u0993\u09af\u09bc\u09be\u09a8\u09cb \u09b9\u09af\u09bc\u09c7\u099b\u09c7?",
+    "titleCulture": "গত ২৪ ঘন্টায় শিশুকে কি কি খাওয়ানো হয়েছে?",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "localDataCache": "childFeedLast24Hrs",
@@ -5934,7 +5934,7 @@
     "visibility": "gone",
     "hint": "",
     "hintCulture": "",
-    "titleCulture": "\u09aa\u09cd\u09b0\u09b8\u09ac\u09c7\u09b0 \u0995\u09a4 \u0998\u09a3\u09cd\u099f\u09be\u09b0 \u09ae\u09a7\u09cd\u09af\u09c7 \u09ae\u09be\u09af\u09bc\u09c7\u09b0 \u09ac\u09c1\u0995\u09c7\u09b0 \u09a6\u09c1\u09a7 \u0996\u09be\u0993\u09af\u09bc\u09be\u09a8\u09cb \u09b9\u09af\u09bc\u09c7\u099b\u09c7?",
+    "titleCulture": "প্রসবের কত ঘণ্টার মধ্যে মায়ের বুকের দুধ খাওয়ানো হয়েছে?",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "isNeededDefault": true,
@@ -5967,7 +5967,7 @@
     "visibility": "gone",
     "hint": "",
     "hintCulture": "",
-    "titleCulture": "\u09b6\u09bf\u09b6\u09c1\u0995\u09c7  \u09ac\u09be\u09a1\u09bc\u09a4\u09bf \u0996\u09be\u09ac\u09be\u09b0 \u0995\u09a4 \u09ae\u09be\u09b8\u09c7 \u09b6\u09c1\u09b0\u09c1 \u0995\u09b0\u09be \u09b9\u09af\u09bc\u09c7\u099b\u09c7?",
+    "titleCulture": "শিশুকে  বাড়তি খাবার কত মাসে শুরু করা হয়েছে?",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "isNeededDefault": true,
@@ -5990,17 +5990,17 @@
       {
         "id": "7",
         "name": "7 Months",
-        "cultureValue": "\u09ed \u09ae\u09be\u09b8\u09c7"
+        "cultureValue": "৭ মাসে"
       },
       {
         "id": "8",
         "name": "8 Months",
-        "cultureValue": "\u09ee \u09ae\u09be\u09b8\u09c7"
+        "cultureValue": "৮ মাসে"
       },
       {
         "id": "9",
         "name": "9 Months",
-        "cultureValue": "\u09ef \u09ae\u09be\u09b8\u09c7"
+        "cultureValue": "৯ মাসে"
       }
     ]
   },
@@ -6015,7 +6015,7 @@
     "isEnabled": true,
     "readOnly": true,
     "visibility": "gone",
-    "titleCulture": " \u09b6\u09bf\u09b6\u09c1 \u09ae\u09be\u09af\u09bc\u09c7\u09b0 \u09ac\u09c1\u0995\u09c7\u09b0 \u09a6\u09c1\u09a7 \u0996\u09be\u099a\u09cd\u099b\u09c7 \u0995\u09bf \u09a8\u09be?",
+    "titleCulture": " শিশু মায়ের বুকের দুধ খাচ্ছে কি না?",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "optionType": "boolean",
@@ -6038,7 +6038,7 @@
       {
         "id": "yes",
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -6050,7 +6050,7 @@
       {
         "id": "no",
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -6072,7 +6072,7 @@
     "isEnabled": true,
     "readOnly": true,
     "visibility": "gone",
-    "titleCulture": "\u0997\u09a4 \u09e8\u09ea \u0998\u09a8\u09cd\u099f\u09be\u09af\u09bc \u09b6\u09bf\u09b6\u09c1\u0995\u09c7 \u0995\u09cb\u09a8\u09cb \u09ac\u09be\u09a1\u09bc\u09a4\u09bf \u0996\u09be\u09ac\u09be\u09b0 \u09a6\u09c7\u0993\u09af\u09bc\u09be \u09b9\u09af\u09bc\u09c7\u099b\u09c7 \u0995\u09bf?",
+    "titleCulture": "গত ২৪ ঘন্টায় শিশুকে কোনো বাড়তি খাবার দেওয়া হয়েছে কি?",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "optionType": "boolean",
@@ -6095,7 +6095,7 @@
       {
         "id": "yes",
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -6107,7 +6107,7 @@
       {
         "id": "no",
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -6129,7 +6129,7 @@
     "isEnabled": true,
     "readOnly": true,
     "visibility": "gone",
-    "titleCulture": "\u09b6\u09bf\u09b6\u09c1 \u099f\u09bf\u0995\u09be \u09a8\u09bf\u09af\u09bc\u09c7\u099b\u09c7 \u0995\u09bf \u09a8\u09be?",
+    "titleCulture": "শিশু টিকা নিয়েছে কি না?",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "optionType": "boolean",
@@ -6152,7 +6152,7 @@
       {
         "id": "yes",
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -6164,7 +6164,7 @@
       {
         "id": "no",
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -6186,7 +6186,7 @@
     "isEnabled": true,
     "readOnly": true,
     "visibility": "gone",
-    "titleCulture": "\u09b6\u09bf\u09b6\u09c1  \u0995\u09c3\u09ae\u09bf\u09a8\u09be\u09b6\u0995 \u0993\u09b7\u09c1\u09a7 \u0996\u09c7\u09af\u09bc\u09c7\u099b\u09bf \u0995\u09bf?",
+    "titleCulture": "শিশু  কৃমিনাশক ওষুধ খেয়েছি কি?",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "optionType": "boolean",
@@ -6209,7 +6209,7 @@
       {
         "id": "yes",
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -6221,7 +6221,7 @@
       {
         "id": "no",
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -6243,7 +6243,7 @@
     "isEnabled": true,
     "readOnly": true,
     "visibility": "visible",
-    "titleCulture": "\u0995\u09cb\u09a8\u09cb \u09b0\u09cb\u0997 \u09ac\u09be \u099c\u099f\u09bf\u09b2\u09a4\u09be \u0986\u099b\u09c7 \u0995\u09bf?",
+    "titleCulture": "কোনো রোগ বা জটিলতা আছে কি?",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "optionType": "boolean",
@@ -6266,7 +6266,7 @@
       {
         "id": "yes",
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -6278,7 +6278,7 @@
       {
         "id": "no",
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -6316,7 +6316,7 @@
     "isMandatory": false,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u0995\u09cb\u09a8\u09cb \u099c\u099f\u09bf\u09b2\u09a4\u09be \u09a5\u09be\u0995\u09b2\u09c7 \u09b2\u09bf\u0996\u09c1\u09a8",
+    "titleCulture": "কোনো জটিলতা থাকলে লিখুন",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "localDataCache": "childIllnessType",
@@ -6349,7 +6349,7 @@
     "isEnabled": true,
     "readOnly": true,
     "visibility": "gone",
-    "titleCulture": "\u09b0\u09c7\u09ab\u09be\u09b0\u09c7\u09b2 \u0995\u09b0\u09be \u09b9\u09af\u09bc\u09c7\u099b\u09c7 \u0995\u09bf\u09a8\u09be?",
+    "titleCulture": "রেফারেল করা হয়েছে কিনা?",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "optionType": "boolean",
@@ -6372,7 +6372,7 @@
       {
         "id": "yes",
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -6384,7 +6384,7 @@
       {
         "id": "no",
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -6412,7 +6412,7 @@
     "isMandatory": false,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u09b0\u09c7\u09ab\u09be\u09b0\u09c7\u09b2\u09c7\u09b0 \u09b8\u09cd\u09a5\u09be\u09a8",
+    "titleCulture": "রেফারেলের স্থান",
     "errorMessage": "Please select Referral Facility",
     "isSummary": true,
     "isNeededDefault": true,
@@ -6434,7 +6434,7 @@
       {
         "id": "medicalCollegeHospital",
         "name": "Medical College Hospital",
-        "cultureValue": "\u09ae\u09c7\u09a1\u09bf\u0995\u09c7\u09b2 \u0995\u09b2\u09c7\u099c \u09b9\u09be\u09b8\u09aa\u09be\u09a4\u09be\u09b2",
+        "cultureValue": "মেডিকেল কলেজ হাসপাতাল",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -6446,12 +6446,12 @@
       {
         "id": "governmentHospital",
         "name": "Government Hospital",
-        "cultureValue": "\u09b8\u09b0\u0995\u09be\u09b0\u09bf \u09b9\u09be\u09b8\u09aa\u09be\u09a4\u09be\u09b2"
+        "cultureValue": "সরকারি হাসপাতাল"
       },
       {
         "id": "upazilaHealthComplex",
         "name": "Upazila Health Complex",
-        "cultureValue": "\u0989\u09aa\u099c\u09c7\u09b2\u09be \u09b8\u09cd\u09ac\u09be\u09b8\u09cd\u09a5\u09cd\u09af \u0995\u09ae\u09aa\u09cd\u09b2\u09c7\u0995\u09cd\u09b8",
+        "cultureValue": "উপজেলা স্বাস্থ্য কমপ্লেক্স",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -6463,17 +6463,17 @@
       {
         "id": "privateHospital",
         "name": "Private Hospital/Clinic",
-        "cultureValue": "\u09ac\u09c7\u09b8\u09b0\u0995\u09be\u09b0\u09bf \u09b9\u09be\u09b8\u09aa\u09be\u09a4\u09be\u09b2/\u0995\u09cd\u09b2\u09bf\u09a8\u09bf\u0995"
+        "cultureValue": "বেসরকারি হাসপাতাল/ক্লিনিক"
       },
       {
         "id": "hwc",
         "name": "Health & Family Welfare Center",
-        "cultureValue": "\u09b8\u09cd\u09ac\u09be\u09b8\u09cd\u09a5\u09cd\u09af \u0993 \u09aa\u09b0\u09bf\u09ac\u09be\u09b0 \u0995\u09b2\u09cd\u09af\u09be\u09a3 \u0995\u09c7\u09a8\u09cd\u09a6\u09cd\u09b0"
+        "cultureValue": "স্বাস্থ্য ও পরিবার কল্যাণ কেন্দ্র"
       },
       {
         "id": "communityClinic",
         "name": "Community Clinic",
-        "cultureValue": "\u0995\u09ae\u09bf\u0989\u09a8\u09bf\u099f\u09bf \u0995\u09cd\u09b2\u09bf\u09a8\u09bf\u0995"
+        "cultureValue": "কমিউনিটি ক্লিনিক"
       }
     ],
     "condition": []
@@ -6483,7 +6483,7 @@
     "label": "Client Profile & Assessment",
     "widgetHint": "CardView",
     "familyOrder": 0,
-    "titleCulture": "\u0995\u09cd\u09b2\u09be\u09af\u09bc\u09c7\u09a8\u09cd\u099f \u09aa\u09cd\u09b0\u09cb\u09ab\u09be\u0987\u09b2 \u098f\u09ac\u0982 \u09ae\u09c2\u09b2\u09cd\u09af\u09be\u09af\u09bc\u09a8",
+    "titleCulture": "ক্লায়েন্ট প্রোফাইল এবং মূল্যায়ন",
     "programmes": [
       {
         "id": "family_planning",
@@ -6503,8 +6503,8 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "Enter Number of Living Children",
-    "hintCulture": "\u099c\u09c0\u09ac\u09bf\u09a4 \u09b8\u09a8\u09cd\u09a4\u09be\u09a8\u09c7\u09b0 \u09b8\u0982\u0996\u09cd\u09af\u09be \u09b2\u09bf\u0996\u09c1\u09a8",
-    "titleCulture": "\u099c\u09c0\u09ac\u09bf\u09a4 \u09ac\u09be\u099a\u09cd\u099a\u09be\u09b0 \u09b8\u0982\u0996\u09cd\u09af\u09be",
+    "hintCulture": "জীবিত সন্তানের সংখ্যা লিখুন",
+    "titleCulture": "জীবিত বাচ্চার সংখ্যা",
     "minValue": 0,
     "isSummary": true,
     "isNeededDefault": true,
@@ -6542,7 +6542,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0986\u09aa\u09a8\u09be\u09b0 \u0995\u09bf \u09ad\u09ac\u09bf\u09b7\u09cd\u09af\u09a4\u09c7 \u09b8\u09a8\u09cd\u09a4\u09be\u09a8 \u09a8\u09c7\u0993\u09df\u09be\u09b0 \u0987\u099a\u09cd\u099b\u09be \u0986\u099b\u09c7?",
+    "titleCulture": "আপনার কি ভবিষ্যতে সন্তান নেওয়ার ইচ্ছা আছে?",
     "errorMessage": "Please select Desire for children in future",
     "isSummary": true,
     "isNeededDefault": true,
@@ -6564,7 +6564,7 @@
       {
         "id": "yesWithin2Yrs",
         "name": "Yes  within 2 yrs",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981, \u09e8 \u09ac\u099b\u09b0\u09c7\u09b0 \u09ae\u09a7\u09cd\u09af\u09c7",
+        "cultureValue": "হ্যাঁ, ২ বছরের মধ্যে",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -6576,7 +6576,7 @@
       {
         "id": "yesAfter2Yrs",
         "name": "Yes after 2 yrs",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981, \u09e8 \u09ac\u099b\u09b0\u09c7\u09b0 \u09aa\u09b0\u09c7",
+        "cultureValue": "হ্যাঁ, ২ বছরের পরে",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -6588,7 +6588,7 @@
       {
         "id": "noMoreChildren",
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -6600,7 +6600,7 @@
       {
         "id": "unsure",
         "name": "Unsure",
-        "cultureValue": "\u09b8\u09bf\u09a6\u09cd\u09a7\u09be\u09a8\u09cd\u09a4 \u09a8\u09c7\u09df\u09a8\u09bf",
+        "cultureValue": "সিদ্ধান্ত নেয়নি",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -6617,7 +6617,7 @@
     "label": "Eye Problems",
     "widgetHint": "CardView",
     "familyOrder": 1.0,
-    "titleCulture": "\u099a\u09cb\u0996\u09c7\u09b0 \u09b8\u09ae\u09b8\u09cd\u09af\u09be \u09b8\u09ae\u09c2\u09b9",
+    "titleCulture": "চোখের সমস্যা সমূহ",
     "programmes": [
       {
         "id": "cataract",
@@ -6636,7 +6636,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u099a\u09cb\u0996\u09c7\u09b0 \u09b0\u09cb\u0997\u09c7\u09b0 \u09a7\u09b0\u09a8",
+    "titleCulture": "চোখের রোগের ধরন",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "isNeededDefault": true,
@@ -6658,7 +6658,7 @@
       {
         "id": "cataracts",
         "name": "Cataracts",
-        "cultureValue": "\u099b\u09be\u09a8\u09bf",
+        "cultureValue": "ছানি",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -6670,12 +6670,12 @@
       {
         "id": "lecrimalTearDuctProblem",
         "name": "Lecrimal (Tear Duct) Problem",
-        "cultureValue": "\u09a8\u09c7\u09a4\u09cd\u09b0\u09a8\u09be\u09b2\u09c0\u09b0 \u09b8\u09ae\u09b8\u09cd\u09af\u09be"
+        "cultureValue": "নেত্রনালীর সমস্যা"
       },
       {
         "id": "pterygium",
         "name": "Pterygium",
-        "cultureValue": "\u099f\u09c7\u09b0\u09bf\u099c\u09bf\u09df\u09be\u09ae/\u09ae\u09be\u0982\u09b8\u09ac\u09c3\u09a6\u09cd\u09a7\u09bf",
+        "cultureValue": "টেরিজিয়াম/মাংসবৃদ্ধি",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -6687,7 +6687,7 @@
       {
         "id": "glaucoma",
         "name": "Glaucoma",
-        "cultureValue": "\u0997\u09cd\u09b2\u09c1\u0995\u09cb\u09ae\u09be",
+        "cultureValue": "গ্লুকোমা",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -6699,7 +6699,7 @@
       {
         "id": "myopia",
         "name": "Myopia",
-        "cultureValue": "\u09a6\u09c2\u09b0\u09a6\u09c3\u09b7\u09cd\u099f\u09bf \u09b8\u09ae\u09b8\u09cd\u09af\u09be",
+        "cultureValue": "দূরদৃষ্টি সমস্যা",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -6711,7 +6711,7 @@
       {
         "id": "presbyopia",
         "name": "Presbyopia",
-        "cultureValue": "\u09aa\u09cd\u09b0\u09c7\u09b8\u09ac\u09be\u09df\u09cb\u09aa\u09bf\u09df\u09be \u09ac\u09be \u09a8\u09bf\u0995\u099f \u09a6\u09c3\u09b7\u09cd\u099f\u09bf \u09b8\u09ae\u09b8\u09cd\u09af\u09be",
+        "cultureValue": "প্রেসবায়োপিয়া বা নিকট দৃষ্টি সমস্যা",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -6723,7 +6723,7 @@
       {
         "id": "otherProblem",
         "name": "Other Problem",
-        "cultureValue": "\u0985\u09a8\u09cd\u09af\u09be\u09a8\u09cd\u09af \u09b8\u09ae\u09b8\u09cd\u09af\u09be",
+        "cultureValue": "অন্যান্য সমস্যা",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -6774,7 +6774,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u09aa\u09be\u0993\u09af\u09bc\u09be\u09b0",
+    "titleCulture": "পাওয়ার",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "isNeededDefault": true,
@@ -6843,7 +6843,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u099a\u09b6\u09ae\u09be \u09a6\u09c7\u09af\u09bc\u09be \u09b9\u09af\u09bc\u09c7\u099b\u09c7 \u0995\u09bf",
+    "titleCulture": "চশমা দেয়া হয়েছে কি",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "isNeededDefault": true,
@@ -6870,7 +6870,7 @@
       {
         "id": "Yes",
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -6882,7 +6882,7 @@
       {
         "id": "No",
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -6915,7 +6915,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u099a\u09b6\u09ae\u09be\u09b0 \u09a7\u09b0\u09a3",
+    "titleCulture": "চশমার ধরণ",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "isNeededDefault": true,
@@ -6942,12 +6942,12 @@
       {
         "id": "biFocal",
         "name": "Bi Focal",
-        "cultureValue": "\u09ac\u09be\u0987-\u09ab\u09cb\u0995\u09be\u09b2"
+        "cultureValue": "বাই-ফোকাল"
       },
       {
         "id": "singleVision",
         "name": "Single Vision",
-        "cultureValue": "\u09b8\u09bf\u0999\u09cd\u0997\u09c7\u09b2 \u09ad\u09bf\u09b6\u09a8"
+        "cultureValue": "সিঙ্গেল ভিশন"
       }
     ],
     "condition": [
@@ -6971,7 +6971,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u09ab\u09cd\u09b0\u09c7\u09ae\u09c7\u09b0 \u09a7\u09b0\u09a3",
+    "titleCulture": "ফ্রেমের ধরণ",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "isNeededDefault": true,
@@ -6998,12 +6998,12 @@
       {
         "id": "Metal",
         "name": "Metal",
-        "cultureValue": "\u09ae\u09c7\u099f\u09be\u09b2"
+        "cultureValue": "মেটাল"
       },
       {
         "id": "Plastic",
         "name": "Plastic",
-        "cultureValue": "\u09aa\u09cd\u09b2\u09be\u09b8\u09cd\u099f\u09bf\u0995"
+        "cultureValue": "প্লাস্টিক"
       }
     ],
     "condition": [
@@ -7027,7 +7027,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u09aa\u09cd\u09b0\u09a5\u09ae \u099a\u09b6\u09ae\u09be \u09ac\u09cd\u09af\u09ac\u09b9\u09be\u09b0\u0995\u09be\u09b0\u09c0 \u0995\u09bf\u09a8\u09be",
+    "titleCulture": "প্রথম চশমা ব্যবহারকারী কিনা",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "isNeededDefault": true,
@@ -7054,7 +7054,7 @@
       {
         "id": "Yes",
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -7066,7 +7066,7 @@
       {
         "id": "No",
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -7097,7 +7097,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u09b0\u09c7\u09ab\u09be\u09b0\u09c7\u09b0 \u09b8\u09cd\u09a5\u09be\u09a8",
+    "titleCulture": "রেফারের স্থান",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "isNeededDefault": true,
@@ -7124,7 +7124,7 @@
       {
         "id": "upazilaHealthComplex",
         "name": "Upazila Health Complex",
-        "cultureValue": "\u0989\u09aa\u099c\u09c7\u09b2\u09be \u09b8\u09cd\u09ac\u09be\u09b8\u09cd\u09a5\u09cd\u09af \u0995\u09ae\u09aa\u09cd\u09b2\u09c7\u0995\u09cd\u09b8",
+        "cultureValue": "উপজেলা স্বাস্থ্য কমপ্লেক্স",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -7136,7 +7136,7 @@
       {
         "id": "districtHospital",
         "name": "District Hospital",
-        "cultureValue": "\u099c\u09c7\u09b2\u09be \u09b8\u09a6\u09b0 \u09b9\u09be\u09b8\u09aa\u09be\u09a4\u09be\u09b2",
+        "cultureValue": "জেলা সদর হাসপাতাল",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -7148,7 +7148,7 @@
       {
         "id": "medicalCollegeHospital",
         "name": "Medical College Hospital",
-        "cultureValue": "\u09ae\u09c7\u09a1\u09bf\u0995\u09c7\u09b2 \u0995\u09b2\u09c7\u099c \u09b9\u09be\u09b8\u09aa\u09be\u09a4\u09be\u09b2",
+        "cultureValue": "মেডিকেল কলেজ হাসপাতাল",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -7160,12 +7160,12 @@
       {
         "id": "govtPrivateSpecializedHospital",
         "name": "Govt/Private Specialized Hospital",
-        "cultureValue": "\u09b8\u09b0\u0995\u09be\u09b0\u09bf/\u09ac\u09c7\u09b8\u09b0\u0995\u09be\u09b0\u09bf \u09ac\u09bf\u09b6\u09c7\u09b7\u09be\u09af\u09bc\u09bf\u09a4 \u09b9\u09be\u09b8\u09aa\u09be\u09a4\u09be\u09b2"
+        "cultureValue": "সরকারি/বেসরকারি বিশেষায়িত হাসপাতাল"
       },
       {
         "id": "others",
         "name": "Others",
-        "cultureValue": "\u0985\u09a8\u09cd\u09af\u09be\u09a8\u09cd\u09af"
+        "cultureValue": "অন্যান্য"
       }
     ],
     "condition": [
@@ -7192,7 +7192,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u0985\u09a8\u09cd\u09af\u09be\u09a8\u09cd\u09af \u09b0\u09cb\u0997\u09c7\u09b0 \u0987\u09a4\u09bf\u09b9\u09be\u09b8 ",
+    "titleCulture": "অন্যান্য রোগের ইতিহাস ",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "isNeededDefault": true,
@@ -7214,33 +7214,33 @@
       {
         "id": "diabetes",
         "name": "Diabetes",
-        "cultureValue": "\u09a1\u09be\u09df\u09be\u09ac\u09c7\u099f\u09bf\u09b8"
+        "cultureValue": "ডায়াবেটিস"
       },
       {
         "id": "hypertension",
         "name": "Hypertension",
-        "cultureValue": "\u0989\u099a\u09cd\u099a \u09b0\u0995\u09cd\u09a4\u099a\u09be\u09aa"
+        "cultureValue": "উচ্চ রক্তচাপ"
       },
       {
         "id": "asthma",
         "name": "Asthma",
-        "cultureValue": "\u09b9\u09be\u09aa\u09be\u09a8\u09bf"
+        "cultureValue": "হাপানি"
       },
       {
         "id": "heartDisease",
         "name": "Heart Disease",
-        "cultureValue": "\u09b9\u09c3\u09a6\u09b0\u09cb\u0997"
+        "cultureValue": "হৃদরোগ"
       },
       {
         "id": "Eye Pressure",
         "name": "Eye Pressure",
-        "cultureValue": "\u099a\u09cb\u0981\u0996\u09c7\u09b0 \u09aa\u09cd\u09b0\u09c7\u09b8\u09be\u09b0"
+        "cultureValue": "চোঁখের প্রেসার"
       },
       {
         "id": "noProblem",
         "name": "No Problem",
         "reset": true,
-        "cultureValue": "\u09b8\u09ae\u09b8\u09cd\u09af\u09be \u09a8\u09c7\u0987",
+        "cultureValue": "সমস্যা নেই",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -7275,7 +7275,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u09b0\u09cb\u0997\u09c0 \u0985\u09aa\u09be\u09b0\u09c7\u09b6\u09a8\u09c7\u09b0 \u099c\u09a8\u09cd\u09af \u09b0\u09c7\u09ab\u09be\u09b0 \u0995\u09b0\u09be \u09b9\u09df\u09c7\u099b\u09c7 \u0995\u09bf\u09a8\u09be?",
+    "titleCulture": "রোগী অপারেশনের জন্য রেফার করা হয়েছে কিনা?",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "optionType": "string",
@@ -7298,7 +7298,7 @@
       {
         "id": "Yes",
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -7310,7 +7310,7 @@
       {
         "id": "No",
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -7343,7 +7343,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u0985\u09aa\u09be\u09b0\u09c7\u09b6\u09a8\u09c7\u09b0 \u09a8\u09be\u09ae",
+    "titleCulture": "অপারেশনের নাম",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "isNeededDefault": true,
@@ -7365,7 +7365,7 @@
       {
         "id": "cataracts",
         "name": "Cataracts",
-        "cultureValue": "\u099b\u09be\u09a8\u09bf",
+        "cultureValue": "ছানি",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -7377,7 +7377,7 @@
       {
         "id": "DCT",
         "name": "DCT",
-        "cultureValue": "\u09a1\u09bf\u09b8\u09bf\u099f\u09bf/\u09a8\u09c7\u09a4\u09cd\u09b0\u09a8\u09be\u09b2\u09c0",
+        "cultureValue": "ডিসিটি/নেত্রনালী",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -7389,7 +7389,7 @@
       {
         "id": "DCR",
         "name": "DCR",
-        "cultureValue": "\u09a1\u09bf\u09b8\u09bf\u0986\u09b0/\u09a8\u09c7\u09a4\u09cd\u09b0\u09a8\u09be\u09b2\u09c0",
+        "cultureValue": "ডিসিআর/নেত্রনালী",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -7401,7 +7401,7 @@
       {
         "id": "pterygium",
         "name": "Pterygium",
-        "cultureValue": "\u099f\u09c7\u09b0\u09bf\u099c\u09bf\u09df\u09be\u09ae/\u09ae\u09be\u0982\u09b8\u09ac\u09c3\u09a6\u09cd\u09a7\u09bf",
+        "cultureValue": "টেরিজিয়াম/মাংসবৃদ্ধি",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -7413,7 +7413,7 @@
       {
         "id": "other",
         "name": "Other",
-        "cultureValue": "\u0985\u09a8\u09cd\u09af\u09be\u09a8\u09cd\u09af",
+        "cultureValue": "অন্যান্য",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -7447,7 +7447,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u0995\u09be\u09b0\u09a3",
+    "titleCulture": "কারণ",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "isNeededDefault": true,
@@ -7469,37 +7469,37 @@
       {
         "id": "diabetes",
         "name": "Diabetes",
-        "cultureValue": "\u09a1\u09be\u09df\u09be\u09ac\u09c7\u099f\u09bf\u09b8"
+        "cultureValue": "ডায়াবেটিস"
       },
       {
         "id": "hypertension",
         "name": "Hypertension",
-        "cultureValue": "\u0989\u099a\u09cd\u099a \u09b0\u0995\u09cd\u09a4\u099a\u09be\u09aa"
+        "cultureValue": "উচ্চ রক্তচাপ"
       },
       {
         "id": "highIOP",
         "name": "High IOP",
-        "cultureValue": "\u09b9\u09be\u0987 \u0986\u0987\u0993\u09aa\u09bf"
+        "cultureValue": "হাই আইওপি"
       },
       {
         "id": "heartDisease",
         "name": "Heart Disease",
-        "cultureValue": "\u09b9\u09c3\u09a6\u09b0\u09cb\u0997"
+        "cultureValue": "হৃদরোগ"
       },
       {
         "id": "lecrimalDuctProblem",
         "name": "Lecrimal Duct Problem",
-        "cultureValue": "\u09a8\u09c7\u09a4\u09cd\u09b0\u09a8\u09be\u09b2\u09c0\u09b0 \u09b8\u09ae\u09b8\u09cd\u09af\u09be"
+        "cultureValue": "নেত্রনালীর সমস্যা"
       },
       {
         "id": "financialIssue",
         "name": "Financial issue",
-        "cultureValue": "\u0986\u09b0\u09cd\u09a5\u09bf\u0995 \u09b8\u09ae\u09b8\u09cd\u09af\u09be"
+        "cultureValue": "আর্থিক সমস্যা"
       },
       {
         "id": "noProblem",
         "name": "No Problem",
-        "cultureValue": "\u09b8\u09ae\u09b8\u09cd\u09af\u09be \u09a8\u09c7\u0987",
+        "cultureValue": "সমস্যা নেই",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -7535,7 +7535,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u09b8\u09bf\u0993\u09a1\u09cb\u09ab\u09be\u0995\u09bf\u09df\u09be \u09ac\u09be \u09aa\u09c2\u09b0\u09cd\u09ac\u09c7 \u098f\u0995\u099a\u09cb\u0996 \u0985\u09aa\u09be\u09b0\u09c7\u09b6\u09a8 \u09b9\u09df\u09c7\u099b\u09c7",
+    "titleCulture": "সিওডোফাকিয়া বা পূর্বে একচোখ অপারেশন হয়েছে",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "optionType": "string",
@@ -7558,7 +7558,7 @@
       {
         "id": "Yes",
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -7570,7 +7570,7 @@
       {
         "id": "No",
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -7601,7 +7601,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u098f\u09a8\u09b8\u09bf\u09a1\u09bf \u09b8\u09be\u09b0\u09cd\u09ad\u09bf\u09b8 \u09a6\u09c7\u0993\u09df\u09be \u09b9\u09df\u09c7\u099b\u09c7 \u0995\u09bf?",
+    "titleCulture": "এনসিডি সার্ভিস দেওয়া হয়েছে কি?",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "optionType": "string",
@@ -7626,7 +7626,7 @@
       {
         "id": "Yes",
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -7638,7 +7638,7 @@
       {
         "id": "No",
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -7727,7 +7727,7 @@
     "widgetHint": "CardView",
     "familyOrder": 3.0,
     "visibility": "gone",
-    "titleCulture": "\u09b0\u0995\u09cd\u09a4\u099a\u09be\u09aa\u09c7\u09b0 \u0997\u09c1\u09b0\u09c1\u09a4\u09cd\u09ac\u09aa\u09c2\u09b0\u09cd\u09a3 \u0989\u09aa\u09be\u09a6\u09be\u09a8",
+    "titleCulture": "রক্তচাপের গুরুত্বপূর্ণ উপাদান",
     "programmes": [
       {
         "id": "cataract",
@@ -7751,7 +7751,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u0986\u0997\u09c7 \u0986\u09aa\u09a8\u09be\u09b0 \u0995\u09bf \u0995\u0996\u09a8\u0993 \u0989\u099a\u09cd\u099a \u09b0\u0995\u09cd\u09a4\u099a\u09be\u09aa \u09ac\u09be \u09b9\u09be\u0987\u09aa\u09be\u09b0\u099f\u09c7\u09a8\u09b6\u09a8 \u09b0\u09cb\u0997 \u09a8\u09bf\u09b0\u09cd\u09a3\u09df \u09b9\u09df\u09c7\u099b\u09bf\u09b2?",
+    "titleCulture": "আগে আপনার কি কখনও উচ্চ রক্তচাপ বা হাইপারটেনশন রোগ নির্ণয় হয়েছিল?",
     "errorMessage": "Please select a valid option",
     "isSummary": false,
     "optionType": "boolean",
@@ -7774,7 +7774,7 @@
       {
         "id": "Yes",
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -7786,7 +7786,7 @@
       {
         "id": "No",
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -7814,7 +7814,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u0986\u09aa\u09a8\u09bf \u0995\u09bf \u09a8\u09bf\u09af\u09bc\u09ae\u09bf\u09a4 \u0994\u09b7\u09a7 \u0996\u09be\u099a\u09cd\u099b\u09c7\u09a8?",
+    "titleCulture": "আপনি কি নিয়মিত ঔষধ খাচ্ছেন?",
     "errorMessage": "Please select the medication",
     "localDataCache": "conditions",
     "isNeededDefault": true,
@@ -7836,7 +7836,7 @@
       {
         "id": "Yes",
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -7848,7 +7848,7 @@
       {
         "id": "No",
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -7879,7 +7879,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u09b0\u0995\u09cd\u09a4\u099a\u09be\u09aa",
+    "titleCulture": "রক্তচাপ",
     "errorMessage": "Please enter a blood pressure value",
     "minValue": 30.0,
     "maxValue": 300.0,
@@ -7915,7 +7915,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u0986\u09aa\u09a8\u09bf \u0995\u09bf \u09a8\u09bf\u09df\u09ae\u09bf\u09a4 \u09a7\u09c2\u09ae\u09aa\u09be\u09df\u09c0 \u0985\u09a5\u09ac\u09be \u0997\u09a4 \u09e7\u09e8 \u09ae\u09be\u09b8\u09c7 \u09a7\u09c2\u09ae\u09aa\u09be\u09a8 \u09ac\u09be \u09a4\u09be\u09ae\u09be\u0995 \u099c\u09be\u09a4\u09c0\u09df \u09a6\u09cd\u09b0\u09ac\u09cd\u09af \u09b8\u09c7\u09ac\u09a8 \u0995\u09b0\u09c7\u099b\u09c7\u09a8?",
+    "titleCulture": "আপনি কি নিয়মিত ধূমপায়ী অথবা গত ১২ মাসে ধূমপান বা তামাক জাতীয় দ্রব্য সেবন করেছেন?",
     "errorMessage": "Please select a valid option",
     "isSummary": false,
     "optionType": "boolean",
@@ -7948,7 +7948,7 @@
       {
         "id": true,
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -7960,7 +7960,7 @@
       {
         "id": false,
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -7984,7 +7984,7 @@
     "widgetHint": "InformationLabel",
     "family": "bpLog",
     "visibility": "gone",
-    "titleCulture": "\u09b8\u09bf\u09ad\u09bf\u09a1\u09bf \u099d\u09c1\u0981\u0995\u09bf",
+    "titleCulture": "সিভিডি ঝুঁকি",
     "isSummary": true,
     "clinicalConcept": [
       {
@@ -8007,7 +8007,7 @@
     "widgetHint": "CardView",
     "familyOrder": 4.0,
     "visibility": "gone",
-    "titleCulture": "\u09ac\u09cd\u09b2\u09be\u09a1 \u0997\u09cd\u09b2\u09c1\u0995\u09cb\u099c",
+    "titleCulture": "ব্লাড গ্লুকোজ",
     "programmes": [
       {
         "id": "cataract",
@@ -8031,7 +8031,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u0986\u0997\u09c7 \u0986\u09aa\u09a8\u09be\u09b0 \u0995\u09bf \u0995\u0996\u09a8\u0993 \u0989\u099a\u09cd\u099a \u09ac\u09cd\u09b2\u09be\u09a1 \u09b8\u09c1\u0997\u09be\u09b0 \u09ac\u09be \u09a1\u09be\u09df\u09be\u09ac\u09c7\u099f\u09bf\u09b8 \u09b0\u09cb\u0997 \u09a8\u09bf\u09b0\u09cd\u09a3\u09df \u09b9\u09df\u09c7\u099b\u09bf\u09b2?",
+    "titleCulture": "আগে আপনার কি কখনও উচ্চ ব্লাড সুগার বা ডায়াবেটিস রোগ নির্ণয় হয়েছিল?",
     "errorMessage": "Please select a valid option",
     "isSummary": false,
     "optionType": "boolean",
@@ -8054,7 +8054,7 @@
       {
         "id": "Yes",
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8066,7 +8066,7 @@
       {
         "id": "No",
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8110,7 +8110,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u0986\u09aa\u09a8\u09bf \u0995\u09bf \u09a8\u09bf\u09af\u09bc\u09ae\u09bf\u09a4 \u0994\u09b7\u09a7 \u0996\u09be\u099a\u09cd\u099b\u09c7\u09a8?",
+    "titleCulture": "আপনি কি নিয়মিত ঔষধ খাচ্ছেন?",
     "errorMessage": "Please select the medication",
     "isNeededDefault": true,
     "clinicalConcept": [
@@ -8131,7 +8131,7 @@
       {
         "id": "Yes",
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8143,7 +8143,7 @@
       {
         "id": "No",
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8174,7 +8174,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u09aa\u09b0\u09c0\u0995\u09cd\u09b7\u09be\u09b0 \u09a8\u09be\u09ae",
+    "titleCulture": "পরীক্ষার নাম",
     "errorMessage": "Please select a valid option",
     "isSummary": false,
     "optionType": "boolean",
@@ -8202,7 +8202,7 @@
       {
         "id": "fbs",
         "name": "FBS (Before Meal)",
-        "cultureValue": "\u098f\u09ab\u09ac\u09bf\u098f\u09b8 (\u0996\u09be\u09b2\u09bf \u09aa\u09c7\u099f\u09c7)",
+        "cultureValue": "এফবিএস (খালি পেটে)",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8214,7 +8214,7 @@
       {
         "id": "rbs",
         "name": "RBS (After Meal)",
-        "cultureValue": "\u0986\u09b0\u09ac\u09bf\u098f\u09b8 (\u09ad\u09b0\u09be \u09aa\u09c7\u099f\u09c7)",
+        "cultureValue": "আরবিএস (ভরা পেটে)",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8246,8 +8246,8 @@
     "isEnabled": true,
     "visibility": "gone",
     "hint": "Enter Glucose Reading",
-    "hintCulture": "\u0997\u09cd\u09b2\u09c1\u0995\u09cb\u099c \u09b0\u09bf\u09a1\u09bf\u0982 \u09b2\u09bf\u0996\u09c1\u09a8",
-    "titleCulture": "\u09ac\u09cd\u09b2\u09be\u09a1 \u0997\u09cd\u09b2\u09c1\u0995\u09cb\u099c",
+    "hintCulture": "গ্লুকোজ রিডিং লিখুন",
+    "titleCulture": "ব্লাড গ্লুকোজ",
     "errorMessage": "",
     "unitMeasurement": "mmol/L",
     "minValue": 0.6,
@@ -8282,7 +8282,7 @@
     "widgetHint": "CardView",
     "familyOrder": 5.0,
     "visibility": "gone",
-    "titleCulture": "\u09b0\u09c7\u09ab\u09be\u09b0\u09c7\u09b2 \u09a4\u09a5\u09cd\u09af",
+    "titleCulture": "রেফারেল তথ্য",
     "programmes": [
       {
         "id": "cataract",
@@ -8301,7 +8301,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u098f\u0987 \u09ac\u09cd\u09af\u0995\u09cd\u09a4\u09bf\u0995\u09c7 \u0995\u09c7 \u09b0\u09c7\u09ab\u09be\u09b0 \u0995\u09b0\u09c7\u099b\u09c7",
+    "titleCulture": "এই ব্যক্তিকে কে রেফার করেছে",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "optionType": "string",
@@ -8324,7 +8324,7 @@
       {
         "id": "SK",
         "name": "SK",
-        "cultureValue": "\u09b8\u09cd\u09ac\u09be\u09b8\u09cd\u09a5\u09cd\u09af\u0995\u09b0\u09cd\u09ae\u09c0",
+        "cultureValue": "স্বাস্থ্যকর্মী",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8336,7 +8336,7 @@
       {
         "id": "SS",
         "name": "SS",
-        "cultureValue": "\u09b8\u09cd\u09ac\u09be\u09b8\u09cd\u09a5\u09cd\u09af \u09b8\u09c7\u09ac\u09bf\u0995\u09be",
+        "cultureValue": "স্বাস্থ্য সেবিকা",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8348,7 +8348,7 @@
       {
         "id": "Patient to Patient",
         "name": "Patient to Patient",
-        "cultureValue": "\u09aa\u09c7\u09b6\u09c7\u09a8\u09cd\u099f \u099f\u09c1 \u09aa\u09c7\u09b6\u09c7\u09a8\u09cd\u099f",
+        "cultureValue": "পেশেন্ট টু পেশেন্ট",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8360,7 +8360,7 @@
       {
         "id": "Volunteer",
         "name": "Volunteer",
-        "cultureValue": "\u09ad\u09b2\u09be\u09a8\u09cd\u099f\u09bf\u09df\u09be\u09b0",
+        "cultureValue": "ভলান্টিয়ার",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8372,7 +8372,7 @@
       {
         "id": "Other",
         "name": "Other",
-        "cultureValue": "\u0985\u09a8\u09cd\u09af\u09be\u09a8\u09cd\u09af",
+        "cultureValue": "অন্যান্য",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8389,7 +8389,7 @@
     "label": "Symptoms",
     "widgetHint": "CardView",
     "familyOrder": 1.0,
-    "titleCulture": "\u09b2\u0995\u09cd\u09b7\u09a3",
+    "titleCulture": "লক্ষণ",
     "programmes": [
       {
         "id": "ncd",
@@ -8408,7 +8408,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09b6\u09c7\u09b7 \u09ab\u09b2\u09cb\u0986\u09aa\u09c7\u09b0 \u09aa\u09b0 \u09a5\u09c7\u0995\u09c7 \u09b0\u09cb\u0997\u09c0\u09b0 \u0995\u09bf \u0995\u09cb\u09a8\u0993 \u09b2\u0995\u09cd\u09b7\u09a3 \u09a6\u09c7\u0996\u09be \u09a6\u09bf\u09af\u09bc\u09c7\u099b\u09c7?",
+    "titleCulture": "শেষ ফলোআপের পর থেকে রোগীর কি কোনও লক্ষণ দেখা দিয়েছে?",
     "errorMessage": "Please select a valid option",
     "isSummary": false,
     "optionType": "boolean",
@@ -8431,7 +8431,7 @@
       {
         "id": "Yes",
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8443,7 +8443,7 @@
       {
         "id": "No",
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8476,7 +8476,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u09b2\u0995\u09cd\u09b7\u09a3 \u09a8\u09bf\u09b0\u09cd\u09ac\u09be\u099a\u09a8 \u0995\u09b0\u09c1\u09a8",
+    "titleCulture": "লক্ষণ নির্বাচন করুন",
     "errorMessage": "Please select the symptoms",
     "isSummary": true,
     "isNeededDefault": true,
@@ -8507,8 +8507,8 @@
     "isEnabled": true,
     "visibility": "gone",
     "hint": "Type your comments",
-    "hintCulture": "\u0986\u09aa\u09a8\u09be\u09b0 \u09ae\u09a8\u09cd\u09a4\u09ac\u09cd\u09af \u09b2\u09bf\u0996\u09c1\u09a8",
-    "titleCulture": "\u09a8\u09a4\u09c1\u09a8 \u09ac\u09be \u0986\u0997\u09c7\u09b0 \u09a4\u09c1\u09b2\u09a8\u09be\u09af\u09bc \u09ac\u09c7\u09a1\u09bc\u09c7 \u09af\u09be\u0993\u09af\u09bc\u09be \u0989\u09aa\u09b8\u09b0\u09cd\u0997",
+    "hintCulture": "আপনার মন্তব্য লিখুন",
+    "titleCulture": "নতুন বা আগের তুলনায় বেড়ে যাওয়া উপসর্গ",
     "errorMessage": "Please enter valid comments",
     "isSummary": true,
     "isNeededDefault": true,
@@ -8540,7 +8540,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0986\u09aa\u09a8\u09bf \u0995\u09bf \u09a8\u09bf\u09af\u09bc\u09ae\u09bf\u09a4 \u0994\u09b7\u09a7 \u0996\u09be\u099a\u09cd\u099b\u09c7\u09a8?",
+    "titleCulture": "আপনি কি নিয়মিত ঔষধ খাচ্ছেন?",
     "errorMessage": "Please select the medication",
     "isSummary": true,
     "titleSummary": "Medication Adherence",
@@ -8563,7 +8563,7 @@
       {
         "id": "Yes",
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8575,7 +8575,7 @@
       {
         "id": "No",
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8596,7 +8596,7 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "Enter HbA1c Reading",
-    "hintCulture": "HbA1c \u09b0\u09bf\u09a1\u09bf\u0982 \u09b2\u09bf\u0996\u09c1\u09a8",
+    "hintCulture": "HbA1c রিডিং লিখুন",
     "titleCulture": "HbA1c",
     "errorMessage": "",
     "unitMeasurement": "%",
@@ -8625,7 +8625,7 @@
     "label": "Eye Care",
     "widgetHint": "CardView",
     "familyOrder": 8.0,
-    "titleCulture": "\u099a\u09cb\u0996 \u09aa\u09b0\u09c0\u0995\u09cd\u09b7\u09be",
+    "titleCulture": "চোখ পরীক্ষা",
     "programmes": [
       {
         "id": "eye_care",
@@ -8644,7 +8644,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u099a\u09cb\u0996 \u09aa\u09b0\u09c0\u0995\u09cd\u09b7\u09be\u09b0 \u09ab\u09b2\u09be\u09ab\u09b2",
+    "titleCulture": "চোখ পরীক্ষার ফলাফল",
     "errorMessage": "Please select a valid option",
     "isSummary": true,
     "isNeededDefault": true,
@@ -8666,7 +8666,7 @@
       {
         "id": "cataracts",
         "name": "Cataracts",
-        "cultureValue": "\u099b\u09be\u09a8\u09bf",
+        "cultureValue": "ছানি",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8678,7 +8678,7 @@
       {
         "id": "myopia",
         "name": "Myopia",
-        "cultureValue": "\u09a6\u09c2\u09b0\u09a6\u09c3\u09b7\u09cd\u099f\u09bf \u09b8\u09ae\u09b8\u09cd\u09af\u09be",
+        "cultureValue": "দূরদৃষ্টি সমস্যা",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8690,7 +8690,7 @@
       {
         "id": "presbyopia",
         "name": "Presbyopia",
-        "cultureValue": "\u09aa\u09cd\u09b0\u09c7\u09b8\u09ac\u09be\u09df\u09cb\u09aa\u09bf\u09df\u09be \u09ac\u09be \u09a8\u09bf\u0995\u099f \u09a6\u09c3\u09b7\u09cd\u099f\u09bf \u09b8\u09ae\u09b8\u09cd\u09af\u09be",
+        "cultureValue": "প্রেসবায়োপিয়া বা নিকট দৃষ্টি সমস্যা",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8702,7 +8702,7 @@
       {
         "id": "otherProblem",
         "name": "Other Problem",
-        "cultureValue": "\u0985\u09a8\u09cd\u09af\u09be\u09a8\u09cd\u09af \u09b8\u09ae\u09b8\u09cd\u09af\u09be",
+        "cultureValue": "অন্যান্য সমস্যা",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8714,7 +8714,7 @@
       {
         "id": "noProblem",
         "name": "No Problem",
-        "cultureValue": "\u09b8\u09ae\u09b8\u09cd\u09af\u09be \u09a8\u09c7\u0987",
+        "cultureValue": "সমস্যা নেই",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8751,7 +8751,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0986\u0987\u09a1\u09bf\u09b0 \u09a7\u09b0\u09a8",
+    "titleCulture": "আইডির ধরন",
     "errorMessage": "Please select ID Type",
     "isNeededDefault": true,
     "clinicalConcept": [
@@ -8772,7 +8772,7 @@
       {
         "id": "nid",
         "name": "National ID",
-        "cultureValue": "\u099c\u09be\u09a4\u09c0\u09af\u09bc \u09aa\u09b0\u09bf\u099a\u09af\u09bc \u09aa\u09a4\u09cd\u09b0 (NID)",
+        "cultureValue": "জাতীয় পরিচয় পত্র (NID)",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8784,7 +8784,7 @@
       {
         "id": "brn",
         "name": "BRN",
-        "cultureValue": "\u099c\u09a8\u09cd\u09ae \u09a8\u09bf\u09ac\u09a8\u09cd\u09a7\u09a8 \u09a8\u09ae\u09cd\u09ac\u09b0 (BRN)",
+        "cultureValue": "জন্ম নিবন্ধন নম্বর (BRN)",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8796,7 +8796,7 @@
       {
         "id": "na",
         "name": "Not Available",
-        "cultureValue": "\u09b8\u09be\u09a5\u09c7 \u09a8\u09c7\u0987",
+        "cultureValue": "সাথে নেই",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8828,8 +8828,8 @@
     "isEnabled": true,
     "visibility": "gone",
     "hint": "Enter National ID",
-    "hintCulture": "\u099c\u09be\u09a4\u09c0\u09af\u09bc \u09aa\u09b0\u09bf\u099a\u09af\u09bc\u09aa\u09a4\u09cd\u09b0 \u09a8\u09ae\u09cd\u09ac\u09b0 \u09b2\u09bf\u0996\u09c1\u09a8",
-    "titleCulture": "\u099c\u09be\u09a4\u09c0\u09af\u09bc \u09aa\u09b0\u09bf\u099a\u09af\u09bc\u09aa\u09a4\u09cd\u09b0 (NID) (\u2265\u09e7\u09ee \u09ac\u099b\u09b0)",
+    "hintCulture": "জাতীয় পরিচয়পত্র নম্বর লিখুন",
+    "titleCulture": "জাতীয় পরিচয়পত্র (NID) (≥১৮ বছর)",
     "isNeededDefault": true,
     "inputType": "text",
     "clinicalConcept": [
@@ -8857,8 +8857,8 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "Enter Full Name",
-    "hintCulture": "\u09aa\u09c1\u09b0\u09cb \u09a8\u09be\u09ae \u09b2\u09bf\u0996\u09c1\u09a8",
-    "titleCulture": "\u09aa\u09c1\u09b0\u09cb \u09a8\u09be\u09ae",
+    "hintCulture": "পুরো নাম লিখুন",
+    "titleCulture": "পুরো নাম",
     "errorMessage": "Full name is required and must be length of 2 to 100",
     "isSummary": true,
     "isNeededDefault": true,
@@ -8890,8 +8890,8 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "Enter Mobile Number",
-    "hintCulture": "\u09ae\u09cb\u09ac\u09be\u0987\u09b2 \u09a8\u09ae\u09cd\u09ac\u09b0 \u09b2\u09bf\u0996\u09c1\u09a8",
-    "titleCulture": "\u09ae\u09cb\u09ac\u09be\u0987\u09b2 \u09a8\u09ae\u09cd\u09ac\u09b0",
+    "hintCulture": "মোবাইল নম্বর লিখুন",
+    "titleCulture": "মোবাইল নম্বর",
     "optionType": "phoneNumberWithoutCountryCode",
     "isNeededDefault": true,
     "inputType": "integer",
@@ -8926,7 +8926,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09ae\u09cb\u09ac\u09be\u0987\u09b2 \u09a8\u09ae\u09cd\u09ac\u09b0\u09c7\u09b0 \u09a7\u09b0\u09a8",
+    "titleCulture": "মোবাইল নম্বরের ধরন",
     "errorMessage": "Please select mobile number category",
     "isNeededDefault": true,
     "clinicalConcept": [
@@ -8947,7 +8947,7 @@
       {
         "id": "Personal",
         "name": "Personal (Self)",
-        "cultureValue": "\u09ac\u09cd\u09af\u09be\u0995\u09cd\u09a4\u09bf\u0997\u09a4 (\u09a8\u09bf\u099c\u09b8\u09cd\u09ac)",
+        "cultureValue": "ব্যাক্তিগত (নিজস্ব)",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8959,7 +8959,7 @@
       {
         "id": "Family Member",
         "name": "Family Member",
-        "cultureValue": "\u09aa\u09b0\u09bf\u09ac\u09be\u09b0\u09c7\u09b0 \u09b8\u09a6\u09b8\u09cd\u09af",
+        "cultureValue": "পরিবারের সদস্য",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8971,7 +8971,7 @@
       {
         "id": "Friend",
         "name": "Friend",
-        "cultureValue": "\u09aa\u09cd\u09b0\u09a4\u09bf\u09ac\u09c7\u09b6\u09c0/\u09ac\u09a8\u09cd\u09a7\u09c1",
+        "cultureValue": "প্রতিবেশী/বন্ধু",
         "clinicalConcept": [
           {
             "system": "SNOMED_CT",
@@ -8991,7 +8991,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0989\u09aa\u099c\u09c7\u09b2\u09be",
+    "titleCulture": "উপজেলা",
     "errorMessage": "",
     "isSummary": true,
     "localDataCache": "chiefdom",
@@ -9021,7 +9021,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0987\u0989\u09a8\u09bf\u09df\u09a8/\u0993\u09df\u09be\u09b0\u09cd\u09a1",
+    "titleCulture": "ইউনিয়ন/ওয়ার্ড",
     "errorMessage": "Please select the union",
     "localDataCache": "village",
     "isNeededDefault": true,
@@ -9051,7 +9051,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0997\u09cd\u09b0\u09be\u09ae/\u098f\u09b2\u09be\u0995\u09be",
+    "titleCulture": "গ্রাম/এলাকা",
     "errorMessage": "Please select the village/area",
     "isNeededDefault": true,
     "clinicalConcept": [
@@ -9086,8 +9086,8 @@
     "isEnabled": true,
     "visibility": "gone",
     "hint": "Enter Village Name",
-    "hintCulture": "\u0997\u09cd\u09b0\u09be\u09ae\u09c7\u09b0 \u09a8\u09be\u09ae \u09b2\u09bf\u0996\u09c1\u09a8",
-    "titleCulture": "\u0997\u09cd\u09b0\u09be\u09ae\u09c7\u09b0 \u09a8\u09be\u09ae",
+    "hintCulture": "গ্রামের নাম লিখুন",
+    "titleCulture": "গ্রামের নাম",
     "errorMessage": "Please enter a valid village name",
     "isSummary": true,
     "isNotDefault": false,
@@ -9118,8 +9118,8 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "Enter house and road number",
-    "hintCulture": "\u09ac\u09be\u09a1\u09bc\u09bf \u098f\u09ac\u0982 \u09b0\u09be\u09b8\u09cd\u09a4\u09be\u09b0 \u09a8\u09ae\u09cd\u09ac\u09b0 \u09b2\u09bf\u0996\u09c1\u09a8",
-    "titleCulture": "\u09ac\u09be\u09a1\u09bc\u09bf \u098f\u09ac\u0982 \u09b0\u09be\u09b8\u09cd\u09a4\u09be \u09a8\u09ae\u09cd\u09ac\u09b0",
+    "hintCulture": "বাড়ি এবং রাস্তার নম্বর লিখুন",
+    "titleCulture": "বাড়ি এবং রাস্তা নম্বর",
     "errorMessage": "",
     "isSummary": true,
     "inputType": "text",
@@ -9144,7 +9144,7 @@
     "label": "Bio metrics",
     "widgetHint": "CardView",
     "familyOrder": 3,
-    "titleCulture": "\u09ac\u09be\u09af\u09bc\u09cb\u09ae\u09c7\u099f\u09cd\u09b0\u09bf\u0995\u09cd\u09b8",
+    "titleCulture": "বায়োমেট্রিক্স",
     "programmes": [
       {
         "id": "enrollment",
@@ -9162,7 +9162,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u09b0\u09cb\u0997\u09c0 \u0995\u09bf \u0997\u09b0\u09cd\u09ad\u09ac\u09a4\u09c0?",
+    "titleCulture": "রোগী কি গর্ভবতী?",
     "errorMessage": "Please select a valid option",
     "optionType": "boolean",
     "isNeededDefault": true,
@@ -9183,7 +9183,7 @@
     "optionsList": [
       {
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "id": "true",
         "clinicalConcept": [
           {
@@ -9195,7 +9195,7 @@
       },
       {
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "id": "false",
         "clinicalConcept": [
           {
@@ -9219,8 +9219,8 @@
     "isEnabled": true,
     "visibility": "visible",
     "hint": "DD/MM/YYYY",
-    "hintCulture": "\u09a6\u09bf\u09a8/\u09ae\u09be\u09b8/\u09ac\u099b\u09b0",
-    "titleCulture": "\u099c\u09a8\u09cd\u09ae \u09a4\u09be\u09b0\u09bf\u0996",
+    "hintCulture": "দিন/মাস/বছর",
+    "titleCulture": "জন্ম তারিখ",
     "isSummary": true,
     "isNeededDefault": true,
     "clinicalConcept": [
@@ -9243,7 +9243,7 @@
     "label": "Patient Status",
     "widgetHint": "CardView",
     "familyOrder": 4,
-    "titleCulture": "\u09b0\u09cb\u0997\u09c0\u09b0 \u0985\u09ac\u09b8\u09cd\u09a5\u09be",
+    "titleCulture": "রোগীর অবস্থা",
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -9268,7 +9268,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0989\u099a\u09cd\u099a \u09b0\u0995\u09cd\u09a4\u099a\u09be\u09aa \u09a8\u09bf\u09b0\u09cd\u09a3\u09af\u09bc",
+    "titleCulture": "উচ্চ রক্তচাপ নির্ণয়",
     "errorMessage": "Please select a valid option",
     "optionType": "string",
     "isNeededDefault": true,
@@ -9289,7 +9289,7 @@
     "optionsList": [
       {
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "id": "Yes",
         "clinicalConcept": [
           {
@@ -9301,7 +9301,7 @@
       },
       {
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "id": "No",
         "clinicalConcept": [
           {
@@ -9329,7 +9329,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u09b0\u09cb\u0997\u09c0\u09b0 \u09a7\u09b0\u09a3",
+    "titleCulture": "রোগীর ধরণ",
     "errorMessage": "Please select a valid option",
     "isNeededDefault": true,
     "clinicalConcept": [
@@ -9349,7 +9349,7 @@
     "optionsList": [
       {
         "name": "Newly Diagnosed",
-        "cultureValue": "\u09a8\u09a4\u09c1\u09a8\u09ad\u09be\u09ac\u09c7 \u09a1\u09be\u09af\u09bc\u09be\u0997\u09a8\u09cb\u09b8\u09a1",
+        "cultureValue": "নতুনভাবে ডায়াগনোসড",
         "id": "newlyDiagnosedHypertension",
         "clinicalConcept": [
           {
@@ -9361,7 +9361,7 @@
       },
       {
         "name": "Known Patient",
-        "cultureValue": "\u09aa\u09c1\u09b0\u09be\u09a4\u09a8 \u09b0\u09cb\u0997\u09c0",
+        "cultureValue": "পুরাতন রোগী",
         "id": "knownPatientHypertension",
         "clinicalConcept": [
           {
@@ -9383,7 +9383,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09a1\u09be\u09af\u09bc\u09be\u09ac\u09c7\u099f\u09bf\u09b8 \u09a8\u09bf\u09b0\u09cd\u09a3\u09af\u09bc",
+    "titleCulture": "ডায়াবেটিস নির্ণয়",
     "errorMessage": "Please select a valid option",
     "optionType": "string",
     "isNeededDefault": true,
@@ -9404,7 +9404,7 @@
     "optionsList": [
       {
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "id": "Yes",
         "clinicalConcept": [
           {
@@ -9416,7 +9416,7 @@
       },
       {
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "id": "No",
         "clinicalConcept": [
           {
@@ -9449,7 +9449,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u09b0\u09cb\u0997\u09c0\u09b0 \u09a7\u09b0\u09a3",
+    "titleCulture": "রোগীর ধরণ",
     "errorMessage": "Please select a valid option",
     "isNeededDefault": true,
     "clinicalConcept": [
@@ -9469,7 +9469,7 @@
     "optionsList": [
       {
         "name": "Newly Diagnosed",
-        "cultureValue": "\u09a8\u09a4\u09c1\u09a8\u09ad\u09be\u09ac\u09c7 \u09a1\u09be\u09af\u09bc\u09be\u0997\u09a8\u09cb\u09b8\u09a1",
+        "cultureValue": "নতুনভাবে ডায়াগনোসড",
         "id": "newlyDiagnosedDiabetes",
         "clinicalConcept": [
           {
@@ -9481,7 +9481,7 @@
       },
       {
         "name": "Known Patient",
-        "cultureValue": "\u09aa\u09c1\u09b0\u09be\u09a4\u09a8 \u09b0\u09cb\u0997\u09c0",
+        "cultureValue": "পুরাতন রোগী",
         "id": "knownPatientDiabetes",
         "clinicalConcept": [
           {
@@ -9503,7 +9503,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "gone",
-    "titleCulture": "\u09b0\u09cb\u0997 \u09a8\u09bf\u09b0\u09cd\u09a3\u09df",
+    "titleCulture": "রোগ নির্ণয়",
     "errorMessage": "Please select a valid option",
     "isNeededDefault": true,
     "clinicalConcept": [
@@ -9523,7 +9523,7 @@
     "optionsList": [
       {
         "name": "Diabetes Mellitus Type 2",
-        "cultureValue": "\u09a1\u09be\u09af\u09bc\u09be\u09ac\u09c7\u099f\u09bf\u09b8 \u099f\u09be\u0987\u09aa \u09e8",
+        "cultureValue": "ডায়াবেটিস টাইপ ২",
         "id": "dmType2",
         "clinicalConcept": [
           {
@@ -9535,7 +9535,7 @@
       },
       {
         "name": "Diabetes Mellitus Type 1",
-        "cultureValue": "\u09a1\u09be\u09af\u09bc\u09be\u09ac\u09c7\u099f\u09bf\u09b8 \u099f\u09be\u0987\u09aa \u09e7",
+        "cultureValue": "ডায়াবেটিস টাইপ ১",
         "id": "dmType1",
         "clinicalConcept": [
           {
@@ -9553,7 +9553,7 @@
     "label": "Health History",
     "widgetHint": "CardView",
     "familyOrder": 5,
-    "titleCulture": "\u09b8\u09cd\u09ac\u09be\u09b8\u09cd\u09a5\u09cd\u09af \u09a4\u09a5\u09cd\u09af",
+    "titleCulture": "স্বাস্থ্য তথ্য",
     "programmes": [
       {
         "id": "enrollment",
@@ -9571,7 +9571,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09b9\u09be\u09b0\u09cd\u099f \u0985\u09cd\u09af\u09be\u099f\u09be\u0995",
+    "titleCulture": "হার্ট অ্যাটাক",
     "errorMessage": "",
     "isSummary": false,
     "isNeededDefault": true,
@@ -9592,7 +9592,7 @@
     "optionsList": [
       {
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "id": "Yes",
         "clinicalConcept": [
           {
@@ -9604,7 +9604,7 @@
       },
       {
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "id": "No",
         "clinicalConcept": [
           {
@@ -9626,7 +9626,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09b8\u09cd\u099f\u09cd\u09b0\u09cb\u0995",
+    "titleCulture": "স্ট্রোক",
     "errorMessage": "",
     "isSummary": false,
     "isNeededDefault": true,
@@ -9647,7 +9647,7 @@
     "optionsList": [
       {
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "id": "Yes",
         "clinicalConcept": [
           {
@@ -9659,7 +9659,7 @@
       },
       {
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "id": "No",
         "clinicalConcept": [
           {
@@ -9681,7 +9681,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u0995\u09bf\u09a1\u09a8\u09bf \u09b0\u09cb\u0997",
+    "titleCulture": "কিডনি রোগ",
     "errorMessage": "",
     "isSummary": false,
     "isNeededDefault": true,
@@ -9702,7 +9702,7 @@
     "optionsList": [
       {
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "id": "Yes",
         "clinicalConcept": [
           {
@@ -9714,7 +9714,7 @@
       },
       {
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "id": "No",
         "clinicalConcept": [
           {
@@ -9736,7 +9736,7 @@
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "\u09b8\u09bf\u0993\u09aa\u09bf\u09a1\u09bf",
+    "titleCulture": "সিওপিডি",
     "errorMessage": "",
     "isSummary": false,
     "isNeededDefault": true,
@@ -9757,7 +9757,7 @@
     "optionsList": [
       {
         "name": "Yes",
-        "cultureValue": "\u09b9\u09cd\u09af\u09be\u0981",
+        "cultureValue": "হ্যাঁ",
         "id": "Yes",
         "clinicalConcept": [
           {
@@ -9769,7 +9769,7 @@
       },
       {
         "name": "No",
-        "cultureValue": "\u09a8\u09be",
+        "cultureValue": "না",
         "id": "No",
         "clinicalConcept": [
           {
@@ -9787,7 +9787,7 @@
     "label": "Scan QR Code",
     "widgetHint": "CardView",
     "familyOrder": 5,
-    "titleCulture": "QR \u0995\u09cb\u09a1 \u09b8\u09cd\u0995\u09cd\u09af\u09be\u09a8 \u0995\u09b0\u09c1\u09a8",
+    "titleCulture": "QR কোড স্ক্যান করুন",
     "programmes": [
       {
         "id": "enrollment",
@@ -9802,7 +9802,7 @@
     "widgetHint": "QRView",
     "family": "qrCard",
     "isMandatory": true,
-    "titleCulture": "QR \u0995\u09cb\u09a1 \u09b8\u09cd\u0995\u09cd\u09af\u09be\u09a8 \u0995\u09b0\u09c1\u09a8",
+    "titleCulture": "QR কোড স্ক্যান করুন",
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",

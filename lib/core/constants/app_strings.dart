@@ -2370,7 +2370,7 @@ abstract final class ComposerStrings {
   // ── BP / glucose range status labels ────────────────────────────────────────
   static const String rangeNormal = 'Normal';
   static const String rangeElevated = 'Elevated';
-  static const String rangeBpStage1 = 'Stage 1 HTN';
+  static const String rangeBpStage1 = 'Slightly elevated';
   static const String rangeBpStage2 = 'Stage 2 HTN';
   static const String rangeBpCrisis = 'Hypertensive Crisis ⚠';
   static const String rangeInRange = 'In Range';

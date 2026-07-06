@@ -45,6 +45,7 @@ class DynamicAssessmentScreen extends StatefulWidget {
     this.restoredDraft,
     this.embedded = false,
     this.onError,
+    this.gestationalWeeks,
   });
 
   /// Single programme identifier (e.g. 'anc', 'ncd').
@@ -81,6 +82,10 @@ class DynamicAssessmentScreen extends StatefulWidget {
   /// Called when the schema fails to load — lets the parent fall back to the
   /// legacy [SectionedAssessmentScreen] rather than showing an error wall.
   final VoidCallback? onError;
+
+  /// Gestational age in weeks — used to pre-populate the pregnancyProfile
+  /// field (LMP/EDD) and show the fundal height expected-value hint.
+  final int? gestationalWeeks;
 
   @override
   State<DynamicAssessmentScreen> createState() =>
@@ -201,6 +206,22 @@ class _DynamicAssessmentScreenState extends State<DynamicAssessmentScreen> {
         onReferNow: widget.onReferNow,
       );
 
+      // Pre-populate pregnancyProfile from gestational weeks when caller
+      // provides it (ANC visit — gestational age known from patient record).
+      final gw = widget.gestationalWeeks;
+      if (gw != null && gw > 0) {
+        final today = DateTime.now();
+        final lmpDate = today.subtract(Duration(days: gw * 7));
+        final eddDate = lmpDate.add(const Duration(days: 280));
+        final fmt = (DateTime d) =>
+            '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+        ctrl.setValue('pregnancyProfile', {
+          'lmp': fmt(lmpDate),
+          'edd': fmt(eddDate),
+          'weeks': gw,
+        });
+      }
+
       setState(() {
         _schema = schema;
         _controller = ctrl;
@@ -317,6 +338,7 @@ class _DynamicAssessmentScreenState extends State<DynamicAssessmentScreen> {
                     onAddPathway: _handleAddPathway,
                     onReferNow: widget.onReferNow,
                     previousAncWeight: _previousAncWeight,
+                    gestationalWeeks: widget.gestationalWeeks,
                   ),
                 ),
               ],
@@ -367,6 +389,7 @@ class _FormBody extends StatelessWidget {
     required this.onAddPathway,
     this.onReferNow,
     this.previousAncWeight,
+    this.gestationalWeeks,
   });
 
   final FormSchema schema;
@@ -374,6 +397,7 @@ class _FormBody extends StatelessWidget {
   final Future<void> Function(Programme) onAddPathway;
   final VoidCallback? onReferNow;
   final double? previousAncWeight;
+  final int? gestationalWeeks;
 
   @override
   Widget build(BuildContext context) {
@@ -418,6 +442,7 @@ class _FormBody extends StatelessWidget {
                 schema: combinedSchema,
                 controller: controller,
                 previousAncWeight: previousAncWeight,
+                gestationalWeeks: gestationalWeeks,
               ),
             ),
           ],

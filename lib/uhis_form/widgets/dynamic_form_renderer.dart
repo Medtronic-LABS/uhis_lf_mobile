@@ -18,11 +18,13 @@ class DynamicFormRenderer extends StatelessWidget {
     required this.schema,
     required this.controller,
     this.previousAncWeight,
+    this.gestationalWeeks,
   });
 
   final FormSchema schema;
   final DynamicFormController controller;
   final double? previousAncWeight;
+  final int? gestationalWeeks;
 
   @override
   Widget build(BuildContext context) {
@@ -58,6 +60,7 @@ class DynamicFormRenderer extends StatelessWidget {
                                 previousWeight: f.kind == FieldKind.anthropometry
                                     ? previousAncWeight
                                     : null,
+                                gestationalWeeks: gestationalWeeks,
                               )
                             : const SizedBox.shrink(),
                       ))

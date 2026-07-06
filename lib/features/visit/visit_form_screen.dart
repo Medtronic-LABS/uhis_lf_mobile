@@ -305,6 +305,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         onSubmit: () => _onSectionedSubmit(ctx, visitCtrl, session),
         onReferNow: () => setState(() => _sectionedReferralTriggered = true),
         embedded: embedded,
+        gestationalWeeks: widget.gestationalWeeks,
         onError: () {
           debugPrint('[VisitForm] SDK form failed — falling back to SectionedAssessmentScreen');
           setState(() => _sdkFormFailed = true);

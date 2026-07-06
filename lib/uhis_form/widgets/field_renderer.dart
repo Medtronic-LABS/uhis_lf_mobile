@@ -48,6 +48,7 @@ class FieldRenderer extends StatelessWidget {
     this.readOnly = false,
     this.errorText,
     this.previousWeight,
+    this.gestationalWeeks,
   });
 
   final FieldSchema schema;
@@ -57,6 +58,7 @@ class FieldRenderer extends StatelessWidget {
   final bool readOnly;
   final String? errorText;
   final double? previousWeight;
+  final int? gestationalWeeks;
 
   @override
   Widget build(BuildContext context) {
@@ -221,11 +223,41 @@ class FieldRenderer extends StatelessWidget {
       FieldKind.sectionHeader => const SizedBox.shrink(),
     };
 
+    // Fundal height lag indicator — shown when entered value is ≥ 2 cm below expected.
+    Widget result = field;
+    if (schema.fieldId == 'fundalHeight' && gestationalWeeks != null) {
+      final entered = value is num ? (value as num).toDouble() : double.tryParse(value?.toString() ?? '');
+      final expected = gestationalWeeks!.toDouble();
+      final lag = entered != null ? (expected - entered).round() : 0;
+      result = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          field,
+          if (lag >= 2)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, left: 2),
+              child: Text(
+                '⚠ $lag cm behind expected (~$gestationalWeeks cm at ${gestationalWeeks}w)',
+                style: const TextStyle(fontSize: 11, color: Color(0xFFD97706)),
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.only(top: 4, left: 2),
+              child: Text(
+                'Expected ~$gestationalWeeks cm at ${gestationalWeeks}w',
+                style: const TextStyle(fontSize: 11, color: Color(0xFF78716C)),
+              ),
+            ),
+        ],
+      );
+    }
+
     // Wrap with AI hint badge if Scribe pre-filled this field
     if (aiHint != null) {
-      return _AiHintWrapper(child: field);
+      return _AiHintWrapper(child: result);
     }
-    return field;
+    return result;
   }
 }
 
