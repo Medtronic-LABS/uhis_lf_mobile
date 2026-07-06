@@ -3066,6 +3066,8 @@ abstract final class VisitCompleteStrings {
   static const String sendCounsellingMessage = 'Send Counselling Message';
   static const String createReferral = 'Create Referral';
   static const String backToHome = 'Back to Home';
+  static const String ncdCallDoctor = '📱 Call a doctor now';
+  static const String ncdBookHospital = '🏥 Book hospital visit & refer';
 
   static const String householdMembersTitle = 'Members in this household';
 

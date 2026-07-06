@@ -2597,6 +2597,40 @@ class _BottomCtaBar extends StatelessWidget {
                   ),
                 ),
               ],
+              if (primaryProgramme == Programme.ncd) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () async {
+                      final uri = Uri.parse('tel:');
+                      if (await canLaunchUrl(uri)) await launchUrl(uri);
+                    },
+                    icon: const Icon(Icons.phone_rounded),
+                    label: const Text(VisitCompleteStrings.ncdCallDoctor),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.statusCritical,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => context.go('/tasks'),
+                    icon: const Icon(Icons.local_hospital_rounded),
+                    label: const Text(VisitCompleteStrings.ncdBookHospital),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: headerColor,
+                      side: BorderSide(
+                          color: headerColor.withValues(alpha: 0.4)),
+                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
+                    ),
+                  ),
+                ),
+              ],
               if ((primaryProgramme == Programme.imci ||
                       primaryProgramme == Programme.epi) &&
                   naba.whatsappSummary != null) ...[
