@@ -92,6 +92,10 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
   /// causes an automatic fallback to [SectionedAssessmentScreen].
   bool _sdkFormFailed = false;
 
+  /// Prevents concurrent submit calls — set on first tap, cleared only if
+  /// submit throws so the SK can retry; successful submit navigates away.
+  bool _isSubmitting = false;
+
   bool get _hasActivatedPathways =>
       widget.activatedPathways != null && widget.activatedPathways!.isNotEmpty;
 
@@ -330,11 +334,20 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     VisitController visitCtrl,
     VisitSession session,
   ) async {
+    if (_isSubmitting) {
+      debugPrint('[VisitForm] _onSectionedSubmit — already submitting, ignoring duplicate tap');
+      return;
+    }
+    _isSubmitting = true;
     debugPrint('[VisitForm] _onSectionedSubmit — visitId=${widget.visitId}');
+    // Capture all services synchronously before any await — ctx is invalid after async gaps.
+    final draftDao = ctx.read<AssessmentDraftDao>();
+    final orchestrator = ctx.read<UnifiedSubmissionOrchestrator>();
+    final encounterDao = ctx.read<EncounterDao>();
+    final assessmentRepo = ctx.read<AssessmentRepository>();
+    final patientDao = ctx.read<PatientDao>();
+    final worklistRepo = ctx.read<WorklistRepository>();
     try {
-      final draftDao = ctx.read<AssessmentDraftDao>();
-      final orchestrator = ctx.read<UnifiedSubmissionOrchestrator>();
-
       final draft = await draftDao.getDraft(widget.visitId);
       debugPrint('[VisitForm] draft=${draft != null ? "found" : "null"}');
       if (draft != null) {
@@ -345,48 +358,48 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
           householdId: widget.householdId,
           villageId: widget.villageId,
         );
+        // Delete draft immediately after successful fan-out to prevent
+        // duplicate assessment rows if onSubmit fires more than once.
+        await draftDao.deleteDraft(draft.encounterId);
         debugPrint('[VisitForm] orchestrator.submit done');
 
-        // Write vitals to the encounter row so VitalsRepository.recentByVisit()
-        // can display them on PatientContextScreen without a server round-trip.
-        if (ctx.mounted) {
-          final fieldValues =
-              jsonDecode(draft.fieldValues) as Map<String, dynamic>;
-          final vitalsMap = _extractVitals(fieldValues);
-          if (vitalsMap.isNotEmpty) {
-            await ctx
-                .read<EncounterDao>()
-                .updateVitals(draft.encounterId, vitalsMap);
-            debugPrint('[VisitForm] encounter vitals written: $vitalsMap');
-          }
-        }
-
-        // Kick off backend sync for all pending assessments now saved by orchestrator
-        if (ctx.mounted) {
-          final assessmentRepo = ctx.read<AssessmentRepository>();
-          debugPrint('[VisitForm] triggering syncPendingAssessments');
-          unawaited(assessmentRepo.syncPendingAssessments().then(
-            (n) => debugPrint('[VisitForm] syncPendingAssessments → synced $n'),
-            onError: (e) => debugPrint('[VisitForm] syncPendingAssessments ✗ $e'),
-          ));
-        }
-      }
-
-      if (widget.patientId != null && ctx.mounted) {
+        final fieldValues = jsonDecode(draft.fieldValues) as Map<String, dynamic>;
+        final vitalsMap = _extractVitals(fieldValues);
+        final encounterId = draft.encounterId;
+        final patientId = widget.patientId;
+        final primaryProgramme = _getPrimaryProgramme();
         final now = DateTime.now();
-        await ctx.read<PatientDao>().updateVisitSchedule(
-          patientId: widget.patientId!,
-          lastVisitAt: now.millisecondsSinceEpoch,
-          nextDueAt: _nextDueForProgramme(_getPrimaryProgramme(), now),
-          missedVisitCount: 0,
-        );
-        debugPrint('[VisitForm] schedule updated');
-        if (ctx.mounted) {
-          await ctx.read<WorklistRepository>().recomputeAllAfterSync();
-          debugPrint('[VisitForm] worklist recomputed');
-        }
+
+        // Fire housekeeping in background — navigate immediately, these finish async.
+        unawaited(Future(() async {
+          try {
+            if (vitalsMap.isNotEmpty) {
+              await encounterDao.updateVitals(encounterId, vitalsMap);
+              debugPrint('[VisitForm] encounter vitals written: $vitalsMap');
+            }
+            debugPrint('[VisitForm] triggering syncPendingAssessments');
+            await assessmentRepo.syncPendingAssessments().then(
+              (n) => debugPrint('[VisitForm] syncPendingAssessments → synced $n'),
+              onError: (e) => debugPrint('[VisitForm] syncPendingAssessments ✗ $e'),
+            );
+            if (patientId != null) {
+              await patientDao.updateVisitSchedule(
+                patientId: patientId,
+                lastVisitAt: now.millisecondsSinceEpoch,
+                nextDueAt: _nextDueForProgramme(primaryProgramme, now),
+                missedVisitCount: 0,
+              );
+              debugPrint('[VisitForm] schedule updated');
+              await worklistRepo.recomputeAllAfterSync();
+              debugPrint('[VisitForm] worklist recomputed');
+            }
+          } catch (e) {
+            debugPrint('[VisitForm] background housekeeping error: $e');
+          }
+        }));
       }
 
+      // Navigate immediately — background tasks continue independently.
       debugPrint('[VisitForm] mounted=$mounted ctx.mounted=${ctx.mounted}');
       if (mounted && ctx.mounted) {
         final onAdvance = widget.onAdvance;
@@ -408,6 +421,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         }
       }
     } catch (e, st) {
+      _isSubmitting = false;
       debugPrint('[VisitForm] assessment save failed: $e\n$st');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(

@@ -1,7 +1,8 @@
-/// Conversational AI assistant screen — Tab 3 of the main shell.
+/// AI Assistant tab — Tab 3 of the main shell.
 ///
-/// Provides a Q&A chat interface backed by [AssistantRepository]. Messages
-/// are ephemeral (in-memory only); no history is persisted across sessions.
+/// Two sub-tabs:
+///   1. "Ask AI"  — conversational Q&A backed by [AssistantRepository].
+///   2. "Training" — micro-coaching modules (Learn → Apply → Measure loop).
 library;
 
 import 'package:flutter/material.dart';
@@ -9,17 +10,66 @@ import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
 import '../../core/theme/app_theme.dart';
+import '../training/training_screen.dart';
 import 'assistant_models.dart';
 import 'assistant_repository.dart';
 
-class AssistantScreen extends StatefulWidget {
+class AssistantScreen extends StatelessWidget {
   const AssistantScreen({super.key});
 
   @override
-  State<AssistantScreen> createState() => _AssistantScreenState();
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: AppColors.canvas,
+        appBar: AppBar(
+          backgroundColor: AppColors.navy,
+          foregroundColor: Colors.white,
+          title: const Text(AssistantStrings.title),
+          elevation: 0,
+          bottom: const TabBar(
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white60,
+            indicatorColor: Colors.white,
+            indicatorWeight: 2.5,
+            labelStyle: TextStyle(
+              fontFamily: 'NunitoSans',
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+            unselectedLabelStyle: TextStyle(
+              fontFamily: 'NunitoSans',
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+            tabs: [
+              Tab(icon: Icon(Icons.chat_outlined, size: 18), text: AssistantStrings.tabAsk),
+              Tab(icon: Icon(Icons.school_outlined, size: 18), text: AssistantStrings.tabTraining),
+            ],
+          ),
+        ),
+        body: const TabBarView(
+          children: [
+            _ChatTab(),
+            TrainingBody(),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-class _AssistantScreenState extends State<AssistantScreen> {
+// ── Chat tab ──────────────────────────────────────────────────────────────────
+
+class _ChatTab extends StatefulWidget {
+  const _ChatTab();
+
+  @override
+  State<_ChatTab> createState() => _ChatTabState();
+}
+
+class _ChatTabState extends State<_ChatTab> {
   final List<ChatMessage> _messages = [];
   final TextEditingController _input = TextEditingController();
   final ScrollController _scroll = ScrollController();
@@ -56,8 +106,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
     _scrollToBottom();
 
     try {
-      final answer =
-          await context.read<AssistantRepository>().ask(q);
+      final answer = await context.read<AssistantRepository>().ask(q);
       if (!mounted) return;
       setState(() {
         _messages.add(ChatMessage(
@@ -97,59 +146,46 @@ class _AssistantScreenState extends State<AssistantScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.canvas,
-      appBar: AppBar(
-        backgroundColor: AppColors.navy,
-        foregroundColor: Colors.white,
-        title: const Text(AssistantStrings.title),
-        elevation: 0,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: AppColors.navyMid),
+    return Column(
+      children: [
+        Expanded(
+          child: _messages.isEmpty
+              ? _EmptyState(onStarter: _send, starters: _starters)
+              : _MessageList(
+                  messages: _messages,
+                  loading: _loading,
+                  scroll: _scroll,
+                ),
         ),
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: _messages.isEmpty
-                ? _EmptyState(onStarter: _send, starters: _starters)
-                : _MessageList(
-                    messages: _messages,
-                    loading: _loading,
-                    scroll: _scroll,
-                  ),
+        if (_error != null)
+          _ErrorBanner(
+            message: _error!,
+            onRetry: () {
+              final last = _messages.lastWhere(
+                (m) => m.role == MessageRole.user,
+                orElse: () => ChatMessage(
+                  role: MessageRole.user,
+                  text: '',
+                  timestamp: DateTime.now(),
+                ),
+              );
+              if (last.text.isNotEmpty) {
+                setState(() {
+                  _error = null;
+                  _messages.removeLast();
+                });
+                _send(last.text);
+              } else {
+                setState(() => _error = null);
+              }
+            },
           ),
-          if (_error != null)
-            _ErrorBanner(
-              message: _error!,
-              onRetry: () {
-                final last = _messages.lastWhere(
-                  (m) => m.role == MessageRole.user,
-                  orElse: () => ChatMessage(
-                    role: MessageRole.user,
-                    text: '',
-                    timestamp: DateTime.now(),
-                  ),
-                );
-                if (last.text.isNotEmpty) {
-                  setState(() {
-                    _error = null;
-                    _messages.removeLast(); // remove partial user msg
-                  });
-                  _send(last.text);
-                } else {
-                  setState(() => _error = null);
-                }
-              },
-            ),
-          _InputBar(
-            controller: _input,
-            loading: _loading,
-            onSend: () => _send(_input.text),
-          ),
-        ],
-      ),
+        _InputBar(
+          controller: _input,
+          loading: _loading,
+          onSend: () => _send(_input.text),
+        ),
+      ],
     );
   }
 }

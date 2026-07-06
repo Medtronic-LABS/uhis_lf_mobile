@@ -28,11 +28,6 @@ class TrainingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final repo = context.watch<CoachingRepository>();
-    final priorities = repo.todaysPriorities;
-    final all = repo.modules;
-
     return Scaffold(
       backgroundColor: AppColors.canvas,
       appBar: AppBar(
@@ -40,7 +35,24 @@ class TrainingScreen extends StatelessWidget {
         backgroundColor: AppColors.aiPurpleDark,
         foregroundColor: Colors.white,
       ),
-      body: SingleChildScrollView(
+      body: const TrainingBody(),
+    );
+  }
+}
+
+/// Embeddable training content — used both by [TrainingScreen] (standalone)
+/// and by the Assistant tab's Training sub-tab.
+class TrainingBody extends StatelessWidget {
+  const TrainingBody({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final repo = context.watch<CoachingRepository>();
+    final priorities = repo.todaysPriorities;
+    final all = repo.modules;
+
+    return SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.xxxl),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -92,7 +104,6 @@ class TrainingScreen extends StatelessWidget {
             ),
           ],
         ),
-      ),
     );
   }
 }

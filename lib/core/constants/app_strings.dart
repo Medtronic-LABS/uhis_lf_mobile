@@ -3803,6 +3803,8 @@ abstract final class AssistantStrings {
   static const String poweredBy =
       'Powered by Gemini · For clinical guidance only';
   static const String badgeLabel = 'AI';
+  static const String tabAsk = 'Ask AI';
+  static const String tabTraining = 'Training';
 }
 
 /// Strings for [HouseholdFollowUpScreen].
