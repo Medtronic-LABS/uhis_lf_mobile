@@ -10,6 +10,8 @@
 /// [VisitFormController.saveDraft].
 library;
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -89,11 +91,36 @@ class _DynamicAssessmentScreenState extends State<DynamicAssessmentScreen> {
   bool _loading = true;
   String? _loadError;
   VisitFormController? _controller;
+  double? _previousAncWeight;
 
   @override
   void initState() {
     super.initState();
     _loadSchema();
+    final isAnc = widget.programmes?.any((p) => p == Programme.anc) == true ||
+        widget.formType.toLowerCase() == 'anc';
+    if (isAnc) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadPrevAncWeight());
+    }
+  }
+
+  Future<void> _loadPrevAncWeight() async {
+    try {
+      final dao = context.read<LocalAssessmentDao>();
+      final records = await dao.getByPatientId(widget.patientId);
+      final anc = records
+          .where((r) => r.assessmentType.toUpperCase() == 'ANC')
+          .toList();
+      if (anc.isEmpty) return;
+      final prev = anc.length > 1 ? anc[1] : anc[0];
+      final raw = jsonDecode(prev.assessmentDetails) as Map<String, dynamic>?;
+      final phys = ((raw?['anc'] as Map?)
+          ?['medicalHistoryPhysicalExamination'] as Map?);
+      final w = phys?['weight'];
+      if (w == null) return;
+      final weight = (w is num) ? w.toDouble() : double.tryParse('$w');
+      if (weight != null && mounted) setState(() => _previousAncWeight = weight);
+    } catch (_) {}
   }
 
   @override
@@ -255,6 +282,7 @@ class _DynamicAssessmentScreenState extends State<DynamicAssessmentScreen> {
                     controller: _controller!,
                     onAddPathway: _handleAddPathway,
                     onReferNow: widget.onReferNow,
+                    previousAncWeight: _previousAncWeight,
                   ),
                 ),
               ],
@@ -304,12 +332,14 @@ class _FormBody extends StatelessWidget {
     required this.controller,
     required this.onAddPathway,
     this.onReferNow,
+    this.previousAncWeight,
   });
 
   final FormSchema schema;
   final VisitFormController controller;
   final Future<void> Function(Programme) onAddPathway;
   final VoidCallback? onReferNow;
+  final double? previousAncWeight;
 
   @override
   Widget build(BuildContext context) {
@@ -353,6 +383,7 @@ class _FormBody extends StatelessWidget {
               child: DynamicFormRenderer(
                 schema: combinedSchema,
                 controller: controller,
+                previousAncWeight: previousAncWeight,
               ),
             ),
           ],

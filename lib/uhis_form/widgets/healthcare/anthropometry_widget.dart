@@ -25,6 +25,7 @@ class AnthropometryWidget extends StatefulWidget {
     required this.onChanged,
     this.value,
     this.readOnly = false,
+    this.previousWeight,
   });
 
   final FieldSchema schema;
@@ -33,6 +34,9 @@ class AnthropometryWidget extends StatefulWidget {
   final Map<String, dynamic>? value;
   final ValueChanged<Map<String, dynamic>> onChanged;
   final bool readOnly;
+
+  /// Previous visit weight (kg) — shown as a hint below the weight input.
+  final double? previousWeight;
 
   @override
   State<AnthropometryWidget> createState() => _AnthropometryWidgetState();
@@ -116,6 +120,13 @@ class _AnthropometryWidgetState extends State<AnthropometryWidget> {
             ),
           ],
         ),
+        if (widget.previousWeight != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Last visit: ${widget.previousWeight!.toStringAsFixed(1)} kg',
+            style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+          ),
+        ],
         if (bmi != null) ...[
           const SizedBox(height: 8),
           _BmiRow(bmi: bmi),

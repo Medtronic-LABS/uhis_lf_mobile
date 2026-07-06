@@ -7,6 +7,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../controller/dynamic_form_controller.dart';
+import '../models/field_kind.dart';
 import '../models/form_schema.dart';
 import 'field_renderer.dart';
 import 'section_card.dart';
@@ -16,10 +17,12 @@ class DynamicFormRenderer extends StatelessWidget {
     super.key,
     required this.schema,
     required this.controller,
+    this.previousAncWeight,
   });
 
   final FormSchema schema;
   final DynamicFormController controller;
+  final double? previousAncWeight;
 
   @override
   Widget build(BuildContext context) {
@@ -52,6 +55,9 @@ class DynamicFormRenderer extends StatelessWidget {
                                 aiHint: controller.getAiHint(f.fieldId),
                                 errorText:
                                     controller.validationErrors[f.fieldId],
+                                previousWeight: f.kind == FieldKind.anthropometry
+                                    ? previousAncWeight
+                                    : null,
                               )
                             : const SizedBox.shrink(),
                       ))

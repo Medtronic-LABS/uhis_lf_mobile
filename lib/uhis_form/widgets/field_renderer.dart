@@ -47,6 +47,7 @@ class FieldRenderer extends StatelessWidget {
     this.aiHint,
     this.readOnly = false,
     this.errorText,
+    this.previousWeight,
   });
 
   final FieldSchema schema;
@@ -55,6 +56,7 @@ class FieldRenderer extends StatelessWidget {
   final dynamic aiHint;
   final bool readOnly;
   final String? errorText;
+  final double? previousWeight;
 
   @override
   Widget build(BuildContext context) {
@@ -139,6 +141,7 @@ class FieldRenderer extends StatelessWidget {
           value: value is Map<String, dynamic> ? value as Map<String, dynamic> : null,
           onChanged: (v) => onChanged(v),
           readOnly: readOnly,
+          previousWeight: previousWeight,
         ),
       FieldKind.bloodGlucose => BloodGlucoseWidget(
           schema: schema,
