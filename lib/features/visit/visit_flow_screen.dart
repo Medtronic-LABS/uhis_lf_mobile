@@ -243,14 +243,8 @@ class _VisitFlowState extends State<VisitFlowScreen> {
             _otherSymptoms = other;
           },
           onAdvance: (pathways) {
-            setState(() {
-              _pathways = pathways;
-              // Seed Step 2 selection with the rule-engine pathways so the SK
-              // sees something even before the AI service responds.
-              _confirmedProgrammes =
-                  pathways.map((p) => p.programme).toSet();
-              _step = 1;
-            });
+            _pathways = pathways;
+            _showProgrammeConfirmSheet(pathways);
           },
         );
       case 1:
@@ -303,6 +297,26 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           origin: widget.origin ?? 'patients',
         );
     }
+  }
+
+  void _showProgrammeConfirmSheet(List<ActivatedPathway> pathways) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => _ProgrammeConfirmSheet(
+        pathways: pathways,
+        onConfirm: (selected) {
+          if (!mounted) return;
+          setState(() {
+            _confirmedProgrammes = selected;
+            _step = 1;
+          });
+        },
+      ),
+    );
   }
 
   Future<bool?> _confirmExit() => showLeaveVisitDialog(context);
@@ -849,6 +863,8 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
   void initState() {
     super.initState();
     _selectedProgrammes = widget.seedProgrammes;
+    // AI programme recommendation disabled — use rule-based PathwayEngine result directly.
+    _phase = _Step2Phase.form;
     WidgetsBinding.instance.addPostFrameCallback((_) => _hydrate());
   }
 
@@ -2635,5 +2651,174 @@ class _BottomCtaBar extends StatelessWidget {
           ),
         ],
       );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Programme confirm bottom sheet — shown after Step 1 triage so the SK can
+// see which pathways were matched by the rule engine and add / remove any
+// before opening the assessment form.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ProgrammeConfirmSheet extends StatefulWidget {
+  const _ProgrammeConfirmSheet({
+    required this.pathways,
+    required this.onConfirm,
+  });
+
+  final List<ActivatedPathway> pathways;
+  final void Function(Set<Programme>) onConfirm;
+
+  @override
+  State<_ProgrammeConfirmSheet> createState() =>
+      _ProgrammeConfirmSheetState();
+}
+
+class _ProgrammeConfirmSheetState extends State<_ProgrammeConfirmSheet> {
+  late Set<Programme> _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = widget.pathways.map((p) => p.programme).toSet();
+  }
+
+  String _readable(String s) {
+    final lower = s.replaceAll('_', ' ').toLowerCase();
+    if (lower.isEmpty) return lower;
+    return lower[0].toUpperCase() + lower.substring(1);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final matched = widget.pathways.map((p) => p.programme).toSet();
+    final unmatched = Programme.kPilotProgrammes
+        .where((p) => !matched.contains(p))
+        .toList();
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        16,
+        16,
+        MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Opening forms for',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Tap to add or remove care pathways',
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: AppColors.textMuted),
+          ),
+          const SizedBox(height: 12),
+          if (widget.pathways.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'No pathways matched. Select one manually to continue.',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: AppColors.textMuted),
+              ),
+            ),
+          ...widget.pathways.map((pathway) {
+            final triggers = [
+              ...pathway.triggerSymptoms,
+              ...pathway.triggerConditions,
+            ];
+            return CheckboxListTile(
+              value: _selected.contains(pathway.programme),
+              onChanged: (val) => setState(() {
+                if (val == true) {
+                  _selected.add(pathway.programme);
+                } else {
+                  _selected.remove(pathway.programme);
+                }
+              }),
+              title: Text(pathway.programme.displayName),
+              subtitle: triggers.isNotEmpty
+                  ? Text(
+                      triggers.map(_readable).join(', '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: AppColors.textMuted),
+                    )
+                  : null,
+              controlAffinity: ListTileControlAffinity.leading,
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+            );
+          }),
+          if (unmatched.isNotEmpty) ...[
+            const Divider(height: 24),
+            Text(
+              'Add manually',
+              style: Theme.of(context)
+                  .textTheme
+                  .labelSmall
+                  ?.copyWith(color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 4),
+            ...unmatched.map((p) => CheckboxListTile(
+                  value: _selected.contains(p),
+                  onChanged: (val) => setState(() {
+                    if (val == true) {
+                      _selected.add(p);
+                    } else {
+                      _selected.remove(p);
+                    }
+                  }),
+                  title: Text(
+                    p.displayName,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(color: AppColors.textMuted),
+                  ),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                )),
+          ],
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: _selected.isEmpty
+                  ? null
+                  : () {
+                      Navigator.of(context).pop();
+                      widget.onConfirm(_selected);
+                    },
+              child: const Text('Start visit'),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

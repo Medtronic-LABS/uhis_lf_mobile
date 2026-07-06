@@ -143,7 +143,7 @@ class _DynamicAssessmentScreenState extends State<DynamicAssessmentScreen> {
       final weight = _extractWeight(det);
       if (weight != null && mounted) setState(() => _previousAncWeight = weight);
     } catch (e, st) {
-      debugPrint('[PW] error: $e\n$st');
+      debugPrint('[PrevWeight] error: $e\n$st');
     }
   }
 
