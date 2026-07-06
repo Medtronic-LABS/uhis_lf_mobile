@@ -209,10 +209,14 @@ class LocalAssessmentEntity {
     // Mirrors Android AssessmentUtil.kt — flat projection fields → nested shape.
     _injectVitalLogs(details);
 
+    // Backend AssessmentDetailsDTO expects programme-specific nesting:
+    // ANC → {"anc": <AncDTO>}, NCD → {"ncd": <NcdDTO>}, etc.
+    final wrappedDetails = _wrapDetailsForType(assessmentType, details);
+
     return {
       'referenceId': householdMemberLocalId,
       'assessmentType': assessmentType.toUpperCase(),
-      'assessmentDetails': details,
+      'assessmentDetails': wrappedDetails,
       'villageId': villageId,
       'assessmentDate': createdAt?.toUtc().toIso8601String(),
       'patientStatus': referralStatus ?? 'Recovered',
@@ -277,6 +281,33 @@ class LocalAssessmentEntity {
         };
       }
     }
+  }
+
+  /// Wrap a flat assessment payload under the programme-specific key that
+  /// matches the backend's AssessmentDetailsDTO field names.
+  ///
+  /// The backend deserializes `assessmentDetails` as AssessmentDetailsDTO,
+  /// which has typed fields per programme (e.g. `AncDTO anc`, `NcdDTO ncd`).
+  /// Sending a flat map means the backend finds no matching field and silently
+  /// drops all data. This method ensures the correct nesting.
+  ///
+  /// If `flat` already contains the programme key (legacy or re-entrant call),
+  /// it is returned unchanged to avoid double-wrapping.
+  static Map<String, dynamic> _wrapDetailsForType(
+    String assessmentType,
+    Map<String, dynamic> flat,
+  ) {
+    final key = switch (assessmentType.toUpperCase()) {
+      'ANC' => 'anc',
+      'NCD' => 'ncd',
+      'PNC' => 'pncMother',
+      'TB' => 'tb',
+      'ICCM' || 'IMCI' => 'iccm',
+      'EPI' => null,
+      _ => null,
+    };
+    if (key == null || flat.containsKey(key)) return flat;
+    return {key: flat};
   }
 }
 
