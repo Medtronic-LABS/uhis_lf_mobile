@@ -290,11 +290,16 @@ class MemberDetailRepository extends ApiRepository {
       villageIds: scoped,
     );
 
+    debugPrint('[MemberDetailRepository] getMemberAssessments memberId=$memberId acceptableIds=$acceptableIds historyTotal=${history.length}');
+    if (history.isNotEmpty) {
+      debugPrint('[MemberDetailRepository] sample householdMemberIds=${history.take(5).map((h) => h.householdMemberId).toList()}');
+    }
     final assessments = <MemberAssessment>[];
     for (final item in _filterHistoryForMember(history, acceptableIds)) {
       final mapped = _historyToAssessment(item);
       if (mapped != null) assessments.add(mapped);
     }
+    debugPrint('[MemberDetailRepository] getMemberAssessments filtered=${assessments.length}');
     assessments.sort((a, b) => b.date.compareTo(a.date));
     return assessments;
   }

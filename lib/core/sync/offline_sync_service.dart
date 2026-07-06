@@ -1159,6 +1159,7 @@ class OfflineSyncService extends ChangeNotifier {
         return const [];
       }
       final data = resp.data;
+      debugPrint('[OfflineSyncService] member-assessment-history raw response keys=${data is Map ? (data as Map).keys.toList() : "list"} totalCount=${data is Map ? data["totalCount"] : "n/a"}');
       final raw = _extractHistoryList(data);
       final items = <AssessmentHistoryItem>[];
       for (final row in raw) {
