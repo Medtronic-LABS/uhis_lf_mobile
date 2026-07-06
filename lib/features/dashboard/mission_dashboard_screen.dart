@@ -395,7 +395,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         int.tryParse(member?.id ?? '') ??
         0;
     final memberId = member?.id;
-    debugPrint('[Dashboard] member lookup: patientId=$patientId referenceId=${member?.referenceId} memberId=$memberId → householdMemberLocalId=$householdMemberLocalId');
+    final villageId = member?.villageId;
+    debugPrint('[Dashboard] member lookup: patientId=$patientId referenceId=${member?.referenceId} memberId=$memberId villageId=$villageId → householdMemberLocalId=$householdMemberLocalId');
     final encounterId = await controller.startVisit(
       patientId: patientId,
       programme: item.primaryProgramme,
@@ -415,6 +416,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           'patientAge': item.age,
           'memberId': memberId,
           'householdMemberLocalId': householdMemberLocalId,
+          'villageId': villageId,
         },
       );
       return;
