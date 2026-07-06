@@ -100,7 +100,6 @@ class _DynamicAssessmentScreenState extends State<DynamicAssessmentScreen> {
     _loadSchema();
     final isAnc = widget.programmes?.any((p) => p == Programme.anc) == true ||
         widget.formType.toLowerCase() == 'anc';
-    debugPrint('[PrevWeight] programmes=${widget.programmes?.map((p)=>p.name).toList()} formType=${widget.formType} isAnc=$isAnc');
     if (isAnc) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _loadPrevAncWeight());
     }
@@ -113,19 +112,14 @@ class _DynamicAssessmentScreenState extends State<DynamicAssessmentScreen> {
       final dao = context.read<AssessmentDao>();
       final byPatient = await dao.forMany([widget.patientId]);
       final rows = byPatient[widget.patientId] ?? [];
-      debugPrint('[PrevWeight] patientId=${widget.patientId} AssessmentDao rows=${rows.length}');
       final ancRows = rows
           .where((r) => (r.kind ?? '').toUpperCase() == 'ANC')
           .toList();
-      debugPrint('[PrevWeight] ANC rows=${ancRows.length}');
       if (ancRows.isEmpty) return;
-      final prev = ancRows.first; // already sorted by occurred_at DESC
+      final prev = ancRows.first; // sorted by occurred_at DESC
       final raw = jsonDecode(prev.rawJson) as Map<String, dynamic>?;
-      debugPrint('[PrevWeight] rawJson keys=${raw?.keys.toList()}');
       final obs = raw?['observations'] as Map?;
-      debugPrint('[PrevWeight] observations=$obs');
       final w = obs?['weight'];
-      debugPrint('[PrevWeight] weight=$w');
       if (w == null) return;
       final weight = (w is num) ? w.toDouble() : double.tryParse('$w');
       if (weight != null && mounted) setState(() => _previousAncWeight = weight);
