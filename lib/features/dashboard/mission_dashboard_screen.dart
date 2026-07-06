@@ -388,8 +388,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final memberDao = context.read<MemberDao>();
     final controller = context.read<VisitController>();
     final member = await memberDao.getByPatientId(patientId);
+    // referenceId is the backend integer PK; fall back to id which may also
+    // be numeric (e.g. "768293") for members synced before schema v17.
     final householdMemberLocalId =
-        int.tryParse(member?.referenceId ?? '') ?? 0;
+        int.tryParse(member?.referenceId ?? '') ??
+        int.tryParse(member?.id ?? '') ??
+        0;
     final memberId = member?.id;
     debugPrint('[Dashboard] member lookup: patientId=$patientId referenceId=${member?.referenceId} memberId=$memberId → householdMemberLocalId=$householdMemberLocalId');
     final encounterId = await controller.startVisit(
