@@ -1535,16 +1535,44 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 
               // ── Counselling ───────────────────────────────────────────
               if (naba.counselling.isNotEmpty) ...[
-                _SectionCard(
-                  title: NabaStrings.sectionCounselling,
-                  icon: Icons.chat_bubble_outline_rounded,
-                  iconBg: AppColors.tagTealSurface,
-                  iconColor: AppColors.tagTealText,
-                  child: _DotList(
-                    items: naba.counselling,
-                    dotColor: AppColors.tagTealText,
+                if (widget.primaryProgramme == Programme.ncd)
+                  Card(
+                    child: ExpansionTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: AppColors.tagTealSurface,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(Icons.chat_bubble_outline_rounded,
+                            color: AppColors.tagTealText, size: 18),
+                      ),
+                      title: Text(NabaStrings.sectionCounselling,
+                          style: Theme.of(context).textTheme.titleSmall),
+                      subtitle: const Text('Tap to expand'),
+                      initiallyExpanded: false,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          child: _DotList(
+                            items: naba.counselling,
+                            dotColor: AppColors.tagTealText,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  _SectionCard(
+                    title: NabaStrings.sectionCounselling,
+                    icon: Icons.chat_bubble_outline_rounded,
+                    iconBg: AppColors.tagTealSurface,
+                    iconColor: AppColors.tagTealText,
+                    child: _DotList(
+                      items: naba.counselling,
+                      dotColor: AppColors.tagTealText,
+                    ),
                   ),
-                ),
                 const SizedBox(height: 12),
               ],
 

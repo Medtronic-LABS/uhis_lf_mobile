@@ -69,6 +69,7 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
   IccmAssessment? _iccmData;
 
   double? _previousAncWeight;
+  double? _previousNcdWeight;
   bool _isSubmitting = false;
 
   late final ScribeController _scribeCtrl;
@@ -87,9 +88,10 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
       service: context.read<RealtimeAsrService>(),
       permissionService: ScribePermissionService(),
     );
-    if (widget.programme.toUpperCase() == 'ANC' &&
-        widget.patientId != null) {
-      _loadPreviousAncWeight();
+    if (widget.patientId != null) {
+      final prog = widget.programme.toUpperCase();
+      if (prog == 'ANC') _loadPreviousAncWeight();
+      if (prog == 'NCD') _loadPreviousNcdWeight();
     }
   }
 
@@ -114,6 +116,29 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
           (w is num) ? w.toDouble() : double.tryParse(w.toString());
       if (weight != null && mounted) {
         setState(() => _previousAncWeight = weight);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadPreviousNcdWeight() async {
+    try {
+      final dao = context.read<LocalAssessmentDao>();
+      final records = await dao.getByPatientId(widget.patientId!);
+      final ncdRecords = records
+          .where((r) => r.assessmentType.toUpperCase() == 'NCD')
+          .toList();
+      if (ncdRecords.isEmpty) return;
+      final prev = ncdRecords.length > 1 ? ncdRecords[1] : ncdRecords[0];
+      final json =
+          jsonDecode(prev.assessmentDetails) as Map<String, dynamic>?;
+      // NCD stores weight at top-level or under bpLog
+      final w = json?['weight'] ??
+          (json?['bpLog'] as Map?)?['weight'];
+      if (w == null) return;
+      final weight =
+          (w is num) ? w.toDouble() : double.tryParse(w.toString());
+      if (weight != null && mounted) {
+        setState(() => _previousNcdWeight = weight);
       }
     } catch (_) {}
   }
@@ -299,6 +324,7 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
         return NcdAssessmentForm(
           initialData: _ncdData,
           patientAge: widget.patientAge,
+          previousWeight: _previousNcdWeight,
           onChanged: (data) => _ncdData = data,
         );
       case 'TB':
