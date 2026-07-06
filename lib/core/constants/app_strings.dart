@@ -3782,6 +3782,29 @@ abstract final class VisitDetailsStrings {
   };
 }
 
+/// Strings for [AssistantScreen] — conversational AI Q&A tab.
+abstract final class AssistantStrings {
+  AssistantStrings._();
+
+  static const String title = 'AI Assistant';
+  static const String subtitle = 'Apon Sushashthya';
+  static const String inputHint = 'Ask a clinical question…';
+  static const String errorMessage =
+      'Could not reach the assistant. Check your connection.';
+  static const String suggestedMuac = 'How do I measure MUAC?';
+  static const String suggestedAncDanger = 'ANC danger signs?';
+  static const String suggestedNcd = 'NCD medication adherence tips';
+  static const String suggestedReferChild = 'When to refer a child?';
+  static const String suggestedFindrisc = 'FINDRISC score interpretation';
+  static const String emptyHeading = 'Ask me anything';
+  static const String emptySubheading =
+      'Clinical guidance, protocol reminders,\nand care tips — always at hand.';
+  static const String retryLabel = 'Retry';
+  static const String poweredBy =
+      'Powered by Gemini · For clinical guidance only';
+  static const String badgeLabel = 'AI';
+}
+
 /// Strings for [HouseholdFollowUpScreen].
 abstract final class HouseholdFollowUpStrings {
   HouseholdFollowUpStrings._();

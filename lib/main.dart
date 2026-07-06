@@ -69,6 +69,7 @@ import 'features/visit/programme_selection/programme_recommendation_repository.d
 import 'features/visit/visit_controller.dart';
 import 'features/training/coaching_dao.dart';
 import 'features/training/coaching_repository.dart';
+import 'features/assistant/assistant_repository.dart';
 import 'features/worklist/worklist_repository.dart';
 
 /// Remove any legacy seeded/demo test data from local SQLite.
@@ -410,6 +411,9 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<VisitBriefingRepository>(
             create: (_) =>
                 VisitBriefingRepository(widget.api, cache: _aiCacheDao)),
+        // AI Assistant — conversational Q&A (Tab 3)
+        Provider<AssistantRepository>(
+            create: (_) => AssistantRepository(widget.api)),
         // AI Programme Recommendation — Step 2 picker grounded in BRAC + BD
         // national clinical guidelines. Caches per-patient via _aiCacheDao
         // so re-entering Step 2 doesn't re-hit the API.

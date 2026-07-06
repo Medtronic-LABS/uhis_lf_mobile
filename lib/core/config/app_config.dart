@@ -142,6 +142,13 @@ class AppConfig {
     return explicit.isNotEmpty ? explicit : apiBaseUrl;
   }
 
+  /// Base URL for the AI Assistant service (port 8097 when running locally).
+  /// Derives from [aiServiceBaseUrl] when set; otherwise routes through nginx.
+  static String get assistantBaseUrl {
+    if (aiServiceBaseUrl.isNotEmpty) return aiServiceBaseUrl;
+    return apiBaseUrl;
+  }
+
   /// Transcription model for AI Scribe.
   /// Options: 'gpt-4o-mini-transcribe', 'whisper-1', 'gemini-2.5-flash'
   static const String scribeTranscriptionModel = String.fromEnvironment(

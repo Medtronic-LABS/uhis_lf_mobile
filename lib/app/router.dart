@@ -26,6 +26,7 @@ import '../features/sync/sync_progress_screen.dart';
 import '../features/counselling/counselling_screen.dart';
 import '../features/teleconsult/teleconsult_screen.dart';
 import '../features/training/training_screen.dart';
+import '../features/assistant/assistant_screen.dart';
 import '../features/visit/briefing/visit_briefing_screen.dart';
 import '../features/visit/visit_flow_screen.dart';
 import '../core/api/api_client.dart';
@@ -325,16 +326,16 @@ GoRouter buildRouter(AuthState auth) {
             ],
           ),
 
-          // Tab 3: Assistant
+          // Tab 3: AI Assistant
           StatefulShellBranch(
             navigatorKey: _mapNavigatorKey,
             routes: [
               GoRoute(
-                path: '/map',
-                name: 'map',
+                path: '/assistant',
+                name: 'assistant',
                 pageBuilder: (context, state) => const MaterialPage(
                   key: ValueKey('assistant-page'),
-                  child: TrainingScreen(),
+                  child: AssistantScreen(),
                 ),
               ),
             ],
