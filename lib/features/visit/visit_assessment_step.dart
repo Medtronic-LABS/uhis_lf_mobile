@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +9,7 @@ import '../../app/theme.dart';
 import '../../core/api/realtime_asr_service.dart';
 import '../../core/api/scribe_api_service.dart';
 import '../../core/db/encounter_dao.dart';
+import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../features/dashboard/mission_dashboard_repository.dart';
 import '../../features/realtime_asr/realtime_asr_controller.dart';
@@ -66,6 +68,7 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
   AncAssessment? _ancData;
   IccmAssessment? _iccmData;
 
+  double? _previousAncWeight;
   bool _isSubmitting = false;
 
   late final ScribeController _scribeCtrl;
@@ -84,6 +87,35 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
       service: context.read<RealtimeAsrService>(),
       permissionService: ScribePermissionService(),
     );
+    if (widget.programme.toUpperCase() == 'ANC' &&
+        widget.patientId != null) {
+      _loadPreviousAncWeight();
+    }
+  }
+
+  Future<void> _loadPreviousAncWeight() async {
+    try {
+      final dao = context.read<LocalAssessmentDao>();
+      final records = await dao.getByPatientId(widget.patientId!);
+      final ancRecords = records
+          .where((r) => r.assessmentType.toUpperCase() == 'ANC')
+          .toList();
+      if (ancRecords.isEmpty) return;
+      // records sorted DESC by created_at; skip index 0 (current in-progress visit)
+      final prev = ancRecords.length > 1 ? ancRecords[1] : ancRecords[0];
+      final json =
+          jsonDecode(prev.assessmentDetails) as Map<String, dynamic>?;
+      final anc = json?['anc'] as Map<String, dynamic>?;
+      final phys =
+          anc?['medicalHistoryPhysicalExamination'] as Map<String, dynamic>?;
+      final w = phys?['weight'];
+      if (w == null) return;
+      final weight =
+          (w is num) ? w.toDouble() : double.tryParse(w.toString());
+      if (weight != null && mounted) {
+        setState(() => _previousAncWeight = weight);
+      }
+    } catch (_) {}
   }
 
   @override
@@ -281,6 +313,7 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
         return AncAssessmentForm(
           initialData: _ancData,
           gestationalWeeks: widget.gestationalWeeks,
+          previousWeight: _previousAncWeight,
           onChanged: (data) {
             _ancData = data;
             setState(() {}); // Rebuild to update referral chip

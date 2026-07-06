@@ -457,9 +457,13 @@ class _VisitFlowHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final step2Title = (primaryProgramme == Programme.anc ||
+            primaryProgramme == Programme.pnc)
+        ? 'Pregnancy checks'
+        : VisitFlowStrings.step2Title;
     final stepLabels = <String>[
       '1. ${VisitFlowStrings.step1Title}',
-      '2. ${VisitFlowStrings.step2Title}',
+      '2. $step2Title',
       '3. ${VisitFlowStrings.step3Title}',
     ];
 
