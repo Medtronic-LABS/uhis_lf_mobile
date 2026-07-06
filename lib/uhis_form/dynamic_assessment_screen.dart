@@ -107,25 +107,54 @@ class _DynamicAssessmentScreenState extends State<DynamicAssessmentScreen> {
 
   Future<void> _loadPrevAncWeight() async {
     try {
-      // Previous visits come from AssessmentDao (synced from server).
-      // rawJson structure: {"observations": {"weight": 56, ...}, "serviceProvided": "ANC", ...}
+      // Capture DAOs before any await to avoid use_build_context_synchronously.
       final dao = context.read<AssessmentDao>();
+      final localDao = context.read<LocalAssessmentDao>();
+
+      // 1. Server-synced assessments keyed by FHIR patient ID.
       final byPatient = await dao.forMany([widget.patientId]);
-      final rows = byPatient[widget.patientId] ?? [];
-      final ancRows = rows
+      final ancRows = (byPatient[widget.patientId] ?? [])
           .where((r) => (r.kind ?? '').toUpperCase() == 'ANC')
           .toList();
-      if (ancRows.isEmpty) return;
-      final prev = ancRows.first; // sorted by occurred_at DESC
-      final raw = jsonDecode(prev.rawJson) as Map<String, dynamic>?;
-      final obs = raw?['observations'] as Map?;
-      final w = obs?['weight'];
-      if (w == null) return;
-      final weight = (w is num) ? w.toDouble() : double.tryParse('$w');
+
+      if (ancRows.isNotEmpty) {
+        final raw = jsonDecode(ancRows.first.rawJson) as Map<String, dynamic>?;
+        final w = (raw?['observations'] as Map?)?['weight'];
+        if (w != null) {
+          final weight = (w is num) ? w.toDouble() : double.tryParse('$w');
+          if (weight != null && mounted) setState(() => _previousAncWeight = weight);
+          return;
+        }
+      }
+
+      // 2. Fallback: device-submitted assessments in LocalAssessmentDao.
+      // These are written when a form is submitted on THIS device (syncStatus may
+      // be pending or success). Assessment details may be in flat SDK format
+      // {"weight": 56} or old nested format {"anc": {"medicalHistoryPhysicalExamination": {"weight": 56}}}.
+
+      final localRecords = await localDao.getByPatientId(widget.patientId);
+      final prevAnc = localRecords
+          .where((r) =>
+              r.assessmentType.toUpperCase() == 'ANC' &&
+              r.id != widget.encounterId)
+          .toList(); // already ordered DESC by created_at
+      if (prevAnc.isEmpty) return;
+      final det = jsonDecode(prevAnc.first.assessmentDetails) as Map<String, dynamic>?;
+      final weight = _extractWeight(det);
       if (weight != null && mounted) setState(() => _previousAncWeight = weight);
     } catch (e, st) {
       debugPrint('[PW] error: $e\n$st');
     }
+  }
+
+  /// Extracts weight from an assessment details map, handling both the flat
+  /// SDK format (`{"weight": 56}`) and the legacy nested format
+  /// (`{"anc": {"medicalHistoryPhysicalExamination": {"weight": 56}}}`).
+  static double? _extractWeight(Map<String, dynamic>? json) {
+    if (json == null) return null;
+    num? w = json['weight'] as num?;
+    w ??= ((json['anc'] as Map?)?['medicalHistoryPhysicalExamination'] as Map?)?['weight'] as num?;
+    return w?.toDouble();
   }
 
   @override
