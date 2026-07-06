@@ -73,6 +73,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Version counter for forcing FutureBuilder rebuilds.
   int _refreshVersion = 0;
 
+  // Completed patient IDs for today — cards remain visible but non-navigable.
+  Set<String> _completedIds = const {};
+
   // Inline village chip + need filter
   List<String> _inlineVillages = const [];
   String? _selectedVillageChipName;
@@ -213,13 +216,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // Load completed patient IDs first
     final completedIds = await encounterDao.completedTodayPatientIds();
 
-    // Load full queue
-    final queue = await missionRepo.loadQueue(limit: 500);
+    // Persist completed IDs so card rendering can mark them done.
+    if (mounted) {
+      // ignore: use_build_context_synchronously
+      setState(() => _completedIds = completedIds);
+    }
 
-    // Filter out completed patients
-    final withoutCompleted = queue.where((item) =>
-      item.patientId == null || !completedIds.contains(item.patientId)
-    ).toList();
+    // Load full queue — keep completed patients in the list so their cards
+    // remain visible (non-navigable, greyed out with a ✓ badge per spec §2.6).
+    final queue = await missionRepo.loadQueue(limit: 500);
+    final withoutCompleted = queue;
 
     // Extract distinct village labels for inline chips (from un-completed queue)
     final allVillageLabels = withoutCompleted
@@ -372,6 +378,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// Falls back to opening the patient detail when the visit can't start.
   Future<void> _startVisitFromQueue(MissionQueueItem item) async {
     final patientId = item.patientId;
+    if (patientId != null && _completedIds.contains(patientId)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("${item.patientName}'s visit already done today ✓"),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
     if (patientId == null || patientId.isEmpty) {
       if (item.referralId != null) {
         context.push('/referral/${item.referralId}');
@@ -715,11 +730,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                         final widgets = <Widget>[];
                         for (final item in visible) {
+                          final done = item.patientId != null &&
+                              _completedIds.contains(item.patientId);
                           widgets.add(Padding(
                             padding: const EdgeInsets.only(bottom: 8),
                             child: MissionQueueCard(
                               item: item,
                               compact: true,
+                              isCompleted: done,
                               onTap: () => _startVisitFromQueue(item),
                               onAction: () => _startVisitFromQueue(item),
                             ),
