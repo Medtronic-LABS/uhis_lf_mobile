@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/constants/app_strings.dart';
+import '../core/db/assessment_dao.dart';
 import '../core/db/local_assessment_dao.dart';
 import '../core/models/programme.dart';
 import '../core/theme/app_theme.dart';
@@ -107,31 +108,25 @@ class _DynamicAssessmentScreenState extends State<DynamicAssessmentScreen> {
 
   Future<void> _loadPrevAncWeight() async {
     try {
-      final dao = context.read<LocalAssessmentDao>();
-      final records = await dao.getByPatientId(widget.patientId);
-      debugPrint('[PrevWeight] patientId=${widget.patientId} total records=${records.length}');
-      final anc = records
-          .where((r) => r.assessmentType.toUpperCase() == 'ANC')
+      // Previous visits come from AssessmentDao (synced from server).
+      // rawJson structure: {"observations": {"weight": 56, ...}, "serviceProvided": "ANC", ...}
+      final dao = context.read<AssessmentDao>();
+      final byPatient = await dao.forMany([widget.patientId]);
+      final rows = byPatient[widget.patientId] ?? [];
+      debugPrint('[PrevWeight] patientId=${widget.patientId} AssessmentDao rows=${rows.length}');
+      final ancRows = rows
+          .where((r) => (r.kind ?? '').toUpperCase() == 'ANC')
           .toList();
-      debugPrint('[PrevWeight] ANC records=${anc.length}');
-      if (anc.isEmpty) return;
-      final prev = anc.length > 1 ? anc[1] : anc[0];
-      final raw = jsonDecode(prev.assessmentDetails) as Map<String, dynamic>?;
-      debugPrint('[PrevWeight] top-level keys=${raw?.keys.toList()}');
-      final phys = ((raw?['anc'] as Map?)
-          ?['medicalHistoryPhysicalExamination'] as Map?);
-      debugPrint('[PrevWeight] phys keys=${phys?.keys.toList()} weight=${phys?['weight']}');
-      final w = phys?['weight'];
-      if (w == null) {
-        // Try alternative JSON paths used by DynamicFormController submission
-        final anthropometry = raw?['anthropometry'] as Map?;
-        debugPrint('[PrevWeight] anthropometry=$anthropometry');
-        final altW = anthropometry?['weight'] ?? raw?['weight'];
-        debugPrint('[PrevWeight] altW=$altW');
-        final weight2 = (altW is num) ? altW.toDouble() : double.tryParse('$altW');
-        if (weight2 != null && mounted) setState(() => _previousAncWeight = weight2);
-        return;
-      }
+      debugPrint('[PrevWeight] ANC rows=${ancRows.length}');
+      if (ancRows.isEmpty) return;
+      final prev = ancRows.first; // already sorted by occurred_at DESC
+      final raw = jsonDecode(prev.rawJson) as Map<String, dynamic>?;
+      debugPrint('[PrevWeight] rawJson keys=${raw?.keys.toList()}');
+      final obs = raw?['observations'] as Map?;
+      debugPrint('[PrevWeight] observations=$obs');
+      final w = obs?['weight'];
+      debugPrint('[PrevWeight] weight=$w');
+      if (w == null) return;
       final weight = (w is num) ? w.toDouble() : double.tryParse('$w');
       if (weight != null && mounted) setState(() => _previousAncWeight = weight);
     } catch (e, st) {
