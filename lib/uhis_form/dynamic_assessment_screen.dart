@@ -99,6 +99,7 @@ class _DynamicAssessmentScreenState extends State<DynamicAssessmentScreen> {
     _loadSchema();
     final isAnc = widget.programmes?.any((p) => p == Programme.anc) == true ||
         widget.formType.toLowerCase() == 'anc';
+    debugPrint('[PrevWeight] programmes=${widget.programmes?.map((p)=>p.name).toList()} formType=${widget.formType} isAnc=$isAnc');
     if (isAnc) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _loadPrevAncWeight());
     }
@@ -108,19 +109,34 @@ class _DynamicAssessmentScreenState extends State<DynamicAssessmentScreen> {
     try {
       final dao = context.read<LocalAssessmentDao>();
       final records = await dao.getByPatientId(widget.patientId);
+      debugPrint('[PrevWeight] patientId=${widget.patientId} total records=${records.length}');
       final anc = records
           .where((r) => r.assessmentType.toUpperCase() == 'ANC')
           .toList();
+      debugPrint('[PrevWeight] ANC records=${anc.length}');
       if (anc.isEmpty) return;
       final prev = anc.length > 1 ? anc[1] : anc[0];
       final raw = jsonDecode(prev.assessmentDetails) as Map<String, dynamic>?;
+      debugPrint('[PrevWeight] top-level keys=${raw?.keys.toList()}');
       final phys = ((raw?['anc'] as Map?)
           ?['medicalHistoryPhysicalExamination'] as Map?);
+      debugPrint('[PrevWeight] phys keys=${phys?.keys.toList()} weight=${phys?['weight']}');
       final w = phys?['weight'];
-      if (w == null) return;
+      if (w == null) {
+        // Try alternative JSON paths used by DynamicFormController submission
+        final anthropometry = raw?['anthropometry'] as Map?;
+        debugPrint('[PrevWeight] anthropometry=$anthropometry');
+        final altW = anthropometry?['weight'] ?? raw?['weight'];
+        debugPrint('[PrevWeight] altW=$altW');
+        final weight2 = (altW is num) ? altW.toDouble() : double.tryParse('$altW');
+        if (weight2 != null && mounted) setState(() => _previousAncWeight = weight2);
+        return;
+      }
       final weight = (w is num) ? w.toDouble() : double.tryParse('$w');
       if (weight != null && mounted) setState(() => _previousAncWeight = weight);
-    } catch (_) {}
+    } catch (e, st) {
+      debugPrint('[PrevWeight] error: $e\n$st');
+    }
   }
 
   @override
