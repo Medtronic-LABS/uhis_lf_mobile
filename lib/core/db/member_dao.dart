@@ -600,22 +600,28 @@ class MemberDao {
   }
 
   /// Bulk-lookup: returns memberId → patientId for the given member IDs.
-  /// Prefers the explicit `patient_id` column; falls back to `id` when null.
-  /// Used to translate `householdMemberId` values from assessment history into
-  /// the BRN-format patient IDs stored in the patients table.
+  ///
+  /// `householdMemberId` in the assessment-history API is the numeric
+  /// `referenceId` (backend PK), NOT the FHIR `id` column. Both are checked
+  /// so callers don't need to know which ID system the server used.
   Future<Map<String, String>> patientIdsByMemberIds(List<String> memberIds) async {
     if (memberIds.isEmpty) return const {};
     final ph = List.filled(memberIds.length, '?').join(',');
     final rows = await _db.db.rawQuery(
-      'SELECT id, patient_id FROM ${AppDatabase.tableMembers} WHERE id IN ($ph)',
-      memberIds,
+      'SELECT id, reference_id, patient_id FROM ${AppDatabase.tableMembers} '
+      'WHERE id IN ($ph) OR reference_id IN ($ph)',
+      [...memberIds, ...memberIds],
     );
     final result = <String, String>{};
     for (final row in rows) {
-      final id = row['id']?.toString();
-      if (id == null || id.isEmpty) continue;
+      final fhirId = row['id']?.toString();
+      final refId = row['reference_id']?.toString();
       final patientId = row['patient_id']?.toString();
-      result[id] = (patientId != null && patientId.isNotEmpty) ? patientId : id;
+      final resolved =
+          (patientId != null && patientId.isNotEmpty) ? patientId : fhirId;
+      if (resolved == null || resolved.isEmpty) continue;
+      if (fhirId != null && fhirId.isNotEmpty) result[fhirId] = resolved;
+      if (refId != null && refId.isNotEmpty) result[refId] = resolved;
     }
     return result;
   }
