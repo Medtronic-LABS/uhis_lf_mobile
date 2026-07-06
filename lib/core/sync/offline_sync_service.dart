@@ -1048,10 +1048,30 @@ class OfflineSyncService extends ChangeNotifier {
         }
       }
 
+      // Write assessment rows keyed by FHIR patient ID so AssessmentDao queries
+      // by patientId resolve correctly (assessment history uses numeric
+      // householdMemberId; the bulk-sync bundle may use a different field).
+      final assessmentRows = <AssessmentRow>[];
+      for (final item in items) {
+        final patientId = memberToPatient[item.householdMemberId];
+        if (patientId == null || patientId.isEmpty) continue;
+        assessmentRows.add(AssessmentRow(
+          id: item.encounterId,
+          patientId: patientId,
+          kind: item.serviceProvided,
+          occurredAt: item.visitDate.millisecondsSinceEpoch,
+          rawJson: jsonEncode(item.rawJson),
+        ));
+      }
+      if (assessmentRows.isNotEmpty) {
+        await _assessments.upsertMany(assessmentRows);
+      }
+
       debugPrint(
         '[OfflineSyncService] assessment-history sync: '
         '${items.length} rows → $progUpdated programme updates, '
-        '$schedUpdated visit-schedule updates, $vitalsWritten encounter rows with vitals',
+        '$schedUpdated visit-schedule updates, $vitalsWritten encounter rows with vitals, '
+        '${assessmentRows.length} assessment rows',
       );
     } catch (e) {
       debugPrint(

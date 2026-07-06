@@ -124,7 +124,7 @@ class _DynamicAssessmentScreenState extends State<DynamicAssessmentScreen> {
       final weight = (w is num) ? w.toDouble() : double.tryParse('$w');
       if (weight != null && mounted) setState(() => _previousAncWeight = weight);
     } catch (e, st) {
-      debugPrint('[PrevWeight] error: $e\n$st');
+      debugPrint('[PW] error: $e\n$st');
     }
   }
 
