@@ -12,6 +12,7 @@ import '../../core/auth/auth_state.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/db/household_dao.dart';
+import '../../core/db/member_dao.dart';
 import '../../core/db/local_dashboard_repository.dart';
 import '../../core/models/dashboard_tier.dart';
 import '../../core/models/mission_queue_item.dart';
@@ -383,7 +384,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
       return;
     }
+    // Look up member to get referenceId (backend integer PK) and memberId.
+    final memberDao = context.read<MemberDao>();
     final controller = context.read<VisitController>();
+    final member = await memberDao.getByPatientId(patientId);
+    final householdMemberLocalId =
+        int.tryParse(member?.referenceId ?? '') ?? 0;
+    final memberId = member?.id;
+    debugPrint('[Dashboard] member lookup: patientId=$patientId referenceId=${member?.referenceId} memberId=$memberId → householdMemberLocalId=$householdMemberLocalId');
     final encounterId = await controller.startVisit(
       patientId: patientId,
       programme: item.primaryProgramme,
@@ -401,6 +409,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           'patientName': item.patientName,
           'householdId': item.householdId,
           'patientAge': item.age,
+          'memberId': memberId,
+          'householdMemberLocalId': householdMemberLocalId,
         },
       );
       return;

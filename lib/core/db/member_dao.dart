@@ -11,6 +11,7 @@ class HouseholdMemberEntity {
     this.fhirId,
     this.householdId,
     this.householdReferenceId,
+    this.referenceId,
     this.name,
     this.gender,
     this.dob,
@@ -44,6 +45,8 @@ class HouseholdMemberEntity {
   final String? fhirId;
   final String? householdId;
   final String? householdReferenceId;
+  /// Backend integer referenceId (the PK used as referenceId in offline-sync/create).
+  final String? referenceId;
   final String? name;
   final String? gender;
   final String? dob;
@@ -77,6 +80,7 @@ class HouseholdMemberEntity {
         'fhir_id': fhirId,
         'household_id': householdId,
         'household_reference_id': householdReferenceId,
+        'reference_id': referenceId,
         'name': name,
         'gender': gender,
         'dob': dob,
@@ -117,6 +121,7 @@ class HouseholdMemberEntity {
       fhirId: fhirId,
       householdId: householdId,
       householdReferenceId: householdReferenceId,
+      referenceId: referenceId,
       name: name,
       gender: gender,
       dob: dob,
@@ -153,6 +158,7 @@ class HouseholdMemberEntity {
       fhirId: row['fhir_id'] as String?,
       householdId: row['household_id'] as String?,
       householdReferenceId: row['household_reference_id'] as String?,
+      referenceId: row['reference_id'] as String?,
       name: row['name'] as String?,
       gender: row['gender'] as String?,
       dob: row['dob'] as String?,
@@ -229,6 +235,7 @@ class HouseholdMemberEntity {
       fhirId: fhirId,
       householdId: str('householdId') ?? str('household_id'),  // This is the FHIR ID of household
       householdReferenceId: str('householdReferenceId') ?? str('household_reference_id'),
+      referenceId: referenceId,
       name: str('name'),
       gender: str('gender'),
       dob: str('dateOfBirth') ?? str('dob'),

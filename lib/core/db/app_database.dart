@@ -20,7 +20,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 16;
+  static const int schemaVersion = 17;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -133,6 +133,7 @@ class AppDatabase {
         fhir_id TEXT,
         household_id TEXT,
         household_reference_id TEXT,
+        reference_id TEXT,
         name TEXT,
         gender TEXT,
         dob TEXT,
@@ -967,6 +968,14 @@ class AppDatabase {
           last_card_viewed INTEGER NOT NULL DEFAULT -1,
           updated_at INTEGER NOT NULL
         )''');
+    }
+    if (from < 17) {
+      Future<void> addCol17(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* column already present */}
+      }
+      await addCol17('ALTER TABLE $tableMembers ADD COLUMN reference_id TEXT');
     }
   }
 
