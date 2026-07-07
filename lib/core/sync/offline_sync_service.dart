@@ -705,6 +705,31 @@ class OfflineSyncService extends ChangeNotifier {
     return out;
   }
 
+  /// Infer programme from `observations.confirmDiagnosis` in an assessment
+  /// history row. The field is a comma-separated string of SNOMED display
+  /// terms sent by the UHIS backend when serviceProvided="enrollment".
+  static Programme? _inferProgrammeFromObservations(Map<String, dynamic> raw) {
+    final obs = raw['observations'];
+    if (obs is! Map) return null;
+    final diag = obs['confirmDiagnosis']?.toString().toLowerCase() ?? '';
+    if (diag.isEmpty) return null;
+    if (diag.contains('hypertension') ||
+        diag.contains('diabetes') ||
+        diag.contains('cardiovascular') ||
+        diag.contains('heart disease') ||
+        diag.contains('copd') ||
+        diag.contains('chronic kidney')) {
+      return Programme.ncd;
+    }
+    if (diag.contains('pregnan') || diag.contains('antenatal') || diag.contains('anc')) {
+      return Programme.anc;
+    }
+    if (diag.contains('tuberculosis') || diag.contains(' tb')) {
+      return Programme.tb;
+    }
+    return null;
+  }
+
   static bool _truthy(Object? v) {
     if (v == null) return false;
     if (v is bool) return v;
@@ -971,7 +996,17 @@ class OfflineSyncService extends ChangeNotifier {
         final patientId = memberToPatient[item.householdMemberId];
         if (patientId == null || patientId.isEmpty) continue;
 
-        final programme = Programme.fromTag(item.serviceProvided);
+        // Primary: map serviceProvided tag directly.
+        var programme = Programme.fromTag(item.serviceProvided);
+
+        // Fallback: when serviceProvided is "enrollment" or otherwise unmapped,
+        // infer the programme from observations.confirmDiagnosis. The UHIS
+        // backend sends confirmDiagnosis as a comma-separated string of SNOMED
+        // display terms (e.g. "Hypertension, Diabetes mellitus type 2 (disorder)").
+        if (programme == null || programme == Programme.unknown) {
+          programme = _inferProgrammeFromObservations(item.rawJson);
+        }
+
         if (programme != null && programme != Programme.unknown) {
           newProgrammes
               .putIfAbsent(patientId, () => <Programme>{})
