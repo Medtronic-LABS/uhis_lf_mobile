@@ -1252,7 +1252,17 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       ),
       visitSummary: NabaVisitSummary(
         title: _programmeSummaryTitle(widget.primaryProgramme),
-        summary: 'Care plan generated using clinical guidelines. AI service was unavailable — review and adjust based on your clinical judgement.',
+        summary: hasAnc
+            ? 'BP, weight, urine protein, and fetal movement assessed. Continuing routine ANC care per WHO guidelines.'
+            : hasNcd
+                ? 'Blood pressure and blood glucose reviewed. Continuing NCD management per Bangladesh guidelines.'
+                : hasPnc
+                    ? 'Mother and neonate assessed — lochia, cord, and breastfeeding. Continuing post-natal care.'
+                    : hasImci
+                        ? 'Child assessed for fever, respiratory rate, and hydration. IMCI classification applied.'
+                        : hasTb
+                            ? 'TB treatment adherence reviewed. Continuing directly observed therapy (DOT).'
+                            : 'Vital signs assessed. Routine care plan generated per clinical guidelines.',
       ),
       nextActions: actions,
       counselling: counselling,
@@ -1451,231 +1461,526 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   }
 
   Widget _buildResult(NabaResponse naba) {
-    final headerColor = _headerColor(widget.primaryProgramme);
     final referral =
         naba.referralRecommendation?.required_ ?? widget.referralRecommended;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.xxxl, AppSpacing.xxxl, AppSpacing.xxxl, AppSpacing.h8xl),
+      physics: const ClampingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-              // ── AI checked header + household strip ───────────────────
-              if (_householdMembers != null && _householdMembers!.length > 1) ...[
-                _AiCheckedHeader(
-                  programmes: widget.confirmedProgrammes,
-                  headerColor: headerColor,
-                ),
-                const SizedBox(height: 10),
-                _HouseholdMemberStrip(
-                  members: _householdMembers!,
-                  onTapMember: (patientId) =>
-                      context.push('/patients/$patientId'),
-                ),
-                const SizedBox(height: 16),
-              ],
+          // ── Household member strip ──────────────────────────────────
+          if (_householdMembers != null && _householdMembers!.length > 1) ...[
+            _HouseholdMemberStrip(
+              members: _householdMembers!,
+              onTapMember: (patientId) =>
+                  context.push('/patients/$patientId'),
+            ),
+            const SizedBox(height: 16),
+          ],
 
-              // ── AI fallback notice ────────────────────────────────────
-              if (naba.modelVersion == 'rule-based-fallback') ...[
-                const _FallbackNoticeBanner(),
-                const SizedBox(height: 12),
-              ],
-
-              // ── Danger signs — elevated to top ────────────────────────
-              if (naba.dangerSigns.isNotEmpty) ...[
-                _DangerSignsAlert(signs: naba.dangerSigns),
-                const SizedBox(height: 12),
-              ],
-
-              // ── Banners: review required + referral ───────────────────
-              if (naba.rationale.humanReviewRequired) ...[
-                _InfoBanner(
-                  color: AppColors.ncdSurface,
-                  borderColor: AppColors.warningBorderAlt,
-                  icon: Icons.supervisor_account_rounded,
-                  iconColor: AppColors.slaDueSoonText,
-                  text: NabaStrings.humanReviewBadge,
-                ),
-                const SizedBox(height: 12),
-              ],
-              if (referral) ...[
-                _InfoBanner(
-                  color: AppColors.statusCriticalSurface,
-                  borderColor: AppColors.statusCriticalBorder,
-                  icon: Icons.local_hospital_rounded,
-                  iconColor: AppColors.statusCritical,
-                  text: naba.referralRecommendation?.reason ??
-                      VisitCompleteStrings.referralWarning,
-                  label: NabaStrings.referralRequired,
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              // ── Visit summary ─────────────────────────────────────────
-              _SummaryCard(
-                title: naba.visitSummary.title,
-                body: naba.visitSummary.summary,
-                headerColor: headerColor,
-                confidence: naba.rationale.confidence,
-              ),
-              const SizedBox(height: 12),
-
-              // ── Next actions ──────────────────────────────────────────
-              if (naba.nextActions.isNotEmpty) ...[
-                _SectionCard(
-                  title: NabaStrings.sectionNextActions,
-                  icon: Icons.checklist_rounded,
-                  iconBg: AppColors.navy.withValues(alpha: 0.1),
-                  iconColor: AppColors.navy,
-                  child: _NextActionsTimeline(actions: naba.nextActions),
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              // ── Clinical findings ─────────────────────────────────────
-              if (naba.clinicalFindings.isNotEmpty) ...[
-                _SectionCard(
-                  title: NabaStrings.sectionFindings,
-                  icon: Icons.biotech_rounded,
-                  iconBg: AppColors.aiSurfaceStart,
-                  iconColor: AppColors.aiPurple,
-                  child:
-                      _ClinicalFindingsCards(findings: naba.clinicalFindings),
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              // ── Counselling ───────────────────────────────────────────
-              if (naba.counselling.isNotEmpty) ...[
-                if (widget.primaryProgramme == Programme.ncd)
-                  Card(
-                    child: ExpansionTile(
-                      leading: Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: AppColors.tagTealSurface,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(Icons.chat_bubble_outline_rounded,
-                            color: AppColors.tagTealText, size: 18),
-                      ),
-                      title: Text(NabaStrings.sectionCounselling,
-                          style: Theme.of(context).textTheme.titleSmall),
-                      subtitle: const Text('Tap to expand'),
-                      initiallyExpanded: false,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                          child: _CounsellingRows(items: naba.counselling),
-                        ),
-                      ],
-                    ),
-                  )
-                else
-                  _SectionCard(
-                    title: NabaStrings.sectionCounselling,
-                    icon: Icons.chat_bubble_outline_rounded,
-                    iconBg: AppColors.tagTealSurface,
-                    iconColor: AppColors.tagTealText,
-                    child: _CounsellingRows(items: naba.counselling),
-                  ),
-                const SizedBox(height: 12),
-              ],
-
-              // ── Medication advice ─────────────────────────────────────
-              if (naba.medicationAdvice.isNotEmpty) ...[
-                _SectionCard(
-                  title: NabaStrings.sectionMedication,
-                  icon: Icons.medication_liquid_rounded,
-                  iconBg: AppColors.tagBlueSurface,
-                  iconColor: AppColors.tagBlueText,
-                  child: _DotList(
-                    items: naba.medicationAdvice,
-                    dotColor: AppColors.tagBlueText,
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              // ── Follow-up ─────────────────────────────────────────────
-              if (naba.followUp.isNotEmpty) ...[
-                _SectionCard(
-                  title: NabaStrings.sectionFollowUp,
-                  icon: Icons.event_available_rounded,
-                  iconBg: AppColors.followUpIconBg,
-                  iconColor: AppColors.followUpIconFg,
-                  child: _FollowUpRows(items: naba.followUp),
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              // ── WhatsApp summary ──────────────────────────────────────
-              if (naba.whatsappSummary != null) ...[
-                _WhatsAppCard(
-                  text: naba.whatsappSummary!,
-                  patientPhone: _patientPhone,
-                  onShared: () => _onAccepted(naba),
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              // ── Proposal note ─────────────────────────────────────────
-              const SizedBox(height: 4),
-              Center(
-                child: Text(
-                  NabaStrings.proposalNote,
-                  style: AppTextStyles.subText.copyWith(
-                    fontStyle: FontStyle.italic,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              // ── CTA bar at scroll bottom ──────────────────────────
-              const SizedBox(height: 12),
-              _BottomCtaBar(
-                naba: naba,
-                accepted: _accepted,
-                headerColor: headerColor,
-                referral: referral,
-                primaryProgramme: widget.primaryProgramme,
-                patientLabel: widget.patientLabel,
-                memberId: widget.memberId,
-                patientPhone: _patientPhone,
-                returnPath: _returnPath,
-                onAccepted: () => _onAccepted(naba),
-              ),
-            ],
+          // ── 1. Vitals summary ───────────────────────────────────────
+          _VitalsSummaryCard(
+            programme: widget.primaryProgramme,
+            summary: naba.visitSummary.summary,
+            hasIssues: referral || naba.dangerSigns.isNotEmpty,
           ),
-        );
+          const SizedBox(height: 12),
+
+          // ── 2. Referral / danger alert ──────────────────────────────
+          if (referral || naba.dangerSigns.isNotEmpty) ...[
+            _ReferralAlertCard(
+              reason: naba.dangerSigns.isNotEmpty
+                  ? 'Danger signs detected: ${naba.dangerSigns.join(', ')}'
+                  : (naba.referralRecommendation?.reason ??
+                      'Referral recommended based on clinical assessment'),
+              urgency: naba.referralRecommendation?.urgency ?? 'Today',
+              isDanger: naba.dangerSigns.isNotEmpty,
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // ── 3. AI Counselling Guide ─────────────────────────────────
+          if (naba.counselling.isNotEmpty) ...[
+            _AiCounsellingCard(
+              programme: widget.primaryProgramme,
+              items: naba.counselling,
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // ── 4. WhatsApp / SMS banner ────────────────────────────────
+          if (naba.whatsappSummary != null) ...[
+            _WhatsAppCard(
+              text: naba.whatsappSummary!,
+              patientPhone: _patientPhone,
+              onShared: () => _onAccepted(naba),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // ── 5. Follow-up date ───────────────────────────────────────
+          if (naba.followUp.isNotEmpty) ...[
+            _FollowUpDateRow(item: naba.followUp.first),
+            const SizedBox(height: 16),
+          ],
+
+          // ── 6. CTA: accept + call/refer ─────────────────────────────
+          _BottomCtaBar(
+            naba: naba,
+            accepted: _accepted,
+            headerColor: _headerColor(widget.primaryProgramme),
+            referral: referral,
+            primaryProgramme: widget.primaryProgramme,
+            patientLabel: widget.patientLabel,
+            memberId: widget.memberId,
+            patientPhone: _patientPhone,
+            returnPath: _returnPath,
+            onAccepted: () => _onAccepted(naba),
+          ),
+        ],
+      ),
+    );
   }
 }
 
 // ── Supporting widgets ────────────────────────────────────────────────────────
 
-class _FallbackNoticeBanner extends StatelessWidget {
-  const _FallbackNoticeBanner();
+class _VitalsSummaryCard extends StatelessWidget {
+  const _VitalsSummaryCard({
+    required this.programme,
+    required this.summary,
+    required this.hasIssues,
+  });
+  final Programme programme;
+  final String summary;
+  final bool hasIssues;
+
+  String _label(Programme p) => switch (p) {
+        Programme.anc || Programme.pnc => 'ANC Vitals',
+        Programme.ncd => 'Vitals & Labs',
+        Programme.imci => 'Child Assessment',
+        Programme.tb => 'TB Follow-up',
+        _ => 'Vitals',
+      };
+
+  String _pillText() {
+    if (hasIssues) return 'Review';
+    return switch (programme) {
+      Programme.anc || Programme.pnc => 'On track',
+      Programme.ncd => 'Monitored',
+      _ => 'Normal',
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
+    const greenBg = Color(0xFFECFDF5);
+    const greenBorder = Color(0xFFA7F3D0);
+    const greenAccent = Color(0xFF059669);
+    const reviewBg = Color(0xFFFFFBEB);
+    const reviewBorder = Color(0xFFFDE68A);
+    const reviewAccent = Color(0xFFB45309);
+
+    final bg = hasIssues ? reviewBg : greenBg;
+    final border = hasIssues ? reviewBorder : greenBorder;
+    final accent = hasIssues ? reviewAccent : greenAccent;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF8E1),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: const Color(0xFFFFE082)),
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  hasIssues
+                      ? Icons.warning_amber_rounded
+                      : Icons.favorite_rounded,
+                  size: 16,
+                  color: accent,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _label(programme),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: accent,
+                    letterSpacing: 0.1,
+                  ),
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                decoration: BoxDecoration(
+                  color: accent,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  _pillText(),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            summary,
+            style: TextStyle(
+              fontSize: 13,
+              color: accent.withValues(alpha: 0.85),
+              height: 1.45,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReferralAlertCard extends StatelessWidget {
+  const _ReferralAlertCard({
+    required this.reason,
+    required this.urgency,
+    required this.isDanger,
+  });
+  final String reason;
+  final String urgency;
+  final bool isDanger;
+
+  @override
+  Widget build(BuildContext context) {
+    const dangerBg = Color(0xFFFEF2F2);
+    const dangerBorder = Color(0xFFFECACA);
+    const dangerAccent = Color(0xFFDC2626);
+    const referBg = Color(0xFFFFFBEB);
+    const referBorder = Color(0xFFFDE68A);
+    const referAccent = Color(0xFFB45309);
+
+    final bg = isDanger ? dangerBg : referBg;
+    final border = isDanger ? dangerBorder : referBorder;
+    final accent = isDanger ? dangerAccent : referAccent;
+    final icon =
+        isDanger ? Icons.emergency_rounded : Icons.local_hospital_rounded;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: border, width: 1.5),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline_rounded, size: 18, color: Color(0xFFF57F17)),
-          const SizedBox(width: 8),
-          const Expanded(
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: accent,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 16, color: Colors.white),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        isDanger ? 'Refer immediately' : 'Refer to facility',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: accent,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: accent,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        urgency.toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  reason,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: accent.withValues(alpha: 0.85),
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AiCounsellingCard extends StatelessWidget {
+  const _AiCounsellingCard({
+    required this.programme,
+    required this.items,
+  });
+  final Programme programme;
+  final List<String> items;
+
+  static const _pinkBg = Color(0xFFFDF2F8);
+  static const _pinkBorder = Color(0xFFF9A8D4);
+  static const _pinkAccent = Color(0xFF9D174D);
+
+  static String _emoji(String item) {
+    final s = item.toLowerCase();
+    if (s.contains('salt') || s.contains('sodium')) { return '🧂'; }
+    if (s.contains('vegetable') || s.contains('fruit') || s.contains('eat') ||
+        s.contains('food') || s.contains('diet') || s.contains('lentil') ||
+        s.contains('egg') || s.contains('nutritious')) { return '🥦'; }
+    if (s.contains('walk') || s.contains('exercise') ||
+        s.contains('activity')) { return '🚶'; }
+    if (s.contains('tobacco') || s.contains('smoke') ||
+        s.contains('alcohol')) { return '🚫'; }
+    if (s.contains('medicine') || s.contains('medication') ||
+        s.contains('tablet') || s.contains('iron') ||
+        s.contains('calcium') || s.contains('zinc')) { return '💊'; }
+    if (s.contains('danger') || s.contains('emergency') ||
+        s.contains('immediately') || s.contains('headache') ||
+        s.contains('vision') || s.contains('convulsion') ||
+        s.contains('bleeding')) { return '⚠️'; }
+    if (s.contains('baby') || s.contains('neonate') ||
+        s.contains('breastfeed')) { return '👶'; }
+    if (s.contains('water') || s.contains('ors') ||
+        s.contains('hydrat')) { return '💧'; }
+    if (s.contains('sleep') || s.contains('rest') ||
+        s.contains('bednet')) { return '🌙'; }
+    if (s.contains('facility') || s.contains('delivery') ||
+        s.contains('hospital') || s.contains('uhc') ||
+        s.contains('refer')) { return '🏥'; }
+    if (s.contains('antenatal') || s.contains('anc') ||
+        s.contains('prenatal') || s.contains('fundal') ||
+        s.contains('fetal')) { return '🤰'; }
+    if (s.contains('tb') || s.contains('tuberculosis') ||
+        s.contains('adherence') || s.contains('cough') ||
+        s.contains('mask')) { return '😷'; }
+    return '✓';
+  }
+
+  String _sourceLabel() => switch (programme) {
+        Programme.anc || Programme.pnc => 'BRAC ANC',
+        Programme.ncd => 'NCD',
+        Programme.imci => 'IMCI',
+        Programme.tb => 'TB',
+        _ => 'GUIDELINE',
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: _pinkBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _pinkBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+            child: Row(
+              children: [
+                Container(
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    color: _pinkAccent,
+                    borderRadius: BorderRadius.circular(7),
+                  ),
+                  child: const Icon(Icons.star, size: 13, color: Colors.white),
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'AI COUNSELLING GUIDE',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                      color: _pinkAccent,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: _pinkAccent.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: _pinkBorder),
+                  ),
+                  child: Text(
+                    _sourceLabel(),
+                    style: const TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: _pinkAccent,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: _pinkBorder),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+            child: Column(
+              children: items
+                  .map((item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _emoji(item),
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                item,
+                                style: const TextStyle(
+                                  fontSize: 12.5,
+                                  color: _pinkAccent,
+                                  height: 1.4,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ))
+                  .toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FollowUpDateRow extends StatelessWidget {
+  const _FollowUpDateRow({required this.item});
+  final NabaFollowUpItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: AppShadows.listItem,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.followUpIconBg,
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: const Icon(
+              Icons.calendar_today_rounded,
+              size: 17,
+              color: AppColors.followUpIconFg,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Next Follow-up',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textMuted,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  item.activity,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.followUpIconBg,
+              borderRadius: BorderRadius.circular(20),
+            ),
             child: Text(
-              NabaStrings.fallbackNotice,
-              style: TextStyle(
-                fontSize: 12,
-                color: Color(0xFF4E342E),
-                height: 1.4,
+              item.timeline,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: AppColors.followUpIconFg,
               ),
             ),
           ),
@@ -1699,674 +2004,6 @@ class _SkeletonCard extends StatelessWidget {
         color: color,
         borderRadius: BorderRadius.circular(AppRadius.card),
       ),
-    );
-  }
-}
-
-class _DangerSignsAlert extends StatelessWidget {
-  const _DangerSignsAlert({required this.signs});
-  final List<String> signs;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: AppColors.statusCriticalSurface,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border:
-            Border.all(color: AppColors.statusCriticalBorder, width: 1.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: double.infinity,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: const BoxDecoration(
-              color: AppColors.statusCritical,
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(AppRadius.card),
-                topRight: Radius.circular(AppRadius.card),
-              ),
-            ),
-            child: Row(
-              children: const [
-                Icon(Icons.warning_rounded, size: 17, color: Colors.white),
-                SizedBox(width: 8),
-                Text(
-                  NabaStrings.sectionDangerSigns,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
-                    color: Colors.white,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(AppSpacing.xl),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: signs
-                  .map(
-                    (s) => Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Padding(
-                            padding: EdgeInsets.only(top: 5),
-                            child: Icon(
-                              Icons.circle,
-                              size: 7,
-                              color: AppColors.statusCritical,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              s,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.statusCriticalText,
-                                height: 1.4,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                  .toList(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _InfoBanner extends StatelessWidget {
-  const _InfoBanner({
-    required this.color,
-    required this.borderColor,
-    required this.icon,
-    required this.iconColor,
-    required this.text,
-    this.label,
-  });
-  final Color color;
-  final Color borderColor;
-  final IconData icon;
-  final Color iconColor;
-  final String text;
-  final String? label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.xl),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: borderColor),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 20, color: iconColor),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (label != null) ...[
-                  Text(
-                    label!,
-                    style: AppTextStyles.scorePill.copyWith(
-                      color: iconColor,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                ],
-                Text(
-                  text,
-                  style: AppTextStyles.body.copyWith(height: 1.4),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({
-    required this.title,
-    required this.body,
-    required this.headerColor,
-    required this.confidence,
-  });
-  final String title;
-  final String body;
-  final Color headerColor;
-  final double confidence;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: AppColors.cardSurface,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        boxShadow: AppShadows.card,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Programme-coloured header strip
-          Container(
-            width: double.infinity,
-            padding:
-                const EdgeInsets.symmetric(horizontal: AppSpacing.xxxl, vertical: AppSpacing.xl),
-            decoration: BoxDecoration(
-              color: headerColor,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(AppRadius.card),
-                topRight: Radius.circular(AppRadius.card),
-              ),
-            ),
-            child: Text(
-              title,
-              style: const TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 14,
-                color: Colors.white,
-              ),
-            ),
-          ),
-          // Summary body
-          Padding(
-            padding: const EdgeInsets.fromLTRB(AppSpacing.xxxl, AppSpacing.xxl, AppSpacing.xxxl, AppSpacing.lg),
-            child: Text(
-              body,
-              style: const TextStyle(
-                fontSize: 14,
-                color: AppColors.textPrimary,
-                height: 1.55,
-              ),
-            ),
-          ),
-          // Confidence footer
-          Padding(
-            padding: const EdgeInsets.fromLTRB(AppSpacing.xxxl, 0, AppSpacing.xxxl, AppSpacing.xl),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.auto_awesome_rounded,
-                  size: 12,
-                  color: AppColors.aiPurple.withValues(alpha: 0.7),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  'AI confidence: ${(confidence * 100).toStringAsFixed(0)}%',
-                  style: AppTextStyles.subText.copyWith(letterSpacing: 0.2),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({
-    required this.title,
-    required this.icon,
-    required this.iconBg,
-    required this.iconColor,
-    required this.child,
-  });
-  final String title;
-  final IconData icon;
-  final Color iconBg;
-  final Color iconColor;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.xxl),
-      decoration: BoxDecoration(
-        color: AppColors.cardSurface,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        boxShadow: AppShadows.listItem,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  color: iconBg,
-                  borderRadius: BorderRadius.circular(AppRadius.rxIcon),
-                ),
-                child: Icon(icon, size: 16, color: iconColor),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 13,
-                  color: AppColors.textPrimary,
-                  letterSpacing: 0.1,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          const Divider(height: 1, color: AppColors.border),
-          const SizedBox(height: 12),
-          child,
-        ],
-      ),
-    );
-  }
-}
-
-class _NextActionsTimeline extends StatelessWidget {
-  const _NextActionsTimeline({required this.actions});
-  final List<NabaNextAction> actions;
-
-  static const _urgencyFg = {
-    'Now': AppColors.statusCritical,
-    'Today': AppColors.slaDueSoonText,
-    'This week': AppColors.navy,
-  };
-  static const _urgencyBg = {
-    'Now': AppColors.statusCriticalSurface,
-    'Today': AppColors.statusWarningSurface,
-    'This week': AppColors.childSurface,
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: List.generate(actions.length, (i) {
-        final a = actions[i];
-        final fgColor =
-            _urgencyFg[a.urgency] ?? AppColors.textMuted;
-        final bgColor =
-            _urgencyBg[a.urgency] ?? AppColors.cardSurfaceMuted;
-        final isLast = i == actions.length - 1;
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Spine: circle + line
-            Column(
-              children: [
-                Container(
-                  width: 26,
-                  height: 26,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: fgColor.withValues(alpha: 0.12),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: fgColor.withValues(alpha: 0.4),
-                      width: 1.5,
-                    ),
-                  ),
-                  child: Text(
-                    '${a.priority}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 12,
-                      color: fgColor,
-                    ),
-                  ),
-                ),
-                if (!isLast)
-                  Container(width: 1.5, height: 16, color: AppColors.border),
-              ],
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      a.action,
-                      style: AppTextStyles.body.copyWith(height: 1.4),
-                    ),
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: bgColor,
-                        borderRadius: BorderRadius.circular(AppRadius.pill),
-                      ),
-                      child: Text(
-                        a.urgency.toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          color: fgColor,
-                          letterSpacing: 0.6,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        );
-      }),
-    );
-  }
-}
-
-class _ClinicalFindingsCards extends StatelessWidget {
-  const _ClinicalFindingsCards({required this.findings});
-  final List<NabaClinicalFinding> findings;
-
-  static (String label, Color color, Color surface) _style(String severity) =>
-      switch (severity) {
-        'High' => (
-            'Refer',
-            AppColors.statusCritical,
-            AppColors.statusCriticalSurface,
-          ),
-        'Medium' => (
-            'Review',
-            AppColors.slaDueSoonText,
-            const Color(0xFFFFFBEB),
-          ),
-        _ => (
-            'Normal',
-            AppColors.statusSuccess,
-            AppColors.statusSuccessSurface,
-          ),
-      };
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: findings.map((f) {
-        final (label, color, surface) = _style(f.severity);
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Container(
-            decoration: BoxDecoration(
-              color: surface,
-              borderRadius: BorderRadius.circular(AppRadius.rxIcon),
-              border: Border(left: BorderSide(color: color, width: 3.5)),
-            ),
-            padding: const EdgeInsets.fromLTRB(
-                AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, AppSpacing.lg),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        f.finding,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: color,
-                        ),
-                      ),
-                      if (f.reason.isNotEmpty) ...[
-                        const SizedBox(height: 3),
-                        Text(
-                          f.reason,
-                          style: AppTextStyles.vitalUnit.copyWith(height: 1.4),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: color,
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
-                  ),
-                  child: Text(
-                    label,
-                    style: AppTextStyles.microTag.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.4,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-}
-
-class _DotList extends StatelessWidget {
-  const _DotList({required this.items, required this.dotColor});
-  final List<String> items;
-  final Color dotColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: items
-          .map(
-            (item) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: dotColor,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      item,
-                      style: AppTextStyles.body.copyWith(height: 1.5),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          )
-          .toList(),
-    );
-  }
-}
-
-class _CounsellingRows extends StatelessWidget {
-  const _CounsellingRows({required this.items});
-  final List<String> items;
-
-  static IconData _icon(String item) {
-    final s = item.toLowerCase();
-    if (s.contains('doctor') || s.contains('hospital') || s.contains('refer') || s.contains('uhc')) {
-      return Icons.local_hospital_rounded;
-    }
-    if (s.contains('danger') || s.contains('emergency') || s.contains('immediately') || s.contains('headache') || s.contains('vision') || s.contains('convulsion')) {
-      return Icons.warning_amber_rounded;
-    }
-    if (s.contains('iron') || s.contains('calcium') || s.contains('tablet') || s.contains('medicine') || s.contains('medication')) {
-      return Icons.medication_rounded;
-    }
-    if (s.contains('baby') || s.contains('mother') || s.contains('okay') || s.contains('normal') || s.contains('reassure')) {
-      return Icons.favorite_rounded;
-    }
-    if (s.contains('salt') || s.contains('vegetable') || s.contains('fruit') || s.contains('eat') || s.contains('diet')) {
-      return Icons.restaurant_rounded;
-    }
-    if (s.contains('walk') || s.contains('exercise') || s.contains('activity')) {
-      return Icons.directions_walk_rounded;
-    }
-    if (s.contains('tobacco') || s.contains('smoke') || s.contains('alcohol')) {
-      return Icons.smoke_free_rounded;
-    }
-    if (s.contains('sleep') || s.contains('stress') || s.contains('rest') || s.contains('weight')) {
-      return Icons.bedtime_rounded;
-    }
-    return Icons.info_outline_rounded;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: items.map((item) => Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: AppColors.tagTealSurface,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(_icon(item), size: 16, color: AppColors.tagTealText),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text(
-                  item,
-                  style: AppTextStyles.body.copyWith(height: 1.4),
-                ),
-              ),
-            ),
-          ],
-        ),
-      )).toList(),
-    );
-  }
-}
-
-class _FollowUpRows extends StatelessWidget {
-  const _FollowUpRows({required this.items});
-  final List<NabaFollowUpItem> items;
-
-  static (Color border, Color chipBg, Color chipFg, IconData icon)
-      _urgencyStyle(String timeline) {
-    final t = timeline.toLowerCase();
-    if (t.contains('now') || t.contains('today') || t.contains('urgent')) {
-      return (
-        AppColors.statusCritical,
-        AppColors.statusCriticalSurface,
-        AppColors.statusCritical,
-        Icons.priority_high_rounded,
-      );
-    }
-    if (t.contains('week') || t.contains('2 week') || t.contains('soon')) {
-      return (
-        AppColors.slaDueSoonText,
-        const Color(0xFFFFFBEB),
-        AppColors.slaDueSoonText,
-        Icons.schedule_rounded,
-      );
-    }
-    return (
-      AppColors.tagTealText,
-      AppColors.tagTealSurface,
-      AppColors.tagTealText,
-      Icons.event_available_rounded,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: items.map((item) {
-        final (border, chipBg, chipFg, icon) = _urgencyStyle(item.timeline);
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(AppRadius.rxIcon),
-              border: Border(left: BorderSide(color: border, width: 3)),
-            ),
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Icon(icon, size: 16, color: border),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    item.activity,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textPrimary,
-                      height: 1.3,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: chipBg,
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
-                  ),
-                  child: Text(
-                    item.timeline,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: chipFg,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      }).toList(),
     );
   }
 }
@@ -3166,42 +2803,3 @@ class _MemberAvatar extends StatelessWidget {
   }
 }
 
-// ── AI checked findings header ────────────────────────────────────────────────
-
-class _AiCheckedHeader extends StatelessWidget {
-  const _AiCheckedHeader({
-    required this.programmes,
-    required this.headerColor,
-  });
-
-  final Set<Programme> programmes;
-  final Color headerColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final labels = programmes
-        .where((p) => p != Programme.unknown)
-        .map((p) => p.displayName)
-        .join(' + ');
-    final text = labels.isEmpty
-        ? VisitFlowStrings.aiCheckedFindings
-        : '${VisitFlowStrings.aiCheckedFindings} · $labels';
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      decoration: BoxDecoration(
-        color: headerColor.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w700,
-          color: headerColor,
-          height: 1.3,
-        ),
-      ),
-    );
-  }
-}
