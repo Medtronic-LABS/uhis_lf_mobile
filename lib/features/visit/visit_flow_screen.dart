@@ -1680,9 +1680,9 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             const SizedBox(height: 12),
           ],
 
-          // ── 5. Follow-up date ───────────────────────────────────────
+          // ── 5. Follow-up timeline ──────────────────────────────────
           if (naba.followUp.isNotEmpty) ...[
-            _FollowUpDateRow(item: naba.followUp.first),
+            _FollowUpTimeline(items: naba.followUp),
             const SizedBox(height: 16),
           ],
 
@@ -1920,7 +1920,7 @@ class _ReferralAlertCard extends StatelessWidget {
   }
 }
 
-class _AiCounsellingCard extends StatelessWidget {
+class _AiCounsellingCard extends StatefulWidget {
   const _AiCounsellingCard({
     required this.programme,
     required this.items,
@@ -1928,11 +1928,19 @@ class _AiCounsellingCard extends StatelessWidget {
   final Programme programme;
   final List<String> items;
 
+  @override
+  State<_AiCounsellingCard> createState() => _AiCounsellingCardState();
+}
+
+class _AiCounsellingCardState extends State<_AiCounsellingCard> {
+  bool _expanded = true;
+
   static const _pinkBg = Color(0xFFFDF2F8);
   static const _pinkBorder = Color(0xFFF9A8D4);
   static const _pinkAccent = Color(0xFF9D174D);
 
-  static String _emoji(String item) {
+  // Returns a fallback emoji for items that don't already start with one.
+  static String _fallbackEmoji(String item) {
     final s = item.toLowerCase();
     if (s.contains('salt') || s.contains('sodium')) { return '🧂'; }
     if (s.contains('vegetable') || s.contains('fruit') || s.contains('eat') ||
@@ -1967,7 +1975,36 @@ class _AiCounsellingCard extends StatelessWidget {
     return '✓';
   }
 
-  String _sourceLabel() => switch (programme) {
+  // True when the first Unicode scalar is an emoji codepoint.
+  static bool _startsWithEmoji(String s) {
+    final trimmed = s.trimLeft();
+    if (trimmed.isEmpty) return false;
+    final first = trimmed.runes.first;
+    return (first >= 0x2600 && first <= 0x27BF) || first >= 0x1F000;
+  }
+
+  // Strips a leading emoji + trailing space so the widget emoji doesn't double.
+  static String _stripLeadingEmoji(String s) {
+    final trimmed = s.trimLeft();
+    if (trimmed.isEmpty) return trimmed;
+    final runes = trimmed.runes.toList();
+    int i = 0;
+    // Skip emoji codepoints and ZWJ / variation selectors
+    while (i < runes.length &&
+        ((runes[i] >= 0x2600 && runes[i] <= 0x27BF) ||
+            runes[i] >= 0x1F000 ||
+            runes[i] == 0xFE0F ||
+            runes[i] == 0x200D)) {
+      i++;
+    }
+    // Skip trailing spaces
+    while (i < runes.length && runes[i] == 0x20) {
+      i++;
+    }
+    return String.fromCharCodes(runes.skip(i));
+  }
+
+  String _sourceLabel() => switch (widget.programme) {
         Programme.anc || Programme.pnc => 'BRAC ANC',
         Programme.ncd => 'NCD',
         Programme.imci => 'IMCI',
@@ -1987,70 +2024,115 @@ class _AiCounsellingCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-            child: Row(
-              children: [
-                Container(
-                  width: 26,
-                  height: 26,
-                  decoration: BoxDecoration(
-                    color: _pinkAccent,
-                    borderRadius: BorderRadius.circular(7),
-                  ),
-                  child: const Icon(Icons.star, size: 13, color: Colors.white),
-                ),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text(
-                    'AI COUNSELLING GUIDE',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w900,
+          // ── Header (always visible, tappable) ──────────────────────
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              child: Row(
+                children: [
+                  Container(
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
                       color: _pinkAccent,
-                      letterSpacing: 0.6,
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                    child: const Icon(Icons.star, size: 13, color: Colors.white),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'AI COUNSELLING GUIDE',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            color: _pinkAccent,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                        if (!_expanded)
+                          Text(
+                            '${widget.items.length} points · Tap to expand',
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              color: _pinkAccent,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                      ],
                     ),
                   ),
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: _pinkAccent.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: _pinkBorder),
-                  ),
-                  child: Text(
-                    _sourceLabel(),
-                    style: const TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w700,
-                      color: _pinkAccent,
-                      letterSpacing: 0.5,
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _pinkAccent.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: _pinkBorder),
+                    ),
+                    child: Text(
+                      _sourceLabel(),
+                      style: const TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: _pinkAccent,
+                        letterSpacing: 0.5,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 4),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 20,
+                      color: _pinkAccent,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          const Divider(height: 1, color: _pinkBorder),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-            child: Column(
-              children: items
-                  .map((item) => Padding(
+
+          // ── Expanded body ───────────────────────────────────────────
+          if (_expanded) ...[
+            const Divider(height: 1, color: _pinkBorder),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              child: Column(
+                children: widget.items
+                    .map((item) {
+                      final hasEmoji = _startsWithEmoji(item);
+                      final emoji = hasEmoji ? '' : _fallbackEmoji(item);
+                      final displayText = hasEmoji ? _stripLeadingEmoji(item) : item;
+                      return Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              _emoji(item),
-                              style: const TextStyle(fontSize: 14),
-                            ),
+                            if (hasEmoji) ...[
+                              // AI-provided emoji sits at the front of the text;
+                              // reconstruct it from the original item.
+                              Text(
+                                item.trimLeft().runes.first > 0
+                                    ? String.fromCharCode(item.trimLeft().runes.first)
+                                    : emoji,
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                            ] else ...[
+                              Text(emoji, style: const TextStyle(fontSize: 14)),
+                            ],
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                item,
+                                displayText,
                                 style: const TextStyle(
                                   fontSize: 12.5,
                                   color: _pinkAccent,
@@ -2061,8 +2143,121 @@ class _AiCounsellingCard extends StatelessWidget {
                             ),
                           ],
                         ),
-                      ))
-                  .toList(),
+                      );
+                    })
+                    .toList(),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// Shows all follow-up items: first item has a date picker; remaining items
+// are compact left-border-coloured timeline rows.
+class _FollowUpTimeline extends StatelessWidget {
+  const _FollowUpTimeline({required this.items});
+  final List<NabaFollowUpItem> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _FollowUpDateRow(item: items.first),
+        for (final item in items.skip(1)) ...[
+          const SizedBox(height: 6),
+          _FollowUpTimelineItem(item: item),
+        ],
+      ],
+    );
+  }
+}
+
+// Compact timeline row with a coloured left border — used for secondary
+// follow-up items (after the primary date-picker row).
+class _FollowUpTimelineItem extends StatelessWidget {
+  const _FollowUpTimelineItem({required this.item});
+  final NabaFollowUpItem item;
+
+  static Color _borderColor(String timeline) {
+    final t = timeline.toLowerCase();
+    if (t.contains('today') || t.contains('now') ||
+        t.contains('immediate') || t == 'in 1 day') {
+      return const Color(0xFFDC2626);
+    }
+    if (t.contains('week') &&
+        !t.contains('4 week') &&
+        !t.contains('monthly')) {
+      return const Color(0xFFB45309);
+    }
+    return const Color(0xFF0D9488);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor = _borderColor(item.timeline);
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            width: 4,
+            decoration: BoxDecoration(
+              color: borderColor,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(8),
+                bottomLeft: Radius.circular(8),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: const BorderRadius.only(
+                  topRight: Radius.circular(8),
+                  bottomRight: Radius.circular(8),
+                ),
+                border: Border(
+                  top: BorderSide(color: borderColor.withValues(alpha: 0.25)),
+                  right: BorderSide(color: borderColor.withValues(alpha: 0.25)),
+                  bottom: BorderSide(color: borderColor.withValues(alpha: 0.25)),
+                ),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      item.activity,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.textPrimary,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: borderColor.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      item.timeline,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: borderColor,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -2082,9 +2277,10 @@ class _FollowUpDateRow extends StatefulWidget {
 class _FollowUpDateRowState extends State<_FollowUpDateRow> {
   late DateTime _date;
 
-  static const _amberBg = Color(0xFFFFFBEB);
-  static const _amberBorder = Color(0xFFFDE68A);
-  static const _amberText = Color(0xFFB45309);
+  static const _cardBorder = Color(0xFFFBCFE8);
+  static const _cardText = Color(0xFF9D174D);
+  static const _gradientStart = Color(0xFFFDF2F8);
+  static const _gradientEnd = Color(0xFFF5F3FF);
 
   @override
   void initState() {
@@ -2138,9 +2334,13 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: _amberBg,
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [_gradientStart, _gradientEnd],
+          ),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _amberBorder, width: 1.5),
+          border: Border.all(color: _cardBorder, width: 1.5),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2154,12 +2354,12 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: _amberBorder),
+                    border: Border.all(color: _cardBorder),
                   ),
                   child: const Icon(
                     Icons.calendar_month_rounded,
                     size: 18,
-                    color: _amberText,
+                    color: _cardText,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -2169,7 +2369,7 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
-                    color: _amberText,
+                    color: _cardText,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -2180,7 +2380,7 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: _amberBorder),
+                      border: Border.all(color: _cardBorder),
                     ),
                     child: Text(
                       _formatted,
@@ -2201,7 +2401,7 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
                 widget.item.activity,
                 style: TextStyle(
                   fontSize: 11.5,
-                  color: _amberText.withValues(alpha: 0.75),
+                  color: _cardText.withValues(alpha: 0.75),
                   height: 1.4,
                   fontStyle: FontStyle.italic,
                 ),
