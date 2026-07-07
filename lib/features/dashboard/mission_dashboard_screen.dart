@@ -464,6 +464,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               settingsMenu: _SettingsMenu(onOfferBiometric: _offerBiometric),
             ),
+            // Referral alert strip — sits between header/search and village tabs
+            // so it reads as a system-level alert before the worklist.
+            _ReferralAlertBanner(
+              key: ValueKey('referral_banner_$_refreshVersion'),
+              onTap: () => context.push('/referrals'),
+            ),
             Expanded(
               child: RefreshIndicator(
                 onRefresh: _refresh,
@@ -502,11 +508,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         _loadMissionData();
                       },
                     ),
-                    _ReferralAlertBanner(
-                      key: ValueKey('referral_banner_$_refreshVersion'),
-                      onTap: () => context.push('/referrals'),
-                    ),
-                    const SizedBox(height: 4),
                     FutureBuilder<List<MissionQueueItem>>(
                       key: ValueKey('queue_$_refreshVersion'),
                       future: _queueFuture,
@@ -1047,15 +1048,7 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner>
         final active = snap.data?.active ?? 0;
         final total = critical + active;
         if (total == 0) return const SizedBox.shrink();
-        // Negative horizontal margin bleeds the banner through the ListView's
-        // 14px padding so it runs full-width like a system-level alert strip.
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Transform.translate(
-            offset: const Offset(-14, 0),
-            child: SizedBox(
-              width: MediaQuery.sizeOf(context).width,
-              child: Semantics(
+        return Semantics(
           button: true,
           label: 'Referral alerts: $total',
           child: Material(
@@ -1125,9 +1118,6 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner>
                   ],
                 ),
               ),
-            ),
-          ),
-        ),
             ),
           ),
         );
