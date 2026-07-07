@@ -2399,8 +2399,12 @@ abstract final class ComposerStrings {
   static const String lmpLabel = 'Last Menstrual Period';
   static const String eddLabel = 'Estimated Due Date';
   static const String gestationalAgeLabel = 'Gestational Age';
-  static const String gestationalAgeWeeks = 'weeks';
+  static const String gestationalAgeWeeks = 'wks';
+  static const String gestationalAgeDays = 'days';
   static const String gestationalAgePreterm = 'Preterm (< 37 weeks)';
+  static const String pregnancyOverviewNoData = 'Pregnancy data not available';
+  static const String pregnancyOverviewLmp = 'LMP';
+  static const String pregnancyOverviewEdd = 'EDD';
 
   // ── Glass prescription labels ────────────────────────────────────────────────
   static const String eyeOd = 'OD (Right)';

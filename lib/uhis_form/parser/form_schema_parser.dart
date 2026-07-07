@@ -100,6 +100,8 @@ class FormSchemaParser {
 
     // ── Standalone typed viewTypes ──────────────────────────────────────────
     switch (viewType) {
+      case 'pregnancyProfile':
+        return (_buildField(item, FieldKind.pregnancyProfile), 1);
       case 'BP':
         return (_buildField(item, FieldKind.bloodPressure), 1);
       case 'AgeOrDob':

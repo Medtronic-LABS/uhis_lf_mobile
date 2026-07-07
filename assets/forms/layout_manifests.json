@@ -501,6 +501,11 @@
     "clinicalWorkflowId": 4,
     "sections": [
       {
+        "sectionId": "pregnancyOverview",
+        "title": "Pregnancy Overview",
+        "fieldRefs": ["pregnancyProfile"]
+      },
+      {
         "sectionId": "medicalHistoryPhysicalExamination",
         "title": "Medical History, Physical Examination & Vitals",
         "fieldRefs": [

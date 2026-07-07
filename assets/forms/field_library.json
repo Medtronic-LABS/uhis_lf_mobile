@@ -1,4 +1,21 @@
 {
+  "pregnancyProfile": {
+    "id": "pregnancyProfile",
+    "label": "Pregnancy Overview",
+    "widgetHint": "pregnancyProfile",
+    "readOnly": true,
+    "isMandatory": false,
+    "isEnabled": false,
+    "visibility": "visible",
+    "clinicalConcept": [
+      {"system": "SNOMED_CT", "code": "21840007", "display": "Date of last menstrual period"},
+      {"system": "SNOMED_CT", "code": "161714006", "display": "Estimated date of delivery"},
+      {"system": "SNOMED_CT", "code": "57036006", "display": "Gestational week"}
+    ],
+    "programmes": [
+      {"id": "anc", "workflowId": 4, "workflowName": "RMNCH"}
+    ]
+  },
   "pncNeonatal": {
     "id": "pncNeonatal",
     "label": "PNC Visit - Neonate",
