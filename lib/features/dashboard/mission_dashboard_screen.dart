@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -1530,99 +1533,152 @@ class _EmptyVisitsCard extends StatelessWidget {
 
 /// AI sorted info banner — sits above the stats strip.
 /// Navy gradient matching the app header; shows overnight sort count + 3 tags.
-class _AiSortedInfoCard extends StatelessWidget {
+class _AiSortedInfoCard extends StatefulWidget {
   const _AiSortedInfoCard({super.key, required this.queueFuture});
 
   final Future<List<MissionQueueItem>>? queueFuture;
 
   @override
+  State<_AiSortedInfoCard> createState() => _AiSortedInfoCardState();
+}
+
+class _AiSortedInfoCardState extends State<_AiSortedInfoCard> {
+  static const _storage = FlutterSecureStorage();
+  static const _storageKey = 'ai_sorted_banner_last_shown';
+
+  bool _visible = false;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAndShow();
+  }
+
+  Future<void> _checkAndShow() async {
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final stored = await _storage.read(key: _storageKey);
+    if (stored != today) {
+      await _storage.write(key: _storageKey, value: today);
+      if (!mounted) return;
+      setState(() => _visible = true);
+      _timer = Timer(const Duration(seconds: 5), () {
+        if (mounted) setState(() => _visible = false);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<MissionQueueItem>>(
-      future: queueFuture,
-      builder: (context, snap) {
-        final count = snap.data?.length ?? 0;
-        final isLoading = snap.connectionState == ConnectionState.waiting;
-        const tags = <String>[
-          MissionDashboardStrings.aiSortedTagRisk,
-          MissionDashboardStrings.aiSortedTagOverdue,
-          MissionDashboardStrings.aiSortedTagCce,
-        ];
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [AppColors.navy, AppColors.navyMid],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.navy.withValues(alpha: 0.18),
-                blurRadius: 8,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 22,
-                    height: 22,
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOut,
+      child: _visible
+          ? FutureBuilder<List<MissionQueueItem>>(
+              future: widget.queueFuture,
+              builder: (context, snap) {
+                final count = snap.data?.length ?? 0;
+                final isLoading =
+                    snap.connectionState == ConnectionState.waiting;
+                const tags = <String>[
+                  MissionDashboardStrings.aiSortedTagRisk,
+                  MissionDashboardStrings.aiSortedTagOverdue,
+                  MissionDashboardStrings.aiSortedTagCce,
+                ];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 0),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.16),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Icon(Icons.auto_awesome, size: 12, color: Colors.white),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      isLoading
-                          ? 'AI sorted your visits overnight'
-                          : MissionDashboardStrings.aiSortedVisits(count),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        height: 1.2,
+                      gradient: const LinearGradient(
+                        colors: [AppColors.navy, AppColors.navyMid],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.navy.withValues(alpha: 0.18),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 22,
+                              height: 22,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.16),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Icon(Icons.auto_awesome,
+                                  size: 12, color: Colors.white),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                isLoading
+                                    ? 'AI sorted your visits overnight'
+                                    : MissionDashboardStrings.aiSortedVisits(
+                                        count),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                  height: 1.2,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: tags
+                              .map(
+                                (t) => Container(
+                                  margin: const EdgeInsets.only(right: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 7, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        Colors.white.withValues(alpha: 0.14),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                        color: Colors.white
+                                            .withValues(alpha: 0.18)),
+                                  ),
+                                  child: Text(
+                                    t,
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: tags
-                    .map(
-                      (t) => Container(
-                        margin: const EdgeInsets.only(right: 6),
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
-                        ),
-                        child: Text(
-                          t,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    )
-                    .toList(),
-              ),
-            ],
-          ),
-        );
-      },
+                );
+              },
+            )
+          : const SizedBox.shrink(),
     );
   }
 }
