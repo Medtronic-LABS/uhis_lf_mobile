@@ -1469,6 +1469,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       nextActions: actions,
       counselling: counselling,
       followUp: followUp,
+      whatsappSummary: _ruleBasedWhatsAppMessage(),
       referralRecommendation: widget.referralRecommended
           ? const NabaReferralRecommendation(
               required_: true,
@@ -1478,6 +1479,102 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             )
           : null,
     );
+  }
+
+  String _ruleBasedWhatsAppMessage() {
+    final progs = widget.confirmedProgrammes;
+    final hasAnc = progs.contains(Programme.anc);
+    final hasNcd = progs.contains(Programme.ncd);
+    final hasPnc = progs.contains(Programme.pnc);
+    final hasImci = progs.contains(Programme.imci);
+    final hasTb = progs.contains(Programme.tb);
+
+    final buf = StringBuffer();
+    buf.writeln('Hello! Your health worker visited you today.');
+
+    if (hasAnc) {
+      final gw = widget.gestationalWeeks;
+      buf.writeln();
+      buf.writeln('*Pregnancy (ANC) visit completed.*');
+      if (gw != null) buf.writeln('Gestational age: $gw weeks.');
+      buf.writeln();
+      buf.writeln('Reminders:');
+      buf.writeln('• Take iron-folic acid every day');
+      buf.writeln('• Eat well: vegetables, fish, eggs, lentils');
+      buf.writeln('• Sleep under a bednet every night');
+      buf.writeln('• Plan delivery at a health facility');
+      buf.writeln('• Go to facility immediately for: heavy bleeding, severe headache, blurred vision, no fetal movement, swollen hands/feet');
+      buf.writeln();
+      buf.writeln('*Next ANC visit: in 4 weeks.*');
+    }
+
+    if (hasNcd) {
+      buf.writeln();
+      buf.writeln('*BP/Diabetes (NCD) visit completed.*');
+      buf.writeln();
+      buf.writeln('Reminders:');
+      buf.writeln('• Take all medicines every day — never skip');
+      buf.writeln('• Reduce salt; avoid processed food');
+      buf.writeln('• Walk 30 minutes daily');
+      buf.writeln('• Avoid tobacco and alcohol');
+      buf.writeln('• Go to facility immediately for: one-sided weakness, sudden severe headache, or chest pain');
+      buf.writeln();
+      buf.writeln('*Next visit: in 4 weeks.*');
+    }
+
+    if (hasPnc) {
+      buf.writeln();
+      buf.writeln('*Post-natal care (PNC) visit completed.*');
+      buf.writeln();
+      buf.writeln('Reminders:');
+      buf.writeln('• Breastfeed exclusively for 6 months — no water or other food');
+      buf.writeln('• Keep baby warm; keep cord stump clean and dry');
+      buf.writeln('• Eat well to support breast milk');
+      buf.writeln('• Seek care immediately for: heavy bleeding, fever, foul discharge, or baby not feeding');
+      buf.writeln();
+      buf.writeln('*Next PNC visit: in 7 days.*');
+    }
+
+    if (hasImci) {
+      buf.writeln();
+      buf.writeln('*Child health (IMCI) visit completed.*');
+      buf.writeln();
+      buf.writeln('Reminders:');
+      buf.writeln('• Continue feeding normally during illness');
+      buf.writeln('• Give ORS often if child has diarrhoea');
+      buf.writeln('• Return immediately if child cannot drink, has convulsions, or is very sleepy');
+      buf.writeln();
+      buf.writeln('*Follow-up visit: in 2 days.*');
+    }
+
+    if (hasTb) {
+      buf.writeln();
+      buf.writeln('*TB treatment follow-up visit completed.*');
+      buf.writeln();
+      buf.writeln('Reminders:');
+      buf.writeln('• Take TB medicines every day — stopping causes drug resistance');
+      buf.writeln('• Cover mouth when coughing; keep rooms ventilated');
+      buf.writeln('• All household members should be screened for TB');
+      buf.writeln();
+      buf.writeln('*Next TB check: in 2 weeks.*');
+    }
+
+    if (!hasAnc && !hasNcd && !hasPnc && !hasImci && !hasTb) {
+      buf.writeln();
+      buf.writeln('*Routine health visit completed.*');
+      buf.writeln('Continue your medications and attend your next scheduled visit.');
+      buf.writeln();
+      buf.writeln('*Next visit: in 4 weeks.*');
+    }
+
+    if (widget.referralRecommended) {
+      buf.writeln();
+      buf.writeln('⚠️ *Please go to the Upazila Health Complex today for further care.*');
+    }
+
+    buf.writeln();
+    buf.write('Contact your health worker if your condition worsens.');
+    return buf.toString().trim();
   }
 
   static String _programmeSummaryTitle(Programme p) => switch (p) {
