@@ -39,7 +39,6 @@ import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
 import 'programme_selection/programme_selection_screen.dart';
 import 'triage/symptom_picker_screen.dart';
-import 'household_followup_screen.dart';
 import 'visit_form_screen.dart';
 
 /// Single-route 3-step visit flow wrapper.
@@ -1287,43 +1286,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     if (_accepted) return;
     setState(() => _accepted = true);
     if (!mounted) return;
-
-    // Prefer householdId from widget (passed via navigation extra).
-    // If null (e.g. visit started from a screen that didn't set it), fall back
-    // to a DB lookup on the patient row — same data, different code path.
-    String? hid = widget.householdId;
-    if ((hid == null || hid.isEmpty) && mounted) {
-      try {
-        final patient =
-            await context.read<PatientDao>().byId(widget.patientId);
-        hid = patient?.householdId;
-        debugPrint(
-          '[Step3] householdId from widget=${widget.householdId} '
-          'DB fallback=$hid patientId=${widget.patientId}',
-        );
-      } on Object catch (e) {
-        debugPrint('[Step3] householdId DB lookup failed: $e');
-      }
-    }
-
-    if (!mounted) return;
-    if (hid != null && hid.isNotEmpty) {
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => HouseholdFollowUpScreen(
-            householdId: hid!,
-            excludePatientId: widget.patientId,
-            onDone: () => context.go(_returnPath),
-            onViewPatient: (patientId) => context.push('/patients/$patientId'),
-          ),
-        ),
-      );
-    } else {
-      debugPrint(
-        '[Step3] No householdId for patient ${widget.patientId} — skipping follow-up screen',
-      );
-      context.go(_returnPath);
-    }
+    context.go(_returnPath);
   }
 
   @override
