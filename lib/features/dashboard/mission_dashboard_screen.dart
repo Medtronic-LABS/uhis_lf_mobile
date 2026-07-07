@@ -1221,64 +1221,60 @@ class _TodaysVisitsHeader extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  MissionDashboardStrings.todaysVisits(dateLabel),
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
-                ),
-                if (queueFuture != null)
-                  FutureBuilder<List<MissionQueueItem>>(
-                    future: queueFuture,
-                    builder: (context, snap) {
-                      if (snap.connectionState == ConnectionState.waiting) {
-                        return const SizedBox.shrink();
-                      }
-                      final queue = snap.data ?? const <MissionQueueItem>[];
-                      final count = queue.length;
-                      final villageCount = queue
-                          .map((i) => i.village)
-                          .whereType<String>()
-                          .where((v) => v.trim().isNotEmpty)
-                          .toSet()
-                          .length;
-                      return Text(
-                        '$count visits · ${MissionDashboardStrings.visitsTodaySubline(villageCount)}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: tokens.brandNavy,
-                          height: 1.4,
-                        ),
-                      );
-                    },
-                  ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: tokens.aiSurfaceStart,
-              borderRadius: BorderRadius.circular(8),
-            ),
             child: Text(
-              MissionDashboardStrings.aiSortedBadge,
+              MissionDashboardStrings.todaysVisits(dateLabel),
               style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: tokens.aiPurple,
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
           ),
+          if (queueFuture != null)
+            FutureBuilder<List<MissionQueueItem>>(
+              future: queueFuture,
+              builder: (context, snap) {
+                final count = snap.data?.length ?? 0;
+                final loading = snap.connectionState == ConnectionState.waiting;
+                final label = loading
+                    ? MissionDashboardStrings.aiSortedBadge
+                    : '${MissionDashboardStrings.aiSortedBadge} $count visits today';
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: tokens.aiSurfaceStart,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: tokens.aiPurple,
+                    ),
+                  ),
+                );
+              },
+            )
+          else
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: tokens.aiSurfaceStart,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                MissionDashboardStrings.aiSortedBadge,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: tokens.aiPurple,
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -1615,49 +1611,30 @@ class _VisitFilterPanel extends StatelessWidget {
           const SizedBox(height: 10),
         ],
 
-        // ── Row 2: filter label + clear ───────────────────────────────────
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Row(
-            children: [
-              Text(
-                MissionDashboardStrings.filterByNeed,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                '(${MissionDashboardStrings.filterByNeedOptional})',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w400,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const Spacer(),
-              if (selectedNeeds.isNotEmpty || selectedProgrammes.isNotEmpty)
-                Semantics(
-                  label: 'Clear all filters',
-                  button: true,
-                  child: GestureDetector(
-                    key: const Key('dashboard_filter_clear_needs_tap'),
-                    onTap: onClearNeeds,
-                    child: Text(
-                      MissionDashboardStrings.clearNeedFilters,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
+        // ── Row 2: clear filters (only when active) ───────────────────────
+        if (selectedNeeds.isNotEmpty || selectedProgrammes.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Semantics(
+                label: 'Clear all filters',
+                button: true,
+                child: GestureDetector(
+                  key: const Key('dashboard_filter_clear_needs_tap'),
+                  onTap: onClearNeeds,
+                  child: Text(
+                    MissionDashboardStrings.clearNeedFilters,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                 ),
-            ],
+              ),
+            ),
           ),
-        ),
         // ── Row 3: category bubbles ──────────────────────────────────────────
         SizedBox(
           height: 88,
