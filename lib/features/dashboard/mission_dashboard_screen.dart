@@ -63,8 +63,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // Mission data futures consumed by the HTML dashboard composition.
   Future<List<MissionQueueItem>>? _queueFuture;
-  Future<ReferralSummary>? _referralSummaryFuture;
-  
+
 
   // Cached reference to mission repository for change listening.
   MissionDashboardRepository? _missionRepo;
@@ -206,7 +205,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       debugPrint('[Dashboard] Loading mission data, version=$_refreshVersion');
       // Load completed patient IDs and filter queue to exclude them
       _queueFuture = _loadFilteredQueue(missionRepo, encounterDao);
-      _referralSummaryFuture = missionRepo.loadReferralSummary();
     });
   }
   
@@ -551,7 +549,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _DashboardHeader(
               greeting: _greeting(),
               locationLine: _locationLine(),
-              onNotifications: () => context.push('/referrals'),
               onPerformance: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
                   builder: (_) => const SkPerformanceScreen(),
@@ -565,17 +562,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(14, 12, 14, 100),
                   children: [
-                    _AiSortedInfoCard(
-                      key: ValueKey('ai_sorted_$_refreshVersion'),
-                      queueFuture: _queueFuture,
-                    ),
-                    const SizedBox(height: 10),
                     _DashboardStatsRow(
                       key: ValueKey('stats_$_refreshVersion'),
                       queueFuture: _queueFuture,
-                      referralFuture: _referralSummaryFuture,
                       onTapVisits: _navigateToFirstQueueItem,
-                      onTapReferrals: () => context.push('/referrals'),
+                    ),
+                    const SizedBox(height: 8),
+                    _ReferralAlertBanner(
+                      key: ValueKey('referral_banner_$_refreshVersion'),
+                      onTap: () => context.push('/referrals'),
                     ),
                     const SizedBox(height: 14),
                     _VisitFilterPanel(
@@ -963,95 +958,10 @@ class _SettingsMenu extends StatelessWidget {
   }
 }
 
-/// Notification bell button for referrals in the AppBar.
-class _ReferralNotificationButton extends StatefulWidget {
-  const _ReferralNotificationButton({required this.onTap});
-  final VoidCallback onTap;
-
-  @override
-  State<_ReferralNotificationButton> createState() =>
-      _ReferralNotificationButtonState();
-}
-
-class _ReferralNotificationButtonState
-    extends State<_ReferralNotificationButton> {
-  Future<({int critical, int active})>? _future;
-  ReferralRepository? _repo;
-  bool _listenerAdded = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _repo = context.read<ReferralRepository>();
-    if (!_listenerAdded) {
-      _listenerAdded = true;
-      _future = _repo!.counts();
-      _repo!.changes.addListener(_onChanges);
-    }
-  }
-
-  @override
-  void dispose() {
-    _repo?.changes.removeListener(_onChanges);
-    super.dispose();
-  }
-
-  void _onChanges() {
-    if (!mounted) return;
-    _reload();
-  }
-
-  void _reload() {
-    if (!mounted) return;
-    final repo = _repo;
-    if (repo == null) return;
-    final future = repo.counts();
-    setState(() {
-      _future = future;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return FutureBuilder<({int critical, int active})>(
-      future: _future,
-      builder: (context, snap) {
-        final critical = snap.data?.critical ?? 0;
-        final active = snap.data?.active ?? 0;
-        final total = critical + active;
-        final hasUrgent = critical > 0;
-        return IconButton(
-          tooltip: ReferralStrings.dashboardTitle,
-          onPressed: widget.onTap,
-          icon: Badge(
-            isLabelVisible: total > 0,
-            offset: const Offset(2, -2),
-            label: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: Text(
-                total > 99 ? '99+' : total.toString(),
-                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
-              ),
-            ),
-            backgroundColor: hasUrgent ? scheme.error : scheme.primary,
-            child: Icon(
-              hasUrgent
-                  ? Icons.notification_important
-                  : Icons.notifications_outlined,
-              color: Colors.white,
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // HTML-composition widgets
-// Match `Leapfrog .html` dashboard: navy header, AI ribbon, two-stat row,
-// "Today's visits" priority-ordered patient cards with colored left border.
+// Match `Leapfrog .html` dashboard: navy header, stat card, referral banner,
+// village tabs, category bubbles, priority-ordered patient cards.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Pink "Enroll new" compact pill FAB — Apon Sushashthya V1 §2.1.
@@ -1103,14 +1013,12 @@ class _DashboardHeader extends StatelessWidget {
   const _DashboardHeader({
     required this.greeting,
     required this.locationLine,
-    required this.onNotifications,
     required this.onPerformance,
     required this.settingsMenu,
   });
 
   final String greeting;
   final String? locationLine;
-  final VoidCallback onNotifications;
   final VoidCallback onPerformance;
   final Widget settingsMenu;
 
@@ -1163,7 +1071,6 @@ class _DashboardHeader extends StatelessWidget {
                   ],
                 ),
               ),
-              _ReferralNotificationButton(onTap: onNotifications),
               IconButton(
                 icon: const Icon(
                   Icons.leaderboard_rounded,
@@ -1188,73 +1095,155 @@ class _DashboardStatsRow extends StatelessWidget {
   const _DashboardStatsRow({
     super.key,
     required this.queueFuture,
-    required this.referralFuture,
     required this.onTapVisits,
-    required this.onTapReferrals,
   });
 
   final Future<List<MissionQueueItem>>? queueFuture;
-  final Future<ReferralSummary>? referralFuture;
   final VoidCallback onTapVisits;
-  final VoidCallback onTapReferrals;
 
   @override
   Widget build(BuildContext context) {
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-        Expanded(
-          child: FutureBuilder<List<MissionQueueItem>>(
-            future: queueFuture,
-            builder: (context, snap) {
-              final isLoading = snap.connectionState == ConnectionState.waiting;
-              final queue = snap.data ?? const <MissionQueueItem>[];
-              final count = queue.length;
-              final villageCount = queue
-                  .map((i) => i.village)
-                  .whereType<String>()
-                  .where((v) => v.trim().isNotEmpty)
-                  .toSet()
-                  .length;
-              return _DashboardStatCard(
-                value: '$count',
-                label: MissionDashboardStrings.visitsToday,
-                accentVariant: _DashboardStatVariant.navy,
-                subline: isLoading
-                    ? 'Loading...'
-                    : MissionDashboardStrings.visitsTodaySubline(villageCount),
-                onTap: onTapVisits,
-                isLoading: isLoading,
-              );
-            },
+    return FutureBuilder<List<MissionQueueItem>>(
+      future: queueFuture,
+      builder: (context, snap) {
+        final isLoading = snap.connectionState == ConnectionState.waiting;
+        final queue = snap.data ?? const <MissionQueueItem>[];
+        final count = queue.length;
+        final villageCount = queue
+            .map((i) => i.village)
+            .whereType<String>()
+            .where((v) => v.trim().isNotEmpty)
+            .toSet()
+            .length;
+        return _DashboardStatCard(
+          value: '$count',
+          label: MissionDashboardStrings.visitsToday,
+          accentVariant: _DashboardStatVariant.navy,
+          subline: isLoading
+              ? 'Loading...'
+              : MissionDashboardStrings.visitsTodaySubline(villageCount),
+          onTap: onTapVisits,
+          isLoading: isLoading,
+        );
+      },
+    );
+  }
+}
+
+class _ReferralAlertBanner extends StatefulWidget {
+  const _ReferralAlertBanner({super.key, required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  State<_ReferralAlertBanner> createState() => _ReferralAlertBannerState();
+}
+
+class _ReferralAlertBannerState extends State<_ReferralAlertBanner> {
+  Future<({int critical, int active})>? _future;
+  ReferralRepository? _repo;
+  bool _listenerAdded = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _repo = context.read<ReferralRepository>();
+    if (!_listenerAdded) {
+      _listenerAdded = true;
+      _future = _repo!.counts();
+      _repo!.changes.addListener(_onChanges);
+    }
+  }
+
+  @override
+  void dispose() {
+    _repo?.changes.removeListener(_onChanges);
+    super.dispose();
+  }
+
+  void _onChanges() {
+    if (!mounted) return;
+    setState(() { _future = _repo!.counts(); });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<({int critical, int active})>(
+      future: _future,
+      builder: (context, snap) {
+        final critical = snap.data?.critical ?? 0;
+        final active = snap.data?.active ?? 0;
+        final total = critical + active;
+        if (total == 0) return const SizedBox.shrink();
+        return Semantics(
+          button: true,
+          label: 'Referral alerts: $total',
+          child: Material(
+            color: const Color(0xFFDC2626),
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              key: const Key('dashboard_referral_banner_tap'),
+              onTap: widget.onTap,
+              borderRadius: BorderRadius.circular(12),
+              splashColor: Colors.white.withValues(alpha: 0.15),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                child: Row(
+                  children: [
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Container(
+                          width: 28,
+                          height: 28,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white24,
+                          ),
+                          child: Center(
+                            child: Text(
+                              total > 99 ? '99+' : '$total',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (critical > 0)
+                          Positioned(
+                            top: -2,
+                            right: -2,
+                            child: Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Color(0xFFFBBF24),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        MissionDashboardStrings.referralAlertsLabel,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const Icon(Icons.chevron_right_rounded, color: Colors.white70, size: 20),
+                  ],
+                ),
+              ),
+            ),
           ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: FutureBuilder<ReferralSummary>(
-            future: referralFuture,
-            builder: (context, snap) {
-              final isLoading = snap.connectionState == ConnectionState.waiting;
-              final s = snap.data ?? ReferralSummary.empty;
-              final alerts = s.breached + s.awaitingReview;
-              return _DashboardStatCard(
-                value: '$alerts',
-                label: MissionDashboardStrings.referralAlertsLabel,
-                accentVariant: _DashboardStatVariant.pink,
-                subline: isLoading
-                    ? 'Loading...'
-                    : MissionDashboardStrings.tapToFollowUp,
-                footnote: MissionDashboardStrings.referralCceComingSoon,
-                showPulse: s.hasBreaches,
-                onTap: onTapReferrals,
-                isLoading: isLoading,
-              );
-            },
-          ),
-        ),
-      ],
-    ),
+        );
+      },
     );
   }
 }
@@ -1268,8 +1257,6 @@ class _DashboardStatCard extends StatelessWidget {
     required this.accentVariant,
     required this.subline,
     required this.onTap,
-    this.footnote,
-    this.showPulse = false,
     this.isLoading = false,
   });
 
@@ -1277,8 +1264,6 @@ class _DashboardStatCard extends StatelessWidget {
   final String label;
   final _DashboardStatVariant accentVariant;
   final String subline;
-  final String? footnote;
-  final bool showPulse;
   final bool isLoading;
   final VoidCallback onTap;
 
@@ -1327,24 +1312,6 @@ class _DashboardStatCard extends StatelessWidget {
                               height: 1,
                             ),
                           ),
-                          if (showPulse) ...[
-                            const SizedBox(width: 5),
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: accent,
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: accent.withValues(alpha: 0.4),
-                                    blurRadius: 5,
-                                    spreadRadius: 1,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
                         ],
                       ),
                     const SizedBox(height: 3),
@@ -1367,18 +1334,6 @@ class _DashboardStatCard extends StatelessWidget {
                         height: 1.2,
                       ),
                     ),
-                    if (footnote != null) ...[
-                      const SizedBox(height: 1),
-                      Text(
-                        footnote!,
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w500,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          height: 1.2,
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),
