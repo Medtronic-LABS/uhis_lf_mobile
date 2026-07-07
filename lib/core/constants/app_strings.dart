@@ -3107,6 +3107,7 @@ abstract final class VisitFlowStrings {
   static const String step2TitleSuffix = 'form';
   static const String step3Title = 'Summary';
   static const String alsoCoverWhileHere = 'ALSO COVER WHILE YOU\'RE HERE';
+  static const String aiCheckedFindings = 'AI checked all findings';
 
   static const String stepIndicator = 'Step %1 of 3';
   static String stepIndicatorFor(int oneBased) =>

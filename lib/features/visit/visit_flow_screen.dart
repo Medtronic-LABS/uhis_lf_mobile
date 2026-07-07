@@ -1497,8 +1497,13 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-              // ── Household "also cover while you're here" strip ────────
+              // ── AI checked header + household strip ───────────────────
               if (_householdMembers != null && _householdMembers!.length > 1) ...[
+                _AiCheckedHeader(
+                  programmes: widget.confirmedProgrammes,
+                  headerColor: headerColor,
+                ),
+                const SizedBox(height: 10),
                 _HouseholdMemberStrip(
                   members: _householdMembers!,
                   onTapMember: (patientId) =>
@@ -2946,29 +2951,47 @@ class _HouseholdMemberStrip extends StatelessWidget {
             scrollDirection: Axis.horizontal,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: members.map((m) {
-                if (m.isCurrentPatient) {
-                  return _MemberAvatar(
-                    member: m,
-                    ringColor: AppColors.navy,
-                    ringWidth: 3.0,
-                    labelText: 'Viewing',
-                    labelColor: AppColors.navy,
-                    labelBold: true,
-                    onTap: null,
-                  );
-                }
-                final (ring, labelColor, visitLabel) = _style(m.primaryProgramme);
-                return _MemberAvatar(
-                  member: m,
-                  ringColor: ring,
-                  ringWidth: 1.5,
-                  labelText: visitLabel,
-                  labelColor: labelColor,
-                  labelBold: false,
-                  onTap: () => onTapMember(m.patientId),
-                );
-              }).toList(),
+              children: [
+                for (int i = 0; i < members.length; i++) ...[
+                  if (i == 1)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 14, top: 4),
+                      child: SizedBox(
+                        height: 72,
+                        child: VerticalDivider(
+                          width: 1,
+                          thickness: 1,
+                          color: const Color(0xFFE2E8F0),
+                        ),
+                      ),
+                    ),
+                  if (members[i].isCurrentPatient)
+                    _MemberAvatar(
+                      member: members[i],
+                      ringColor: AppColors.navy,
+                      ringWidth: 3.0,
+                      labelText: 'Viewing',
+                      labelColor: AppColors.navy,
+                      labelBold: true,
+                      onTap: null,
+                    )
+                  else ...[
+                    Builder(builder: (context) {
+                      final (ring, labelColor, visitLabel) =
+                          _style(members[i].primaryProgramme);
+                      return _MemberAvatar(
+                        member: members[i],
+                        ringColor: ring,
+                        ringWidth: 1.5,
+                        labelText: visitLabel,
+                        labelColor: labelColor,
+                        labelBold: false,
+                        onTap: () => onTapMember(members[i].patientId),
+                      );
+                    }),
+                  ],
+                ],
+              ],
             ),
           ),
         ],
@@ -3071,6 +3094,46 @@ class _MemberAvatar extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── AI checked findings header ────────────────────────────────────────────────
+
+class _AiCheckedHeader extends StatelessWidget {
+  const _AiCheckedHeader({
+    required this.programmes,
+    required this.headerColor,
+  });
+
+  final Set<Programme> programmes;
+  final Color headerColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final labels = programmes
+        .where((p) => p != Programme.unknown)
+        .map((p) => p.displayName)
+        .join(' + ');
+    final text = labels.isEmpty
+        ? VisitFlowStrings.aiCheckedFindings
+        : '${VisitFlowStrings.aiCheckedFindings} · $labels';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: headerColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+          color: headerColor,
+          height: 1.3,
         ),
       ),
     );
