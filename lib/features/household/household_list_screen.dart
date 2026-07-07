@@ -10,6 +10,7 @@ import '../../core/db/member_dao.dart';
 import '../../core/models/dashboard_tier.dart';
 import '../../core/models/mission_queue_item.dart';
 import '../../core/widgets/location_filter_sheet.dart';
+import '../../core/widgets/patient_filter_panel.dart';
 import '../dashboard/dashboard_repository.dart';
 import '../dashboard/mission_dashboard_repository.dart';
 import '../visit/widgets/mission_queue_card.dart';
@@ -79,6 +80,10 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
   List<({String id, String name})> _inlineVillages = const [];
   String? _selectedInlineVillageId;
 
+  // Need / programme filter state (derived from queue items)
+  Set<NeedFilter> _selectedNeeds = const {};
+  Set<NeedFilter> _availableNeeds = const {};
+
   @override
   void initState() {
     super.initState();
@@ -108,9 +113,11 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
           queueMap[item.patientId!] = item;
         }
       }
+      final availableNeeds = computeAvailableNeeds(queue);
       setState(() {
         _patientTiers = tiers;
         _queueItems = queueMap;
+        _availableNeeds = availableNeeds;
       });
     } catch (_) {}
   }
@@ -510,7 +517,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
 
     return Column(
       children: [
-        _buildInlineVillageChipRow(scheme),
+        _buildPatientFilterPanel(),
         Container(
           padding: const EdgeInsets.all(16),
           color: scheme.surfaceContainerHighest.withValues(alpha: 0.3),
@@ -588,6 +595,15 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
     );
   }
 
+  bool _needMatchesMember(_MemberInfo m) {
+    if (_selectedNeeds.isEmpty) return true;
+    final pid = m.patientId ?? m.id;
+    if (pid == null) return false;
+    final qItem = _queueItems[pid];
+    if (qItem == null) return false;
+    return _selectedNeeds.any((need) => need.matches(qItem));
+  }
+
   Widget _buildMembersList(BuildContext context, List<_HouseholdItem> items) {
     final scheme = Theme.of(context).colorScheme;
     // Flatten all members from all households
@@ -611,7 +627,12 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
       }).toList();
     }
 
-    // Counts derived AFTER location/tier filters so chips always match the list.
+    // Apply need filter (matches queue items; members without queue items shown when no filter active).
+    if (_selectedNeeds.isNotEmpty) {
+      villageFiltered = villageFiltered.where(_needMatchesMember).toList();
+    }
+
+    // Counts derived AFTER location/tier/need filters so chips always match the list.
     final allMembersCount = villageFiltered.length;
     final myPatientsCount = villageFiltered
         .where((m) => _myPatientIds.contains(m.id) || _myPatientIds.contains(m.patientId))
@@ -640,7 +661,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
         children: [
           _buildSearchBar(),
           _buildTierChipRow(),
-          _buildInlineVillageChipRow(scheme),
+          _buildPatientFilterPanel(),
           Expanded(
             child: ListView.separated(
               controller: _scrollController,
@@ -665,7 +686,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
       children: [
         _buildSearchBar(),
         _buildTierChipRow(),
-        _buildInlineVillageChipRow(scheme),
+        _buildPatientFilterPanel(),
         _buildFilterToggle(scheme, allCount: allMembersCount, myCount: myPatientsCount),
         if (members.isNotEmpty)
           Padding(
@@ -767,50 +788,34 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
     );
   }
 
-  /// Inline village chip row — "WHICH VILLAGE ARE YOU VISITING?"
-  /// Mirrors the dashboard pattern. Hidden when ≤1 village in local data.
-  Widget _buildInlineVillageChipRow(ColorScheme scheme) {
-    if (_inlineVillages.isEmpty) return const SizedBox.shrink();
-    return Container(
-      color: scheme.surface,
-      padding: const EdgeInsets.only(left: 12, right: 12, top: 8, bottom: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            MissionDashboardStrings.whichVillageVisiting,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: scheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 6),
-          SizedBox(
-            height: 32,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                _InlineVillageChip(
-                  label: MissionDashboardStrings.allVillages,
-                  isActive: _selectedInlineVillageId == null,
-                  navyColor: AppColors.navy,
-                  onTap: () => setState(() => _selectedInlineVillageId = null),
-                ),
-                ..._inlineVillages.map((v) => _InlineVillageChip(
-                      label: v.name,
-                      isActive: _selectedInlineVillageId == v.id,
-                      navyColor: AppColors.navy,
-                      onTap: () => setState(() {
-                        _selectedInlineVillageId =
-                            _selectedInlineVillageId == v.id ? null : v.id;
-                      }),
-                    )),
-              ],
-            ),
-          ),
-          const SizedBox(height: 4),
-        ],
+  /// Dashboard-style filter panel: village tabs + need category bubbles.
+  Widget _buildPatientFilterPanel() {
+    if (_inlineVillages.isEmpty && _availableNeeds.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      child: PatientFilterPanel(
+        villages: _inlineVillages
+            .map((v) => (value: v.id, label: v.name))
+            .toList(),
+        selectedVillageValue: _selectedInlineVillageId,
+        onVillageSelected: (id) =>
+            setState(() => _selectedInlineVillageId = id),
+        availableNeeds: _availableNeeds,
+        selectedNeeds: _selectedNeeds,
+        onNeedToggled: (need) {
+          setState(() {
+            final updated = Set<NeedFilter>.from(_selectedNeeds);
+            if (updated.contains(need)) {
+              updated.remove(need);
+            } else {
+              updated.add(need);
+            }
+            _selectedNeeds = updated;
+          });
+        },
+        onClearNeeds: () => setState(() => _selectedNeeds = const {}),
       ),
     );
   }
@@ -1565,56 +1570,6 @@ class _MemberInfo {
   }
 }
 
-class _InlineVillageChip extends StatelessWidget {
-  const _InlineVillageChip({
-    required this.label,
-    required this.isActive,
-    required this.navyColor,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool isActive;
-  final Color navyColor;
-  final VoidCallback onTap;
-
-  static const _activeUnderline = Color(0xFFEC4899); // pink — matches dashboard VillageTab
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
-    return Padding(
-      padding: const EdgeInsets.only(right: 4),
-      child: Semantics(
-        label: 'Filter by village: $label',
-        button: true,
-        selected: isActive,
-        child: GestureDetector(
-          key: ValueKey('household_inline_village_$label'),
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: isActive
-                    ? const BorderSide(color: _activeUnderline, width: 2)
-                    : BorderSide.none,
-              ),
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                color: isActive ? tokens.brandNavy : tokens.textMuted,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 // _LocationFilterSheet and _FilterDropdown have been extracted to
 // lib/core/widgets/location_filter_sheet.dart as LocationFilterSheet
