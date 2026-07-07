@@ -294,14 +294,16 @@ class _UhisNextAppState extends State<UhisNextApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
-      _lockDebounce?.cancel();
-      _lockDebounce = null;
-      widget.authState.lock();
+      // Lock after 7 seconds — lets the SK glance at notifications or switch
+      // apps briefly without being forced to re-authenticate every time.
+      _lockDebounce ??= Timer(const Duration(seconds: 7), () {
+        _lockDebounce = null;
+        widget.authState.lock();
+      });
     } else if (state == AppLifecycleState.inactive) {
-      // Lock after a short delay — catches platforms where `paused` is
-      // unreliable. Cancelled immediately if the app resumes (e.g. notification
-      // shade pulled down and released).
-      _lockDebounce ??= Timer(const Duration(milliseconds: 600), () {
+      // Inactive is transient (notification shade, app switcher). Only arm the
+      // timer if one isn't already running from a paused state.
+      _lockDebounce ??= Timer(const Duration(seconds: 7), () {
         _lockDebounce = null;
         widget.authState.lock();
       });
