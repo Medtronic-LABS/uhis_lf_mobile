@@ -563,6 +563,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: RefreshIndicator(
                 onRefresh: _refresh,
                 child: ListView(
+                  physics: const ClampingScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(14, 12, 14, 100),
                   children: [
                     _VisitFilterPanel(

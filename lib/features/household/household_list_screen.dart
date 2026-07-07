@@ -639,12 +639,12 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
       return Column(
         children: [
           _buildSearchBar(),
-          if (widget.initialTier != null || _selectedTier != null)
-            _buildTierChipRow(),
+          _buildTierChipRow(),
           _buildInlineVillageChipRow(scheme),
           Expanded(
             child: ListView.separated(
               controller: _scrollController,
+              physics: const ClampingScrollPhysics(),
               padding: const EdgeInsets.symmetric(vertical: 8),
               itemCount: items.length,
               separatorBuilder: (context, idx) => const SizedBox(height: 4),
@@ -664,8 +664,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
     return Column(
       children: [
         _buildSearchBar(),
-        if (widget.initialTier != null || _selectedTier != null)
-          _buildTierChipRow(),
+        _buildTierChipRow(),
         _buildInlineVillageChipRow(scheme),
         _buildFilterToggle(scheme, allCount: allMembersCount, myCount: myPatientsCount),
         if (members.isNotEmpty)
@@ -705,6 +704,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
                 )
               : ListView.separated(
                   controller: _scrollController,
+                  physics: const ClampingScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
                   itemCount: members.length,
                   separatorBuilder: (context, idx) => const SizedBox(height: 6),
@@ -904,8 +904,7 @@ class _TierFilterChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
-    final urgency = Theme.of(context).extension<UrgencyTheme>()!;
-    final color = _tierColor(tier, urgency, tokens);
+    final color = _tierColor(tier, tokens);
     return Semantics(
       label: 'Filter by $label',
       button: true,
@@ -936,16 +935,16 @@ class _TierFilterChip extends StatelessWidget {
     );
   }
 
-  Color _tierColor(DashboardTier? t, UrgencyTheme urgency, LeapfrogColors tokens) {
+  Color _tierColor(DashboardTier? t, LeapfrogColors tokens) {
     if (t == null) return tokens.brandNavy;
     switch (t) {
       case DashboardTier.critical:
-      case DashboardTier.overdue:
-        return urgency.visitNow;
       case DashboardTier.dueToday:
-        return urgency.today;
+        return const Color(0xFF16A34A); // green — Now / Today
+      case DashboardTier.overdue:
+        return const Color(0xFFDC2626); // red — Overdue
       case DashboardTier.thisWeek:
-        return urgency.thisWeek;
+        return const Color(0xFFB45309); // amber — This week
       case DashboardTier.upcoming:
         return tokens.textMuted;
     }
@@ -1163,6 +1162,11 @@ class _PatientCard extends StatelessWidget {
         member.relation!.toLowerCase() != 'head' &&
         member.relation!.toLowerCase() != 'self';
 
+    // Accent: ANC/PNC=crimson, else=teal (matches MissionQueueCard._programmeColor)
+    final accentColor = isPregnant
+        ? const Color(0xFF9D174D)
+        : const Color(0xFF0F766E);
+
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(12),
@@ -1173,7 +1177,17 @@ class _PatientCard extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            boxShadow: AppShadows.card,
+            boxShadow: [
+              BoxShadow(
+                color: accentColor.withValues(alpha: 0.15),
+                offset: const Offset(-4, 0),
+                blurRadius: 10,
+              ),
+              ...AppShadows.card,
+            ],
+            border: Border(
+              left: BorderSide(color: accentColor, width: 4),
+            ),
             color: Colors.white,
           ),
           child: Row(
@@ -1564,10 +1578,13 @@ class _InlineVillageChip extends StatelessWidget {
   final Color navyColor;
   final VoidCallback onTap;
 
+  static const _activeUnderline = Color(0xFFEC4899); // pink — matches dashboard VillageTab
+
   @override
   Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     return Padding(
-      padding: const EdgeInsets.only(right: 6),
+      padding: const EdgeInsets.only(right: 4),
       child: Semantics(
         label: 'Filter by village: $label',
         button: true,
@@ -1576,20 +1593,20 @@ class _InlineVillageChip extends StatelessWidget {
           key: ValueKey('household_inline_village_$label'),
           onTap: onTap,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: isActive ? navyColor : Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: isActive ? navyColor : AppColors.border,
+              border: Border(
+                bottom: isActive
+                    ? const BorderSide(color: _activeUnderline, width: 2)
+                    : BorderSide.none,
               ),
             ),
             child: Text(
               label,
               style: TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: isActive ? Colors.white : Theme.of(context).colorScheme.onSurface,
+                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                color: isActive ? tokens.brandNavy : tokens.textMuted,
               ),
             ),
           ),

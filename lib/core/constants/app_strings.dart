@@ -2932,8 +2932,6 @@ abstract final class SymptomPickerStrings {
 
   // ── AI-driven symptom list (replaces the hardcoded cluster grid) ─────────
   static const String detectedSymptomsTitle = 'AI-Detected Symptoms';
-  static const String detectedSymptomsSubtitleEmpty =
-      'Tap the mic above to record the patient. AI-detected symptoms will appear here for you to review.';
   static const String detectedSymptomsSubtitleFilled =
       'Review each symptom. Tap × to remove anything incorrect, or add what is missing.';
   static const String addSymptomSearchHint = 'Search or type symptom…';

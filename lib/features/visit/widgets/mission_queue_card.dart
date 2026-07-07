@@ -197,17 +197,17 @@ class MissionQueueCard extends StatelessWidget {
   static Color _programmeColor(MissionQueueItem item) {
     if (item.programmes.contains(Programme.anc) ||
         item.programmes.contains(Programme.pnc)) {
-      return const Color(0xFF831843); // deep rose — pregnancy
+      return const Color(0xFF9D174D); // crimson rose — ANC/maternal
     }
     if (item.programmes.contains(Programme.imci) ||
         item.programmes.contains(Programme.epi)) {
-      return const Color(0xFF1B2B5E); // navy — child / immunisation
+      return const Color(0xFF1D4ED8); // blue — child / immunisation
     }
     if (item.programmes.contains(Programme.ncd)) {
-      return const Color(0xFF854F0B); // deep amber — NCD
+      return const Color(0xFFCA8A04); // amber — NCD
     }
     if (item.programmes.contains(Programme.tb)) return AppColors.aiPurple;
-    return const Color(0xFF6B7280); // grey — unenrolled / unknown
+    return const Color(0xFF0F766E); // teal — new registration / unenrolled
   }
 
   /// Tier border overrides programme color for urgent states (overdue / CCE).
@@ -228,13 +228,13 @@ class MissionQueueCard extends StatelessWidget {
   (String, Color) _statusDotStyle(DashboardTier tier, LeapfrogColors tokens) {
     switch (tier) {
       case DashboardTier.critical:
-        return (MissionDashboardStrings.statusPillForTier(tier), tokens.statusCritical);
-      case DashboardTier.overdue:
-        return (MissionDashboardStrings.statusPillForTier(tier), AppColors.statusWarning);
+        return (MissionDashboardStrings.statusPillForTier(tier), const Color(0xFF16A34A)); // green — Now
       case DashboardTier.dueToday:
-        return (MissionDashboardStrings.statusPillForTier(tier), tokens.brandNavy);
+        return (MissionDashboardStrings.statusPillForTier(tier), const Color(0xFF16A34A)); // green — Today
+      case DashboardTier.overdue:
+        return (MissionDashboardStrings.statusPillForTier(tier), const Color(0xFFDC2626)); // red — Overdue
       case DashboardTier.thisWeek:
-        return (MissionDashboardStrings.statusPillForTier(tier), tokens.textMuted);
+        return (MissionDashboardStrings.statusPillForTier(tier), const Color(0xFFB45309)); // amber — This week
       case DashboardTier.upcoming:
         return (MissionDashboardStrings.statusPillForTier(tier), tokens.textMuted);
     }
