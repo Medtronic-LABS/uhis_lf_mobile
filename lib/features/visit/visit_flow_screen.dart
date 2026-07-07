@@ -1497,13 +1497,6 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-              // ── Success header ────────────────────────────────────────
-              _ResultHeader(
-                programme: widget.primaryProgramme,
-                headerColor: headerColor,
-              ),
-              const SizedBox(height: 16),
-
               // ── Household "also cover while you're here" strip ────────
               if (_householdMembers != null && _householdMembers!.length > 1) ...[
                 _HouseholdMemberStrip(
@@ -1743,69 +1736,6 @@ class _SkeletonCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: color,
         borderRadius: BorderRadius.circular(AppRadius.card),
-      ),
-    );
-  }
-}
-
-class _ResultHeader extends StatelessWidget {
-  const _ResultHeader({
-    required this.programme,
-    required this.headerColor,
-  });
-  final Programme programme;
-  final Color headerColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        children: [
-          TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0.0, end: 1.0),
-            duration: const Duration(milliseconds: 550),
-            curve: Curves.elasticOut,
-            builder: (_, v, child) => Transform.scale(scale: v, child: child),
-            child: Container(
-              width: 52,
-              height: 52,
-              decoration: const BoxDecoration(
-                color: AppColors.statusSuccessSurface,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.check_rounded,
-                size: 28,
-                color: AppColors.statusSuccess,
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            VisitCompleteStrings.saved,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: AppColors.textPrimary,
-            ),
-          ),
-          if (programme != Programme.unknown) ...[
-            const SizedBox(height: 6),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-              decoration: BoxDecoration(
-                color: headerColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(AppRadius.pill),
-              ),
-              child: Text(
-                programme.name.toUpperCase(),
-                style: AppTextStyles.scorePill.copyWith(
-                  color: headerColor,
-                  letterSpacing: 0.8,
-                ),
-              ),
-            ),
-          ],
-        ],
       ),
     );
   }
@@ -3066,23 +2996,25 @@ class _MemberAvatar extends StatelessWidget {
   final bool labelBold;
   final VoidCallback? onTap;
 
-  static String _emoji(Programme p) {
+  static IconData _icon(Programme p) {
     switch (p) {
       case Programme.anc:
       case Programme.pnc:
-        return '🤰';
+        return Icons.pregnant_woman_rounded;
       case Programme.imci:
-        return '👶';
+        return Icons.child_care_rounded;
       case Programme.ncd:
-        return '🫀';
+        return Icons.monitor_heart_outlined;
       case Programme.tb:
-        return '🫁';
+        return Icons.sick_outlined;
       case Programme.epi:
-        return '💉';
+        return Icons.vaccines_rounded;
       case Programme.nutrition:
-        return '🥗';
+        return Icons.restaurant_rounded;
+      case Programme.familyPlanning:
+        return Icons.family_restroom_rounded;
       default:
-        return '🏥';
+        return Icons.local_hospital_rounded;
     }
   }
 
@@ -3106,9 +3038,10 @@ class _MemberAvatar extends StatelessWidget {
                   border: Border.all(color: ringColor, width: ringWidth),
                 ),
                 child: Center(
-                  child: Text(
-                    _emoji(member.primaryProgramme),
-                    style: const TextStyle(fontSize: 24),
+                  child: Icon(
+                    _icon(member.primaryProgramme),
+                    size: 26,
+                    color: ringColor,
                   ),
                 ),
               ),
