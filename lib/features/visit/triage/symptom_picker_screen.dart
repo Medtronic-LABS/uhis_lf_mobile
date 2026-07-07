@@ -88,6 +88,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
 
   VisitBriefingResponse? _briefingData;
   bool _briefingLoading = true;
+  int? _ancVisitCount;
 
   @override
   void initState() {
@@ -277,6 +278,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         setState(() {
           _briefingData = data;
           _briefingLoading = false;
+          _ancVisitCount = visitsByVisit.length;
         });
       }
     } on Object {
@@ -422,6 +424,17 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           builder: (context, vm, _) {
             return CustomScrollView(
               slivers: [
+                // 0) ANC visit summary chip — only for ANC patients.
+                //    Spec §4.1 "AI Brief — Visit summary chip — Read-only".
+                if (_patientContext!.isPregnant)
+                  SliverToBoxAdapter(
+                    child: _AncVisitSummaryChip(
+                      patientName: widget.patientName,
+                      patientContext: _patientContext!,
+                      visitCount: _ancVisitCount,
+                    ),
+                  ),
+
                 // 1) Before You Knock (AI brief — collapsible card).
                 // 2) Sit with her / him — greet warmly (navy filled card).
                 // 3) "How is she feeling today?" heading.
@@ -523,6 +536,162 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     );
   }
 
+}
+
+// ── ANC Visit Summary Chip ────────────────────────────────────────────────────
+//
+// Spec §4.1: Read-only strip at the top of Step 1 for ANC patients.
+// Shows: patient name · ANC visit number · gestational week · parity · key trend.
+// Sits flush edge-to-edge so it reads as a contextual header, not a card.
+
+class _AncVisitSummaryChip extends StatelessWidget {
+  const _AncVisitSummaryChip({
+    required this.patientContext,
+    this.patientName,
+    this.visitCount,
+  });
+
+  final PatientContext patientContext;
+  final String? patientName;
+
+  /// Total completed visits for this patient — loaded from vitals history.
+  /// Null while the briefing fetch is in flight.
+  final int? visitCount;
+
+  String? get _keyTrend {
+    final facts = patientContext.pregnancyFacts;
+    if (patientContext.lastBpSystolic != null &&
+        patientContext.lastBpSystolic! >= 140) {
+      return ComposerStrings.ancSummaryBpElevated;
+    }
+    if (facts == null) return null;
+    if (facts.isNearTermAnc) return ComposerStrings.ancSummaryNearTerm;
+    if (facts.highRiskPregnantWoman) return ComposerStrings.ancSummaryHighRisk;
+    if (facts.hasGapsInAnc) return ComposerStrings.ancSummaryAncGap;
+    return null;
+  }
+
+  Color get _trendColor {
+    final facts = patientContext.pregnancyFacts;
+    if (patientContext.lastBpSystolic != null &&
+        patientContext.lastBpSystolic! >= 140) {
+      return AppColors.statusCritical;
+    }
+    if (facts?.isNearTermAnc == true) return AppColors.statusWarning;
+    if (facts?.highRiskPregnantWoman == true) return AppColors.statusCritical;
+    if (facts?.hasGapsInAnc == true) return AppColors.statusWarning;
+    return AppColors.textMuted;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ga = patientContext.gestationalWeeks;
+    final g = patientContext.gravida;
+    final p = patientContext.para;
+    final trend = _keyTrend;
+
+    return Container(
+      color: AppColors.ancSurface,
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      child: Row(
+        children: [
+          // ANC badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: AppColors.ancText,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              ComposerStrings.ancSummaryEyebrow,
+              style: const TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+                letterSpacing: 0.6,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Patient name
+          Expanded(
+            child: Text(
+              patientName ?? '',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.ancText,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Pill chips — GA · parity · visit number
+          Wrap(
+            spacing: 5,
+            children: [
+              if (ga != null)
+                _SummaryPill(
+                  label: '$ga ${ComposerStrings.ancSummaryGaUnit}',
+                  color: AppColors.ancText,
+                  surface: AppColors.ancBorder,
+                ),
+              if (g != null && p != null)
+                _SummaryPill(
+                  label: ComposerStrings.ancSummaryParity(g, p),
+                  color: AppColors.ancText,
+                  surface: AppColors.ancBorder,
+                ),
+              if (visitCount != null)
+                _SummaryPill(
+                  label: '${ComposerStrings.ancSummaryVisitPrefix}$visitCount',
+                  color: AppColors.ancText,
+                  surface: AppColors.ancBorder,
+                ),
+              if (trend != null)
+                _SummaryPill(
+                  label: trend,
+                  color: Colors.white,
+                  surface: _trendColor,
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryPill extends StatelessWidget {
+  const _SummaryPill({
+    required this.label,
+    required this.color,
+    required this.surface,
+  });
+
+  final String label;
+  final Color color;
+  final Color surface;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: surface,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
+      ),
+    );
+  }
 }
 
 // ── AI Briefing Section: 3 stacked cards ─────────────────────────────────────

@@ -2414,6 +2414,17 @@ abstract final class ComposerStrings {
   static const String axisLabel = 'Axis';
   static const String glassPrescriptionSummary = 'Prescription recorded';
 
+  // ── ANC visit summary chip (Step 1 — Before You Knock) ──────────────────────
+  static const String ancSummaryEyebrow = 'ANC VISIT';
+  static const String ancSummaryGaUnit = 'wks GA';
+  static const String ancSummaryVisitPrefix = '#';
+  static const String ancSummaryHighRisk = 'High-risk';
+  static const String ancSummaryNearTerm = 'Near-term';
+  static const String ancSummaryAncGap = 'ANC gap';
+  static const String ancSummaryBpElevated = 'BP elevated';
+  static const String ancSummaryParityFormat = 'G{g}P{p}';
+  static String ancSummaryParity(int g, int p) => 'G${g}P$p';
+
   // ── Compound-widget column sub-labels ────────────────────────────────────────
   static const String heightShort = 'Height';
   static const String weightShort = 'Weight';

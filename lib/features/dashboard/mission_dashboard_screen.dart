@@ -995,10 +995,25 @@ class _ReferralAlertBanner extends StatefulWidget {
   State<_ReferralAlertBanner> createState() => _ReferralAlertBannerState();
 }
 
-class _ReferralAlertBannerState extends State<_ReferralAlertBanner> {
+class _ReferralAlertBannerState extends State<_ReferralAlertBanner>
+    with SingleTickerProviderStateMixin {
   Future<({int critical, int active})>? _future;
   ReferralRepository? _repo;
   bool _listenerAdded = false;
+  late final AnimationController _pulseCtrl;
+  late final Animation<double> _pulseAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+    _pulseAnim = Tween<double>(begin: 0.4, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
+    );
+  }
 
   @override
   void didChangeDependencies() {
@@ -1013,6 +1028,7 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner> {
 
   @override
   void dispose() {
+    _pulseCtrl.dispose();
     _repo?.changes.removeListener(_onChanges);
     super.dispose();
   }
@@ -1069,12 +1085,18 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner> {
                           Positioned(
                             top: -2,
                             right: -2,
-                            child: Container(
-                              width: 6,
-                              height: 6,
-                              decoration: const BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Color(0xFFFEF08A),
+                            child: AnimatedBuilder(
+                              animation: _pulseAnim,
+                              builder: (_, __) => Opacity(
+                                opacity: _pulseAnim.value,
+                                child: Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Color(0xFFFEF08A),
+                                  ),
+                                ),
                               ),
                             ),
                           ),
