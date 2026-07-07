@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -562,12 +561,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(14, 12, 14, 100),
                   children: [
-                    _DashboardStatsRow(
-                      key: ValueKey('stats_$_refreshVersion'),
-                      queueFuture: _queueFuture,
-                      onTapVisits: _navigateToFirstQueueItem,
-                    ),
-                    const SizedBox(height: 8),
                     _ReferralAlertBanner(
                       key: ValueKey('referral_banner_$_refreshVersion'),
                       onTap: () => context.push('/referrals'),
@@ -632,7 +625,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              const _TodaysVisitsHeader(),
+                              _TodaysVisitsHeader(
+                                queueFuture: _queueFuture,
+                                onTap: _navigateToFirstQueueItem,
+                              ),
                               const SizedBox(height: 8),
                               if (hasFilters)
                                 _FilterEmptyCard(
@@ -744,7 +740,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            const _TodaysVisitsHeader(),
+                            _TodaysVisitsHeader(
+                                queueFuture: _queueFuture,
+                                onTap: _navigateToFirstQueueItem,
+                              ),
                             const SizedBox(height: 8),
                             ...widgets,
                             if (overflow > 0)
@@ -1091,45 +1090,6 @@ class _DashboardHeader extends StatelessWidget {
   }
 }
 
-class _DashboardStatsRow extends StatelessWidget {
-  const _DashboardStatsRow({
-    super.key,
-    required this.queueFuture,
-    required this.onTapVisits,
-  });
-
-  final Future<List<MissionQueueItem>>? queueFuture;
-  final VoidCallback onTapVisits;
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<List<MissionQueueItem>>(
-      future: queueFuture,
-      builder: (context, snap) {
-        final isLoading = snap.connectionState == ConnectionState.waiting;
-        final queue = snap.data ?? const <MissionQueueItem>[];
-        final count = queue.length;
-        final villageCount = queue
-            .map((i) => i.village)
-            .whereType<String>()
-            .where((v) => v.trim().isNotEmpty)
-            .toSet()
-            .length;
-        return _DashboardStatCard(
-          value: '$count',
-          label: MissionDashboardStrings.visitsToday,
-          accentVariant: _DashboardStatVariant.navy,
-          subline: isLoading
-              ? 'Loading...'
-              : MissionDashboardStrings.visitsTodaySubline(villageCount),
-          onTap: onTapVisits,
-          isLoading: isLoading,
-        );
-      },
-    );
-  }
-}
-
 class _ReferralAlertBanner extends StatefulWidget {
   const _ReferralAlertBanner({super.key, required this.onTap});
   final VoidCallback onTap;
@@ -1248,107 +1208,11 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner> {
   }
 }
 
-enum _DashboardStatVariant { navy, pink }
-
-class _DashboardStatCard extends StatelessWidget {
-  const _DashboardStatCard({
-    required this.value,
-    required this.label,
-    required this.accentVariant,
-    required this.subline,
-    required this.onTap,
-    this.isLoading = false,
-  });
-
-  final String value;
-  final String label;
-  final _DashboardStatVariant accentVariant;
-  final String subline;
-  final bool isLoading;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
-    final accent = accentVariant == _DashboardStatVariant.pink
-        ? tokens.brandPink
-        : tokens.brandNavy;
-    return Semantics(
-      label: '$label: $value',
-      button: true,
-      child: Material(
-      color: Theme.of(context).colorScheme.surface,
-      borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
-      child: InkWell(
-        key: const Key('dashboard_stat_card_tap'),
-        onTap: isLoading ? null : onTap,
-        borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (isLoading)
-                      SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2.5, color: accent),
-                      )
-                    else
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Text(
-                            value,
-                            style: TextStyle(
-                              fontSize: 26,
-                              fontWeight: FontWeight.w900,
-                              color: accent,
-                              height: 1,
-                            ),
-                          ),
-                        ],
-                      ),
-                    const SizedBox(height: 3),
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: Theme.of(context).colorScheme.onSurface,
-                        height: 1.2,
-                      ),
-                    ),
-                    const SizedBox(height: 1),
-                    Text(
-                      subline,
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: accent,
-                        height: 1.2,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Icons.chevron_right_rounded, size: 14, color: accent.withValues(alpha: 0.4)),
-            ],
-          ),
-        ),
-      ),
-      ),
-    );
-  }
-}
-
 class _TodaysVisitsHeader extends StatelessWidget {
-  const _TodaysVisitsHeader();
+  const _TodaysVisitsHeader({this.queueFuture, this.onTap});
+
+  final Future<List<MissionQueueItem>>? queueFuture;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1357,15 +1221,47 @@ class _TodaysVisitsHeader extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            child: Text(
-              MissionDashboardStrings.todaysVisits(dateLabel),
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w800,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  MissionDashboardStrings.todaysVisits(dateLabel),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+                if (queueFuture != null)
+                  FutureBuilder<List<MissionQueueItem>>(
+                    future: queueFuture,
+                    builder: (context, snap) {
+                      if (snap.connectionState == ConnectionState.waiting) {
+                        return const SizedBox.shrink();
+                      }
+                      final queue = snap.data ?? const <MissionQueueItem>[];
+                      final count = queue.length;
+                      final villageCount = queue
+                          .map((i) => i.village)
+                          .whereType<String>()
+                          .where((v) => v.trim().isNotEmpty)
+                          .toSet()
+                          .length;
+                      return Text(
+                        '$count visits · ${MissionDashboardStrings.visitsTodaySubline(villageCount)}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: tokens.brandNavy,
+                          height: 1.4,
+                        ),
+                      );
+                    },
+                  ),
+              ],
             ),
           ),
           Container(
@@ -1482,158 +1378,6 @@ class _EmptyVisitsCard extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// AI sorted info banner — sits above the stats strip.
-/// Navy gradient matching the app header; shows overnight sort count + 3 tags.
-class _AiSortedInfoCard extends StatefulWidget {
-  const _AiSortedInfoCard({super.key, required this.queueFuture});
-
-  final Future<List<MissionQueueItem>>? queueFuture;
-
-  @override
-  State<_AiSortedInfoCard> createState() => _AiSortedInfoCardState();
-}
-
-class _AiSortedInfoCardState extends State<_AiSortedInfoCard> {
-  static const _storage = FlutterSecureStorage();
-  static const _storageKey = 'ai_sorted_banner_last_shown';
-
-  bool _visible = false;
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    _checkAndShow();
-  }
-
-  Future<void> _checkAndShow() async {
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    final stored = await _storage.read(key: _storageKey);
-    if (stored != today) {
-      await _storage.write(key: _storageKey, value: today);
-      if (!mounted) return;
-      setState(() => _visible = true);
-      _timer = Timer(const Duration(seconds: 5), () {
-        if (mounted) setState(() => _visible = false);
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedSize(
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeInOut,
-      child: _visible
-          ? FutureBuilder<List<MissionQueueItem>>(
-              future: widget.queueFuture,
-              builder: (context, snap) {
-                final count = snap.data?.length ?? 0;
-                final isLoading =
-                    snap.connectionState == ConnectionState.waiting;
-                const tags = <String>[
-                  MissionDashboardStrings.aiSortedTagRisk,
-                  MissionDashboardStrings.aiSortedTagOverdue,
-                  MissionDashboardStrings.aiSortedTagCce,
-                ];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 0),
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [AppColors.navy, AppColors.navyMid],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.navy.withValues(alpha: 0.18),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 22,
-                              height: 22,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.16),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: const Icon(Icons.auto_awesome,
-                                  size: 12, color: Colors.white),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                isLoading
-                                    ? 'AI sorted your visits overnight'
-                                    : MissionDashboardStrings.aiSortedVisits(
-                                        count),
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.white,
-                                  height: 1.2,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: tags
-                              .map(
-                                (t) => Container(
-                                  margin: const EdgeInsets.only(right: 6),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 7, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        Colors.white.withValues(alpha: 0.14),
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
-                                        color: Colors.white
-                                            .withValues(alpha: 0.18)),
-                                  ),
-                                  child: Text(
-                                    t,
-                                    style: const TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            )
-          : const SizedBox.shrink(),
     );
   }
 }
