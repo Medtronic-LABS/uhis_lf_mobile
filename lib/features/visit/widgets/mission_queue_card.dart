@@ -88,65 +88,98 @@ class MissionQueueCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 child: Container(
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(14),
                     border: hasTierBorder
                         ? Border(
                             left: BorderSide(color: tierBorderColor, width: 4),
                           )
-                        : Border(
+                        : const Border(
                             left: BorderSide(
-                              color: programmeColor.withValues(alpha: 0.5),
-                              width: 3,
+                              color: Color(0xFFE5E7EB),
+                              width: 4,
                             ),
                           ),
                   ),
-                  padding: const EdgeInsets.fromLTRB(13, 13, 12, 13),
+                  padding: const EdgeInsets.fromLTRB(13, 11, 12, 11),
                   child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // ── Avatar ──────────────────────────────────────────
-                    _ProgrammeAvatar(
-                      item: item,
-                      isCompleted: isCompleted,
-                      avatarColor: programmeColor,
-                      tokens: tokens,
-                    ),
-                    const SizedBox(width: 12),
-
                     // ── Content ──────────────────────────────────────────
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Row 1: Name + badge inline (Wrap handles overflow)
-                          Wrap(
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            spacing: 8,
-                            runSpacing: 3,
+                          // Row 1: Name + age chip + reason badge
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              Text(
-                                item.patientName,
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                  color: isCompleted
-                                      ? tokens.textMuted
-                                      : tokens.textPrimary,
-                                  decoration: isCompleted
-                                      ? TextDecoration.lineThrough
-                                      : null,
+                              Flexible(
+                                child: Text(
+                                  item.patientName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: isCompleted
+                                        ? tokens.textMuted
+                                        : tokens.textPrimary,
+                                    decoration: isCompleted
+                                        ? TextDecoration.lineThrough
+                                        : null,
+                                  ),
                                 ),
                               ),
+                              if (item.age != null) ...[
+                                const SizedBox(width: 6),
+                                _AgeChip(item.age!),
+                              ],
+                              const SizedBox(width: 6),
                               if (isCompleted)
                                 _VisitedBadge(tokens: tokens)
                               else
                                 MissionReasonBadge(item: item),
                             ],
                           ),
-                          const SizedBox(height: 5),
+                          const SizedBox(height: 4),
 
-                          // Row 2: Age · House · Village · Programme + emoji
-                          _CombinedMetaLine(item: item, tokens: tokens),
+                          // Row 2: address
+                          Builder(builder: (context) {
+                            final address = [
+                              item.householdDisplay,
+                              item.village ?? '',
+                            ].where((s) => s.isNotEmpty).join(', ');
+                            if (address.isEmpty) return const SizedBox.shrink();
+                            return Row(
+                              children: [
+                                Icon(Icons.home_outlined, size: 12, color: tokens.textMuted),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    address,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(fontSize: 11.5, color: tokens.textMuted),
+                                  ),
+                                ),
+                              ],
+                            );
+                          }),
+
+                          // Row 3: phone (if available)
+                          if (item.phoneNumber != null && item.phoneNumber!.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Row(
+                              children: [
+                                Icon(Icons.phone_outlined, size: 12, color: tokens.textMuted),
+                                const SizedBox(width: 4),
+                                Text(
+                                  item.phoneNumber!,
+                                  style: TextStyle(fontSize: 11.5, color: tokens.textMuted),
+                                ),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -214,113 +247,30 @@ class MissionQueueCard extends StatelessWidget {
   }
 }
 
-// ─── Avatar ──────────────────────────────────────────────────────────────────
+// ─── Age chip ─────────────────────────────────────────────────────────────────
 
-class _ProgrammeAvatar extends StatelessWidget {
-  const _ProgrammeAvatar({
-    required this.item,
-    required this.isCompleted,
-    required this.avatarColor,
-    required this.tokens,
-  });
-
-  final MissionQueueItem item;
-  final bool isCompleted;
-  final Color avatarColor;
-  final LeapfrogColors tokens;
+class _AgeChip extends StatelessWidget {
+  const _AgeChip(this.age);
+  final int age;
 
   @override
   Widget build(BuildContext context) {
-    if (isCompleted) {
-      return CircleAvatar(
-        radius: 22,
-        backgroundColor: tokens.statusSuccess.withValues(alpha: 0.15),
-        child: Icon(Icons.check, color: tokens.statusSuccess, size: 22),
-      );
-    }
-    return CircleAvatar(
-      radius: 22,
-      backgroundColor: avatarColor.withValues(alpha: 0.15),
-      child: Icon(
-        _iconForProgramme(item.programmes),
-        color: avatarColor,
-        size: 22,
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: tokens.cardSurfaceMuted,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        '${age}y',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: tokens.textMuted,
+        ),
       ),
     );
-  }
-
-  static IconData _iconForProgramme(Set<Programme> programmes) {
-    if (programmes.contains(Programme.anc) ||
-        programmes.contains(Programme.pnc)) {
-      return Icons.pregnant_woman_rounded;
-    }
-    if (programmes.contains(Programme.imci) ||
-        programmes.contains(Programme.epi)) {
-      return Icons.child_care_rounded;
-    }
-    if (programmes.contains(Programme.ncd)) return Icons.monitor_heart_rounded;
-    if (programmes.contains(Programme.tb)) return Icons.air_rounded;
-    return Icons.person_rounded;
-  }
-}
-
-// ─── Combined meta: Age · House · Village · Programme description + emoji ─────
-
-class _CombinedMetaLine extends StatelessWidget {
-  const _CombinedMetaLine({required this.item, required this.tokens});
-
-  final MissionQueueItem item;
-  final LeapfrogColors tokens;
-
-  @override
-  Widget build(BuildContext context) {
-    final parts = <String>[];
-    if (item.age != null) parts.add(WorklistStrings.ageFmt(item.age!));
-    final house = item.householdDisplay;
-    if (house.isNotEmpty) parts.add(house);
-    if (item.village != null && item.village!.isNotEmpty) {
-      parts.add(item.village!);
-    }
-
-    // Programme description: diagnosis label if available, else programme name
-    final knownProgrammes =
-        item.programmes.where((p) => p != Programme.unknown).toList();
-    if (knownProgrammes.isNotEmpty) {
-      final diagnosis = item.diagnosisLabel;
-      final progLabel = (diagnosis != null && diagnosis.isNotEmpty)
-          ? diagnosis
-          : knownProgrammes.map(_displayName).join(' · ');
-      parts.add('$progLabel ${item.programmeEmoji}');
-    } else {
-      parts.add('${WorklistStrings.selectService} ${item.programmeEmoji}');
-    }
-
-    return Text(
-      parts.join(' · '),
-      style: TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w500,
-        color: tokens.textMuted,
-      ),
-      maxLines: 2,
-      overflow: TextOverflow.ellipsis,
-    );
-  }
-
-  static String _displayName(Programme p) {
-    switch (p) {
-      case Programme.anc:            return WorklistStrings.programmeAnc;
-      case Programme.pnc:            return WorklistStrings.programmePnc;
-      case Programme.ncd:            return WorklistStrings.programmeNcd;
-      case Programme.imci:           return WorklistStrings.programmeImci;
-      case Programme.tb:             return WorklistStrings.programmeTb;
-      case Programme.epi:            return WorklistStrings.programmeEpi;
-      case Programme.nutrition:      return WorklistStrings.programmeNutrition;
-      case Programme.familyPlanning: return WorklistStrings.programmeFamilyPlanning;
-      case Programme.cataract:       return WorklistStrings.programmeCataract;
-      case Programme.eyeCare:        return WorklistStrings.programmeEyeCare;
-      case Programme.unknown:        return '';
-    }
   }
 }
 
