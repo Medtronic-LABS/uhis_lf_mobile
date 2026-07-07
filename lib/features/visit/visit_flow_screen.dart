@@ -1566,10 +1566,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
                       children: [
                         Padding(
                           padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                          child: _DotList(
-                            items: naba.counselling,
-                            dotColor: AppColors.tagTealText,
-                          ),
+                          child: _CounsellingRows(items: naba.counselling),
                         ),
                       ],
                     ),
@@ -1580,10 +1577,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
                     icon: Icons.chat_bubble_outline_rounded,
                     iconBg: AppColors.tagTealSurface,
                     iconColor: AppColors.tagTealText,
-                    child: _DotList(
-                      items: naba.counselling,
-                      dotColor: AppColors.tagTealText,
-                    ),
+                    child: _CounsellingRows(items: naba.counselling),
                   ),
                 const SizedBox(height: 12),
               ],
@@ -2096,74 +2090,87 @@ class _ClinicalFindingsCards extends StatelessWidget {
   const _ClinicalFindingsCards({required this.findings});
   final List<NabaClinicalFinding> findings;
 
-  Color _severityColor(String s) => switch (s) {
-        'High' => AppColors.statusCritical,
-        'Medium' => AppColors.slaDueSoonText,
-        _ => AppColors.statusSuccess,
+  static (String label, Color color, Color surface) _style(String severity) =>
+      switch (severity) {
+        'High' => (
+            'Refer',
+            AppColors.statusCritical,
+            AppColors.statusCriticalSurface,
+          ),
+        'Medium' => (
+            'Review',
+            AppColors.slaDueSoonText,
+            const Color(0xFFFFFBEB),
+          ),
+        _ => (
+            'Normal',
+            AppColors.statusSuccess,
+            AppColors.statusSuccessSurface,
+          ),
       };
 
   @override
   Widget build(BuildContext context) {
     return Column(
-      children: findings
-          .map((f) {
-            final sc = _severityColor(f.severity);
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppColors.cardSurfaceMuted,
-                  borderRadius: BorderRadius.circular(AppRadius.rxIcon),
-                  border: Border(
-                    left: BorderSide(color: sc, width: 3.5),
-                  ),
-                ),
-                padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, AppSpacing.lg),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            f.finding,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
+      children: findings.map((f) {
+        final (label, color, surface) = _style(f.severity);
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Container(
+            decoration: BoxDecoration(
+              color: surface,
+              borderRadius: BorderRadius.circular(AppRadius.rxIcon),
+              border: Border(left: BorderSide(color: color, width: 3.5)),
+            ),
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, AppSpacing.lg),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        f.finding,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: color,
                         ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: sc.withValues(alpha: 0.12),
-                            borderRadius:
-                                BorderRadius.circular(AppRadius.flag),
-                          ),
-                          child: Text(
-                            f.severity.toUpperCase(),
-                            style: AppTextStyles.microTag.copyWith(
-                              color: sc,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
+                      ),
+                      if (f.reason.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          f.reason,
+                          style: AppTextStyles.vitalUnit.copyWith(height: 1.4),
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      f.reason,
-                      style: AppTextStyles.vitalUnit.copyWith(height: 1.4),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            );
-          })
-          .toList(),
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                  ),
+                  child: Text(
+                    label,
+                    style: AppTextStyles.microTag.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 }
@@ -2210,60 +2217,156 @@ class _DotList extends StatelessWidget {
   }
 }
 
-class _FollowUpRows extends StatelessWidget {
-  const _FollowUpRows({required this.items});
-  final List<NabaFollowUpItem> items;
+class _CounsellingRows extends StatelessWidget {
+  const _CounsellingRows({required this.items});
+  final List<String> items;
+
+  static IconData _icon(String item) {
+    final s = item.toLowerCase();
+    if (s.contains('doctor') || s.contains('hospital') || s.contains('refer') || s.contains('uhc')) {
+      return Icons.local_hospital_rounded;
+    }
+    if (s.contains('danger') || s.contains('emergency') || s.contains('immediately') || s.contains('headache') || s.contains('vision') || s.contains('convulsion')) {
+      return Icons.warning_amber_rounded;
+    }
+    if (s.contains('iron') || s.contains('calcium') || s.contains('tablet') || s.contains('medicine') || s.contains('medication')) {
+      return Icons.medication_rounded;
+    }
+    if (s.contains('baby') || s.contains('mother') || s.contains('okay') || s.contains('normal') || s.contains('reassure')) {
+      return Icons.favorite_rounded;
+    }
+    if (s.contains('salt') || s.contains('vegetable') || s.contains('fruit') || s.contains('eat') || s.contains('diet')) {
+      return Icons.restaurant_rounded;
+    }
+    if (s.contains('walk') || s.contains('exercise') || s.contains('activity')) {
+      return Icons.directions_walk_rounded;
+    }
+    if (s.contains('tobacco') || s.contains('smoke') || s.contains('alcohol')) {
+      return Icons.smoke_free_rounded;
+    }
+    if (s.contains('sleep') || s.contains('stress') || s.contains('rest') || s.contains('weight')) {
+      return Icons.bedtime_rounded;
+    }
+    return Icons.info_outline_rounded;
+  }
 
   @override
   Widget build(BuildContext context) {
     return Column(
-      children: items
-          .map(
-            (item) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: AppColors.followUpIconBg,
-                      borderRadius:
-                          BorderRadius.circular(AppRadius.rxIcon),
-                    ),
-                    child: const Icon(
-                      Icons.event_rounded,
-                      size: 16,
-                      color: AppColors.followUpIconFg,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.activity,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          item.timeline,
-                          style: AppTextStyles.vitalUnit,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+      children: items.map((item) => Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: AppColors.tagTealSurface,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(_icon(item), size: 16, color: AppColors.tagTealText),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  item,
+                  style: AppTextStyles.body.copyWith(height: 1.4),
+                ),
               ),
             ),
-          )
-          .toList(),
+          ],
+        ),
+      )).toList(),
+    );
+  }
+}
+
+class _FollowUpRows extends StatelessWidget {
+  const _FollowUpRows({required this.items});
+  final List<NabaFollowUpItem> items;
+
+  static (Color border, Color chipBg, Color chipFg, IconData icon)
+      _urgencyStyle(String timeline) {
+    final t = timeline.toLowerCase();
+    if (t.contains('now') || t.contains('today') || t.contains('urgent')) {
+      return (
+        AppColors.statusCritical,
+        AppColors.statusCriticalSurface,
+        AppColors.statusCritical,
+        Icons.priority_high_rounded,
+      );
+    }
+    if (t.contains('week') || t.contains('2 week') || t.contains('soon')) {
+      return (
+        AppColors.slaDueSoonText,
+        const Color(0xFFFFFBEB),
+        AppColors.slaDueSoonText,
+        Icons.schedule_rounded,
+      );
+    }
+    return (
+      AppColors.tagTealText,
+      AppColors.tagTealSurface,
+      AppColors.tagTealText,
+      Icons.event_available_rounded,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: items.map((item) {
+        final (border, chipBg, chipFg, icon) = _urgencyStyle(item.timeline);
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(AppRadius.rxIcon),
+              border: Border(left: BorderSide(color: border, width: 3)),
+            ),
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Icon(icon, size: 16, color: border),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    item.activity,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textPrimary,
+                      height: 1.3,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: chipBg,
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                  ),
+                  child: Text(
+                    item.timeline,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: chipFg,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 }
