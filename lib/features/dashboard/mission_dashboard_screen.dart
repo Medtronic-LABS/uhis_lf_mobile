@@ -1812,6 +1812,52 @@ class _VisitFilterPanel extends StatelessWidget {
     }
   }
 
+  IconData _needIcon(_NeedFilter need) {
+    switch (need) {
+      case _NeedFilter.highRisk:
+        return Icons.warning_amber_rounded;
+      case _NeedFilter.ancMnch:
+        return Icons.pregnant_woman_rounded;
+      case _NeedFilter.childImmunisation:
+        return Icons.child_care_rounded;
+      case _NeedFilter.ncd:
+        return Icons.monitor_heart_rounded;
+      case _NeedFilter.eyeCare:
+        return Icons.visibility_rounded;
+      case _NeedFilter.missedFollowUp:
+        return Icons.event_busy_rounded;
+      case _NeedFilter.pendingReferral:
+        return Icons.assignment_rounded;
+      case _NeedFilter.homeVisit:
+        return Icons.home_rounded;
+      case _NeedFilter.facilityReferral:
+        return Icons.local_hospital_rounded;
+    }
+  }
+
+  Color _needActiveColor(_NeedFilter need) {
+    switch (need) {
+      case _NeedFilter.highRisk:
+        return const Color(0xFFDC2626);
+      case _NeedFilter.ancMnch:
+        return const Color(0xFF831843);
+      case _NeedFilter.childImmunisation:
+        return const Color(0xFF1B2B5E);
+      case _NeedFilter.ncd:
+        return const Color(0xFF854F0B);
+      case _NeedFilter.eyeCare:
+        return const Color(0xFF0E7490);
+      case _NeedFilter.missedFollowUp:
+        return const Color(0xFFD97706);
+      case _NeedFilter.pendingReferral:
+        return const Color(0xFF6B21A8);
+      case _NeedFilter.homeVisit:
+        return const Color(0xFF047857);
+      case _NeedFilter.facilityReferral:
+        return const Color(0xFF0369A1);
+    }
+  }
+
   String _programmeLabel(Programme programme) {
     switch (programme) {
       case Programme.imci:
@@ -1844,31 +1890,20 @@ class _VisitFilterPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Row 1: village chips ──────────────────────────────────────────
+        // ── Row 1: village tabs ───────────────────────────────────────────
         if (villages.isNotEmpty) ...[
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Text(
-              MissionDashboardStrings.whichVillageVisiting,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
-            ),
-          ),
           SizedBox(
-            height: 34,
+            height: 38,
             child: ListView(
               scrollDirection: Axis.horizontal,
               padding: EdgeInsets.zero,
               children: [
-                _VillageChip(
+                _VillageTab(
                   label: MissionDashboardStrings.allVillages,
                   isActive: selectedVillage == null,
                   onTap: () => onVillageSelected(null),
                 ),
-                ...villages.map((v) => _VillageChip(
+                ...villages.map((v) => _VillageTab(
                   label: v,
                   isActive: selectedVillage == v,
                   onTap: () => onVillageSelected(selectedVillage == v ? null : v),
@@ -1878,7 +1913,7 @@ class _VisitFilterPanel extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Divider(height: 1, color: Theme.of(context).colorScheme.outlineVariant),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
         ],
 
         // ── Row 2: filter label + clear ───────────────────────────────────
@@ -1924,97 +1959,35 @@ class _VisitFilterPanel extends StatelessWidget {
             ],
           ),
         ),
-        // ── Row 3: single scrollable row — need chips then programme chips ──
+        // ── Row 3: category bubbles ──────────────────────────────────────────
         SizedBox(
-          height: 34,
+          height: 88,
           child: ListView(
             scrollDirection: Axis.horizontal,
             padding: EdgeInsets.zero,
             children: [
               ..._NeedFilter.values
                   .where((n) => availableNeeds.contains(n))
-                  .map((need) {
-                final active = selectedNeeds.contains(need);
-                final cs = Theme.of(context).colorScheme;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: Semantics(
-                    label: active
-                        ? 'Filter by need: ${_needLabel(need)}, selected'
-                        : 'Filter by need: ${_needLabel(need)}',
-                    button: true,
-                    child: GestureDetector(
-                      key: ValueKey('dashboard_need_filter_${need.name}'),
-                      onTap: () => onNeedToggled(need),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: active ? AppColors.aiPurple : cs.surface,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: active
-                                ? AppColors.aiPurple
-                                : cs.outlineVariant,
-                            width: 1,
-                          ),
+                  .map((need) => Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: _CategoryBubble(
+                          label: _needLabel(need),
+                          icon: _needIcon(need),
+                          activeColor: _needActiveColor(need),
+                          isActive: selectedNeeds.contains(need),
+                          onTap: () => onNeedToggled(need),
                         ),
-                        child: Text(
-                          _needLabel(need),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight:
-                                active ? FontWeight.w800 : FontWeight.w500,
-                            color:
-                                active ? Colors.white : cs.onSurface,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }),
-              ...availableProgrammes.map((prog) {
-                final active = selectedProgrammes.contains(prog);
-                final cs = Theme.of(context).colorScheme;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: Semantics(
-                    label: active
-                        ? 'Filter by programme: ${_programmeLabel(prog)}, selected'
-                        : 'Filter by programme: ${_programmeLabel(prog)}',
-                    button: true,
-                    child: GestureDetector(
-                      key: ValueKey('dashboard_prog_filter_${prog.name}'),
+                      )),
+              ...availableProgrammes.map((prog) => Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: _CategoryBubble(
+                      label: _programmeLabel(prog),
+                      icon: Icons.vaccines_rounded,
+                      activeColor: AppColors.aiPurple,
+                      isActive: selectedProgrammes.contains(prog),
                       onTap: () => onProgrammeToggled(prog),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: active ? AppColors.aiPurple : cs.surface,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: active
-                                ? AppColors.aiPurple
-                                : cs.outlineVariant,
-                            width: 1,
-                          ),
-                        ),
-                        child: Text(
-                          _programmeLabel(prog),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight:
-                                active ? FontWeight.w800 : FontWeight.w500,
-                            color:
-                                active ? Colors.white : cs.onSurface,
-                          ),
-                        ),
-                      ),
                     ),
-                  ),
-                );
-              }),
+                  )),
             ],
           ),
         ),
@@ -2023,8 +1996,8 @@ class _VisitFilterPanel extends StatelessWidget {
   }
 }
 
-class _VillageChip extends StatelessWidget {
-  const _VillageChip({
+class _VillageTab extends StatelessWidget {
+  const _VillageTab({
     required this.label,
     required this.isActive,
     required this.onTap,
@@ -2036,32 +2009,103 @@ class _VillageChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
-      child: Semantics(
-        label: isActive ? 'Village filter: $label, selected' : 'Filter by village: $label',
-        button: true,
-        child: GestureDetector(
-          key: const Key('dashboard_filter_chip_tap'),
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: isActive ? AppColors.navy : Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: isActive ? AppColors.navy : Theme.of(context).colorScheme.outlineVariant,
-                width: 1,
-              ),
+    const activeColor = Color(0xFF1B2B5E);
+    const activeLine = Color(0xFFEC4899);
+    return GestureDetector(
+      key: const Key('dashboard_filter_chip_tap'),
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(right: 16),
+        padding: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: isActive ? activeLine : Colors.transparent,
+              width: 2,
             ),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: isActive ? Colors.white : Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+            color: isActive ? activeColor : const Color(0xFF6B7280),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CategoryBubble extends StatelessWidget {
+  const _CategoryBubble({
+    required this.label,
+    required this.icon,
+    required this.activeColor,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color activeColor;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Semantics(
+      label: isActive ? '$label filter, selected' : 'Filter by $label',
+      button: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: SizedBox(
+          width: 68,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isActive ? activeColor : cs.surface,
+                  border: Border.all(
+                    color: isActive ? activeColor : cs.outlineVariant,
+                    width: 1.5,
+                  ),
+                  boxShadow: isActive
+                      ? [
+                          BoxShadow(
+                            color: activeColor.withValues(alpha: 0.25),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          )
+                        ]
+                      : null,
+                ),
+                child: Icon(
+                  icon,
+                  size: 22,
+                  color: isActive ? Colors.white : cs.onSurfaceVariant,
+                ),
               ),
-            ),
+              const SizedBox(height: 5),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                  color: isActive ? activeColor : cs.onSurfaceVariant,
+                  height: 1.2,
+                ),
+              ),
+            ],
           ),
         ),
       ),
