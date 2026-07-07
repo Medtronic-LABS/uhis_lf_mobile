@@ -16,6 +16,8 @@
 ///   - All copy from [VisitFlowStrings] / [VisitCompleteStrings].
 library;
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -25,6 +27,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/scribe_api_service.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
@@ -1004,6 +1007,8 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   bool _accepted = false;
   String? _patientPhone;
   List<_HouseholdMember>? _householdMembers;
+  NabaVitalSnapshot? _loadedVitals;
+  List<NabaLabResult> _loadedLabs = [];
 
   Color _headerColor(Programme p) => switch (p) {
         Programme.anc || Programme.pnc => AppColors.ancHeader,
@@ -1082,8 +1087,10 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   }
 
   Future<NabaResponse> _fetchNaba() async {
+    final apiClient = context.read<ApiClient>(); // read before any await
+    await _loadVitalsAndLabs();
     try {
-      final repo = NabaRepository(context.read<ApiClient>());
+      final repo = NabaRepository(apiClient);
       final programmes = widget.confirmedProgrammes
           .where((p) => p != Programme.unknown)
           .map((p) => p.wireTag)
@@ -1099,12 +1106,165 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         gestationalWeeks: widget.gestationalWeeks,
         isPregnant: widget.gestationalWeeks != null,
         manuallySelectedSymptoms: widget.confirmedSymptoms.toList(),
+        currentVitals: _loadedVitals,
+        labResults: _loadedLabs,
       );
       return await repo.generate(req);
     } catch (e) {
       debugPrint('[NABA] AI failed — rule-based fallback: $e');
       return _ruleBasedNaba();
     }
+  }
+
+  Future<void> _loadVitalsAndLabs() async {
+    try {
+      final dao = context.read<LocalAssessmentDao>(); // read before first await
+      final assessments = await dao.getByPatientId(widget.patientId);
+      if (assessments.isEmpty) return;
+
+      final isPrimaryAnc = widget.primaryProgramme == Programme.anc ||
+          widget.primaryProgramme == Programme.pnc;
+      final targetType = isPrimaryAnc ? 'ANC' : 'NCD';
+
+      LocalAssessmentEntity? target;
+      for (final a in assessments.reversed) {
+        if (a.assessmentType == targetType) {
+          target = a;
+          break;
+        }
+      }
+      target ??= assessments.last;
+
+      final data =
+          jsonDecode(target.assessmentDetails) as Map<String, dynamic>;
+      if (target.assessmentType == 'ANC') {
+        _parseAncVitals(data);
+      } else if (target.assessmentType == 'NCD') {
+        _parseNcdVitals(data);
+      }
+    } catch (e) {
+      debugPrint('[NABA] Assessment vitals load failed: $e');
+    }
+  }
+
+  void _parseAncVitals(Map<String, dynamic> data) {
+    final phys = data['medicalHistoryPhysicalExamination']
+            as Map<String, dynamic>? ??
+        {};
+    final poc =
+        data['pointOfCareInvestigations'] as Map<String, dynamic>? ?? {};
+
+    _loadedVitals = NabaVitalSnapshot(
+      bloodPressureSystolic: phys['bloodPressureSystolic'] as int?,
+      bloodPressureDiastolic: phys['bloodPressureDiastolic'] as int?,
+      weight: (phys['weight'] as num?)?.toDouble(),
+      bmi: (phys['bmi'] as num?)?.toDouble(),
+    );
+
+    final labs = <NabaLabResult>[];
+    final hb = poc['hemoglobin'];
+    if (hb != null) {
+      final v = (hb as num).toDouble();
+      labs.add(NabaLabResult(
+        name: 'Hemoglobin',
+        value: v.toStringAsFixed(1),
+        unit: 'g/dL',
+        referenceRange: '≥11 g/dL',
+        abnormal: v < 11,
+      ));
+    }
+    final bsf = poc['bloodSugarFasting'];
+    if (bsf != null) {
+      final v = (bsf as num).toDouble();
+      labs.add(NabaLabResult(
+        name: 'Blood Glucose (Fasting)',
+        value: v.toStringAsFixed(0),
+        unit: 'mg/dL',
+        referenceRange: '<100 mg/dL',
+        abnormal: v >= 126,
+      ));
+    }
+    final bsr = poc['bloodSugarRandom'];
+    if (bsr != null) {
+      final v = (bsr as num).toDouble();
+      labs.add(NabaLabResult(
+        name: 'Blood Glucose (Random)',
+        value: v.toStringAsFixed(0),
+        unit: 'mg/dL',
+        referenceRange: '<140 mg/dL',
+        abnormal: v >= 200,
+      ));
+    }
+    _loadedLabs = labs;
+  }
+
+  void _parseNcdVitals(Map<String, dynamic> data) {
+    final bp = data['bpLog'] as Map<String, dynamic>? ?? {};
+    final glucose = data['glucoseLog'] as Map<String, dynamic>? ?? {};
+
+    final avgSys = bp['avgSystolic'];
+    final avgDia = bp['avgDiastolic'];
+
+    _loadedVitals = NabaVitalSnapshot(
+      bloodPressureSystolic:
+          avgSys != null ? (avgSys as num).toInt() : null,
+      bloodPressureDiastolic:
+          avgDia != null ? (avgDia as num).toInt() : null,
+      weight: (bp['weight'] as num?)?.toDouble(),
+      temperature: (bp['temperature'] as num?)?.toDouble(),
+      bmi: (bp['bmi'] as num?)?.toDouble(),
+    );
+
+    final labs = <NabaLabResult>[];
+    final gv = glucose['glucoseValue'];
+    if (gv != null) {
+      final isFasting = glucose['glucoseType'] == 'fasting';
+      final v = (gv as num).toDouble();
+      labs.add(NabaLabResult(
+        name: isFasting ? 'Blood Glucose (Fasting)' : 'Blood Glucose (Random)',
+        value: v.toStringAsFixed(0),
+        unit: glucose['glucoseUnit'] as String? ?? 'mg/dL',
+        referenceRange: isFasting ? '<100 mg/dL' : '<140 mg/dL',
+        abnormal: isFasting ? v >= 126 : v >= 200,
+      ));
+    }
+    _loadedLabs = labs;
+  }
+
+  String _ancVitalsSummary() {
+    final v = _loadedVitals;
+    if (v == null) {
+      return 'BP, weight, urine protein, and fetal movement assessed. Continuing routine ANC care per WHO guidelines.';
+    }
+    final bpPart = (v.bloodPressureSystolic != null && v.bloodPressureDiastolic != null)
+        ? 'BP ${v.bloodPressureSystolic}/${v.bloodPressureDiastolic} mmHg'
+        : 'BP assessed';
+    final wtPart = v.weight != null ? ', weight ${v.weight!.toStringAsFixed(1)} kg' : '';
+    final hb = _loadedLabs.firstWhere(
+      (l) => l.name == 'Hemoglobin',
+      orElse: () => const NabaLabResult(name: '', value: '', unit: ''),
+    );
+    final hbPart = hb.name.isNotEmpty
+        ? ', Hb ${hb.value} g/dL${hb.abnormal ? " — low" : ""}'
+        : '';
+    final bpHigh = v.bloodPressureSystolic != null && v.bloodPressureSystolic! >= 140;
+    final status = bpHigh ? 'BP elevated — monitor for pre-eclampsia.' : 'Vitals within expected range.';
+    return '$bpPart$wtPart$hbPart. $status';
+  }
+
+  String _ncdVitalsSummary() {
+    final v = _loadedVitals;
+    if (v == null) {
+      return 'Blood pressure and blood glucose reviewed. Continuing NCD management per Bangladesh guidelines.';
+    }
+    final bpPart = (v.bloodPressureSystolic != null && v.bloodPressureDiastolic != null)
+        ? 'BP avg ${v.bloodPressureSystolic}/${v.bloodPressureDiastolic} mmHg'
+        : 'BP assessed';
+    final gl = _loadedLabs.isNotEmpty ? _loadedLabs.first : null;
+    final glPart = gl != null ? ', glucose ${gl.value} ${gl.unit}${gl.abnormal ? " — elevated" : ""}' : '';
+    final bpHigh = v.bloodPressureSystolic != null && v.bloodPressureSystolic! >= 140;
+    final status = bpHigh ? 'BP above target — review medication and refer if persistent.' : 'BP within controlled range.';
+    return '$bpPart$glPart. $status';
   }
 
   NabaResponse _ruleBasedNaba() {
@@ -1253,9 +1413,9 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       visitSummary: NabaVisitSummary(
         title: _programmeSummaryTitle(widget.primaryProgramme),
         summary: hasAnc
-            ? 'BP, weight, urine protein, and fetal movement assessed. Continuing routine ANC care per WHO guidelines.'
+            ? _ancVitalsSummary()
             : hasNcd
-                ? 'Blood pressure and blood glucose reviewed. Continuing NCD management per Bangladesh guidelines.'
+                ? _ncdVitalsSummary()
                 : hasPnc
                     ? 'Mother and neonate assessed — lochia, cord, and breastfeeding. Continuing post-natal care.'
                     : hasImci
@@ -1911,80 +2071,144 @@ class _AiCounsellingCard extends StatelessWidget {
   }
 }
 
-class _FollowUpDateRow extends StatelessWidget {
+class _FollowUpDateRow extends StatefulWidget {
   const _FollowUpDateRow({required this.item});
   final NabaFollowUpItem item;
 
   @override
+  State<_FollowUpDateRow> createState() => _FollowUpDateRowState();
+}
+
+class _FollowUpDateRowState extends State<_FollowUpDateRow> {
+  late DateTime _date;
+
+  static const _amberBg = Color(0xFFFFFBEB);
+  static const _amberBorder = Color(0xFFFDE68A);
+  static const _amberText = Color(0xFFB45309);
+
+  @override
+  void initState() {
+    super.initState();
+    _date = _dateFromTimeline(widget.item.timeline);
+  }
+
+  static DateTime _dateFromTimeline(String timeline) {
+    final t = timeline.toLowerCase();
+    final now = DateTime.now();
+    // parse "in X week(s)"
+    final weekMatch = RegExp(r'(\d+)\s*week').firstMatch(t);
+    if (weekMatch != null) {
+      return now.add(Duration(days: int.parse(weekMatch.group(1)!) * 7));
+    }
+    // parse "in X day(s)"
+    final dayMatch = RegExp(r'(\d+)\s*day').firstMatch(t);
+    if (dayMatch != null) {
+      return now.add(Duration(days: int.parse(dayMatch.group(1)!)));
+    }
+    // parse "in X month(s)"
+    final monthMatch = RegExp(r'(\d+)\s*month').firstMatch(t);
+    if (monthMatch != null) {
+      return DateTime(now.year, now.month + int.parse(monthMatch.group(1)!), now.day);
+    }
+    return now.add(const Duration(days: 28));
+  }
+
+  String get _formatted =>
+      '${_date.day.toString().padLeft(2, '0')}-'
+      '${_date.month.toString().padLeft(2, '0')}-'
+      '${_date.year}';
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
+    );
+    if (picked != null && mounted) {
+      setState(() => _date = picked);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-        boxShadow: AppShadows.listItem,
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: AppColors.followUpIconBg,
-              borderRadius: BorderRadius.circular(9),
-            ),
-            child: const Icon(
-              Icons.calendar_today_rounded,
-              size: 17,
-              color: AppColors.followUpIconFg,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return GestureDetector(
+      onTap: _pickDate,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: _amberBg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _amberBorder, width: 1.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                const Text(
-                  'Next Follow-up',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textMuted,
-                    letterSpacing: 0.2,
+                // Calendar icon
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: _amberBorder),
+                  ),
+                  child: const Icon(
+                    Icons.calendar_month_rounded,
+                    size: 18,
+                    color: _amberText,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  item.activity,
-                  style: const TextStyle(
+                const SizedBox(width: 10),
+                // Label
+                const Text(
+                  'Follow-up',
+                  style: TextStyle(
                     fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                    height: 1.3,
+                    fontWeight: FontWeight.w800,
+                    color: _amberText,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                // Date field
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _amberBorder),
+                    ),
+                    child: Text(
+                      _formatted,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.navy,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
                   ),
                 ),
               ],
             ),
-          ),
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.followUpIconBg,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              item.timeline,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: AppColors.followUpIconFg,
+            if (widget.item.activity.isNotEmpty) ...[
+              const SizedBox(height: 7),
+              Text(
+                widget.item.activity,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  color: _amberText.withValues(alpha: 0.75),
+                  height: 1.4,
+                  fontStyle: FontStyle.italic,
+                ),
               ),
-            ),
-          ),
-        ],
+            ],
+          ],
+        ),
       ),
     );
   }

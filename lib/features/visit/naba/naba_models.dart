@@ -9,6 +9,33 @@ library;
 
 // ── Inbound sub-models ────────────────────────────────────────────────────────
 
+class NabaLabResult {
+  const NabaLabResult({
+    required this.name,
+    required this.value,
+    required this.unit,
+    this.referenceRange,
+    this.abnormal = false,
+    this.loincCode,
+  });
+
+  final String name;
+  final String value;
+  final String unit;
+  final String? referenceRange;
+  final bool abnormal;
+  final String? loincCode;
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'value': value,
+        'unit': unit,
+        if (referenceRange != null) 'referenceRange': referenceRange,
+        'abnormal': abnormal,
+        if (loincCode != null) 'loincCode': loincCode,
+      };
+}
+
 class NabaVitalSnapshot {
   const NabaVitalSnapshot({
     this.bloodPressureSystolic,
@@ -89,6 +116,7 @@ class NabaRequest {
     this.manuallySelectedSymptoms = const [],
     this.scribeTranscriptExcerpt,
     this.currentVitals,
+    this.labResults = const [],
     this.currentMedications = const [],
     this.medicationAdherence,
     this.priorVisits = const [],
@@ -110,6 +138,7 @@ class NabaRequest {
   final List<String> manuallySelectedSymptoms;
   final String? scribeTranscriptExcerpt;
   final NabaVitalSnapshot? currentVitals;
+  final List<NabaLabResult> labResults;
   final List<String> currentMedications;
   final String? medicationAdherence;
   final List<NabaPriorVisit> priorVisits;
@@ -132,6 +161,8 @@ class NabaRequest {
         if (scribeTranscriptExcerpt != null)
           'scribeTranscriptExcerpt': scribeTranscriptExcerpt,
         if (currentVitals != null) 'currentVitals': currentVitals!.toJson(),
+        if (labResults.isNotEmpty)
+          'labResults': labResults.map((l) => l.toJson()).toList(),
         'currentMedications': currentMedications,
         if (medicationAdherence != null) 'medicationAdherence': medicationAdherence,
         'priorVisits': priorVisits.map((v) => v.toJson()).toList(),
