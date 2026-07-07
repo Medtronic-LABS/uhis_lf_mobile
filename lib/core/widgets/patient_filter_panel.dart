@@ -348,9 +348,13 @@ class NeedCategoryBubble extends StatelessWidget {
                 height: 52,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: isActive ? activeColor : cs.surface,
+                  color: isActive
+                      ? activeColor
+                      : activeColor.withValues(alpha: 0.08),
                   border: Border.all(
-                    color: isActive ? activeColor : cs.outlineVariant,
+                    color: isActive
+                        ? activeColor
+                        : activeColor.withValues(alpha: 0.30),
                     width: 1.5,
                   ),
                   boxShadow: isActive
@@ -366,7 +370,7 @@ class NeedCategoryBubble extends StatelessWidget {
                 child: Icon(
                   icon,
                   size: 22,
-                  color: isActive ? Colors.white : cs.onSurfaceVariant,
+                  color: isActive ? Colors.white : activeColor,
                 ),
               ),
               const SizedBox(height: 5),
@@ -378,7 +382,7 @@ class NeedCategoryBubble extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 9.5,
                   fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                  color: isActive ? activeColor : cs.onSurfaceVariant,
+                  color: isActive ? activeColor : activeColor.withValues(alpha: 0.75),
                   height: 1.2,
                 ),
               ),
