@@ -1145,13 +1145,31 @@ class _Step3AiRecoState extends State<_Step3AiReco>
           counselling: ai.counselling.isNotEmpty ? ai.counselling : fallback.counselling,
           familyCounselling: ai.familyCounselling,
           medicationAdvice: ai.medicationAdvice,
-          whatsappSummary: ai.whatsappSummary,
+          whatsappSummary: ai.whatsappSummary ?? fallback.whatsappSummary,
           doctorHandover: ai.doctorHandover,
           referralRecommendation: ai.referralRecommendation,
           contextTruncated: ai.contextTruncated,
         );
       }
-      return ai;
+      if (ai.whatsappSummary != null) return ai;
+      return NabaResponse(
+        requestId: ai.requestId,
+        modelVersion: ai.modelVersion,
+        generatedAt: ai.generatedAt,
+        rationale: ai.rationale,
+        visitSummary: ai.visitSummary,
+        clinicalFindings: ai.clinicalFindings,
+        nextActions: ai.nextActions,
+        dangerSigns: ai.dangerSigns,
+        followUp: ai.followUp,
+        counselling: ai.counselling,
+        familyCounselling: ai.familyCounselling,
+        medicationAdvice: ai.medicationAdvice,
+        whatsappSummary: _ruleBasedWhatsAppMessage(),
+        doctorHandover: ai.doctorHandover,
+        referralRecommendation: ai.referralRecommendation,
+        contextTruncated: ai.contextTruncated,
+      );
     } catch (e) {
       debugPrint('[NABA] AI failed — rule-based fallback: $e');
       return _ruleBasedNaba();
