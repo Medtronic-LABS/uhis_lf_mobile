@@ -555,17 +555,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               settingsMenu: _SettingsMenu(onOfferBiometric: _offerBiometric),
             ),
+            _ReferralAlertBanner(
+              key: ValueKey('referral_banner_$_refreshVersion'),
+              onTap: () => context.push('/referrals'),
+            ),
             Expanded(
               child: RefreshIndicator(
                 onRefresh: _refresh,
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(14, 12, 14, 100),
                   children: [
-                    _ReferralAlertBanner(
-                      key: ValueKey('referral_banner_$_refreshVersion'),
-                      onTap: () => context.push('/referrals'),
-                    ),
-                    const SizedBox(height: 14),
                     _VisitFilterPanel(
                       villages: _inlineVillages,
                       selectedVillage: _selectedVillageChipName,
@@ -1139,22 +1138,20 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner> {
           label: 'Referral alerts: $total',
           child: Material(
             color: const Color(0xFFDC2626),
-            borderRadius: BorderRadius.circular(12),
             child: InkWell(
               key: const Key('dashboard_referral_banner_tap'),
               onTap: widget.onTap,
-              borderRadius: BorderRadius.circular(12),
               splashColor: Colors.white.withValues(alpha: 0.15),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
                 child: Row(
                   children: [
                     Stack(
                       clipBehavior: Clip.none,
                       children: [
                         Container(
-                          width: 28,
-                          height: 28,
+                          width: 20,
+                          height: 20,
                           decoration: const BoxDecoration(
                             shape: BoxShape.circle,
                             color: Colors.white24,
@@ -1163,8 +1160,8 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner> {
                             child: Text(
                               total > 99 ? '99+' : '$total',
                               style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w900,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
                                 color: Colors.white,
                               ),
                             ),
@@ -1175,28 +1172,28 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner> {
                             top: -2,
                             right: -2,
                             child: Container(
-                              width: 8,
-                              height: 8,
+                              width: 6,
+                              height: 6,
                               decoration: const BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: Color(0xFFFBBF24),
+                                color: Color(0xFFFEF08A),
                               ),
                             ),
                           ),
                       ],
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         MissionDashboardStrings.referralAlertsLabel,
                         style: const TextStyle(
-                          fontSize: 14,
+                          fontSize: 12,
                           fontWeight: FontWeight.w700,
                           color: Colors.white,
                         ),
                       ),
                     ),
-                    const Icon(Icons.chevron_right_rounded, color: Colors.white70, size: 20),
+                    const Icon(Icons.chevron_right_rounded, color: Colors.white70, size: 16),
                   ],
                 ),
               ),
@@ -1654,16 +1651,6 @@ class _VisitFilterPanel extends StatelessWidget {
                           onTap: () => onNeedToggled(need),
                         ),
                       )),
-              ...availableProgrammes.map((prog) => Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: _CategoryBubble(
-                      label: _programmeLabel(prog),
-                      icon: Icons.vaccines_rounded,
-                      activeColor: AppColors.aiPurple,
-                      isActive: selectedProgrammes.contains(prog),
-                      onTap: () => onProgrammeToggled(prog),
-                    ),
-                  )),
             ],
           ),
         ),

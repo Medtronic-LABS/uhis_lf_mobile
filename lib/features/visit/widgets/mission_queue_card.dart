@@ -109,32 +109,26 @@ class MissionQueueCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Row 1: Name + age chip + reason badge
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
+                          // Row 1: Name + age chip + reason badge (wraps)
+                          Wrap(
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 6,
+                            runSpacing: 3,
                             children: [
-                              Flexible(
-                                child: Text(
-                                  item.patientName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 13.5,
-                                    fontWeight: FontWeight.w800,
-                                    color: isCompleted
-                                        ? tokens.textMuted
-                                        : tokens.textPrimary,
-                                    decoration: isCompleted
-                                        ? TextDecoration.lineThrough
-                                        : null,
-                                  ),
+                              Text(
+                                item.patientName,
+                                style: TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: isCompleted
+                                      ? tokens.textMuted
+                                      : tokens.textPrimary,
+                                  decoration: isCompleted
+                                      ? TextDecoration.lineThrough
+                                      : null,
                                 ),
                               ),
-                              if (item.age != null) ...[
-                                const SizedBox(width: 6),
-                                _AgeChip(item.age!),
-                              ],
-                              const SizedBox(width: 6),
+                              if (item.age != null) _AgeChip(item.age!),
                               if (isCompleted)
                                 _VisitedBadge(tokens: tokens)
                               else
@@ -259,15 +253,15 @@ class _AgeChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: tokens.cardSurfaceMuted,
+        color: tokens.brandNavy.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
         '${age}y',
         style: TextStyle(
           fontSize: 10,
-          fontWeight: FontWeight.w600,
-          color: tokens.textMuted,
+          fontWeight: FontWeight.w700,
+          color: tokens.brandNavy,
         ),
       ),
     );
