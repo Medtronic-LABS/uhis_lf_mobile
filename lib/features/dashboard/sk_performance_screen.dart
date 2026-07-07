@@ -38,12 +38,12 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen> {
       backgroundColor: AppColors.canvas,
       appBar: AppBar(
         backgroundColor: AppColors.navy,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.textOnNavy,
         elevation: 0,
         title: const Text(
           PerformanceStrings.title,
           style: TextStyle(
-            color: Colors.white,
+            color: AppColors.textOnNavy,
             fontWeight: FontWeight.w700,
             fontSize: 17,
           ),
@@ -147,7 +147,7 @@ class _Tab extends StatelessWidget {
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeInOut,
           decoration: BoxDecoration(
-            color: active ? Colors.white : Colors.transparent,
+            color: active ? AppColors.cardSurface : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
           ),
           padding: const EdgeInsets.symmetric(vertical: 9),
@@ -155,7 +155,7 @@ class _Tab extends StatelessWidget {
           child: Text(
             label,
             style: TextStyle(
-              color: active ? AppColors.navy : Colors.white70,
+              color: active ? AppColors.navy : AppColors.onDarkMid,
               fontWeight: FontWeight.w700,
               fontSize: 13,
             ),
@@ -193,7 +193,7 @@ class _HeroCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [AppColors.aiPurpleDark, Color(0xFF5448C8)],
+          colors: [AppColors.aiPurpleDark, AppColors.aiPurple],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -206,7 +206,7 @@ class _HeroCard extends StatelessWidget {
           Text(
             periodLabel,
             style: const TextStyle(
-              color: Colors.white70,
+              color: AppColors.onDarkMid,
               fontSize: 12,
               fontWeight: FontWeight.w600,
               letterSpacing: 0.5,
@@ -219,7 +219,7 @@ class _HeroCard extends StatelessWidget {
               Text(
                 '$visitCount',
                 style: const TextStyle(
-                  color: Colors.white,
+                  color: AppColors.textOnNavy,
                   fontSize: 52,
                   fontWeight: FontWeight.w900,
                   height: 1,
@@ -231,7 +231,7 @@ class _HeroCard extends StatelessWidget {
                 child: Text(
                   PerformanceStrings.heroSubline,
                   style: const TextStyle(
-                    color: Colors.white60,
+                    color: AppColors.onDarkLow,
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
@@ -247,7 +247,7 @@ class _HeroCard extends StatelessWidget {
                 Text(
                   PerformanceStrings.weeklyTarget,
                   style: const TextStyle(
-                    color: Colors.white60,
+                    color: AppColors.onDarkLow,
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
@@ -255,7 +255,7 @@ class _HeroCard extends StatelessWidget {
                 Text(
                   '$visitCount / ${SkPerformanceStats.weeklyTarget}',
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: AppColors.textOnNavy,
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
@@ -268,7 +268,7 @@ class _HeroCard extends StatelessWidget {
               child: LinearProgressIndicator(
                 value: progress,
                 minHeight: 6,
-                backgroundColor: Colors.white24,
+                backgroundColor: AppColors.onDarkSurface,
                 valueColor:
                     AlwaysStoppedAnimation<Color>(AppColors.pink),
               ),
@@ -348,16 +348,10 @@ class _StatCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(AppRadius.button),
         border: Border(top: BorderSide(color: accentColor, width: 3)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0A000000),
-            blurRadius: 4,
-            offset: Offset(0, 2),
-          ),
-        ],
+        boxShadow: AppShadows.statBox,
       ),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       child: Column(
@@ -381,14 +375,14 @@ class _StatCard extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF374151),
+                  color: AppColors.textMid,
                 ),
               ),
               Text(
                 subline,
                 style: const TextStyle(
                   fontSize: 10,
-                  color: Color(0xFF9CA3AF),
+                  color: AppColors.textDisabled,
                 ),
               ),
             ],
@@ -416,7 +410,7 @@ class _ProgrammeStrip extends StatelessWidget {
           style: const TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF6B7280),
+            color: AppColors.textMuted,
             letterSpacing: 0.8,
           ),
         ),
@@ -468,15 +462,9 @@ class _ProgCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0A000000),
-            blurRadius: 4,
-            offset: Offset(0, 2),
-          ),
-        ],
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(AppRadius.field),
+        boxShadow: AppShadows.statBox,
       ),
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
       child: Column(
@@ -558,22 +546,16 @@ class _RecentActivity extends StatelessWidget {
           style: const TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF6B7280),
+            color: AppColors.textMuted,
             letterSpacing: 0.8,
           ),
         ),
         const SizedBox(height: 10),
         Container(
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x0A000000),
-                blurRadius: 4,
-                offset: Offset(0, 2),
-              ),
-            ],
+            color: AppColors.cardSurface,
+            borderRadius: BorderRadius.circular(AppRadius.button),
+            boxShadow: AppShadows.statBox,
           ),
           child: Column(
             children: [
@@ -588,7 +570,7 @@ class _RecentActivity extends StatelessWidget {
                       style: const TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFF9CA3AF),
+                        color: AppColors.textDisabled,
                         letterSpacing: 0.5,
                       ),
                     ),
@@ -651,7 +633,7 @@ class _ActivityRow extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF1F2937),
+                      color: AppColors.textStrong,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -660,7 +642,7 @@ class _ActivityRow extends StatelessWidget {
                     '${item.programme}  ·  ${item.villageName}',
                     style: const TextStyle(
                       fontSize: 11,
-                      color: Color(0xFF9CA3AF),
+                      color: AppColors.textDisabled,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -700,7 +682,7 @@ class _ActivityRow extends StatelessWidget {
                     child: Icon(
                       Icons.chevron_right_rounded,
                       size: 16,
-                      color: Color(0xFFD1D5DB),
+                      color: AppColors.borderDashed,
                     ),
                   ),
               ],
@@ -725,16 +707,16 @@ class _ErrorView extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.error_outline, size: 40, color: Color(0xFF9CA3AF)),
+          const Icon(Icons.error_outline, size: 40, color: AppColors.textDisabled),
           const SizedBox(height: 12),
           Text(
             PerformanceStrings.loadError,
-            style: const TextStyle(color: Color(0xFF6B7280)),
+            style: const TextStyle(color: AppColors.textMuted),
           ),
           const SizedBox(height: 16),
           FilledButton.tonal(
             onPressed: onRetry,
-            child: const Text('Retry'),
+            child: const Text(CommonStrings.retry),
           ),
         ],
       ),

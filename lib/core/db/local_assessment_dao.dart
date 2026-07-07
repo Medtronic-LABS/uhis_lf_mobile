@@ -193,22 +193,42 @@ class LocalAssessmentEntity {
       );
 
   /// Convert to API request format matching Android's Assessment model.
-  Map<String, dynamic> toApiRequest() {
-    final details = jsonDecode(assessmentDetails);
+  ///
+  /// [provenance] — map with `organizationId`, `spiceUserId`, `userId`,
+  /// `modifiedDate` from the logged-in user session.
+  /// [peerSupervisorId] — numeric user ID used as `peerSupervisorId`.
+  Map<String, dynamic> toApiRequest({
+    Map<String, dynamic>? provenance,
+    int? peerSupervisorId,
+  }) {
+    final details =
+        jsonDecode(assessmentDetails) as Map<String, dynamic>;
+
+    // Inject bpLog / glucoseLog sub-objects that the backend offline-service
+    // extracts from assessmentDetails to create vitals records server-side.
+    // Mirrors Android AssessmentUtil.kt — flat projection fields → nested shape.
+    _injectVitalLogs(details);
+
+    // Backend AssessmentDetailsDTO expects programme-specific nesting:
+    // ANC → {"anc": <AncDTO>}, NCD → {"ncd": <NcdDTO>}, etc.
+    final wrappedDetails = _wrapDetailsForType(assessmentType, details);
+
     return {
       'referenceId': householdMemberLocalId,
       'assessmentType': assessmentType.toUpperCase(),
-      'assessmentDetails': details,
+      'assessmentDetails': wrappedDetails,
       'villageId': villageId,
       'assessmentDate': createdAt?.toUtc().toIso8601String(),
       'patientStatus': referralStatus ?? 'Recovered',
-      if (referredReasons != null) 'referredReasons': referredReasons,
+      'peerSupervisorId': ?peerSupervisorId,
+      'referredReasons': ?referredReasons,
       if (otherDetails != null) 'summary': jsonDecode(otherDetails!),
       'encounter': {
         'householdId': householdId,
         'memberId': memberId,
         'referred': isReferred,
         'patientId': patientId,
+        'provenance': ?provenance,
         'latitude': latitude,
         'longitude': longitude,
         'startTime': createdAt?.toUtc().toIso8601String(),
@@ -217,6 +237,77 @@ class LocalAssessmentEntity {
       if (followUpId != null) 'followUpId': followUpId,
       'updatedAt': updatedAt?.millisecondsSinceEpoch ?? 0,
     };
+  }
+
+  /// Build bpLog / glucoseLog nested objects from flat projection fields so
+  /// the backend offline-service can extract and store them as vitals records.
+  /// Matches Android AssessmentDefinedParams + AssessmentUtil field names.
+  static void _injectVitalLogs(Map<String, dynamic> d) {
+    double? asDouble(Object? v) {
+      if (v is num) return v.toDouble();
+      if (v is String) return double.tryParse(v);
+      return null;
+    }
+
+    // ── bpLog ────────────────────────────────────────────────────────────────
+    if (!d.containsKey('bpLog')) {
+      final sys = asDouble(d['systolic'] ?? d['systolicBp'] ?? d['bloodPressureSystolic']);
+      final dia = asDouble(d['diastolic'] ?? d['diastolicBp'] ?? d['bloodPressureDiastolic']);
+      if (sys != null && dia != null) {
+        d['bpLog'] = {
+          'avgSystolic': sys.toInt(),
+          'avgDiastolic': dia.toInt(),
+          'avgBloodPressure': '${sys.toInt()}/${dia.toInt()}',
+          'bpLogDetails': [
+            {'systolic': sys.toInt(), 'diastolic': dia.toInt()}
+          ],
+        };
+      }
+    }
+
+    // ── glucoseLog ───────────────────────────────────────────────────────────
+    if (!d.containsKey('glucoseLog')) {
+      final glucose = asDouble(
+          d['glucoseValue'] ?? d['glucose'] ?? d['bloodGlucose'] ?? d['fbs'] ?? d['rbs']);
+      if (glucose != null) {
+        final type = d['glucoseType'] as String? ??
+            (d.containsKey('fbs') ? 'fbs' : d.containsKey('rbs') ? 'rbs' : 'rbs');
+        final unit = d['glucoseUnit'] as String? ?? 'mg/dL';
+        d['glucoseLog'] = {
+          'glucose': glucose,
+          'glucoseValue': glucose,
+          'glucoseType': type,
+          'glucoseUnit': unit,
+        };
+      }
+    }
+  }
+
+  /// Wrap a flat assessment payload under the programme-specific key that
+  /// matches the backend's AssessmentDetailsDTO field names.
+  ///
+  /// The backend deserializes `assessmentDetails` as AssessmentDetailsDTO,
+  /// which has typed fields per programme (e.g. `AncDTO anc`, `NcdDTO ncd`).
+  /// Sending a flat map means the backend finds no matching field and silently
+  /// drops all data. This method ensures the correct nesting.
+  ///
+  /// If `flat` already contains the programme key (legacy or re-entrant call),
+  /// it is returned unchanged to avoid double-wrapping.
+  static Map<String, dynamic> _wrapDetailsForType(
+    String assessmentType,
+    Map<String, dynamic> flat,
+  ) {
+    final key = switch (assessmentType.toUpperCase()) {
+      'ANC' => 'anc',
+      'NCD' => 'ncd',
+      'PNC' => 'pncMother',
+      'TB' => 'tb',
+      'ICCM' || 'IMCI' => 'iccm',
+      'EPI' => null,
+      _ => null,
+    };
+    if (key == null || flat.containsKey(key)) return flat;
+    return {key: flat};
   }
 }
 

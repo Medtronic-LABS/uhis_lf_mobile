@@ -15,9 +15,12 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
 import '../../core/constants/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import 'coaching_models.dart';
+import 'coaching_repository.dart';
 import 'module_player_screen.dart';
 
 class TrainingScreen extends StatelessWidget {
@@ -25,10 +28,6 @@ class TrainingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final priorities = MockCoachingData.todaysPriorities;
-    final all = MockCoachingData.allModules;
-
     return Scaffold(
       backgroundColor: AppColors.canvas,
       appBar: AppBar(
@@ -36,7 +35,24 @@ class TrainingScreen extends StatelessWidget {
         backgroundColor: AppColors.aiPurpleDark,
         foregroundColor: Colors.white,
       ),
-      body: SingleChildScrollView(
+      body: const TrainingBody(),
+    );
+  }
+}
+
+/// Embeddable training content — used both by [TrainingScreen] (standalone)
+/// and by the Assistant tab's Training sub-tab.
+class TrainingBody extends StatelessWidget {
+  const TrainingBody({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final repo = context.watch<CoachingRepository>();
+    final priorities = repo.todaysPriorities;
+    final all = repo.modules;
+
+    return SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.xxxl),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -88,7 +104,6 @@ class TrainingScreen extends StatelessWidget {
             ),
           ],
         ),
-      ),
     );
   }
 }

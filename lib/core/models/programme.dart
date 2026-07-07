@@ -152,6 +152,34 @@ enum Programme {
     return null;
   }
 
+  /// Human-readable form label shown in visit-flow dialogs and headers.
+  String get displayName {
+    switch (this) {
+      case Programme.imci:
+        return 'Child Visit';
+      case Programme.anc:
+        return 'ANC Visit';
+      case Programme.pnc:
+        return 'PNC Visit';
+      case Programme.ncd:
+        return 'NCD Check';
+      case Programme.tb:
+        return 'TB Check';
+      case Programme.epi:
+        return 'Vaccination';
+      case Programme.nutrition:
+        return 'Nutrition';
+      case Programme.familyPlanning:
+        return 'Family Planning';
+      case Programme.cataract:
+        return 'Cataract';
+      case Programme.eyeCare:
+        return 'Eye Care';
+      case Programme.unknown:
+        return 'Scheduled Visit';
+    }
+  }
+
   /// Parse from any string, returning [Programme.unknown] if not recognized.
   static Programme fromString(String? s) {
     if (s == null || s.isEmpty) return Programme.unknown;

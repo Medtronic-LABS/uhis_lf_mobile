@@ -146,7 +146,7 @@ class _EnrollmentInputFieldState extends State<EnrollmentInputField> {
             decoration: BoxDecoration(
               color: fillColor,
               border: Border.all(color: borderColor, width: 1.5),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppRadius.button),
             ),
             child: TextField(
               controller: _controller,
@@ -164,7 +164,12 @@ class _EnrollmentInputFieldState extends State<EnrollmentInputField> {
                   fontSize: 14,
                   color: AppColors.textMuted,
                 ),
-                contentPadding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                contentPadding: const EdgeInsets.fromLTRB(
+                  AppSpacing.xxxl,
+                  AppSpacing.xl,
+                  AppSpacing.xxxl,
+                  AppSpacing.xl,
+                ),
                 border: InputBorder.none,
               ),
               style: TextStyle(

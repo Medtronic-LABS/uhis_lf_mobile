@@ -35,7 +35,7 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
     if (!mounted) return;
 
     if (ok) {
-      context.go('/dashboard');
+      context.go('/home');
     } else {
       setState(() {
         _busy = false;
@@ -48,8 +48,12 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
   @override
   Widget build(BuildContext context) {
     // Use select to only rebuild on specific field changes
-    final biometricEnabled = context.select<AuthState, bool>((a) => a.biometricEnabled);
-    final biometricAvailable = context.select<AuthState, bool>((a) => a.biometricAvailable);
+    final biometricEnabled = context.select<AuthState, bool>(
+      (a) => a.biometricEnabled,
+    );
+    final biometricAvailable = context.select<AuthState, bool>(
+      (a) => a.biometricAvailable,
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -108,11 +112,10 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
                                   final auth = context.read<AuthState>();
                                   final ok = await auth.biometricUnlock();
                                   if (!mounted) return;
-                                  if (ok) router.go('/dashboard');
+                                  if (ok) router.go('/home');
                                 },
                           icon: const Icon(Icons.lock_open),
-                          label: const Text(
-                              LockStrings.unlockWithBiometrics),
+                          label: const Text(LockStrings.unlockWithBiometrics),
                         ),
                       TextButton(
                         onPressed: _busy

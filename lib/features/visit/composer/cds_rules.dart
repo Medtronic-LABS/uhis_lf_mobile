@@ -127,8 +127,12 @@ class CdsRules {
     final alerts = <CdsAlert>[];
 
     // ── BP rules (WHO HEARTS) ────────────────────────────────────────────────
-    final systolic = fieldValues['bloodPressureSystolic'] as int?;
-    final diastolic = fieldValues['bloodPressureDiastolic'] as int?;
+    // Supports both legacy flat keys (bloodPressureSystolic) and SDK flat keys
+    // (systolic / diastolic — after DynamicFormController composite expansion).
+    final systolic = (fieldValues['bloodPressureSystolic'] ??
+        fieldValues['systolic']) as int?;
+    final diastolic = (fieldValues['bloodPressureDiastolic'] ??
+        fieldValues['diastolic']) as int?;
 
     if (systolic != null || diastolic != null) {
       final sys = systolic ?? 0;
@@ -254,7 +258,8 @@ class CdsRules {
     }
 
     // ── Blood glucose / diabetes (WHO PEN) ────────────────────────────────────
-    final glucoseRaw = fieldValues['glucoseValue'];
+    // 'glucoseValue' = legacy composer key; 'glucose' = SDK field_library key.
+    final glucoseRaw = fieldValues['glucoseValue'] ?? fieldValues['glucose'];
     final glucose = glucoseRaw is num ? glucoseRaw.toDouble() : null;
     final glucoseType = fieldValues['glucoseType'] as String?;
 

@@ -68,49 +68,45 @@ class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
         final hhNumber = household?.householdNumber ?? '';
 
         return Scaffold(
-          backgroundColor: const Color(0xFFF5F6FB),
+          backgroundColor: AppColors.pageBackground,
           body: SafeArea(
             child: Stack(
               children: [
                 ListView(
-                  padding: const EdgeInsets.only(bottom: 96),
+                  padding: const EdgeInsets.only(
+                    bottom: AppSpacing.stickyBarClearance,
+                  ),
                   children: [
-                    // ── Green success header (no AppBar) ───────────────────
+                    // ── Maroon success header ───────────────────────────────
                     Container(
                       width: double.infinity,
-                      color: const Color(0xFF14996A),
-                      padding: const EdgeInsets.fromLTRB(24, 28, 24, 28),
+                      color: const Color(0xFF831843),
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.h6xl,
+                        AppSpacing.h7xl,
+                        AppSpacing.h6xl,
+                        AppSpacing.h7xl,
+                      ),
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            width: 56,
-                            height: 56,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: Colors.white,
-                                width: 2,
-                              ),
-                              color: Colors.white.withValues(alpha: 0.2),
-                            ),
-                            child: const Icon(
-                              Icons.check,
-                              color: Colors.white,
-                              size: 28,
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          const Text(
-                            EnrollmentStrings.householdCreatedTitle2,
-                            style: TextStyle(
-                              fontSize: 22,
+                          Text(
+                            '✓ ${EnrollmentStrings.householdCreatedTitle2}',
+                            style: const TextStyle(
+                              fontSize: 26,
                               fontWeight: FontWeight.w800,
                               color: Colors.white,
                             ),
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            '$hhNumber · Char Bhadra',
+                            [
+                              if (hhNumber.isNotEmpty) hhNumber,
+                              if ((household?.subVillageName ?? '').isNotEmpty)
+                                household!.subVillageName!
+                              else if ((household?.villageName ?? '').isNotEmpty)
+                                household!.villageName!,
+                            ].join(' · '),
                             style: TextStyle(
                               fontSize: 13,
                               color: Colors.white.withValues(alpha: 0.7),
@@ -122,7 +118,7 @@ class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
 
                     // ── Body ───────────────────────────────────────────────
                     Padding(
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.all(AppSpacing.h5xl),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -132,9 +128,9 @@ class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
                               decoration: BoxDecoration(
                                 color: AppColors.cardSurface,
                                 border: Border.all(color: AppColors.border),
-                                borderRadius: BorderRadius.circular(16),
+                                borderRadius: BorderRadius.circular(AppRadius.card),
                               ),
-                              padding: const EdgeInsets.all(16),
+                              padding: const EdgeInsets.all(AppSpacing.xxxl),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -215,7 +211,7 @@ class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
                                 ),
                                 decoration: BoxDecoration(
                                   color: AppColors.aiPurple,
-                                  borderRadius: BorderRadius.circular(20),
+                                  borderRadius: BorderRadius.circular(AppRadius.pill),
                                 ),
                                 child: Text(
                                   '$totalCount',
@@ -327,9 +323,9 @@ class _HeadMemberCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.cardSurface,
         border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppRadius.card),
       ),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.xl),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -376,17 +372,20 @@ class _HeadMemberCard extends StatelessWidget {
           ),
           // "Head" amber badge
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: AppSpacing.xs,
+            ),
             decoration: BoxDecoration(
-              color: const Color(0xFFFEF3C7),
-              borderRadius: BorderRadius.circular(20),
+              color: AppColors.statusWarningSurface,
+              borderRadius: BorderRadius.circular(AppRadius.pill),
             ),
             child: const Text(
               'Head',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF92400E),
+                color: AppColors.statusWarningText,
               ),
             ),
           ),
@@ -394,18 +393,20 @@ class _HeadMemberCard extends StatelessWidget {
           if (head.nidScanned) ...[
             const SizedBox(width: 6),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.xs,
+              ),
               decoration: BoxDecoration(
-                color: const Color(0xFFF0FDF4),
-                borderRadius: BorderRadius.circular(20),
+                color: AppColors.tbSurface,
+                borderRadius: BorderRadius.circular(AppRadius.pill),
               ),
               child: const Text(
                 '📇 NID scan',
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFF14996A),
+                  color: AppColors.enrollmentSuccess,
                 ),
               ),
             ),
@@ -433,7 +434,7 @@ class _DashedAddMemberButton extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             color: AppColors.cardSurface,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppRadius.button),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(

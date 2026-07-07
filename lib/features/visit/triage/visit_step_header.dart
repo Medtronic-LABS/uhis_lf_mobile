@@ -7,6 +7,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_strings.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// Which of the 3 visit steps is currently active.
 enum VisitStep { symptomPicker, triageResult, detailedForm }
@@ -30,7 +31,7 @@ class VisitStepHeader extends StatelessWidget implements PreferredSizeWidget {
 
   final VoidCallback? onBack;
 
-  static const Color _headerColor = Color(0xFF1B2B5E); // Navy
+  static const Color _headerColor = AppColors.navy;
 
   @override
   Size get preferredSize => const Size.fromHeight(104);
@@ -41,10 +42,13 @@ class VisitStepHeader extends StatelessWidget implements PreferredSizeWidget {
 
     return Material(
       color: _headerColor,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             // Back button + title row
             Padding(
               padding: const EdgeInsets.fromLTRB(4, 4, 16, 0),
@@ -116,6 +120,7 @@ class VisitStepHeader extends StatelessWidget implements PreferredSizeWidget {
             ),
           ],
         ),
+      ),
     );
   }
 

@@ -5,6 +5,8 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart' show Endpoints;
+import '../../core/auth/auth_repository.dart';
+import '../../core/config/app_config.dart';
 import '../../core/db/local_assessment_dao.dart';
 
 /// Repository for offline-first assessment management.
@@ -20,11 +22,14 @@ class AssessmentRepository extends ChangeNotifier {
   AssessmentRepository({
     required LocalAssessmentDao dao,
     required ApiClient api,
+    required AuthRepository auth,
   })  : _dao = dao,
-        _api = api;
+        _api = api,
+        _auth = auth;
 
   final LocalAssessmentDao _dao;
   final ApiClient _api;
+  final AuthRepository _auth;
 
   bool _isSyncing = false;
   bool get isSyncing => _isSyncing;
@@ -100,18 +105,26 @@ class AssessmentRepository extends ChangeNotifier {
   ///
   /// This is the only write path — no direct assessment/create call.
   Future<int> syncPendingAssessments() async {
-    if (_isSyncing) return 0;
+    if (_isSyncing) {
+      debugPrint('[AssessmentSync] Already syncing — skip');
+      return 0;
+    }
 
     _isSyncing = true;
     notifyListeners();
 
     try {
       final pending = await _dao.getUnsynced();
+      debugPrint('[AssessmentSync] Pending count: ${pending.length}');
       if (pending.isEmpty) return 0;
 
       final synced = await _batchSync(pending);
       await _refreshPendingCount();
+      debugPrint('[AssessmentSync] ✓ Synced $synced assessment(s). Pending now: $_pendingCount');
       return synced;
+    } catch (e, st) {
+      debugPrint('[AssessmentSync] ✗ Sync error: $e\n$st');
+      rethrow;
     } finally {
       _isSyncing = false;
       notifyListeners();
@@ -121,35 +134,79 @@ class AssessmentRepository extends ChangeNotifier {
   /// Batch sync via offline-service/offline-sync/create.
   Future<int> _batchSync(List<LocalAssessmentEntity> assessments) async {
     final ids = assessments.map((e) => e.id).toList();
+    debugPrint('[AssessmentSync] Marking ${ids.length} as in-progress: $ids');
 
     // Mark as in-progress
     await _dao.updateSyncStatus(ids, AssessmentSyncStatus.inProgress);
 
-    // Build batch request matching Android's format
+    // Resolve provenance from auth once for the whole batch
+    final userId = await _auth.userId();
+    final orgId = await _auth.organizationFhirId();
+    final deviceId = await _auth.deviceId();
+    debugPrint('[AssessmentSync] Provenance — userId=$userId, orgId=$orgId, deviceId=$deviceId');
+
+    final provenance = <String, dynamic>{
+      'modifiedDate': DateTime.now().toUtc().toIso8601String(),
+      'organizationId': ?orgId,
+      'spiceUserId': ?userId,
+      if (userId != null) 'userId': userId.toString(),
+    };
+
+    // Build batch request matching Android's offline-sync/create format
     final requestId = const Uuid().v4();
+    final assessmentPayloads = assessments
+        .map((e) => e.toApiRequest(
+              provenance: provenance,
+              peerSupervisorId: userId,
+            ))
+        .toList();
+
+    debugPrint('[AssessmentSync] Request payload:');
+    debugPrint('  requestId: $requestId');
+    debugPrint('  tenantId: ${_api.tenantIdAsNum}');
+    debugPrint('  appVersionName: ${AppConfig.appVersionName}');
+    debugPrint('  appType: ${AppConfig.appType}');
+    debugPrint('  assessments[${assessmentPayloads.length}]:');
+    for (var i = 0; i < assessmentPayloads.length; i++) {
+      final a = assessmentPayloads[i];
+      debugPrint('    [$i] type=${a['assessmentType']} patient=${a['encounter']?['patientId']} referred=${a['encounter']?['referred']}');
+      debugPrint('    [$i] provenance=${a['encounter']?['provenance']}');
+      final det = a['assessmentDetails'] as Map<String, dynamic>?;
+      debugPrint('    [$i] villageId=${a['villageId']} referenceId=${a['referenceId']} bpLog=${det?['bpLog']} glucoseLog=${det?['glucoseLog']}');
+    }
+
     final request = {
       'requestId': requestId,
       'tenantId': _api.tenantIdAsNum,
+      'appVersionName': AppConfig.appVersionName,
+      'appVersionCode': AppConfig.appVersionCode,
+      'appType': AppConfig.appType,
+      'syncMode': 'ManualSync',
+      if (deviceId.isNotEmpty) 'deviceId': deviceId,
       'households': <Map<String, dynamic>>[],
       'householdMembers': <Map<String, dynamic>>[],
-      'assessments': assessments.map((e) => e.toApiRequest()).toList(),
-      'followups': <Map<String, dynamic>>[],
-      'householdMemberLink': <Map<String, dynamic>>[],
+      'assessments': assessmentPayloads,
+      'followUps': <Map<String, dynamic>>[],
+      'householdMemberLinks': <Map<String, dynamic>>[],
     };
 
+    debugPrint('[AssessmentSync] POST ${Endpoints.offlineSyncCreate}');
     final response = await _api.dio.post<Map<String, dynamic>>(
       Endpoints.offlineSyncCreate,
       data: request,
     );
 
     final status = response.statusCode ?? 0;
+    debugPrint('[AssessmentSync] Response HTTP $status — body: ${response.data}');
+
     if (status >= 200 && status < 300) {
-      // Poll for sync status or mark as success
       await _dao.updateSyncStatus(ids, AssessmentSyncStatus.success);
+      debugPrint('[AssessmentSync] Marked ${ids.length} as success');
       return ids.length;
     } else {
       await _dao.updateSyncStatus(ids, AssessmentSyncStatus.failed);
-      throw StateError('Batch sync failed: HTTP $status');
+      debugPrint('[AssessmentSync] ✗ Marked ${ids.length} as failed');
+      throw StateError('Batch sync failed: HTTP $status — ${response.data}');
     }
   }
 

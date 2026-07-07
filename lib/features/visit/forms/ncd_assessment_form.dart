@@ -18,11 +18,13 @@ class NcdAssessmentForm extends StatefulWidget {
     this.initialData,
     this.onChanged,
     this.patientAge,
+    this.previousWeight,
   });
 
   final NcdAssessment? initialData;
   final ValueChanged<NcdAssessment>? onChanged;
   final int? patientAge;
+  final double? previousWeight;
 
   @override
   State<NcdAssessmentForm> createState() => _NcdAssessmentFormState();
@@ -432,21 +434,35 @@ class _NcdAssessmentFormState extends State<NcdAssessmentForm> {
                   Row(
                     children: [
                       Expanded(
-                        child: _wrapWithAIIndicator(
-                          'weight',
-                          TextFormField(
-                            controller: _weightController,
-                            decoration: const InputDecoration(
-                              labelText: 'Weight',
-                              suffixText: 'kg',
-                              border: OutlineInputBorder(),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _wrapWithAIIndicator(
+                              'weight',
+                              TextFormField(
+                                controller: _weightController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Weight',
+                                  suffixText: 'kg',
+                                  border: OutlineInputBorder(),
+                                ),
+                                keyboardType: TextInputType.number,
+                                onChanged: (_) {
+                                  _onFieldEdited('weight');
+                                  _updateData();
+                                },
+                              ),
                             ),
-                            keyboardType: TextInputType.number,
-                            onChanged: (_) {
-                              _onFieldEdited('weight');
-                              _updateData();
-                            },
-                          ),
+                            if (widget.previousWeight != null) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                'Last: ${widget.previousWeight!.toStringAsFixed(1)} kg',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Theme.of(context).colorScheme.outline,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                       const SizedBox(width: 12),

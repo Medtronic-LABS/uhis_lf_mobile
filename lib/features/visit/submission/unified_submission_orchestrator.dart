@@ -20,6 +20,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/models/programme.dart';
+import '../composer/sdk_field_projector.dart';
 import '../composer/section_registry.dart';
 import '../eval/shadow_log_service.dart';
 
@@ -102,8 +103,14 @@ class UnifiedSubmissionOrchestrator {
 
     for (final programme in programmes) {
       final legId = _uuid.v4();
-      final projection =
-          SectionRegistry.projectionFor(programme, fieldValues);
+      // Prefer SDK projection (layout_manifests field IDs = canonical backend IDs).
+      // Fall back to SectionRegistry for any legacy drafts whose field IDs
+      // predate the canonical transformer.
+      final sdkProjection =
+          SdkFieldProjector.project(programme, fieldValues);
+      final projection = sdkProjection.isNotEmpty
+          ? sdkProjection
+          : SectionRegistry.projectionFor(programme, fieldValues);
 
       final entity = LocalAssessmentEntity(
         id: _uuid.v4(),
@@ -126,6 +133,8 @@ class UnifiedSubmissionOrchestrator {
       );
 
       await _localAssessmentDao.insert(entity);
+      // ignore: avoid_print
+      print('[Orchestrator] saved leg: type=${programme.wireTag} patientId=${draft.patientId} memberId=$memberId householdMemberLocalId=$householdMemberLocalId');
     }
 
     // Phase 6: shadow-log the completed assessment for eval dataset capture.

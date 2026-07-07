@@ -94,7 +94,7 @@ abstract final class LockStrings {
   static const String communityHealth = 'Community Health';
   static const String programName = 'Apon Sushashthya';
   static const String programSubtitle = 'আপন সুস্বাস্থ্য · Community Health';
-  static String orUsePin(int len) => 'Or use $len-digit PIN';
+  static String orUsePin(int len) => 'Use $len-digit PIN';
 }
 
 /// Android `BiometricPrompt` copy + biometric unlock messages.
@@ -443,18 +443,18 @@ abstract final class HouseholdDetailStrings {
 abstract final class WorklistStrings {
   WorklistStrings._();
 
-  // Programme labels.
-  static const String programmeImci = 'IMCI';
-  static const String programmeAnc = 'ANC';
-  static const String programmePnc = 'PNC';
-  static const String programmeNcd = 'NCD';
-  static const String programmeTb = 'TB';
-  static const String programmeEpi = 'EPI';
+  // Programme labels — descriptive visit-type labels shown on patient cards.
+  static const String programmeImci = 'Child Visit';
+  static const String programmeAnc = 'ANC Visit';
+  static const String programmePnc = 'PNC Visit';
+  static const String programmeNcd = 'NCD Check';
+  static const String programmeTb = 'TB Check';
+  static const String programmeEpi = 'Vaccination';
   static const String programmeNutrition = 'Nutrition';
   static const String programmeFamilyPlanning = 'Family Planning';
   static const String programmeCataract = 'Cataract';
   static const String programmeEyeCare = 'Eye Care';
-  static const String programmeUnknown = 'General';
+  static const String programmeUnknown = 'Scheduled Visit';
   static const String selectService = '📋  Select service';
 
   // Chip filters.
@@ -908,6 +908,12 @@ abstract final class MissionDashboardStrings {
   static const String startRoute = 'Start Route';
   static const String continueTodaysWork = "Continue Today's Work";
 
+  // ── Household Enrollment CTA ─────────────────────────────────────────────
+  static const String enrollHouseholdTitle = 'Enrol a new household';
+  static const String enrollHouseholdSubtitle =
+      'Register a family not yet in the programme';
+  static const String enrollHouseholdAction = 'Enrol now';
+
   // ── Referral Operations Widget ───────────────────────────────────────────
   static const String referralStatus = 'Referral Status';
   static const String active = 'Active';
@@ -1051,6 +1057,7 @@ abstract final class MissionDashboardStrings {
   static const String needFacilityReferral = '🏥 Facility referral';
   static const String clearNeedFilters = 'Clear';
   static const String filterByProgramme = 'Programme';
+  static const String noNeedsInQueue = 'No priority needs in today\'s list';
   static const String noVisitsMatchFilters = 'No visits match these filters';
   static const String noVisitsMatchFiltersHint =
       'Try another village or clear the filters';
@@ -1058,9 +1065,9 @@ abstract final class MissionDashboardStrings {
       "$name's visit already done today ✓";
 
   // ── AI sorted info card tags ──────────────────────────────────────────────
-  static const String aiSortedTagRisk = 'Risk scoring';
-  static const String aiSortedTagOverdue = 'Overdue flags';
-  static const String aiSortedTagCce = 'CCE alerts';
+  static const String aiSortedTagRisk = '✦Risk scoring';
+  static const String aiSortedTagOverdue = '✦Overdue flags';
+  static const String aiSortedTagCce = '✦CCE alerts';
 
   // ── "+ Enrol new" FAB ────────────────────────────────────────────────────
   static const String enrolNewCta = 'Enroll new';
@@ -2343,6 +2350,80 @@ abstract final class ComposerStrings {
   static const String discardButton = 'Discard';
   static const String nextButton = 'Next';
   static const String dismissOkButton = 'OK';
+
+  // ── Extended field widget strings ───────────────────────────────────────────
+  static const String selectDateHint = 'Select date';
+  static const String bpSystolicHint = 'SYS';
+  static const String bpDiastolicHint = 'DIA';
+  static const String bpUnit = 'mmHg';
+  static const String bpValidationError = 'Enter a valid reading';
+  static const String ageLabel = 'Age';
+  static const String dobLabel = 'Date of Birth';
+  static const String yearsShort = 'Y';
+  static const String monthsShort = 'M';
+  static const String daysShort = 'D';
+  static const String noneSelected = 'None selected';
+  static const String tapToSelect = 'Tap to select';
+  static const String doneLabel = 'Done';
+  static String nSelected(int n) => '$n selected';
+
+  // ── BP / glucose range status labels ────────────────────────────────────────
+  static const String rangeNormal = 'Normal';
+  static const String rangeElevated = 'Elevated';
+  static const String rangeBpStage1 = 'Slightly elevated';
+  static const String rangeBpStage2 = 'Stage 2 HTN';
+  static const String rangeBpCrisis = 'Hypertensive Crisis ⚠';
+  static const String rangeInRange = 'In Range';
+  static const String rangeOutOfRange = 'Out of Range';
+
+  // ── Vital flag labels (abnormal indicator badges) ───────────────────────────
+  static const String vitalFlagHigh = 'High ⚠';
+  static const String vitalFlagLow = 'Low ⚠';
+
+  // ── MUAC classification labels ───────────────────────────────────────────────
+  static const String muacLabel = 'MUAC (cm)';
+  static const String muacSam = 'SAM';
+  static const String muacMam = 'MAM';
+  static const String muacNormal = 'Normal';
+
+  // ── Lab result reference prefix ──────────────────────────────────────────────
+  static const String labReferencePrefix = 'Ref:';
+
+  // ── Referral urgency labels ──────────────────────────────────────────────────
+  static const String referralUrgencyLabel = 'Urgency';
+  static const String referralRoutine = 'Routine';
+  static const String referralUrgent = 'Urgent';
+  static const String referralEmergency = 'Emergency';
+
+  // ── Pregnancy profile labels ─────────────────────────────────────────────────
+  static const String lmpLabel = 'Last Menstrual Period';
+  static const String eddLabel = 'Estimated Due Date';
+  static const String gestationalAgeLabel = 'Gestational Age';
+  static const String gestationalAgeWeeks = 'weeks';
+  static const String gestationalAgePreterm = 'Preterm (< 37 weeks)';
+
+  // ── Glass prescription labels ────────────────────────────────────────────────
+  static const String eyeOd = 'OD (Right)';
+  static const String eyeOs = 'OS (Left)';
+  static const String sphereLabel = 'Sphere';
+  static const String cylinderLabel = 'Cylinder';
+  static const String axisLabel = 'Axis';
+  static const String glassPrescriptionSummary = 'Prescription recorded';
+
+  // ── Compound-widget column sub-labels ────────────────────────────────────────
+  static const String heightShort = 'Height';
+  static const String weightShort = 'Weight';
+  static const String parityShort = 'Parity';
+  static const String livingShort = 'Living';
+
+  // ── Urine test sub-labels ────────────────────────────────────────────────────
+  static const String urinaryAlbuminShort = 'Albumin';
+  static const String urinarySugarShort = 'Sugar';
+  static const String urinaryBilirubinShort = 'Bilirubin';
+
+  // ── Supply pair sub-labels ───────────────────────────────────────────────────
+  static const String supplyConsumedShort = 'Consumed';
+  static const String supplyProvidedShort = 'Provided today';
 }
 
 /// CDS (Clinical Decision Support) alert strings.
@@ -2985,6 +3066,23 @@ abstract final class VisitCompleteStrings {
   static const String sendCounsellingMessage = 'Send Counselling Message';
   static const String createReferral = 'Create Referral';
   static const String backToHome = 'Back to Home';
+  static const String ncdCallDoctor = '📱 Call a doctor now';
+  static const String ncdBookHospital = '🏥 Book hospital visit & refer';
+
+  static const String householdMembersTitle = 'Members in this household';
+
+  static const String ancFirstVisitCounsellingTitle =
+      'First ANC Visit — Key Messages';
+  static const String ancFirstVisitCounselling =
+      'Congratulations on this pregnancy! Today we:\n'
+      '• Registered you in the ANC programme\n'
+      '• Measured your blood pressure and weight\n'
+      '• Scheduled your next visit in 4 weeks\n\n'
+      'Remember to:\n'
+      '• Take your iron-folate tablet every day\n'
+      '• Eat nutritious food — dal, eggs, leafy vegetables\n'
+      '• Rest and avoid heavy lifting\n'
+      '• Come immediately if you have heavy bleeding, severe headache, or blurred vision';
 }
 
 /// Strings for the unified 3-step visit flow (spec §3.1).
@@ -3008,6 +3106,8 @@ abstract final class VisitFlowStrings {
   // interpolation contract — the header no longer references this string.
   static const String step2TitleSuffix = 'form';
   static const String step3Title = 'Summary';
+  static const String alsoCoverWhileHere = 'ALSO COVER WHILE YOU\'RE HERE';
+  static const String aiCheckedFindings = 'AI checked all findings';
 
   static const String stepIndicator = 'Step %1 of 3';
   static String stepIndicatorFor(int oneBased) =>
@@ -3073,6 +3173,10 @@ abstract final class NabaStrings {
   static const String acceptProposal = 'Accept & continue';
   static const String proposalNote =
       'This is an AI proposal. Review and accept to proceed.';
+
+  static const String fallbackNotice =
+      'AI service was unavailable. Care plan is based on clinical guidelines. '
+      'Review and adjust based on your assessment.';
 }
 
 /// Teleconsult placeholder screen strings.
@@ -3186,6 +3290,24 @@ abstract final class NcdScreeningStrings {
 
   static const String familyHistoryTitle = 'Family history of high BP?';
   static const String familyHistoryBn = 'বাবা-মায়ের / পরিবারে উচ্চ রক্তচাপ?';
+}
+
+/// Visit form host screen (fallback, non-sectioned mode).
+abstract final class VisitFormStrings {
+  VisitFormStrings._();
+
+  static const String saveFailed =
+      'Could not save the assessment. It is kept on this device — please try again.';
+}
+
+abstract final class FormGalleryStrings {
+  FormGalleryStrings._();
+  static const String tabLabel     = 'Gallery';
+  static const String screenTitle  = 'Form Gallery';
+  static const String vitalsTab    = 'Vitals';
+  static const String symptomsTab  = 'Symptoms';
+  static const String programmesTab = 'Programmes';
+  static const String fields       = 'fields';
 }
 
 abstract final class PerformanceStrings {
@@ -3488,5 +3610,220 @@ abstract final class EnrollmentStrings {
   static const String detailLabelHouseNo = 'House No.';
   static const String detailLabelVillage = 'Village';
   static const String detailLabelTotalMembers = 'Total Members';
+}
+
+/// Visit landing screen — patient header, last-seen line, household co-flags,
+/// and the "Start Visit" CTA. (`Start Visit` itself and the patient-name
+/// fallback are shared with [PatientContextStrings].)
+abstract final class VisitLandingStrings {
+  VisitLandingStrings._();
+
+  static const String startFailed = 'Failed to start visit';
+  static const String firstVisit = 'First visit for this patient';
+  static const String alsoInHousehold = 'Also in this household';
+  static const String startingButton = 'Starting...';
+
+  /// Patient age line, e.g. `42 years`.
+  static String ageYears(int age) => '$age years';
+
+  // ── Last-seen relative time ────────────────────────────────────────────────
+  static const String seenToday = 'today';
+  static const String seenYesterday = 'yesterday';
+
+  /// e.g. `3 days ago`.
+  static String seenDaysAgo(int days) => '$days days ago';
+
+  /// e.g. `2 weeks ago`.
+  static String seenWeeksAgo(int weeks) => '$weeks weeks ago';
+
+  /// e.g. `Last seen yesterday — ANC`.
+  static String lastSeen(String timeAgo, String programme) =>
+      'Last seen $timeAgo — $programme';
+}
+
+/// Three-card pre-visit AI briefing screen shown between encounter creation
+/// and triage. (Card 1 title is shared with
+/// [SymptomPickerStrings.briefCard1Title]; `Next` is shared with
+/// [ComposerStrings.nextButton].)
+abstract final class VisitBriefingStrings {
+  VisitBriefingStrings._();
+
+  static const String fallbackTitle = 'Pre-Visit Briefing';
+
+  // ── Card 1: Before You Knock ──────────────────────────────────────────────
+  static const String card1Subtitle =
+      'AI-generated briefing based on patient history';
+  static const String briefingUnavailable =
+      'AI briefing unavailable — check patient record manually.';
+
+  // ── Card 2: Conversation Guide ────────────────────────────────────────────
+  static const String card2Title = 'Conversation Guide';
+  static const String card2Subtitle =
+      'Personalised for this patient\'s programmes and history';
+  static const String guideUnavailable = 'Conversation guide unavailable.';
+
+  // ── Card 3: Transition ────────────────────────────────────────────────────
+  static const String card3Title = 'Begin the Consultation';
+  static const String card3Subtitle =
+      'Ask the patient how they are feeling — the AI Scribe will start listening';
+  static const String transitionFallback =
+      'Ask the patient how she is feeling today and begin the consultation.';
+  static const String scribeBadgeLabel = 'Ambient AI Scribe';
+  static const String scribeBadgeDescription =
+      'Automatically transcribes and structures clinical information as you speak.';
+  static const String autofillBadgeLabel = 'Auto-fill Assessment';
+  static const String autofillBadgeDescription =
+      'Relevant fields in the assessment form are populated from the conversation.';
+  static const String reviewBadgeLabel = 'You Review Everything';
+  static const String reviewBadgeDescription =
+      'All AI suggestions are proposals — you accept or edit before submitting.';
+
+  // ── Bottom bar ────────────────────────────────────────────────────────────
+  static const String beginAssessment = 'Begin Assessment';
+  static const String skipBriefing = 'Skip briefing';
+}
+
+/// Visit details screen — per-encounter drill-down with section cards,
+/// detail-row labels, and rawJson-derived additional details.
+/// (`Diagnosis` is shared with [RealtimeAsrStrings.diagnosis].)
+abstract final class VisitDetailsStrings {
+  VisitDetailsStrings._();
+
+  static const String fallbackTitle = 'Visit Details';
+  static const String headerVisitFallback = 'Visit';
+
+  // ── Visit Information section ─────────────────────────────────────────────
+  static const String sectionVisitInformation = 'Visit Information';
+  static const String labelService = 'Service';
+  static const String generalVisitFallback = 'General Visit';
+  static const String labelVisitDate = 'Visit Date';
+  static const String labelReviewDate = 'Review Date';
+  static const String labelVisitNumber = 'Visit Number';
+  static const String labelStatus = 'Status';
+  static const String labelVisitType = 'Visit Type';
+  static const String labelPatientStatus = 'Patient Status';
+  static const String labelEncounterId = 'Encounter ID';
+
+  // ── Clinical section titles ───────────────────────────────────────────────
+  static const String sectionPresentingComplaints = 'Presenting Complaints';
+  static const String sectionSystemicExaminations = 'Systemic Examinations';
+  static const String sectionObstetricExaminations = 'Obstetric Examinations';
+  static const String sectionComplaints = 'Complaints';
+  static const String sectionPhysicalExaminations = 'Physical Examinations';
+  static const String sectionComorbidities = 'Comorbidities';
+  static const String sectionComplications = 'Complications';
+  static const String sectionInvestigations = 'Investigations';
+  static const String sectionClinicalNotes = 'Clinical Notes';
+  static const String notesLabel = 'Notes';
+
+  // ── Visit history section ─────────────────────────────────────────────────
+  static const String sectionVisitHistory = 'Visit History';
+  static const String unknownVisitType = 'Unknown';
+
+  /// e.g. `Encounter ID: enc-123`.
+  static String encounterIdLine(String id) => '$labelEncounterId: $id';
+
+  // ── Prescriptions section ─────────────────────────────────────────────────
+  static const String sectionPrescriptions = 'Prescriptions';
+  static const String unknownMedication = 'Unknown Medication';
+  static const String labelDosage = 'Dosage';
+  static const String labelFrequency = 'Frequency';
+  static const String labelDuration = 'Duration';
+  static const String labelInstructions = 'Instructions';
+
+  // ── Provider section ──────────────────────────────────────────────────────
+  static const String sectionProviderInformation = 'Provider Information';
+  static const String labelProvider = 'Provider';
+  static const String labelFacility = 'Facility';
+
+  // ── Labour & Delivery section ─────────────────────────────────────────────
+  static const String sectionLabourDelivery = 'Labour & Delivery';
+  static const String labelDeliveryType = 'Delivery Type';
+  static const String labelDeliveryAt = 'Delivery At';
+  static const String labelDeliveryBy = 'Delivery By';
+  static const String labelDeliveryStatus = 'Delivery Status';
+  static const String labelDeliveryDateTime = 'Delivery Date/Time';
+  static const String labelLabourOnset = 'Labour Onset';
+
+  // ── Neonate / Baby section ────────────────────────────────────────────────
+  static const String sectionNeonate = 'Neonate / Baby';
+  static const String labelMotherAlive = 'Mother Alive';
+  static const String yes = 'Yes';
+  static const String no = 'No';
+  static const String labelNeonateOutcome = 'Neonate Outcome';
+  static const String labelStateOfBaby = 'State of Baby';
+  static const String labelBirthWeight = 'Birth Weight';
+  static const String labelBreastCondition = 'Breast Condition';
+  static const String labelBreastNotes = 'Breast Notes';
+  static const String labelInvolutionOfUterus = 'Involution of Uterus';
+  static const String labelSigns = 'Signs';
+
+  // ── Additional details section ────────────────────────────────────────────
+  static const String sectionAdditionalDetails = 'Additional Details';
+
+  /// Display labels for rawJson fields surfaced in the Additional Details
+  /// section, keyed by the wire field name (keys are not user-facing).
+  static const Map<String, String> additionalDetailLabels = {
+    'referralStatus': 'Referral Status',
+    'referralReason': 'Referral Reason',
+    'nextFollowUpDate': 'Next Follow-up',
+    'diagnosis': RealtimeAsrStrings.diagnosis,
+    'prescription': 'Prescription',
+    'labTests': 'Lab Tests',
+    'symptoms': 'Symptoms',
+    'riskLevel': 'Risk Level',
+    'programType': 'Program Type',
+    'encounterClass': 'Encounter Type',
+    'reasonCode': 'Reason',
+    'bloodPressureSystolic': 'BP Systolic',
+    'bloodPressureDiastolic': 'BP Diastolic',
+    'weight': 'Weight',
+    'height': 'Height',
+    'bmi': 'BMI',
+    'temperature': 'Temperature',
+    'pulseRate': 'Pulse Rate',
+    'respiratoryRate': 'Respiratory Rate',
+  };
+}
+
+/// Strings for [AssistantScreen] — conversational AI Q&A tab.
+abstract final class AssistantStrings {
+  AssistantStrings._();
+
+  static const String title = 'AI Assistant';
+  static const String subtitle = 'Apon Sushashthya';
+  static const String inputHint = 'Ask a clinical question…';
+  static const String errorMessage =
+      'Could not reach the assistant. Check your connection.';
+  static const String suggestedMuac = 'How do I measure MUAC?';
+  static const String suggestedAncDanger = 'ANC danger signs?';
+  static const String suggestedNcd = 'NCD medication adherence tips';
+  static const String suggestedReferChild = 'When to refer a child?';
+  static const String suggestedFindrisc = 'FINDRISC score interpretation';
+  static const String emptyHeading = 'Ask me anything';
+  static const String emptySubheading =
+      'Clinical guidance, protocol reminders,\nand care tips — always at hand.';
+  static const String retryLabel = 'Retry';
+  static const String poweredBy =
+      'Powered by Gemini · For clinical guidance only';
+  static const String badgeLabel = 'AI';
+  static const String tabAsk = 'Ask AI';
+  static const String tabTraining = 'Training';
+}
+
+/// Strings for [HouseholdFollowUpScreen].
+abstract final class HouseholdFollowUpStrings {
+  HouseholdFollowUpStrings._();
+
+  static const String title = 'Others in this household';
+  static const String subtitle =
+      'Check if any family members need care today.';
+  static const String emptyState = 'No other household members need a visit.';
+  static const String viewPatient = 'View patient';
+  static const String doneButton = 'Done — go to home';
+  static const String overdue = 'Overdue';
+  static const String dueToday = 'Due today';
+  static const String dueSoon = 'Due soon';
+  static const String urgentLabel = 'Urgent';
 }
 

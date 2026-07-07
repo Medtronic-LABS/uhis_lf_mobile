@@ -13,7 +13,10 @@ class EnrollmentSectionHeader extends StatelessWidget {
   const EnrollmentSectionHeader({
     required this.title,
     this.subtitle,
-    this.padding = const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    this.padding = const EdgeInsets.symmetric(
+      horizontal: AppSpacing.lg,
+      vertical: AppSpacing.sm,
+    ),
     super.key,
   });
 
@@ -28,7 +31,7 @@ class EnrollmentSectionHeader extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.aiSurfaceStart,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.rxIcon),
       ),
       padding: padding,
       child: Text(

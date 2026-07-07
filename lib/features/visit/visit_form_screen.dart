@@ -1,9 +1,14 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/api/scribe_api_service.dart';
+import '../../core/constants/app_strings.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/db/encounter_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/models/programme.dart';
@@ -13,8 +18,11 @@ import '../scribe/scribe_permission_service.dart';
 import '../scribe/scribe_session.dart';
 import '../scribe/widgets/scribe_review_sheet.dart';
 import '../worklist/worklist_repository.dart';
+import '../../core/config/app_config.dart';
 import 'composer/sectioned_assessment_screen.dart';
+import '../../uhis_form/dynamic_assessment_screen.dart';
 import 'pathway/pathway_engine.dart';
+import 'assessment_repository.dart';
 import 'submission/unified_submission_orchestrator.dart';
 import 'triage/patient_context_builder.dart';
 import 'visit_controller.dart';
@@ -80,6 +88,14 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
   /// fires a referral recommendation.
   bool _sectionedReferralTriggered = false;
 
+  /// True after [DynamicAssessmentScreen] signals a load failure via onError —
+  /// causes an automatic fallback to [SectionedAssessmentScreen].
+  bool _sdkFormFailed = false;
+
+  /// Prevents concurrent submit calls — set on first tap, cleared only if
+  /// submit throws so the SK can retry; successful submit navigates away.
+  bool _isSubmitting = false;
+
   bool get _hasActivatedPathways =>
       widget.activatedPathways != null && widget.activatedPathways!.isNotEmpty;
 
@@ -123,6 +139,32 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         interval = const Duration(days: 30);
     }
     return now.add(interval).millisecondsSinceEpoch;
+  }
+
+  /// Extract vital signs from raw field values so they can be persisted to
+  /// the encounter row for offline display in VitalsRepository.
+  static Map<String, dynamic> _extractVitals(Map<String, dynamic> fv) {
+    final out = <String, dynamic>{};
+    void pick(String outKey, List<String> aliases) {
+      for (final k in aliases) {
+        if (fv.containsKey(k) && fv[k] != null) {
+          out[outKey] = fv[k];
+          return;
+        }
+      }
+    }
+
+    pick('systolic', ['systolic', 'systolicBp', 'bloodPressureSystolic']);
+    pick('diastolic', ['diastolic', 'diastolicBp', 'bloodPressureDiastolic']);
+    pick('pulse', ['pulse', 'heartRate', 'pulseRate']);
+    pick('glucose', ['glucose', 'bloodGlucose', 'glucoseValue', 'bg', 'fbs', 'rbs']);
+    pick('weight', ['weight', 'weightInKg']);
+    pick('height', ['height', 'heightInCm']);
+    pick('bmi', ['bmi', 'bodyMassIndex']);
+    pick('temperature', ['temperature', 'temp', 'bodyTemperature']);
+    pick('spO2', ['spO2', 'spo2', 'oxygenSaturation', 'oxygenLevel']);
+    pick('respiratoryRate', ['respiratoryRate', 'respiratoryRateValue', 'rr']);
+    return out;
   }
 
   Programme _getPrimaryProgramme() {
@@ -247,6 +289,30 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
   ) {
     debugPrint(
         '[VisitForm] Sectioned mode — programmes: ${widget.activatedPathways?.join(', ')}');
+
+    if (AppConfig.useDynamicForms && !_sdkFormFailed) {
+      final allProgrammes = (widget.activatedPathways ?? const [])
+          .map(Programme.fromString)
+          .where((p) => p != Programme.unknown)
+          .toList();
+      return DynamicAssessmentScreen(
+        programmes: allProgrammes,
+        formType: _getPrimaryProgramme().name.toLowerCase(),
+        encounterId: widget.visitId,
+        patientId: widget.patientId ?? '',
+        memberId: widget.memberId,
+        draftDao: ctx.read<AssessmentDraftDao>(),
+        onSubmit: () => _onSectionedSubmit(ctx, visitCtrl, session),
+        onReferNow: () => setState(() => _sectionedReferralTriggered = true),
+        embedded: embedded,
+        gestationalWeeks: widget.gestationalWeeks,
+        onError: () {
+          debugPrint('[VisitForm] SDK form failed — falling back to SectionedAssessmentScreen');
+          setState(() => _sdkFormFailed = true);
+        },
+      );
+    }
+
     return SectionedAssessmentScreen(
       pathways: _buildPathways(),
       patientContext: _buildPatientContext(),
@@ -269,11 +335,22 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     VisitController visitCtrl,
     VisitSession session,
   ) async {
+    if (_isSubmitting) {
+      debugPrint('[VisitForm] _onSectionedSubmit — already submitting, ignoring duplicate tap');
+      return;
+    }
+    _isSubmitting = true;
+    debugPrint('[VisitForm] _onSectionedSubmit — visitId=${widget.visitId}');
+    // Capture all services synchronously before any await — ctx is invalid after async gaps.
+    final draftDao = ctx.read<AssessmentDraftDao>();
+    final orchestrator = ctx.read<UnifiedSubmissionOrchestrator>();
+    final encounterDao = ctx.read<EncounterDao>();
+    final assessmentRepo = ctx.read<AssessmentRepository>();
+    final patientDao = ctx.read<PatientDao>();
+    final worklistRepo = ctx.read<WorklistRepository>();
     try {
-      final draftDao = ctx.read<AssessmentDraftDao>();
-      final orchestrator = ctx.read<UnifiedSubmissionOrchestrator>();
-
       final draft = await draftDao.getDraft(widget.visitId);
+      debugPrint('[VisitForm] draft=${draft != null ? "found" : "null"}');
       if (draft != null) {
         await orchestrator.submit(
           draft,
@@ -282,24 +359,53 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
           householdId: widget.householdId,
           villageId: widget.villageId,
         );
-      }
+        // Delete draft immediately after successful fan-out to prevent
+        // duplicate assessment rows if onSubmit fires more than once.
+        await draftDao.deleteDraft(draft.encounterId);
+        debugPrint('[VisitForm] orchestrator.submit done');
 
-      if (widget.patientId != null && ctx.mounted) {
+        final fieldValues = jsonDecode(draft.fieldValues) as Map<String, dynamic>;
+        final vitalsMap = _extractVitals(fieldValues);
+        final encounterId = draft.encounterId;
+        final patientId = widget.patientId;
+        final primaryProgramme = _getPrimaryProgramme();
         final now = DateTime.now();
-        await ctx.read<PatientDao>().updateVisitSchedule(
-          patientId: widget.patientId!,
-          lastVisitAt: now.millisecondsSinceEpoch,
-          nextDueAt: _nextDueForProgramme(_getPrimaryProgramme(), now),
-          missedVisitCount: 0,
-        );
-        if (ctx.mounted) {
-          await ctx.read<WorklistRepository>().recomputeAllAfterSync();
-        }
+
+        // Fire housekeeping in background — navigate immediately, these finish async.
+        unawaited(Future(() async {
+          try {
+            if (vitalsMap.isNotEmpty) {
+              await encounterDao.updateVitals(encounterId, vitalsMap);
+              debugPrint('[VisitForm] encounter vitals written: $vitalsMap');
+            }
+            debugPrint('[VisitForm] triggering syncPendingAssessments');
+            await assessmentRepo.syncPendingAssessments().then(
+              (n) => debugPrint('[VisitForm] syncPendingAssessments → synced $n'),
+              onError: (e) => debugPrint('[VisitForm] syncPendingAssessments ✗ $e'),
+            );
+            if (patientId != null) {
+              await patientDao.updateVisitSchedule(
+                patientId: patientId,
+                lastVisitAt: now.millisecondsSinceEpoch,
+                nextDueAt: _nextDueForProgramme(primaryProgramme, now),
+                missedVisitCount: 0,
+              );
+              debugPrint('[VisitForm] schedule updated');
+              await worklistRepo.recomputeAllAfterSync();
+              debugPrint('[VisitForm] worklist recomputed');
+            }
+          } catch (e) {
+            debugPrint('[VisitForm] background housekeeping error: $e');
+          }
+        }));
       }
 
+      // Navigate immediately — background tasks continue independently.
+      debugPrint('[VisitForm] mounted=$mounted ctx.mounted=${ctx.mounted}');
       if (mounted && ctx.mounted) {
         final onAdvance = widget.onAdvance;
         if (onAdvance != null) {
+          debugPrint('[VisitForm] calling onAdvance');
           onAdvance(_getPrimaryProgramme(), _referralRecommended);
         } else {
           ctx.go(
@@ -315,11 +421,13 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
           );
         }
       }
-    } catch (e) {
-      if (!ctx.mounted) return;
-      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-        content: Text('Failed to save assessment: $e'),
-        backgroundColor: Theme.of(ctx).colorScheme.error,
+    } catch (e, st) {
+      _isSubmitting = false;
+      debugPrint('[VisitForm] assessment save failed: $e\n$st');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text(VisitFormStrings.saveFailed),
+        backgroundColor: Theme.of(context).colorScheme.error,
       ));
     }
   }

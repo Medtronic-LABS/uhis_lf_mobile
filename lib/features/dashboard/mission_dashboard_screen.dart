@@ -1,5 +1,9 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +15,7 @@ import '../../core/auth/auth_state.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/db/household_dao.dart';
+import '../../core/db/member_dao.dart';
 import '../../core/db/local_dashboard_repository.dart';
 import '../../core/models/dashboard_tier.dart';
 import '../../core/models/mission_queue_item.dart';
@@ -70,6 +75,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // Version counter for forcing FutureBuilder rebuilds.
   int _refreshVersion = 0;
+
+  // Completed patient IDs for today — cards remain visible but non-navigable.
+  Set<String> _completedIds = const {};
 
   // Inline village chip + need filter
   List<String> _inlineVillages = const [];
@@ -211,13 +219,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // Load completed patient IDs first
     final completedIds = await encounterDao.completedTodayPatientIds();
 
-    // Load full queue
-    final queue = await missionRepo.loadQueue(limit: 500);
+    // Persist completed IDs so card rendering can mark them done.
+    if (mounted) {
+      // ignore: use_build_context_synchronously
+      setState(() => _completedIds = completedIds);
+    }
 
-    // Filter out completed patients
-    final withoutCompleted = queue.where((item) =>
-      item.patientId == null || !completedIds.contains(item.patientId)
-    ).toList();
+    // Load full queue — keep completed patients in the list so their cards
+    // remain visible (non-navigable, greyed out with a ✓ badge per spec §2.6).
+    final queue = await missionRepo.loadQueue(limit: 500);
+    final withoutCompleted = queue;
 
     // Extract distinct village labels for inline chips (from un-completed queue)
     final allVillageLabels = withoutCompleted
@@ -370,6 +381,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// Falls back to opening the patient detail when the visit can't start.
   Future<void> _startVisitFromQueue(MissionQueueItem item) async {
     final patientId = item.patientId;
+    if (patientId != null && _completedIds.contains(patientId)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("${item.patientName}'s visit already done today ✓"),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
     if (patientId == null || patientId.isEmpty) {
       if (item.referralId != null) {
         context.push('/referral/${item.referralId}');
@@ -382,7 +402,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
       return;
     }
+    // Look up member to get referenceId (backend integer PK) and memberId.
+    final memberDao = context.read<MemberDao>();
     final controller = context.read<VisitController>();
+    final member = await memberDao.getByPatientId(patientId);
+    // referenceId is the backend integer PK; fall back to id which may also
+    // be numeric (e.g. "768293") for members synced before schema v17.
+    final householdMemberLocalId =
+        int.tryParse(member?.referenceId ?? '') ??
+        int.tryParse(member?.id ?? '') ??
+        0;
+    final memberId = member?.id;
+    final villageId = member?.villageId;
+    debugPrint('[Dashboard] member lookup: patientId=$patientId referenceId=${member?.referenceId} memberId=$memberId villageId=$villageId → householdMemberLocalId=$householdMemberLocalId');
     final encounterId = await controller.startVisit(
       patientId: patientId,
       programme: item.primaryProgramme,
@@ -400,6 +432,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           'patientName': item.patientName,
           'householdId': item.householdId,
           'patientAge': item.age,
+          'memberId': memberId,
+          'householdMemberLocalId': householdMemberLocalId,
+          'villageId': villageId,
         },
       );
       return;
@@ -698,11 +733,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                         final widgets = <Widget>[];
                         for (final item in visible) {
+                          final done = item.patientId != null &&
+                              _completedIds.contains(item.patientId);
                           widgets.add(Padding(
                             padding: const EdgeInsets.only(bottom: 8),
                             child: MissionQueueCard(
                               item: item,
                               compact: true,
+                              isCompleted: done,
                               onTap: () => _startVisitFromQueue(item),
                               onAction: () => _startVisitFromQueue(item),
                             ),
@@ -823,6 +861,9 @@ class _SettingsMenu extends StatelessWidget {
               final theme = ctx.read<ThemeProvider>();
               await theme.toggleDarkMode();
               break;
+            case 'form_gallery':
+              ctx.push('/dev/form-gallery');
+              break;
             case 'logout':
               final confirmLogout = await showDialog<bool>(
                 context: ctx,
@@ -900,6 +941,15 @@ class _SettingsMenu extends StatelessWidget {
               },
             ),
           ),
+          if (kDebugMode)
+            const PopupMenuItem(
+              value: 'form_gallery',
+              child: ListTile(
+                leading: Icon(Icons.view_list_outlined),
+                title: Text('Form Gallery'),
+                subtitle: Text('Dev: render all programme forms'),
+              ),
+            ),
           const PopupMenuItem(
             value: 'logout',
             child: ListTile(
@@ -1483,99 +1533,152 @@ class _EmptyVisitsCard extends StatelessWidget {
 
 /// AI sorted info banner — sits above the stats strip.
 /// Navy gradient matching the app header; shows overnight sort count + 3 tags.
-class _AiSortedInfoCard extends StatelessWidget {
+class _AiSortedInfoCard extends StatefulWidget {
   const _AiSortedInfoCard({super.key, required this.queueFuture});
 
   final Future<List<MissionQueueItem>>? queueFuture;
 
   @override
+  State<_AiSortedInfoCard> createState() => _AiSortedInfoCardState();
+}
+
+class _AiSortedInfoCardState extends State<_AiSortedInfoCard> {
+  static const _storage = FlutterSecureStorage();
+  static const _storageKey = 'ai_sorted_banner_last_shown';
+
+  bool _visible = false;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAndShow();
+  }
+
+  Future<void> _checkAndShow() async {
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final stored = await _storage.read(key: _storageKey);
+    if (stored != today) {
+      await _storage.write(key: _storageKey, value: today);
+      if (!mounted) return;
+      setState(() => _visible = true);
+      _timer = Timer(const Duration(seconds: 5), () {
+        if (mounted) setState(() => _visible = false);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<MissionQueueItem>>(
-      future: queueFuture,
-      builder: (context, snap) {
-        final count = snap.data?.length ?? 0;
-        final isLoading = snap.connectionState == ConnectionState.waiting;
-        const tags = <(String, String)>[
-          ('🎯', MissionDashboardStrings.aiSortedTagRisk),
-          ('⏰', MissionDashboardStrings.aiSortedTagOverdue),
-          ('🚨', MissionDashboardStrings.aiSortedTagCce),
-        ];
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [AppColors.navy, AppColors.navyMid],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.navy.withValues(alpha: 0.18),
-                blurRadius: 8,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 22,
-                    height: 22,
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOut,
+      child: _visible
+          ? FutureBuilder<List<MissionQueueItem>>(
+              future: widget.queueFuture,
+              builder: (context, snap) {
+                final count = snap.data?.length ?? 0;
+                final isLoading =
+                    snap.connectionState == ConnectionState.waiting;
+                const tags = <String>[
+                  MissionDashboardStrings.aiSortedTagRisk,
+                  MissionDashboardStrings.aiSortedTagOverdue,
+                  MissionDashboardStrings.aiSortedTagCce,
+                ];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 0),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.16),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Icon(Icons.auto_awesome, size: 12, color: Colors.white),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      isLoading
-                          ? 'AI sorted your visits overnight'
-                          : MissionDashboardStrings.aiSortedVisits(count),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        height: 1.2,
+                      gradient: const LinearGradient(
+                        colors: [AppColors.navy, AppColors.navyMid],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.navy.withValues(alpha: 0.18),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 22,
+                              height: 22,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.16),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Icon(Icons.auto_awesome,
+                                  size: 12, color: Colors.white),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                isLoading
+                                    ? 'AI sorted your visits overnight'
+                                    : MissionDashboardStrings.aiSortedVisits(
+                                        count),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                  height: 1.2,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: tags
+                              .map(
+                                (t) => Container(
+                                  margin: const EdgeInsets.only(right: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 7, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        Colors.white.withValues(alpha: 0.14),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                        color: Colors.white
+                                            .withValues(alpha: 0.18)),
+                                  ),
+                                  child: Text(
+                                    t,
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: tags
-                    .map(
-                      (t) => Container(
-                        margin: const EdgeInsets.only(right: 6),
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
-                        ),
-                        child: Text(
-                          '${t.$1} ${t.$2}',
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    )
-                    .toList(),
-              ),
-            ],
-          ),
-        );
-      },
+                );
+              },
+            )
+          : const SizedBox.shrink(),
     );
   }
 }

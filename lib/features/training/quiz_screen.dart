@@ -11,10 +11,12 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import 'coaching_models.dart';
+import 'coaching_repository.dart';
 import 'module_player_screen.dart';
 
 class QuizScreen extends StatefulWidget {
@@ -58,6 +60,8 @@ class _QuizScreenState extends State<QuizScreen> {
         _answered = false;
       });
     } else {
+      final score = _correctCount / _questions.length;
+      context.read<CoachingRepository>().markQuizCompleted(widget.module.id, score);
       setState(() => _done = true);
     }
   }

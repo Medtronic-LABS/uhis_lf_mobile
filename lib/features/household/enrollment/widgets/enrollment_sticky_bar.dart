@@ -35,13 +35,18 @@ class EnrollmentStickyBar extends StatelessWidget {
         border: Border(top: BorderSide(color: AppColors.border)),
         boxShadow: [
           BoxShadow(
-            color: Color(0x14000000),
+            color: AppColors.borderSoft,
             blurRadius: 16,
             offset: Offset(0, -4),
           ),
         ],
       ),
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.h5xl,
+        AppSpacing.xl,
+        AppSpacing.h5xl,
+        AppSpacing.h5xl,
+      ),
       child: SizedBox(
         width: double.infinity,
         height: 52,
@@ -53,7 +58,7 @@ class EnrollmentStickyBar extends StatelessWidget {
             disabledBackgroundColor: AppColors.navy.withValues(alpha: 0.4),
             disabledForegroundColor: Colors.white.withValues(alpha: 0.85),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(AppRadius.patRow),
             ),
             elevation: 0,
           ),
@@ -67,6 +72,13 @@ class EnrollmentStickyBar extends StatelessWidget {
                   ),
                 )
               : Text(
+                  // Deliberately not Theme.of(context).textTheme.titleMedium:
+                  // that style bakes in Colors.black87, which would break the
+                  // white-on-navy CTA text (and its disabled-alpha dimming,
+                  // handled by ElevatedButton.styleFrom above). Numeric
+                  // literals kept intentionally — see AppTextStyles module
+                  // doc for why no bare 15/w700-with-inherited-color token
+                  // exists.
                   label,
                   style: const TextStyle(
                     fontSize: 15,

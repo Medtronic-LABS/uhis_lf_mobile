@@ -65,6 +65,9 @@ class Endpoints {
   // ── AI Next Best Action: post-assessment care plan proposal ──────────────
   static const String nabaGenerate = '/ai-scribe/naba/generate';
 
+  // ── AI Assistant: conversational Q&A ────────────────────────────────────
+  static const String assistantAsk = '/ai-scribe/assistant/ask';
+
   // Chunked upload — for audio files ≥ 1 MB (rural 2G path)
   static const String scribeUploadInit = '/ai-scribe/upload/init';
   static String scribeUploadChunk(String uploadId, int chunk) =>

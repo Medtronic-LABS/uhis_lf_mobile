@@ -1,0 +1,381 @@
+{
+  "message": "Static user data fetched successfully.",
+  "entity": {
+    "formData": [
+      {
+        "formType": "pncNeonatal",
+        "workflowName": "RMNCH",
+        "clinicalWorkflowId": 4
+      },
+      {
+        "formType": "pncMother",
+        "workflowName": "RMNCH",
+        "clinicalWorkflowId": 4
+      },
+      {
+        "formType": "pwProfile",
+        "workflowName": "PW Profile",
+        "clinicalWorkflowId": 101
+      },
+      {
+        "formType": "pregnancyOutcome",
+        "workflowName": "Pregnancy Outcome",
+        "clinicalWorkflowId": 102
+      },
+      {
+        "formType": "household_member_registration",
+        "workflowName": null,
+        "clinicalWorkflowId": null
+      },
+      {
+        "formType": "household_registration",
+        "workflowName": null,
+        "clinicalWorkflowId": null
+      },
+      {
+        "formType": "anc",
+        "workflowName": "RMNCH",
+        "clinicalWorkflowId": 4
+      },
+      {
+        "formType": "pncChild",
+        "workflowName": "RMNCH",
+        "clinicalWorkflowId": 4
+      },
+      {
+        "formType": "family_planning",
+        "workflowName": "Family Planning",
+        "clinicalWorkflowId": 100
+      },
+      {
+        "formType": "cataract",
+        "workflowName": "Cataract",
+        "clinicalWorkflowId": 23
+      },
+      {
+        "formType": "ncd",
+        "workflowName": "NCD",
+        "clinicalWorkflowId": 21
+      },
+      {
+        "formType": "eye_care",
+        "workflowName": "Eye Care",
+        "clinicalWorkflowId": 22
+      },
+      {
+        "formType": "enrollment",
+        "workflowName": "Confirm Diagnosis",
+        "clinicalWorkflowId": 103
+      }
+    ],
+    "clinicalTools": [
+      {
+        "id": 4,
+        "createdBy": 1,
+        "updatedBy": 1,
+        "createdAt": "2024-02-29T16:48:53+05:30",
+        "updatedAt": "2024-02-29T16:48:53+05:30",
+        "name": "RMNCH",
+        "moduleType": "clinical",
+        "groupName": null,
+        "workflowName": "rmnch",
+        "countryId": null,
+        "displayOrder": 2,
+        "conditions": [
+          {
+            "gender": "male",
+            "maxAge": 25,
+            "minAge": 0,
+            "subModule": "childhoodVisit",
+            "moduleType": "assessment"
+          },
+          {
+            "gender": "female",
+            "maxAge": 25,
+            "minAge": 0,
+            "subModule": "childhoodVisit",
+            "moduleType": "assessment"
+          },
+          {
+            "gender": "female",
+            "maxAge": 661,
+            "minAge": 168,
+            "moduleType": "assessment"
+          }
+        ],
+        "jsonDisplayValues": null,
+        "viewScreens": null,
+        "hasInitialValue": true,
+        "appTypes": [
+          "COMMUNITY"
+        ],
+        "displayValues": null,
+        "readOnly": false,
+        "active": true,
+        "deleted": false
+      },
+      {
+        "id": 101,
+        "createdBy": 1,
+        "updatedBy": 1,
+        "createdAt": "2026-02-23T10:00:30+05:30",
+        "updatedAt": "2026-02-23T10:00:30+05:30",
+        "name": "PW Profile",
+        "moduleType": "clinical",
+        "groupName": null,
+        "workflowName": "pwProfile",
+        "countryId": null,
+        "displayOrder": 7,
+        "conditions": [
+          {
+            "gender": "female",
+            "maxAge": 661,
+            "minAge": 168,
+            "moduleType": "assessment"
+          }
+        ],
+        "jsonDisplayValues": null,
+        "viewScreens": [],
+        "hasInitialValue": true,
+        "appTypes": [
+          "COMMUNITY"
+        ],
+        "displayValues": {
+          "bn": "গর্ভবতী প্রোফাইল"
+        },
+        "readOnly": false,
+        "active": true,
+        "deleted": false
+      },
+      {
+        "id": 100,
+        "createdBy": 1,
+        "updatedBy": 1,
+        "createdAt": "2025-03-04T17:26:17+05:30",
+        "updatedAt": "2025-03-04T17:26:17+05:30",
+        "name": "Family Planning",
+        "moduleType": "clinical",
+        "groupName": null,
+        "workflowName": "family_planning",
+        "countryId": null,
+        "displayOrder": 6,
+        "conditions": [
+          {
+            "gender": "female",
+            "maxAge": 661,
+            "minAge": 168,
+            "moduleType": "assessment"
+          }
+        ],
+        "jsonDisplayValues": null,
+        "viewScreens": null,
+        "hasInitialValue": true,
+        "appTypes": [
+          "COMMUNITY"
+        ],
+        "displayValues": {
+          "bn": "পরিবার পরিকল্পনা"
+        },
+        "readOnly": false,
+        "active": true,
+        "deleted": false
+      },
+      {
+        "id": 102,
+        "createdBy": 1,
+        "updatedBy": 1,
+        "createdAt": "2026-02-23T10:00:30+05:30",
+        "updatedAt": "2026-02-23T10:00:30+05:30",
+        "name": "Pregnancy Outcome",
+        "moduleType": "clinical",
+        "groupName": null,
+        "workflowName": "pregnancyOutcome",
+        "countryId": null,
+        "displayOrder": 10,
+        "conditions": [
+          {
+            "gender": "female",
+            "maxAge": 661,
+            "minAge": 168,
+            "moduleType": "assessment"
+          }
+        ],
+        "jsonDisplayValues": null,
+        "viewScreens": [],
+        "hasInitialValue": true,
+        "appTypes": [
+          "COMMUNITY"
+        ],
+        "displayValues": {
+          "bn": "গর্ভধারণের ফলাফল"
+        },
+        "readOnly": false,
+        "active": true,
+        "deleted": false
+      },
+      {
+        "id": 21,
+        "createdBy": 1,
+        "updatedBy": 1,
+        "createdAt": "2026-02-26T17:11:46+05:30",
+        "updatedAt": "2026-02-26T17:11:46+05:30",
+        "name": "NCD",
+        "moduleType": "clinical",
+        "groupName": null,
+        "workflowName": "ncd",
+        "countryId": null,
+        "displayOrder": 11,
+        "conditions": [
+          {
+            "gender": "male",
+            "maxAge": null,
+            "minAge": 216,
+            "moduleType": "assessment"
+          },
+          {
+            "gender": "female",
+            "maxAge": null,
+            "minAge": 216,
+            "moduleType": "assessment"
+          }
+        ],
+        "jsonDisplayValues": null,
+        "viewScreens": null,
+        "hasInitialValue": true,
+        "appTypes": [
+          "COMMUNITY"
+        ],
+        "displayValues": {
+          "bn": "এনসিডি"
+        },
+        "readOnly": false,
+        "active": true,
+        "deleted": false
+      },
+      {
+        "id": 103,
+        "createdBy": null,
+        "updatedBy": null,
+        "createdAt": "2026-05-25T12:33:10+05:30",
+        "updatedAt": "2026-05-27T16:52:25+05:30",
+        "name": "Confirm Diagnosis",
+        "moduleType": "clinical",
+        "groupName": null,
+        "workflowName": "confirm_diagnosis",
+        "countryId": null,
+        "displayOrder": 11,
+        "conditions": [
+          {
+            "moduleType": "assessment"
+          }
+        ],
+        "jsonDisplayValues": null,
+        "viewScreens": null,
+        "hasInitialValue": true,
+        "appTypes": [
+          "COMMUNITY"
+        ],
+        "displayValues": null,
+        "readOnly": false,
+        "active": true,
+        "deleted": false
+      },
+      {
+        "id": 22,
+        "createdBy": 1,
+        "updatedBy": 1,
+        "createdAt": "2026-03-02T13:29:42+05:30",
+        "updatedAt": "2026-06-10T07:50:21+05:30",
+        "name": "Eye Care",
+        "moduleType": "clinical",
+        "groupName": null,
+        "workflowName": "eye_care",
+        "countryId": null,
+        "displayOrder": 12,
+        "conditions": [
+          {
+            "gender": "male",
+            "maxAge": null,
+            "minAge": 420,
+            "moduleType": "assessment"
+          },
+          {
+            "gender": "female",
+            "maxAge": null,
+            "minAge": 420,
+            "moduleType": "assessment"
+          }
+        ],
+        "jsonDisplayValues": null,
+        "viewScreens": null,
+        "hasInitialValue": true,
+        "appTypes": [
+          "COMMUNITY"
+        ],
+        "displayValues": {
+          "bn": "চোখের যত্ন"
+        },
+        "readOnly": false,
+        "active": true,
+        "deleted": false
+      },
+      {
+        "id": 23,
+        "createdBy": 1,
+        "updatedBy": 1,
+        "createdAt": "2026-03-02T13:31:48+05:30",
+        "updatedAt": "2026-06-10T07:50:21+05:30",
+        "name": "Cataract",
+        "moduleType": "clinical",
+        "groupName": null,
+        "workflowName": "cataract",
+        "countryId": null,
+        "displayOrder": 13,
+        "conditions": [
+          {
+            "gender": "male",
+            "maxAge": null,
+            "minAge": 420,
+            "moduleType": "assessment"
+          },
+          {
+            "gender": "female",
+            "maxAge": null,
+            "minAge": 420,
+            "moduleType": "assessment"
+          }
+        ],
+        "jsonDisplayValues": null,
+        "viewScreens": null,
+        "hasInitialValue": true,
+        "appTypes": [
+          "COMMUNITY"
+        ],
+        "displayValues": {
+          "bn": "ছানি"
+        },
+        "readOnly": false,
+        "active": true,
+        "deleted": false
+      }
+    ],
+    "enrollment": {
+      "inputForm": "{\"formLayout\":[]}",
+      "consentForm": "<!DOCTYPE html><html><head>  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />  <style>    html,    body {      max-width: 100%;      overflow-x: hidden;    }    .requlartext {      font-size: 16px;      font-family: \"Inter\";      font-weight: 400;      line-height: 1.6;    }    .boldtext {      font-size: 16px;      font-family: \"Inter\";      font-weight: 700;      line-height: 1.6;    }    a {      word-wrap: break-word;    }    .bold-text {      font-weight: bold;      padding-bottom: 10px;    }    ul {      margin: 0px;    }    /* Extra small devices (phones, 600px and down) */    @media only screen and (max-width: 600px) {      .requlartext {        font-size: 16px;        font-family: \"Inter\";        font-weight: 400;        line-height: 1.6;      }      .boldtext {        font-size: 16px;        font-family: \"Inter\";        font-weight: 700;        line-height: 1.6;      }    }    /* Small devices (portrait tablets and large phones, 600px and up) */    @media only screen and (min-width: 600px) {      .requlartext {        font-size: 20px;        font-family: \"Inter\";        font-weight: 400;        line-height: 1.6;      }      .boldtext {        font-size: 20px;        font-family: \"Inter\";        font-weight: 700;        line-height: 1.6;      }    }    /* Medium devices (landscape tablets, 768px and up) */    @media only screen and (min-width: 768px) {      .requlartext {        font-size: 20px;        font-family: \"Inter\";        font-weight: 400;        line-height: 1.6;      }      .boldtext {        font-size: 20px;        font-family: \"Inter\";        font-weight: 700;        line-height: 1.6;      }    }    /* Large devices (laptops/desktops, 992px and up) */    @media only screen and (min-width: 992px) {      .requlartext {        font-size: 20px;        font-family: \"Inter\";        font-weight: 400;        line-height: 1.6;      }      .boldtext {        font-size: 20px;        font-family: \"Inter\";        font-weight: 700;        line-height: 1.6;      }    }    /* Extra large devices (large laptops and desktops, 1200px and up) */    @media only screen and (min-width: 1200px) {      .requlartext {        font-size: 20px;        font-family: \"Inter\";        font-weight: 400;        line-height: 1.6;      }      .boldtext {        font-size: 20px;        font-family: \"Inter\";        font-weight: 700;        line-height: 1.6;      }    }  </style></head><body>  <div class=\"boldtext\">    <div class=\"bold-text\"> Medtronic Labs SPICE&trade;      <div> Patient Consent and Notification Background:</div>    </div>  </div>  <div class=\"requlartext\">    <div>Hypertension (also known as high blood pressure) and diabetes (also known as high blood      sugar) are growing health concerns in Sub-Saharan Africa and across the world. You are being invited to      participate in the Medtronic Labs SPICE&trade; Management program because you have hypertension or      diabetes or both.</div>    <div>Managing your condition, attending clinic appointments, getting prescriptions filled,      and being compliant with your medications and management plan can be challenging. It can also be difficult      for      your health care provider, such as your doctor, to track your blood pressure (BP) or blood glucose, health      status, and medication information over time.</div>    <div>The Medtronic Labs SPICE&trade; program, uses a new      method to improve clinical care for patients with hypertension and diabetes. This program seeks to track      your BP      and blood glucose data over time and to present it in an understandable way for your health care provider,      empower you by providing more information about your hypertension and diabetes status, with the overall      goals of      providing improved care to reduce related complications and challenges.    </div>    <div>Program Procedures      <div>As a        participant in this program, you will:        <ul>          <li>Be requested to visit the clinic/ hospital for enrollment            into the program. You will be informed about the program and if you agree to participate, will            be enrolled into            the Medtronic Labs SPICE&trade; system.</li>          <li>Receive educational information about            hypertension and diabetes.</li>          <li>Be asked to comply with the follow-up plan your health care provider            provides you to the best of your ability:</li>          <li>Regularly have your BP and blood glucose checked , per            your follow-up plan.</li>          <li>Attend hospital/ clinic medical reviews to see your health care provider, per            your follow-up plan.</li>          <li>Receive and review short message service (SMS) messages with information from            your health care provider.</li>        </ul>      </div>    </div>    <div>Risk(s):      <div>Risks associated with this program include delays or inaccurate        information getting to your doctor or nurse that might potentially impact your care. To minimize this        risk, we        are using automated BP monitors and glucometers that are already approved to be purchased locally. All        software        being used has been carefully tested to make sure it is functioning as expected and is accurate. There        are also        checks in the system to ensure your information is being sent to your doctor.</div>      <div>In situations where you are        instructed to go to the hospital/ clinic your doctor or nurse will be notified via SMS and will        follow-up with        you. In this regard, you are required to provide accurate contact information (i.e. telephone number) to        your        doctor and you will be required to inform your doctor in the event of any change of such contact        information.</div>    </div>    <div>Benefit(s):      <div>Patient and population benefits:        <ul>          <li>You may learn more about your            condition and how to better your health status.</li>          <li>You will have access to regular BP and blood            glucose measurements and will receive clear actionable information, which may help you in            managing your            hypertension and/ or diabetes.</li>          <li>Information collected from the program may be used to further            benefit future similar patients or family members with hypertension, diabetes or heart disease          </li>        </ul>      </div>    </div>    <div>Confidentiality/ Use of Personal Information:      <div>While participating in this program the following information will be collected:        <ul>          <li>identifying information (age, gender, phone number) and medical data            and health information from you and from your medical records as prepared by your doctor            including treatment and            examination notes, and other health related information</li>          <li>You will be assigned a program ID that will be            used for unique identification and to protect data privacy.</li>        </ul>        <div>Your doctor, nurse, pharmacist, those checking          your BP or blood glucose, and other designated parties that are involved in the program (for example          those          processing the program data) may have direct access to your personal information.</div>        <div>As an enrolled          participant in the program, your personal information will be transferred to the United States as          part of          processing, with computing support from the software team in India. The program team will have your          personal          information processed manually or by computer, including the use of internet or of cloud computing.          By enrolling          in the program, you agree to the said transfer, storage and processing of your personal information.          Data          results from the program may be published but will not disclose your name or any other identifying          characteristics. No personal information will be used to market to you without your consent.</div>        <div> Your          de-identified medical information may also be used for additional research, educational purposes,          publications,          population health review, future health studies, development of new medical products or procedures,          or for          obtaining future approvals for health systems. In addition, the program team may also be required to          disclose          your personal information and health information if required by law or by a court order.</div>        <div>There          is no          patient portal to access your personal information collected as part of this program, but this          information can          be requested directly from your doctor or nurse.</div>        <div>The program will handle your personal information in          accordance with appropriate confidentiality standards and all applicable data protection and privacy          laws.</div>      </div>      <div>Participation:        <div>Whether you take part in this program is up to you. If you choose to join the program, you          may stop at any time, and this will not affect your current medical care.</div>        <div>Please notify your doctor or          nurse if you would like to withdraw.</div>        <div>You may also choose not to answer any question you find uncomfortable          or private during the program. There will be no consequence, loss of benefit or care to you if you          choose to          leave the program. Your collected data may be used as part of the program, unless you request          otherwise.</div>        <div>Program team members from may reach out to you via SMS or calls to ask about your experience or in          follow-up to          missed assessment or medical reviews, as part of tele-counseling services. You may notify them if          you wish to          not receive any calls or SMS.</div>      </div>      <div>Compensation:        <div>You will not receive any compensation for participating          in this program.</div>      </div>      <div>SMS:        <div>By signing up for the program, you are accepting to receive SMS messages used          for communication of messages from your doctor or nurse, or instructions to pick up filled          prescriptions. SMS          messages from the software application will not be used for marketing purposes. If you wish to stop          receiving          the SMS messages, kindly inform your doctor or nurse.</div>      </div>      <div>Secondary use of data:        <div>Your de-identified          medical information may be combined with data from other program participants and used by the          program team for          research, marketing, or publication purposes, or to inform on the performance of the Medtronic Labs          SPICE&trade; system.</div>        <div>Additionally, your de-identified medical information along with other          patients&rsquo; may also be used by program stakeholders, such as the Ministry of Health and          County/Regional          Health teams, as part of their assessment of overall patient population health and to evaluate          trends.</div>        <div>Identifying information will be removed from individual patient records before sharing with program          stakeholders          to protect patient privacy.</div>        <div>Consent for the secondary uses of program data is separate from your medical          treatment and does not affect your care.</div>      </div>      <div>Contacts:        <div>If you have any questions concerning this          program, please do not hesitate to contact your doctor or nurse or          <a href=\"mailto:support@medtroniclabs.org\">support@medtroniclabs.org</a>        </div>      </div>      <div>Statement of the person giving consent:</div>      <div>I have read the        information on this program or have had it translated into a language I understand. I have also talked        it over        to my satisfaction.</div>      <div>I understand that my participation is voluntary.</div>      <div>I know enough about the        purpose, methods, risks, and benefits of the program to decide that I want to take part in it.</div>      <div>I        understand that I may freely stop being part of this program at any time without having to explain        myself.</div>      <div>I understand and agree that, as part of the program, the program team shall collect my personal        information        which may be disclosed to doctors, nurses, pharmacists, and BP/Glucose checkers, and other parties that        are        involved in the program as well as other third parties.</div>      <div>I understand that the program may be modified,        amended, or terminated at any time with or without notice.</div>      <div> I understand and agree that the program team        will store my personal information for a period of up to ten (10) years after the conclusion of the        program.</div>      <div>If requested, I have received a copy of this consent and notification form to keep for        myself.</div>      <div>The Healthcare worker will be accepting the above-mentioned Terms and Conditions on behalf of        Screening Participant.</div>    </div></body></html>"
+    },
+    "screening": {
+      "inputForm": "{\"formLayout\":[]}",
+      "consentForm": ""
+    },
+    "assessment": {
+      "inputForm": "{\"formLayout\":[]}",
+      "consentForm": ""
+    },
+    "customizedWorkflow": [],
+    "modelQuestions": []
+  },
+  "status": true,
+  "entityList": null,
+  "responseCode": 200,
+  "totalCount": null
+}

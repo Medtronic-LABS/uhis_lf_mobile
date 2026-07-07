@@ -11,6 +11,7 @@ class HouseholdMemberEntity {
     this.fhirId,
     this.householdId,
     this.householdReferenceId,
+    this.referenceId,
     this.name,
     this.gender,
     this.dob,
@@ -44,6 +45,8 @@ class HouseholdMemberEntity {
   final String? fhirId;
   final String? householdId;
   final String? householdReferenceId;
+  /// Backend integer referenceId (the PK used as referenceId in offline-sync/create).
+  final String? referenceId;
   final String? name;
   final String? gender;
   final String? dob;
@@ -77,6 +80,7 @@ class HouseholdMemberEntity {
         'fhir_id': fhirId,
         'household_id': householdId,
         'household_reference_id': householdReferenceId,
+        'reference_id': referenceId,
         'name': name,
         'gender': gender,
         'dob': dob,
@@ -117,6 +121,7 @@ class HouseholdMemberEntity {
       fhirId: fhirId,
       householdId: householdId,
       householdReferenceId: householdReferenceId,
+      referenceId: referenceId,
       name: name,
       gender: gender,
       dob: dob,
@@ -153,6 +158,7 @@ class HouseholdMemberEntity {
       fhirId: row['fhir_id'] as String?,
       householdId: row['household_id'] as String?,
       householdReferenceId: row['household_reference_id'] as String?,
+      referenceId: row['reference_id'] as String?,
       name: row['name'] as String?,
       gender: row['gender'] as String?,
       dob: row['dob'] as String?,
@@ -229,6 +235,7 @@ class HouseholdMemberEntity {
       fhirId: fhirId,
       householdId: str('householdId') ?? str('household_id'),  // This is the FHIR ID of household
       householdReferenceId: str('householdReferenceId') ?? str('household_reference_id'),
+      referenceId: referenceId,
       name: str('name'),
       gender: str('gender'),
       dob: str('dateOfBirth') ?? str('dob'),
@@ -593,22 +600,28 @@ class MemberDao {
   }
 
   /// Bulk-lookup: returns memberId → patientId for the given member IDs.
-  /// Prefers the explicit `patient_id` column; falls back to `id` when null.
-  /// Used to translate `householdMemberId` values from assessment history into
-  /// the BRN-format patient IDs stored in the patients table.
+  ///
+  /// `householdMemberId` in the assessment-history API is the numeric
+  /// `referenceId` (backend PK), NOT the FHIR `id` column. Both are checked
+  /// so callers don't need to know which ID system the server used.
   Future<Map<String, String>> patientIdsByMemberIds(List<String> memberIds) async {
     if (memberIds.isEmpty) return const {};
     final ph = List.filled(memberIds.length, '?').join(',');
     final rows = await _db.db.rawQuery(
-      'SELECT id, patient_id FROM ${AppDatabase.tableMembers} WHERE id IN ($ph)',
-      memberIds,
+      'SELECT id, reference_id, patient_id FROM ${AppDatabase.tableMembers} '
+      'WHERE id IN ($ph) OR reference_id IN ($ph)',
+      [...memberIds, ...memberIds],
     );
     final result = <String, String>{};
     for (final row in rows) {
-      final id = row['id']?.toString();
-      if (id == null || id.isEmpty) continue;
+      final fhirId = row['id']?.toString();
+      final refId = row['reference_id']?.toString();
       final patientId = row['patient_id']?.toString();
-      result[id] = (patientId != null && patientId.isNotEmpty) ? patientId : id;
+      final resolved =
+          (patientId != null && patientId.isNotEmpty) ? patientId : fhirId;
+      if (resolved == null || resolved.isEmpty) continue;
+      if (fhirId != null && fhirId.isNotEmpty) result[fhirId] = resolved;
+      if (refId != null && refId.isNotEmpty) result[refId] = resolved;
     }
     return result;
   }

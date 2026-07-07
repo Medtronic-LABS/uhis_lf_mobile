@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
@@ -8,7 +9,9 @@ import '../core/auth/auth_state.dart';
 import '../core/models/programme.dart';
 import '../core/constants/app_strings.dart';
 import '../core/models/dashboard_tier.dart';
+import '../core/theme/app_theme.dart';
 import '../features/dashboard/mission_dashboard_screen.dart';
+import '../uhis_form/form_gallery_screen.dart';
 import '../features/household/household_detail_screen.dart';
 import '../features/household/household_list_screen.dart';
 import '../features/lock/lock_screen.dart';
@@ -23,6 +26,7 @@ import '../features/sync/sync_progress_screen.dart';
 import '../features/counselling/counselling_screen.dart';
 import '../features/teleconsult/teleconsult_screen.dart';
 import '../features/training/training_screen.dart';
+import '../features/assistant/assistant_screen.dart';
 import '../features/visit/briefing/visit_briefing_screen.dart';
 import '../features/visit/visit_flow_screen.dart';
 import '../core/api/api_client.dart';
@@ -39,6 +43,7 @@ final _homeNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'home');
 final _patientsNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'patients');
 final _tasksNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'tasks');
 final _mapNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'assistant');
+final _galleryNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'gallery');
 
 GoRouter buildRouter(AuthState auth) {
   return GoRouter(
@@ -321,17 +326,29 @@ GoRouter buildRouter(AuthState auth) {
             ],
           ),
 
-          // Tab 3: Assistant
+          // Tab 3: AI Assistant
           StatefulShellBranch(
             navigatorKey: _mapNavigatorKey,
             routes: [
               GoRoute(
-                path: '/map',
-                name: 'map',
+                path: '/assistant',
+                name: 'assistant',
                 pageBuilder: (context, state) => const MaterialPage(
                   key: ValueKey('assistant-page'),
-                  child: AssistantPlaceholderScreen(),
+                  child: AssistantScreen(),
                 ),
+              ),
+            ],
+          ),
+
+          // Tab 4: Form Gallery
+          StatefulShellBranch(
+            navigatorKey: _galleryNavigatorKey,
+            routes: [
+              GoRoute(
+                path: '/gallery',
+                name: 'gallery',
+                builder: (_, _) => const FormGalleryScreen(),
               ),
             ],
           ),
@@ -465,6 +482,16 @@ GoRouter buildRouter(AuthState auth) {
         path: '/household/:id',
         redirect: (_, state) => '/patients/household/${state.pathParameters['id']}',
       ),
+
+      // ─────────────────────────────────────────────────────────────────────
+      // Dev-only routes (debug builds)
+      // ─────────────────────────────────────────────────────────────────────
+      if (kDebugMode)
+        GoRoute(
+          path: '/dev/form-gallery',
+          name: 'form-gallery',
+          builder: (_, _) => const FormGalleryScreen(),
+        ),
     ],
   );
 }
@@ -573,14 +600,14 @@ class _SplashScreenState extends State<_SplashScreen>
             height: 80,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFFE8356D), Color(0xFFb01f52)],
+                colors: [AppColors.pink, AppColors.brandAccentDeep],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(22),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFE8356D).withValues(alpha: 0.45),
+                  color: AppColors.pink.withValues(alpha: 0.45),
                   blurRadius: 40,
                   offset: const Offset(0, 12),
                 ),
@@ -637,7 +664,7 @@ class _SplashScreenState extends State<_SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1B2B5E),
+      backgroundColor: AppColors.navy,
       body: SafeArea(
         child: Center(
           child: Column(
@@ -760,7 +787,7 @@ class _AnimatedDots extends StatelessWidget {
               final t = sin(phase * pi).clamp(0.0, 1.0);
               final color = Color.lerp(
                 Colors.white.withValues(alpha: 0.25),
-                const Color(0xFFE8356D),
+                AppColors.pink,
                 t,
               )!;
               return Container(

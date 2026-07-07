@@ -106,6 +106,13 @@ class AppConfig {
     return raw == 4 ? 4 : 6;
   }
 
+  /// Base URL for the spice-coaching micro-coaching service.
+  /// Default: Android emulator loopback to port 8000.
+  static const String coachingServiceUrl = String.fromEnvironment(
+    'COACHING_SERVICE_URL',
+    defaultValue: 'http://10.0.2.2:8000',
+  );
+
   /// Base URL for the unified `leapfrog-ai-services` container — AI Visit
   /// Briefing, Programme Recommendation, NABA, AI Scribe, and realtime ASR all
   /// live behind this one service/port now.
@@ -133,6 +140,13 @@ class AppConfig {
     // No AI_SERVICE_URL → route through the main API gateway (nginx).
     final explicit = const String.fromEnvironment('SCRIBE_BASE_URL', defaultValue: '');
     return explicit.isNotEmpty ? explicit : apiBaseUrl;
+  }
+
+  /// Base URL for the AI Assistant service (port 8097 when running locally).
+  /// Derives from [aiServiceBaseUrl] when set; otherwise routes through nginx.
+  static String get assistantBaseUrl {
+    if (aiServiceBaseUrl.isNotEmpty) return aiServiceBaseUrl;
+    return apiBaseUrl;
   }
 
   /// Transcription model for AI Scribe.
@@ -209,4 +223,11 @@ class AppConfig {
   // it is a per-user runtime preference, not a compile-time build flag.
   // It must be read from SharedPreferences / SecureStorage and managed by
   // a dedicated ConsentRepository (TODO: wire in a future sprint).
+
+  /// Feature flag: use the uhis_form JSON-driven renderer instead of the
+  /// hardcoded [SectionRegistry]. Set via `--dart-define=USE_DYNAMIC_FORMS=true`.
+  static const bool useDynamicForms = bool.fromEnvironment(
+    'USE_DYNAMIC_FORMS',
+    defaultValue: true,
+  );
 }

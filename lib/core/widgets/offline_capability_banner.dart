@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 
 /// A reusable banner widget that indicates offline capability.
 /// Displays "Works offline · On-device model · No internet needed" with a wifi-off icon.
-/// Used by AI surfaces in Phase 3.
+/// Currently unconsumed — reserved for the offline-state contract rollout
+/// (design_v11/VALIDATION_REPORT.md, remediation item 4; state.md §1.4).
 class OfflineCapabilityBanner extends StatelessWidget {
   const OfflineCapabilityBanner({
     super.key,

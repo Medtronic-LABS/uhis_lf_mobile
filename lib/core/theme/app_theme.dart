@@ -163,6 +163,150 @@ abstract final class AppColors {
   //   onTrack text     = tbText                (0x065F46)
   static const Color slaOverdueText = Color(0xFFDC2626); // brighter than statusCritical
   static const Color slaDueSoonText = Color(0xFFD97706); // matches amber-700
+
+  // ─── Healthcare range palette ──────────────────────────
+  // Exact hex values from HTML prototype — distinct from status palette
+  static const Color rangeNormal   = Color(0xFF16A34A); // green-600
+  static const Color rangeElevated = Color(0xFFCA8A04); // amber-600
+  static const Color rangeAbnormal = Color(0xFFEA580C); // orange-600 (Stage 1)
+  static const Color rangeCritical = Color(0xFFDC2626); // red-600   (Stage 2)
+  static const Color rangeCrisis   = Color(0xFF7F1D1D); // red-900   (hypertensive crisis)
+
+  static const Color rangeNormalSurface   = Color(0xFFDCFCE7); // green-100
+  static const Color rangeElevatedSurface = Color(0xFFFEF3C7); // = statusWarningSurface
+  static const Color rangeAbnormalSurface = Color(0xFFFFF7ED); // orange-50
+  static const Color rangeCriticalSurface = Color(0xFFFEE2E2); // = statusCriticalSurface
+  static const Color rangeCrisisSurface   = Color(0xFFFEE2E2);
+
+  // Named aliases for danger-sign widget (bg/border reuse imciSurface/imciBorder)
+  static const Color dangerSignIconColor = rangeCritical; // #DC2626
+  static const Color dangerSignText      = rangeCrisis;   // #7F1D1D
+
+  // ─── v11 additions — Brand / AI scribe ──────────────────────
+  static const Color brandAccentDeep     = Color(0xFFB01F52); // splash gradient end
+  static const Color brandAccentDeepDark = brandAccentDeep;
+
+  static const Color aiScribeActiveBorder     = Color(0xFF7F77DD); // scribe autofill field border
+  static const Color aiScribeActiveBorderDark = aiPurpleLight;
+  static const Color aiScribeSurface          = Color(0xFFEEF2FF); // scribe listening pill bg
+  static const Color aiScribeSurfaceDark      = Color(0xFF241F45);
+
+  // ─── v11 additions — Neutrals ───────────────────────────────
+  static const Color textDisabled     = Color(0xFF9CA3AF);
+  static const Color textDisabledDark = Color(0xFF64748B);
+  static const Color borderDashed     = Color(0xFFD1D5DB);
+  static const Color borderDashedDark = Color(0xFF475569);
+
+  // Promoted from inline ColorScheme literals in buildAppTheme()/buildDarkTheme()
+  static const Color surfaceContainerHigh         = Color(0xFFE6E9F2);
+  static const Color surfaceContainerHighest      = Color(0xFFD9DDEA);
+  static const Color surfaceContainerHighDark     = Color(0xFF2B3548);
+  static const Color surfaceContainerHighestDark  = Color(0xFF36405A);
+
+  // ─── v11 additions — Status border members ─────────────────
+  // (status *base*/*surface*/*text* already existed; *border* was only
+  // complete for critical — add success/warning to match colors.md §4)
+  static const Color statusSuccessBorder     = Color(0xFFA7F3D0);
+  static const Color statusSuccessBorderDark = Color(0xFF065F46);
+  static const Color statusWarningBorder     = Color(0xFFFDE68A);
+  static const Color statusWarningBorderDark = Color(0xFF78350F);
+  // statusCriticalBorder itself predates v11 (see Status section above);
+  // it never had a dark pair — add one following the same convention.
+  static const Color statusCriticalBorderDark = statusCriticalText; // reuse sibling value, #991B1B
+
+  // ─── v11 additions — Programme "mid" (progress-fill) tones ─
+  // dark-mode mid reuses the light-mode *Text tone, same convention
+  // ancTextDark/imciTextDark/etc. already use below (reusing a sibling
+  // light-mode value rather than minting a new hex).
+  static const Color ancMid      = Color(0xFFFBCFE8);
+  static const Color ancMidDark  = ancText;
+  static const Color imciMid     = Color(0xFFFECACA);
+  static const Color imciMidDark = imciText;
+  static const Color ncdMid      = Color(0xFFFDE68A);
+  static const Color ncdMidDark  = ncdText;
+  static const Color tbMid       = Color(0xFFA7F3D0);
+  static const Color tbMidDark   = tbText;
+  static const Color pncMid      = Color(0xFFDDD6FE);
+  static const Color pncMidDark  = pncText;
+
+  // ─── v11 addition — Programme "child" (immunisation) set ────
+  // Maps to Programme.epi — design_v11 calls this token "programme.child".
+  // No *BorderDark: matches the existing convention where anc/imci/ncd/tb/pnc
+  // borders also have no separate dark variant.
+  static const Color childText      = Color(0xFF1E40AF);
+  static const Color childBorder    = Color(0xFF93C5FD);
+  static const Color childSurface   = Color(0xFFEFF6FF);
+  static const Color childMid       = Color(0xFFBFDBFE);
+  static const Color childTextDark    = childBorder;
+  static const Color childSurfaceDark = Color(0xFF172554);
+  static const Color childMidDark     = childText;
+
+  // ─── v11 addition — Tag gold ─────────────────────────────────
+  static const Color tagGold     = Color(0xFFFFD700);
+  static const Color tagGoldDark = tagGold;
+
+  // ─── v11 addition — Scrims ───────────────────────────────────
+  // rgba(15,15,30,0.55) / rgba(0,0,0,0.92)
+  static const Color scrimDrawer     = Color(0x8C0F0F1E);
+  static const Color scrimDrawerDark = Color(0xB30F0F1E); // deepened for dark theme
+  static const Color scrimCamera     = Color(0xEB000000);
+  static const Color scrimCameraDark = scrimCamera;
+
+  // ─── v11 addition — On-dark alpha ladder (white over navy) ──
+  // onDarkLow/onDarkFaint dedupe literals already inline in AppTextStyles
+  // below (headerSub/callSub, sectionLabelOnNavy); onDarkDivider reuses
+  // borderSoftDark directly (numerically identical, see OnDarkColors).
+  static const Color onDarkHigh    = Color(0xE6FFFFFF); // 0.9
+  static const Color onDarkMid     = Color(0xBFFFFFFF); // 0.75
+  static const Color onDarkLow     = Color(0x99FFFFFF); // 0.6
+  static const Color onDarkFaint   = Color(0x80FFFFFF); // 0.5
+  static const Color onDarkSurface = Color(0x26FFFFFF); // 0.15
+
+  // ─── v11 addition — Partner (Sukhee teleconsult) ─────────────
+  static const Color partnerSukheeBar             = Color(0xFF0F2544);
+  static const Color partnerSukheeBarDark         = partnerSukheeBar;
+  static const Color partnerSukheeCardStart       = Color(0xFF0D2137);
+  static const Color partnerSukheeCardStartDark   = partnerSukheeCardStart;
+  static const Color partnerSukheeCardEnd         = Color(0xFF163354);
+  static const Color partnerSukheeCardEndDark     = partnerSukheeCardEnd;
+  static const Color partnerSukheeCardShimmer     = Color(0xFF1A3F6F);
+  static const Color partnerSukheeCardShimmerDark = partnerSukheeCardShimmer;
+
+  // ─── v11 addition — Field-kind legend (form_gallery_screen.dart) ──
+  // Distinct hues for the dev-only FieldKind catalog legend; #047857
+  // intentionally reuses statusSuccessActionDark rather than duplicating it.
+  static const Color fieldKindGreen   = Color(0xFF1D6D2F);
+  static const Color fieldKindPurple  = Color(0xFF7B3FA0);
+  static const Color fieldKindOrange  = Color(0xFFC2410C);
+  static const Color fieldKindBlue    = Color(0xFF0F6CBD);
+  static const Color fieldKindRed     = Color(0xFFB91C1C);
+  static const Color fieldKindViolet  = Color(0xFF7C3AED);
+  static const Color fieldKindAmber   = Color(0xFFB45309);
+  static const Color fieldKindIndigo  = Color(0xFF1D4ED8);
+  static const Color fieldKindTeal    = Color(0xFF0369A1);
+  static const Color fieldKindSlate   = Color(0xFF64748B);
+
+  // ─── household-enrollment merge additions ───────────────────
+  // Recurring hardcoded colors found across lib/features/household/enrollment,
+  // lib/features/visit/visit_flow_screen.dart, and counselling_screen.dart —
+  // named here so they have a single home instead of duplicated literals.
+  static const Color enrollmentSuccess     = Color(0xFF14996A); // success-screen hero, NID-scan badge
+  static const Color enrollmentSuccessDark = Color(0xFF34D399);
+  static const Color infoAccent     = Color(0xFF3B82F6); // "existing patient" info banner border
+  static const Color infoAccentDark = Color(0xFF1D4ED8); // ...and its icon/text tone
+  static const Color infoAccentDarkDark = Color(0xFF60A5FA);
+  static const Color warningBorderAlt     = Color(0xFFFED7AA); // human-review / Bangla-name banners
+  static const Color warningBorderAltDark = Color(0xFF9A3412);
+  static const Color warningTextAlt       = Color(0xFF9A3412);
+  static const Color warningTextAltDark   = Color(0xFFFDBA74);
+  static const Color followUpIconBg     = Color(0xFFE0E7FF); // NABA follow-up icon tile
+  static const Color followUpIconBgDark = Color(0xFF312E81);
+  static const Color followUpIconFg     = Color(0xFF4338CA);
+  static const Color followUpIconFgDark = Color(0xFFA5B4FC);
+  // WhatsApp-preview screen chrome — mimics the real WhatsApp app palette,
+  // deliberately distinct from AppColors.whatsapp/waHeader (the in-app accent).
+  static const Color whatsappPreviewHeader = Color(0xFF075E54);
+  static const Color whatsappPreviewBubble = Color(0xFFDCF8C6);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -185,6 +329,13 @@ abstract final class AppSpacing {
   static const double h6xl  = 24.0;  // body padding, s1 bottom padding
   static const double h7xl  = 28.0;  // fp drawer scanning padding top
   static const double h8xl  = 32.0;  // bio-frame top padding
+
+  /// Bottom-list clearance so content isn't hidden behind a sticky bottom
+  /// action bar. Not part of the 4-pt rhythm above (it's a layout-contract
+  /// value driven by the sticky bar's own height, not a spacing rung) —
+  /// named separately so it has one home instead of a repeated literal
+  /// across the household-enrollment screens.
+  static const double stickyBarClearance = 96.0;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -265,12 +416,27 @@ abstract final class AppAnimations {
   static const Duration verifyBounce  = Duration(milliseconds: 500);
   static const Duration pressFeedback = Duration(milliseconds: 100);
 
+  // v11 additions — durations missing from the original extraction
+  static const Duration control     = Duration(milliseconds: 150);
+  static const Duration sheet       = Duration(milliseconds: 300);
+  static const Duration state       = Duration(milliseconds: 400);
+  static const Duration hero        = Duration(milliseconds: 600);
+  static const Duration sweep       = Duration(milliseconds: 900);
+  static const Duration blink       = Duration(milliseconds: 1000);
+  static const Duration pulseSlow   = Duration(milliseconds: 1200);
+  static const Duration scan        = Duration(milliseconds: 1500);
+  static const Duration shimmer     = Duration(milliseconds: 3000);
+  static const Duration splashHold  = Duration(milliseconds: 3200);
+
   // Curves
   static const Curve standard = Curves.ease;
   static const Curve gentle   = Curves.easeInOut;
   static const Curve easeOut  = Curves.easeOut;
   // cubic-bezier(0.34, 1.56, 0.64, 1) — spring overshoot for verify bounce
   static const Curve spring   = Cubic(0.34, 1.56, 0.64, 1.0);
+  // cubic-bezier(0.34, 1.15, 0.64, 1) — softened spring for sheet/drawer slide-in
+  static const Curve sheetSpring = Cubic(0.34, 1.15, 0.64, 1.0);
+  static const Curve linear      = Curves.linear;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -283,141 +449,159 @@ abstract final class AppAnimations {
 abstract final class AppTextStyles {
   AppTextStyles._();
 
+  // Every style below carries fontFamilyFallback: ['NotoSansBengali'] so
+  // mixed Bangla/Latin strings resolve per-glyph (design_v11 typography.md
+  // §3 rule 1). No Bengali font asset ships yet — Flutter silently skips
+  // an unregistered fallback family, so this is safe to land ahead of the
+  // asset. TODO(design-v11): register NotoSansBengali in pubspec.yaml
+  // fonts: once assets/fonts/NotoSansBengali-*.ttf lands.
+  static const List<String> _bn = ['NotoSansBengali'];
+
   // ─── Header ────────────────────────────────────────────────
   // .header-title: Nunito 20px w800 white
   static const TextStyle headerTitle = TextStyle(
-    fontFamily: 'Nunito', fontSize: 20, fontWeight: FontWeight.w800,
+    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 20, fontWeight: FontWeight.w800,
     color: Colors.white,
   );
   // .header-sub: NunitoSans 12px rgba(255,255,255,0.6)
   static const TextStyle headerSub = TextStyle(
-    fontFamily: 'NunitoSans', fontSize: 12, fontWeight: FontWeight.w400,
-    color: Color(0x99FFFFFF),
+    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 12, fontWeight: FontWeight.w400,
+    color: AppColors.onDarkLow,
   );
 
   // ─── Body / content ────────────────────────────────────────
   // default body: NunitoSans 13px w400 --text
   static const TextStyle body = TextStyle(
-    fontFamily: 'NunitoSans', fontSize: 13, fontWeight: FontWeight.w400,
+    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 13, fontWeight: FontWeight.w400,
     color: AppColors.textPrimary,
   );
   // .patient-name: NunitoSans 14px w700
   static const TextStyle listTitle = TextStyle(
-    fontFamily: 'NunitoSans', fontSize: 14, fontWeight: FontWeight.w700,
+    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 14, fontWeight: FontWeight.w700,
     color: AppColors.textPrimary,
   );
   // .patient-meta, sub-text: NunitoSans 11px --muted
   static const TextStyle subText = TextStyle(
-    fontFamily: 'NunitoSans', fontSize: 11, fontWeight: FontWeight.w400,
+    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 11, fontWeight: FontWeight.w400,
     color: AppColors.textMuted,
   );
 
   // ─── Section labels ────────────────────────────────────────
   // .section-label, .ai-label: NunitoSans 11px w700 uppercase ls0.07em --muted
   static const TextStyle sectionLabel = TextStyle(
-    fontFamily: 'NunitoSans', fontSize: 11, fontWeight: FontWeight.w700,
+    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 11, fontWeight: FontWeight.w700,
     color: AppColors.textMuted,
     letterSpacing: 0.77, // 0.07em × 11px
   );
   // Uppercase variant (text-transform applied at call site via toUpperCase())
   static const TextStyle sectionLabelOnNavy = TextStyle(
-    fontFamily: 'NunitoSans', fontSize: 10, fontWeight: FontWeight.w700,
-    color: Color(0x80FFFFFF), // rgba(255,255,255,0.5)
+    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 10, fontWeight: FontWeight.w700,
+    color: AppColors.onDarkFaint, // rgba(255,255,255,0.5)
     letterSpacing: 0.80, // 0.08em × 10px
   );
 
   // ─── Stats & vitals ────────────────────────────────────────
   // .stat-num: Nunito 22px w800 --navy
   static const TextStyle statNumber = TextStyle(
-    fontFamily: 'Nunito', fontSize: 22, fontWeight: FontWeight.w800,
+    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 22, fontWeight: FontWeight.w800,
     color: AppColors.navy,
   );
   // .stat-lbl: NunitoSans 10px --muted
   static const TextStyle statLabel = TextStyle(
-    fontFamily: 'NunitoSans', fontSize: 10, fontWeight: FontWeight.w400,
+    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 10, fontWeight: FontWeight.w400,
     color: AppColors.textMuted,
   );
   // .vital-val: Nunito 24px w800 --text
   static const TextStyle vitalValue = TextStyle(
-    fontFamily: 'Nunito', fontSize: 24, fontWeight: FontWeight.w800,
+    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 24, fontWeight: FontWeight.w800,
     color: AppColors.textPrimary,
   );
   // .vital-lbl: NunitoSans 10px w700 uppercase ls0.05em --muted
   static const TextStyle vitalLabel = TextStyle(
-    fontFamily: 'NunitoSans', fontSize: 10, fontWeight: FontWeight.w700,
+    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 10, fontWeight: FontWeight.w700,
     color: AppColors.textMuted, letterSpacing: 0.50,
   );
   // .vital-unit: NunitoSans 12px w400 --muted
   static const TextStyle vitalUnit = TextStyle(
-    fontFamily: 'NunitoSans', fontSize: 12, fontWeight: FontWeight.w400,
+    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 12, fontWeight: FontWeight.w400,
     color: AppColors.textMuted,
   );
 
   // ─── Score / tag pills ─────────────────────────────────────
   // .score-pill, .tag: Nunito 11px w800
   static const TextStyle scorePill = TextStyle(
-    fontFamily: 'Nunito', fontSize: 11, fontWeight: FontWeight.w800,
+    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 11, fontWeight: FontWeight.w800,
   );
   // .chip: NunitoSans 12px w600
   static const TextStyle chip = TextStyle(
-    fontFamily: 'NunitoSans', fontSize: 12, fontWeight: FontWeight.w600,
+    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 12, fontWeight: FontWeight.w600,
   );
 
   // ─── AI cards ──────────────────────────────────────────────
   // .ai-title: Nunito 18px w800 --navy
   static const TextStyle aiTitle = TextStyle(
-    fontFamily: 'Nunito', fontSize: 18, fontWeight: FontWeight.w800,
+    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 18, fontWeight: FontWeight.w800,
     color: AppColors.navy,
   );
   // .ai-label: NunitoSans 11px w700 uppercase ls0.06em --purple
   static const TextStyle aiLabel = TextStyle(
-    fontFamily: 'NunitoSans', fontSize: 11, fontWeight: FontWeight.w700,
+    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 11, fontWeight: FontWeight.w700,
     color: AppColors.aiPurple, letterSpacing: 0.66,
   );
   // .ai-sub: NunitoSans 12px w400 --muted
   static const TextStyle aiSub = TextStyle(
-    fontFamily: 'NunitoSans', fontSize: 12, fontWeight: FontWeight.w400,
+    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 12, fontWeight: FontWeight.w400,
     color: AppColors.textMuted,
   );
 
   // ─── Telecall ──────────────────────────────────────────────
   // .call-timer: Nunito 32px w800 white ls2px
   static const TextStyle callTimer = TextStyle(
-    fontFamily: 'Nunito', fontSize: 32, fontWeight: FontWeight.w800,
+    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 32, fontWeight: FontWeight.w800,
     color: Colors.white, letterSpacing: 2,
   );
   // .call-name: Nunito 16px w800 white
   static const TextStyle callName = TextStyle(
-    fontFamily: 'Nunito', fontSize: 16, fontWeight: FontWeight.w800,
+    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 16, fontWeight: FontWeight.w800,
     color: Colors.white,
   );
   // .call-sub: NunitoSans 12px rgba(255,255,255,0.6)
   static const TextStyle callSub = TextStyle(
-    fontFamily: 'NunitoSans', fontSize: 12, fontWeight: FontWeight.w400,
-    color: Color(0x99FFFFFF),
+    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 12, fontWeight: FontWeight.w400,
+    color: AppColors.onDarkLow,
   );
 
   // ─── Navigation ────────────────────────────────────────────
   // .nav-tab-lbl: NunitoSans 10px w600 --muted
   static const TextStyle navTabLabel = TextStyle(
-    fontFamily: 'NunitoSans', fontSize: 10, fontWeight: FontWeight.w600,
+    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 10, fontWeight: FontWeight.w600,
     color: AppColors.textMuted,
   );
 
   // ─── Diagnosis / step ──────────────────────────────────────
   // .diag-title: Nunito 16px w800
   static const TextStyle diagTitle = TextStyle(
-    fontFamily: 'Nunito', fontSize: 16, fontWeight: FontWeight.w800,
+    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 16, fontWeight: FontWeight.w800,
   );
   // .diag-body: NunitoSans 12px ls1.6 #4B5563
   static const TextStyle diagBody = TextStyle(
-    fontFamily: 'NunitoSans', fontSize: 12, fontWeight: FontWeight.w400,
+    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 12, fontWeight: FontWeight.w400,
     color: AppColors.textMid, height: 1.6,
   );
   // .step-text: NunitoSans 13px ls1.5 --text
   static const TextStyle stepText = TextStyle(
-    fontFamily: 'NunitoSans', fontSize: 13, fontWeight: FontWeight.w400,
+    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 13, fontWeight: FontWeight.w400,
     color: AppColors.textPrimary, height: 1.5,
+  );
+
+  // ─── Micro badges ──────────────────────────────────────────
+  /// 9px tag/severity-badge text found in a few household-enrollment and
+  /// visit-flow spots. design_v11's accessibility spec (accessibility.md
+  /// §Type sizes) bans anything below 10px on new screens — this exists
+  /// only so the existing 9px usages have a named home instead of a bare
+  /// literal; do not use it in new code, use [scorePill]/[chip] instead.
+  static const TextStyle microTag = TextStyle(
+    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 9, fontWeight: FontWeight.w800,
   );
 }
 
@@ -434,7 +618,10 @@ class LeapfrogColors extends ThemeExtension<LeapfrogColors> {
     required this.brandNavyDark,
     required this.brandPink,
     required this.brandPinkDark,
+    @Deprecated('Use AiColors.primary instead — kept for ai_brief_card.dart, '
+        'mission_dashboard_screen.dart, patient_context_screen.dart until migrated')
     required this.aiPurple,
+    @Deprecated('Use AiColors.primaryDeep instead — kept for patient_context_screen.dart until migrated')
     required this.aiPurpleDark,
     required this.aiSurfaceStart,
     required this.aiSurfaceEnd,
@@ -453,16 +640,45 @@ class LeapfrogColors extends ThemeExtension<LeapfrogColors> {
     required this.statusCriticalSurface,
     required this.statusInfo,
     required this.statusInfoSurface,
+    @Deprecated('Use PartnerColors.whatsapp instead — kept for referral_list_screen.dart until migrated')
     required this.whatsapp,
+    @Deprecated('Use PartnerColors.sukheeStart instead — no outside consumers, kept for uniformity')
     required this.sukheeGradientStart,
+    @Deprecated('Use PartnerColors.sukheeEnd instead — no outside consumers, kept for uniformity')
     required this.sukheeGradientEnd,
+    required this.textStrong,
+    required this.textMid,
+    required this.textDisabled,
+    required this.borderDefault,
+    required this.borderDashed,
+    required this.surfaceTrack,
+    required this.surfaceChat,
+    required this.brandAccentDeep,
+    required this.statusSuccessText,
+    required this.statusWarningText,
+    required this.statusCriticalText,
+    required this.statusInfoText,
+    required this.statusSuccessBorder,
+    required this.statusWarningBorder,
+    required this.statusCriticalBorder,
+    required this.statusSuccessAction,
+    required this.statusSuccessActionPressed,
+    required this.tagBlueSurface,
+    required this.tagBlueText,
+    required this.tagTealSurface,
+    required this.tagTealText,
+    required this.tagGold,
+    required this.scrimDrawer,
+    required this.scrimCamera,
   });
 
   final Color brandNavy;
   final Color brandNavyDark;
   final Color brandPink;
   final Color brandPinkDark;
+  @Deprecated('Use AiColors.primary instead')
   final Color aiPurple;
+  @Deprecated('Use AiColors.primaryDeep instead')
   final Color aiPurpleDark;
   final Color aiSurfaceStart;
   final Color aiSurfaceEnd;
@@ -481,9 +697,36 @@ class LeapfrogColors extends ThemeExtension<LeapfrogColors> {
   final Color statusCriticalSurface;
   final Color statusInfo;
   final Color statusInfoSurface;
+  @Deprecated('Use PartnerColors.whatsapp instead')
   final Color whatsapp;
+  @Deprecated('Use PartnerColors.sukheeStart instead')
   final Color sukheeGradientStart;
+  @Deprecated('Use PartnerColors.sukheeEnd instead')
   final Color sukheeGradientEnd;
+  final Color textStrong;
+  final Color textMid;
+  final Color textDisabled;
+  final Color borderDefault;
+  final Color borderDashed;
+  final Color surfaceTrack;
+  final Color surfaceChat;
+  final Color brandAccentDeep;
+  final Color statusSuccessText;
+  final Color statusWarningText;
+  final Color statusCriticalText;
+  final Color statusInfoText;
+  final Color statusSuccessBorder;
+  final Color statusWarningBorder;
+  final Color statusCriticalBorder;
+  final Color statusSuccessAction;
+  final Color statusSuccessActionPressed;
+  final Color tagBlueSurface;
+  final Color tagBlueText;
+  final Color tagTealSurface;
+  final Color tagTealText;
+  final Color tagGold;
+  final Color scrimDrawer;
+  final Color scrimCamera;
 
   /// Border-radius scale (mirrors [AppRadius]).
   static const double radiusSm = AppRadius.button;   // 12
@@ -493,6 +736,7 @@ class LeapfrogColors extends ThemeExtension<LeapfrogColors> {
 
   static const List<BoxShadow> cardShadow = AppShadows.card;
 
+  // ignore: deprecated_member_use_from_same_package
   static const LeapfrogColors light = LeapfrogColors(
     brandNavy: AppColors.navy,
     brandNavyDark: AppColors.navyDark,
@@ -520,8 +764,33 @@ class LeapfrogColors extends ThemeExtension<LeapfrogColors> {
     whatsapp: AppColors.whatsapp,
     sukheeGradientStart: AppColors.sukheeStart,
     sukheeGradientEnd: AppColors.sukheeEnd,
+    textStrong: AppColors.textStrong,
+    textMid: AppColors.textMid,
+    textDisabled: AppColors.textDisabled,
+    borderDefault: AppColors.border,
+    borderDashed: AppColors.borderDashed,
+    surfaceTrack: AppColors.progressTrack,
+    surfaceChat: AppColors.chatBg,
+    brandAccentDeep: AppColors.brandAccentDeep,
+    statusSuccessText: AppColors.statusSuccessText,
+    statusWarningText: AppColors.statusWarningText,
+    statusCriticalText: AppColors.statusCriticalText,
+    statusInfoText: AppColors.statusInfoText,
+    statusSuccessBorder: AppColors.statusSuccessBorder,
+    statusWarningBorder: AppColors.statusWarningBorder,
+    statusCriticalBorder: AppColors.statusCriticalBorder,
+    statusSuccessAction: AppColors.statusSuccessAction,
+    statusSuccessActionPressed: AppColors.statusSuccessActionDark,
+    tagBlueSurface: AppColors.tagBlueSurface,
+    tagBlueText: AppColors.tagBlueText,
+    tagTealSurface: AppColors.tagTealSurface,
+    tagTealText: AppColors.tagTealText,
+    tagGold: AppColors.tagGold,
+    scrimDrawer: AppColors.scrimDrawer,
+    scrimCamera: AppColors.scrimCamera,
   );
 
+  // ignore: deprecated_member_use_from_same_package
   static const LeapfrogColors dark = LeapfrogColors(
     brandNavy: AppColors.navy,
     brandNavyDark: AppColors.navyDeepDark,
@@ -549,9 +818,34 @@ class LeapfrogColors extends ThemeExtension<LeapfrogColors> {
     whatsapp: AppColors.whatsapp,
     sukheeGradientStart: AppColors.sukheeStart,
     sukheeGradientEnd: AppColors.sukheeEnd,
+    textStrong: AppColors.textPrimaryDark,
+    textMid: AppColors.textMutedDark,
+    textDisabled: AppColors.textDisabledDark,
+    borderDefault: AppColors.borderDark,
+    borderDashed: AppColors.borderDashedDark,
+    surfaceTrack: AppColors.cardSurfaceMutedDark,
+    surfaceChat: AppColors.cardSurfaceMutedDark,
+    brandAccentDeep: AppColors.brandAccentDeepDark,
+    statusSuccessText: AppColors.statusSuccessDark,
+    statusWarningText: AppColors.statusWarningDark,
+    statusCriticalText: AppColors.statusCriticalDark,
+    statusInfoText: AppColors.statusInfoDark,
+    statusSuccessBorder: AppColors.statusSuccessBorderDark,
+    statusWarningBorder: AppColors.statusWarningBorderDark,
+    statusCriticalBorder: AppColors.statusCriticalBorderDark,
+    statusSuccessAction: AppColors.statusSuccessActionDark,
+    statusSuccessActionPressed: AppColors.statusSuccessAction,
+    tagBlueSurface: AppColors.tagBlueSurface,
+    tagBlueText: AppColors.tagBlueText,
+    tagTealSurface: AppColors.tagTealSurface,
+    tagTealText: AppColors.tagTealText,
+    tagGold: AppColors.tagGoldDark,
+    scrimDrawer: AppColors.scrimDrawerDark,
+    scrimCamera: AppColors.scrimCameraDark,
   );
 
   @override
+  // ignore: deprecated_member_use_from_same_package
   LeapfrogColors copyWith({
     Color? brandNavy, Color? brandNavyDark, Color? brandPink,
     Color? brandPinkDark, Color? aiPurple, Color? aiPurpleDark,
@@ -563,6 +857,17 @@ class LeapfrogColors extends ThemeExtension<LeapfrogColors> {
     Color? statusCritical, Color? statusCriticalSurface,
     Color? statusInfo, Color? statusInfoSurface,
     Color? whatsapp, Color? sukheeGradientStart, Color? sukheeGradientEnd,
+    Color? textStrong, Color? textMid, Color? textDisabled,
+    Color? borderDefault, Color? borderDashed,
+    Color? surfaceTrack, Color? surfaceChat, Color? brandAccentDeep,
+    Color? statusSuccessText, Color? statusWarningText,
+    Color? statusCriticalText, Color? statusInfoText,
+    Color? statusSuccessBorder, Color? statusWarningBorder,
+    Color? statusCriticalBorder,
+    Color? statusSuccessAction, Color? statusSuccessActionPressed,
+    Color? tagBlueSurface, Color? tagBlueText,
+    Color? tagTealSurface, Color? tagTealText, Color? tagGold,
+    Color? scrimDrawer, Color? scrimCamera,
   }) => LeapfrogColors(
     brandNavy: brandNavy ?? this.brandNavy,
     brandNavyDark: brandNavyDark ?? this.brandNavyDark,
@@ -590,9 +895,35 @@ class LeapfrogColors extends ThemeExtension<LeapfrogColors> {
     whatsapp: whatsapp ?? this.whatsapp,
     sukheeGradientStart: sukheeGradientStart ?? this.sukheeGradientStart,
     sukheeGradientEnd: sukheeGradientEnd ?? this.sukheeGradientEnd,
+    textStrong: textStrong ?? this.textStrong,
+    textMid: textMid ?? this.textMid,
+    textDisabled: textDisabled ?? this.textDisabled,
+    borderDefault: borderDefault ?? this.borderDefault,
+    borderDashed: borderDashed ?? this.borderDashed,
+    surfaceTrack: surfaceTrack ?? this.surfaceTrack,
+    surfaceChat: surfaceChat ?? this.surfaceChat,
+    brandAccentDeep: brandAccentDeep ?? this.brandAccentDeep,
+    statusSuccessText: statusSuccessText ?? this.statusSuccessText,
+    statusWarningText: statusWarningText ?? this.statusWarningText,
+    statusCriticalText: statusCriticalText ?? this.statusCriticalText,
+    statusInfoText: statusInfoText ?? this.statusInfoText,
+    statusSuccessBorder: statusSuccessBorder ?? this.statusSuccessBorder,
+    statusWarningBorder: statusWarningBorder ?? this.statusWarningBorder,
+    statusCriticalBorder: statusCriticalBorder ?? this.statusCriticalBorder,
+    statusSuccessAction: statusSuccessAction ?? this.statusSuccessAction,
+    statusSuccessActionPressed:
+        statusSuccessActionPressed ?? this.statusSuccessActionPressed,
+    tagBlueSurface: tagBlueSurface ?? this.tagBlueSurface,
+    tagBlueText: tagBlueText ?? this.tagBlueText,
+    tagTealSurface: tagTealSurface ?? this.tagTealSurface,
+    tagTealText: tagTealText ?? this.tagTealText,
+    tagGold: tagGold ?? this.tagGold,
+    scrimDrawer: scrimDrawer ?? this.scrimDrawer,
+    scrimCamera: scrimCamera ?? this.scrimCamera,
   );
 
   @override
+  // ignore: deprecated_member_use_from_same_package
   LeapfrogColors lerp(ThemeExtension<LeapfrogColors>? other, double t) {
     if (other is! LeapfrogColors) return this;
     return LeapfrogColors(
@@ -622,6 +953,31 @@ class LeapfrogColors extends ThemeExtension<LeapfrogColors> {
       whatsapp: Color.lerp(whatsapp, other.whatsapp, t)!,
       sukheeGradientStart: Color.lerp(sukheeGradientStart, other.sukheeGradientStart, t)!,
       sukheeGradientEnd: Color.lerp(sukheeGradientEnd, other.sukheeGradientEnd, t)!,
+      textStrong: Color.lerp(textStrong, other.textStrong, t)!,
+      textMid: Color.lerp(textMid, other.textMid, t)!,
+      textDisabled: Color.lerp(textDisabled, other.textDisabled, t)!,
+      borderDefault: Color.lerp(borderDefault, other.borderDefault, t)!,
+      borderDashed: Color.lerp(borderDashed, other.borderDashed, t)!,
+      surfaceTrack: Color.lerp(surfaceTrack, other.surfaceTrack, t)!,
+      surfaceChat: Color.lerp(surfaceChat, other.surfaceChat, t)!,
+      brandAccentDeep: Color.lerp(brandAccentDeep, other.brandAccentDeep, t)!,
+      statusSuccessText: Color.lerp(statusSuccessText, other.statusSuccessText, t)!,
+      statusWarningText: Color.lerp(statusWarningText, other.statusWarningText, t)!,
+      statusCriticalText: Color.lerp(statusCriticalText, other.statusCriticalText, t)!,
+      statusInfoText: Color.lerp(statusInfoText, other.statusInfoText, t)!,
+      statusSuccessBorder: Color.lerp(statusSuccessBorder, other.statusSuccessBorder, t)!,
+      statusWarningBorder: Color.lerp(statusWarningBorder, other.statusWarningBorder, t)!,
+      statusCriticalBorder: Color.lerp(statusCriticalBorder, other.statusCriticalBorder, t)!,
+      statusSuccessAction: Color.lerp(statusSuccessAction, other.statusSuccessAction, t)!,
+      statusSuccessActionPressed: Color.lerp(
+          statusSuccessActionPressed, other.statusSuccessActionPressed, t)!,
+      tagBlueSurface: Color.lerp(tagBlueSurface, other.tagBlueSurface, t)!,
+      tagBlueText: Color.lerp(tagBlueText, other.tagBlueText, t)!,
+      tagTealSurface: Color.lerp(tagTealSurface, other.tagTealSurface, t)!,
+      tagTealText: Color.lerp(tagTealText, other.tagTealText, t)!,
+      tagGold: Color.lerp(tagGold, other.tagGold, t)!,
+      scrimDrawer: Color.lerp(scrimDrawer, other.scrimDrawer, t)!,
+      scrimCamera: Color.lerp(scrimCamera, other.scrimCamera, t)!,
     );
   }
 }
@@ -636,6 +992,13 @@ class ProgrammeColors extends ThemeExtension<ProgrammeColors> {
     required this.ncd, required this.ncdContainer,
     required this.tb, required this.tbContainer,
     required this.pnc, required this.pncContainer,
+    required this.child, required this.childContainer,
+    required this.imciBorder, required this.imciMid, required this.imciHeaderDark,
+    required this.ancBorder, required this.ancMid, required this.ancHeaderDark,
+    required this.ncdBorder, required this.ncdMid, required this.ncdHeaderDark,
+    required this.tbBorder, required this.tbMid, required this.tbHeaderDark,
+    required this.pncBorder, required this.pncMid, required this.pncHeaderDark,
+    required this.childBorder, required this.childMid, required this.childHeaderDark,
   });
 
   final Color imci; final Color imciContainer;
@@ -643,6 +1006,16 @@ class ProgrammeColors extends ThemeExtension<ProgrammeColors> {
   final Color ncd;  final Color ncdContainer;
   final Color tb;   final Color tbContainer;
   final Color pnc;  final Color pncContainer;
+  /// Maps to [Programme.epi] (immunisation) — design_v11 calls this
+  /// token set "programme.child".
+  final Color child; final Color childContainer;
+
+  final Color imciBorder; final Color imciMid; final Color imciHeaderDark;
+  final Color ancBorder;  final Color ancMid;  final Color ancHeaderDark;
+  final Color ncdBorder;  final Color ncdMid;  final Color ncdHeaderDark;
+  final Color tbBorder;   final Color tbMid;   final Color tbHeaderDark;
+  final Color pncBorder;  final Color pncMid;  final Color pncHeaderDark;
+  final Color childBorder; final Color childMid; final Color childHeaderDark;
 
   Color of(Programme p) {
     switch (p) {
@@ -651,6 +1024,7 @@ class ProgrammeColors extends ThemeExtension<ProgrammeColors> {
       case Programme.pnc:  return pnc;
       case Programme.ncd:  return ncd;
       case Programme.tb:   return tb;
+      case Programme.epi:  return child;
       default:             return ncd;
     }
   }
@@ -662,7 +1036,50 @@ class ProgrammeColors extends ThemeExtension<ProgrammeColors> {
       case Programme.pnc:  return pncContainer;
       case Programme.ncd:  return ncdContainer;
       case Programme.tb:   return tbContainer;
+      case Programme.epi:  return childContainer;
       default:             return ncdContainer;
+    }
+  }
+
+  /// Progress-fill tone (mid saturation between [of] and [containerOf]).
+  Color midOf(Programme p) {
+    switch (p) {
+      case Programme.imci: return imciMid;
+      case Programme.anc:  return ancMid;
+      case Programme.pnc:  return pncMid;
+      case Programme.ncd:  return ncdMid;
+      case Programme.tb:   return tbMid;
+      case Programme.epi:  return childMid;
+      default:             return ncdMid;
+    }
+  }
+
+  /// Border tone matching [of]'s surface family.
+  Color borderOf(Programme p) {
+    switch (p) {
+      case Programme.imci: return imciBorder;
+      case Programme.anc:  return ancBorder;
+      case Programme.pnc:  return pncBorder;
+      case Programme.ncd:  return ncdBorder;
+      case Programme.tb:   return tbBorder;
+      case Programme.epi:  return childBorder;
+      default:             return ncdBorder;
+    }
+  }
+
+  /// Dark background for the programme-tinted AppBar variant
+  /// (visit-screen headers). PNC/child have no v11-sourced override —
+  /// both fall back to the brand default [AppColors.navy], which is
+  /// also what those screens render today (no override exists yet).
+  Color headerDarkOf(Programme p) {
+    switch (p) {
+      case Programme.imci: return imciHeaderDark;
+      case Programme.anc:  return ancHeaderDark;
+      case Programme.pnc:  return pncHeaderDark;
+      case Programme.ncd:  return ncdHeaderDark;
+      case Programme.tb:   return tbHeaderDark;
+      case Programme.epi:  return childHeaderDark;
+      default:             return ncdHeaderDark;
     }
   }
 
@@ -672,6 +1089,13 @@ class ProgrammeColors extends ThemeExtension<ProgrammeColors> {
     ncd:  AppColors.ncdText,    ncdContainer:  AppColors.ncdSurface,
     tb:   AppColors.tbText,     tbContainer:   AppColors.tbSurface,
     pnc:  AppColors.pncText,    pncContainer:  AppColors.pncSurface,
+    child: AppColors.childText, childContainer: AppColors.childSurface,
+    imciBorder: AppColors.imciBorder, imciMid: AppColors.imciMid, imciHeaderDark: AppColors.imciHeader,
+    ancBorder:  AppColors.ancBorder,  ancMid:  AppColors.ancMid,  ancHeaderDark:  AppColors.ancHeader,
+    ncdBorder:  AppColors.ncdBorder,  ncdMid:  AppColors.ncdMid,  ncdHeaderDark:  AppColors.ncdHeader,
+    tbBorder:   AppColors.tbBorder,   tbMid:   AppColors.tbMid,   tbHeaderDark:   AppColors.tbHeader,
+    pncBorder:  AppColors.pncBorder,  pncMid:  AppColors.pncMid,  pncHeaderDark:  AppColors.navy,
+    childBorder: AppColors.childBorder, childMid: AppColors.childMid, childHeaderDark: AppColors.navy,
   );
 
   static const ProgrammeColors dark = ProgrammeColors(
@@ -680,19 +1104,47 @@ class ProgrammeColors extends ThemeExtension<ProgrammeColors> {
     ncd:  AppColors.ncdTextDark,  ncdContainer:  AppColors.ncdSurfaceDark,
     tb:   AppColors.tbTextDark,   tbContainer:   AppColors.tbSurfaceDark,
     pnc:  AppColors.pncTextDark,  pncContainer:  AppColors.pncSurfaceDark,
+    child: AppColors.childTextDark, childContainer: AppColors.childSurfaceDark,
+    // Border/headerDark are fixed brand tones — identical across brightness,
+    // same treatment as OnDarkColors/MotionTheme (see their doc comments).
+    imciBorder: AppColors.imciBorder, imciMid: AppColors.imciMidDark, imciHeaderDark: AppColors.imciHeader,
+    ancBorder:  AppColors.ancBorder,  ancMid:  AppColors.ancMidDark,  ancHeaderDark:  AppColors.ancHeader,
+    ncdBorder:  AppColors.ncdBorder,  ncdMid:  AppColors.ncdMidDark,  ncdHeaderDark:  AppColors.ncdHeader,
+    tbBorder:   AppColors.tbBorder,   tbMid:   AppColors.tbMidDark,   tbHeaderDark:   AppColors.tbHeader,
+    pncBorder:  AppColors.pncBorder,  pncMid:  AppColors.pncMidDark,  pncHeaderDark:  AppColors.navy,
+    childBorder: AppColors.childBorder, childMid: AppColors.childMidDark, childHeaderDark: AppColors.navy,
   );
 
   @override
   ProgrammeColors copyWith({
     Color? imci, Color? imciContainer, Color? anc, Color? ancContainer,
     Color? ncd, Color? ncdContainer, Color? tb, Color? tbContainer,
-    Color? pnc, Color? pncContainer,
+    Color? pnc, Color? pncContainer, Color? child, Color? childContainer,
+    Color? imciBorder, Color? imciMid, Color? imciHeaderDark,
+    Color? ancBorder, Color? ancMid, Color? ancHeaderDark,
+    Color? ncdBorder, Color? ncdMid, Color? ncdHeaderDark,
+    Color? tbBorder, Color? tbMid, Color? tbHeaderDark,
+    Color? pncBorder, Color? pncMid, Color? pncHeaderDark,
+    Color? childBorder, Color? childMid, Color? childHeaderDark,
   }) => ProgrammeColors(
     imci: imci ?? this.imci, imciContainer: imciContainer ?? this.imciContainer,
     anc:  anc  ?? this.anc,  ancContainer:  ancContainer  ?? this.ancContainer,
     ncd:  ncd  ?? this.ncd,  ncdContainer:  ncdContainer  ?? this.ncdContainer,
     tb:   tb   ?? this.tb,   tbContainer:   tbContainer   ?? this.tbContainer,
     pnc:  pnc  ?? this.pnc,  pncContainer:  pncContainer  ?? this.pncContainer,
+    child: child ?? this.child, childContainer: childContainer ?? this.childContainer,
+    imciBorder: imciBorder ?? this.imciBorder, imciMid: imciMid ?? this.imciMid,
+    imciHeaderDark: imciHeaderDark ?? this.imciHeaderDark,
+    ancBorder: ancBorder ?? this.ancBorder, ancMid: ancMid ?? this.ancMid,
+    ancHeaderDark: ancHeaderDark ?? this.ancHeaderDark,
+    ncdBorder: ncdBorder ?? this.ncdBorder, ncdMid: ncdMid ?? this.ncdMid,
+    ncdHeaderDark: ncdHeaderDark ?? this.ncdHeaderDark,
+    tbBorder: tbBorder ?? this.tbBorder, tbMid: tbMid ?? this.tbMid,
+    tbHeaderDark: tbHeaderDark ?? this.tbHeaderDark,
+    pncBorder: pncBorder ?? this.pncBorder, pncMid: pncMid ?? this.pncMid,
+    pncHeaderDark: pncHeaderDark ?? this.pncHeaderDark,
+    childBorder: childBorder ?? this.childBorder, childMid: childMid ?? this.childMid,
+    childHeaderDark: childHeaderDark ?? this.childHeaderDark,
   );
 
   @override
@@ -709,6 +1161,26 @@ class ProgrammeColors extends ThemeExtension<ProgrammeColors> {
       tbContainer:   Color.lerp(tbContainer,   other.tbContainer,   t)!,
       pnc:  Color.lerp(pnc,  other.pnc,  t)!,
       pncContainer:  Color.lerp(pncContainer,  other.pncContainer,  t)!,
+      child: Color.lerp(child, other.child, t)!,
+      childContainer: Color.lerp(childContainer, other.childContainer, t)!,
+      imciBorder: Color.lerp(imciBorder, other.imciBorder, t)!,
+      imciMid: Color.lerp(imciMid, other.imciMid, t)!,
+      imciHeaderDark: Color.lerp(imciHeaderDark, other.imciHeaderDark, t)!,
+      ancBorder: Color.lerp(ancBorder, other.ancBorder, t)!,
+      ancMid: Color.lerp(ancMid, other.ancMid, t)!,
+      ancHeaderDark: Color.lerp(ancHeaderDark, other.ancHeaderDark, t)!,
+      ncdBorder: Color.lerp(ncdBorder, other.ncdBorder, t)!,
+      ncdMid: Color.lerp(ncdMid, other.ncdMid, t)!,
+      ncdHeaderDark: Color.lerp(ncdHeaderDark, other.ncdHeaderDark, t)!,
+      tbBorder: Color.lerp(tbBorder, other.tbBorder, t)!,
+      tbMid: Color.lerp(tbMid, other.tbMid, t)!,
+      tbHeaderDark: Color.lerp(tbHeaderDark, other.tbHeaderDark, t)!,
+      pncBorder: Color.lerp(pncBorder, other.pncBorder, t)!,
+      pncMid: Color.lerp(pncMid, other.pncMid, t)!,
+      pncHeaderDark: Color.lerp(pncHeaderDark, other.pncHeaderDark, t)!,
+      childBorder: Color.lerp(childBorder, other.childBorder, t)!,
+      childMid: Color.lerp(childMid, other.childMid, t)!,
+      childHeaderDark: Color.lerp(childHeaderDark, other.childHeaderDark, t)!,
     );
   }
 }
@@ -777,6 +1249,354 @@ class UrgencyTheme extends ThemeExtension<UrgencyTheme> {
   }
 }
 
+/// AI-identity tokens — split out of [LeapfrogColors] as the explainability
+/// seam. Use via `Theme.of(context).extension<AiColors>()!`.
+@immutable
+class AiColors extends ThemeExtension<AiColors> {
+  const AiColors({
+    required this.primary,
+    required this.primaryDeep,
+    required this.surface,
+    required this.surfaceEnd,
+    required this.border,
+    required this.scribeActiveBorder,
+    required this.scribeSurface,
+  });
+
+  final Color primary;
+  final Color primaryDeep;
+  final Color surface;
+  final Color surfaceEnd;
+  final Color border;
+  final Color scribeActiveBorder;
+  final Color scribeSurface;
+
+  static const AiColors light = AiColors(
+    primary: AppColors.aiPurple,
+    primaryDeep: AppColors.aiPurpleDark,
+    surface: AppColors.aiSurfaceStart,
+    surfaceEnd: AppColors.aiSurfaceEnd,
+    border: AppColors.aiBorder,
+    scribeActiveBorder: AppColors.aiScribeActiveBorder,
+    scribeSurface: AppColors.aiScribeSurface,
+  );
+
+  static const AiColors dark = AiColors(
+    primary: AppColors.aiPurpleLight,
+    primaryDeep: AppColors.aiPurple,
+    surface: AppColors.aiSurfaceStartDark,
+    surfaceEnd: AppColors.aiSurfaceEndDark,
+    border: AppColors.aiBorderDark,
+    scribeActiveBorder: AppColors.aiScribeActiveBorderDark,
+    scribeSurface: AppColors.aiScribeSurfaceDark,
+  );
+
+  @override
+  AiColors copyWith({
+    Color? primary, Color? primaryDeep, Color? surface, Color? surfaceEnd,
+    Color? border, Color? scribeActiveBorder, Color? scribeSurface,
+  }) => AiColors(
+    primary: primary ?? this.primary,
+    primaryDeep: primaryDeep ?? this.primaryDeep,
+    surface: surface ?? this.surface,
+    surfaceEnd: surfaceEnd ?? this.surfaceEnd,
+    border: border ?? this.border,
+    scribeActiveBorder: scribeActiveBorder ?? this.scribeActiveBorder,
+    scribeSurface: scribeSurface ?? this.scribeSurface,
+  );
+
+  @override
+  AiColors lerp(ThemeExtension<AiColors>? other, double t) {
+    if (other is! AiColors) return this;
+    return AiColors(
+      primary: Color.lerp(primary, other.primary, t)!,
+      primaryDeep: Color.lerp(primaryDeep, other.primaryDeep, t)!,
+      surface: Color.lerp(surface, other.surface, t)!,
+      surfaceEnd: Color.lerp(surfaceEnd, other.surfaceEnd, t)!,
+      border: Color.lerp(border, other.border, t)!,
+      scribeActiveBorder: Color.lerp(scribeActiveBorder, other.scribeActiveBorder, t)!,
+      scribeSurface: Color.lerp(scribeSurface, other.scribeSurface, t)!,
+    );
+  }
+}
+
+/// On-dark alpha ladder (white text/surfaces over the navy AppBar chrome).
+/// `.light`/`.dark` are identical: the AppBar stays a dark navy tone in both
+/// [ThemeData] brightnesses, so the ladder's reference surface doesn't change.
+/// Use via `Theme.of(context).extension<OnDarkColors>()!`.
+@immutable
+class OnDarkColors extends ThemeExtension<OnDarkColors> {
+  const OnDarkColors({
+    required this.high,
+    required this.mid,
+    required this.low,
+    required this.faint,
+    required this.surface,
+    required this.divider,
+  });
+
+  final Color high;    // 0.9
+  final Color mid;     // 0.75
+  final Color low;     // 0.6
+  final Color faint;   // 0.5
+  final Color surface; // 0.15 — ghost-button chrome
+  final Color divider; // 0.08 — header row dividers
+
+  static const OnDarkColors light = OnDarkColors(
+    high: AppColors.onDarkHigh,
+    mid: AppColors.onDarkMid,
+    low: AppColors.onDarkLow,
+    faint: AppColors.onDarkFaint,
+    surface: AppColors.onDarkSurface,
+    divider: AppColors.borderSoftDark, // numerically identical to 0.08 white
+  );
+
+  static const OnDarkColors dark = light;
+
+  @override
+  OnDarkColors copyWith({
+    Color? high, Color? mid, Color? low, Color? faint,
+    Color? surface, Color? divider,
+  }) => OnDarkColors(
+    high: high ?? this.high,
+    mid: mid ?? this.mid,
+    low: low ?? this.low,
+    faint: faint ?? this.faint,
+    surface: surface ?? this.surface,
+    divider: divider ?? this.divider,
+  );
+
+  @override
+  OnDarkColors lerp(ThemeExtension<OnDarkColors>? other, double t) {
+    if (other is! OnDarkColors) return this;
+    return OnDarkColors(
+      high: Color.lerp(high, other.high, t)!,
+      mid: Color.lerp(mid, other.mid, t)!,
+      low: Color.lerp(low, other.low, t)!,
+      faint: Color.lerp(faint, other.faint, t)!,
+      surface: Color.lerp(surface, other.surface, t)!,
+      divider: Color.lerp(divider, other.divider, t)!,
+    );
+  }
+}
+
+/// External-partner tokens (WhatsApp counselling, Sukhee teleconsult).
+/// Split out of [LeapfrogColors]. Use via
+/// `Theme.of(context).extension<PartnerColors>()!`.
+@immutable
+class PartnerColors extends ThemeExtension<PartnerColors> {
+  const PartnerColors({
+    required this.whatsapp,
+    required this.whatsappSurface,
+    required this.whatsappBorder,
+    required this.sukheeStart,
+    required this.sukheeEnd,
+    required this.sukheeBar,
+    required this.sukheeCardStart,
+    required this.sukheeCardEnd,
+    required this.sukheeCardShimmer,
+    required this.waHeader,
+    required this.sukheeHeader,
+  });
+
+  final Color whatsapp;
+  final Color whatsappSurface;
+  final Color whatsappBorder;
+  final Color sukheeStart;
+  final Color sukheeEnd;
+  final Color sukheeBar;
+  final Color sukheeCardStart;
+  final Color sukheeCardEnd;
+  final Color sukheeCardShimmer;
+  final Color waHeader;
+  final Color sukheeHeader;
+
+  static const PartnerColors light = PartnerColors(
+    whatsapp: AppColors.whatsapp,
+    whatsappSurface: AppColors.waBg,
+    whatsappBorder: AppColors.waBorder,
+    sukheeStart: AppColors.sukheeStart,
+    sukheeEnd: AppColors.sukheeEnd,
+    sukheeBar: AppColors.partnerSukheeBar,
+    sukheeCardStart: AppColors.partnerSukheeCardStart,
+    sukheeCardEnd: AppColors.partnerSukheeCardEnd,
+    sukheeCardShimmer: AppColors.partnerSukheeCardShimmer,
+    waHeader: AppColors.waHeader,
+    sukheeHeader: AppColors.sukheeHeader,
+  );
+
+  // Partner chrome is a fixed dark-card treatment in both themes today —
+  // no v11-sourced light/dark split, same identical-instance treatment
+  // as OnDarkColors/MotionTheme.
+  static const PartnerColors dark = light;
+
+  @override
+  PartnerColors copyWith({
+    Color? whatsapp, Color? whatsappSurface, Color? whatsappBorder,
+    Color? sukheeStart, Color? sukheeEnd, Color? sukheeBar,
+    Color? sukheeCardStart, Color? sukheeCardEnd, Color? sukheeCardShimmer,
+    Color? waHeader, Color? sukheeHeader,
+  }) => PartnerColors(
+    whatsapp: whatsapp ?? this.whatsapp,
+    whatsappSurface: whatsappSurface ?? this.whatsappSurface,
+    whatsappBorder: whatsappBorder ?? this.whatsappBorder,
+    sukheeStart: sukheeStart ?? this.sukheeStart,
+    sukheeEnd: sukheeEnd ?? this.sukheeEnd,
+    sukheeBar: sukheeBar ?? this.sukheeBar,
+    sukheeCardStart: sukheeCardStart ?? this.sukheeCardStart,
+    sukheeCardEnd: sukheeCardEnd ?? this.sukheeCardEnd,
+    sukheeCardShimmer: sukheeCardShimmer ?? this.sukheeCardShimmer,
+    waHeader: waHeader ?? this.waHeader,
+    sukheeHeader: sukheeHeader ?? this.sukheeHeader,
+  );
+
+  @override
+  PartnerColors lerp(ThemeExtension<PartnerColors>? other, double t) {
+    if (other is! PartnerColors) return this;
+    return PartnerColors(
+      whatsapp: Color.lerp(whatsapp, other.whatsapp, t)!,
+      whatsappSurface: Color.lerp(whatsappSurface, other.whatsappSurface, t)!,
+      whatsappBorder: Color.lerp(whatsappBorder, other.whatsappBorder, t)!,
+      sukheeStart: Color.lerp(sukheeStart, other.sukheeStart, t)!,
+      sukheeEnd: Color.lerp(sukheeEnd, other.sukheeEnd, t)!,
+      sukheeBar: Color.lerp(sukheeBar, other.sukheeBar, t)!,
+      sukheeCardStart: Color.lerp(sukheeCardStart, other.sukheeCardStart, t)!,
+      sukheeCardEnd: Color.lerp(sukheeCardEnd, other.sukheeCardEnd, t)!,
+      sukheeCardShimmer: Color.lerp(sukheeCardShimmer, other.sukheeCardShimmer, t)!,
+      waHeader: Color.lerp(waHeader, other.waHeader, t)!,
+      sukheeHeader: Color.lerp(sukheeHeader, other.sukheeHeader, t)!,
+    );
+  }
+}
+
+/// Motion tokens as instance fields (wraps [AppAnimations]). Gives a single
+/// seam to later swap in a reduced-motion variant (loops → static); motion
+/// has no brightness semantics so `.light`/`.dark` are identical.
+/// Use via `Theme.of(context).extension<MotionTheme>()!`.
+@immutable
+class MotionTheme extends ThemeExtension<MotionTheme> {
+  const MotionTheme({
+    required this.pressFeedback,
+    required this.control,
+    required this.screenEnter,
+    required this.sheet,
+    required this.state,
+    required this.verifyBounce,
+    required this.hero,
+    required this.scanPulse,
+    required this.sweep,
+    required this.blink,
+    required this.pulseSlow,
+    required this.scan,
+    required this.ripple,
+    required this.idleGlow,
+    required this.shimmer,
+    required this.splashHold,
+    required this.staggerStep,
+    required this.standard,
+    required this.gentle,
+    required this.easeOut,
+    required this.spring,
+    required this.sheetSpring,
+    required this.linear,
+  });
+
+  final Duration pressFeedback;
+  final Duration control;
+  final Duration screenEnter;
+  final Duration sheet;
+  final Duration state;
+  final Duration verifyBounce;
+  final Duration hero;
+  final Duration scanPulse;
+  final Duration sweep;
+  final Duration blink;
+  final Duration pulseSlow;
+  final Duration scan;
+  final Duration ripple;
+  final Duration idleGlow;
+  final Duration shimmer;
+  final Duration splashHold;
+  final Duration staggerStep;
+  final Curve standard;
+  final Curve gentle;
+  final Curve easeOut;
+  final Curve spring;
+  final Curve sheetSpring;
+  final Curve linear;
+
+  static const MotionTheme light = MotionTheme(
+    pressFeedback: AppAnimations.pressFeedback,
+    control: AppAnimations.control,
+    screenEnter: AppAnimations.screenEnter,
+    sheet: AppAnimations.sheet,
+    state: AppAnimations.state,
+    verifyBounce: AppAnimations.verifyBounce,
+    hero: AppAnimations.hero,
+    scanPulse: AppAnimations.scanPulse,
+    sweep: AppAnimations.sweep,
+    blink: AppAnimations.blink,
+    pulseSlow: AppAnimations.pulseSlow,
+    scan: AppAnimations.scan,
+    ripple: AppAnimations.ripple,
+    idleGlow: AppAnimations.idleGlow,
+    shimmer: AppAnimations.shimmer,
+    splashHold: AppAnimations.splashHold,
+    staggerStep: AppAnimations.staggerStep,
+    standard: AppAnimations.standard,
+    gentle: AppAnimations.gentle,
+    easeOut: AppAnimations.easeOut,
+    spring: AppAnimations.spring,
+    sheetSpring: AppAnimations.sheetSpring,
+    linear: AppAnimations.linear,
+  );
+
+  static const MotionTheme dark = light;
+
+  @override
+  MotionTheme copyWith({
+    Duration? pressFeedback, Duration? control, Duration? screenEnter,
+    Duration? sheet, Duration? state, Duration? verifyBounce, Duration? hero,
+    Duration? scanPulse, Duration? sweep, Duration? blink, Duration? pulseSlow,
+    Duration? scan, Duration? ripple, Duration? idleGlow, Duration? shimmer,
+    Duration? splashHold, Duration? staggerStep,
+    Curve? standard, Curve? gentle, Curve? easeOut, Curve? spring,
+    Curve? sheetSpring, Curve? linear,
+  }) => MotionTheme(
+    pressFeedback: pressFeedback ?? this.pressFeedback,
+    control: control ?? this.control,
+    screenEnter: screenEnter ?? this.screenEnter,
+    sheet: sheet ?? this.sheet,
+    state: state ?? this.state,
+    verifyBounce: verifyBounce ?? this.verifyBounce,
+    hero: hero ?? this.hero,
+    scanPulse: scanPulse ?? this.scanPulse,
+    sweep: sweep ?? this.sweep,
+    blink: blink ?? this.blink,
+    pulseSlow: pulseSlow ?? this.pulseSlow,
+    scan: scan ?? this.scan,
+    ripple: ripple ?? this.ripple,
+    idleGlow: idleGlow ?? this.idleGlow,
+    shimmer: shimmer ?? this.shimmer,
+    splashHold: splashHold ?? this.splashHold,
+    staggerStep: staggerStep ?? this.staggerStep,
+    standard: standard ?? this.standard,
+    gentle: gentle ?? this.gentle,
+    easeOut: easeOut ?? this.easeOut,
+    spring: spring ?? this.spring,
+    sheetSpring: sheetSpring ?? this.sheetSpring,
+    linear: linear ?? this.linear,
+  );
+
+  @override
+  MotionTheme lerp(ThemeExtension<MotionTheme>? other, double t) {
+    // Durations/curves aren't meaningfully lerp-able — step at the midpoint,
+    // matching ThemeExtension's documented behavior for non-color fields.
+    if (other is! MotionTheme) return this;
+    return t < 0.5 ? this : other;
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════
 // TEXT THEME
 // Sized to match the HTML prototype type scale.
@@ -793,27 +1613,31 @@ TextTheme _buildTextTheme(Brightness brightness) {
   final h = base.apply(fontFamily: 'Nunito');
   final b = base.apply(fontFamily: 'NunitoSans');
 
+  // Bangla fallback on every role — see AppTextStyles._bn for why this is
+  // safe to land ahead of the actual font asset.
+  const bn = AppTextStyles._bn;
+
   return base.copyWith(
     // ─── Display — timer, large numbers ────────────────────
-    displayLarge:  h.displayLarge?.copyWith(fontSize: 32, fontWeight: FontWeight.w800),
-    displayMedium: h.displayMedium?.copyWith(fontSize: 28, fontWeight: FontWeight.w800),
-    displaySmall:  h.displaySmall?.copyWith(fontSize: 24, fontWeight: FontWeight.w800),
+    displayLarge:  h.displayLarge?.copyWith(fontSize: 32, fontWeight: FontWeight.w800, fontFamilyFallback: bn),
+    displayMedium: h.displayMedium?.copyWith(fontSize: 28, fontWeight: FontWeight.w800, fontFamilyFallback: bn),
+    displaySmall:  h.displaySmall?.copyWith(fontSize: 24, fontWeight: FontWeight.w800, fontFamilyFallback: bn),
     // ─── Headline — titles, AI card titles, stat numbers ───
-    headlineLarge:  h.headlineLarge?.copyWith(fontSize: 22, fontWeight: FontWeight.w800),
-    headlineMedium: h.headlineMedium?.copyWith(fontSize: 20, fontWeight: FontWeight.w800),
-    headlineSmall:  h.headlineSmall?.copyWith(fontSize: 18, fontWeight: FontWeight.w800),
+    headlineLarge:  h.headlineLarge?.copyWith(fontSize: 22, fontWeight: FontWeight.w800, fontFamilyFallback: bn),
+    headlineMedium: h.headlineMedium?.copyWith(fontSize: 20, fontWeight: FontWeight.w800, fontFamilyFallback: bn),
+    headlineSmall:  h.headlineSmall?.copyWith(fontSize: 18, fontWeight: FontWeight.w800, fontFamilyFallback: bn),
     // ─── Title — screen sub-titles, patient names ──────────
-    titleLarge:  h.titleLarge?.copyWith(fontSize: 16, fontWeight: FontWeight.w800),
-    titleMedium: h.titleMedium?.copyWith(fontSize: 15, fontWeight: FontWeight.w700),
-    titleSmall:  b.titleSmall?.copyWith(fontSize: 14, fontWeight: FontWeight.w700),
+    titleLarge:  h.titleLarge?.copyWith(fontSize: 16, fontWeight: FontWeight.w800, fontFamilyFallback: bn),
+    titleMedium: h.titleMedium?.copyWith(fontSize: 15, fontWeight: FontWeight.w700, fontFamilyFallback: bn),
+    titleSmall:  b.titleSmall?.copyWith(fontSize: 14, fontWeight: FontWeight.w700, fontFamilyFallback: bn),
     // ─── Body — default reading text ───────────────────────
-    bodyLarge:  b.bodyLarge?.copyWith(fontSize: 13, fontWeight: FontWeight.w400),
-    bodyMedium: b.bodyMedium?.copyWith(fontSize: 12, fontWeight: FontWeight.w400),
-    bodySmall:  b.bodySmall?.copyWith(fontSize: 11, fontWeight: FontWeight.w400),
+    bodyLarge:  b.bodyLarge?.copyWith(fontSize: 13, fontWeight: FontWeight.w400, fontFamilyFallback: bn),
+    bodyMedium: b.bodyMedium?.copyWith(fontSize: 12, fontWeight: FontWeight.w400, fontFamilyFallback: bn),
+    bodySmall:  b.bodySmall?.copyWith(fontSize: 11, fontWeight: FontWeight.w400, fontFamilyFallback: bn),
     // ─── Label — chips, section labels, navigation ─────────
-    labelLarge:  b.labelLarge?.copyWith(fontSize: 12, fontWeight: FontWeight.w700),
-    labelMedium: b.labelMedium?.copyWith(fontSize: 11, fontWeight: FontWeight.w700),
-    labelSmall:  b.labelSmall?.copyWith(fontSize: 10, fontWeight: FontWeight.w700),
+    labelLarge:  h.labelLarge?.copyWith(fontSize: 12, fontWeight: FontWeight.w700, fontFamilyFallback: bn),
+    labelMedium: h.labelMedium?.copyWith(fontSize: 11, fontWeight: FontWeight.w700, fontFamilyFallback: bn),
+    labelSmall:  b.labelSmall?.copyWith(fontSize: 10, fontWeight: FontWeight.w700, fontFamilyFallback: bn),
   );
 }
 
@@ -829,6 +1653,15 @@ abstract final class AppTheme {
 
   static ThemeData get light => buildAppTheme();
   static ThemeData get dark  => buildDarkTheme();
+
+  /// The "dense" InputDecoration padding for inline row editors / compact
+  /// sheet forms (design_v11 theme.md §3) — e.g. the healthcare form
+  /// widgets' side-by-side numeric fields (BP systolic/diastolic,
+  /// anthropometry height/weight, MUAC, etc). Single named home instead of
+  /// each widget hand-rolling its own EdgeInsets.
+  static const EdgeInsets denseFieldPadding = EdgeInsets.symmetric(
+    horizontal: AppSpacing.xl, vertical: AppSpacing.lg, // 12×10
+  );
 }
 
 ThemeData buildAppTheme() {
@@ -862,7 +1695,7 @@ ThemeData buildAppTheme() {
     outlineVariant:   AppColors.borderSoft,
     // ─── Utility ───────────────────────────────────────────
     shadow:           Color(0x1A000000),
-    scrim:            Color(0x80000000),
+    scrim:            AppColors.scrimDrawer,
     inverseSurface:   AppColors.navy,
     onInverseSurface: AppColors.textOnNavy,
     inversePrimary:   AppColors.aiSurfaceStart,
@@ -870,8 +1703,8 @@ ThemeData buildAppTheme() {
     surfaceContainerLowest:   AppColors.cardSurface,
     surfaceContainerLow:      AppColors.cardSurfaceMuted,
     surfaceContainer:         AppColors.canvas,
-    surfaceContainerHigh:     Color(0xFFE6E9F2),
-    surfaceContainerHighest:  Color(0xFFD9DDEA),
+    surfaceContainerHigh:     AppColors.surfaceContainerHigh,
+    surfaceContainerHighest:  AppColors.surfaceContainerHighest,
   );
 
   final textTheme = _buildTextTheme(Brightness.light);
@@ -885,10 +1718,14 @@ ThemeData buildAppTheme() {
       LeapfrogColors.light,
       ProgrammeColors.light,
       UrgencyTheme.light,
+      AiColors.light,
+      OnDarkColors.light,
+      PartnerColors.light,
+      MotionTheme.light,
     ],
     scaffoldBackgroundColor: AppColors.canvas,
     appBarTheme: AppBarTheme(
-      backgroundColor: AppColors.navy,
+      backgroundColor: const Color(0xFF831843),
       foregroundColor: AppColors.textOnNavy,
       elevation: 0,
       scrolledUnderElevation: 0,
@@ -923,17 +1760,21 @@ ThemeData buildAppTheme() {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: AppColors.cardSurface,
+      fillColor: AppColors.cardSurfaceMuted,
       hintStyle: const TextStyle(
         fontFamily: 'NunitoSans', fontSize: 13, color: AppColors.textMuted,
       ),
+      errorStyle: const TextStyle(
+        fontFamily: 'NunitoSans', fontSize: 11, fontWeight: FontWeight.w400,
+        color: AppColors.statusCriticalText,
+      ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppRadius.button),
-        borderSide: const BorderSide(color: AppColors.border),
+        borderSide: const BorderSide(color: AppColors.border, width: 1.5),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppRadius.button),
-        borderSide: const BorderSide(color: AppColors.border),
+        borderSide: const BorderSide(color: AppColors.border, width: 1.5),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppRadius.button),
@@ -941,10 +1782,14 @@ ThemeData buildAppTheme() {
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppRadius.button),
-        borderSide: const BorderSide(color: AppColors.statusCritical),
+        borderSide: const BorderSide(color: AppColors.statusCritical, width: 1.5),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.button),
+        borderSide: const BorderSide(color: AppColors.statusCritical, width: 1.5),
       ),
       contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.h5xl, vertical: AppSpacing.xl,
+        horizontal: AppSpacing.xxl, vertical: AppSpacing.xl, // 14×12
       ),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
@@ -954,14 +1799,17 @@ ThemeData buildAppTheme() {
         elevation: 0,
         shadowColor: AppShadows.fab.first.color,
         padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.h5xl, vertical: AppSpacing.xl + 1,
+          horizontal: AppSpacing.xxxl, vertical: AppSpacing.xl, // 16×12
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.button),
         ),
         textStyle: const TextStyle(
-          fontFamily: 'Nunito', fontSize: 15, fontWeight: FontWeight.w800,
+          fontFamily: 'Nunito', fontSize: 13, fontWeight: FontWeight.w800,
         ),
+      ).copyWith(
+        overlayColor: WidgetStateProperty.resolveWith((states) =>
+            states.contains(WidgetState.pressed) ? AppColors.pinkDark : null),
       ),
     ),
     filledButtonTheme: FilledButtonThemeData(
@@ -969,14 +1817,17 @@ ThemeData buildAppTheme() {
         backgroundColor: AppColors.navy,
         foregroundColor: AppColors.textOnNavy,
         padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.h5xl, vertical: AppSpacing.xl + 1,
+          horizontal: AppSpacing.xxxl, vertical: AppSpacing.xl, // 16×12
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.button),
         ),
         textStyle: const TextStyle(
-          fontFamily: 'Nunito', fontSize: 15, fontWeight: FontWeight.w700,
+          fontFamily: 'Nunito', fontSize: 13, fontWeight: FontWeight.w700,
         ),
+      ).copyWith(
+        overlayColor: WidgetStateProperty.resolveWith((states) =>
+            states.contains(WidgetState.pressed) ? AppColors.navyDark : null),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
@@ -984,13 +1835,13 @@ ThemeData buildAppTheme() {
         foregroundColor: AppColors.navy,
         side: const BorderSide(color: AppColors.navy, width: 1.5),
         padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.h5xl, vertical: AppSpacing.xl,
+          horizontal: AppSpacing.xxxl, vertical: AppSpacing.xl, // 16×12
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.button),
         ),
         textStyle: const TextStyle(
-          fontFamily: 'Nunito', fontSize: 14, fontWeight: FontWeight.w700,
+          fontFamily: 'Nunito', fontSize: 13, fontWeight: FontWeight.w700,
         ),
       ),
     ),
@@ -998,19 +1849,25 @@ ThemeData buildAppTheme() {
       style: TextButton.styleFrom(
         foregroundColor: AppColors.aiPurple,
         textStyle: const TextStyle(
-          fontFamily: 'Nunito', fontSize: 14, fontWeight: FontWeight.w700,
+          fontFamily: 'Nunito', fontSize: 13, fontWeight: FontWeight.w700,
         ),
       ),
     ),
     floatingActionButtonTheme: const FloatingActionButtonThemeData(
       backgroundColor: AppColors.pink,
       foregroundColor: AppColors.textOnNavy,
-      elevation: 4,
+      // Depth comes from the explicit AppShadows.fab decoration drawn by
+      // the widget, not Material elevation (elevation.md §Cards contract).
+      elevation: 0,
+      focusElevation: 0,
+      hoverElevation: 0,
+      highlightElevation: 0,
+      disabledElevation: 0,
     ),
     chipTheme: ChipThemeData(
       backgroundColor: AppColors.cardSurface,
       selectedColor: AppColors.navy,
-      side: const BorderSide(color: AppColors.border),
+      side: const BorderSide(color: AppColors.border, width: 1.5),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.pill),
       ),
@@ -1048,13 +1905,13 @@ ThemeData buildAppTheme() {
       }),
     ),
     popupMenuTheme: PopupMenuThemeData(
-      color: AppColors.cardSurface, elevation: 6,
+      color: AppColors.cardSurface, elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.button),
       ),
     ),
     dialogTheme: DialogThemeData(
-      backgroundColor: AppColors.cardSurface, elevation: 8,
+      backgroundColor: AppColors.cardSurface, elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.card),
       ),
@@ -1070,6 +1927,8 @@ ThemeData buildAppTheme() {
         borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
       ),
       modalBackgroundColor: AppColors.cardSurface,
+      showDragHandle: true,
+      dragHandleColor: AppColors.borderDashed,
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: AppColors.navy,
@@ -1111,7 +1970,7 @@ ThemeData buildDarkTheme() {
     outline:          AppColors.borderDark,
     outlineVariant:   AppColors.borderSoftDark,
     shadow:           Color(0x66000000),
-    scrim:            Color(0xCC000000),
+    scrim:            AppColors.scrimDrawerDark,
     inverseSurface:   AppColors.textPrimaryDark,
     onInverseSurface: AppColors.canvasDark,
     inversePrimary:   AppColors.pink,
@@ -1119,8 +1978,8 @@ ThemeData buildDarkTheme() {
     surfaceContainerLowest:  AppColors.canvasDark,
     surfaceContainerLow:     AppColors.cardSurfaceMutedDark,
     surfaceContainer:        AppColors.cardSurfaceDark,
-    surfaceContainerHigh:    Color(0xFF2B3548),
-    surfaceContainerHighest: Color(0xFF36405A),
+    surfaceContainerHigh:    AppColors.surfaceContainerHighDark,
+    surfaceContainerHighest: AppColors.surfaceContainerHighestDark,
   );
 
   final textTheme = _buildTextTheme(Brightness.dark);
@@ -1135,6 +1994,10 @@ ThemeData buildDarkTheme() {
       LeapfrogColors.dark,
       ProgrammeColors.dark,
       UrgencyTheme.dark,
+      AiColors.dark,
+      OnDarkColors.dark,
+      PartnerColors.dark,
+      MotionTheme.dark,
     ],
     scaffoldBackgroundColor: AppColors.canvasDark,
     appBarTheme: AppBarTheme(
@@ -1172,17 +2035,21 @@ ThemeData buildDarkTheme() {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: AppColors.cardSurfaceDark,
+      fillColor: AppColors.cardSurfaceMutedDark,
       hintStyle: const TextStyle(
         fontFamily: 'NunitoSans', fontSize: 13, color: AppColors.textMutedDark,
       ),
+      errorStyle: const TextStyle(
+        fontFamily: 'NunitoSans', fontSize: 11, fontWeight: FontWeight.w400,
+        color: AppColors.statusCriticalDark,
+      ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppRadius.button),
-        borderSide: const BorderSide(color: AppColors.borderDark),
+        borderSide: const BorderSide(color: AppColors.borderDark, width: 1.5),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppRadius.button),
-        borderSide: const BorderSide(color: AppColors.borderDark),
+        borderSide: const BorderSide(color: AppColors.borderDark, width: 1.5),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppRadius.button),
@@ -1190,10 +2057,14 @@ ThemeData buildDarkTheme() {
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppRadius.button),
-        borderSide: const BorderSide(color: AppColors.statusCriticalDark),
+        borderSide: const BorderSide(color: AppColors.statusCriticalDark, width: 1.5),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.button),
+        borderSide: const BorderSide(color: AppColors.statusCriticalDark, width: 1.5),
       ),
       contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.h5xl, vertical: AppSpacing.xl,
+        horizontal: AppSpacing.xxl, vertical: AppSpacing.xl, // 14×12
       ),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
@@ -1202,14 +2073,17 @@ ThemeData buildDarkTheme() {
         foregroundColor: AppColors.canvasDark,
         elevation: 0,
         padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.h5xl, vertical: AppSpacing.xl + 1,
+          horizontal: AppSpacing.xxxl, vertical: AppSpacing.xl, // 16×12
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.button),
         ),
         textStyle: const TextStyle(
-          fontFamily: 'Nunito', fontSize: 15, fontWeight: FontWeight.w800,
+          fontFamily: 'Nunito', fontSize: 13, fontWeight: FontWeight.w800,
         ),
+      ).copyWith(
+        overlayColor: WidgetStateProperty.resolveWith((states) =>
+            states.contains(WidgetState.pressed) ? AppColors.pink : null),
       ),
     ),
     filledButtonTheme: FilledButtonThemeData(
@@ -1217,14 +2091,17 @@ ThemeData buildDarkTheme() {
         backgroundColor: AppColors.navy,
         foregroundColor: AppColors.textPrimaryDark,
         padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.h5xl, vertical: AppSpacing.xl + 1,
+          horizontal: AppSpacing.xxxl, vertical: AppSpacing.xl, // 16×12
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.button),
         ),
         textStyle: const TextStyle(
-          fontFamily: 'Nunito', fontSize: 15, fontWeight: FontWeight.w700,
+          fontFamily: 'Nunito', fontSize: 13, fontWeight: FontWeight.w700,
         ),
+      ).copyWith(
+        overlayColor: WidgetStateProperty.resolveWith((states) =>
+            states.contains(WidgetState.pressed) ? AppColors.navyDeepDark : null),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
@@ -1232,13 +2109,13 @@ ThemeData buildDarkTheme() {
         foregroundColor: AppColors.textPrimaryDark,
         side: const BorderSide(color: AppColors.aiPurpleLight, width: 1.5),
         padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.h5xl, vertical: AppSpacing.xl,
+          horizontal: AppSpacing.xxxl, vertical: AppSpacing.xl, // 16×12
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.button),
         ),
         textStyle: const TextStyle(
-          fontFamily: 'Nunito', fontSize: 14, fontWeight: FontWeight.w700,
+          fontFamily: 'Nunito', fontSize: 13, fontWeight: FontWeight.w700,
         ),
       ),
     ),
@@ -1246,18 +2123,24 @@ ThemeData buildDarkTheme() {
       style: TextButton.styleFrom(
         foregroundColor: AppColors.aiPurpleLight,
         textStyle: const TextStyle(
-          fontFamily: 'Nunito', fontSize: 14, fontWeight: FontWeight.w700,
+          fontFamily: 'Nunito', fontSize: 13, fontWeight: FontWeight.w700,
         ),
       ),
     ),
     floatingActionButtonTheme: const FloatingActionButtonThemeData(
       backgroundColor: AppColors.pinkLight,
       foregroundColor: AppColors.canvasDark,
-      elevation: 4,
+      elevation: 0,
+      focusElevation: 0,
+      hoverElevation: 0,
+      highlightElevation: 0,
+      disabledElevation: 0,
     ),
     chipTheme: ChipThemeData(
       backgroundColor: AppColors.cardSurfaceDark,
-      selectedColor: AppColors.aiPurple,
+      // brand.primary-family dark tone, not AI purple — "selected" must never
+      // collide with the AI-identity signature (theme.md §7).
+      selectedColor: AppColors.navyOnDark,
       side: const BorderSide(color: AppColors.borderDark),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.pill),
@@ -1297,13 +2180,13 @@ ThemeData buildDarkTheme() {
       }),
     ),
     popupMenuTheme: PopupMenuThemeData(
-      color: AppColors.cardSurfaceDark, elevation: 6,
+      color: AppColors.cardSurfaceDark, elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.button),
       ),
     ),
     dialogTheme: DialogThemeData(
-      backgroundColor: AppColors.cardSurfaceDark, elevation: 8,
+      backgroundColor: AppColors.cardSurfaceDark, elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.card),
       ),
@@ -1319,6 +2202,8 @@ ThemeData buildDarkTheme() {
         borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
       ),
       modalBackgroundColor: AppColors.cardSurfaceDark,
+      showDragHandle: true,
+      dragHandleColor: AppColors.borderDashedDark,
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: AppColors.cardSurfaceMutedDark,

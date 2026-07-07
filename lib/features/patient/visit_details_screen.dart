@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../core/constants/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import 'member_detail_repository.dart';
 
@@ -65,7 +66,9 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.visit.serviceProvided ?? widget.visit.encounterType ?? 'Visit Details'),
+        title: Text(widget.visit.serviceProvided ??
+            widget.visit.encounterType ??
+            VisitDetailsStrings.fallbackTitle),
         elevation: 0,
       ),
       body: FutureBuilder<VisitDetails?>(
@@ -98,59 +101,59 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
                     children: [
                       _buildSection(
                         context,
-                        title: 'Visit Information',
+                        title: VisitDetailsStrings.sectionVisitInformation,
                         icon: Icons.calendar_today_outlined,
                         children: [
                           _buildDetailRow(
                             context,
-                            label: 'Service',
-                            value: details?.visitType ?? 
-                                   widget.visit.serviceProvided ?? 
-                                   widget.visit.encounterType ?? 
-                                   'General Visit',
+                            label: VisitDetailsStrings.labelService,
+                            value: details?.visitType ??
+                                   widget.visit.serviceProvided ??
+                                   widget.visit.encounterType ??
+                                   VisitDetailsStrings.generalVisitFallback,
                           ),
                           _buildDetailRow(
                             context,
-                            label: 'Visit Date',
+                            label: VisitDetailsStrings.labelVisitDate,
                             value: dateFormat.format(widget.visit.visitDate),
                           ),
                           if (details?.dateOfReview != null)
                             _buildDetailRow(
                               context,
-                              label: 'Review Date',
+                              label: VisitDetailsStrings.labelReviewDate,
                               value: _formatDate(details!.dateOfReview!),
                             ),
                           if (widget.visit.visitNumber != null || 
                               details?.reviewDetails?.visitNumber != null)
                             _buildDetailRow(
                               context,
-                              label: 'Visit Number',
+                              label: VisitDetailsStrings.labelVisitNumber,
                               value: (details?.reviewDetails?.visitNumber ?? 
                                      widget.visit.visitNumber).toString(),
                             ),
                           if (widget.visit.status != null)
                             _buildDetailRow(
                               context,
-                              label: 'Status',
+                              label: VisitDetailsStrings.labelStatus,
                               value: widget.visit.status!,
                               valueColor: _getStatusColor(widget.visit.status!, scheme),
                             ),
                           if (details?.visitType != null)
                             _buildDetailRow(
                               context,
-                              label: 'Visit Type',
+                              label: VisitDetailsStrings.labelVisitType,
                               value: _formatVisitType(details!.visitType!),
                             ),
                           if (details?.reviewDetails?.patientStatus != null)
                             _buildDetailRow(
                               context,
-                              label: 'Patient Status',
+                              label: VisitDetailsStrings.labelPatientStatus,
                               value: details!.reviewDetails!.patientStatus!,
                             ),
                           if (details?.id != null)
                             _buildDetailRow(
                               context,
-                              label: 'Encounter ID',
+                              label: VisitDetailsStrings.labelEncounterId,
                               value: details!.id!,
                             ),
                         ],
@@ -172,7 +175,7 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
                           details!.reviewDetails!.presentingComplaints!.isNotEmpty)
                         _buildListSection(
                           context,
-                          title: 'Presenting Complaints',
+                          title: VisitDetailsStrings.sectionPresentingComplaints,
                           icon: Icons.medical_information_outlined,
                           items: details.reviewDetails!.presentingComplaints!,
                           notes: details.reviewDetails!.presentingComplaintsNotes,
@@ -187,7 +190,7 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
                           details!.reviewDetails!.systemicExaminations!.isNotEmpty)
                         _buildListSection(
                           context,
-                          title: 'Systemic Examinations',
+                          title: VisitDetailsStrings.sectionSystemicExaminations,
                           icon: Icons.health_and_safety_outlined,
                           items: details.reviewDetails!.systemicExaminations!,
                           notes: details.reviewDetails!.systemicExaminationsNotes,
@@ -202,7 +205,8 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
                           details!.reviewDetails!.obstetricExaminations!.isNotEmpty)
                         _buildListSection(
                           context,
-                          title: 'Obstetric Examinations',
+                          title:
+                              VisitDetailsStrings.sectionObstetricExaminations,
                           icon: Icons.pregnant_woman,
                           items: details.reviewDetails!.obstetricExaminations!,
                           notes: details.reviewDetails!.obstetricExaminationsNotes,
@@ -232,7 +236,7 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
                         if (details!.complaints.isNotEmpty)
                           _buildSimpleListSection(
                             context,
-                            title: 'Complaints',
+                            title: VisitDetailsStrings.sectionComplaints,
                             icon: Icons.healing,
                             items: details.complaints,
                           ),
@@ -243,7 +247,8 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
                         if (details.physicalExams.isNotEmpty)
                           _buildSimpleListSection(
                             context,
-                            title: 'Physical Examinations',
+                            title:
+                                VisitDetailsStrings.sectionPhysicalExaminations,
                             icon: Icons.medical_services,
                             items: details.physicalExams,
                           ),
@@ -254,7 +259,7 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
                         if (details.comorbidities.isNotEmpty)
                           _buildSimpleListSection(
                             context,
-                            title: 'Comorbidities',
+                            title: VisitDetailsStrings.sectionComorbidities,
                             icon: Icons.health_and_safety,
                             items: details.comorbidities,
                           ),
@@ -265,7 +270,7 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
                         if (details.complications.isNotEmpty)
                           _buildSimpleListSection(
                             context,
-                            title: 'Complications',
+                            title: VisitDetailsStrings.sectionComplications,
                             icon: Icons.warning_amber,
                             items: details.complications,
                           ),
@@ -276,7 +281,7 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
                         if (details.investigations.isNotEmpty)
                           _buildSimpleListSection(
                             context,
-                            title: 'Investigations',
+                            title: VisitDetailsStrings.sectionInvestigations,
                             icon: Icons.science,
                             items: details.investigations,
                           ),
@@ -293,7 +298,7 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
                         if (details.clinicalNote != null && details.clinicalNote!.isNotEmpty)
                           _buildSection(
                             context,
-                            title: 'Clinical Notes',
+                            title: VisitDetailsStrings.sectionClinicalNotes,
                             icon: Icons.note_outlined,
                             children: [
                               Container(
@@ -325,19 +330,19 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
                       if (widget.visit.providerName != null)
                         _buildSection(
                           context,
-                          title: 'Provider Information',
+                          title: VisitDetailsStrings.sectionProviderInformation,
                           icon: Icons.person_outline,
                           children: [
                             _buildDetailRow(
                               context,
-                              label: 'Provider',
+                              label: VisitDetailsStrings.labelProvider,
                               value: widget.visit.providerName!,
                             ),
                             // Check for facility from rawJson
                             if (widget.visit.rawJson['facilityName'] != null)
                               _buildDetailRow(
                                 context,
-                                label: 'Facility',
+                                label: VisitDetailsStrings.labelFacility,
                                 value: widget.visit.rawJson['facilityName'].toString(),
                               ),
                           ],
@@ -351,7 +356,7 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
                            details!.reviewDetails!.clinicalNotes!.isNotEmpty))
                         _buildSection(
                           context,
-                          title: 'Clinical Notes',
+                          title: VisitDetailsStrings.sectionClinicalNotes,
                           icon: Icons.note_outlined,
                           children: [
                             Container(
@@ -394,10 +399,11 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
     
     return _buildSection(
       context,
-      title: 'Visit History',
+      title: VisitDetailsStrings.sectionVisitHistory,
       icon: Icons.history,
       children: history.map((item) {
-        final rawType = item['type']?.toString() ?? 'Unknown';
+        final rawType =
+            item['type']?.toString() ?? VisitDetailsStrings.unknownVisitType;
         final formattedType = _formatVisitType(rawType);
         final date = item['date']?.toString();
         final id = item['id']?.toString();
@@ -448,7 +454,7 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
               if (id != null) ...[
                 const SizedBox(height: 2),
                 Text(
-                  'Encounter ID: $id',
+                  VisitDetailsStrings.encounterIdLine(id),
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: scheme.outline,
                   ),
@@ -507,10 +513,12 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
     
     return _buildSection(
       context,
-      title: 'Prescriptions',
+      title: VisitDetailsStrings.sectionPrescriptions,
       icon: Icons.medication,
       children: prescriptions.map((rx) {
-        final drugName = rx['drugName']?.toString() ?? rx['name']?.toString() ?? 'Unknown Medication';
+        final drugName = rx['drugName']?.toString() ??
+            rx['name']?.toString() ??
+            VisitDetailsStrings.unknownMedication;
         final dosage = rx['dosage']?.toString();
         final frequency = rx['frequency']?.toString();
         final duration = rx['duration']?.toString();
@@ -544,13 +552,19 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
               ),
               const SizedBox(height: 8),
               if (dosage != null)
-                _buildDetailRow(context, label: 'Dosage', value: dosage),
+                _buildDetailRow(context,
+                    label: VisitDetailsStrings.labelDosage, value: dosage),
               if (frequency != null)
-                _buildDetailRow(context, label: 'Frequency', value: frequency),
+                _buildDetailRow(context,
+                    label: VisitDetailsStrings.labelFrequency,
+                    value: frequency),
               if (duration != null)
-                _buildDetailRow(context, label: 'Duration', value: duration),
+                _buildDetailRow(context,
+                    label: VisitDetailsStrings.labelDuration, value: duration),
               if (instructions != null && instructions.isNotEmpty)
-                _buildDetailRow(context, label: 'Instructions', value: instructions),
+                _buildDetailRow(context,
+                    label: VisitDetailsStrings.labelInstructions,
+                    value: instructions),
             ],
           ),
         );
@@ -563,7 +577,7 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
     
     return _buildSection(
       context,
-      title: 'Diagnosis',
+      title: RealtimeAsrStrings.diagnosis,
       icon: Icons.medical_services_outlined,
       children: [
         ...diagnosis.map((d) => _buildDiagnosisItem(context, d, scheme)),
@@ -651,7 +665,7 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Notes',
+                  VisitDetailsStrings.notesLabel,
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -669,21 +683,33 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
   Widget _buildLabourSection(BuildContext context, LabourDetails labour) {
     return _buildSection(
       context,
-      title: 'Labour & Delivery',
+      title: VisitDetailsStrings.sectionLabourDelivery,
       icon: Icons.child_friendly,
       children: [
         if (labour.deliveryType != null)
-          _buildDetailRow(context, label: 'Delivery Type', value: labour.deliveryType!),
+          _buildDetailRow(context,
+              label: VisitDetailsStrings.labelDeliveryType,
+              value: labour.deliveryType!),
         if (labour.deliveryAt != null)
-          _buildDetailRow(context, label: 'Delivery At', value: labour.deliveryAt!),
+          _buildDetailRow(context,
+              label: VisitDetailsStrings.labelDeliveryAt,
+              value: labour.deliveryAt!),
         if (labour.deliveryBy != null)
-          _buildDetailRow(context, label: 'Delivery By', value: labour.deliveryBy!),
+          _buildDetailRow(context,
+              label: VisitDetailsStrings.labelDeliveryBy,
+              value: labour.deliveryBy!),
         if (labour.deliveryStatus != null)
-          _buildDetailRow(context, label: 'Delivery Status', value: labour.deliveryStatus!),
+          _buildDetailRow(context,
+              label: VisitDetailsStrings.labelDeliveryStatus,
+              value: labour.deliveryStatus!),
         if (labour.dateAndTimeOfDelivery != null)
-          _buildDetailRow(context, label: 'Delivery Date/Time', value: labour.dateAndTimeOfDelivery!),
+          _buildDetailRow(context,
+              label: VisitDetailsStrings.labelDeliveryDateTime,
+              value: labour.dateAndTimeOfDelivery!),
         if (labour.dateAndTimeOfLabourOnset != null)
-          _buildDetailRow(context, label: 'Labour Onset', value: labour.dateAndTimeOfLabourOnset!),
+          _buildDetailRow(context,
+              label: VisitDetailsStrings.labelLabourOnset,
+              value: labour.dateAndTimeOfLabourOnset!),
       ],
     );
   }
@@ -691,29 +717,45 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
   Widget _buildNeonateSection(BuildContext context, ReviewDetails details) {
     return _buildSection(
       context,
-      title: 'Neonate / Baby',
+      title: VisitDetailsStrings.sectionNeonate,
       icon: Icons.child_care,
       children: [
         if (details.isMotherAlive != null)
           _buildDetailRow(
-            context, 
-            label: 'Mother Alive', 
-            value: details.isMotherAlive! ? 'Yes' : 'No',
+            context,
+            label: VisitDetailsStrings.labelMotherAlive,
+            value: details.isMotherAlive!
+                ? VisitDetailsStrings.yes
+                : VisitDetailsStrings.no,
           ),
         if (details.neonateOutcome != null)
-          _buildDetailRow(context, label: 'Neonate Outcome', value: details.neonateOutcome!),
+          _buildDetailRow(context,
+              label: VisitDetailsStrings.labelNeonateOutcome,
+              value: details.neonateOutcome!),
         if (details.stateOfBaby != null)
-          _buildDetailRow(context, label: 'State of Baby', value: details.stateOfBaby!),
+          _buildDetailRow(context,
+              label: VisitDetailsStrings.labelStateOfBaby,
+              value: details.stateOfBaby!),
         if (details.birthWeight != null)
-          _buildDetailRow(context, label: 'Birth Weight', value: details.birthWeight!),
+          _buildDetailRow(context,
+              label: VisitDetailsStrings.labelBirthWeight,
+              value: details.birthWeight!),
         if (details.breastCondition != null)
-          _buildDetailRow(context, label: 'Breast Condition', value: details.breastCondition!),
+          _buildDetailRow(context,
+              label: VisitDetailsStrings.labelBreastCondition,
+              value: details.breastCondition!),
         if (details.breastConditionNotes != null)
-          _buildDetailRow(context, label: 'Breast Notes', value: details.breastConditionNotes!),
+          _buildDetailRow(context,
+              label: VisitDetailsStrings.labelBreastNotes,
+              value: details.breastConditionNotes!),
         if (details.involutionsOfTheUterus != null)
-          _buildDetailRow(context, label: 'Involution of Uterus', value: details.involutionsOfTheUterus!),
+          _buildDetailRow(context,
+              label: VisitDetailsStrings.labelInvolutionOfUterus,
+              value: details.involutionsOfTheUterus!),
         if (details.signs != null && details.signs!.isNotEmpty)
-          _buildDetailRow(context, label: 'Signs', value: details.signs!.join(', ')),
+          _buildDetailRow(context,
+              label: VisitDetailsStrings.labelSigns,
+              value: details.signs!.join(', ')),
       ],
     );
   }
@@ -770,7 +812,9 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      widget.visit.serviceProvided ?? widget.visit.encounterType ?? 'Visit',
+                      widget.visit.serviceProvided ??
+                          widget.visit.encounterType ??
+                          VisitDetailsStrings.headerVisitFallback,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             color: scheme.onPrimary,
                             fontWeight: FontWeight.w600,
@@ -896,28 +940,8 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
     final rawJson = widget.visit.rawJson;
     
     // Extract additional fields that might be useful
-    final fieldsToShow = {
-      'referralStatus': 'Referral Status',
-      'referralReason': 'Referral Reason',
-      'nextFollowUpDate': 'Next Follow-up',
-      'diagnosis': 'Diagnosis',
-      'prescription': 'Prescription',
-      'labTests': 'Lab Tests',
-      'symptoms': 'Symptoms',
-      'riskLevel': 'Risk Level',
-      'programType': 'Program Type',
-      'encounterClass': 'Encounter Type',
-      'reasonCode': 'Reason',
-      'bloodPressureSystolic': 'BP Systolic',
-      'bloodPressureDiastolic': 'BP Diastolic',
-      'weight': 'Weight',
-      'height': 'Height',
-      'bmi': 'BMI',
-      'temperature': 'Temperature',
-      'pulseRate': 'Pulse Rate',
-      'respiratoryRate': 'Respiratory Rate',
-    };
-    
+    const fieldsToShow = VisitDetailsStrings.additionalDetailLabels;
+
     for (final entry in fieldsToShow.entries) {
       final value = rawJson[entry.key];
       if (value != null && value.toString().isNotEmpty) {
@@ -965,7 +989,7 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
     
     return _buildSection(
       context,
-      title: 'Additional Details',
+      title: VisitDetailsStrings.sectionAdditionalDetails,
       icon: Icons.info_outline,
       children: additionalDetails,
     );

@@ -28,6 +28,7 @@ import '../../core/constants/app_strings.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
+import '../../core/models/patient.dart';
 import '../../core/db/pregnancy_snapshot_dao.dart';
 import '../../core/models/programme.dart';
 import '../../core/theme/app_theme.dart';
@@ -38,6 +39,7 @@ import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
 import 'programme_selection/programme_selection_screen.dart';
 import 'triage/symptom_picker_screen.dart';
+import 'household_followup_screen.dart';
 import 'visit_form_screen.dart';
 
 /// Single-route 3-step visit flow wrapper.
@@ -242,14 +244,8 @@ class _VisitFlowState extends State<VisitFlowScreen> {
             _otherSymptoms = other;
           },
           onAdvance: (pathways) {
-            setState(() {
-              _pathways = pathways;
-              // Seed Step 2 selection with the rule-engine pathways so the SK
-              // sees something even before the AI service responds.
-              _confirmedProgrammes =
-                  pathways.map((p) => p.programme).toSet();
-              _step = 1;
-            });
+            _pathways = pathways;
+            _showProgrammeConfirmSheet(pathways);
           },
         );
       case 1:
@@ -304,6 +300,26 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     }
   }
 
+  void _showProgrammeConfirmSheet(List<ActivatedPathway> pathways) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => _ProgrammeConfirmSheet(
+        pathways: pathways,
+        onConfirm: (selected) {
+          if (!mounted) return;
+          setState(() {
+            _confirmedProgrammes = selected;
+            _step = 1;
+          });
+        },
+      ),
+    );
+  }
+
   Future<bool?> _confirmExit() => showLeaveVisitDialog(context);
 }
 
@@ -317,7 +333,7 @@ Future<bool?> showLeaveVisitDialog(BuildContext context) {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 22, 20, 16),
+          padding: const EdgeInsets.fromLTRB(AppSpacing.h5xl, 22, AppSpacing.h5xl, AppSpacing.xxxl),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -371,7 +387,7 @@ Future<bool?> showLeaveVisitDialog(BuildContext context) {
                     foregroundColor: Colors.white,
                     minimumSize: const Size.fromHeight(48),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(AppRadius.field),
                     ),
                     textStyle: const TextStyle(
                       fontSize: 14,
@@ -390,7 +406,7 @@ Future<bool?> showLeaveVisitDialog(BuildContext context) {
                     foregroundColor: AppColors.statusCritical,
                     minimumSize: const Size.fromHeight(48),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(AppRadius.field),
                     ),
                     textStyle: const TextStyle(
                       fontSize: 14,
@@ -442,7 +458,7 @@ class _VisitFlowHeader extends StatelessWidget {
   final String? patientGender;
   final Programme primaryProgramme;
 
-  static const Color _headerColor = Color(0xFF1B2B5E); // Navy
+  static const Color _headerColor = Color(0xFF831843);
 
   String get _initials {
     final name = (patientName ?? '').trim();
@@ -456,9 +472,13 @@ class _VisitFlowHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final step2Title = (primaryProgramme == Programme.anc ||
+            primaryProgramme == Programme.pnc)
+        ? 'Pregnancy checks'
+        : VisitFlowStrings.step2Title;
     final stepLabels = <String>[
       '1. ${VisitFlowStrings.step1Title}',
-      '2. ${VisitFlowStrings.step2Title}',
+      '2. $step2Title',
       '3. ${VisitFlowStrings.step3Title}',
     ];
 
@@ -467,7 +487,7 @@ class _VisitFlowHeader extends StatelessWidget {
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(4, 4, 12, 12),
+          padding: const EdgeInsets.fromLTRB(AppSpacing.xs, AppSpacing.xs, AppSpacing.xl, AppSpacing.xl),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -475,10 +495,10 @@ class _VisitFlowHeader extends StatelessWidget {
               // Row 1: ← Back to visits
               InkWell(
                 onTap: onBack,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(AppRadius.rxIcon),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 6),
+                      horizontal: AppSpacing.md, vertical: AppSpacing.sm),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -501,7 +521,7 @@ class _VisitFlowHeader extends StatelessWidget {
 
               // Row 2 + 3: avatar + name / age · house
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
@@ -510,7 +530,7 @@ class _VisitFlowHeader extends StatelessWidget {
                       height: 40,
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(AppRadius.pill),
                       ),
                       alignment: Alignment.center,
                       child: Text(
@@ -575,7 +595,7 @@ class _VisitFlowHeader extends StatelessWidget {
 
               // Row 4: 3-step line indicators with labels below.
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -586,7 +606,7 @@ class _VisitFlowHeader extends StatelessWidget {
                           child: Container(
                             height: 3,
                             margin: EdgeInsets.only(
-                              right: i == stepLabels.length - 1 ? 0 : 6,
+                              right: i == stepLabels.length - 1 ? 0 : AppSpacing.sm,
                             ),
                             decoration: BoxDecoration(
                               color: filled
@@ -605,7 +625,7 @@ class _VisitFlowHeader extends StatelessWidget {
                         return Expanded(
                           child: Padding(
                             padding: EdgeInsets.only(
-                              right: i == stepLabels.length - 1 ? 0 : 6,
+                              right: i == stepLabels.length - 1 ? 0 : AppSpacing.sm,
                             ),
                             child: Text(
                               stepLabels[i],
@@ -844,6 +864,8 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
   void initState() {
     super.initState();
     _selectedProgrammes = widget.seedProgrammes;
+    // AI programme recommendation disabled — use rule-based PathwayEngine result directly.
+    _phase = _Step2Phase.form;
     WidgetsBinding.instance.addPostFrameCallback((_) => _hydrate());
   }
 
@@ -982,6 +1004,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   late AnimationController _shimmer;
   bool _accepted = false;
   String? _patientPhone;
+  List<_HouseholdMember>? _householdMembers;
 
   Color _headerColor(Programme p) => switch (p) {
         Programme.anc || Programme.pnc => AppColors.ancHeader,
@@ -1002,6 +1025,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       duration: const Duration(milliseconds: 1100),
     )..repeat(reverse: true);
     _loadPatientPhone();
+    _loadHouseholdMembers();
   }
 
   Future<void> _loadPatientPhone() async {
@@ -1014,44 +1038,292 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     }
   }
 
+  Future<void> _loadHouseholdMembers() async {
+    String? hid = widget.householdId;
+    if ((hid == null || hid.isEmpty) && mounted) {
+      try {
+        final patient = await context.read<PatientDao>().byId(widget.patientId);
+        hid = patient?.householdId;
+      } on Object catch (_) {}
+    }
+    if (hid == null || hid.isEmpty || !mounted) return;
+
+    final patientDao = context.read<PatientDao>();
+    final progDao = context.read<PatientProgrammesDao>();
+
+    final rows = await patientDao.getByHouseholdId(hid);
+    final patients = rows.map(Patient.fromDb).where((p) => p.isActive != false).toList();
+    final ids = patients.map((p) => p.id).toList();
+    final progMap = await progDao.programmesForMany(ids);
+
+    if (!mounted) return;
+    final members = patients.map((p) {
+      final progs = progMap[p.id] ?? {};
+      final primary = progs.isNotEmpty ? progs.first : Programme.unknown;
+      return _HouseholdMember(
+        patientId: p.id,
+        name: p.name ?? '—',
+        primaryProgramme: primary,
+        isCurrentPatient: p.id == widget.patientId,
+      );
+    }).toList()
+      ..sort((a, b) {
+        if (a.isCurrentPatient) return -1;
+        if (b.isCurrentPatient) return 1;
+        return 0;
+      });
+
+    setState(() => _householdMembers = members);
+  }
+
   @override
   void dispose() {
     _shimmer.dispose();
     super.dispose();
   }
 
-  Future<NabaResponse> _fetchNaba() {
-    final repo = NabaRepository(context.read<ApiClient>());
-    final programmes = widget.confirmedProgrammes
-        .where((p) => p != Programme.unknown)
-        .map((p) => p.wireTag)
-        .toList();
+  Future<NabaResponse> _fetchNaba() async {
+    try {
+      final repo = NabaRepository(context.read<ApiClient>());
+      final programmes = widget.confirmedProgrammes
+          .where((p) => p != Programme.unknown)
+          .map((p) => p.wireTag)
+          .toList();
 
-    final req = NabaRequest(
-      requestId: widget.visitId,
-      patientId: widget.patientId,
-      visitType: 'routine',
-      ageYears: widget.patientAge,
-      sex: widget.patientGender,
-      activeProgrammes: programmes,
-      gestationalWeeks: widget.gestationalWeeks,
-      isPregnant: widget.gestationalWeeks != null,
-      manuallySelectedSymptoms: widget.confirmedSymptoms.toList(),
-    );
-    return repo.generate(req);
+      final req = NabaRequest(
+        requestId: widget.visitId,
+        patientId: widget.patientId,
+        visitType: 'routine',
+        ageYears: widget.patientAge,
+        sex: widget.patientGender,
+        activeProgrammes: programmes,
+        gestationalWeeks: widget.gestationalWeeks,
+        isPregnant: widget.gestationalWeeks != null,
+        manuallySelectedSymptoms: widget.confirmedSymptoms.toList(),
+      );
+      return await repo.generate(req);
+    } catch (e) {
+      debugPrint('[NABA] AI failed — rule-based fallback: $e');
+      return _ruleBasedNaba();
+    }
   }
+
+  NabaResponse _ruleBasedNaba() {
+    final progs = widget.confirmedProgrammes;
+    final hasAnc = progs.contains(Programme.anc);
+    final hasNcd = progs.contains(Programme.ncd);
+    final hasPnc = progs.contains(Programme.pnc);
+    final hasImci = progs.contains(Programme.imci);
+    final hasTb = progs.contains(Programme.tb);
+
+    final actions = <NabaNextAction>[];
+    final counselling = <String>[];
+    final followUp = <NabaFollowUpItem>[];
+
+    if (hasAnc) {
+      final gw = widget.gestationalWeeks;
+      if (gw != null && gw >= 36) {
+        actions.add(const NabaNextAction(
+          priority: 0,
+          action: 'Patient is at or near term (≥36 weeks). Advise to go to facility immediately if labour starts.',
+          urgency: 'Now',
+          programme: 'ANC',
+        ));
+      }
+      actions.addAll(const [
+        NabaNextAction(priority: 1, action: 'Measure blood pressure, weight, and fundal height', urgency: 'Today', programme: 'ANC'),
+        NabaNextAction(priority: 2, action: 'Check for danger signs: heavy bleeding, severe headache, blurred vision, convulsions, no fetal movement', urgency: 'Today', programme: 'ANC'),
+        NabaNextAction(priority: 3, action: 'Confirm iron-folic acid supply for next 4 weeks', urgency: 'Today', programme: 'ANC'),
+        NabaNextAction(priority: 4, action: 'Schedule next ANC visit in 4 weeks', urgency: 'This week', programme: 'ANC'),
+      ]);
+      counselling.addAll(const [
+        'Take iron-folic acid tablet every day, even when feeling well',
+        'Eat nutritious food: green vegetables, lentils, fish, eggs',
+        'Sleep under a bednet every night',
+        'Plan delivery with a skilled attendant at a health facility',
+        'Go to facility immediately if any danger sign occurs',
+      ]);
+      followUp.add(const NabaFollowUpItem(
+        activity: 'ANC visit — BP, weight, fundal height, fetal position',
+        timeline: 'In 4 weeks',
+        programme: 'ANC',
+      ));
+    }
+
+    if (hasNcd) {
+      actions.addAll(const [
+        NabaNextAction(priority: 1, action: 'Measure blood pressure in both arms', urgency: 'Today', programme: 'NCD'),
+        NabaNextAction(priority: 2, action: 'Check fasting blood glucose if patient has diabetes', urgency: 'Today', programme: 'NCD'),
+        NabaNextAction(priority: 3, action: 'Verify medication supply — patient must not run out', urgency: 'Today', programme: 'NCD'),
+        NabaNextAction(priority: 4, action: 'Counsel on lifestyle: salt reduction, daily walking, no tobacco', urgency: 'This week', programme: 'NCD'),
+      ]);
+      counselling.addAll(const [
+        'Take all prescribed medications every day without skipping',
+        'Reduce salt in cooking — avoid processed and salty foods',
+        'Walk at least 30 minutes every day',
+        'Avoid tobacco and alcohol',
+        'Return immediately for one-sided weakness, sudden severe headache, or chest pain',
+      ]);
+      followUp.add(const NabaFollowUpItem(
+        activity: 'BP and glucose re-check',
+        timeline: 'In 4 weeks',
+        programme: 'NCD',
+      ));
+    }
+
+    if (hasPnc) {
+      actions.addAll(const [
+        NabaNextAction(priority: 1, action: "Check mother's BP and temperature; assess lochia and wound healing", urgency: 'Today', programme: 'PNC'),
+        NabaNextAction(priority: 2, action: 'Weigh neonate; check cord stump; observe breastfeeding latch', urgency: 'Today', programme: 'PNC'),
+        NabaNextAction(priority: 3, action: 'Confirm vitamin A given to mother within 8 weeks of delivery', urgency: 'Today', programme: 'PNC'),
+        NabaNextAction(priority: 4, action: 'Counsel on family planning options', urgency: 'This week', programme: 'PNC'),
+      ]);
+      counselling.addAll(const [
+        'Breastfeed exclusively for 6 months — no water, no other food',
+        'Keep baby warm and cord stump clean and dry',
+        'Eat nutritious food to support breast milk production',
+        'Seek care immediately for heavy bleeding, fever, foul-smelling discharge, or baby not feeding',
+      ]);
+      followUp.add(const NabaFollowUpItem(
+        activity: 'PNC follow-up — mother and neonate',
+        timeline: 'In 7 days',
+        programme: 'PNC',
+      ));
+    }
+
+    if (hasImci) {
+      actions.addAll(const [
+        NabaNextAction(priority: 1, action: 'Measure temperature and respiratory rate; assess hydration status', urgency: 'Today', programme: 'IMCI'),
+        NabaNextAction(priority: 2, action: 'Classify illness per IMCI chart; prescribe ORS and zinc if diarrhoea', urgency: 'Today', programme: 'IMCI'),
+        NabaNextAction(priority: 3, action: 'Check for danger signs: not able to drink, persistent vomiting, convulsions, very sleepy', urgency: 'Today', programme: 'IMCI'),
+      ]);
+      counselling.addAll(const [
+        'Continue breastfeeding or usual feeding during illness',
+        'Give ORS frequently if child has diarrhoea',
+        'Complete full zinc course (10 days) for diarrhoea',
+        'Return immediately if child is not improving or has a danger sign',
+      ]);
+      followUp.add(const NabaFollowUpItem(
+        activity: 'Follow-up sick child visit',
+        timeline: 'In 2 days',
+        programme: 'IMCI',
+      ));
+    }
+
+    if (hasTb) {
+      actions.addAll(const [
+        NabaNextAction(priority: 1, action: 'Confirm TB treatment adherence — check pill count and any side effects', urgency: 'Today', programme: 'TB'),
+        NabaNextAction(priority: 2, action: 'Counsel on infection control: cough hygiene, ventilation, mask use', urgency: 'Today', programme: 'TB'),
+      ]);
+      counselling.addAll(const [
+        'Take TB medicines every day without stopping — stopping leads to drug resistance',
+        'Cover mouth when coughing; keep rooms well-ventilated',
+        'All household contacts should be screened for TB symptoms',
+      ]);
+      followUp.add(const NabaFollowUpItem(
+        activity: 'TB treatment adherence check',
+        timeline: 'In 2 weeks',
+        programme: 'TB',
+      ));
+    }
+
+    if (actions.isEmpty) {
+      actions.add(const NabaNextAction(
+        priority: 1,
+        action: 'Record vital signs and complete routine clinical assessment',
+        urgency: 'Today',
+      ));
+      counselling.add('Follow up as scheduled and contact the health worker if symptoms worsen');
+      followUp.add(const NabaFollowUpItem(
+        activity: 'Routine follow-up visit',
+        timeline: 'In 4 weeks',
+      ));
+    }
+
+    return NabaResponse(
+      requestId: widget.visitId,
+      modelVersion: 'rule-based-fallback',
+      generatedAt: DateTime.now().toIso8601String(),
+      rationale: const NabaRationale(
+        guidelineIds: ['WHO-ANC-2016', 'IMCI-2014', 'BN-NCD-2023'],
+        sourceObservations: ['Programme context', 'Gestational age', 'Confirmed symptoms'],
+        modelVersion: 'rule-based-fallback',
+        confidence: 0.7,
+        humanReviewRequired: true,
+      ),
+      visitSummary: NabaVisitSummary(
+        title: _programmeSummaryTitle(widget.primaryProgramme),
+        summary: 'Care plan generated using clinical guidelines. AI service was unavailable — review and adjust based on your clinical judgement.',
+      ),
+      nextActions: actions,
+      counselling: counselling,
+      followUp: followUp,
+      referralRecommendation: widget.referralRecommended
+          ? const NabaReferralRecommendation(
+              required_: true,
+              destination: 'Upazila Health Complex',
+              urgency: 'Today',
+              reason: 'Referral recommended based on clinical assessment',
+            )
+          : null,
+    );
+  }
+
+  static String _programmeSummaryTitle(Programme p) => switch (p) {
+        Programme.anc => 'ANC Visit — Guideline Care Plan',
+        Programme.pnc => 'PNC Visit — Guideline Care Plan',
+        Programme.ncd => 'NCD Visit — Guideline Care Plan',
+        Programme.imci => 'Child Health Visit — Guideline Care Plan',
+        Programme.tb => 'TB Follow-up — Guideline Care Plan',
+        _ => 'Visit — Guideline Care Plan',
+      };
 
   void _retry() {
     final nextFuture = _fetchNaba();
     setState(() => _future = nextFuture);
   }
 
-  void _onAccepted(NabaResponse naba) {
+  Future<void> _onAccepted(NabaResponse naba) async {
     if (_accepted) return;
     setState(() => _accepted = true);
-    // Proposal accepted — navigate home. FHIR resource creation happens
-    // server-side after the SK accepts; rationale is already on the response.
-    if (mounted) context.go(_returnPath);
+    if (!mounted) return;
+
+    // Prefer householdId from widget (passed via navigation extra).
+    // If null (e.g. visit started from a screen that didn't set it), fall back
+    // to a DB lookup on the patient row — same data, different code path.
+    String? hid = widget.householdId;
+    if ((hid == null || hid.isEmpty) && mounted) {
+      try {
+        final patient =
+            await context.read<PatientDao>().byId(widget.patientId);
+        hid = patient?.householdId;
+        debugPrint(
+          '[Step3] householdId from widget=${widget.householdId} '
+          'DB fallback=$hid patientId=${widget.patientId}',
+        );
+      } on Object catch (e) {
+        debugPrint('[Step3] householdId DB lookup failed: $e');
+      }
+    }
+
+    if (!mounted) return;
+    if (hid != null && hid.isNotEmpty) {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => HouseholdFollowUpScreen(
+            householdId: hid!,
+            excludePatientId: widget.patientId,
+            onDone: () => context.go(_returnPath),
+            onViewPatient: (patientId) => context.push('/patients/$patientId'),
+          ),
+        ),
+      );
+    } else {
+      debugPrint(
+        '[Step3] No householdId for patient ${widget.patientId} — skipping follow-up screen',
+      );
+      context.go(_returnPath);
+    }
   }
 
   @override
@@ -1073,7 +1345,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   Widget _buildLoading() {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.h8xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1107,11 +1379,9 @@ class _Step3AiRecoState extends State<_Step3AiReco>
               ),
             ),
             const SizedBox(height: 24),
-            const Text(
+            Text(
               NabaStrings.loadingTitle,
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 18,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 color: AppColors.textPrimary,
               ),
               textAlign: TextAlign.center,
@@ -1132,8 +1402,8 @@ class _Step3AiRecoState extends State<_Step3AiReco>
               animation: _shimmer,
               builder: (context, unused) {
                 final shimmerColor = Color.lerp(
-                  const Color(0xFFE5E7EB),
-                  const Color(0xFFF3F4F6),
+                  AppColors.border,
+                  AppColors.progressTrack,
                   _shimmer.value,
                 )!;
                 return Column(
@@ -1156,7 +1426,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   Widget _buildError(Object? error) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(AppSpacing.h8xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1202,7 +1472,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
                 label: const Text(NabaStrings.retryButton),
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.navy,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxl),
                 ),
               ),
             ),
@@ -1223,16 +1493,30 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         naba.referralRecommendation?.required_ ?? widget.referralRecommended;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.xxxl, AppSpacing.xxxl, AppSpacing.xxxl, AppSpacing.h8xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-              // ── Success header ────────────────────────────────────────
-              _ResultHeader(
-                programme: widget.primaryProgramme,
-                headerColor: headerColor,
-              ),
-              const SizedBox(height: 16),
+              // ── AI checked header + household strip ───────────────────
+              if (_householdMembers != null && _householdMembers!.length > 1) ...[
+                _AiCheckedHeader(
+                  programmes: widget.confirmedProgrammes,
+                  headerColor: headerColor,
+                ),
+                const SizedBox(height: 10),
+                _HouseholdMemberStrip(
+                  members: _householdMembers!,
+                  onTapMember: (patientId) =>
+                      context.push('/patients/$patientId'),
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              // ── AI fallback notice ────────────────────────────────────
+              if (naba.modelVersion == 'rule-based-fallback') ...[
+                const _FallbackNoticeBanner(),
+                const SizedBox(height: 12),
+              ],
 
               // ── Danger signs — elevated to top ────────────────────────
               if (naba.dangerSigns.isNotEmpty) ...[
@@ -1243,10 +1527,10 @@ class _Step3AiRecoState extends State<_Step3AiReco>
               // ── Banners: review required + referral ───────────────────
               if (naba.rationale.humanReviewRequired) ...[
                 _InfoBanner(
-                  color: const Color(0xFFFFF7ED),
-                  borderColor: const Color(0xFFFED7AA),
+                  color: AppColors.ncdSurface,
+                  borderColor: AppColors.warningBorderAlt,
                   icon: Icons.supervisor_account_rounded,
-                  iconColor: const Color(0xFFD97706),
+                  iconColor: AppColors.slaDueSoonText,
                   text: NabaStrings.humanReviewBadge,
                 ),
                 const SizedBox(height: 12),
@@ -1300,16 +1584,44 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 
               // ── Counselling ───────────────────────────────────────────
               if (naba.counselling.isNotEmpty) ...[
-                _SectionCard(
-                  title: NabaStrings.sectionCounselling,
-                  icon: Icons.chat_bubble_outline_rounded,
-                  iconBg: AppColors.tagTealSurface,
-                  iconColor: AppColors.tagTealText,
-                  child: _DotList(
-                    items: naba.counselling,
-                    dotColor: AppColors.tagTealText,
+                if (widget.primaryProgramme == Programme.ncd)
+                  Card(
+                    child: ExpansionTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: AppColors.tagTealSurface,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(Icons.chat_bubble_outline_rounded,
+                            color: AppColors.tagTealText, size: 18),
+                      ),
+                      title: Text(NabaStrings.sectionCounselling,
+                          style: Theme.of(context).textTheme.titleSmall),
+                      subtitle: const Text('Tap to expand'),
+                      initiallyExpanded: false,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          child: _DotList(
+                            items: naba.counselling,
+                            dotColor: AppColors.tagTealText,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  _SectionCard(
+                    title: NabaStrings.sectionCounselling,
+                    icon: Icons.chat_bubble_outline_rounded,
+                    iconBg: AppColors.tagTealSurface,
+                    iconColor: AppColors.tagTealText,
+                    child: _DotList(
+                      items: naba.counselling,
+                      dotColor: AppColors.tagTealText,
+                    ),
                   ),
-                ),
                 const SizedBox(height: 12),
               ],
 
@@ -1333,8 +1645,8 @@ class _Step3AiRecoState extends State<_Step3AiReco>
                 _SectionCard(
                   title: NabaStrings.sectionFollowUp,
                   icon: Icons.event_available_rounded,
-                  iconBg: const Color(0xFFE0E7FF),
-                  iconColor: const Color(0xFF4338CA),
+                  iconBg: AppColors.followUpIconBg,
+                  iconColor: AppColors.followUpIconFg,
                   child: _FollowUpRows(items: naba.followUp),
                 ),
                 const SizedBox(height: 12),
@@ -1352,12 +1664,10 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 
               // ── Proposal note ─────────────────────────────────────────
               const SizedBox(height: 4),
-              const Center(
+              Center(
                 child: Text(
                   NabaStrings.proposalNote,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textMuted,
+                  style: AppTextStyles.subText.copyWith(
                     fontStyle: FontStyle.italic,
                   ),
                   textAlign: TextAlign.center,
@@ -1385,6 +1695,39 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 
 // ── Supporting widgets ────────────────────────────────────────────────────────
 
+class _FallbackNoticeBanner extends StatelessWidget {
+  const _FallbackNoticeBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF8E1),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: const Color(0xFFFFE082)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline_rounded, size: 18, color: Color(0xFFF57F17)),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text(
+              NabaStrings.fallbackNotice,
+              style: TextStyle(
+                fontSize: 12,
+                color: Color(0xFF4E342E),
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SkeletonCard extends StatelessWidget {
   const _SkeletonCard({required this.color, required this.height});
   final Color color;
@@ -1398,73 +1741,6 @@ class _SkeletonCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: color,
         borderRadius: BorderRadius.circular(AppRadius.card),
-      ),
-    );
-  }
-}
-
-class _ResultHeader extends StatelessWidget {
-  const _ResultHeader({
-    required this.programme,
-    required this.headerColor,
-  });
-  final Programme programme;
-  final Color headerColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        children: [
-          TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0.0, end: 1.0),
-            duration: const Duration(milliseconds: 550),
-            curve: Curves.elasticOut,
-            builder: (_, v, child) => Transform.scale(scale: v, child: child),
-            child: Container(
-              width: 52,
-              height: 52,
-              decoration: const BoxDecoration(
-                color: AppColors.statusSuccessSurface,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.check_rounded,
-                size: 28,
-                color: AppColors.statusSuccess,
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            VisitCompleteStrings.saved,
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 16,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          if (programme != Programme.unknown) ...[
-            const SizedBox(height: 6),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-              decoration: BoxDecoration(
-                color: headerColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(AppRadius.pill),
-              ),
-              child: Text(
-                programme.name.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: headerColor,
-                  letterSpacing: 0.8,
-                ),
-              ),
-            ),
-          ],
-        ],
       ),
     );
   }
@@ -1515,7 +1791,7 @@ class _DangerSignsAlert extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(AppSpacing.xl),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: signs
@@ -1578,7 +1854,7 @@ class _InfoBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.xl),
       decoration: BoxDecoration(
         color: color,
         borderRadius: BorderRadius.circular(AppRadius.card),
@@ -1596,9 +1872,7 @@ class _InfoBanner extends StatelessWidget {
                 if (label != null) ...[
                   Text(
                     label!,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
+                    style: AppTextStyles.scorePill.copyWith(
                       color: iconColor,
                       letterSpacing: 0.5,
                     ),
@@ -1607,11 +1881,7 @@ class _InfoBanner extends StatelessWidget {
                 ],
                 Text(
                   text,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    height: 1.4,
-                    color: AppColors.textPrimary,
-                  ),
+                  style: AppTextStyles.body.copyWith(height: 1.4),
                 ),
               ],
             ),
@@ -1650,7 +1920,7 @@ class _SummaryCard extends StatelessWidget {
           Container(
             width: double.infinity,
             padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                const EdgeInsets.symmetric(horizontal: AppSpacing.xxxl, vertical: AppSpacing.xl),
             decoration: BoxDecoration(
               color: headerColor,
               borderRadius: const BorderRadius.only(
@@ -1669,7 +1939,7 @@ class _SummaryCard extends StatelessWidget {
           ),
           // Summary body
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.xxxl, AppSpacing.xxl, AppSpacing.xxxl, AppSpacing.lg),
             child: Text(
               body,
               style: const TextStyle(
@@ -1681,7 +1951,7 @@ class _SummaryCard extends StatelessWidget {
           ),
           // Confidence footer
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.xxxl, 0, AppSpacing.xxxl, AppSpacing.xl),
             child: Row(
               children: [
                 Icon(
@@ -1692,11 +1962,7 @@ class _SummaryCard extends StatelessWidget {
                 const SizedBox(width: 4),
                 Text(
                   'AI confidence: ${(confidence * 100).toStringAsFixed(0)}%',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textMuted,
-                    letterSpacing: 0.2,
-                  ),
+                  style: AppTextStyles.subText.copyWith(letterSpacing: 0.2),
                 ),
               ],
             ),
@@ -1725,7 +1991,7 @@ class _SectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(AppSpacing.xxl),
       decoration: BoxDecoration(
         color: AppColors.cardSurface,
         borderRadius: BorderRadius.circular(AppRadius.card),
@@ -1773,13 +2039,13 @@ class _NextActionsTimeline extends StatelessWidget {
 
   static const _urgencyFg = {
     'Now': AppColors.statusCritical,
-    'Today': Color(0xFFD97706),
+    'Today': AppColors.slaDueSoonText,
     'This week': AppColors.navy,
   };
   static const _urgencyBg = {
     'Now': AppColors.statusCriticalSurface,
-    'Today': Color(0xFFFEF3C7),
-    'This week': Color(0xFFEFF6FF),
+    'Today': AppColors.statusWarningSurface,
+    'This week': AppColors.childSurface,
   };
 
   @override
@@ -1832,11 +2098,7 @@ class _NextActionsTimeline extends StatelessWidget {
                   children: [
                     Text(
                       a.action,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textPrimary,
-                        height: 1.4,
-                      ),
+                      style: AppTextStyles.body.copyWith(height: 1.4),
                     ),
                     const SizedBox(height: 4),
                     Container(
@@ -1873,7 +2135,7 @@ class _ClinicalFindingsCards extends StatelessWidget {
 
   Color _severityColor(String s) => switch (s) {
         'High' => AppColors.statusCritical,
-        'Medium' => const Color(0xFFD97706),
+        'Medium' => AppColors.slaDueSoonText,
         _ => AppColors.statusSuccess,
       };
 
@@ -1893,7 +2155,7 @@ class _ClinicalFindingsCards extends StatelessWidget {
                     left: BorderSide(color: sc, width: 3.5),
                   ),
                 ),
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, AppSpacing.lg),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1920,9 +2182,7 @@ class _ClinicalFindingsCards extends StatelessWidget {
                           ),
                           child: Text(
                             f.severity.toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
+                            style: AppTextStyles.microTag.copyWith(
                               color: sc,
                               letterSpacing: 0.5,
                             ),
@@ -1933,11 +2193,7 @@ class _ClinicalFindingsCards extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(
                       f.reason,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textMuted,
-                        height: 1.4,
-                      ),
+                      style: AppTextStyles.vitalUnit.copyWith(height: 1.4),
                     ),
                   ],
                 ),
@@ -1979,11 +2235,7 @@ class _DotList extends StatelessWidget {
                   Expanded(
                     child: Text(
                       item,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textPrimary,
-                        height: 1.5,
-                      ),
+                      style: AppTextStyles.body.copyWith(height: 1.5),
                     ),
                   ),
                 ],
@@ -2013,14 +2265,14 @@ class _FollowUpRows extends StatelessWidget {
                     width: 32,
                     height: 32,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE0E7FF),
+                      color: AppColors.followUpIconBg,
                       borderRadius:
                           BorderRadius.circular(AppRadius.rxIcon),
                     ),
                     child: const Icon(
                       Icons.event_rounded,
                       size: 16,
-                      color: Color(0xFF4338CA),
+                      color: AppColors.followUpIconFg,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -2039,10 +2291,7 @@ class _FollowUpRows extends StatelessWidget {
                         const SizedBox(height: 2),
                         Text(
                           item.timeline,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textMuted,
-                          ),
+                          style: AppTextStyles.vitalUnit,
                         ),
                       ],
                     ),
@@ -2168,7 +2417,7 @@ class _WhatsAppCardState extends State<_WhatsAppCard>
         children: [
           // ── Header row ─────────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 8, 0),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.xl, 8, 0),
             child: Row(
               children: [
                 Container(
@@ -2234,7 +2483,7 @@ class _WhatsAppCardState extends State<_WhatsAppCard>
           const Divider(height: 1, color: AppColors.waBorder),
           // ── Message body ───────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.xl, AppSpacing.xxl, AppSpacing.xl),
             child: Text(
               widget.text,
               style: const TextStyle(
@@ -2247,7 +2496,7 @@ class _WhatsAppCardState extends State<_WhatsAppCard>
           const Divider(height: 1, color: AppColors.waBorder),
           // ── Share actions ──────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, AppSpacing.xl),
             child: Row(
               children: [
                 Expanded(
@@ -2258,11 +2507,8 @@ class _WhatsAppCardState extends State<_WhatsAppCard>
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.navy,
                       side: const BorderSide(color: AppColors.border),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      textStyle: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                      textStyle: AppTextStyles.chip,
                     ),
                   ),
                 ),
@@ -2275,11 +2521,8 @@ class _WhatsAppCardState extends State<_WhatsAppCard>
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.whatsapp,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      textStyle: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                      textStyle: AppTextStyles.chip,
                     ),
                   ),
                 ),
@@ -2338,11 +2581,8 @@ class _BottomCtaBar extends StatelessWidget {
                     foregroundColor: Colors.white,
                     disabledBackgroundColor:
                         headerColor.withValues(alpha: 0.4),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    textStyle: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
+                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxl),
+                    textStyle: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
               ),
@@ -2366,7 +2606,41 @@ class _BottomCtaBar extends StatelessWidget {
                       foregroundColor: headerColor,
                       side: BorderSide(
                           color: headerColor.withValues(alpha: 0.4)),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
+                    ),
+                  ),
+                ),
+              ],
+              if (primaryProgramme == Programme.ncd) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () async {
+                      final uri = Uri.parse('tel:');
+                      if (await canLaunchUrl(uri)) await launchUrl(uri);
+                    },
+                    icon: const Icon(Icons.phone_rounded),
+                    label: const Text(VisitCompleteStrings.ncdCallDoctor),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.statusCritical,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => context.go('/tasks'),
+                    icon: const Icon(Icons.local_hospital_rounded),
+                    label: const Text(VisitCompleteStrings.ncdBookHospital),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: headerColor,
+                      side: BorderSide(
+                          color: headerColor.withValues(alpha: 0.4)),
+                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
                     ),
                   ),
                 ),
@@ -2393,7 +2667,7 @@ class _BottomCtaBar extends StatelessWidget {
                       foregroundColor: headerColor,
                       side: BorderSide(
                           color: headerColor.withValues(alpha: 0.4)),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
                     ),
                   ),
                 ),
@@ -2408,7 +2682,7 @@ class _BottomCtaBar extends StatelessWidget {
                       foregroundColor: AppColors.statusCritical,
                       side: const BorderSide(
                           color: AppColors.statusCriticalBorder),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
                     ),
                     child: const Text(VisitCompleteStrings.createReferral),
                   ),
@@ -2425,5 +2699,443 @@ class _BottomCtaBar extends StatelessWidget {
           ),
         ],
       );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Programme confirm bottom sheet — shown after Step 1 triage so the SK can
+// see which pathways were matched by the rule engine and add / remove any
+// before opening the assessment form.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ProgrammeConfirmSheet extends StatefulWidget {
+  const _ProgrammeConfirmSheet({
+    required this.pathways,
+    required this.onConfirm,
+  });
+
+  final List<ActivatedPathway> pathways;
+  final void Function(Set<Programme>) onConfirm;
+
+  @override
+  State<_ProgrammeConfirmSheet> createState() =>
+      _ProgrammeConfirmSheetState();
+}
+
+class _ProgrammeConfirmSheetState extends State<_ProgrammeConfirmSheet> {
+  late Set<Programme> _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = widget.pathways.map((p) => p.programme).toSet();
+  }
+
+  String _readable(String s) {
+    final lower = s.replaceAll('_', ' ').toLowerCase();
+    if (lower.isEmpty) return lower;
+    return lower[0].toUpperCase() + lower.substring(1);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final matched = widget.pathways.map((p) => p.programme).toSet();
+    final unmatched = Programme.kPilotProgrammes
+        .where((p) => !matched.contains(p))
+        .toList();
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        16,
+        16,
+        MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Opening forms for',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Tap to add or remove care pathways',
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: AppColors.textMuted),
+          ),
+          const SizedBox(height: 12),
+          if (widget.pathways.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'No pathways matched. Select one manually to continue.',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: AppColors.textMuted),
+              ),
+            ),
+          ...widget.pathways.map((pathway) {
+            final triggers = [
+              ...pathway.triggerSymptoms,
+              ...pathway.triggerConditions,
+            ];
+            return CheckboxListTile(
+              value: _selected.contains(pathway.programme),
+              onChanged: (val) => setState(() {
+                if (val == true) {
+                  _selected.add(pathway.programme);
+                } else {
+                  _selected.remove(pathway.programme);
+                }
+              }),
+              title: Text(pathway.programme.displayName),
+              subtitle: triggers.isNotEmpty
+                  ? Text(
+                      triggers.map(_readable).join(', '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: AppColors.textMuted),
+                    )
+                  : null,
+              controlAffinity: ListTileControlAffinity.leading,
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+            );
+          }),
+          if (unmatched.isNotEmpty) ...[
+            const Divider(height: 24),
+            Text(
+              'Add manually',
+              style: Theme.of(context)
+                  .textTheme
+                  .labelSmall
+                  ?.copyWith(color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 4),
+            ...unmatched.map((p) => CheckboxListTile(
+                  value: _selected.contains(p),
+                  onChanged: (val) => setState(() {
+                    if (val == true) {
+                      _selected.add(p);
+                    } else {
+                      _selected.remove(p);
+                    }
+                  }),
+                  title: Text(
+                    p.displayName,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(color: AppColors.textMuted),
+                  ),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                )),
+          ],
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: _selected.isEmpty
+                  ? null
+                  : () {
+                      Navigator.of(context).pop();
+                      widget.onConfirm(_selected);
+                    },
+              child: const Text('Start visit'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Household member data holder (Step 3 strip) ───────────────────────────────
+
+class _HouseholdMember {
+  const _HouseholdMember({
+    required this.patientId,
+    required this.name,
+    required this.primaryProgramme,
+    required this.isCurrentPatient,
+  });
+
+  final String patientId;
+  final String name;
+  final Programme primaryProgramme;
+  final bool isCurrentPatient;
+}
+
+// ── Household member strip ────────────────────────────────────────────────────
+
+class _HouseholdMemberStrip extends StatelessWidget {
+  const _HouseholdMemberStrip({
+    required this.members,
+    required this.onTapMember,
+  });
+
+  final List<_HouseholdMember> members;
+  final void Function(String patientId) onTapMember;
+
+  static (Color ring, Color labelColor, String visitLabel) _style(Programme p) {
+    switch (p) {
+      case Programme.anc:
+        return (AppColors.ancText, AppColors.ancText, 'ANC visit');
+      case Programme.pnc:
+        return (AppColors.pncText, AppColors.pncText, 'PNC visit');
+      case Programme.imci:
+        return (AppColors.imciText, AppColors.imciText, 'Child visit');
+      case Programme.ncd:
+        return (AppColors.ncdText, AppColors.ncdText, 'BP check');
+      case Programme.tb:
+        return (AppColors.tbText, AppColors.tbText, 'TB check');
+      case Programme.epi:
+        return (const Color(0xFF1D4ED8), const Color(0xFF1D4ED8), 'Vaccines');
+      case Programme.nutrition:
+        return (const Color(0xFF15803D), const Color(0xFF15803D), 'Nutrition');
+      default:
+        return (AppColors.border, AppColors.textMuted, 'Scheduled');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.people_rounded, size: 16, color: AppColors.navy),
+              const SizedBox(width: 6),
+              Text(
+                VisitFlowStrings.alsoCoverWhileHere,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.navy,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (int i = 0; i < members.length; i++) ...[
+                  if (i == 1)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 14, top: 4),
+                      child: SizedBox(
+                        height: 72,
+                        child: VerticalDivider(
+                          width: 1,
+                          thickness: 1,
+                          color: const Color(0xFFE2E8F0),
+                        ),
+                      ),
+                    ),
+                  if (members[i].isCurrentPatient)
+                    _MemberAvatar(
+                      member: members[i],
+                      ringColor: AppColors.navy,
+                      ringWidth: 3.0,
+                      labelText: 'Viewing',
+                      labelColor: AppColors.navy,
+                      labelBold: true,
+                      onTap: null,
+                    )
+                  else ...[
+                    Builder(builder: (context) {
+                      final (ring, labelColor, visitLabel) =
+                          _style(members[i].primaryProgramme);
+                      return _MemberAvatar(
+                        member: members[i],
+                        ringColor: ring,
+                        ringWidth: 1.5,
+                        labelText: visitLabel,
+                        labelColor: labelColor,
+                        labelBold: false,
+                        onTap: () => onTapMember(members[i].patientId),
+                      );
+                    }),
+                  ],
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MemberAvatar extends StatelessWidget {
+  const _MemberAvatar({
+    required this.member,
+    required this.ringColor,
+    required this.ringWidth,
+    required this.labelText,
+    required this.labelColor,
+    required this.labelBold,
+    required this.onTap,
+  });
+
+  final _HouseholdMember member;
+  final Color ringColor;
+  final double ringWidth;
+  final String labelText;
+  final Color labelColor;
+  final bool labelBold;
+  final VoidCallback? onTap;
+
+  static IconData _icon(Programme p) {
+    switch (p) {
+      case Programme.anc:
+      case Programme.pnc:
+        return Icons.pregnant_woman_rounded;
+      case Programme.imci:
+        return Icons.child_care_rounded;
+      case Programme.ncd:
+        return Icons.monitor_heart_outlined;
+      case Programme.tb:
+        return Icons.sick_outlined;
+      case Programme.epi:
+        return Icons.vaccines_rounded;
+      case Programme.nutrition:
+        return Icons.restaurant_rounded;
+      case Programme.familyPlanning:
+        return Icons.family_restroom_rounded;
+      default:
+        return Icons.local_hospital_rounded;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final firstName = member.name.split(' ').first;
+    return Padding(
+      padding: const EdgeInsets.only(right: 14),
+      child: GestureDetector(
+        onTap: onTap,
+        child: SizedBox(
+          width: 68,
+          child: Column(
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFFF8FAFC),
+                  border: Border.all(color: ringColor, width: ringWidth),
+                ),
+                child: Center(
+                  child: Icon(
+                    _icon(member.primaryProgramme),
+                    size: 26,
+                    color: ringColor,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                firstName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: labelBold ? FontWeight.w700 : FontWeight.w500,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                labelText,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: labelBold ? FontWeight.w600 : FontWeight.w400,
+                  color: labelColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── AI checked findings header ────────────────────────────────────────────────
+
+class _AiCheckedHeader extends StatelessWidget {
+  const _AiCheckedHeader({
+    required this.programmes,
+    required this.headerColor,
+  });
+
+  final Set<Programme> programmes;
+  final Color headerColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final labels = programmes
+        .where((p) => p != Programme.unknown)
+        .map((p) => p.displayName)
+        .join(' + ');
+    final text = labels.isEmpty
+        ? VisitFlowStrings.aiCheckedFindings
+        : '${VisitFlowStrings.aiCheckedFindings} · $labels';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: headerColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+          color: headerColor,
+          height: 1.3,
+        ),
+      ),
+    );
   }
 }

@@ -62,10 +62,14 @@ import 'features/visit/assessment_repository.dart';
 import 'features/visit/encounter_repository.dart';
 import 'features/visit/household_repository.dart';
 import 'features/visit/observation_repository.dart';
+import 'features/visit/composer/sdk_field_projector.dart';
 import 'features/visit/submission/unified_submission_orchestrator.dart';
 import 'features/visit/briefing/visit_briefing_repository.dart';
 import 'features/visit/programme_selection/programme_recommendation_repository.dart';
 import 'features/visit/visit_controller.dart';
+import 'features/training/coaching_dao.dart';
+import 'features/training/coaching_repository.dart';
+import 'features/assistant/assistant_repository.dart';
 import 'features/worklist/worklist_repository.dart';
 
 /// Remove any legacy seeded/demo test data from local SQLite.
@@ -100,6 +104,7 @@ Future<void> main() async {
   // Offline-first: never fetch fonts from the network. Falls back to bundled
   // assets (if declared in pubspec fonts:) then to system fonts.
   GoogleFonts.config.allowRuntimeFetching = false;
+  await SdkFieldProjector.init();
   final api = await ApiClient.create();
   final authRepo = AuthRepository(api);
   final biometric = BiometricService();
@@ -238,6 +243,7 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final AssessmentRepository _assessmentRepo = AssessmentRepository(
     dao: _localAssessmentDao,
     api: widget.api,
+    auth: widget.authRepo,
   );
   late final AssessmentDraftDao _draftDao = AssessmentDraftDao(widget.appDb);
   late final AiResponseCacheDao _aiCacheDao = AiResponseCacheDao(widget.appDb);
@@ -246,6 +252,11 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final UnifiedSubmissionOrchestrator _submissionOrchestrator =
       UnifiedSubmissionOrchestrator(_localAssessmentDao);
 
+  // ── Micro-coaching ────────────────────────────────────────────────────────
+  late final CoachingDao _coachingDao = CoachingDao(widget.appDb);
+  late final CoachingRepository _coachingRepo =
+      CoachingRepository(_coachingDao, widget.api, widget.authRepo);
+
   @override
   void initState() {
     super.initState();
@@ -253,6 +264,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     // Register notification channels + rehydrate any pending repeat alarms
     // from the last session. Both are idempotent.
     unawaited(_bootstrapNotifications());
+    unawaited(_coachingRepo.initialize());
   }
 
   Future<void> _bootstrapNotifications() async {
@@ -399,6 +411,9 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<VisitBriefingRepository>(
             create: (_) =>
                 VisitBriefingRepository(widget.api, cache: _aiCacheDao)),
+        // AI Assistant — conversational Q&A (Tab 3)
+        Provider<AssistantRepository>(
+            create: (_) => AssistantRepository(widget.api)),
         // AI Programme Recommendation — Step 2 picker grounded in BRAC + BD
         // national clinical guidelines. Caches per-patient via _aiCacheDao
         // so re-entering Step 2 doesn't re-hit the API.
@@ -419,6 +434,8 @@ class _UhisNextAppState extends State<UhisNextApp>
         // SK → SS → sub-village hierarchy (session cache, invalidated on logout)
         ChangeNotifierProvider<UserHierarchyService>.value(
             value: _userHierarchy),
+        // Micro-coaching: module library + progress (offline-first, syncs from spice-coaching)
+        ChangeNotifierProvider<CoachingRepository>.value(value: _coachingRepo),
       ],
       child: Builder(
         builder: (context) {

@@ -134,13 +134,16 @@ lib/
 | Household list | `/patients/households` | Yes |
 | Household detail | `/patients/household/:id` | Yes |
 | Patient context | `/patients/:id` | Yes |
-| Start visit | `/patients/visit/:patientId/start` | Yes |
-| Symptom triage | `/patients/visit/:visitId/triage` | Yes |
-| Triage result | `/patients/visit/:visitId/triage-result` | Yes |
-| Assessment form | `/patients/visit/:visitId/form` | Yes |
+| Visit briefing | `/patients/visit/:visitId/briefing` (name `visit-briefing`) | Yes |
+| Visit flow (triage → assessment → recommendation) | `/patients/visit/:visitId/flow` (name `visit-flow`) | Yes |
 | Tasks / referrals | `/tasks` | Yes |
 | Task detail | `/tasks/:id` | Yes |
-| AI Scribe tab | `/map` | Yes |
+| Assistant tab (placeholder) | `/map` | Yes |
+| Form gallery | `/gallery` (dev duplicate: `/dev/form-gallery`, kDebugMode) | Yes |
+| Teleconsult | `/teleconsult` | Yes |
+| Counselling | `/counselling` | Yes |
+| Training | `/training` | Yes |
+| Household enrollment | `/household/enrollment/{create,success,add-member}` | Yes |
 
 ## Auth
 

@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -6,6 +9,7 @@ import '../../app/theme.dart';
 import '../../core/api/realtime_asr_service.dart';
 import '../../core/api/scribe_api_service.dart';
 import '../../core/db/encounter_dao.dart';
+import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../features/dashboard/mission_dashboard_repository.dart';
 import '../../features/realtime_asr/realtime_asr_controller.dart';
@@ -64,6 +68,8 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
   AncAssessment? _ancData;
   IccmAssessment? _iccmData;
 
+  double? _previousAncWeight;
+  double? _previousNcdWeight;
   bool _isSubmitting = false;
 
   late final ScribeController _scribeCtrl;
@@ -82,6 +88,59 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
       service: context.read<RealtimeAsrService>(),
       permissionService: ScribePermissionService(),
     );
+    if (widget.patientId != null) {
+      final prog = widget.programme.toUpperCase();
+      if (prog == 'ANC') _loadPreviousAncWeight();
+      if (prog == 'NCD') _loadPreviousNcdWeight();
+    }
+  }
+
+  Future<void> _loadPreviousAncWeight() async {
+    try {
+      final dao = context.read<LocalAssessmentDao>();
+      final records = await dao.getByPatientId(widget.patientId!);
+      final ancRecords = records
+          .where((r) => r.assessmentType.toUpperCase() == 'ANC')
+          .toList();
+      if (ancRecords.isEmpty) return;
+      // records sorted DESC by created_at; skip index 0 (current in-progress visit)
+      final prev = ancRecords.length > 1 ? ancRecords[1] : ancRecords[0];
+      final json =
+          jsonDecode(prev.assessmentDetails) as Map<String, dynamic>?;
+      final anc = json?['anc'] as Map<String, dynamic>?;
+      final phys =
+          anc?['medicalHistoryPhysicalExamination'] as Map<String, dynamic>?;
+      final w = phys?['weight'];
+      if (w == null) return;
+      final weight =
+          (w is num) ? w.toDouble() : double.tryParse(w.toString());
+      if (weight != null && mounted) {
+        setState(() => _previousAncWeight = weight);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadPreviousNcdWeight() async {
+    try {
+      final dao = context.read<LocalAssessmentDao>();
+      final records = await dao.getByPatientId(widget.patientId!);
+      final ncdRecords = records
+          .where((r) => r.assessmentType.toUpperCase() == 'NCD')
+          .toList();
+      if (ncdRecords.isEmpty) return;
+      final prev = ncdRecords.length > 1 ? ncdRecords[1] : ncdRecords[0];
+      final json =
+          jsonDecode(prev.assessmentDetails) as Map<String, dynamic>?;
+      // NCD stores weight at top-level or under bpLog
+      final w = json?['weight'] ??
+          (json?['bpLog'] as Map?)?['weight'];
+      if (w == null) return;
+      final weight =
+          (w is num) ? w.toDouble() : double.tryParse(w.toString());
+      if (weight != null && mounted) {
+        setState(() => _previousNcdWeight = weight);
+      }
+    } catch (_) {}
   }
 
   @override
@@ -265,6 +324,7 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
         return NcdAssessmentForm(
           initialData: _ncdData,
           patientAge: widget.patientAge,
+          previousWeight: _previousNcdWeight,
           onChanged: (data) => _ncdData = data,
         );
       case 'TB':
@@ -279,6 +339,7 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
         return AncAssessmentForm(
           initialData: _ancData,
           gestationalWeeks: widget.gestationalWeeks,
+          previousWeight: _previousAncWeight,
           onChanged: (data) {
             _ancData = data;
             setState(() {}); // Rebuild to update referral chip
@@ -368,6 +429,12 @@ class _VisitAssessmentStepState extends State<VisitAssessmentStep> {
 
       debugPrint('Assessment saved locally with ID: $localId');
       debugPrint('Referral recommended: $_referralRecommended');
+
+      // Fire-and-forget sync to backend — non-blocking so UI isn't delayed
+      unawaited(repo.syncPendingAssessments().then(
+        (n) => debugPrint('Synced $n assessment(s) to backend'),
+        onError: (e) => debugPrint('Assessment sync failed (will retry): $e'),
+      ));
 
       // Mark the encounter as completed so it shows in Tasks completed section
       if (!mounted) return;

@@ -6,7 +6,7 @@ import '../core/constants/app_strings.dart';
 import '../features/visit/visit_flow_screen.dart';
 import 'theme.dart';
 
-/// Shell widget for the persistent 4-tab bottom navigation.
+/// Shell widget for the persistent 5-tab bottom navigation.
 /// Each tab maintains its own navigation stack.
 class BottomNavShell extends StatefulWidget {
   const BottomNavShell({

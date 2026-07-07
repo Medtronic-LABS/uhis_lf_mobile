@@ -25,6 +25,14 @@ import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../scribe/scribe_controller.dart';
+import '../widgets/form_fields/age_or_dob_field.dart';
+import '../widgets/form_fields/age_ymd_field.dart';
+import '../widgets/form_fields/bp_form_field.dart';
+import '../widgets/form_fields/date_form_field.dart';
+import '../widgets/form_fields/dialog_multi_select_field.dart';
+import '../widgets/form_fields/info_label_field.dart';
+import '../widgets/form_fields/radio_form_field.dart';
+import '../widgets/form_fields/text_label_field.dart';
 import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/models/programme.dart';
 import '../../scribe/models/ai_extracted_field.dart';
@@ -406,6 +414,7 @@ class SectionedAssessmentScreen extends StatefulWidget {
 class _SectionedAssessmentScreenState
     extends State<SectionedAssessmentScreen> {
   late SectionedAssessmentViewModel _viewModel;
+  double? _previousAncWeight;
 
   @override
   void initState() {
@@ -418,6 +427,11 @@ class _SectionedAssessmentScreenState
       memberId: widget.memberId,
       draftDao: widget.draftDao,
     );
+    final isAnc =
+        widget.pathways.any((p) => p.programme == Programme.anc);
+    if (isAnc) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadPrevAncWeight());
+    }
     // Wire triageNotes into ScribeController so they appear in scribe metadata.
     if (widget.triageNotes != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -427,6 +441,25 @@ class _SectionedAssessmentScreenState
         } catch (_) {}
       });
     }
+  }
+
+  Future<void> _loadPrevAncWeight() async {
+    try {
+      final dao = context.read<LocalAssessmentDao>();
+      final records = await dao.getByPatientId(widget.patientId);
+      final anc = records
+          .where((r) => r.assessmentType.toUpperCase() == 'ANC')
+          .toList();
+      if (anc.isEmpty) return;
+      final prev = anc.length > 1 ? anc[1] : anc[0];
+      final raw = jsonDecode(prev.assessmentDetails) as Map<String, dynamic>?;
+      final phys = ((raw?['anc'] as Map?)
+          ?['medicalHistoryPhysicalExamination'] as Map?);
+      final w = phys?['weight'];
+      if (w == null) return;
+      final weight = (w is num) ? w.toDouble() : double.tryParse('$w');
+      if (weight != null && mounted) setState(() => _previousAncWeight = weight);
+    } catch (_) {}
   }
 
   @override
@@ -445,6 +478,7 @@ class _SectionedAssessmentScreenState
         onReferNow: widget.onReferNow,
         embedded: widget.embedded,
         triageNotes: widget.triageNotes,
+        previousAncWeight: _previousAncWeight,
       ),
     );
   }
@@ -458,6 +492,7 @@ class _SectionedAssessmentView extends StatelessWidget {
     this.onReferNow,
     this.embedded = false,
     this.triageNotes,
+    this.previousAncWeight,
   });
 
   final SectionedAssessmentViewModel viewModel;
@@ -465,6 +500,7 @@ class _SectionedAssessmentView extends StatelessWidget {
   final void Function(String alertId)? onReferNow;
   final bool embedded;
   final String? triageNotes;
+  final double? previousAncWeight;
 
   @override
   Widget build(BuildContext context) {
@@ -484,16 +520,16 @@ class _SectionedAssessmentView extends StatelessWidget {
               final isDark = Theme.of(ctx).brightness == Brightness.dark;
               final cardBg = isDark
                   ? AppColors.statusWarningSurfaceDark
-                  : const Color(0xFFFFF8E1);
+                  : AppColors.statusWarningSurface;
               final cardBorder = isDark
                   ? AppColors.statusWarningDark
-                  : const Color(0xFFFFCC02);
+                  : AppColors.statusWarningBorder;
               final emphColor = isDark
                   ? AppColors.statusWarningDark
-                  : const Color(0xFF795548);
+                  : AppColors.statusWarningText;
               final bodyColor = isDark
                   ? AppColors.textPrimaryDark
-                  : const Color(0xFF4E342E);
+                  : AppColors.statusWarningText;
               return Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               child: Container(
@@ -576,6 +612,7 @@ class _SectionedAssessmentView extends StatelessWidget {
               isScribePreFilled: viewModel.isScribePreFilled,
               onFieldTouched: viewModel.markFieldTouched,
               unmappedFindings: viewModel.unmappedFindings,
+              previousAncWeight: previousAncWeight,
             ),
           ),
 
@@ -630,6 +667,7 @@ class _AllSectionsBody extends StatelessWidget {
     required this.isScribePreFilled,
     required this.onFieldTouched,
     this.unmappedFindings = const [],
+    this.previousAncWeight,
   });
 
   final List<FormSection> sections;
@@ -638,6 +676,7 @@ class _AllSectionsBody extends StatelessWidget {
   final bool Function(String fieldId) isScribePreFilled;
   final void Function(String fieldId) onFieldTouched;
   final List<String> unmappedFindings;
+  final double? previousAncWeight;
 
   @override
   Widget build(BuildContext context) {
@@ -666,6 +705,7 @@ class _AllSectionsBody extends StatelessWidget {
         onFieldChanged: onFieldChanged,
         isScribePreFilled: isScribePreFilled,
         onFieldTouched: onFieldTouched,
+        previousAncWeight: previousAncWeight,
       ));
     }
 
@@ -727,6 +767,7 @@ class _SectionBlock extends StatelessWidget {
     required this.onFieldChanged,
     required this.isScribePreFilled,
     required this.onFieldTouched,
+    this.previousAncWeight,
   });
 
   final String sectionId;
@@ -735,11 +776,58 @@ class _SectionBlock extends StatelessWidget {
   final void Function(String fieldId, dynamic value) onFieldChanged;
   final bool Function(String fieldId) isScribePreFilled;
   final void Function(String fieldId) onFieldTouched;
+  final double? previousAncWeight;
+
+  /// BP status badge for ANC vitals section.
+  Widget? _bpBadge() {
+    final sys = int.tryParse('${fieldValues['bloodPressureSystolic'] ?? ''}');
+    final dia = int.tryParse('${fieldValues['bloodPressureDiastolic'] ?? ''}');
+    if (sys == null && dia == null) return null;
+    final s = sys ?? 0;
+    final d = dia ?? 0;
+    final String label;
+    final Color bg;
+    final Color fg;
+    if (s >= 160 || d >= 110) {
+      label = '🚨 Urgent referral';
+      bg = const Color(0xFFFEE2E2);
+      fg = const Color(0xFF991B1B);
+    } else if (s >= 140 || d >= 90) {
+      label = '⚠ High BP';
+      bg = const Color(0xFFFEE2E2);
+      fg = const Color(0xFF991B1B);
+    } else if (s >= 130 || d >= 85) {
+      label = 'Slightly elevated';
+      bg = const Color(0xFFFEF3C7);
+      fg = const Color(0xFF92400E);
+    } else {
+      label = '✓ Normal';
+      bg = const Color(0xFFDCFCE7);
+      fg = const Color(0xFF166534);
+    }
+    return Container(
+      margin: const EdgeInsets.only(top: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: fg,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final title = ComposerStrings.sectionTitle(sectionId);
+    final isAncVitals = sectionId == 'anc-vitals';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -756,6 +844,7 @@ class _SectionBlock extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               for (int i = 0; i < fields.length; i++) ...[
                 _FieldWidget(
@@ -767,6 +856,25 @@ class _SectionBlock extends StatelessWidget {
                     onFieldChanged(fields[i].fieldId, value);
                   },
                 ),
+                // BP status badge — shown after diastolic in anc-vitals
+                if (isAncVitals &&
+                    fields[i].fieldId == 'bloodPressureDiastolic') ...[
+                  _bpBadge() ?? const SizedBox.shrink(),
+                ],
+                // Weight previous reading hint
+                if (isAncVitals &&
+                    fields[i].fieldId == 'weight' &&
+                    previousAncWeight != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Last visit: ${previousAncWeight!.toStringAsFixed(1)} kg',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ),
                 if (i < fields.length - 1) const SizedBox(height: 12),
               ],
             ],
@@ -974,6 +1082,64 @@ class _FieldWidget extends StatelessWidget {
           ),
           initialValue: currentValue as String?,
           onChanged: onChanged,
+        );
+
+      case FieldType.radioField:
+        return RadioFormField(
+          labelText: _label,
+          options: field.options ?? const [],
+          currentValue: currentValue as String?,
+          onChanged: (v) => onChanged(v),
+        );
+
+      case FieldType.dialogMultiSelectField:
+        return DialogMultiSelectField(
+          labelText: _label,
+          options: field.options ?? const [],
+          currentValue:
+              (currentValue as List<dynamic>?)?.cast<String>() ?? const [],
+          onChanged: (v) => onChanged(v),
+        );
+
+      case FieldType.dateField:
+        return DateFormField(
+          labelText: _label,
+          currentValue: currentValue as String?,
+          hint: field.hint,
+          onChanged: (v) => onChanged(v),
+        );
+
+      case FieldType.bpField:
+        return BpFormField(
+          labelText: _label,
+          currentValue: currentValue as String?,
+          onChanged: (v) => onChanged(v),
+        );
+
+      case FieldType.ageOrDobField:
+        return AgeOrDobField(
+          labelText: _label,
+          currentValue: currentValue as String?,
+          onChanged: (v) => onChanged(v),
+        );
+
+      case FieldType.ageYmdField:
+        return AgeYmdField(
+          labelText: _label,
+          currentValue: currentValue as String?,
+          onChanged: (v) => onChanged(v),
+        );
+
+      case FieldType.infoLabelField:
+        return InfoLabelField(
+          labelText: _label,
+          currentValue: currentValue?.toString(),
+        );
+
+      case FieldType.textLabelField:
+        return TextLabelField(
+          text: _label,
+          isInstruction: field.isInstruction,
         );
     }
   }

@@ -15,14 +15,15 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 
-/// WhatsApp brand green header.
-const Color _waHeaderColor = Color(0xFF075E54);
+/// WhatsApp brand green header — mimics the real WhatsApp app chrome,
+/// deliberately distinct from AppColors.whatsapp/waHeader (the in-app accent).
+const Color _waHeaderColor = AppColors.whatsappPreviewHeader;
 
 /// WhatsApp sent-bubble green.
-const Color _waBubbleColor = Color(0xFFDCF8C6);
+const Color _waBubbleColor = AppColors.whatsappPreviewBubble;
 
 /// WhatsApp accent green (send button, avatar).
-const Color _waAccentColor = Color(0xFF25D366);
+const Color _waAccentColor = AppColors.whatsapp;
 
 class CounsellingScreen extends StatefulWidget {
   const CounsellingScreen({
@@ -191,7 +192,7 @@ class _CounsellingScreenState extends State<CounsellingScreen> {
                           backgroundColor: _waAccentColor,
                           foregroundColor: Colors.white,
                           padding:
-                              const EdgeInsets.symmetric(vertical: 12),
+                              const EdgeInsets.symmetric(vertical: AppSpacing.xl),
                         ),
                       ),
                     ),

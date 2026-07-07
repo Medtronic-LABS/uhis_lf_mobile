@@ -7,7 +7,7 @@ class EnrollmentStatusHeader extends StatelessWidget {
     required this.title,
     this.subtitle,
     this.icon = Icons.check_circle,
-    this.padding = const EdgeInsets.all(20),
+    this.padding = const EdgeInsets.all(AppSpacing.h5xl),
     super.key,
   });
 

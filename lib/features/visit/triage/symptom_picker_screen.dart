@@ -511,7 +511,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                         onPressed: _onContinue,
                         style: FilledButton.styleFrom(
                           backgroundColor: AppColors.pink,
-                          foregroundColor: Colors.white,
+                          foregroundColor: AppColors.textOnNavy,
                         ),
                         child: Text(
                           vm.activatedPathways.isNotEmpty
@@ -609,8 +609,8 @@ class _BriefingCardState extends State<_BriefingCard> {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(AppRadius.patRow),
         border: Border.all(color: AppColors.aiBorder),
       ),
       child: Column(
@@ -702,7 +702,7 @@ class _BriefingCard1Content extends StatelessWidget {
   const _BriefingCard1Content({required this.data});
   final VisitBriefingResponse data;
 
-  static const Color _aiTextColor = Color(0xFF9D174D);
+  static const Color _aiTextColor = AppColors.ancText;
 
   @override
   Widget build(BuildContext context) {
@@ -758,8 +758,8 @@ class _GreetWarmlyCard extends StatelessWidget {
   /// `greeting.english` field is empty.
   final String? fallbackOpeningLine;
 
-  static const Color _navyBg = Color(0xFF1B2B5E);
-  static const Color _navyHint = Color(0xFF243C7A);
+  static const Color _navyBg = AppColors.navy;
+  static const Color _navyHint = AppColors.navyMid;
 
   String _resolveBangla() {
     final g = greeting;
@@ -812,7 +812,7 @@ class _GreetWarmlyCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
-                    color: Colors.white.withValues(alpha: 0.75),
+                    color: AppColors.textOnNavy.withValues(alpha: 0.75),
                     letterSpacing: 0.8,
                   ),
                 ),
@@ -824,7 +824,7 @@ class _GreetWarmlyCard extends StatelessWidget {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.14),
+                    color: AppColors.textOnNavy.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: const Text(
@@ -832,7 +832,7 @@ class _GreetWarmlyCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 9,
                       fontWeight: FontWeight.w800,
-                      color: Colors.white,
+                      color: AppColors.textOnNavy,
                       letterSpacing: 0.5,
                     ),
                   ),
@@ -848,7 +848,7 @@ class _GreetWarmlyCard extends StatelessWidget {
               style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
-                color: Colors.white,
+                color: AppColors.textOnNavy,
                 height: 1.35,
               ),
             ),
@@ -858,7 +858,7 @@ class _GreetWarmlyCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
-                color: Colors.white.withValues(alpha: 0.85),
+                color: AppColors.textOnNavy.withValues(alpha: 0.85),
                 fontStyle: FontStyle.italic,
                 height: 1.35,
               ),
@@ -877,7 +877,7 @@ class _GreetWarmlyCard extends StatelessWidget {
                     '💡',
                     style: TextStyle(
                       fontSize: 13,
-                      color: Colors.white.withValues(alpha: 0.85),
+                      color: AppColors.textOnNavy.withValues(alpha: 0.85),
                     ),
                   ),
                   const SizedBox(width: 6),
@@ -886,7 +886,7 @@ class _GreetWarmlyCard extends StatelessWidget {
                       hint,
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.white.withValues(alpha: 0.85),
+                        color: AppColors.textOnNavy.withValues(alpha: 0.85),
                       ),
                     ),
                   ),
@@ -914,7 +914,7 @@ class _GreetLoadingSkeleton extends StatelessWidget {
           width: w * fraction,
           height: height,
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.14),
+            color: AppColors.textOnNavy.withValues(alpha: 0.14),
             borderRadius: BorderRadius.circular(4),
           ),
         );
@@ -1028,7 +1028,7 @@ class _BriefingFallbackContent extends StatelessWidget {
                   child: Text(
                     c.$1,
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: AppColors.textOnNavy,
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
                     ),
@@ -1071,12 +1071,12 @@ class _AiScribeTriageBanner extends StatefulWidget {
 }
 
 class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
-  static const Color _gradStart = Color(0xFF4F3FBA);
-  static const Color _gradEnd = Color(0xFF6E54E0);
-  static const Color _iconBg = Color(0xFF5E47C9);
-  static const Color _recordingIconBg = Color(0xFF7A63E8);
-  static const Color _errorGradStart = Color(0xFF8B3A3A);
-  static const Color _errorGradEnd = Color(0xFFB84A4A);
+  static const Color _gradStart = AppColors.aiPurpleDark;
+  static const Color _gradEnd = AppColors.aiPurple;
+  static const Color _iconBg = AppColors.aiPurple;
+  static const Color _recordingIconBg = AppColors.aiPurpleLight;
+  static const Color _errorGradStart = AppColors.statusCriticalText;
+  static const Color _errorGradEnd = AppColors.rangeCritical;
 
   bool _showDone = false;
   bool _triageResultConsumed = false;
@@ -1292,7 +1292,10 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
                 colors: liveActive
                     ? const [_gradStart, _gradEnd]
                     : _showDone
-                    ? const [Color(0xFF3D7A52), Color(0xFF2F9E62)]
+                    ? const [
+                        AppColors.statusSuccessAction,
+                        AppColors.statusSuccess,
+                      ]
                     : isError
                     ? const [_errorGradStart, _errorGradEnd]
                     : const [_gradStart, _gradEnd],
@@ -1302,13 +1305,13 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
               borderRadius: BorderRadius.circular(14),
               border: _showDone
                   ? Border.all(
-                      color: Colors.white.withValues(alpha: 0.35),
+                      color: AppColors.textOnNavy.withValues(alpha: 0.35),
                       width: 1,
                     )
                   : null,
               boxShadow: [
                 BoxShadow(
-                  color: (_showDone ? const Color(0xFF2F9E62) : _gradStart)
+                  color: (_showDone ? AppColors.statusSuccess : _gradStart)
                       .withValues(alpha: 0.25),
                   blurRadius: 14,
                   offset: const Offset(0, 6),
@@ -1355,7 +1358,7 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
-                                    color: Colors.white,
+                                    color: AppColors.textOnNavy,
                                     fontWeight: FontWeight.w800,
                                     fontSize: 14,
                                   ),
@@ -1369,7 +1372,7 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.78),
+                              color: AppColors.textOnNavy.withValues(alpha: 0.78),
                               fontSize: 12,
                             ),
                           ),
@@ -1445,10 +1448,10 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
                 height: 20,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: Colors.white,
+                  color: AppColors.textOnNavy,
                 ),
               )
-            : const Icon(Icons.podcasts, color: Colors.white, size: 22),
+            : const Icon(Icons.podcasts, color: AppColors.textOnNavy, size: 22),
       );
     }
     if (showDone) {
@@ -1469,7 +1472,7 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
         height: 44,
         decoration: const BoxDecoration(color: _iconBg, shape: BoxShape.circle),
         alignment: Alignment.center,
-        child: const Icon(Icons.refresh_rounded, color: Colors.white, size: 22),
+        child: const Icon(Icons.refresh_rounded, color: AppColors.textOnNavy, size: 22),
       );
     }
     return Container(
@@ -1477,7 +1480,7 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
       height: 44,
       decoration: const BoxDecoration(color: _iconBg, shape: BoxShape.circle),
       alignment: Alignment.center,
-      child: const Icon(Icons.mic_rounded, color: Colors.white, size: 22),
+      child: const Icon(Icons.mic_rounded, color: AppColors.textOnNavy, size: 22),
     );
   }
 }
@@ -1507,19 +1510,19 @@ class _TriageModeButton extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.18),
+            color: AppColors.textOnNavy.withValues(alpha: 0.18),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+            border: Border.all(color: AppColors.textOnNavy.withValues(alpha: 0.35)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: Colors.white, size: 14),
+              Icon(icon, color: AppColors.textOnNavy, size: 14),
               const SizedBox(width: 4),
               Text(
                 label,
                 style: const TextStyle(
-                  color: Colors.white,
+                  color: AppColors.textOnNavy,
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.3,
@@ -1544,13 +1547,13 @@ class _TriageModeBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.15),
+        color: AppColors.textOnNavy.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
         label,
         style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.85),
+          color: AppColors.textOnNavy.withValues(alpha: 0.85),
           fontSize: 10,
           fontWeight: FontWeight.w800,
           letterSpacing: 0.4,
@@ -1574,8 +1577,9 @@ class _TriageLiveAsrPanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
+        // [MANUAL: no token — 20% black inset panel on the dark ASR surface]
         color: Colors.black.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.rxIcon),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1586,12 +1590,12 @@ class _TriageLiveAsrPanel extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.warning_amber_rounded, color: Colors.amberAccent, size: 16),
+                  const Icon(Icons.warning_amber_rounded, color: AppColors.statusWarningDark, size: 16),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       controller.micWarning!,
-                      style: const TextStyle(color: Colors.amberAccent, fontSize: 12),
+                      style: const TextStyle(color: AppColors.statusWarningDark, fontSize: 12),
                     ),
                   ),
                 ],
@@ -1600,7 +1604,7 @@ class _TriageLiveAsrPanel extends StatelessWidget {
           if (controller.errorMessage != null)
             Text(
               controller.errorMessage!,
-              style: const TextStyle(color: Colors.white, fontSize: 12),
+              style: const TextStyle(color: AppColors.textOnNavy, fontSize: 12),
             )
           else ...[
             Text(
@@ -1608,7 +1612,7 @@ class _TriageLiveAsrPanel extends StatelessWidget {
                   ? RealtimeAsrStrings.transcriptEmpty
                   : controller.fullTranscript,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.9),
+                color: AppColors.textOnNavy.withValues(alpha: 0.9),
                 fontSize: 12,
                 fontStyle: controller.segments.isEmpty
                     ? FontStyle.italic
@@ -1626,7 +1630,7 @@ class _TriageLiveAsrPanel extends StatelessWidget {
                         ? RealtimeAsrStrings.symptomsEmpty
                         : _summarize(fields),
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.75),
+                      color: AppColors.textOnNavy.withValues(alpha: 0.75),
                       fontSize: 11,
                     ),
                     maxLines: 2,
@@ -1640,7 +1644,7 @@ class _TriageLiveAsrPanel extends StatelessWidget {
                         ? RealtimeAsrStrings.extracting
                         : RealtimeAsrStrings.extractNow,
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: AppColors.textOnNavy,
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                     ),
@@ -1709,9 +1713,9 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.cardSurface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.card)),
       ),
       builder: (_) => _AddSymptomSheet(vm: widget.vm),
     );
@@ -1746,7 +1750,7 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
 
         return Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: AppColors.textOnNavy,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: AppColors.border),
           ),
@@ -1826,7 +1830,7 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                     onPressed: () => _openAddSheet(context),
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.navy,
-                      foregroundColor: Colors.white,
+                      foregroundColor: AppColors.textOnNavy,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
                         vertical: 12,
@@ -2149,9 +2153,9 @@ class _AddSymptomTile extends StatelessWidget {
     if (isSelected) {
       bg = isAi ? AppColors.aiSurfaceStart : AppColors.navy;
       border = isAi ? AppColors.aiBorder : AppColors.navy;
-      fg = isAi ? AppColors.aiPurple : Colors.white;
+      fg = isAi ? AppColors.aiPurple : AppColors.textOnNavy;
     } else {
-      bg = Colors.white;
+      bg = AppColors.cardSurface;
       border = AppColors.border;
       fg = AppColors.navy;
     }
@@ -2202,7 +2206,7 @@ class _AddSymptomTile extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 9,
                       fontWeight: FontWeight.w800,
-                      color: Colors.white,
+                      color: AppColors.textOnNavy,
                     ),
                   ),
                 ),

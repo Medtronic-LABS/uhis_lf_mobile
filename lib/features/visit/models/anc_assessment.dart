@@ -380,6 +380,43 @@ class AncServicesBirthPreparedness {
       };
 }
 
+/// ANC summary matching AncSummaryDTO.
+///
+/// [highRiskPregnantWoman] is `Map<String, List<String>>` on the backend
+/// (keys: "URGENT" / "NON_URGENT", values: condition lists).
+/// Never serialize this as an array — omit the key when empty.
+class AncSummary {
+  const AncSummary({
+    this.highRiskPregnantWoman = const {},
+    this.gapsInAnc = const [],
+  });
+
+  /// Risk categories → list of conditions. Must be a Map, never a List.
+  final Map<String, List<String>> highRiskPregnantWoman;
+  final List<String> gapsInAnc;
+
+  Map<String, dynamic> toJson() => {
+        if (highRiskPregnantWoman.isNotEmpty)
+          'highRiskPregnantWoman': highRiskPregnantWoman,
+        if (gapsInAnc.isNotEmpty) 'gapsInAnc': gapsInAnc,
+      };
+
+  factory AncSummary.fromJson(Map<String, dynamic> json) {
+    final raw = json['highRiskPregnantWoman'];
+    final Map<String, List<String>> hrpw;
+    if (raw is Map) {
+      hrpw = raw.map((k, v) =>
+          MapEntry(k.toString(), (v as List<dynamic>).cast<String>()));
+    } else {
+      hrpw = const {};
+    }
+    return AncSummary(
+      highRiskPregnantWoman: hrpw,
+      gapsInAnc: (json['gapsInAnc'] as List<dynamic>?)?.cast<String>() ?? [],
+    );
+  }
+}
+
 /// Complete ANC assessment matching spice-service AncDTO.
 class AncAssessment {
   const AncAssessment({
@@ -391,6 +428,7 @@ class AncAssessment {
     this.bmiCategory,
     this.visitNo,
     this.gestationalWeeks,
+    this.summary,
   });
 
   final VaccinationAndSupplements? vaccinationAndSupplements;
@@ -401,6 +439,7 @@ class AncAssessment {
   final String? bmiCategory;
   final int? visitNo;
   final int? gestationalWeeks;
+  final AncSummary? summary;
 
   /// Current trimester based on gestational weeks.
   int get trimester {
@@ -425,6 +464,7 @@ class AncAssessment {
     String? bmiCategory,
     int? visitNo,
     int? gestationalWeeks,
+    AncSummary? summary,
   }) =>
       AncAssessment(
         vaccinationAndSupplements:
@@ -440,6 +480,7 @@ class AncAssessment {
         bmiCategory: bmiCategory ?? this.bmiCategory,
         visitNo: visitNo ?? this.visitNo,
         gestationalWeeks: gestationalWeeks ?? this.gestationalWeeks,
+        summary: summary ?? this.summary,
       );
 
   Map<String, dynamic> toJson() => {
@@ -457,6 +498,7 @@ class AncAssessment {
           'ancServicesBirthPreparedness': ancServicesBirthPreparedness!.toJson(),
         if (bmiCategory != null) 'bmiCategory': bmiCategory,
         if (visitNo != null) 'visitNo': visitNo,
+        if (summary != null) 'summary': summary!.toJson(),
       };
 }
 
@@ -468,6 +510,7 @@ class AncDangerSignsOptions {
     'Severe abdominal pain',
     'Persistent vomiting',
     'Fever',
+    'Fever / burning while urinating',
     'Headache',
     'Convulsions',
   ];
@@ -478,6 +521,7 @@ class AncDangerSignsOptions {
     'Severe abdominal pain',
     'Leaking fluid',
     'Fever',
+    'Fever / burning while urinating',
     'Severe headache',
     'Blurred vision',
     'Convulsions',
@@ -491,6 +535,7 @@ class AncDangerSignsOptions {
     'Leaking fluid',
     'Reduced fetal movement',
     'Fever',
+    'Fever / burning while urinating',
     'Severe headache',
     'Blurred vision',
     'Convulsions',
