@@ -332,7 +332,6 @@ class NeedCategoryBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     return Semantics(
       label: isActive ? '$label filter, selected' : 'Filter by $label',
       button: true,
