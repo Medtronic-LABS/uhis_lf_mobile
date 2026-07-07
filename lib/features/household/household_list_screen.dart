@@ -55,12 +55,15 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
   Future<List<_HouseholdItem>>? _future;
   final ScrollController _scrollController = ScrollController();
   late TabController _tabController;
-  
+
+  // Search
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
   // Filter state for members view — default to allMembers so data is visible
   // before patient-ID cross-reference is verified against the members table.
   MemberFilter _filter = MemberFilter.allMembers;
   Set<String> _myPatientIds = {};
-
 
   // 5-tier filter state (null = All)
   DashboardTier? _selectedTier;
@@ -109,13 +112,12 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
         _patientTiers = tiers;
         _queueItems = queueMap;
       });
-    } catch (e) {
-      debugPrint('[HouseholdList] Failed to load patient tiers: $e');
-    }
+    } catch (_) {}
   }
 
   @override
   void dispose() {
+    _searchController.dispose();
     _tabController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -205,20 +207,11 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
       final ss = ssWorkers.where((s) => s.id == shebikaId).firstOrNull;
       if (ss != null && ss.subVillages.isNotEmpty) {
         ssSubVillageIds = ss.subVillages.map((sv) => sv.id).toList();
-        // ignore: avoid_print
-        print('[HouseholdList] SS $shebikaId → ${ssSubVillageIds.length} sub-villages');
       }
     }
 
     try {
-      // Try local SQLite first (INSTANT - no network latency)
       final localHouseholds = await householdDao.getAll(limit: 1000);
-      // ignore: avoid_print
-      print('[HouseholdList] Found ${localHouseholds.length} households in local DB');
-      if (localHouseholds.isNotEmpty) {
-        // ignore: avoid_print
-        print('[HouseholdList] Sample household IDs: ${localHouseholds.take(3).map((h) => h.id).toList()}');
-      }
 
       // Get members grouped by household, with optional location/SS filter.
       final membersByHousehold = await memberDao.getAllGroupedByHousehold(
@@ -227,16 +220,10 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
         shasthyaShebikaId: shebikaId,
         subVillageIds: ssSubVillageIds,
       );
-      // ignore: avoid_print
-      print('[HouseholdList] Got members grouped by ${membersByHousehold.length} households');
-      // ignore: avoid_print
-      print('[HouseholdList] Member household IDs: ${membersByHousehold.keys.take(3).toList()}');
-      
-      // For Members view, use members directly grouped by household (bypass household table)
-      // This ensures we show all 39 members, not just those linked to old household records
+
+      // Use members directly grouped by household (bypass household table)
+      // to ensure all members are shown even when household records are stale.
       if (membersByHousehold.isNotEmpty) {
-        // ignore: avoid_print
-        print('[HouseholdList] Using member-derived households');
         final items = <_HouseholdItem>[];
         for (final entry in membersByHousehold.entries) {
           final hhId = entry.key;
@@ -277,15 +264,9 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
       }
       
       // Fallback to API if local cache is empty
-      // ignore: avoid_print
-      print('[HouseholdList] Local cache empty, falling back to API');
       final rawList = await repo.getHouseholdsWithMembers();
       return rawList.map((raw) => _HouseholdItem.fromJson(raw)).toList();
-    } catch (e, stack) {
-      // ignore: avoid_print
-      print('[HouseholdList] Exception: $e');
-      // ignore: avoid_print
-      print('[HouseholdList] Stack: $stack');
+    } catch (_) {
       rethrow;
     }
   }
@@ -296,9 +277,8 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
 
     return Scaffold(
       appBar: AppBar(
-        // No back button - this is a root tab in bottom navigation
         automaticallyImplyLeading: false,
-        title: const Text('Patients'),
+        title: const Text('My Patients'),
         actions: [
           // Filter icon shows a badge dot when any location filter is active.
           Stack(
@@ -557,12 +537,12 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
         Expanded(
           child: ListView.separated(
             controller: _scrollController,
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
             itemCount: filteredItems.length,
-            separatorBuilder: (_, _) => const Divider(height: 1, indent: 72),
+            separatorBuilder: (context, idx) => const SizedBox(height: 6),
             itemBuilder: (context, index) {
               final item = filteredItems[index];
-              return _HouseholdTile(
+              return _HouseholdCard(
                 item: item,
                 onTap: () => _navigateToDetail(context, item),
               );
@@ -637,19 +617,28 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
         .where((m) => _myPatientIds.contains(m.id) || _myPatientIds.contains(m.patientId))
         .length;
 
-    // Apply patient-type filter last.
-    final members = _filter == MemberFilter.myPatients
+    // Apply patient-type filter.
+    var members = _filter == MemberFilter.myPatients
         ? villageFiltered.where((m) => _myPatientIds.contains(m.id) || _myPatientIds.contains(m.patientId)).toList()
         : villageFiltered;
+
+    // Apply search filter last.
+    if (_searchQuery.isNotEmpty) {
+      members = members.where((m) {
+        final name = (m.name ?? '').toLowerCase();
+        final hno = (m.householdNo ?? '').toLowerCase();
+        return name.contains(_searchQuery) || hno.contains(_searchQuery);
+      }).toList();
+    }
 
     // Calculate total from noOfPeople if we don't have individual members
     final totalFromCount = items.fold<int>(0, (sum, h) => sum + (h.memberCount ?? 0));
 
     // If we have no individual members but have a count, show households with counts.
-    // Filter toggle is hidden here — it would show (0) for both options and confuse the user.
     if (allMembers.isEmpty && totalFromCount > 0) {
       return Column(
         children: [
+          _buildSearchBar(),
           if (widget.initialTier != null || _selectedTier != null)
             _buildTierChipRow(),
           _buildInlineVillageChipRow(scheme),
@@ -658,10 +647,10 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
               controller: _scrollController,
               padding: const EdgeInsets.symmetric(vertical: 8),
               itemCount: items.length,
-              separatorBuilder: (_, _) => const Divider(height: 1, indent: 72),
+              separatorBuilder: (context, idx) => const SizedBox(height: 4),
               itemBuilder: (context, index) {
                 final item = items[index];
-                return _HouseholdWithMemberCountTile(
+                return _HouseholdCard(
                   item: item,
                   onTap: () => _navigateToDetail(context, item),
                 );
@@ -674,10 +663,26 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
 
     return Column(
       children: [
+        _buildSearchBar(),
         if (widget.initialTier != null || _selectedTier != null)
           _buildTierChipRow(),
         _buildInlineVillageChipRow(scheme),
         _buildFilterToggle(scheme, allCount: allMembersCount, myCount: myPatientsCount),
+        if (members.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Showing ${members.length} patient${members.length == 1 ? '' : 's'}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: scheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ),
         Expanded(
           child: members.isEmpty
               ? Center(
@@ -687,34 +692,29 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
                       Icon(Icons.people_outline, size: 64, color: scheme.outline),
                       const SizedBox(height: 16),
                       Text(
-                        _filter == MemberFilter.myPatients
-                            ? HouseholdListStrings.noPatientsAssigned
-                            : HouseholdListStrings.noMembers,
+                        _searchQuery.isNotEmpty
+                            ? 'No results for "$_searchQuery"'
+                            : _filter == MemberFilter.myPatients
+                                ? HouseholdListStrings.noPatientsAssigned
+                                : HouseholdListStrings.noMembers,
                         style: Theme.of(context).textTheme.bodyLarge,
+                        textAlign: TextAlign.center,
                       ),
                     ],
                   ),
                 )
               : ListView.separated(
                   controller: _scrollController,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
                   itemCount: members.length,
-                  separatorBuilder: (context, index) {
-                    final member = members[index];
-                    final pid = member.patientId ?? member.id;
-                    final hasCard = pid != null && _queueItems.containsKey(pid);
-                    return hasCard
-                        ? const SizedBox.shrink()
-                        : const Divider(height: 1, indent: 72);
-                  },
+                  separatorBuilder: (context, idx) => const SizedBox(height: 6),
                   itemBuilder: (context, index) {
                     final member = members[index];
                     final pid = member.patientId ?? member.id;
-                    debugPrint('[MembersList] member=${member.name} pid=$pid queueKeys=${_queueItems.keys.take(3).toList()} hit=${_queueItems.containsKey(pid)}');
                     final queueItem = pid != null ? _queueItems[pid] : null;
                     if (queueItem != null) {
                       return Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
+                        padding: const EdgeInsets.only(bottom: 2),
                         child: MissionQueueCard(
                           item: queueItem,
                           compact: true,
@@ -729,7 +729,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
                         ),
                       );
                     }
-                    return _MemberTile(
+                    return _PatientCard(
                       member: member,
                       onTap: () => _navigateToMemberDetail(context, member),
                     );
@@ -737,6 +737,33 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
                 ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSearchBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      child: TextField(
+        controller: _searchController,
+        onChanged: (v) => setState(() => _searchQuery = v.trim().toLowerCase()),
+        decoration: InputDecoration(
+          hintText: 'Search by name or house number...',
+          prefixIcon: const Icon(Icons.search, size: 20),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear, size: 18),
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() => _searchQuery = '');
+                  },
+                )
+              : null,
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          filled: true,
+        ),
+      ),
     );
   }
 
@@ -792,26 +819,32 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
   /// [allCount] and [myCount] are post-filter counts so the labels always
   /// match the list length the user sees.
   Widget _buildFilterToggle(ColorScheme scheme, {required int allCount, required int myCount}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: scheme.surface,
-        border: Border(bottom: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.3))),
-      ),
-      child: Row(
-        children: [
-          _FilterChip(
-            label: HouseholdListStrings.myPatientsCount(myCount),
-            isSelected: _filter == MemberFilter.myPatients,
-            onTap: () => setState(() => _filter = MemberFilter.myPatients),
-          ),
-          const SizedBox(width: 8),
-          _FilterChip(
-            label: HouseholdListStrings.allMembersCount(allCount),
-            isSelected: _filter == MemberFilter.allMembers,
-            onTap: () => setState(() => _filter = MemberFilter.allMembers),
-          ),
-        ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      child: Container(
+        height: 38,
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: _SegmentButton(
+                label: HouseholdListStrings.myPatientsCount(myCount),
+                isSelected: _filter == MemberFilter.myPatients,
+                onTap: () => setState(() => _filter = MemberFilter.myPatients),
+              ),
+            ),
+            Expanded(
+              child: _SegmentButton(
+                label: HouseholdListStrings.allMembersCount(allCount),
+                isSelected: _filter == MemberFilter.allMembers,
+                onTap: () => setState(() => _filter = MemberFilter.allMembers),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -959,9 +992,9 @@ class _SummaryChip extends StatelessWidget {
   }
 }
 
-/// Chip toggle for filter selection.
-class _FilterChip extends StatelessWidget {
-  const _FilterChip({
+/// Segmented toggle button — used in the My Patients / All Members toggle.
+class _SegmentButton extends StatelessWidget {
+  const _SegmentButton({
     required this.label,
     required this.isSelected,
     required this.onTap,
@@ -979,24 +1012,27 @@ class _FilterChip extends StatelessWidget {
       button: true,
       selected: isSelected,
       child: GestureDetector(
-        key: const Key('household_programme_filter_tap'),
         onTap: onTap,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          duration: const Duration(milliseconds: 180),
+          height: double.infinity,
+          margin: const EdgeInsets.all(3),
           decoration: BoxDecoration(
-            color: isSelected ? scheme.primary : scheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isSelected ? scheme.primary : scheme.outline.withValues(alpha: 0.3),
-            ),
+            color: isSelected ? scheme.surface : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: isSelected
+                ? [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 4, offset: const Offset(0, 1))]
+                : null,
           ),
+          alignment: Alignment.center,
           child: Text(
             label,
             style: TextStyle(
-              color: isSelected ? scheme.onPrimary : scheme.onSurface,
-              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              fontSize: 13,
+              color: isSelected ? scheme.primary : scheme.onSurfaceVariant,
+              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
             ),
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ),
@@ -1004,139 +1040,118 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
-class _HouseholdTile extends StatelessWidget {
-  const _HouseholdTile({required this.item, this.onTap});
+/// Card for a household — used in the Households tab.
+class _HouseholdCard extends StatelessWidget {
+  const _HouseholdCard({required this.item, this.onTap});
 
   final _HouseholdItem item;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
-    // Use brand navy for icons - visible in both light and dark modes
-    final iconColor = tokens.brandNavy;
-    final iconBgColor = tokens.brandNavy.withValues(alpha: 0.1);
-    return ListTile(
-      onTap: onTap,
-      leading: CircleAvatar(
-        backgroundColor: iconBgColor,
-        child: Icon(Icons.home_outlined, color: iconColor),
-      ),
-      title: Text(
-        item.name ?? HouseholdListStrings.unnamedHousehold,
-        style: TextStyle(
-          fontWeight: FontWeight.w600,
-          color: scheme.onSurface,
-        ),
-      ),
-      subtitle: Text(
-        item.householdNo ?? '',
-        style: TextStyle(
-          color: scheme.onSurface.withValues(alpha: 0.7),
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: iconBgColor,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.people_outline, size: 16, color: iconColor),
-                const SizedBox(width: 4),
-                Text(
-                  '${item.memberCount ?? 0}',
-                  style: TextStyle(
-                    color: iconColor,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Icon(Icons.chevron_right, color: scheme.outline),
-        ],
-      ),
-    );
-  }
-}
-
-/// Tile for displaying households with member counts in the "All Members" view
-/// when individual member data is not available from the API.
-class _HouseholdWithMemberCountTile extends StatelessWidget {
-  const _HouseholdWithMemberCountTile({required this.item, this.onTap});
-
-  final _HouseholdItem item;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final navy = tokens.brandNavy;
+    final navyLight = navy.withValues(alpha: 0.10);
     final count = item.memberCount ?? 0;
-    return ListTile(
-      onTap: onTap,
-      leading: CircleAvatar(
-        backgroundColor: scheme.primaryContainer,
-        child: Text(
-          '$count',
-          style: TextStyle(
-            color: scheme.onPrimaryContainer,
-            fontWeight: FontWeight.bold,
+    final title = item.name ??
+        (item.householdNo != null ? 'Household #${item.householdNo}' : HouseholdListStrings.unnamedHousehold);
+
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: AppShadows.card,
+            color: Colors.white,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(color: navyLight, shape: BoxShape.circle),
+                child: Icon(Icons.home_outlined, color: navy, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (item.village != null && item.village!.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        item.village!,
+                        style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: navyLight, borderRadius: BorderRadius.circular(20)),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.people_outline, size: 14, color: navy),
+                    const SizedBox(width: 4),
+                    Text(
+                      '$count',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: navy),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(Icons.chevron_right, color: AppColors.border, size: 20),
+            ],
           ),
         ),
       ),
-      title: Text(
-        item.name ?? HouseholdListStrings.unnamedHousehold,
-        style: TextStyle(
-          fontWeight: FontWeight.w600,
-          color: scheme.onSurface,
-        ),
-      ),
-      subtitle: Text(
-        HouseholdListStrings.membersCount(count),
-        style: TextStyle(
-          color: scheme.onSurface.withValues(alpha: 0.7),
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-      trailing: Icon(Icons.chevron_right, color: scheme.outline),
     );
   }
 }
 
-class _MemberTile extends StatelessWidget {
-  const _MemberTile({required this.member, this.onTap});
+/// Card for a patient member — used in the Members tab for non-queue patients.
+class _PatientCard extends StatelessWidget {
+  const _PatientCard({required this.member, this.onTap});
 
   final _MemberInfo member;
   final VoidCallback? onTap;
 
-  IconData _genderIcon() {
-    final g = member.gender?.toLowerCase();
-    if (g == 'male' || g == 'm') return Icons.male;
-    if (g == 'female' || g == 'f') return Icons.female;
-    return Icons.person_outline;
+  static String _initials(String? name) {
+    if (name == null || name.isEmpty) return '';
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.length == 1) return parts[0][0].toUpperCase();
+    return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
   }
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    
-    // Build metadata parts: Age · Gender · House #
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    final navy = tokens.brandNavy;
+    final isPregnant = member.isPregnant;
+
+    final avatarBg = isPregnant ? AppColors.tagTealSurface : navy.withValues(alpha: 0.10);
+    final avatarFg = isPregnant ? AppColors.tagTealText : navy;
+
+    final initials = _initials(member.name);
+
     final metaParts = <String>[];
-    if (member.age != null) {
-      metaParts.add('Age ${member.age}');
-    }
-    if (member.gender != null) {
-      metaParts.add(member.gender!);
-    }
+    if (member.age != null) metaParts.add('Age ${member.age}');
+    if (member.gender != null) metaParts.add(member.gender!);
     if (member.householdNo != null) {
       metaParts.add('House #${member.householdNo}');
     } else if (member.householdName != null) {
@@ -1144,72 +1159,102 @@ class _MemberTile extends StatelessWidget {
     }
     final metaLine = metaParts.join(' · ');
 
-    return ListTile(
-      onTap: onTap,
-      leading: CircleAvatar(
-        backgroundColor: member.isPregnant
-            ? scheme.tertiaryContainer
-            : scheme.primaryContainer,
-        child: member.isPregnant
-            ? const Text('🤰', style: TextStyle(fontSize: 20))
-            : Icon(_genderIcon(), color: scheme.onPrimaryContainer),
-      ),
-      title: Row(
-        children: [
-          Expanded(
-            child: Text(
-              member.name ?? HouseholdListStrings.unnamedMember,
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: scheme.onSurface,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
+    final showRelation = member.relation != null &&
+        member.relation!.toLowerCase() != 'head' &&
+        member.relation!.toLowerCase() != 'self';
+
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: AppShadows.card,
+            color: Colors.white,
           ),
-          if (member.isPregnant)
-            Container(
-              margin: const EdgeInsets.only(left: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: scheme.tertiaryContainer,
-                borderRadius: BorderRadius.circular(8),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(color: avatarBg, shape: BoxShape.circle),
+                alignment: Alignment.center,
+                child: initials.isNotEmpty
+                    ? Text(
+                        initials,
+                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: avatarFg),
+                      )
+                    : Icon(Icons.person_outline, color: avatarFg, size: 20),
               ),
-              child: Text(
-                'Pregnant',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: scheme.onTertiaryContainer,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            member.name ?? HouseholdListStrings.unnamedMember,
+                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (isPregnant) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.tagTealSurface,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.pregnant_woman_rounded, size: 11, color: AppColors.tagTealText),
+                                const SizedBox(width: 3),
+                                Text(
+                                  'ANC',
+                                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.tagTealText),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    if (metaLine.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        metaLine,
+                        style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    if (showRelation) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        member.relation!,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textMuted,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-            ),
-        ],
+              const SizedBox(width: 4),
+              Icon(Icons.chevron_right, color: AppColors.border, size: 20),
+            ],
+          ),
+        ),
       ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (member.relation != null)
-            Text(
-              member.relation!,
-              style: TextStyle(
-                color: scheme.onSurface.withValues(alpha: 0.7),
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          if (metaLine.isNotEmpty)
-            Text(
-              metaLine,
-              style: TextStyle(
-                color: scheme.onSurface.withValues(alpha: 0.6),
-                fontSize: 13,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-        ],
-      ),
-      trailing: Icon(Icons.chevron_right, color: scheme.outline),
-      isThreeLine: member.relation != null,
     );
   }
 }
