@@ -28,6 +28,7 @@ import '../../core/constants/app_strings.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
+import '../../core/models/patient.dart';
 import '../../core/db/pregnancy_snapshot_dao.dart';
 import '../../core/models/programme.dart';
 import '../../core/theme/app_theme.dart';
@@ -1003,6 +1004,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   late AnimationController _shimmer;
   bool _accepted = false;
   String? _patientPhone;
+  List<_HouseholdMember>? _householdMembers;
 
   Color _headerColor(Programme p) => switch (p) {
         Programme.anc || Programme.pnc => AppColors.ancHeader,
@@ -1023,6 +1025,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       duration: const Duration(milliseconds: 1100),
     )..repeat(reverse: true);
     _loadPatientPhone();
+    _loadHouseholdMembers();
   }
 
   Future<void> _loadPatientPhone() async {
@@ -1033,6 +1036,44 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     if (mounted && phone != null && phone.isNotEmpty) {
       setState(() => _patientPhone = phone);
     }
+  }
+
+  Future<void> _loadHouseholdMembers() async {
+    String? hid = widget.householdId;
+    if ((hid == null || hid.isEmpty) && mounted) {
+      try {
+        final patient = await context.read<PatientDao>().byId(widget.patientId);
+        hid = patient?.householdId;
+      } on Object catch (_) {}
+    }
+    if (hid == null || hid.isEmpty || !mounted) return;
+
+    final patientDao = context.read<PatientDao>();
+    final progDao = context.read<PatientProgrammesDao>();
+
+    final rows = await patientDao.getByHouseholdId(hid);
+    final patients = rows.map(Patient.fromDb).where((p) => p.isActive != false).toList();
+    final ids = patients.map((p) => p.id).toList();
+    final progMap = await progDao.programmesForMany(ids);
+
+    if (!mounted) return;
+    final members = patients.map((p) {
+      final progs = progMap[p.id] ?? {};
+      final primary = progs.isNotEmpty ? progs.first : Programme.unknown;
+      return _HouseholdMember(
+        patientId: p.id,
+        name: p.name ?? '—',
+        primaryProgramme: primary,
+        isCurrentPatient: p.id == widget.patientId,
+      );
+    }).toList()
+      ..sort((a, b) {
+        if (a.isCurrentPatient) return -1;
+        if (b.isCurrentPatient) return 1;
+        return 0;
+      });
+
+    setState(() => _householdMembers = members);
   }
 
   @override
@@ -1462,6 +1503,16 @@ class _Step3AiRecoState extends State<_Step3AiReco>
                 headerColor: headerColor,
               ),
               const SizedBox(height: 16),
+
+              // ── Household "also cover while you're here" strip ────────
+              if (_householdMembers != null && _householdMembers!.length > 1) ...[
+                _HouseholdMemberStrip(
+                  members: _householdMembers!,
+                  onTapMember: (patientId) =>
+                      context.push('/patients/$patientId'),
+                ),
+                const SizedBox(height: 16),
+              ],
 
               // ── AI fallback notice ────────────────────────────────────
               if (naba.modelVersion == 'rule-based-fallback') ...[
@@ -2880,6 +2931,214 @@ class _ProgrammeConfirmSheetState extends State<_ProgrammeConfirmSheet> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Household member data holder (Step 3 strip) ───────────────────────────────
+
+class _HouseholdMember {
+  const _HouseholdMember({
+    required this.patientId,
+    required this.name,
+    required this.primaryProgramme,
+    required this.isCurrentPatient,
+  });
+
+  final String patientId;
+  final String name;
+  final Programme primaryProgramme;
+  final bool isCurrentPatient;
+}
+
+// ── Household member strip ────────────────────────────────────────────────────
+
+class _HouseholdMemberStrip extends StatelessWidget {
+  const _HouseholdMemberStrip({
+    required this.members,
+    required this.onTapMember,
+  });
+
+  final List<_HouseholdMember> members;
+  final void Function(String patientId) onTapMember;
+
+  static (Color ring, Color labelColor, String visitLabel) _style(Programme p) {
+    switch (p) {
+      case Programme.anc:
+        return (AppColors.ancText, AppColors.ancText, 'ANC visit');
+      case Programme.pnc:
+        return (AppColors.pncText, AppColors.pncText, 'PNC visit');
+      case Programme.imci:
+        return (AppColors.imciText, AppColors.imciText, 'Child visit');
+      case Programme.ncd:
+        return (AppColors.ncdText, AppColors.ncdText, 'BP check');
+      case Programme.tb:
+        return (AppColors.tbText, AppColors.tbText, 'TB check');
+      case Programme.epi:
+        return (const Color(0xFF1D4ED8), const Color(0xFF1D4ED8), 'Vaccines');
+      case Programme.nutrition:
+        return (const Color(0xFF15803D), const Color(0xFF15803D), 'Nutrition');
+      default:
+        return (AppColors.border, AppColors.textMuted, 'Scheduled');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.people_rounded, size: 16, color: AppColors.navy),
+              const SizedBox(width: 6),
+              Text(
+                VisitFlowStrings.alsoCoverWhileHere,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.navy,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: members.map((m) {
+                if (m.isCurrentPatient) {
+                  return _MemberAvatar(
+                    member: m,
+                    ringColor: AppColors.navy,
+                    ringWidth: 3.0,
+                    labelText: 'Viewing',
+                    labelColor: AppColors.navy,
+                    labelBold: true,
+                    onTap: null,
+                  );
+                }
+                final (ring, labelColor, visitLabel) = _style(m.primaryProgramme);
+                return _MemberAvatar(
+                  member: m,
+                  ringColor: ring,
+                  ringWidth: 1.5,
+                  labelText: visitLabel,
+                  labelColor: labelColor,
+                  labelBold: false,
+                  onTap: () => onTapMember(m.patientId),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MemberAvatar extends StatelessWidget {
+  const _MemberAvatar({
+    required this.member,
+    required this.ringColor,
+    required this.ringWidth,
+    required this.labelText,
+    required this.labelColor,
+    required this.labelBold,
+    required this.onTap,
+  });
+
+  final _HouseholdMember member;
+  final Color ringColor;
+  final double ringWidth;
+  final String labelText;
+  final Color labelColor;
+  final bool labelBold;
+  final VoidCallback? onTap;
+
+  static String _emoji(Programme p) {
+    switch (p) {
+      case Programme.anc:
+      case Programme.pnc:
+        return '🤰';
+      case Programme.imci:
+        return '👶';
+      case Programme.ncd:
+        return '🫀';
+      case Programme.tb:
+        return '🫁';
+      case Programme.epi:
+        return '💉';
+      case Programme.nutrition:
+        return '🥗';
+      default:
+        return '🏥';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final firstName = member.name.split(' ').first;
+    return Padding(
+      padding: const EdgeInsets.only(right: 14),
+      child: GestureDetector(
+        onTap: onTap,
+        child: SizedBox(
+          width: 68,
+          child: Column(
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFFF8FAFC),
+                  border: Border.all(color: ringColor, width: ringWidth),
+                ),
+                child: Center(
+                  child: Text(
+                    _emoji(member.primaryProgramme),
+                    style: const TextStyle(fontSize: 24),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                firstName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: labelBold ? FontWeight.w700 : FontWeight.w500,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                labelText,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: labelBold ? FontWeight.w600 : FontWeight.w400,
+                  color: labelColor,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

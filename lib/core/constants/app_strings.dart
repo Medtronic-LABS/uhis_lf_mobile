@@ -3106,6 +3106,7 @@ abstract final class VisitFlowStrings {
   // interpolation contract — the header no longer references this string.
   static const String step2TitleSuffix = 'form';
   static const String step3Title = 'Summary';
+  static const String alsoCoverWhileHere = 'ALSO COVER WHILE YOU\'RE HERE';
 
   static const String stepIndicator = 'Step %1 of 3';
   static String stepIndicatorFor(int oneBased) =>
