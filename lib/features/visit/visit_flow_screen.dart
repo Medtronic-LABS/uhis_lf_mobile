@@ -1518,82 +1518,98 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   }
 
   Widget _buildLoading() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.h8xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Pulsing AI icon
-            AnimatedBuilder(
-              animation: _shimmer,
-              builder: (context, unused) => Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Color.lerp(
-                    AppColors.aiSurfaceStart,
-                    AppColors.aiSurfaceEnd,
-                    _shimmer.value,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.aiPurple.withValues(
-                          alpha: 0.15 + 0.1 * _shimmer.value),
-                      blurRadius: 20,
-                      spreadRadius: 2,
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.auto_awesome_rounded,
-                  size: 38,
-                  color: AppColors.aiPurple,
-                ),
-              ),
+    return SingleChildScrollView(
+      physics: const ClampingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Household strip shown immediately — taps locked until AI loads.
+          if (_householdMembers != null && _householdMembers!.length > 1) ...[
+            _HouseholdMemberStrip(
+              members: _householdMembers!,
+              onTapMember: null,
             ),
-            const SizedBox(height: 24),
-            Text(
-              NabaStrings.loadingTitle,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: AppColors.textPrimary,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              NabaStrings.loadingSubtitle,
-              style: TextStyle(
-                fontSize: 13,
-                color: AppColors.textMuted,
-                height: 1.5,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 36),
-            // Skeleton preview cards
-            AnimatedBuilder(
-              animation: _shimmer,
-              builder: (context, unused) {
-                final shimmerColor = Color.lerp(
-                  AppColors.border,
-                  AppColors.progressTrack,
-                  _shimmer.value,
-                )!;
-                return Column(
-                  children: [
-                    _SkeletonCard(color: shimmerColor, height: 72),
-                    const SizedBox(height: 10),
-                    _SkeletonCard(color: shimmerColor, height: 56),
-                    const SizedBox(height: 10),
-                    _SkeletonCard(color: shimmerColor, height: 64),
-                  ],
-                );
-              },
-            ),
+            const SizedBox(height: 20),
           ],
-        ),
+          // AI loading indicator + skeleton cards.
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.h8xl),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AnimatedBuilder(
+                    animation: _shimmer,
+                    builder: (context, unused) => Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Color.lerp(
+                          AppColors.aiSurfaceStart,
+                          AppColors.aiSurfaceEnd,
+                          _shimmer.value,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.aiPurple.withValues(
+                                alpha: 0.15 + 0.1 * _shimmer.value),
+                            blurRadius: 20,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.auto_awesome_rounded,
+                        size: 38,
+                        color: AppColors.aiPurple,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    NabaStrings.loadingTitle,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      color: AppColors.textPrimary,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    NabaStrings.loadingSubtitle,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textMuted,
+                      height: 1.5,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 36),
+                  AnimatedBuilder(
+                    animation: _shimmer,
+                    builder: (context, unused) {
+                      final shimmerColor = Color.lerp(
+                        AppColors.border,
+                        AppColors.progressTrack,
+                        _shimmer.value,
+                      )!;
+                      return Column(
+                        children: [
+                          _SkeletonCard(color: shimmerColor, height: 72),
+                          const SizedBox(height: 10),
+                          _SkeletonCard(color: shimmerColor, height: 56),
+                          const SizedBox(height: 10),
+                          _SkeletonCard(color: shimmerColor, height: 64),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -3064,7 +3080,9 @@ class _HouseholdMemberStrip extends StatelessWidget {
   });
 
   final List<_HouseholdMember> members;
-  final void Function(String patientId) onTapMember;
+  // Null while the AI recommendation is still loading — members are shown
+  // as a preview but taps are disabled until the care plan is ready.
+  final void Function(String patientId)? onTapMember;
 
   static (Color ring, Color labelColor, String visitLabel) _style(Programme p) {
     switch (p) {
@@ -3147,14 +3165,20 @@ class _HouseholdMemberStrip extends StatelessWidget {
                     Builder(builder: (context) {
                       final (ring, labelColor, visitLabel) =
                           _style(members[i].primaryProgramme);
-                      return _MemberAvatar(
-                        member: members[i],
-                        ringColor: ring,
-                        ringWidth: 1.5,
-                        labelText: visitLabel,
-                        labelColor: labelColor,
-                        labelBold: false,
-                        onTap: () => onTapMember(members[i].patientId),
+                      final pid = members[i].patientId;
+                      return Opacity(
+                        opacity: onTapMember != null ? 1.0 : 0.45,
+                        child: _MemberAvatar(
+                          member: members[i],
+                          ringColor: ring,
+                          ringWidth: 1.5,
+                          labelText: visitLabel,
+                          labelColor: labelColor,
+                          labelBold: false,
+                          onTap: onTapMember != null
+                              ? () => onTapMember!(pid)
+                              : null,
+                        ),
                       );
                     }),
                   ],
