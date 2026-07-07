@@ -1061,6 +1061,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     final progMap = await progDao.programmesForMany(ids);
 
     if (!mounted) return;
+    debugPrint('[HouseholdStrip] hid=$hid rows=${rows.length} active=${patients.length}');
     final members = patients.map((p) {
       final progs = progMap[p.id] ?? {};
       final primary = progs.isNotEmpty ? progs.first : Programme.unknown;
@@ -1109,7 +1110,31 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         currentVitals: _loadedVitals,
         labResults: _loadedLabs,
       );
-      return await repo.generate(req);
+      final ai = await repo.generate(req);
+      // Backfill empty fields from rule-based fallback so the UI always
+      // has counselling and follow-up content even when AI data is sparse.
+      if (ai.counselling.isEmpty || ai.followUp.isEmpty) {
+        final fallback = _ruleBasedNaba();
+        return NabaResponse(
+          requestId: ai.requestId,
+          modelVersion: ai.modelVersion,
+          generatedAt: ai.generatedAt,
+          rationale: ai.rationale,
+          visitSummary: ai.visitSummary,
+          clinicalFindings: ai.clinicalFindings,
+          nextActions: ai.nextActions.isNotEmpty ? ai.nextActions : fallback.nextActions,
+          dangerSigns: ai.dangerSigns.isNotEmpty ? ai.dangerSigns : fallback.dangerSigns,
+          followUp: ai.followUp.isNotEmpty ? ai.followUp : fallback.followUp,
+          counselling: ai.counselling.isNotEmpty ? ai.counselling : fallback.counselling,
+          familyCounselling: ai.familyCounselling,
+          medicationAdvice: ai.medicationAdvice,
+          whatsappSummary: ai.whatsappSummary,
+          doctorHandover: ai.doctorHandover,
+          referralRecommendation: ai.referralRecommendation,
+          contextTruncated: ai.contextTruncated,
+        );
+      }
+      return ai;
     } catch (e) {
       debugPrint('[NABA] AI failed — rule-based fallback: $e');
       return _ruleBasedNaba();
