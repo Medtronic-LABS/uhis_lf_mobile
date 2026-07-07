@@ -31,7 +31,6 @@ import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
-import '../../core/models/patient.dart';
 import '../../core/db/pregnancy_snapshot_dao.dart';
 import '../../core/models/programme.dart';
 import '../../core/theme/app_theme.dart';
@@ -1044,34 +1043,52 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 
   Future<void> _loadHouseholdMembers() async {
     String? hid = widget.householdId;
+
+    // patients.household_id is sparsely populated; members.household_id is
+    // always written by sync — try that first as fallback.
     if ((hid == null || hid.isEmpty) && mounted) {
       try {
         final patient = await context.read<PatientDao>().byId(widget.patientId);
         hid = patient?.householdId;
       } on Object catch (_) {}
     }
+    if ((hid == null || hid.isEmpty) && mounted) {
+      try {
+        final member =
+            await context.read<MemberDao>().getByPatientId(widget.patientId);
+        hid = member?.householdId;
+      } on Object catch (_) {}
+    }
     if (hid == null || hid.isEmpty || !mounted) return;
 
-    final patientDao = context.read<PatientDao>();
+    final memberDao = context.read<MemberDao>();
     final progDao = context.read<PatientProgrammesDao>();
 
-    final rows = await patientDao.getByHouseholdId(hid);
-    final patients = rows.map(Patient.fromDb).where((p) => p.isActive != false).toList();
-    final ids = patients.map((p) => p.id).toList();
+    // members table is the authoritative household membership source; querying
+    // patients table for household_id misses members whose patient row wasn't
+    // synced with household_id set.
+    final entities = await memberDao.getByHouseholdId(hid);
+    final active = entities.where((m) => m.isActive).toList();
+    final ids = active
+        .map((m) => m.patientId)
+        .whereType<String>()
+        .where((id) => id.isNotEmpty)
+        .toList();
     final progMap = await progDao.programmesForMany(ids);
 
     if (!mounted) return;
-    debugPrint('[HouseholdStrip] hid=$hid rows=${rows.length} active=${patients.length}');
-    final members = patients.map((p) {
-      final progs = progMap[p.id] ?? {};
+    final members = active.map((m) {
+      final pid = m.patientId ?? '';
+      if (pid.isEmpty) return null;
+      final progs = progMap[pid] ?? {};
       final primary = progs.isNotEmpty ? progs.first : Programme.unknown;
       return _HouseholdMember(
-        patientId: p.id,
-        name: p.name ?? '—',
+        patientId: pid,
+        name: m.name ?? '—',
         primaryProgramme: primary,
-        isCurrentPatient: p.id == widget.patientId,
+        isCurrentPatient: pid == widget.patientId,
       );
-    }).toList()
+    }).whereType<_HouseholdMember>().toList()
       ..sort((a, b) {
         if (a.isCurrentPatient) return -1;
         if (b.isCurrentPatient) return 1;
@@ -1648,7 +1665,6 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   Widget _buildResult(NabaResponse naba) {
     final referral =
         naba.referralRecommendation?.required_ ?? widget.referralRecommended;
-
     return SingleChildScrollView(
       physics: const ClampingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
