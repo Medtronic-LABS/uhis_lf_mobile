@@ -102,6 +102,10 @@ class FormSchemaParser {
     switch (viewType) {
       case 'pregnancyProfile':
         return (_buildField(item, FieldKind.pregnancyProfile), 1);
+      case 'bloodGlucose':
+        return (_buildField(item, FieldKind.bloodGlucose), 1);
+      case 'labResult':
+        return (_buildField(item, FieldKind.labResult), 1);
       case 'BP':
         return (_buildField(item, FieldKind.bloodPressure), 1);
       case 'AgeOrDob':
@@ -372,8 +376,8 @@ class FormSchemaParser {
       kind: kind,
       required: item['isMandatory'] == true,
       unit: item['unitMeasurement'] as String?,
-      min: _toDouble(item['minVal']),
-      max: _toDouble(item['maxVal']),
+      min: _toDouble(item['minVal'] ?? item['minValue']),
+      max: _toDouble(item['maxVal'] ?? item['maxValue']),
       hint: item['hint'] as String?,
       options: options ?? _parseOptions(item),
       conditions: _parseConditions(item),

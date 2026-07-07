@@ -152,7 +152,7 @@ class CanonicalFormTransformer {
       'family', 'familyOrder', 'orderId', 'isEnabled',
       'readOnly', 'visibility', 'hint', 'hintCulture', 'titleCulture',
       'errorMessage', 'errorMessageCulture', 'unitMeasurement',
-      'minValue', 'maxValue', 'isSummary', 'titleSummary',
+      'minValue', 'maxValue', 'minVal', 'maxVal', 'isSummary', 'titleSummary',
       'localDataCache', 'isBooleanAnswer', 'optionType',
       'isInfo', 'infoTitle', 'isNeededDefault', 'isNotDefault',
       'applyDecimalFilter', 'condition',

@@ -34,7 +34,8 @@ class BloodGlucoseWidget extends StatefulWidget {
 }
 
 class _BloodGlucoseWidgetState extends State<BloodGlucoseWidget> {
-  static const _types = ['Fasting', 'Random', 'Post-prandial'];
+  // Spec §4.2.3: 2hr PP option removed. Fasting threshold ≥5.1, Random ≥11.1.
+  static const _types = ['Fasting', 'Random'];
   static const _unit = 'mmol/L';
 
   late String _selectedType;
@@ -68,9 +69,9 @@ class _BloodGlucoseWidgetState extends State<BloodGlucoseWidget> {
 
   double? get _normalMax {
     return switch (_selectedType) {
-      'Fasting' => 7.0,
+      'Fasting' => 5.1,
       'Random'  => 11.1,
-      _         => 7.8,
+      _         => null,
     };
   }
 
