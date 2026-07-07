@@ -280,12 +280,10 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        title: const Text('My Patients'),
+        title: const Text('Patients'),
         actions: [
           // Filter icon shows a badge dot when any location filter is active.
           Stack(
@@ -319,189 +317,122 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
             onPressed: () => setState(_loadData),
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'Members', icon: Icon(Icons.people_outline)),
-            Tab(text: 'Households', icon: Icon(Icons.home_outlined)),
-          ],
-          labelColor: scheme.primary,
-          unselectedLabelColor: scheme.onSurfaceVariant,
-          indicatorColor: scheme.primary,
-        ),
       ),
-      body: _future == null
-          ? const SizedBox.shrink()
-          : FutureBuilder<List<_HouseholdItem>>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const SizedBox.shrink();
-          }
-          if (snapshot.hasError) {
-            // ignore: avoid_print
-            print('[HouseholdList] Error: ${snapshot.error}');
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.error_outline, size: 48),
-                  const SizedBox(height: 16),
-                  Text(HouseholdListStrings.loadError),
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 32),
-                    child: Text(
-                      '${snapshot.error}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                      textAlign: TextAlign.center,
-                    ),
+      body: Column(
+        children: [
+          // Compact pill tab strip — always visible.
+          AnimatedBuilder(
+            animation: _tabController,
+            builder: (context, _) => _buildCompactTabStrip(context),
+          ),
+          // Shared search bar — always visible.
+          _buildSearchBar(),
+          // Shared village + need filter panel — visible when data present.
+          _buildPatientFilterPanel(),
+          // Content area.
+          Expanded(
+            child: _future == null
+                ? const SizedBox.shrink()
+                : FutureBuilder<List<_HouseholdItem>>(
+                    future: _future,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        );
+                      }
+                      if (snapshot.hasError) {
+                        // ignore: avoid_print
+                        print('[HouseholdList] Error: ${snapshot.error}');
+                        return Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.error_outline, size: 48),
+                              const SizedBox(height: 16),
+                              Text(HouseholdListStrings.loadError),
+                              const SizedBox(height: 8),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 32),
+                                child: Text(
+                                  '${snapshot.error}',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              FilledButton.tonal(
+                                onPressed: () => setState(_loadData),
+                                child: const Text(CommonStrings.retry),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      final items = snapshot.data ?? [];
+                      if (items.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.people_outline,
+                                size: 64,
+                                color: Theme.of(context).colorScheme.outline,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                HouseholdListStrings.noMembers,
+                                style: Theme.of(context).textTheme.bodyLarge,
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      return TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildMembersList(context, items),
+                          _buildHouseholdsList(context, items),
+                        ],
+                      );
+                    },
                   ),
-                  const SizedBox(height: 16),
-                  FilledButton.tonal(
-                    onPressed: () => setState(_loadData),
-                    child: const Text(CommonStrings.retry),
-                  ),
-                ],
-              ),
-            );
-          }
-          final items = snapshot.data ?? [];
-          if (items.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.people_outline,
-                    size: 64,
-                    color: Theme.of(context).colorScheme.outline,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    HouseholdListStrings.noMembers,
-                    style: Theme.of(context).textTheme.bodyLarge,
-                  ),
-                ],
-              ),
-            );
-          }
-
-          // Use TabBarView to show Members or Households
-          return TabBarView(
-            controller: _tabController,
-            children: [
-              Column(children: [
-                _buildActiveFilterRow(context, householdCount: items.length),
-                Expanded(child: _buildMembersList(context, items)),
-              ]),
-              Column(children: [
-                _buildActiveFilterRow(context, householdCount: items.length),
-                Expanded(child: _buildHouseholdsList(context, items)),
-              ]),
-            ],
-          );
-        },
+          ),
+        ],
       ),
     );
   }
 
-  /// Renders household count + dismissible chips for active location/SS filters.
-  /// Hidden when no location filters are active.
-  Widget _buildActiveFilterRow(
-    BuildContext context, {
-    required int householdCount,
-  }) {
-    final scheme = Theme.of(context).colorScheme;
-    final hasLocationFilter = _selectedVillageId != null ||
-        _selectedSubVillageId != null ||
-        _selectedShebikaId != null;
-    if (!hasLocationFilter) return const SizedBox.shrink();
-
-    final hierarchy = context.read<UserHierarchyService>();
-    final chips = <Widget>[];
-
-    void addChip(String label, VoidCallback onRemove) {
-      chips.add(Padding(
-        padding: const EdgeInsets.only(right: 6),
-        child: InputChip(
-          label: Text(label, style: const TextStyle(fontSize: 12)),
-          onDeleted: onRemove,
-          deleteIconColor: scheme.onSecondaryContainer,
-          backgroundColor: scheme.secondaryContainer,
-          labelStyle: TextStyle(color: scheme.onSecondaryContainer),
-          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          visualDensity: VisualDensity.compact,
-        ),
-      ));
-    }
-
-    if (_selectedVillageId != null) {
-      final name = hierarchy.villages
-              ?.where((v) => v.id == _selectedVillageId)
-              .firstOrNull
-              ?.name ??
-          _selectedVillageId!;
-      addChip('${HouseholdListStrings.filterVillage}: $name', () {
-        setState(() {
-          _selectedVillageId = null;
-          _selectedSubVillageId = null;
-          _selectedShebikaId = null;
-        });
-        _loadData();
-      });
-    }
-    if (_selectedSubVillageId != null) {
-      final name = hierarchy.subVillages
-              ?.where((sv) => sv.id == _selectedSubVillageId)
-              .firstOrNull
-              ?.name ??
-          _selectedSubVillageId!;
-      addChip('${HouseholdListStrings.filterSubVillage}: $name', () {
-        setState(() {
-          _selectedSubVillageId = null;
-          _selectedShebikaId = null;
-        });
-        _loadData();
-      });
-    }
-    if (_selectedShebikaId != null) {
-      final name = hierarchy.ssWorkers
-              ?.where((ss) => ss.id == _selectedShebikaId)
-              .firstOrNull
-              ?.name ??
-          _selectedShebikaId!;
-      addChip('${HouseholdListStrings.filterSS}: $name', () {
-        setState(() => _selectedShebikaId = null);
-        _loadData();
-      });
-    }
-
+  Widget _buildCompactTabStrip(BuildContext context) {
+    final selectedIdx = _tabController.index;
     return Container(
-      width: double.infinity,
-      color: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      color: AppColors.cardSurface,
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
       child: Row(
         children: [
-          Text(
-            HouseholdListStrings.householdsCount(householdCount),
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: scheme.onSurfaceVariant,
+          Expanded(
+            child: _TabPill(
+              label: 'My Patients',
+              icon: Icons.people_outline,
+              isSelected: selectedIdx == 0,
+              onTap: () => _tabController.animateTo(0),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(children: chips),
+            child: _TabPill(
+              label: 'My Households',
+              icon: Icons.home_outlined,
+              isSelected: selectedIdx == 1,
+              onTap: () => _tabController.animateTo(1),
             ),
           ),
         ],
       ),
     );
   }
+
 
   Widget _buildHouseholdsList(BuildContext context, List<_HouseholdItem> items) {
     final scheme = Theme.of(context).colorScheme;
@@ -517,7 +448,6 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
 
     return Column(
       children: [
-        _buildPatientFilterPanel(),
         Container(
           padding: const EdgeInsets.all(16),
           color: scheme.surfaceContainerHighest.withValues(alpha: 0.3),
@@ -659,9 +589,6 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
     if (allMembers.isEmpty && totalFromCount > 0) {
       return Column(
         children: [
-          _buildSearchBar(),
-          _buildTierChipRow(),
-          _buildPatientFilterPanel(),
           Expanded(
             child: ListView.separated(
               controller: _scrollController,
@@ -684,9 +611,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
 
     return Column(
       children: [
-        _buildSearchBar(),
-        _buildTierChipRow(),
-        _buildPatientFilterPanel(),
+        if (_selectedTier != null) _buildTierChipRow(),
         _buildFilterToggle(scheme, allCount: allMembersCount, myCount: myPatientsCount),
         if (members.isNotEmpty)
           Padding(
@@ -763,7 +688,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
 
   Widget _buildSearchBar() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
       child: TextField(
         controller: _searchController,
         onChanged: (v) => setState(() => _searchQuery = v.trim().toLowerCase()),
@@ -780,7 +705,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
                 )
               : null,
           isDense: true,
-          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+          contentPadding: const EdgeInsets.symmetric(vertical: 7),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           filled: true,
         ),
@@ -794,7 +719,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
       return const SizedBox.shrink();
     }
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      padding: const EdgeInsets.fromLTRB(12, 2, 12, 2),
       child: PatientFilterPanel(
         villages: _inlineVillages
             .map((v) => (value: v.id, label: v.name))
@@ -825,9 +750,9 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
   /// match the list length the user sees.
   Widget _buildFilterToggle(ColorScheme scheme, {required int allCount, required int myCount}) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
       child: Container(
-        height: 38,
+        height: 34,
         decoration: BoxDecoration(
           color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(10),
@@ -1574,3 +1499,52 @@ class _MemberInfo {
 // _LocationFilterSheet and _FilterDropdown have been extracted to
 // lib/core/widgets/location_filter_sheet.dart as LocationFilterSheet
 // and LocationFilterDropdown (public, shared with mission_dashboard_screen).
+
+class _TabPill extends StatelessWidget {
+  const _TabPill({
+    required this.label,
+    required this.icon,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.navy : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: isSelected ? AppColors.textOnNavy : AppColors.textMuted,
+            ),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: isSelected ? AppColors.textOnNavy : AppColors.textMuted,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
