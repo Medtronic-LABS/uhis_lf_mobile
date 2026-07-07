@@ -42,10 +42,14 @@ class RealtimeAsrService {
 
     final base = Uri.parse(AppConfig.scribeBaseUrl);
     final wsScheme = base.scheme == 'https' ? 'wss' : 'ws';
+    // base.port returns 0 when no explicit port is present in the URL.
+    // Passing 0 to Uri() serializes as ':0' — omit so the scheme default
+    // applies (443 for wss, 80 for ws).
+    final wsPort = base.port > 0 ? base.port : null;
     final uri = Uri(
       scheme: wsScheme,
       host: base.host,
-      port: base.hasPort ? base.port : null,
+      port: wsPort,
       path: _joinPaths(base.path, path),
       queryParameters: {
         'language': language,
