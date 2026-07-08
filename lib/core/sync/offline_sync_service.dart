@@ -1136,9 +1136,12 @@ class OfflineSyncService extends ChangeNotifier {
     }
   }
 
-  /// Calls `POST /spice-service/static-data/user-data`, extracts village IDs,
-  /// persists them via [AuthRepository.saveLinkedVillageIds], and returns the
-  /// list. Returns an empty list if the endpoint fails or returns no villages.
+  /// Calls `POST /spice-service/static-data/user-data`, extracts village IDs
+  /// and the user's FHIR Practitioner ID, persists both, and returns the list.
+  /// Returns an empty list if the endpoint fails or returns no villages.
+  ///
+  /// Android MetaDataResponse.userProfile.fhirId mirrors ProvanceDto.userId —
+  /// storing it here prevents HAPI-1094 Practitioner/numericId not found.
   Future<List<int>> _fetchAndSaveVillageIds() async {
     try {
       final resp = await _api.dio.post(Endpoints.staticUserData);
@@ -1151,6 +1154,18 @@ class OfflineSyncService extends ChangeNotifier {
       } else {
         return const [];
       }
+
+      // Persist FHIR Practitioner ID from userProfile so provenance.userId
+      // references a real Practitioner resource (mirrors Android saveFhirId()).
+      final userProfile = entity['userProfile'];
+      if (userProfile is Map) {
+        final fhirId = userProfile['fhirId'] as String?;
+        if (fhirId != null && fhirId.isNotEmpty) {
+          await _auth.saveUserFhirId(fhirId);
+          debugPrint('[OfflineSyncService] Saved userFhirId: $fhirId');
+        }
+      }
+
       // fetch-synced-data filters at sub-village granularity, so use
       // subVillages[].id rather than villages[].id (village IDs return no data).
       final subVillagesRaw = entity['subVillages'];

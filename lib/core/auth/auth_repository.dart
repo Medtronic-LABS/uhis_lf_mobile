@@ -110,6 +110,16 @@ class AuthRepository {
   /// Returns the FHIR ID of the logged-in user (e.g. for provenance payloads).
   Future<String?> userFhirId() => _storage.read(key: _kUserFhirId);
 
+  /// Persists the FHIR Practitioner ID obtained from the MetaData /
+  /// static-data/user-data response (entity.userProfile.fhirId).
+  /// Called during offline-sync init so provenance payloads reference the
+  /// correct Practitioner resource rather than the numeric userId.
+  Future<void> saveUserFhirId(String? fhirId) async {
+    if (fhirId != null && fhirId.isNotEmpty) {
+      await _storage.write(key: _kUserFhirId, value: fhirId);
+    }
+  }
+
   /// Returns a stable device ID, generating one on first access.
   Future<String> deviceId() async {
     var stored = await _storage.read(key: _kDeviceId);

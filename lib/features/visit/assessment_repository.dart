@@ -145,15 +145,23 @@ class AssessmentRepository extends ChangeNotifier {
     await _dao.updateSyncStatus(ids, AssessmentSyncStatus.inProgress);
 
     final userId = await _auth.userId();
+    // userFhirId = FHIR Practitioner resource ID (e.g. stored from login data['fhirId']).
+    // Android ProvanceDto.userId = getUserFhirId(), not the numeric userId.
+    // Sending numeric userId here causes HAPI-1094: Practitioner/<numericId> not found.
+    final userFhirId = await _auth.userFhirId();
     final orgId = await _auth.organizationFhirId();
     final deviceId = await _auth.deviceId();
-    debugPrint('[AssessmentSync] Provenance — userId=$userId, orgId=$orgId, deviceId=$deviceId');
+    debugPrint('[AssessmentSync] Provenance — userId=$userId, userFhirId=$userFhirId, orgId=$orgId, deviceId=$deviceId');
 
     final provenance = ProvanceDto.fromMap({
       'modifiedDate': DateTime.now().toUtc().toIso8601String(),
       'organizationId': orgId,
       'spiceUserId': userId,
-      if (userId != null) 'userId': userId.toString(),
+      // Use FHIR ID as userId; fall back to numeric string only if FHIR ID not yet stored
+      if (userFhirId != null && userFhirId.isNotEmpty)
+        'userId': userFhirId
+      else if (userId != null)
+        'userId': userId.toString(),
     });
 
     final requestId = const Uuid().v4();
