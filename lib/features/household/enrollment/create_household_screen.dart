@@ -114,7 +114,13 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
         final auth = context.read<AuthRepository>();
         final hierarchy = context.read<UserHierarchyService>();
 
+        // Ensure static-data has been fetched before reading the lists.
+        // prefetch() is a no-op if already loaded; safe to await here.
+        await hierarchy.prefetch();
+        if (!mounted) return;
+
         final userId = await auth.userId();
+        if (!mounted) return;
         final villages = hierarchy.villages ?? [];
         final subVillages = hierarchy.subVillages ?? [];
 

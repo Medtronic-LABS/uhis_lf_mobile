@@ -8,6 +8,8 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../core/api/realtime_asr_service.dart';
 import '../../core/constants/app_strings.dart';
+import '../scribe/form_field_schema_builder.dart';
+import '../scribe/models/ai_extracted_field.dart';
 import '../scribe/scribe_permission_service.dart';
 import 'models/realtime_clinical_fields.dart';
 import 'realtime_asr_channel_io.dart'
@@ -73,6 +75,18 @@ class RealtimeAsrController extends ChangeNotifier {
   RealtimeClinicalFields? _fields;
   RealtimeClinicalFields? get fields => _fields;
 
+  /// Result from `form_fill` extraction — populated when [setFormSchema] has
+  /// been called before starting the session (Step 2 form mode).
+  FormPrefillResult? _formFill;
+  FormPrefillResult? get formFill => _formFill;
+
+  /// Active form schema sent with every extract frame.
+  ///
+  /// Set by [setFormSchema] before [start]; cleared by [stop] / [_teardown].
+  /// When non-null the extract frame includes `mode: "form_fill"` and the
+  /// server replies with `{"type": "form_fill", ...}` instead of `"symptoms"`.
+  List<FormFieldSchema>? _formSchema;
+
   bool _extracting = false;
   bool get isExtracting => _extracting;
 
@@ -92,6 +106,14 @@ class RealtimeAsrController extends ChangeNotifier {
       _state == RealtimeAsrState.listening ||
       _state == RealtimeAsrState.stopping;
 
+  /// Attach a form field schema so that subsequent [extractNow] calls send
+  /// `mode: "form_fill"` and populate [formFill] instead of [fields].
+  ///
+  /// Call before [start]. Pass `null` to revert to generic symptom extraction.
+  void setFormSchema(List<FormFieldSchema>? schema) {
+    _formSchema = schema;
+  }
+
   Future<void> start({String language = 'bn-IN'}) async {
     if (isActive) return;
 
@@ -109,6 +131,7 @@ class RealtimeAsrController extends ChangeNotifier {
     // visible feedback.
     _segments.clear();
     _fields = null;
+    _formFill = null;
     _errorMessage = null;
     _micWarning = null;
     _lastExtractedTranscript = null;
@@ -224,7 +247,18 @@ class RealtimeAsrController extends ChangeNotifier {
     _extractionCompleter = completer;
     notifyListeners();
     debugPrint('[RealtimeASR] extract requested (${transcript.length} chars): "$transcript"');
-    _send({'type': 'extract', 'transcript': transcript});
+
+    final schema = _formSchema;
+    if (schema != null && schema.isNotEmpty) {
+      _send({
+        'type': 'extract',
+        'transcript': transcript,
+        'mode': 'form_fill',
+        'formSchema': {'fields': schema.map((f) => f.toJson()).toList()},
+      });
+    } else {
+      _send({'type': 'extract', 'transcript': transcript});
+    }
 
     Future.delayed(_extractionSafetyTimeout, () {
       if (identical(_extractionCompleter, completer) && _extracting) {
@@ -315,6 +349,14 @@ class RealtimeAsrController extends ChangeNotifier {
         _fields = RealtimeClinicalFields.fromJson(
           (msg['data'] as Map<String, dynamic>?) ?? const {},
         );
+        _extractionCompleter?.complete();
+        _extractionCompleter = null;
+        notifyListeners();
+      case 'form_fill':
+        debugPrint('[RealtimeASR] recv form_fill: ${msg['data']}');
+        _extracting = false;
+        final data = (msg['data'] as Map<String, dynamic>?) ?? const {};
+        _formFill = FormPrefillResult.fromJson(data);
         _extractionCompleter?.complete();
         _extractionCompleter = null;
         notifyListeners();

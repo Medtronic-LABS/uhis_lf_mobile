@@ -8,6 +8,7 @@ import '../widgets/form_fields/dialog_multi_select_field.dart';
 import '../widgets/form_fields/radio_form_field.dart';
 import 'canonical_visit_data.dart';
 import 'form_config.dart';
+import 'step2_asr_banner.dart';
 import 'unified_form_notifier.dart';
 import 'unified_section_rules.dart';
 
@@ -90,6 +91,9 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
 
         return Column(
           children: [
+            // ── Step 2 AI ambient listening banner ──────────────────────────
+            Step2AsrBanner(activeFormTypes: widget.activeFormTypes),
+            // ── Assessment form sections ────────────────────────────────────
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.symmetric(

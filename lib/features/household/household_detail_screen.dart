@@ -1087,8 +1087,11 @@ class _MemberDetailSheet extends StatelessWidget {
                 final navId = (member.patientId != null && member.patientId!.isNotEmpty)
                     ? member.patientId!
                     : member.id;
+                // Push directly to /patients/:id — the /patient/:id
+                // redirect alias exists for backward compat but GoRouter
+                // drops extra when redirecting, losing referenceId etc.
                 context.push(
-                  '/patient/$navId',
+                  '/patients/$navId',
                   extra: {
                     'id': member.id,
                     // Numeric server-assigned referenceId — used as
