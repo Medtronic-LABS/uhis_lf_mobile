@@ -34,6 +34,9 @@ import '../features/household/enrollment/create_household_screen.dart';
 import '../features/household/enrollment/household_created_screen.dart';
 import '../features/household/enrollment/add_household_member_screen.dart';
 import '../features/household/enrollment/enrollment_controller.dart';
+import '../core/db/household_dao.dart';
+import '../core/db/member_dao.dart';
+import '../core/db/patient_dao.dart';
 import 'bottom_nav.dart';
 
 /// Navigation keys for each tab's navigator.
@@ -364,6 +367,9 @@ GoRouter buildRouter(AuthState auth) {
           create: (ctx) => EnrollmentController(
             auth: ctx.read<AuthRepository>(),
             apiClient: ctx.read<ApiClient>(),
+            householdDao: ctx.read<HouseholdDao>(),
+            memberDao: ctx.read<MemberDao>(),
+            patientDao: ctx.read<PatientDao>(),
           ),
           child: child,
         ),
