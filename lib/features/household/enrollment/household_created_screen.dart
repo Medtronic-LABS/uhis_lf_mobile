@@ -1,9 +1,12 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/sync/offline_sync_service.dart';
 import 'enrollment_controller.dart';
 import 'models/household_enrollment_models.dart';
 import 'widgets/enrollment_member_card.dart';
@@ -40,8 +43,15 @@ class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
           ),
         );
 
+        // Trigger a warm sync so newly enrolled members appear in the member
+        // list immediately after navigating home. Fire-and-forget — the sync
+        // service shows its own progress indicator on the home screen.
+        final sync = context.read<OfflineSyncService>();
+        unawaited(sync.warmSync());
+
         await Future.delayed(const Duration(seconds: 1));
         if (mounted) {
+          controller.reset();
           context.go('/home');
         }
       } else {
