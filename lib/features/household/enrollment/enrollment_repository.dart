@@ -1,7 +1,12 @@
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/api/api_repository.dart';
 import '../../../core/api/endpoints.dart';
+import '../../../core/config/app_config.dart';
+import '../../../core/models/provance_dto.dart';
 import 'models/household_enrollment_models.dart';
 
 /// Submits a completed household enrollment to
@@ -9,12 +14,14 @@ import 'models/household_enrollment_models.dart';
 ///
 /// Postman-verified payload shape. All field mappings follow the canonical
 /// `create-record` example in the Leapfrog postman collection.
+/// Matches Android's HouseHoldRepository.submitHousehold pattern.
 class EnrollmentRepository extends ApiRepository {
   EnrollmentRepository(super.api);
 
   static const _uuid = Uuid();
+  static const _skRole = 'SHASTIYA_KORMI';
 
-  /// Build and POST the offline-sync/create payload.
+  /// Build and POST the offline-sync/create payload matching Android.
   ///
   /// [household] and [head] must pass their respective validation checks before
   /// this is called. [members] may be empty (head-only enrollment).
@@ -27,23 +34,29 @@ class EnrollmentRepository extends ApiRepository {
     required HouseholdHeadInfo head,
     required List<HouseholdMember> members,
     required int userId,
+    required String userFhirId,
     required String organizationId,
     required String deviceId,
-    String appVersionName = '2.0.3',
-    int appVersionCode = 10,
+    double latitude = 0.0,
+    double longitude = 0.0,
+    String appVersionName = AppConfig.appVersionName,
+    int appVersionCode = AppConfig.appVersionCode,
   }) async {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final hhReferenceId = _uuid.v4();
 
-    final provenance = {
+    final provenance = ProvanceDto.fromMap({
       'modifiedDate': DateTime.now().toUtc().toIso8601String(),
       'organizationId': organizationId,
       'spiceUserId': userId,
-      'userId': userId.toString(),
-    };
+      'userId': userFhirId,
+      'spiceRole': _skRole,
+    });
 
     final villageId = int.tryParse(household.villageId) ?? 0;
     final subVillageId = int.tryParse(household.subVillageId ?? '') ?? 0;
+    // SS worker assigned to the household — distinct from the SK (logged-in user).
+    final ssWorkerId = int.tryParse(household.healthWorkerId) ?? userId;
 
     // Build member rows — head first, then additional members.
     final allMembers = <Map<String, dynamic>>[
@@ -54,9 +67,12 @@ class EnrollmentRepository extends ApiRepository {
         villageId: villageId,
         subVillageId: subVillageId,
         villageName: household.villageName ?? '',
-        subVillageName: household.subVillageName ?? '',
         provenance: provenance,
         nowMs: nowMs,
+        skUserId: userId,
+        ssWorkerId: ssWorkerId,
+        latitude: latitude,
+        longitude: longitude,
       ),
       for (final m in members)
         _memberPayload(
@@ -66,32 +82,33 @@ class EnrollmentRepository extends ApiRepository {
           villageId: villageId,
           subVillageId: subVillageId,
           villageName: household.villageName ?? '',
-          subVillageName: household.subVillageName ?? '',
           provenance: provenance,
           nowMs: nowMs,
+          skUserId: userId,
+          ssWorkerId: ssWorkerId,
+          latitude: latitude,
+          longitude: longitude,
         ),
     ];
 
     final hhPayload = {
       'referenceId': hhReferenceId,
       'name': head.name,
-      'householdNo': household.householdNumber,
+      'householdNo': nowMs,
       'householdType': household.householdType,
-      // Backend villageId = sub-village ID (what fetch-synced-data filters on).
-      // hierarchy.villages = unions (id=40), hierarchy.subVillages = actual villages (id=262).
-      'villageId': subVillageId.toString(),
-      'subVillageId': villageId.toString(),
-      'village': household.subVillageName ?? household.villageName ?? '',
-      'shasthyaShebikaId': userId,
+      'villageId': villageId,
+      'subVillageId': subVillageId,
+      'village': household.villageName ?? '',
+      'shasthyaShebikaId': ssWorkerId,
       'noOfPeople': household.numberOfMembers,
       'householdHeadOccupation': household.occupation,
       if (household.occupation.toLowerCase() == 'other')
         'otherOccupation': household.occupation,
       'monthlyIncome': _incomeToInt(household.monthlyIncome),
       'disabilityPersonsCount': household.disabilityQuestion ? 1 : 0,
-      'latitude': 0.0,
-      'longitude': 0.0,
-      'provenance': provenance,
+      'latitude': latitude,
+      'longitude': longitude,
+      'provenance': provenance.toJson(),
       'householdMembers': allMembers,
       'createdAt': nowMs,
       'updatedAt': nowMs,
@@ -102,7 +119,7 @@ class EnrollmentRepository extends ApiRepository {
       'appVersionName': appVersionName,
       'appVersionCode': appVersionCode,
       'deviceId': deviceId,
-      'appType': 'COMMUNITY',
+      'appType': AppConfig.appType,
       'syncMode': 'AutomaticSync',
       'households': [hhPayload],
       'householdMembers': <dynamic>[],
@@ -113,6 +130,10 @@ class EnrollmentRepository extends ApiRepository {
       'rxBuddies': <dynamic>[],
     };
 
+    if (kDebugMode) {
+      debugPrint('[EnrollmentRepository] offline-sync/create payload:\n'
+          '${const JsonEncoder.withIndent('  ').convert(body)}');
+    }
     await postOk(Endpoints.offlineSyncCreate, data: body, action: 'Enrollment');
   }
 
@@ -123,9 +144,12 @@ class EnrollmentRepository extends ApiRepository {
     required int villageId,
     required int subVillageId,
     required String villageName,
-    required String subVillageName,
-    required Map<String, dynamic> provenance,
+    required ProvanceDto provenance,
     required int nowMs,
+    required int skUserId,
+    required int ssWorkerId,
+    double latitude = 0.0,
+    double longitude = 0.0,
   }) {
     final normDob = _normaliseDob(member.dateOfBirth);
     return {
@@ -141,14 +165,28 @@ class EnrollmentRepository extends ApiRepository {
       'isChild': _isChild(member.age, normDob),
       'maritalStatus': member.maritalStatus.toLowerCase(),
       'disability': _disabilityValue(member.disabilityStatus),
-      'villageId': subVillageId,
-      'subVillageId': villageId,
-      'village': subVillageName.isNotEmpty ? subVillageName : villageName,
-      'subVillage': villageName,
+      'villageId': villageId,
+      'subVillageId': subVillageId,
+      'village': villageName,
       'phoneNumber': member.mobileNumber ?? '',
-      'latitude': 0.0,
-      'longitude': 0.0,
-      'provenance': provenance,
+      'phoneNumberCategory': '',
+      'shasthyaShebikaId': ssWorkerId,
+      'shasthyaKormiId': skUserId,
+      'createdByRoleName': _skRole,
+      'createdBySpiceUserId': skUserId,
+      'assignHousehold': false,
+      'isPregnant': false,
+      'hasTbContactTracing': false,
+      'initial': '',
+      'signature': '',
+      'memberId': '',
+      'patientReference': '',
+      'householdHeadRelationship': isHouseholdHead ? 'Self' : '',
+      'motherMemberId': '',
+      'children': <dynamic>[],
+      'latitude': latitude,
+      'longitude': longitude,
+      'provenance': provenance.toJson(),
       'assessments': <dynamic>[],
       'rxBuddies': <dynamic>[],
       'createdAt': nowMs,
@@ -156,7 +194,6 @@ class EnrollmentRepository extends ApiRepository {
     };
   }
 
-  /// Map income bracket strings to midpoint integers expected by the API.
   static int _incomeToInt(String bracket) {
     switch (bracket) {
       case '<10000':
@@ -172,23 +209,14 @@ class EnrollmentRepository extends ApiRepository {
     }
   }
 
-  /// Normalize DOB to "YYYY-MM-DDT00:00:00+00:00".
-  ///
-  /// Handles:
-  /// - Already ISO with time component → return as-is
-  /// - "YYYY-MM-DD" → append time suffix
-  /// - "DD Mon YYYY" (NID OCR output, including common OCR variants like "Noy"→Nov) → parse and convert
-  /// - Unparseable → return empty string (never send garbage to the backend)
   static String _normaliseDob(String dob) {
     if (dob.isEmpty) return dob;
     if (dob.contains('T')) return dob;
 
-    // YYYY-MM-DD
     if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(dob.trim())) {
       return '${dob.trim()}T00:00:00+00:00';
     }
 
-    // "DD Mon YYYY" — NID card format, possibly with OCR typos
     final match =
         RegExp(r'^(\d{1,2})\s+([A-Za-z]{3,4})\s+(\d{4})$').firstMatch(dob.trim());
     if (match != null) {
@@ -205,21 +233,17 @@ class EnrollmentRepository extends ApiRepository {
     return '';
   }
 
-  /// Map month abbreviations to month numbers, including common OCR variants
-  /// from Bangladeshi NID cards (e.g. "Noy" for November).
   static int? _parseMonth(String abbr) {
     const map = {
       'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4,
       'may': 5, 'jun': 6, 'jul': 7, 'aug': 8,
       'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
-      // OCR variants
       'noy': 11, 'nob': 11, 'okt': 10, 'agt': 8,
       'jao': 1,  'fob': 2,  'mao': 3,
     };
     return map[abbr.toLowerCase()];
   }
 
-  /// Determine isChild from age if known, otherwise derive from normalised DOB.
   static bool _isChild(int age, String normDob) {
     if (age > 0) return age < 18;
     if (normDob.isEmpty) return false;
@@ -228,14 +252,11 @@ class EnrollmentRepository extends ApiRepository {
     return DateTime.now().difference(parsed).inDays < 18 * 365;
   }
 
-  /// Normalize idType to backend-expected values: 'nid' or 'brn'.
   static String _normalizeIdType(String raw) {
     final s = raw.toLowerCase().replaceAll(' ', '');
     return s == 'nationalid' ? 'nid' : s;
   }
 
-  /// Convert internal disabilityStatus to the API "absent"/"present" string.
-  /// Internal defaults to 'Absent'; also accepts 'None' for compatibility.
   static String _disabilityValue(String status) {
     final s = status.toLowerCase();
     return (s == 'none' || s == 'absent') ? 'absent' : 'present';

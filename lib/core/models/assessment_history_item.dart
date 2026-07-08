@@ -19,6 +19,7 @@ class AssessmentHistoryItem {
     this.nextFollowUpDate,
     this.isLatestVisit = false,
     this.customStatus = const [],
+    this.observations,
     this.rawJson = const {},
   });
 
@@ -36,6 +37,7 @@ class AssessmentHistoryItem {
   final DateTime? nextFollowUpDate;
   final bool isLatestVisit;
   final List<String> customStatus;
+  final Map<String, dynamic>? observations;
   final Map<String, dynamic> rawJson;
 
   /// Returns null for rows missing the two id keys we need to render or drill
@@ -71,6 +73,12 @@ class AssessmentHistoryItem {
       }
     }
 
+    Map<String, dynamic>? observations;
+    final obsRaw = json['observations'];
+    if (obsRaw is Map) {
+      observations = Map<String, dynamic>.from(obsRaw);
+    }
+
     return AssessmentHistoryItem(
       householdMemberId: memberId,
       encounterId: encounterId,
@@ -83,6 +91,7 @@ class AssessmentHistoryItem {
           JsonRead.firstBool(json, const ['isLatestVisit', 'latestVisit']) ??
               false,
       customStatus: customStatus,
+      observations: observations,
       rawJson: Map<String, dynamic>.from(json),
     );
   }

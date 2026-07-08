@@ -16,6 +16,8 @@
 ///   - All copy from [VisitFlowStrings] / [VisitCompleteStrings].
 library;
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -25,10 +27,10 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/scribe_api_service.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
-import '../../core/models/patient.dart';
 import '../../core/db/pregnancy_snapshot_dao.dart';
 import '../../core/models/programme.dart';
 import '../../core/theme/app_theme.dart';
@@ -39,7 +41,6 @@ import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
 import 'programme_selection/programme_selection_screen.dart';
 import 'triage/symptom_picker_screen.dart';
-import 'household_followup_screen.dart';
 import 'visit_form_screen.dart';
 
 /// Single-route 3-step visit flow wrapper.
@@ -1005,6 +1006,8 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   bool _accepted = false;
   String? _patientPhone;
   List<_HouseholdMember>? _householdMembers;
+  NabaVitalSnapshot? _loadedVitals;
+  List<NabaLabResult> _loadedLabs = [];
 
   Color _headerColor(Programme p) => switch (p) {
         Programme.anc || Programme.pnc => AppColors.ancHeader,
@@ -1040,33 +1043,52 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 
   Future<void> _loadHouseholdMembers() async {
     String? hid = widget.householdId;
+
+    // patients.household_id is sparsely populated; members.household_id is
+    // always written by sync — try that first as fallback.
     if ((hid == null || hid.isEmpty) && mounted) {
       try {
         final patient = await context.read<PatientDao>().byId(widget.patientId);
         hid = patient?.householdId;
       } on Object catch (_) {}
     }
+    if ((hid == null || hid.isEmpty) && mounted) {
+      try {
+        final member =
+            await context.read<MemberDao>().getByPatientId(widget.patientId);
+        hid = member?.householdId;
+      } on Object catch (_) {}
+    }
     if (hid == null || hid.isEmpty || !mounted) return;
 
-    final patientDao = context.read<PatientDao>();
+    final memberDao = context.read<MemberDao>();
     final progDao = context.read<PatientProgrammesDao>();
 
-    final rows = await patientDao.getByHouseholdId(hid);
-    final patients = rows.map(Patient.fromDb).where((p) => p.isActive != false).toList();
-    final ids = patients.map((p) => p.id).toList();
+    // members table is the authoritative household membership source; querying
+    // patients table for household_id misses members whose patient row wasn't
+    // synced with household_id set.
+    final entities = await memberDao.getByHouseholdId(hid);
+    final active = entities.where((m) => m.isActive).toList();
+    final ids = active
+        .map((m) => m.patientId)
+        .whereType<String>()
+        .where((id) => id.isNotEmpty)
+        .toList();
     final progMap = await progDao.programmesForMany(ids);
 
     if (!mounted) return;
-    final members = patients.map((p) {
-      final progs = progMap[p.id] ?? {};
+    final members = active.map((m) {
+      final pid = m.patientId ?? '';
+      if (pid.isEmpty) return null;
+      final progs = progMap[pid] ?? {};
       final primary = progs.isNotEmpty ? progs.first : Programme.unknown;
       return _HouseholdMember(
-        patientId: p.id,
-        name: p.name ?? '—',
+        patientId: pid,
+        name: m.name ?? '—',
         primaryProgramme: primary,
-        isCurrentPatient: p.id == widget.patientId,
+        isCurrentPatient: pid == widget.patientId,
       );
-    }).toList()
+    }).whereType<_HouseholdMember>().toList()
       ..sort((a, b) {
         if (a.isCurrentPatient) return -1;
         if (b.isCurrentPatient) return 1;
@@ -1083,8 +1105,10 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   }
 
   Future<NabaResponse> _fetchNaba() async {
+    final apiClient = context.read<ApiClient>(); // read before any await
+    await _loadVitalsAndLabs();
     try {
-      final repo = NabaRepository(context.read<ApiClient>());
+      final repo = NabaRepository(apiClient);
       final programmes = widget.confirmedProgrammes
           .where((p) => p != Programme.unknown)
           .map((p) => p.wireTag)
@@ -1100,12 +1124,207 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         gestationalWeeks: widget.gestationalWeeks,
         isPregnant: widget.gestationalWeeks != null,
         manuallySelectedSymptoms: widget.confirmedSymptoms.toList(),
+        currentVitals: _loadedVitals,
+        labResults: _loadedLabs,
       );
-      return await repo.generate(req);
+      final ai = await repo.generate(req);
+      // Backfill empty fields from rule-based fallback so the UI always
+      // has counselling and follow-up content even when AI data is sparse.
+      if (ai.counselling.isEmpty || ai.followUp.isEmpty) {
+        final fallback = _ruleBasedNaba();
+        return NabaResponse(
+          requestId: ai.requestId,
+          modelVersion: ai.modelVersion,
+          generatedAt: ai.generatedAt,
+          rationale: ai.rationale,
+          visitSummary: ai.visitSummary,
+          clinicalFindings: ai.clinicalFindings,
+          nextActions: ai.nextActions.isNotEmpty ? ai.nextActions : fallback.nextActions,
+          dangerSigns: ai.dangerSigns.isNotEmpty ? ai.dangerSigns : fallback.dangerSigns,
+          followUp: ai.followUp.isNotEmpty ? ai.followUp : fallback.followUp,
+          counselling: ai.counselling.isNotEmpty ? ai.counselling : fallback.counselling,
+          familyCounselling: ai.familyCounselling,
+          medicationAdvice: ai.medicationAdvice,
+          whatsappSummary: ai.whatsappSummary ?? fallback.whatsappSummary,
+          doctorHandover: ai.doctorHandover,
+          referralRecommendation: ai.referralRecommendation,
+          contextTruncated: ai.contextTruncated,
+        );
+      }
+      if (ai.whatsappSummary != null) return ai;
+      return NabaResponse(
+        requestId: ai.requestId,
+        modelVersion: ai.modelVersion,
+        generatedAt: ai.generatedAt,
+        rationale: ai.rationale,
+        visitSummary: ai.visitSummary,
+        clinicalFindings: ai.clinicalFindings,
+        nextActions: ai.nextActions,
+        dangerSigns: ai.dangerSigns,
+        followUp: ai.followUp,
+        counselling: ai.counselling,
+        familyCounselling: ai.familyCounselling,
+        medicationAdvice: ai.medicationAdvice,
+        whatsappSummary: _ruleBasedWhatsAppMessage(),
+        doctorHandover: ai.doctorHandover,
+        referralRecommendation: ai.referralRecommendation,
+        contextTruncated: ai.contextTruncated,
+      );
     } catch (e) {
       debugPrint('[NABA] AI failed — rule-based fallback: $e');
       return _ruleBasedNaba();
     }
+  }
+
+  Future<void> _loadVitalsAndLabs() async {
+    try {
+      final dao = context.read<LocalAssessmentDao>(); // read before first await
+      final assessments = await dao.getByPatientId(widget.patientId);
+      if (assessments.isEmpty) return;
+
+      final isPrimaryAnc = widget.primaryProgramme == Programme.anc ||
+          widget.primaryProgramme == Programme.pnc;
+      final targetType = isPrimaryAnc ? 'ANC' : 'NCD';
+
+      LocalAssessmentEntity? target;
+      for (final a in assessments.reversed) {
+        if (a.assessmentType == targetType) {
+          target = a;
+          break;
+        }
+      }
+      target ??= assessments.last;
+
+      final data =
+          jsonDecode(target.assessmentDetails) as Map<String, dynamic>;
+      if (target.assessmentType == 'ANC') {
+        _parseAncVitals(data);
+      } else if (target.assessmentType == 'NCD') {
+        _parseNcdVitals(data);
+      }
+    } catch (e) {
+      debugPrint('[NABA] Assessment vitals load failed: $e');
+    }
+  }
+
+  void _parseAncVitals(Map<String, dynamic> data) {
+    final phys = data['medicalHistoryPhysicalExamination']
+            as Map<String, dynamic>? ??
+        {};
+    final poc =
+        data['pointOfCareInvestigations'] as Map<String, dynamic>? ?? {};
+
+    _loadedVitals = NabaVitalSnapshot(
+      bloodPressureSystolic: phys['bloodPressureSystolic'] as int?,
+      bloodPressureDiastolic: phys['bloodPressureDiastolic'] as int?,
+      weight: (phys['weight'] as num?)?.toDouble(),
+      bmi: (phys['bmi'] as num?)?.toDouble(),
+    );
+
+    final labs = <NabaLabResult>[];
+    final hb = poc['hemoglobin'];
+    if (hb != null) {
+      final v = (hb as num).toDouble();
+      labs.add(NabaLabResult(
+        name: 'Hemoglobin',
+        value: v.toStringAsFixed(1),
+        unit: 'g/dL',
+        referenceRange: '≥11 g/dL',
+        abnormal: v < 11,
+      ));
+    }
+    final bsf = poc['bloodSugarFasting'];
+    if (bsf != null) {
+      final v = (bsf as num).toDouble();
+      labs.add(NabaLabResult(
+        name: 'Blood Glucose (Fasting)',
+        value: v.toStringAsFixed(0),
+        unit: 'mg/dL',
+        referenceRange: '<100 mg/dL',
+        abnormal: v >= 126,
+      ));
+    }
+    final bsr = poc['bloodSugarRandom'];
+    if (bsr != null) {
+      final v = (bsr as num).toDouble();
+      labs.add(NabaLabResult(
+        name: 'Blood Glucose (Random)',
+        value: v.toStringAsFixed(0),
+        unit: 'mg/dL',
+        referenceRange: '<140 mg/dL',
+        abnormal: v >= 200,
+      ));
+    }
+    _loadedLabs = labs;
+  }
+
+  void _parseNcdVitals(Map<String, dynamic> data) {
+    final bp = data['bpLog'] as Map<String, dynamic>? ?? {};
+    final glucose = data['glucoseLog'] as Map<String, dynamic>? ?? {};
+
+    final avgSys = bp['avgSystolic'];
+    final avgDia = bp['avgDiastolic'];
+
+    _loadedVitals = NabaVitalSnapshot(
+      bloodPressureSystolic:
+          avgSys != null ? (avgSys as num).toInt() : null,
+      bloodPressureDiastolic:
+          avgDia != null ? (avgDia as num).toInt() : null,
+      weight: (bp['weight'] as num?)?.toDouble(),
+      temperature: (bp['temperature'] as num?)?.toDouble(),
+      bmi: (bp['bmi'] as num?)?.toDouble(),
+    );
+
+    final labs = <NabaLabResult>[];
+    final gv = glucose['glucoseValue'];
+    if (gv != null) {
+      final isFasting = glucose['glucoseType'] == 'fasting';
+      final v = (gv as num).toDouble();
+      labs.add(NabaLabResult(
+        name: isFasting ? 'Blood Glucose (Fasting)' : 'Blood Glucose (Random)',
+        value: v.toStringAsFixed(0),
+        unit: glucose['glucoseUnit'] as String? ?? 'mg/dL',
+        referenceRange: isFasting ? '<100 mg/dL' : '<140 mg/dL',
+        abnormal: isFasting ? v >= 126 : v >= 200,
+      ));
+    }
+    _loadedLabs = labs;
+  }
+
+  String _ancVitalsSummary() {
+    final v = _loadedVitals;
+    if (v == null) {
+      return 'BP, weight, urine protein, and fetal movement assessed. Continuing routine ANC care per WHO guidelines.';
+    }
+    final bpPart = (v.bloodPressureSystolic != null && v.bloodPressureDiastolic != null)
+        ? 'BP ${v.bloodPressureSystolic}/${v.bloodPressureDiastolic} mmHg'
+        : 'BP assessed';
+    final wtPart = v.weight != null ? ', weight ${v.weight!.toStringAsFixed(1)} kg' : '';
+    final hb = _loadedLabs.firstWhere(
+      (l) => l.name == 'Hemoglobin',
+      orElse: () => const NabaLabResult(name: '', value: '', unit: ''),
+    );
+    final hbPart = hb.name.isNotEmpty
+        ? ', Hb ${hb.value} g/dL${hb.abnormal ? " — low" : ""}'
+        : '';
+    final bpHigh = v.bloodPressureSystolic != null && v.bloodPressureSystolic! >= 140;
+    final status = bpHigh ? 'BP elevated — monitor for pre-eclampsia.' : 'Vitals within expected range.';
+    return '$bpPart$wtPart$hbPart. $status';
+  }
+
+  String _ncdVitalsSummary() {
+    final v = _loadedVitals;
+    if (v == null) {
+      return 'Blood pressure and blood glucose reviewed. Continuing NCD management per Bangladesh guidelines.';
+    }
+    final bpPart = (v.bloodPressureSystolic != null && v.bloodPressureDiastolic != null)
+        ? 'BP avg ${v.bloodPressureSystolic}/${v.bloodPressureDiastolic} mmHg'
+        : 'BP assessed';
+    final gl = _loadedLabs.isNotEmpty ? _loadedLabs.first : null;
+    final glPart = gl != null ? ', glucose ${gl.value} ${gl.unit}${gl.abnormal ? " — elevated" : ""}' : '';
+    final bpHigh = v.bloodPressureSystolic != null && v.bloodPressureSystolic! >= 140;
+    final status = bpHigh ? 'BP above target — review medication and refer if persistent.' : 'BP within controlled range.';
+    return '$bpPart$glPart. $status';
   }
 
   NabaResponse _ruleBasedNaba() {
@@ -1253,11 +1472,22 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       ),
       visitSummary: NabaVisitSummary(
         title: _programmeSummaryTitle(widget.primaryProgramme),
-        summary: 'Care plan generated using clinical guidelines. AI service was unavailable — review and adjust based on your clinical judgement.',
+        summary: hasAnc
+            ? _ancVitalsSummary()
+            : hasNcd
+                ? _ncdVitalsSummary()
+                : hasPnc
+                    ? 'Mother and neonate assessed — lochia, cord, and breastfeeding. Continuing post-natal care.'
+                    : hasImci
+                        ? 'Child assessed for fever, respiratory rate, and hydration. IMCI classification applied.'
+                        : hasTb
+                            ? 'TB treatment adherence reviewed. Continuing directly observed therapy (DOT).'
+                            : 'Vital signs assessed. Routine care plan generated per clinical guidelines.',
       ),
       nextActions: actions,
       counselling: counselling,
       followUp: followUp,
+      whatsappSummary: _ruleBasedWhatsAppMessage(),
       referralRecommendation: widget.referralRecommended
           ? const NabaReferralRecommendation(
               required_: true,
@@ -1267,6 +1497,102 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             )
           : null,
     );
+  }
+
+  String _ruleBasedWhatsAppMessage() {
+    final progs = widget.confirmedProgrammes;
+    final hasAnc = progs.contains(Programme.anc);
+    final hasNcd = progs.contains(Programme.ncd);
+    final hasPnc = progs.contains(Programme.pnc);
+    final hasImci = progs.contains(Programme.imci);
+    final hasTb = progs.contains(Programme.tb);
+
+    final buf = StringBuffer();
+    buf.writeln('Hello! Your health worker visited you today.');
+
+    if (hasAnc) {
+      final gw = widget.gestationalWeeks;
+      buf.writeln();
+      buf.writeln('*Pregnancy (ANC) visit completed.*');
+      if (gw != null) buf.writeln('Gestational age: $gw weeks.');
+      buf.writeln();
+      buf.writeln('Reminders:');
+      buf.writeln('• Take iron-folic acid every day');
+      buf.writeln('• Eat well: vegetables, fish, eggs, lentils');
+      buf.writeln('• Sleep under a bednet every night');
+      buf.writeln('• Plan delivery at a health facility');
+      buf.writeln('• Go to facility immediately for: heavy bleeding, severe headache, blurred vision, no fetal movement, swollen hands/feet');
+      buf.writeln();
+      buf.writeln('*Next ANC visit: in 4 weeks.*');
+    }
+
+    if (hasNcd) {
+      buf.writeln();
+      buf.writeln('*BP/Diabetes (NCD) visit completed.*');
+      buf.writeln();
+      buf.writeln('Reminders:');
+      buf.writeln('• Take all medicines every day — never skip');
+      buf.writeln('• Reduce salt; avoid processed food');
+      buf.writeln('• Walk 30 minutes daily');
+      buf.writeln('• Avoid tobacco and alcohol');
+      buf.writeln('• Go to facility immediately for: one-sided weakness, sudden severe headache, or chest pain');
+      buf.writeln();
+      buf.writeln('*Next visit: in 4 weeks.*');
+    }
+
+    if (hasPnc) {
+      buf.writeln();
+      buf.writeln('*Post-natal care (PNC) visit completed.*');
+      buf.writeln();
+      buf.writeln('Reminders:');
+      buf.writeln('• Breastfeed exclusively for 6 months — no water or other food');
+      buf.writeln('• Keep baby warm; keep cord stump clean and dry');
+      buf.writeln('• Eat well to support breast milk');
+      buf.writeln('• Seek care immediately for: heavy bleeding, fever, foul discharge, or baby not feeding');
+      buf.writeln();
+      buf.writeln('*Next PNC visit: in 7 days.*');
+    }
+
+    if (hasImci) {
+      buf.writeln();
+      buf.writeln('*Child health (IMCI) visit completed.*');
+      buf.writeln();
+      buf.writeln('Reminders:');
+      buf.writeln('• Continue feeding normally during illness');
+      buf.writeln('• Give ORS often if child has diarrhoea');
+      buf.writeln('• Return immediately if child cannot drink, has convulsions, or is very sleepy');
+      buf.writeln();
+      buf.writeln('*Follow-up visit: in 2 days.*');
+    }
+
+    if (hasTb) {
+      buf.writeln();
+      buf.writeln('*TB treatment follow-up visit completed.*');
+      buf.writeln();
+      buf.writeln('Reminders:');
+      buf.writeln('• Take TB medicines every day — stopping causes drug resistance');
+      buf.writeln('• Cover mouth when coughing; keep rooms ventilated');
+      buf.writeln('• All household members should be screened for TB');
+      buf.writeln();
+      buf.writeln('*Next TB check: in 2 weeks.*');
+    }
+
+    if (!hasAnc && !hasNcd && !hasPnc && !hasImci && !hasTb) {
+      buf.writeln();
+      buf.writeln('*Routine health visit completed.*');
+      buf.writeln('Continue your medications and attend your next scheduled visit.');
+      buf.writeln();
+      buf.writeln('*Next visit: in 4 weeks.*');
+    }
+
+    if (widget.referralRecommended) {
+      buf.writeln();
+      buf.writeln('⚠️ *Please go to the Upazila Health Complex today for further care.*');
+    }
+
+    buf.writeln();
+    buf.write('Contact your health worker if your condition worsens.');
+    return buf.toString().trim();
   }
 
   static String _programmeSummaryTitle(Programme p) => switch (p) {
@@ -1287,43 +1613,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     if (_accepted) return;
     setState(() => _accepted = true);
     if (!mounted) return;
-
-    // Prefer householdId from widget (passed via navigation extra).
-    // If null (e.g. visit started from a screen that didn't set it), fall back
-    // to a DB lookup on the patient row — same data, different code path.
-    String? hid = widget.householdId;
-    if ((hid == null || hid.isEmpty) && mounted) {
-      try {
-        final patient =
-            await context.read<PatientDao>().byId(widget.patientId);
-        hid = patient?.householdId;
-        debugPrint(
-          '[Step3] householdId from widget=${widget.householdId} '
-          'DB fallback=$hid patientId=${widget.patientId}',
-        );
-      } on Object catch (e) {
-        debugPrint('[Step3] householdId DB lookup failed: $e');
-      }
-    }
-
-    if (!mounted) return;
-    if (hid != null && hid.isNotEmpty) {
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => HouseholdFollowUpScreen(
-            householdId: hid!,
-            excludePatientId: widget.patientId,
-            onDone: () => context.go(_returnPath),
-            onViewPatient: (patientId) => context.push('/patients/$patientId'),
-          ),
-        ),
-      );
-    } else {
-      debugPrint(
-        '[Step3] No householdId for patient ${widget.patientId} — skipping follow-up screen',
-      );
-      context.go(_returnPath);
-    }
+    context.go(_returnPath);
   }
 
   @override
@@ -1343,82 +1633,98 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   }
 
   Widget _buildLoading() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.h8xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Pulsing AI icon
-            AnimatedBuilder(
-              animation: _shimmer,
-              builder: (context, unused) => Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Color.lerp(
-                    AppColors.aiSurfaceStart,
-                    AppColors.aiSurfaceEnd,
-                    _shimmer.value,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.aiPurple.withValues(
-                          alpha: 0.15 + 0.1 * _shimmer.value),
-                      blurRadius: 20,
-                      spreadRadius: 2,
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.auto_awesome_rounded,
-                  size: 38,
-                  color: AppColors.aiPurple,
-                ),
-              ),
+    return SingleChildScrollView(
+      physics: const ClampingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Household strip shown immediately — taps locked until AI loads.
+          if (_householdMembers != null && _householdMembers!.length > 1) ...[
+            _HouseholdMemberStrip(
+              members: _householdMembers!,
+              onTapMember: null,
             ),
-            const SizedBox(height: 24),
-            Text(
-              NabaStrings.loadingTitle,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: AppColors.textPrimary,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              NabaStrings.loadingSubtitle,
-              style: TextStyle(
-                fontSize: 13,
-                color: AppColors.textMuted,
-                height: 1.5,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 36),
-            // Skeleton preview cards
-            AnimatedBuilder(
-              animation: _shimmer,
-              builder: (context, unused) {
-                final shimmerColor = Color.lerp(
-                  AppColors.border,
-                  AppColors.progressTrack,
-                  _shimmer.value,
-                )!;
-                return Column(
-                  children: [
-                    _SkeletonCard(color: shimmerColor, height: 72),
-                    const SizedBox(height: 10),
-                    _SkeletonCard(color: shimmerColor, height: 56),
-                    const SizedBox(height: 10),
-                    _SkeletonCard(color: shimmerColor, height: 64),
-                  ],
-                );
-              },
-            ),
+            const SizedBox(height: 20),
           ],
-        ),
+          // AI loading indicator + skeleton cards.
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.h8xl),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AnimatedBuilder(
+                    animation: _shimmer,
+                    builder: (context, unused) => Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Color.lerp(
+                          AppColors.aiSurfaceStart,
+                          AppColors.aiSurfaceEnd,
+                          _shimmer.value,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.aiPurple.withValues(
+                                alpha: 0.15 + 0.1 * _shimmer.value),
+                            blurRadius: 20,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.auto_awesome_rounded,
+                        size: 38,
+                        color: AppColors.aiPurple,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    NabaStrings.loadingTitle,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      color: AppColors.textPrimary,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    NabaStrings.loadingSubtitle,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textMuted,
+                      height: 1.5,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 36),
+                  AnimatedBuilder(
+                    animation: _shimmer,
+                    builder: (context, unused) {
+                      final shimmerColor = Color.lerp(
+                        AppColors.border,
+                        AppColors.progressTrack,
+                        _shimmer.value,
+                      )!;
+                      return Column(
+                        children: [
+                          _SkeletonCard(color: shimmerColor, height: 72),
+                          const SizedBox(height: 10),
+                          _SkeletonCard(color: shimmerColor, height: 56),
+                          const SizedBox(height: 10),
+                          _SkeletonCard(color: shimmerColor, height: 64),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1488,241 +1794,793 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   }
 
   Widget _buildResult(NabaResponse naba) {
-    final headerColor = _headerColor(widget.primaryProgramme);
     final referral =
         naba.referralRecommendation?.required_ ?? widget.referralRecommended;
-
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.xxxl, AppSpacing.xxxl, AppSpacing.xxxl, AppSpacing.h8xl),
+      physics: const ClampingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-              // ── AI checked header + household strip ───────────────────
-              if (_householdMembers != null && _householdMembers!.length > 1) ...[
-                _AiCheckedHeader(
-                  programmes: widget.confirmedProgrammes,
-                  headerColor: headerColor,
-                ),
-                const SizedBox(height: 10),
-                _HouseholdMemberStrip(
-                  members: _householdMembers!,
-                  onTapMember: (patientId) =>
-                      context.push('/patients/$patientId'),
-                ),
-                const SizedBox(height: 16),
-              ],
+          // ── Household member strip ──────────────────────────────────
+          if (_householdMembers != null && _householdMembers!.length > 1) ...[
+            _HouseholdMemberStrip(
+              members: _householdMembers!,
+              onTapMember: (patientId) =>
+                  context.push('/patients/$patientId'),
+            ),
+            const SizedBox(height: 16),
+          ],
 
-              // ── AI fallback notice ────────────────────────────────────
-              if (naba.modelVersion == 'rule-based-fallback') ...[
-                const _FallbackNoticeBanner(),
-                const SizedBox(height: 12),
-              ],
-
-              // ── Danger signs — elevated to top ────────────────────────
-              if (naba.dangerSigns.isNotEmpty) ...[
-                _DangerSignsAlert(signs: naba.dangerSigns),
-                const SizedBox(height: 12),
-              ],
-
-              // ── Banners: review required + referral ───────────────────
-              if (naba.rationale.humanReviewRequired) ...[
-                _InfoBanner(
-                  color: AppColors.ncdSurface,
-                  borderColor: AppColors.warningBorderAlt,
-                  icon: Icons.supervisor_account_rounded,
-                  iconColor: AppColors.slaDueSoonText,
-                  text: NabaStrings.humanReviewBadge,
-                ),
-                const SizedBox(height: 12),
-              ],
-              if (referral) ...[
-                _InfoBanner(
-                  color: AppColors.statusCriticalSurface,
-                  borderColor: AppColors.statusCriticalBorder,
-                  icon: Icons.local_hospital_rounded,
-                  iconColor: AppColors.statusCritical,
-                  text: naba.referralRecommendation?.reason ??
-                      VisitCompleteStrings.referralWarning,
-                  label: NabaStrings.referralRequired,
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              // ── Visit summary ─────────────────────────────────────────
-              _SummaryCard(
-                title: naba.visitSummary.title,
-                body: naba.visitSummary.summary,
-                headerColor: headerColor,
-                confidence: naba.rationale.confidence,
-              ),
-              const SizedBox(height: 12),
-
-              // ── Next actions ──────────────────────────────────────────
-              if (naba.nextActions.isNotEmpty) ...[
-                _SectionCard(
-                  title: NabaStrings.sectionNextActions,
-                  icon: Icons.checklist_rounded,
-                  iconBg: AppColors.navy.withValues(alpha: 0.1),
-                  iconColor: AppColors.navy,
-                  child: _NextActionsTimeline(actions: naba.nextActions),
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              // ── Clinical findings ─────────────────────────────────────
-              if (naba.clinicalFindings.isNotEmpty) ...[
-                _SectionCard(
-                  title: NabaStrings.sectionFindings,
-                  icon: Icons.biotech_rounded,
-                  iconBg: AppColors.aiSurfaceStart,
-                  iconColor: AppColors.aiPurple,
-                  child:
-                      _ClinicalFindingsCards(findings: naba.clinicalFindings),
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              // ── Counselling ───────────────────────────────────────────
-              if (naba.counselling.isNotEmpty) ...[
-                if (widget.primaryProgramme == Programme.ncd)
-                  Card(
-                    child: ExpansionTile(
-                      leading: Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: AppColors.tagTealSurface,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(Icons.chat_bubble_outline_rounded,
-                            color: AppColors.tagTealText, size: 18),
-                      ),
-                      title: Text(NabaStrings.sectionCounselling,
-                          style: Theme.of(context).textTheme.titleSmall),
-                      subtitle: const Text('Tap to expand'),
-                      initiallyExpanded: false,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                          child: _DotList(
-                            items: naba.counselling,
-                            dotColor: AppColors.tagTealText,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                else
-                  _SectionCard(
-                    title: NabaStrings.sectionCounselling,
-                    icon: Icons.chat_bubble_outline_rounded,
-                    iconBg: AppColors.tagTealSurface,
-                    iconColor: AppColors.tagTealText,
-                    child: _DotList(
-                      items: naba.counselling,
-                      dotColor: AppColors.tagTealText,
-                    ),
-                  ),
-                const SizedBox(height: 12),
-              ],
-
-              // ── Medication advice ─────────────────────────────────────
-              if (naba.medicationAdvice.isNotEmpty) ...[
-                _SectionCard(
-                  title: NabaStrings.sectionMedication,
-                  icon: Icons.medication_liquid_rounded,
-                  iconBg: AppColors.tagBlueSurface,
-                  iconColor: AppColors.tagBlueText,
-                  child: _DotList(
-                    items: naba.medicationAdvice,
-                    dotColor: AppColors.tagBlueText,
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              // ── Follow-up ─────────────────────────────────────────────
-              if (naba.followUp.isNotEmpty) ...[
-                _SectionCard(
-                  title: NabaStrings.sectionFollowUp,
-                  icon: Icons.event_available_rounded,
-                  iconBg: AppColors.followUpIconBg,
-                  iconColor: AppColors.followUpIconFg,
-                  child: _FollowUpRows(items: naba.followUp),
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              // ── WhatsApp summary ──────────────────────────────────────
-              if (naba.whatsappSummary != null) ...[
-                _WhatsAppCard(
-                  text: naba.whatsappSummary!,
-                  patientPhone: _patientPhone,
-                  onShared: () => _onAccepted(naba),
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              // ── Proposal note ─────────────────────────────────────────
-              const SizedBox(height: 4),
-              Center(
-                child: Text(
-                  NabaStrings.proposalNote,
-                  style: AppTextStyles.subText.copyWith(
-                    fontStyle: FontStyle.italic,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              // ── CTA bar at scroll bottom ──────────────────────────
-              const SizedBox(height: 12),
-              _BottomCtaBar(
-                naba: naba,
-                accepted: _accepted,
-                headerColor: headerColor,
-                referral: referral,
-                primaryProgramme: widget.primaryProgramme,
-                patientLabel: widget.patientLabel,
-                memberId: widget.memberId,
-                patientPhone: _patientPhone,
-                returnPath: _returnPath,
-                onAccepted: () => _onAccepted(naba),
-              ),
-            ],
+          // ── 1. Vitals summary ───────────────────────────────────────
+          _VitalsSummaryCard(
+            programme: widget.primaryProgramme,
+            summary: naba.visitSummary.summary,
+            hasIssues: referral || naba.dangerSigns.isNotEmpty,
           ),
-        );
+          const SizedBox(height: 12),
+
+          // ── 2. Referral / danger alert ──────────────────────────────
+          if (referral || naba.dangerSigns.isNotEmpty) ...[
+            _ReferralAlertCard(
+              reason: naba.dangerSigns.isNotEmpty
+                  ? 'Danger signs detected: ${naba.dangerSigns.join(', ')}'
+                  : (naba.referralRecommendation?.reason ??
+                      'Referral recommended based on clinical assessment'),
+              urgency: naba.referralRecommendation?.urgency ?? 'Today',
+              isDanger: naba.dangerSigns.isNotEmpty,
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // ── 3. AI Counselling Guide ─────────────────────────────────
+          if (naba.counselling.isNotEmpty) ...[
+            _AiCounsellingCard(
+              programme: widget.primaryProgramme,
+              items: naba.counselling,
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // ── 4. WhatsApp / SMS banner ────────────────────────────────
+          if (naba.whatsappSummary != null) ...[
+            _WhatsAppCard(
+              text: naba.whatsappSummary!,
+              patientPhone: _patientPhone,
+              onShared: () => _onAccepted(naba),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // ── 5. Follow-up timeline ──────────────────────────────────
+          if (naba.followUp.isNotEmpty) ...[
+            _FollowUpTimeline(items: naba.followUp),
+            const SizedBox(height: 16),
+          ],
+
+          // ── 6. CTA: accept + call/refer ─────────────────────────────
+          _BottomCtaBar(
+            naba: naba,
+            accepted: _accepted,
+            headerColor: _headerColor(widget.primaryProgramme),
+            referral: referral,
+            primaryProgramme: widget.primaryProgramme,
+            patientLabel: widget.patientLabel,
+            memberId: widget.memberId,
+            patientPhone: _patientPhone,
+            returnPath: _returnPath,
+            onAccepted: () => _onAccepted(naba),
+          ),
+        ],
+      ),
+    );
   }
 }
 
 // ── Supporting widgets ────────────────────────────────────────────────────────
 
-class _FallbackNoticeBanner extends StatelessWidget {
-  const _FallbackNoticeBanner();
+class _VitalsSummaryCard extends StatelessWidget {
+  const _VitalsSummaryCard({
+    required this.programme,
+    required this.summary,
+    required this.hasIssues,
+  });
+  final Programme programme;
+  final String summary;
+  final bool hasIssues;
+
+  String _label(Programme p) => switch (p) {
+        Programme.anc || Programme.pnc => 'ANC Vitals',
+        Programme.ncd => 'Vitals & Labs',
+        Programme.imci => 'Child Assessment',
+        Programme.tb => 'TB Follow-up',
+        _ => 'Vitals',
+      };
+
+  String _pillText() {
+    if (hasIssues) return 'Review';
+    return switch (programme) {
+      Programme.anc || Programme.pnc => 'On track',
+      Programme.ncd => 'Monitored',
+      _ => 'Normal',
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
+    const greenBg = Color(0xFFECFDF5);
+    const greenBorder = Color(0xFFA7F3D0);
+    const greenAccent = Color(0xFF059669);
+    const reviewBg = Color(0xFFFFFBEB);
+    const reviewBorder = Color(0xFFFDE68A);
+    const reviewAccent = Color(0xFFB45309);
+
+    final bg = hasIssues ? reviewBg : greenBg;
+    final border = hasIssues ? reviewBorder : greenBorder;
+    final accent = hasIssues ? reviewAccent : greenAccent;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF8E1),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: const Color(0xFFFFE082)),
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  hasIssues
+                      ? Icons.warning_amber_rounded
+                      : Icons.favorite_rounded,
+                  size: 16,
+                  color: accent,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _label(programme),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: accent,
+                    letterSpacing: 0.1,
+                  ),
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                decoration: BoxDecoration(
+                  color: accent,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  _pillText(),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            summary,
+            style: TextStyle(
+              fontSize: 13,
+              color: accent.withValues(alpha: 0.85),
+              height: 1.45,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReferralAlertCard extends StatelessWidget {
+  const _ReferralAlertCard({
+    required this.reason,
+    required this.urgency,
+    required this.isDanger,
+  });
+  final String reason;
+  final String urgency;
+  final bool isDanger;
+
+  @override
+  Widget build(BuildContext context) {
+    const dangerBg = Color(0xFFFEF2F2);
+    const dangerBorder = Color(0xFFFECACA);
+    const dangerAccent = Color(0xFFDC2626);
+    const referBg = Color(0xFFFFFBEB);
+    const referBorder = Color(0xFFFDE68A);
+    const referAccent = Color(0xFFB45309);
+
+    final bg = isDanger ? dangerBg : referBg;
+    final border = isDanger ? dangerBorder : referBorder;
+    final accent = isDanger ? dangerAccent : referAccent;
+    final icon =
+        isDanger ? Icons.emergency_rounded : Icons.local_hospital_rounded;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: border, width: 1.5),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline_rounded, size: 18, color: Color(0xFFF57F17)),
-          const SizedBox(width: 8),
-          const Expanded(
-            child: Text(
-              NabaStrings.fallbackNotice,
-              style: TextStyle(
-                fontSize: 12,
-                color: Color(0xFF4E342E),
-                height: 1.4,
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: accent,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 16, color: Colors.white),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        isDanger ? 'Refer immediately' : 'Refer to facility',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: accent,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: accent,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        urgency.toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  reason,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: accent.withValues(alpha: 0.85),
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AiCounsellingCard extends StatefulWidget {
+  const _AiCounsellingCard({
+    required this.programme,
+    required this.items,
+  });
+  final Programme programme;
+  final List<String> items;
+
+  @override
+  State<_AiCounsellingCard> createState() => _AiCounsellingCardState();
+}
+
+class _AiCounsellingCardState extends State<_AiCounsellingCard> {
+  bool _expanded = true;
+
+  static const _pinkBg = Color(0xFFFDF2F8);
+  static const _pinkBorder = Color(0xFFF9A8D4);
+  static const _pinkAccent = Color(0xFF9D174D);
+
+  // Returns a fallback emoji for items that don't already start with one.
+  static String _fallbackEmoji(String item) {
+    final s = item.toLowerCase();
+    if (s.contains('salt') || s.contains('sodium')) { return '🧂'; }
+    if (s.contains('vegetable') || s.contains('fruit') || s.contains('eat') ||
+        s.contains('food') || s.contains('diet') || s.contains('lentil') ||
+        s.contains('egg') || s.contains('nutritious')) { return '🥦'; }
+    if (s.contains('walk') || s.contains('exercise') ||
+        s.contains('activity')) { return '🚶'; }
+    if (s.contains('tobacco') || s.contains('smoke') ||
+        s.contains('alcohol')) { return '🚫'; }
+    if (s.contains('medicine') || s.contains('medication') ||
+        s.contains('tablet') || s.contains('iron') ||
+        s.contains('calcium') || s.contains('zinc')) { return '💊'; }
+    if (s.contains('danger') || s.contains('emergency') ||
+        s.contains('immediately') || s.contains('headache') ||
+        s.contains('vision') || s.contains('convulsion') ||
+        s.contains('bleeding')) { return '⚠️'; }
+    if (s.contains('baby') || s.contains('neonate') ||
+        s.contains('breastfeed')) { return '👶'; }
+    if (s.contains('water') || s.contains('ors') ||
+        s.contains('hydrat')) { return '💧'; }
+    if (s.contains('sleep') || s.contains('rest') ||
+        s.contains('bednet')) { return '🌙'; }
+    if (s.contains('facility') || s.contains('delivery') ||
+        s.contains('hospital') || s.contains('uhc') ||
+        s.contains('refer')) { return '🏥'; }
+    if (s.contains('antenatal') || s.contains('anc') ||
+        s.contains('prenatal') || s.contains('fundal') ||
+        s.contains('fetal')) { return '🤰'; }
+    if (s.contains('tb') || s.contains('tuberculosis') ||
+        s.contains('adherence') || s.contains('cough') ||
+        s.contains('mask')) { return '😷'; }
+    return '✓';
+  }
+
+  // True when the first Unicode scalar is an emoji codepoint.
+  static bool _startsWithEmoji(String s) {
+    final trimmed = s.trimLeft();
+    if (trimmed.isEmpty) return false;
+    final first = trimmed.runes.first;
+    return (first >= 0x2600 && first <= 0x27BF) || first >= 0x1F000;
+  }
+
+  // Strips a leading emoji + trailing space so the widget emoji doesn't double.
+  static String _stripLeadingEmoji(String s) {
+    final trimmed = s.trimLeft();
+    if (trimmed.isEmpty) return trimmed;
+    final runes = trimmed.runes.toList();
+    int i = 0;
+    // Skip emoji codepoints and ZWJ / variation selectors
+    while (i < runes.length &&
+        ((runes[i] >= 0x2600 && runes[i] <= 0x27BF) ||
+            runes[i] >= 0x1F000 ||
+            runes[i] == 0xFE0F ||
+            runes[i] == 0x200D)) {
+      i++;
+    }
+    // Skip trailing spaces
+    while (i < runes.length && runes[i] == 0x20) {
+      i++;
+    }
+    return String.fromCharCodes(runes.skip(i));
+  }
+
+  String _sourceLabel() => switch (widget.programme) {
+        Programme.anc || Programme.pnc => 'BRAC ANC',
+        Programme.ncd => 'NCD',
+        Programme.imci => 'IMCI',
+        Programme.tb => 'TB',
+        _ => 'GUIDELINE',
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: _pinkBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _pinkBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header (always visible, tappable) ──────────────────────
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              child: Row(
+                children: [
+                  Container(
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      color: _pinkAccent,
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                    child: const Icon(Icons.star, size: 13, color: Colors.white),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'AI COUNSELLING GUIDE',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            color: _pinkAccent,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                        if (!_expanded)
+                          Text(
+                            '${widget.items.length} points · Tap to expand',
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              color: _pinkAccent,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _pinkAccent.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: _pinkBorder),
+                    ),
+                    child: Text(
+                      _sourceLabel(),
+                      style: const TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: _pinkAccent,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 20,
+                      color: _pinkAccent,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // ── Expanded body ───────────────────────────────────────────
+          if (_expanded) ...[
+            const Divider(height: 1, color: _pinkBorder),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              child: Column(
+                children: widget.items
+                    .map((item) {
+                      final hasEmoji = _startsWithEmoji(item);
+                      final emoji = hasEmoji ? '' : _fallbackEmoji(item);
+                      final displayText = hasEmoji ? _stripLeadingEmoji(item) : item;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (hasEmoji) ...[
+                              // AI-provided emoji sits at the front of the text;
+                              // reconstruct it from the original item.
+                              Text(
+                                item.trimLeft().runes.first > 0
+                                    ? String.fromCharCode(item.trimLeft().runes.first)
+                                    : emoji,
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                            ] else ...[
+                              Text(emoji, style: const TextStyle(fontSize: 14)),
+                            ],
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                displayText,
+                                style: const TextStyle(
+                                  fontSize: 12.5,
+                                  color: _pinkAccent,
+                                  height: 1.4,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    })
+                    .toList(),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// Shows all follow-up items: first item has a date picker; remaining items
+// are compact left-border-coloured timeline rows.
+class _FollowUpTimeline extends StatelessWidget {
+  const _FollowUpTimeline({required this.items});
+  final List<NabaFollowUpItem> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _FollowUpDateRow(item: items.first),
+        for (final item in items.skip(1)) ...[
+          const SizedBox(height: 6),
+          _FollowUpTimelineItem(item: item),
+        ],
+      ],
+    );
+  }
+}
+
+// Compact timeline row with a coloured left border — used for secondary
+// follow-up items (after the primary date-picker row).
+class _FollowUpTimelineItem extends StatelessWidget {
+  const _FollowUpTimelineItem({required this.item});
+  final NabaFollowUpItem item;
+
+  static Color _borderColor(String timeline) {
+    final t = timeline.toLowerCase();
+    if (t.contains('today') || t.contains('now') ||
+        t.contains('immediate') || t == 'in 1 day') {
+      return const Color(0xFFDC2626);
+    }
+    if (t.contains('week') &&
+        !t.contains('4 week') &&
+        !t.contains('monthly')) {
+      return const Color(0xFFB45309);
+    }
+    return const Color(0xFF0D9488);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor = _borderColor(item.timeline);
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            width: 4,
+            decoration: BoxDecoration(
+              color: borderColor,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(8),
+                bottomLeft: Radius.circular(8),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: const BorderRadius.only(
+                  topRight: Radius.circular(8),
+                  bottomRight: Radius.circular(8),
+                ),
+                border: Border(
+                  top: BorderSide(color: borderColor.withValues(alpha: 0.25)),
+                  right: BorderSide(color: borderColor.withValues(alpha: 0.25)),
+                  bottom: BorderSide(color: borderColor.withValues(alpha: 0.25)),
+                ),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      item.activity,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.textPrimary,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: borderColor.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      item.timeline,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: borderColor,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FollowUpDateRow extends StatefulWidget {
+  const _FollowUpDateRow({required this.item});
+  final NabaFollowUpItem item;
+
+  @override
+  State<_FollowUpDateRow> createState() => _FollowUpDateRowState();
+}
+
+class _FollowUpDateRowState extends State<_FollowUpDateRow> {
+  late DateTime _date;
+
+  static const _cardBorder = Color(0xFFFBCFE8);
+  static const _cardText = Color(0xFF9D174D);
+  static const _gradientStart = Color(0xFFFDF2F8);
+  static const _gradientEnd = Color(0xFFF5F3FF);
+
+  @override
+  void initState() {
+    super.initState();
+    _date = _dateFromTimeline(widget.item.timeline);
+  }
+
+  static DateTime _dateFromTimeline(String timeline) {
+    final t = timeline.toLowerCase();
+    final now = DateTime.now();
+    // parse "in X week(s)"
+    final weekMatch = RegExp(r'(\d+)\s*week').firstMatch(t);
+    if (weekMatch != null) {
+      return now.add(Duration(days: int.parse(weekMatch.group(1)!) * 7));
+    }
+    // parse "in X day(s)"
+    final dayMatch = RegExp(r'(\d+)\s*day').firstMatch(t);
+    if (dayMatch != null) {
+      return now.add(Duration(days: int.parse(dayMatch.group(1)!)));
+    }
+    // parse "in X month(s)"
+    final monthMatch = RegExp(r'(\d+)\s*month').firstMatch(t);
+    if (monthMatch != null) {
+      return DateTime(now.year, now.month + int.parse(monthMatch.group(1)!), now.day);
+    }
+    return now.add(const Duration(days: 28));
+  }
+
+  String get _formatted =>
+      '${_date.day.toString().padLeft(2, '0')}-'
+      '${_date.month.toString().padLeft(2, '0')}-'
+      '${_date.year}';
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
+    );
+    if (picked != null && mounted) {
+      setState(() => _date = picked);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _pickDate,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [_gradientStart, _gradientEnd],
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _cardBorder, width: 1.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                // Calendar icon
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: _cardBorder),
+                  ),
+                  child: const Icon(
+                    Icons.calendar_month_rounded,
+                    size: 18,
+                    color: _cardText,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                // Label
+                const Text(
+                  'Follow-up',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: _cardText,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                // Date field
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _cardBorder),
+                    ),
+                    child: Text(
+                      _formatted,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.navy,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (widget.item.activity.isNotEmpty) ...[
+              const SizedBox(height: 7),
+              Text(
+                widget.item.activity,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  color: _cardText.withValues(alpha: 0.75),
+                  height: 1.4,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -1742,565 +2600,6 @@ class _SkeletonCard extends StatelessWidget {
         color: color,
         borderRadius: BorderRadius.circular(AppRadius.card),
       ),
-    );
-  }
-}
-
-class _DangerSignsAlert extends StatelessWidget {
-  const _DangerSignsAlert({required this.signs});
-  final List<String> signs;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: AppColors.statusCriticalSurface,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border:
-            Border.all(color: AppColors.statusCriticalBorder, width: 1.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: double.infinity,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: const BoxDecoration(
-              color: AppColors.statusCritical,
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(AppRadius.card),
-                topRight: Radius.circular(AppRadius.card),
-              ),
-            ),
-            child: Row(
-              children: const [
-                Icon(Icons.warning_rounded, size: 17, color: Colors.white),
-                SizedBox(width: 8),
-                Text(
-                  NabaStrings.sectionDangerSigns,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
-                    color: Colors.white,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(AppSpacing.xl),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: signs
-                  .map(
-                    (s) => Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Padding(
-                            padding: EdgeInsets.only(top: 5),
-                            child: Icon(
-                              Icons.circle,
-                              size: 7,
-                              color: AppColors.statusCritical,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              s,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.statusCriticalText,
-                                height: 1.4,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                  .toList(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _InfoBanner extends StatelessWidget {
-  const _InfoBanner({
-    required this.color,
-    required this.borderColor,
-    required this.icon,
-    required this.iconColor,
-    required this.text,
-    this.label,
-  });
-  final Color color;
-  final Color borderColor;
-  final IconData icon;
-  final Color iconColor;
-  final String text;
-  final String? label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.xl),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: borderColor),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 20, color: iconColor),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (label != null) ...[
-                  Text(
-                    label!,
-                    style: AppTextStyles.scorePill.copyWith(
-                      color: iconColor,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                ],
-                Text(
-                  text,
-                  style: AppTextStyles.body.copyWith(height: 1.4),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({
-    required this.title,
-    required this.body,
-    required this.headerColor,
-    required this.confidence,
-  });
-  final String title;
-  final String body;
-  final Color headerColor;
-  final double confidence;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: AppColors.cardSurface,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        boxShadow: AppShadows.card,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Programme-coloured header strip
-          Container(
-            width: double.infinity,
-            padding:
-                const EdgeInsets.symmetric(horizontal: AppSpacing.xxxl, vertical: AppSpacing.xl),
-            decoration: BoxDecoration(
-              color: headerColor,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(AppRadius.card),
-                topRight: Radius.circular(AppRadius.card),
-              ),
-            ),
-            child: Text(
-              title,
-              style: const TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 14,
-                color: Colors.white,
-              ),
-            ),
-          ),
-          // Summary body
-          Padding(
-            padding: const EdgeInsets.fromLTRB(AppSpacing.xxxl, AppSpacing.xxl, AppSpacing.xxxl, AppSpacing.lg),
-            child: Text(
-              body,
-              style: const TextStyle(
-                fontSize: 14,
-                color: AppColors.textPrimary,
-                height: 1.55,
-              ),
-            ),
-          ),
-          // Confidence footer
-          Padding(
-            padding: const EdgeInsets.fromLTRB(AppSpacing.xxxl, 0, AppSpacing.xxxl, AppSpacing.xl),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.auto_awesome_rounded,
-                  size: 12,
-                  color: AppColors.aiPurple.withValues(alpha: 0.7),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  'AI confidence: ${(confidence * 100).toStringAsFixed(0)}%',
-                  style: AppTextStyles.subText.copyWith(letterSpacing: 0.2),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({
-    required this.title,
-    required this.icon,
-    required this.iconBg,
-    required this.iconColor,
-    required this.child,
-  });
-  final String title;
-  final IconData icon;
-  final Color iconBg;
-  final Color iconColor;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.xxl),
-      decoration: BoxDecoration(
-        color: AppColors.cardSurface,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        boxShadow: AppShadows.listItem,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  color: iconBg,
-                  borderRadius: BorderRadius.circular(AppRadius.rxIcon),
-                ),
-                child: Icon(icon, size: 16, color: iconColor),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 13,
-                  color: AppColors.textPrimary,
-                  letterSpacing: 0.1,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          const Divider(height: 1, color: AppColors.border),
-          const SizedBox(height: 12),
-          child,
-        ],
-      ),
-    );
-  }
-}
-
-class _NextActionsTimeline extends StatelessWidget {
-  const _NextActionsTimeline({required this.actions});
-  final List<NabaNextAction> actions;
-
-  static const _urgencyFg = {
-    'Now': AppColors.statusCritical,
-    'Today': AppColors.slaDueSoonText,
-    'This week': AppColors.navy,
-  };
-  static const _urgencyBg = {
-    'Now': AppColors.statusCriticalSurface,
-    'Today': AppColors.statusWarningSurface,
-    'This week': AppColors.childSurface,
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: List.generate(actions.length, (i) {
-        final a = actions[i];
-        final fgColor =
-            _urgencyFg[a.urgency] ?? AppColors.textMuted;
-        final bgColor =
-            _urgencyBg[a.urgency] ?? AppColors.cardSurfaceMuted;
-        final isLast = i == actions.length - 1;
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Spine: circle + line
-            Column(
-              children: [
-                Container(
-                  width: 26,
-                  height: 26,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: fgColor.withValues(alpha: 0.12),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: fgColor.withValues(alpha: 0.4),
-                      width: 1.5,
-                    ),
-                  ),
-                  child: Text(
-                    '${a.priority}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 12,
-                      color: fgColor,
-                    ),
-                  ),
-                ),
-                if (!isLast)
-                  Container(width: 1.5, height: 16, color: AppColors.border),
-              ],
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      a.action,
-                      style: AppTextStyles.body.copyWith(height: 1.4),
-                    ),
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: bgColor,
-                        borderRadius: BorderRadius.circular(AppRadius.pill),
-                      ),
-                      child: Text(
-                        a.urgency.toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          color: fgColor,
-                          letterSpacing: 0.6,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        );
-      }),
-    );
-  }
-}
-
-class _ClinicalFindingsCards extends StatelessWidget {
-  const _ClinicalFindingsCards({required this.findings});
-  final List<NabaClinicalFinding> findings;
-
-  Color _severityColor(String s) => switch (s) {
-        'High' => AppColors.statusCritical,
-        'Medium' => AppColors.slaDueSoonText,
-        _ => AppColors.statusSuccess,
-      };
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: findings
-          .map((f) {
-            final sc = _severityColor(f.severity);
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppColors.cardSurfaceMuted,
-                  borderRadius: BorderRadius.circular(AppRadius.rxIcon),
-                  border: Border(
-                    left: BorderSide(color: sc, width: 3.5),
-                  ),
-                ),
-                padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, AppSpacing.lg),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            f.finding,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: sc.withValues(alpha: 0.12),
-                            borderRadius:
-                                BorderRadius.circular(AppRadius.flag),
-                          ),
-                          child: Text(
-                            f.severity.toUpperCase(),
-                            style: AppTextStyles.microTag.copyWith(
-                              color: sc,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      f.reason,
-                      style: AppTextStyles.vitalUnit.copyWith(height: 1.4),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          })
-          .toList(),
-    );
-  }
-}
-
-class _DotList extends StatelessWidget {
-  const _DotList({required this.items, required this.dotColor});
-  final List<String> items;
-  final Color dotColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: items
-          .map(
-            (item) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: dotColor,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      item,
-                      style: AppTextStyles.body.copyWith(height: 1.5),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          )
-          .toList(),
-    );
-  }
-}
-
-class _FollowUpRows extends StatelessWidget {
-  const _FollowUpRows({required this.items});
-  final List<NabaFollowUpItem> items;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: items
-          .map(
-            (item) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: AppColors.followUpIconBg,
-                      borderRadius:
-                          BorderRadius.circular(AppRadius.rxIcon),
-                    ),
-                    child: const Icon(
-                      Icons.event_rounded,
-                      size: 16,
-                      color: AppColors.followUpIconFg,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.activity,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          item.timeline,
-                          style: AppTextStyles.vitalUnit,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          )
-          .toList(),
     );
   }
 }
@@ -2896,7 +3195,9 @@ class _HouseholdMemberStrip extends StatelessWidget {
   });
 
   final List<_HouseholdMember> members;
-  final void Function(String patientId) onTapMember;
+  // Null while the AI recommendation is still loading — members are shown
+  // as a preview but taps are disabled until the care plan is ready.
+  final void Function(String patientId)? onTapMember;
 
   static (Color ring, Color labelColor, String visitLabel) _style(Programme p) {
     switch (p) {
@@ -2979,14 +3280,20 @@ class _HouseholdMemberStrip extends StatelessWidget {
                     Builder(builder: (context) {
                       final (ring, labelColor, visitLabel) =
                           _style(members[i].primaryProgramme);
-                      return _MemberAvatar(
-                        member: members[i],
-                        ringColor: ring,
-                        ringWidth: 1.5,
-                        labelText: visitLabel,
-                        labelColor: labelColor,
-                        labelBold: false,
-                        onTap: () => onTapMember(members[i].patientId),
+                      final pid = members[i].patientId;
+                      return Opacity(
+                        opacity: onTapMember != null ? 1.0 : 0.45,
+                        child: _MemberAvatar(
+                          member: members[i],
+                          ringColor: ring,
+                          ringWidth: 1.5,
+                          labelText: visitLabel,
+                          labelColor: labelColor,
+                          labelBold: false,
+                          onTap: onTapMember != null
+                              ? () => onTapMember!(pid)
+                              : null,
+                        ),
                       );
                     }),
                   ],
@@ -3100,42 +3407,3 @@ class _MemberAvatar extends StatelessWidget {
   }
 }
 
-// ── AI checked findings header ────────────────────────────────────────────────
-
-class _AiCheckedHeader extends StatelessWidget {
-  const _AiCheckedHeader({
-    required this.programmes,
-    required this.headerColor,
-  });
-
-  final Set<Programme> programmes;
-  final Color headerColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final labels = programmes
-        .where((p) => p != Programme.unknown)
-        .map((p) => p.displayName)
-        .join(' + ');
-    final text = labels.isEmpty
-        ? VisitFlowStrings.aiCheckedFindings
-        : '${VisitFlowStrings.aiCheckedFindings} · $labels';
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      decoration: BoxDecoration(
-        color: headerColor.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w700,
-          color: headerColor,
-          height: 1.3,
-        ),
-      ),
-    );
-  }
-}

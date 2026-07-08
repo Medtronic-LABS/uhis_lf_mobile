@@ -125,6 +125,18 @@ class OfflineSyncService extends ChangeNotifier {
     var report = SyncReport(startedAt: started, finishedAt: started)
         .copyWith(wasFullSync: fullSync);
     try {
+      // userId is required by the server — fail fast rather than sending a
+      // request without it and getting an empty/rejected bundle silently.
+      final syncUserId = await _auth.userId();
+      if (syncUserId == null) {
+        const msg = 'userId not available — re-login required before sync';
+        _emitProgress(SyncProgress.failed(msg));
+        return report.copyWith(
+          finishedAt: DateTime.now(),
+          errors: const [msg],
+        );
+      }
+
       var villageIds = await _auth.villageIds();
       if (villageIds.isEmpty) {
         // Profile endpoint returned no villages (common for kakina_sk accounts
@@ -239,17 +251,26 @@ class OfflineSyncService extends ChangeNotifier {
   // honoured and a single `--dart-define` bump propagates to both headers
   // (set in `ApiClient`) and request bodies.
 
+  /// Formats [dt] as `"2024-01-15T10:30:00+00:00"` — matching Android's
+  /// `DateTimeFormatter.ISO_OFFSET_DATE_TIME` output (no millis, explicit offset).
+  static String _toOffsetDateTime(DateTime dt) {
+    final s = dt.toUtc().toIso8601String().replaceFirst(RegExp(r'\.\d+'), '');
+    return s.endsWith('Z') ? '${s.substring(0, s.length - 1)}+00:00' : s;
+  }
+
   Future<Map<String, dynamic>> _fetchBundle({
     required List<int> villageIds,
     DateTime? since,
   }) async {
     // Match Android RequestAllEntities format: integer villageIds + metadata
     final userId = await _auth.userId();
+    if (userId == null) {
+      debugPrint('[OfflineSyncService] WARNING: userId is null — sync may return empty bundle');
+    }
     final deviceId = await _auth.deviceId();
     final body = <String, dynamic>{
-      'villageIds': villageIds, // integers, not strings
-      if (since != null)
-        'lastSyncTime': since.toUtc().toIso8601String(),
+      'villageIds': villageIds,
+      if (since != null) 'lastSyncTime': _toOffsetDateTime(since),
       'userId': ?userId,
       'appVersionName': AppConfig.appVersionName,
       'appVersionCode': AppConfig.appVersionCode,
@@ -705,6 +726,31 @@ class OfflineSyncService extends ChangeNotifier {
     return out;
   }
 
+  /// Infer programme from `observations.confirmDiagnosis` in an assessment
+  /// history row. The field is a comma-separated string of SNOMED display
+  /// terms sent by the UHIS backend when serviceProvided="enrollment".
+  static Programme? _inferProgrammeFromObservations(Map<String, dynamic> raw) {
+    final obs = raw['observations'];
+    if (obs is! Map) return null;
+    final diag = obs['confirmDiagnosis']?.toString().toLowerCase() ?? '';
+    if (diag.isEmpty) return null;
+    if (diag.contains('hypertension') ||
+        diag.contains('diabetes') ||
+        diag.contains('cardiovascular') ||
+        diag.contains('heart disease') ||
+        diag.contains('copd') ||
+        diag.contains('chronic kidney')) {
+      return Programme.ncd;
+    }
+    if (diag.contains('pregnan') || diag.contains('antenatal') || diag.contains('anc')) {
+      return Programme.anc;
+    }
+    if (diag.contains('tuberculosis') || diag.contains(' tb')) {
+      return Programme.tb;
+    }
+    return null;
+  }
+
   static bool _truthy(Object? v) {
     if (v == null) return false;
     if (v is bool) return v;
@@ -971,7 +1017,17 @@ class OfflineSyncService extends ChangeNotifier {
         final patientId = memberToPatient[item.householdMemberId];
         if (patientId == null || patientId.isEmpty) continue;
 
-        final programme = Programme.fromTag(item.serviceProvided);
+        // Primary: map serviceProvided tag directly.
+        var programme = Programme.fromTag(item.serviceProvided);
+
+        // Fallback: when serviceProvided is "enrollment" or otherwise unmapped,
+        // infer the programme from observations.confirmDiagnosis. The UHIS
+        // backend sends confirmDiagnosis as a comma-separated string of SNOMED
+        // display terms (e.g. "Hypertension, Diabetes mellitus type 2 (disorder)").
+        if (programme == null || programme == Programme.unknown) {
+          programme = _inferProgrammeFromObservations(item.rawJson);
+        }
+
         if (programme != null && programme != Programme.unknown) {
           newProgrammes
               .putIfAbsent(patientId, () => <Programme>{})
@@ -1156,10 +1212,13 @@ class OfflineSyncService extends ChangeNotifier {
     // memberId in the body silently excludes every row. The endpoint already
     // scopes by `villageIds`; we filter to the requested member client-side
     // via [_filterHistoryForMember] in the calling repository.
+    if (userId == null) {
+      debugPrint('[OfflineSyncService] WARNING: userId is null for assessment-history request');
+    }
     final body = <String, dynamic>{
       'appType': AppConfig.appType,
       'villageIds': scope,
-      if (since != null) 'lastSyncTime': since.toUtc().toIso8601String(),
+      if (since != null) 'lastSyncTime': _toOffsetDateTime(since),
       'userId': ?userId,
       'appVersionName': AppConfig.appVersionName,
       'appVersionCode': AppConfig.appVersionCode,
@@ -1179,7 +1238,7 @@ class OfflineSyncService extends ChangeNotifier {
         return const [];
       }
       final data = resp.data;
-      debugPrint('[OfflineSyncService] member-assessment-history raw response keys=${data is Map ? (data as Map).keys.toList() : "list"} totalCount=${data is Map ? data["totalCount"] : "n/a"}');
+      debugPrint('[OfflineSyncService] member-assessment-history raw response keys=${data is Map ? data.keys.toList() : "list"} totalCount=${data is Map ? data["totalCount"] : "n/a"}');
       final raw = _extractHistoryList(data);
       final items = <AssessmentHistoryItem>[];
       for (final row in raw) {

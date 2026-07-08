@@ -65,6 +65,20 @@ class PatientOrMemberData {
       localPatient?.patient.patientId ?? remoteMember?.patientId;
   int? get age => localPatient?.patient.age ?? remoteMember?.age;
   bool get isPregnant => remoteMember?.isPregnant ?? false;
+  String? get nationalId =>
+      localPatient?.patient.nationalId ?? remoteMember?.nationalId;
+  String? get dateOfBirth =>
+      localPatient?.patient.dob ?? remoteMember?.dateOfBirth;
+  String? get maritalStatus => remoteMember?.maritalStatus;
+  String? get disability => remoteMember?.disability;
+  bool get isHouseholdHead => remoteMember?.isHouseholdHead ?? false;
+  String? get shasthyaShebikaId => remoteMember?.shasthyaShebikaId;
+  String? get guardianId => remoteMember?.guardianId;
+  String? get guardianFhirId => remoteMember?.guardianFhirId;
+  String? get motherReferenceId => remoteMember?.motherReferenceId;
+  double? get latitude => remoteMember?.latitude;
+  double? get longitude => remoteMember?.longitude;
+  String? get idType => remoteMember?.idType;
   int? get riskScore => localPatient?.patient.riskScore;
   Band? get riskBand => localPatient?.patient.riskBand;
   Modifier? get riskModifier => localPatient?.patient.riskModifier;
@@ -550,6 +564,8 @@ class _PatientContextScreenState
                         programmes: data.programmes,
                         fallbackReasons: data.riskReasons,
                       ),
+                      const SizedBox(height: 10),
+                      _PatientProfileCard(data: data),
                       const SizedBox(height: 10),
                       _AssessmentsSection(assessments: data.assessments),
                       const SizedBox(height: 10),
@@ -1096,45 +1112,66 @@ class _AssessmentDetailSheet extends StatelessWidget {
   Widget _buildTypeSpecificInfo(BuildContext context, Color typeColor) {
     final raw = assessment.rawJson;
     // assessmentDetails is the nested clinical object from member-assessment-history
-    final details = raw['assessmentDetails'] is Map<String, dynamic>
-        ? raw['assessmentDetails'] as Map<String, dynamic>
+    final details = raw['assessmentDetails'] is Map
+        ? Map<String, dynamic>.from(raw['assessmentDetails'] as Map)
+        : <String, dynamic>{};
+    // observations is the vitals snapshot keyed by the server (bp, weight, height, bg, bgType,
+    // hemoglobin, ancVisitNumber, pncVisitNumber, fundalHeight, gravida, parity …)
+    final obs = raw['observations'] is Map
+        ? Map<String, dynamic>.from(raw['observations'] as Map)
         : <String, dynamic>{};
 
-    // Helper: extract a numeric value from details or rawJson
+    // Lookup priority: assessmentDetails → observations → rawJson top-level
     double? num_(String key) {
-      Object? v = details[key] ?? raw[key];
+      Object? v = details[key] ?? obs[key] ?? raw[key];
       if (v is num) return v.toDouble();
       if (v is String) return double.tryParse(v);
       return null;
     }
 
     String? str_(String key) {
-      final v = details[key] ?? raw[key];
+      final v = details[key] ?? obs[key] ?? raw[key];
       if (v == null) return null;
       final s = v.toString().trim();
       return s.isEmpty || s == 'null' ? null : s;
     }
 
     bool? bool_(String key) {
-      final v = details[key] ?? raw[key];
+      final v = details[key] ?? obs[key] ?? raw[key];
       if (v is bool) return v;
       if (v == true || v == 1 || v == 'true' || v == 'YES') return true;
       if (v == false || v == 0 || v == 'false' || v == 'NO') return false;
       return null;
     }
 
+    // Parse "systolic/diastolic" string (server observations['bp'] format e.g. "120/80")
+    (double, double)? parseBpString(String? s) {
+      if (s == null) return null;
+      final parts = s.split('/');
+      if (parts.length != 2) return null;
+      final sys = double.tryParse(parts[0].trim());
+      final dia = double.tryParse(parts[1].trim());
+      if (sys == null || dia == null) return null;
+      return (sys, dia);
+    }
+
     final fields = <_ClinicalField>[];
 
     switch (assessment.type) {
       case 'NCD':
-        final sys = num_('avgSystolic') ?? num_('systolicBp') ?? num_('systolic');
-        final dia = num_('avgDiastolic') ?? num_('diastolicBp') ?? num_('diastolic');
+        // BP: try numeric fields first, then obs['bp'] string
+        var sys = num_('avgSystolic') ?? num_('systolicBp') ?? num_('systolic');
+        var dia = num_('avgDiastolic') ?? num_('diastolicBp') ?? num_('diastolic');
+        if (sys == null || dia == null) {
+          final parsed = parseBpString(str_('bp'));
+          if (parsed != null) { sys = parsed.$1; dia = parsed.$2; }
+        }
         if (sys != null && dia != null) {
           fields.add(_ClinicalField('Blood Pressure', '${sys.toInt()}/${dia.toInt()} mmHg',
               icon: Icons.favorite, urgent: sys >= 140 || dia >= 90));
         }
-        final glucose = num_('glucoseValue') ?? num_('bloodGlucose');
-        final glucoseType = str_('glucoseType');
+        final glucose = num_('glucoseValue') ?? num_('bloodGlucose') ?? num_('bg');
+        final glucoseType = str_('glucoseType') ?? str_('bgType');
         if (glucose != null) {
           final label = glucoseType != null ? 'Glucose (${glucoseType.toLowerCase()})' : 'Glucose';
           fields.add(_ClinicalField(label, '${glucose.toStringAsFixed(1)} mg/dL',
@@ -1144,26 +1181,54 @@ class _AssessmentDetailSheet extends StatelessWidget {
         if (height != null) fields.add(_ClinicalField('Height', '${height.toInt()} cm', icon: Icons.straighten));
         if (weight != null) fields.add(_ClinicalField('Weight', '${weight.toStringAsFixed(1)} kg', icon: Icons.monitor_weight));
         if (bmi != null) fields.add(_ClinicalField('BMI', bmi.toStringAsFixed(1), icon: Icons.calculate));
+        final hb = num_('hemoglobin');
+        if (hb != null) {
+          fields.add(_ClinicalField('Haemoglobin', '${hb.toStringAsFixed(1)} g/dL',
+              icon: Icons.opacity, urgent: hb < 10.0));
+        }
         final smoker = bool_('isRegularSmoker') ?? bool_('isSmoking');
         if (smoker != null) fields.add(_ClinicalField('Smoking', smoker ? 'Yes' : 'No', icon: Icons.smoking_rooms));
         final alcohol = bool_('isDrinkingAlcohol') ?? bool_('alcoholConsumption');
         if (alcohol != null) fields.add(_ClinicalField('Alcohol', alcohol ? 'Yes' : 'No', icon: Icons.local_bar));
 
       case 'ANC':
+        final ancVisit = str_('ancVisitNumber');
+        if (ancVisit != null) fields.add(_ClinicalField('ANC Visit', ancVisit, icon: Icons.calendar_today));
         final ga = num_('gestationalAge') ?? num_('gestationAge');
         if (ga != null) fields.add(_ClinicalField('Gestational Age', '${ga.toInt()} weeks', icon: Icons.calendar_month));
+        final gravida = str_('gravida');
+        final parity = str_('parity');
+        if (gravida != null || parity != null) {
+          fields.add(_ClinicalField('G/P', 'G${gravida ?? '?'} P${parity ?? '?'}', icon: Icons.child_friendly));
+        }
         final fetuses = num_('noOfFetus') ?? num_('numberOfFetus');
         if (fetuses != null && fetuses > 1) fields.add(_ClinicalField('Fetuses', fetuses.toInt().toString(), icon: Icons.group));
         final fh = num_('fundalHeight');
         if (fh != null) fields.add(_ClinicalField('Fundal Height', '${fh.toStringAsFixed(1)} cm', icon: Icons.height));
-        final sys = num_('avgSystolic') ?? num_('systolicBp');
-        final dia = num_('avgDiastolic') ?? num_('diastolicBp');
+        // BP: try numeric fields first, then obs['bp'] string
+        var sys = num_('avgSystolic') ?? num_('systolicBp');
+        var dia = num_('avgDiastolic') ?? num_('diastolicBp');
+        if (sys == null || dia == null) {
+          final parsed = parseBpString(str_('bp'));
+          if (parsed != null) { sys = parsed.$1; dia = parsed.$2; }
+        }
         if (sys != null && dia != null) {
           fields.add(_ClinicalField('Blood Pressure', '${sys.toInt()}/${dia.toInt()} mmHg',
               icon: Icons.favorite, urgent: sys >= 140 || dia >= 90));
         }
         final weight = num_('weight');
         if (weight != null) fields.add(_ClinicalField('Weight', '${weight.toStringAsFixed(1)} kg', icon: Icons.monitor_weight));
+        final hb = num_('hemoglobin');
+        if (hb != null) {
+          fields.add(_ClinicalField('Haemoglobin', '${hb.toStringAsFixed(1)} g/dL',
+              icon: Icons.opacity, urgent: hb < 10.0));
+        }
+        final glucose = num_('bg') ?? num_('glucoseValue') ?? num_('bloodGlucose');
+        final glucoseType = str_('bgType') ?? str_('glucoseType');
+        if (glucose != null) {
+          final label = glucoseType != null ? 'Glucose (${glucoseType.toLowerCase()})' : 'Glucose';
+          fields.add(_ClinicalField(label, '${glucose.toStringAsFixed(1)} mg/dL', icon: Icons.bloodtype));
+        }
         final fetalMovement = bool_('fetalMovement') ?? bool_('isFetalMovementNormal');
         if (fetalMovement != null) {
           fields.add(_ClinicalField('Fetal Movement', fetalMovement ? 'Normal' : 'Abnormal',
@@ -1171,14 +1236,26 @@ class _AssessmentDetailSheet extends StatelessWidget {
         }
 
       case 'PNC':
-        final sys = num_('avgSystolic') ?? num_('systolicBp');
-        final dia = num_('avgDiastolic') ?? num_('diastolicBp');
+        final pncVisit = str_('pncVisitNumber');
+        if (pncVisit != null) fields.add(_ClinicalField('PNC Visit', pncVisit, icon: Icons.calendar_today));
+        // BP: try numeric fields first, then obs['bp'] string
+        var sys = num_('avgSystolic') ?? num_('systolicBp');
+        var dia = num_('avgDiastolic') ?? num_('diastolicBp');
+        if (sys == null || dia == null) {
+          final parsed = parseBpString(str_('bp'));
+          if (parsed != null) { sys = parsed.$1; dia = parsed.$2; }
+        }
         if (sys != null && dia != null) {
           fields.add(_ClinicalField('Blood Pressure', '${sys.toInt()}/${dia.toInt()} mmHg',
               icon: Icons.favorite, urgent: sys >= 140 || dia >= 90));
         }
         final weight = num_('weight');
         if (weight != null) fields.add(_ClinicalField('Weight', '${weight.toStringAsFixed(1)} kg', icon: Icons.monitor_weight));
+        final hb = num_('hemoglobin');
+        if (hb != null) {
+          fields.add(_ClinicalField('Haemoglobin', '${hb.toStringAsFixed(1)} g/dL',
+              icon: Icons.opacity, urgent: hb < 10.0));
+        }
         final breastfeeding = bool_('isBreastfeeding') ?? bool_('breastfeeding');
         if (breastfeeding != null) fields.add(_ClinicalField('Breastfeeding', breastfeeding ? 'Yes' : 'No', icon: Icons.child_friendly));
 
@@ -1339,6 +1416,201 @@ class _DetailRow extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Patient Profile Card — collapsible demographic card. Shows identity,
+// location, contact, care-team, and household-role fields sourced from
+// HouseholdMemberEntity (Android-parity: matches HouseholdMemberEntity.kt).
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _PatientProfileCard extends StatefulWidget {
+  const _PatientProfileCard({required this.data});
+  final PatientOrMemberData data;
+
+  @override
+  State<_PatientProfileCard> createState() => _PatientProfileCardState();
+}
+
+class _PatientProfileCardState extends State<_PatientProfileCard> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final d = widget.data;
+
+    Widget buildRow(String label, String? value, {IconData? icon}) {
+      if (value == null || value.isEmpty) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 5),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 130,
+              child: Row(
+                children: [
+                  if (icon != null) ...[
+                    Icon(icon, size: 14, color: scheme.onSurfaceVariant),
+                    const SizedBox(width: 4),
+                  ],
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Text(
+                value,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget buildSection(String title, List<Widget> rows) {
+      final visible = rows.whereType<Padding>().isNotEmpty ||
+          rows.any((w) => w is! SizedBox);
+      if (!visible) return const SizedBox.shrink();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 10, bottom: 4),
+            child: Text(
+              title,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: scheme.primary,
+                letterSpacing: 0.6,
+              ),
+            ),
+          ),
+          ...rows,
+        ],
+      );
+    }
+
+    String? formatGps() {
+      final lat = d.latitude;
+      final lon = d.longitude;
+      if (lat == null || lon == null) return null;
+      return '${lat.toStringAsFixed(5)}, ${lon.toStringAsFixed(5)}';
+    }
+
+    String? boolLabel(bool v) => v ? PatientProfileStrings.yes : null;
+
+    final collapsed = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (d.nationalId != null)
+          buildRow(PatientProfileStrings.labelNid, d.nationalId,
+              icon: Icons.badge_outlined),
+        if (d.dateOfBirth != null)
+          buildRow(PatientProfileStrings.labelDob, d.dateOfBirth,
+              icon: Icons.cake_outlined),
+        if (d.phoneNumber != null)
+          buildRow(PatientProfileStrings.labelPhone, d.phoneNumber,
+              icon: Icons.phone_outlined),
+        if (d.villageName != null)
+          buildRow(PatientProfileStrings.labelVillage, d.villageName,
+              icon: Icons.location_on_outlined),
+      ],
+    );
+
+    final full = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        buildSection(PatientProfileStrings.sectionIdentity, [
+          buildRow(PatientProfileStrings.labelNid, d.nationalId,
+              icon: Icons.badge_outlined),
+          buildRow(PatientProfileStrings.labelGender, d.gender,
+              icon: Icons.person_outline),
+          buildRow(PatientProfileStrings.labelDob, d.dateOfBirth,
+              icon: Icons.cake_outlined),
+          buildRow(PatientProfileStrings.labelIdType, d.idType),
+          buildRow(PatientProfileStrings.labelMaritalStatus, d.maritalStatus),
+          buildRow(PatientProfileStrings.labelDisability, d.disability),
+          buildRow(PatientProfileStrings.labelIsPregnant,
+              d.isPregnant ? PatientProfileStrings.yes : null,
+              icon: Icons.pregnant_woman),
+        ]),
+        buildSection(PatientProfileStrings.sectionLocation, [
+          buildRow(PatientProfileStrings.labelVillage, d.villageName,
+              icon: Icons.location_on_outlined),
+          buildRow(PatientProfileStrings.labelGps, formatGps(),
+              icon: Icons.gps_fixed),
+        ]),
+        buildSection(PatientProfileStrings.sectionContact, [
+          buildRow(PatientProfileStrings.labelPhone, d.phoneNumber,
+              icon: Icons.phone_outlined),
+        ]),
+        buildSection(PatientProfileStrings.sectionCareTeam, [
+          buildRow(PatientProfileStrings.labelSk, d.shasthyaShebikaId,
+              icon: Icons.health_and_safety_outlined),
+          buildRow(PatientProfileStrings.labelGuardian, d.guardianId),
+          buildRow(PatientProfileStrings.labelMother, d.motherReferenceId),
+        ]),
+        buildSection(PatientProfileStrings.sectionHousehold, [
+          buildRow(PatientProfileStrings.labelIsHouseholdHead,
+              boolLabel(d.isHouseholdHead),
+              icon: Icons.house_outlined),
+        ]),
+      ],
+    );
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.person_pin_outlined, color: scheme.primary, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  PatientProfileStrings.profileTitle,
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const Spacer(),
+                TextButton(
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 32),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: () => setState(() => _expanded = !_expanded),
+                  child: Text(
+                    _expanded
+                        ? PatientProfileStrings.hide
+                        : PatientProfileStrings.showMore,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            _expanded ? full : collapsed,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // HTML-composition widgets for the Patient Detail screen.
 // Match `Leapfrog .html` patient summary view: purple header strip, greeting
 // card with bilingual prompt, AI summary card with lavender background.
@@ -1371,10 +1643,22 @@ class _PatientDetailHeader extends StatelessWidget {
     }
     final subtitle = subtitleParts.join(' · ');
 
+    final chips = <_HeaderChip>[
+      if (data.nationalId != null)
+        _HeaderChip(Icons.badge_outlined, data.nationalId!),
+      if (data.phoneNumber != null)
+        _HeaderChip(Icons.phone_outlined, data.phoneNumber!),
+      if (data.villageName != null)
+        _HeaderChip(Icons.location_on_outlined, data.villageName!),
+      if (data.isPregnant)
+        const _HeaderChip(Icons.pregnant_woman, 'Pregnant'),
+    ];
+
     return Container(
       color: tokens.aiPurpleDark,
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 14),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
@@ -1477,6 +1761,41 @@ class _PatientDetailHeader extends StatelessWidget {
               ],
             ),
           ),
+          if (chips.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: chips
+                    .map(
+                      (c) => Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(c.icon, size: 12, color: Colors.white70),
+                            const SizedBox(width: 4),
+                            Text(
+                              c.label,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
         ],
       ),
     );
@@ -1489,6 +1808,12 @@ class _PatientDetailHeader extends StatelessWidget {
     return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
         .toUpperCase();
   }
+}
+
+class _HeaderChip {
+  const _HeaderChip(this.icon, this.label);
+  final IconData icon;
+  final String label;
 }
 
 /// Gemini-powered 2-3 sentence patient summary shown at the top of the

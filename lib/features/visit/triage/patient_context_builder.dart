@@ -22,6 +22,8 @@ class PatientContext {
     this.gestationalWeeks,
     this.pregnancyFacts,
     this.deliveryDateMillis,
+    this.gravida,
+    this.para,
     this.knownConditions = const {},
     this.activeProgrammes = const {},
     this.lastBpSystolic,
@@ -51,6 +53,14 @@ class PatientContext {
 
   /// Delivery date in milliseconds since epoch, for PNC window calculation.
   final int? deliveryDateMillis;
+
+  /// Total number of pregnancies (including current), from patient record.
+  /// Null if not recorded.
+  final int? gravida;
+
+  /// Number of completed deliveries (Para), from patient record.
+  /// Null if not recorded.
+  final int? para;
 
   /// Known diagnosis codes (ICD-10/SNOMED) from active Conditions.
   /// Used for history-triggered pathways (e.g., known HTN, prior TB).
@@ -203,6 +213,7 @@ class PatientContextBuilder {
     // Extract last vitals from raw JSON or assessment history
     final (lastBpSystolic, lastBpDiastolic) = _extractLastBp(patient.rawJson);
     final lastGlucose = _extractLastGlucose(patient.rawJson);
+    final (gravida, para) = _extractGravidaPara(patient.rawJson);
 
     return PatientContext(
       patientId: patientId,
@@ -212,6 +223,8 @@ class PatientContextBuilder {
       gestationalWeeks: gestationalWeeks,
       pregnancyFacts: pregnancyFacts,
       deliveryDateMillis: deliveryDateMillis,
+      gravida: gravida,
+      para: para,
       knownConditions: knownConditions,
       activeProgrammes: programmes,
       lastBpSystolic: lastBpSystolic,
@@ -372,6 +385,18 @@ class PatientContextBuilder {
           return ((s as num).toInt(), (d as num).toInt());
         }
       }
+    } catch (_) {}
+    return (null, null);
+  }
+
+  (int?, int?) _extractGravidaPara(String rawJson) {
+    try {
+      final json = jsonDecode(rawJson) as Map<String, dynamic>;
+      final g = json['gravida'] ?? json['noOfGravida'] ?? json['numberOfGravida'];
+      final p = json['para'] ?? json['parity'] ?? json['noOfDeliveries'] ?? json['numberOfDeliveries'];
+      final gravida = g != null ? (g as num).toInt() : null;
+      final para = p != null ? (p as num).toInt() : null;
+      return (gravida, para);
     } catch (_) {}
     return (null, null);
   }

@@ -29,14 +29,14 @@ class AppConfig {
   /// `pubspec.yaml` so a single bump propagates to the wire.
   static const String appVersionName = String.fromEnvironment(
     'APP_VERSION_NAME',
-    defaultValue: '1.0.0',
+    defaultValue: '2.1.0',
   );
 
   /// Numeric app version code (also sent as the `App-Version-Code` header).
   /// Matches the Android reference contract for offline-sync request bodies.
   static const int appVersionCode = int.fromEnvironment(
     'APP_VERSION_CODE',
-    defaultValue: 1,
+    defaultValue: 12,
   );
 
   /// Application type sent in offline-sync request bodies. Mirrors the

@@ -88,6 +88,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
 
   VisitBriefingResponse? _briefingData;
   bool _briefingLoading = true;
+  int? _ancVisitCount;
 
   @override
   void initState() {
@@ -277,6 +278,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         setState(() {
           _briefingData = data;
           _briefingLoading = false;
+          _ancVisitCount = visitsByVisit.length;
         });
       }
     } on Object {
@@ -422,6 +424,17 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           builder: (context, vm, _) {
             return CustomScrollView(
               slivers: [
+                // 0) ANC visit summary chip — only for ANC patients.
+                //    Spec §4.1 "AI Brief — Visit summary chip — Read-only".
+                if (_patientContext!.isPregnant)
+                  SliverToBoxAdapter(
+                    child: _AncVisitSummaryChip(
+                      patientName: widget.patientName,
+                      patientContext: _patientContext!,
+                      visitCount: _ancVisitCount,
+                    ),
+                  ),
+
                 // 1) Before You Knock (AI brief — collapsible card).
                 // 2) Sit with her / him — greet warmly (navy filled card).
                 // 3) "How is she feeling today?" heading.
@@ -475,54 +488,47 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                 // Unified symptom section: AI chips + search/type-to-add
                 // inline list + other symptoms free-text — all in one card.
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                   sliver: SliverToBoxAdapter(
                     child: _UnifiedSymptomPicker(vm: vm),
                   ),
                 ),
-              ],
-            );
-          },
-        ),
-        bottomNavigationBar: Consumer<TriageViewModel>(
-          builder: (context, vm, _) {
-            return SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Routine visit button
-                    if (vm.isRoutineVisit && vm.activatedPathways.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: TextButton(
-                          onPressed: () => _navigateToForm([]),
-                          child: const Text(
-                            TriageStrings.noSymptomsRoutineVisit,
+
+                // Continue button scrolls with content — tap after reviewing
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                  sliver: SliverToBoxAdapter(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (vm.isRoutineVisit && vm.activatedPathways.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: TextButton(
+                              onPressed: () => _navigateToForm([]),
+                              child: const Text(TriageStrings.noSymptomsRoutineVisit),
+                            ),
+                          ),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            onPressed: _onContinue,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: AppColors.pink,
+                              foregroundColor: AppColors.textOnNavy,
+                            ),
+                            child: Text(
+                              vm.activatedPathways.isNotEmpty
+                                  ? SymptomPickerStrings.ctaWithPathways
+                                  : SymptomPickerStrings.ctaRoutine,
+                            ),
                           ),
                         ),
-                      ),
-
-                    // Continue button
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        onPressed: _onContinue,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.pink,
-                          foregroundColor: AppColors.textOnNavy,
-                        ),
-                        child: Text(
-                          vm.activatedPathways.isNotEmpty
-                              ? SymptomPickerStrings.ctaWithPathways
-                              : SymptomPickerStrings.ctaRoutine,
-                        ),
-                      ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             );
           },
         ),
@@ -530,6 +536,162 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     );
   }
 
+}
+
+// ── ANC Visit Summary Chip ────────────────────────────────────────────────────
+//
+// Spec §4.1: Read-only strip at the top of Step 1 for ANC patients.
+// Shows: patient name · ANC visit number · gestational week · parity · key trend.
+// Sits flush edge-to-edge so it reads as a contextual header, not a card.
+
+class _AncVisitSummaryChip extends StatelessWidget {
+  const _AncVisitSummaryChip({
+    required this.patientContext,
+    this.patientName,
+    this.visitCount,
+  });
+
+  final PatientContext patientContext;
+  final String? patientName;
+
+  /// Total completed visits for this patient — loaded from vitals history.
+  /// Null while the briefing fetch is in flight.
+  final int? visitCount;
+
+  String? get _keyTrend {
+    final facts = patientContext.pregnancyFacts;
+    if (patientContext.lastBpSystolic != null &&
+        patientContext.lastBpSystolic! >= 140) {
+      return ComposerStrings.ancSummaryBpElevated;
+    }
+    if (facts == null) return null;
+    if (facts.isNearTermAnc) return ComposerStrings.ancSummaryNearTerm;
+    if (facts.highRiskPregnantWoman) return ComposerStrings.ancSummaryHighRisk;
+    if (facts.hasGapsInAnc) return ComposerStrings.ancSummaryAncGap;
+    return null;
+  }
+
+  Color get _trendColor {
+    final facts = patientContext.pregnancyFacts;
+    if (patientContext.lastBpSystolic != null &&
+        patientContext.lastBpSystolic! >= 140) {
+      return AppColors.statusCritical;
+    }
+    if (facts?.isNearTermAnc == true) return AppColors.statusWarning;
+    if (facts?.highRiskPregnantWoman == true) return AppColors.statusCritical;
+    if (facts?.hasGapsInAnc == true) return AppColors.statusWarning;
+    return AppColors.textMuted;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ga = patientContext.gestationalWeeks;
+    final g = patientContext.gravida;
+    final p = patientContext.para;
+    final trend = _keyTrend;
+
+    return Container(
+      color: AppColors.ancSurface,
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      child: Row(
+        children: [
+          // ANC badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: AppColors.ancText,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              ComposerStrings.ancSummaryEyebrow,
+              style: const TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+                letterSpacing: 0.6,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Patient name
+          Expanded(
+            child: Text(
+              patientName ?? '',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.ancText,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Pill chips — GA · parity · visit number
+          Wrap(
+            spacing: 5,
+            children: [
+              if (ga != null)
+                _SummaryPill(
+                  label: '$ga ${ComposerStrings.ancSummaryGaUnit}',
+                  color: AppColors.ancText,
+                  surface: AppColors.ancBorder,
+                ),
+              if (g != null && p != null)
+                _SummaryPill(
+                  label: ComposerStrings.ancSummaryParity(g, p),
+                  color: AppColors.ancText,
+                  surface: AppColors.ancBorder,
+                ),
+              if (visitCount != null)
+                _SummaryPill(
+                  label: '${ComposerStrings.ancSummaryVisitPrefix}$visitCount',
+                  color: AppColors.ancText,
+                  surface: AppColors.ancBorder,
+                ),
+              if (trend != null)
+                _SummaryPill(
+                  label: trend,
+                  color: Colors.white,
+                  surface: _trendColor,
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryPill extends StatelessWidget {
+  const _SummaryPill({
+    required this.label,
+    required this.color,
+    required this.surface,
+  });
+
+  final String label;
+  final Color color;
+  final Color surface;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: surface,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
+      ),
+    );
+  }
 }
 
 // ── AI Briefing Section: 3 stacked cards ─────────────────────────────────────
@@ -609,81 +771,54 @@ class _BriefingCardState extends State<_BriefingCard> {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.cardSurface,
-        borderRadius: BorderRadius.circular(AppRadius.patRow),
-        border: Border.all(color: AppColors.aiBorder),
+        color: const Color(0xFFF8F9FA),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           // Tappable header row
-          InkWell(
+          GestureDetector(
             onTap: () => setState(() => _expanded = !_expanded),
-            borderRadius: BorderRadius.circular(14),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-              child: Row(
-                children: [
-                  Container(
-                    width: 26,
-                    height: 26,
-                    decoration: BoxDecoration(
-                      color: widget.iconColor.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Icon(widget.icon, size: 15, color: widget.iconColor),
+            behavior: HitTestBehavior.opaque,
+            child: Row(
+              children: [
+                // Solid navy square with star icon
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: AppColors.navy,
+                    borderRadius: BorderRadius.circular(7),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      widget.title,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                        color: AppColors.navy,
-                      ),
+                  child: const Icon(Icons.star, size: 12, color: Colors.white),
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    widget.title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                      color: AppColors.navy,
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.aiSurfaceStart,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: AppColors.aiBorder),
-                    ),
-                    child: const Text(
-                      '✦ AI',
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.aiPurple,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Icon(
-                    _expanded
-                        ? Icons.expand_less_rounded
-                        : Icons.expand_more_rounded,
-                    size: 18,
-                    color: AppColors.textMuted,
-                  ),
-                ],
-              ),
+                ),
+                Icon(
+                  _expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                  size: 16,
+                  color: AppColors.textMuted,
+                ),
+              ],
             ),
           ),
           // Expandable content
           if (_expanded) ...[
-            const Divider(height: 1, thickness: 0.5),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-              child: widget.child,
-            ),
+            const SizedBox(height: 6),
+            widget.child,
           ],
         ],
       ),
@@ -715,16 +850,22 @@ class _BriefingCard1Content extends StatelessWidget {
         ? '$headline\n$firstPoint'
         : headline;
 
-    return Text(
-      aiBody,
-      style: const TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w600,
-        height: 1.35,
-        color: _aiTextColor,
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFDF2F8),
+        borderRadius: BorderRadius.circular(8),
       ),
-      maxLines: 2,
-      overflow: TextOverflow.ellipsis,
+      child: Text(
+        aiBody,
+        style: const TextStyle(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w600,
+          height: 1.4,
+          color: _aiTextColor,
+        ),
+      ),
     );
   }
 }
@@ -759,7 +900,6 @@ class _GreetWarmlyCard extends StatelessWidget {
   final String? fallbackOpeningLine;
 
   static const Color _navyBg = AppColors.navy;
-  static const Color _navyHint = AppColors.navyMid;
 
   String _resolveBangla() {
     final g = greeting;
@@ -776,121 +916,50 @@ class _GreetWarmlyCard extends StatelessWidget {
     return SymptomPickerStrings.sitWithGreetEnglishFor(isFemale: isFemale);
   }
 
-  String _resolveHint() {
-    final g = greeting;
-    if (g != null && g.hint.trim().isNotEmpty) return g.hint.trim();
-    return SymptomPickerStrings.sitWithGreetHintFor(isFemale: isFemale);
-  }
-
   @override
   Widget build(BuildContext context) {
     final bangla = _resolveBangla();
     final english = _resolveEnglish();
-    final hint = _resolveHint();
-
     final hasAi = greeting != null && !greeting!.isEmpty;
 
     return Container(
       decoration: BoxDecoration(
         color: _navyBg,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
       ),
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              const Text('👋', style: TextStyle(fontSize: 13)),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  SymptomPickerStrings.sitWithGreetHeaderFor(
-                    isFemale: isFemale,
-                  ),
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textOnNavy.withValues(alpha: 0.75),
-                    letterSpacing: 0.8,
-                  ),
-                ),
-              ),
-              if (hasAi)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.textOnNavy.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Text(
-                    '✦ AI',
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textOnNavy,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-            ],
+          Text(
+            '👋 Greet warmly',
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textOnNavy.withValues(alpha: 0.6),
+              letterSpacing: 0.08 * 9,
+            ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 5),
           if (loading && !hasAi)
             const _GreetLoadingSkeleton()
           else ...[
             Text(
               bangla,
               style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
                 color: AppColors.textOnNavy,
-                height: 1.35,
+                height: 1.5,
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 3),
             Text(
               '"$english"',
               style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: AppColors.textOnNavy.withValues(alpha: 0.85),
-                fontStyle: FontStyle.italic,
-                height: 1.35,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: _navyHint,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '💡',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textOnNavy.withValues(alpha: 0.85),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      hint,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textOnNavy.withValues(alpha: 0.85),
-                      ),
-                    ),
-                  ),
-                ],
+                fontSize: 11,
+                color: AppColors.textOnNavy.withValues(alpha: 0.6),
               ),
             ),
           ],
@@ -1759,34 +1828,13 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Section header
-              Row(
-                children: [
-                  const Icon(
-                    Icons.auto_awesome,
-                    size: 16,
-                    color: AppColors.aiPurple,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      SymptomPickerStrings.detectedSymptomsTitle,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.aiPurple,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                selected.isEmpty
-                    ? SymptomPickerStrings.detectedSymptomsSubtitleEmpty
-                    : SymptomPickerStrings.detectedSymptomsSubtitleFilled,
-                style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-              ),
+              if (selected.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  SymptomPickerStrings.detectedSymptomsSubtitleFilled,
+                  style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                ),
+              ],
               // AI-detected / manually-added chips
               if (selected.isNotEmpty) ...[
                 const SizedBox(height: 10),

@@ -550,6 +550,41 @@ abstract final class PatientContextStrings {
   static const String allAssessmentsTitle = 'All assessments';
 }
 
+/// Copy for the patient profile card — collapsible demographic section
+/// shown inside PatientContextScreen below the header.
+abstract final class PatientProfileStrings {
+  PatientProfileStrings._();
+
+  static const String profileTitle = 'Patient Profile';
+  static const String showMore = 'Show full profile';
+  static const String hide = 'Hide profile';
+
+  static const String sectionIdentity = 'Identity';
+  static const String sectionLocation = 'Location';
+  static const String sectionContact = 'Contact';
+  static const String sectionCareTeam = 'Care Team';
+  static const String sectionHousehold = 'Household Role';
+
+  static const String labelNid = 'NID / BRN';
+  static const String labelGender = 'Gender';
+  static const String labelDob = 'Date of Birth';
+  static const String labelIdType = 'ID Type';
+  static const String labelMaritalStatus = 'Marital Status';
+  static const String labelDisability = 'Disability';
+  static const String labelVillage = 'Village';
+  static const String labelPhone = 'Phone';
+  static const String labelIsHouseholdHead = 'HH Head';
+  static const String labelRelation = 'Relation to HH Head';
+  static const String labelSk = 'Assigned SK';
+  static const String labelGuardian = 'Guardian';
+  static const String labelMother = 'Mother Ref';
+  static const String labelGps = 'GPS';
+  static const String labelIsPregnant = 'Pregnant';
+  static const String yes = 'Yes';
+  static const String no = 'No';
+  static const String notAvailable = '—';
+}
+
 /// Copy for the Referral SLA dashboard, cards, banners, and notifications.
 /// Spec: `leapfrog-setup/designs/referral-sla-engine.md` §11.
 abstract final class ReferralStrings {
@@ -819,7 +854,7 @@ abstract final class MissionDashboardStrings {
     return '$villageCount villages';
   }
 
-  static const String referralAlertsLabel = 'Referral alerts';
+  static const String referralAlertsLabel = 'Referral alerts need follow-up';
   static const String tapToFollowUp = 'Tap to follow up →';
   static const String referralCceComingSoon = 'CCE integration coming soon';
   static const String visitStartFailed =
@@ -1046,15 +1081,15 @@ abstract final class MissionDashboardStrings {
   static const String allVillages = 'All villages';
   static const String filterByNeed = 'FILTER BY NEED';
   static const String filterByNeedOptional = 'optional';
-  static const String needHighRisk = '⚠️ High-risk';
-  static const String needAncMnch = '🤰 ANC / MNCH';
-  static const String needChildImmunisation = '👶 Child / Immunisation';
-  static const String needNcd = '💊 NCD';
-  static const String needEyeCare = '👁️ Eye care';
-  static const String needMissedFollowUp = '⏰ Missed follow-up';
-  static const String needPendingReferral = '📋 Pending referral';
-  static const String needHomeVisit = '🏠 Home visit';
-  static const String needFacilityReferral = '🏥 Facility referral';
+  static const String needHighRisk = 'High-risk';
+  static const String needAncMnch = 'ANC / MNCH';
+  static const String needChildImmunisation = 'Child / Immunisation';
+  static const String needNcd = 'NCD';
+  static const String needEyeCare = 'Eye care';
+  static const String needMissedFollowUp = 'Missed follow-up';
+  static const String needPendingReferral = 'Pending referral';
+  static const String needHomeVisit = 'Home visit';
+  static const String needFacilityReferral = 'Facility referral';
   static const String clearNeedFilters = 'Clear';
   static const String filterByProgramme = 'Programme';
   static const String noNeedsInQueue = 'No priority needs in today\'s list';
@@ -2399,8 +2434,12 @@ abstract final class ComposerStrings {
   static const String lmpLabel = 'Last Menstrual Period';
   static const String eddLabel = 'Estimated Due Date';
   static const String gestationalAgeLabel = 'Gestational Age';
-  static const String gestationalAgeWeeks = 'weeks';
+  static const String gestationalAgeWeeks = 'wks';
+  static const String gestationalAgeDays = 'days';
   static const String gestationalAgePreterm = 'Preterm (< 37 weeks)';
+  static const String pregnancyOverviewNoData = 'Pregnancy data not available';
+  static const String pregnancyOverviewLmp = 'LMP';
+  static const String pregnancyOverviewEdd = 'EDD';
 
   // ── Glass prescription labels ────────────────────────────────────────────────
   static const String eyeOd = 'OD (Right)';
@@ -2409,6 +2448,17 @@ abstract final class ComposerStrings {
   static const String cylinderLabel = 'Cylinder';
   static const String axisLabel = 'Axis';
   static const String glassPrescriptionSummary = 'Prescription recorded';
+
+  // ── ANC visit summary chip (Step 1 — Before You Knock) ──────────────────────
+  static const String ancSummaryEyebrow = 'ANC VISIT';
+  static const String ancSummaryGaUnit = 'wks GA';
+  static const String ancSummaryVisitPrefix = '#';
+  static const String ancSummaryHighRisk = 'High-risk';
+  static const String ancSummaryNearTerm = 'Near-term';
+  static const String ancSummaryAncGap = 'ANC gap';
+  static const String ancSummaryBpElevated = 'BP elevated';
+  static const String ancSummaryParityFormat = 'G{g}P{p}';
+  static String ancSummaryParity(int g, int p) => 'G${g}P$p';
 
   // ── Compound-widget column sub-labels ────────────────────────────────────────
   static const String heightShort = 'Height';
@@ -2932,8 +2982,6 @@ abstract final class SymptomPickerStrings {
 
   // ── AI-driven symptom list (replaces the hardcoded cluster grid) ─────────
   static const String detectedSymptomsTitle = 'AI-Detected Symptoms';
-  static const String detectedSymptomsSubtitleEmpty =
-      'Tap the mic above to record the patient. AI-detected symptoms will appear here for you to review.';
   static const String detectedSymptomsSubtitleFilled =
       'Review each symptom. Tap × to remove anything incorrect, or add what is missing.';
   static const String addSymptomSearchHint = 'Search or type symptom…';
@@ -3365,6 +3413,8 @@ abstract final class EnrollmentStrings {
 
   static const String villageLabel = 'Village';
   static const String villageHint = 'Select village';
+  static const String subVillageLabel = 'Sub-Village';
+  static const String subVillageHint = 'Select sub-village';
 
   static const String householdTypeLabel = 'Household Type';
   static const List<String> householdTypes = [

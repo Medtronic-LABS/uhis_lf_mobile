@@ -504,7 +504,24 @@ class AncAssessment {
 
 /// Danger signs options for ANC by trimester.
 class AncDangerSignsOptions {
-  /// First trimester danger signs (weeks 1-12).
+  /// Flat list shown to the SK regardless of trimester — union of all
+  /// trimester signs in clinical priority order (spec: flat 7+ item list).
+  static const List<String> all = [
+    'Vaginal bleeding',
+    'Convulsions',
+    'Severe headache',
+    'Blurred vision',
+    'Swelling of face/hands',
+    'Difficulty breathing',
+    'Fever / burning while urinating',
+    'Fever',
+    'Severe abdominal pain',
+    'Leaking fluid',
+    'Reduced fetal movement',
+    'Persistent vomiting',
+  ];
+
+  // Kept for backend serialisation — UI no longer uses these directly.
   static const List<String> firstTrimester = [
     'Vaginal bleeding',
     'Severe abdominal pain',
@@ -515,7 +532,6 @@ class AncDangerSignsOptions {
     'Convulsions',
   ];
 
-  /// Second trimester danger signs (weeks 13-27).
   static const List<String> secondTrimester = [
     'Vaginal bleeding',
     'Severe abdominal pain',
@@ -528,7 +544,6 @@ class AncDangerSignsOptions {
     'Swelling of face/hands',
   ];
 
-  /// Third trimester danger signs (weeks 28-40).
   static const List<String> thirdTrimester = [
     'Vaginal bleeding',
     'Severe abdominal pain',

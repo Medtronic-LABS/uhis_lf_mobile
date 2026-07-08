@@ -4,7 +4,11 @@ import '../../../app/theme.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/models/dashboard_tier.dart';
 import '../../../core/models/mission_queue_item.dart';
-import '../../../core/models/programme.dart';
+
+String _titleCase(String s) => s
+    .split(' ')
+    .map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1).toLowerCase())
+    .join(' ');
 
 /// Shared patient card widget for mission queue items.
 /// Used by both Dashboard (home) and Tasks screens.
@@ -29,13 +33,6 @@ class MissionQueueCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
-    final programmeColor = isCompleted
-        ? tokens.statusSuccess
-        : _programmeColor(item);
-    final tierBorderColor = isCompleted
-        ? tokens.statusSuccess
-        : _borderColorForTier(item.tier, tokens);
-    final hasTierBorder = tierBorderColor != const Color(0xFFE5E7EB);
     final (dotLabel, dotColor) = isCompleted
         ? ('Done', tokens.statusSuccess)
         : _statusDotStyle(item.tier, tokens);
@@ -45,7 +42,7 @@ class MissionQueueCard extends StatelessWidget {
       child: Padding(
         padding: compact
             ? EdgeInsets.zero
-            : const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            : const EdgeInsets.fromLTRB(12, 0, 12, 8),
         child: Semantics(
           label: 'View patient ${item.patientName}',
           button: true,
@@ -54,17 +51,9 @@ class MissionQueueCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               color: tokens.cardSurface,
               boxShadow: [
-                // Subtle programme-colour glow on the left
-                BoxShadow(
-                  color: programmeColor.withValues(alpha: 0.22),
-                  offset: const Offset(-5, 0),
-                  blurRadius: 12,
-                  spreadRadius: 0,
-                ),
-                // Standard card drop shadow
                 BoxShadow(
                   color: const Color(0xFF000000).withValues(alpha: 0.06),
-                  offset: const Offset(0, 2),
+                  offset: const Offset(0, 1),
                   blurRadius: 6,
                 ),
               ],
@@ -87,75 +76,97 @@ class MissionQueueCard extends StatelessWidget {
                     : onTap,
                 borderRadius: BorderRadius.circular(12),
                 child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    border: hasTierBorder
-                        ? Border(
-                            left: BorderSide(color: tierBorderColor, width: 4),
-                          )
-                        : Border(
-                            left: BorderSide(
-                              color: programmeColor.withValues(alpha: 0.5),
-                              width: 3,
-                            ),
-                          ),
-                  ),
-                  padding: const EdgeInsets.fromLTRB(13, 13, 12, 13),
-                  child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    // ── Avatar ──────────────────────────────────────────
-                    _ProgrammeAvatar(
-                      item: item,
-                      isCompleted: isCompleted,
-                      avatarColor: programmeColor,
-                      tokens: tokens,
+                  decoration: const BoxDecoration(
+                    borderRadius: BorderRadius.all(Radius.circular(14)),
+                    border: Border(
+                      left: BorderSide(color: Color(0xFFE5E7EB), width: 4),
                     ),
-                    const SizedBox(width: 12),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // ── Left: patient info ──────────────────────────────
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Name + age + badge (baseline-aligned, wraps)
+                            Wrap(
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              spacing: 6,
+                              runSpacing: 3,
+                              children: [
+                                Text(
+                                  item.patientName,
+                                  style: AppTextStyles.worklistPatientName.copyWith(
+                                    color: isCompleted ? tokens.textMuted : const Color(0xFF111827),
+                                    decoration: isCompleted ? TextDecoration.lineThrough : null,
+                                  ),
+                                ),
+                                if (item.age != null)
+                                  Text(
+                                    '${item.age}y',
+                                    style: const TextStyle(
+                                      fontFamily: 'NunitoSans',
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: Color(0xFF111827),
+                                    ),
+                                  ),
+                                if (isCompleted)
+                                  _VisitedBadge(tokens: tokens)
+                                else
+                                  MissionReasonBadge(item: item),
+                              ],
+                            ),
 
-                    // ── Content ──────────────────────────────────────────
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Row 1: Name + badge inline (Wrap handles overflow)
-                          Wrap(
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            spacing: 8,
-                            runSpacing: 3,
-                            children: [
-                              Text(
-                                item.patientName,
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                  color: isCompleted
-                                      ? tokens.textMuted
-                                      : tokens.textPrimary,
-                                  decoration: isCompleted
-                                      ? TextDecoration.lineThrough
-                                      : null,
+                            // Address
+                            Builder(builder: (context) {
+                              final address = [
+                                item.householdDisplay,
+                                _titleCase(item.village ?? ''),
+                              ].where((s) => s.isNotEmpty).join(', ');
+                              if (address.isEmpty) return const SizedBox.shrink();
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(
+                                  address,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontFamily: 'NunitoSans',
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w400,
+                                    color: AppColors.textMuted,
+                                  ),
+                                ),
+                              );
+                            }),
+
+                            // Phone
+                            if (item.phoneNumber != null && item.phoneNumber!.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(
+                                  item.phoneNumber!,
+                                  style: const TextStyle(
+                                    fontFamily: 'NunitoSans',
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w400,
+                                    color: AppColors.textMuted,
+                                  ),
                                 ),
                               ),
-                              if (isCompleted)
-                                _VisitedBadge(tokens: tokens)
-                              else
-                                MissionReasonBadge(item: item),
-                            ],
-                          ),
-                          const SizedBox(height: 5),
-
-                          // Row 2: Age · House · Village · Programme + emoji
-                          _CombinedMetaLine(item: item, tokens: tokens),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
 
-                    // ── Status dot + label ───────────────────────────────
-                    _StatusDot(label: dotLabel, color: dotColor),
-                  ],
-                ),
+                      // ── Right: status dot ───────────────────────────────
+                      const SizedBox(width: 12),
+                      _StatusDot(label: dotLabel, color: dotColor),
+                    ],
+                  ),
               ),
             ),
           ),
@@ -166,163 +177,23 @@ class MissionQueueCard extends StatelessWidget {
   }
 
 
-  /// Programme accent colour — drives avatar tint only (left border stays grey).
-  static Color _programmeColor(MissionQueueItem item) {
-    if (item.programmes.contains(Programme.anc) ||
-        item.programmes.contains(Programme.pnc)) {
-      return const Color(0xFF831843); // deep rose — pregnancy
-    }
-    if (item.programmes.contains(Programme.imci) ||
-        item.programmes.contains(Programme.epi)) {
-      return const Color(0xFF1B2B5E); // navy — child / immunisation
-    }
-    if (item.programmes.contains(Programme.ncd)) {
-      return const Color(0xFF854F0B); // deep amber — NCD
-    }
-    if (item.programmes.contains(Programme.tb)) return AppColors.aiPurple;
-    return const Color(0xFF6B7280); // grey — unenrolled / unknown
-  }
-
-  /// Tier border overrides programme color for urgent states (overdue / CCE).
-  Color _borderColorForTier(DashboardTier tier, LeapfrogColors tokens) {
-    if (tier == DashboardTier.overdue) return AppColors.statusWarning;
-    if (tier == DashboardTier.critical) {
-      final cceOrDanger = item.drivers.any((d) =>
-          d == 'sla-breached' ||
-          d == 'danger-sign' ||
-          d == 'stroke-sign' ||
-          d == 'eclampsia');
-      return cceOrDanger ? tokens.statusCritical : const Color(0xFFE5E7EB);
-    }
-    return const Color(0xFFE5E7EB);
-  }
-
-  /// Status dot style: (label, dotColor) keyed by tier.
+/// Status dot style: (label, dotColor) keyed by tier.
   (String, Color) _statusDotStyle(DashboardTier tier, LeapfrogColors tokens) {
     switch (tier) {
       case DashboardTier.critical:
-        return (MissionDashboardStrings.statusPillForTier(tier), tokens.statusCritical);
-      case DashboardTier.overdue:
-        return (MissionDashboardStrings.statusPillForTier(tier), AppColors.statusWarning);
+        return (MissionDashboardStrings.statusPillForTier(tier), const Color(0xFF16A34A)); // green — Now
       case DashboardTier.dueToday:
-        return (MissionDashboardStrings.statusPillForTier(tier), tokens.brandNavy);
+        return (MissionDashboardStrings.statusPillForTier(tier), const Color(0xFF16A34A)); // green — Today
+      case DashboardTier.overdue:
+        return (MissionDashboardStrings.statusPillForTier(tier), const Color(0xFFDC2626)); // red — Overdue
       case DashboardTier.thisWeek:
-        return (MissionDashboardStrings.statusPillForTier(tier), tokens.textMuted);
+        return (MissionDashboardStrings.statusPillForTier(tier), const Color(0xFFB45309)); // amber — This week
       case DashboardTier.upcoming:
         return (MissionDashboardStrings.statusPillForTier(tier), tokens.textMuted);
     }
   }
 }
 
-// ─── Avatar ──────────────────────────────────────────────────────────────────
-
-class _ProgrammeAvatar extends StatelessWidget {
-  const _ProgrammeAvatar({
-    required this.item,
-    required this.isCompleted,
-    required this.avatarColor,
-    required this.tokens,
-  });
-
-  final MissionQueueItem item;
-  final bool isCompleted;
-  final Color avatarColor;
-  final LeapfrogColors tokens;
-
-  @override
-  Widget build(BuildContext context) {
-    if (isCompleted) {
-      return CircleAvatar(
-        radius: 22,
-        backgroundColor: tokens.statusSuccess.withValues(alpha: 0.15),
-        child: Icon(Icons.check, color: tokens.statusSuccess, size: 22),
-      );
-    }
-    return CircleAvatar(
-      radius: 22,
-      backgroundColor: avatarColor.withValues(alpha: 0.15),
-      child: Icon(
-        _iconForProgramme(item.programmes),
-        color: avatarColor,
-        size: 22,
-      ),
-    );
-  }
-
-  static IconData _iconForProgramme(Set<Programme> programmes) {
-    if (programmes.contains(Programme.anc) ||
-        programmes.contains(Programme.pnc)) {
-      return Icons.pregnant_woman_rounded;
-    }
-    if (programmes.contains(Programme.imci) ||
-        programmes.contains(Programme.epi)) {
-      return Icons.child_care_rounded;
-    }
-    if (programmes.contains(Programme.ncd)) return Icons.monitor_heart_rounded;
-    if (programmes.contains(Programme.tb)) return Icons.air_rounded;
-    return Icons.person_rounded;
-  }
-}
-
-// ─── Combined meta: Age · House · Village · Programme description + emoji ─────
-
-class _CombinedMetaLine extends StatelessWidget {
-  const _CombinedMetaLine({required this.item, required this.tokens});
-
-  final MissionQueueItem item;
-  final LeapfrogColors tokens;
-
-  @override
-  Widget build(BuildContext context) {
-    final parts = <String>[];
-    if (item.age != null) parts.add(WorklistStrings.ageFmt(item.age!));
-    final house = item.householdDisplay;
-    if (house.isNotEmpty) parts.add(house);
-    if (item.village != null && item.village!.isNotEmpty) {
-      parts.add(item.village!);
-    }
-
-    // Programme description: diagnosis label if available, else programme name
-    final knownProgrammes =
-        item.programmes.where((p) => p != Programme.unknown).toList();
-    if (knownProgrammes.isNotEmpty) {
-      final diagnosis = item.diagnosisLabel;
-      final progLabel = (diagnosis != null && diagnosis.isNotEmpty)
-          ? diagnosis
-          : knownProgrammes.map(_displayName).join(' · ');
-      parts.add('$progLabel ${item.programmeEmoji}');
-    } else {
-      parts.add('${WorklistStrings.selectService} ${item.programmeEmoji}');
-    }
-
-    return Text(
-      parts.join(' · '),
-      style: TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w500,
-        color: tokens.textMuted,
-      ),
-      maxLines: 2,
-      overflow: TextOverflow.ellipsis,
-    );
-  }
-
-  static String _displayName(Programme p) {
-    switch (p) {
-      case Programme.anc:            return WorklistStrings.programmeAnc;
-      case Programme.pnc:            return WorklistStrings.programmePnc;
-      case Programme.ncd:            return WorklistStrings.programmeNcd;
-      case Programme.imci:           return WorklistStrings.programmeImci;
-      case Programme.tb:             return WorklistStrings.programmeTb;
-      case Programme.epi:            return WorklistStrings.programmeEpi;
-      case Programme.nutrition:      return WorklistStrings.programmeNutrition;
-      case Programme.familyPlanning: return WorklistStrings.programmeFamilyPlanning;
-      case Programme.cataract:       return WorklistStrings.programmeCataract;
-      case Programme.eyeCare:        return WorklistStrings.programmeEyeCare;
-      case Programme.unknown:        return '';
-    }
-  }
-}
 
 // ─── Reason badge ─────────────────────────────────────────────────────────────
 
@@ -347,6 +218,7 @@ class MissionReasonBadge extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
+          fontFamily: 'NunitoSans',
           fontSize: 10,
           fontWeight: FontWeight.w700,
           color: fg,
@@ -388,18 +260,14 @@ class _StatusDot extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 7,
-              height: 7,
+              width: 6,
+              height: 6,
               decoration: BoxDecoration(shape: BoxShape.circle, color: color),
             ),
             const SizedBox(width: 4),
             Text(
               label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: color,
-              ),
+              style: AppTextStyles.worklistStatusPill.copyWith(color: color),
             ),
           ],
         ),

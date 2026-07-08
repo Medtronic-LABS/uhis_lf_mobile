@@ -20,7 +20,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 17;
+  static const int schemaVersion = 19;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -155,6 +155,13 @@ class AppDatabase {
         local_signature_file TEXT,
         mother_patient_id TEXT,
         mother_reference_id TEXT,
+        marital_status TEXT,
+        disability TEXT,
+        guardian_id TEXT,
+        guardian_fhir_id TEXT,
+        latitude REAL,
+        longitude REAL,
+        id_type TEXT,
         version TEXT,
         last_updated TEXT,
         created_at INTEGER,
@@ -355,6 +362,7 @@ class AppDatabase {
         referral_status TEXT,
         referred_reasons TEXT,
         follow_up_id INTEGER,
+        pregnancy_episode_id TEXT,
         latitude REAL DEFAULT 0.0,
         longitude REAL DEFAULT 0.0,
         sync_status TEXT DEFAULT 'pending',
@@ -976,6 +984,32 @@ class AppDatabase {
         } catch (_) {/* column already present */}
       }
       await addCol17('ALTER TABLE $tableMembers ADD COLUMN reference_id TEXT');
+    }
+    if (from < 18) {
+      // v18 — Extended member demographic fields matching Android
+      // HouseholdMemberEntity: maritalStatus, disability, guardianId,
+      // guardianFhirId, latitude, longitude, idType.
+      Future<void> addCol18(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* column already present */}
+      }
+      await addCol18('ALTER TABLE $tableMembers ADD COLUMN marital_status TEXT');
+      await addCol18('ALTER TABLE $tableMembers ADD COLUMN disability TEXT');
+      await addCol18('ALTER TABLE $tableMembers ADD COLUMN guardian_id TEXT');
+      await addCol18('ALTER TABLE $tableMembers ADD COLUMN guardian_fhir_id TEXT');
+      await addCol18('ALTER TABLE $tableMembers ADD COLUMN latitude REAL');
+      await addCol18('ALTER TABLE $tableMembers ADD COLUMN longitude REAL');
+      await addCol18('ALTER TABLE $tableMembers ADD COLUMN id_type TEXT');
+    }
+    if (from < 19) {
+      // v19 — pregnancyEpisodeId on local_assessments, matching Android's
+      // PregnancyDetails.pregnancyEpisodeId sent in offline-sync/create for
+      // ANC/PNC encounters so the server can link sequential visits.
+      try {
+        await db.execute(
+            'ALTER TABLE $tableLocalAssessments ADD COLUMN pregnancy_episode_id TEXT');
+      } catch (_) {/* column already present */}
     }
   }
 

@@ -81,9 +81,21 @@ class MemberHealthDetails {
     this.age,
     this.dateOfBirth,
     this.phoneNumber,
+    this.nationalId,
     this.householdId,
     this.villageId,
+    this.villageName,
     this.isPregnant = false,
+    this.isHouseholdHead = false,
+    this.maritalStatus,
+    this.disability,
+    this.shasthyaShebikaId,
+    this.guardianId,
+    this.guardianFhirId,
+    this.motherReferenceId,
+    this.latitude,
+    this.longitude,
+    this.idType,
     this.assessments = const [],
     this.rawJson = const {},
   });
@@ -95,9 +107,21 @@ class MemberHealthDetails {
   final int? age;
   final String? dateOfBirth;
   final String? phoneNumber;
+  final String? nationalId;
   final String? householdId;
   final String? villageId;
+  final String? villageName;
   final bool isPregnant;
+  final bool isHouseholdHead;
+  final String? maritalStatus;
+  final String? disability;
+  final String? shasthyaShebikaId;
+  final String? guardianId;
+  final String? guardianFhirId;
+  final String? motherReferenceId;
+  final double? latitude;
+  final double? longitude;
+  final String? idType;
   final List<MemberAssessment> assessments;
   final Map<String, dynamic> rawJson;
 
@@ -235,9 +259,21 @@ class MemberDetailRepository extends ApiRepository {
       age: age,
       dateOfBirth: m.dob,
       phoneNumber: m.phone,
+      nationalId: m.nationalId,
       householdId: m.householdId,
       villageId: m.villageId,
+      villageName: m.villageName,
       isPregnant: m.isPregnant,
+      isHouseholdHead: m.isHouseholdHead,
+      maritalStatus: m.maritalStatus,
+      disability: m.disability,
+      shasthyaShebikaId: m.shasthyaShebikaId,
+      guardianId: m.guardianId,
+      guardianFhirId: m.guardianFhirId,
+      motherReferenceId: m.motherReferenceId,
+      latitude: m.latitude,
+      longitude: m.longitude,
+      idType: m.idType,
     );
   }
 
@@ -281,6 +317,11 @@ class MemberDetailRepository extends ApiRepository {
         }
         if (entity.patientId != null && entity.patientId!.isNotEmpty) {
           acceptableIds.add(entity.patientId!);
+        }
+        // referenceId is the server's internal integer PK — assessment-history
+        // rows use this as householdMemberId, so it must be in the match set.
+        if (entity.referenceId != null && entity.referenceId!.isNotEmpty) {
+          acceptableIds.add(entity.referenceId!);
         }
       }
     }

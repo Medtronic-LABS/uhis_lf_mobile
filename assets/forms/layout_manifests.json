@@ -501,282 +501,122 @@
     "clinicalWorkflowId": 4,
     "sections": [
       {
-        "sectionId": "medicalHistoryPhysicalExamination",
-        "title": "Medical History, Physical Examination & Vitals",
+        "sectionId": "pregnancyOverview",
+        "title": "Pregnancy Overview",
         "fieldRefs": [
-          {
-            "fieldName": "Any complication during all previous pregnancies",
-            "isMandatory": false,
-            "id": "previousPregnancyComplications"
-          },
-          {
-            "fieldName": "Pregnant woman has any existing illness",
-            "isMandatory": false,
-            "id": "pregnantWomanExistingIllness"
-          },
-          {
-            "fieldName": "Pregnant woman on treatment for any existing illness",
-            "isMandatory": false,
-            "id": "pregnantWomanOnTreatment"
-          },
-          {
-            "fieldName": "Height",
-            "inputType": 8192,
-            "isMandatory": false,
-            "id": "height"
-          },
-          {
-            "fieldName": "Weight",
-            "inputType": 8192,
-            "isMandatory": false,
-            "id": "weight"
-          },
-          "bmi",
-          {
-            "fieldName": "Blood Pressure",
-            "isMandatory": false,
-            "id": "bloodPressure"
-          },
-          {
-            "fieldName": "Systolic",
-            "inputType": 3,
-            "isMandatory": false,
-            "id": "systolic"
-          },
-          {
-            "fieldName": "Diastolic",
-            "inputType": 3,
-            "isMandatory": false,
-            "id": "diastolic"
-          },
-          {
-            "fieldName": "Edema",
-            "isMandatory": false,
-            "id": "edema"
-          },
-          {
-            "fieldName": "Temperature",
-            "inputType": 8192,
-            "isMandatory": false,
-            "id": "temperature"
-          },
-          {
-            "fieldName": "Pulse",
-            "inputType": 8192,
-            "isMandatory": false,
-            "id": "pulse"
-          },
-          {
-            "fieldName": "Fundal Height",
-            "inputType": 8192,
-            "isMandatory": false,
-            "id": "fundalHeight"
-          }
+          "pregnancyProfile"
         ]
       },
       {
-        "sectionId": "pointOfCareInvestigations",
-        "title": "Point-of-Care Investigations",
+        "sectionId": "todaysVitals",
+        "title": "Today's Vitals",
         "fieldRefs": [
           {
-            "fieldName": "Hemoglobin",
-            "inputType": 8192,
-            "isMandatory": false,
-            "id": "hemoglobin"
+            "id": "bloodPressure",
+            "fieldName": "Blood Pressure",
+            "isMandatory": false
           },
           {
-            "fieldName": "Blood Sugar",
-            "isMandatory": false,
-            "id": "bloodSugar"
+            "id": "systolic",
+            "fieldName": "Systolic",
+            "inputType": 3,
+            "isMandatory": false
           },
           {
-            "fieldName": "Blood Sugar Fasting",
-            "inputType": 8192,
-            "isMandatory": false,
-            "id": "bloodSugarFasting"
+            "id": "diastolic",
+            "fieldName": "Diastolic",
+            "inputType": 3,
+            "isMandatory": false
           },
           {
-            "fieldName": "Blood Sugar Random",
-            "inputType": 8192,
-            "isMandatory": false,
-            "id": "bloodSugarRandom"
+            "id": "weight",
+            "fieldName": "Weight (kg)",
+            "isMandatory": false
           },
           {
-            "fieldName": "Urinary Albumin",
-            "isMandatory": false,
-            "id": "urinaryAlbumin"
+            "id": "urinaryAlbumin",
+            "fieldName": "Urine Protein",
+            "isMandatory": false
           },
           {
-            "fieldName": "Urinary Sugar",
-            "isMandatory": false,
-            "id": "urinarySugar"
+            "id": "fundalHeight",
+            "fieldName": "Fundal Height (cm)",
+            "isMandatory": false
           },
+          "fetalMovement"
+        ]
+      },
+      {
+        "sectionId": "bloodTests",
+        "title": "Blood Tests",
+        "fieldRefs": [
           {
-            "fieldName": "Urinary Bilirubin",
-            "isMandatory": false,
-            "id": "urinaryBilirubin"
-          }
+            "id": "hemoglobin",
+            "fieldName": "Hemoglobin (g/dL)",
+            "isMandatory": false
+          },
+          "ancBloodGlucose"
         ]
       },
       {
         "sectionId": "vaccinationAndSupplements",
-        "title": "Vaccination and Supplements",
+        "title": "Vaccination & Supplements",
         "fieldRefs": [
           {
+            "id": "ttTdCompleted",
             "fieldName": "TT/TD completed",
-            "isMandatory": false,
-            "id": "ttTdCompleted"
+            "isMandatory": false
           },
           {
-            "fieldName": "Folic Acid Tablets",
-            "isMandatory": false,
-            "id": "folicAcidTablets"
-          },
-          {
-            "fieldName": "Folic Acid Tablets Total Consumed",
+            "id": "folicAcidTotalConsumed",
+            "fieldName": "Folic Acid consumed last month",
             "inputType": 3,
-            "isMandatory": false,
-            "id": "folicAcidTotalConsumed"
+            "isMandatory": false
           },
           {
-            "fieldName": "Folic Acid Tablets Provided",
+            "id": "folicAcidProvided",
+            "fieldName": "Folic Acid provided this visit",
             "inputType": 3,
-            "isMandatory": false,
-            "id": "folicAcidProvided"
+            "isMandatory": false
           },
           {
-            "fieldName": "IFA Tablets",
-            "isMandatory": false,
-            "id": "ifaTablets"
-          },
-          {
-            "fieldName": "IFA Tablets Total Consumed",
+            "id": "ifaTotalConsumed",
+            "fieldName": "IFA consumed last month",
             "inputType": 3,
-            "isMandatory": false,
-            "id": "ifaTotalConsumed"
+            "isMandatory": false
           },
           {
-            "fieldName": "IFA Tablets Provided",
+            "id": "ifaProvided",
+            "fieldName": "IFA provided this visit",
             "inputType": 3,
-            "isMandatory": false,
-            "id": "ifaProvided"
+            "isMandatory": false
           },
           {
-            "fieldName": "Calcium Tablets",
-            "isMandatory": false,
-            "id": "calciumTablets"
-          },
-          {
-            "fieldName": "Calcium Tablets Total Consumed",
+            "id": "calciumTotalConsumed",
+            "fieldName": "Calcium consumed last month",
             "inputType": 3,
-            "isMandatory": false,
-            "id": "calciumTotalConsumed"
+            "isMandatory": false
           },
           {
-            "fieldName": "Calcium Tablets Provided",
+            "id": "calciumProvided",
+            "fieldName": "Calcium provided this visit",
             "inputType": 3,
-            "isMandatory": false,
-            "id": "calciumProvided"
+            "isMandatory": false
           }
         ]
       },
       {
-        "sectionId": "ancServicesBirthPreparedness",
-        "title": "ANC services and Birth Preparedness",
+        "sectionId": "ancDangerSignsSection",
+        "title": "Danger Signs",
         "fieldRefs": [
-          {
-            "fieldName": "No.of ANC visits conducted with other providers",
-            "inputType": 3,
-            "isMandatory": false,
-            "id": "ancVisitsOtherProviders"
-          },
-          {
-            "fieldName": "PW received atleast one ANC from a medical doctor",
-            "isMandatory": false,
-            "id": "ancFromMedicalDoctor"
-          },
-          {
-            "fieldName": "Ultrasound",
-            "isMandatory": false,
-            "id": "ultrasound"
-          },
-          {
-            "fieldName": "Has the PW identified a health facility for institutional delivery",
-            "isMandatory": false,
-            "id": "facilityIdentifiedForDelivery"
-          }
+          "ancDangerSigns"
         ]
       },
       {
-        "sectionId": "dangerSignsRiskIdentification",
-        "title": "Danger Signs/Risk identification",
+        "sectionId": "birthPreparedness",
+        "title": "Birth Preparedness",
         "fieldRefs": [
-          {
-            "fieldName": "Has the PW experienced any of the following (Gestation age \u2264 12 weeks)",
-            "isMandatory": false,
-            "id": "dangerSignsExperienced12"
-          },
-          {
-            "fieldName": "Has the PW experienced any of the following (Gestation age 13-27 weeks)",
-            "isMandatory": false,
-            "id": "dangerSignsExperienced13To27"
-          },
-          {
-            "fieldName": "Has the PW experienced any of the following (Gestation age 28-40 weeks)",
-            "isMandatory": false,
-            "id": "dangerSignsExperienced28To40"
-          },
-          {
-            "fieldName": "High risk pregnant woman",
-            "isMandatory": false,
-            "id": "highRiskPregnantWoman"
-          },
-          {
-            "fieldName": "Gaps in ANC",
-            "isMandatory": false,
-            "id": "gapsInAnc"
-          }
-        ]
-      },
-      {
-        "sectionId": "counselling",
-        "title": "Counselling",
-        "fieldRefs": [
-          {
-            "fieldName": "Nutrition Counselling",
-            "isMandatory": false,
-            "id": "nutritionCounselling"
-          },
-          {
-            "fieldName": "Care during Antenatal period",
-            "isMandatory": false,
-            "id": "careDuringAntenatalPeriod"
-          },
-          {
-            "fieldName": "Danger Signs During Pregnancy",
-            "isMandatory": false,
-            "id": "dangerSignsDuringPregnancy"
-          },
-          {
-            "fieldName": "Birth Preparedness",
-            "isMandatory": false,
-            "id": "birthPreparedness"
-          },
-          {
-            "fieldName": "Newborn Care Education",
-            "isMandatory": false,
-            "id": "newbornCareEducation"
-          },
-          {
-            "fieldName": "Referral Facility",
-            "isMandatory": false,
-            "id": "referralFacility"
-          },
-          {
-            "fieldName": "Follow up Visit",
-            "isMandatory": false,
-            "id": "followUpVisit"
-          }
+          "deliveryFacilityType"
         ]
       }
     ]

@@ -3,6 +3,7 @@ import 'dart:math';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/auth/auth_repository.dart';
+import '../../../core/services/location_service.dart';
 import 'enrollment_repository.dart';
 import 'models/household_enrollment_models.dart';
 
@@ -66,6 +67,7 @@ class EnrollmentController extends ChangeNotifier {
 
   /// Update household information (step 1).
   void updateHousehold({
+    String? healthWorkerId,
     String? householdType,
     int? numberOfMembers,
     String? houseNumber,
@@ -73,10 +75,15 @@ class EnrollmentController extends ChangeNotifier {
     String? monthlyIncome,
     bool? disabilityQuestion,
     String? disabilityDetails,
+    String? villageId,
+    String? villageName,
+    String? subVillageId,
+    String? subVillageName,
   }) {
     if (_household == null) return;
 
     _household = _household!.copyWith(
+      healthWorkerId: healthWorkerId,
       householdType: householdType,
       numberOfMembers: numberOfMembers,
       houseNumber: houseNumber,
@@ -84,6 +91,10 @@ class EnrollmentController extends ChangeNotifier {
       monthlyIncome: monthlyIncome,
       disabilityQuestion: disabilityQuestion,
       disabilityDetails: disabilityDetails,
+      villageId: villageId,
+      villageName: villageName,
+      subVillageId: subVillageId,
+      subVillageName: subVillageName,
     );
     notifyListeners();
   }
@@ -242,16 +253,21 @@ class EnrollmentController extends ChangeNotifier {
       final auth = _auth;
       if (repo != null && auth != null) {
         final userId = await auth.userId() ?? 0;
+        final userFhirId = await auth.userFhirId() ?? '';
         final orgId = await auth.organizationFhirId() ?? '';
         final deviceId = await auth.deviceId();
+        final location = await LocationService.getCurrentPosition();
 
         await repo.submit(
           household: _household!,
           head: _householdHead!,
           members: _members,
           userId: userId,
+          userFhirId: userFhirId,
           organizationId: orgId,
           deviceId: deviceId,
+          latitude: location.latitude,
+          longitude: location.longitude,
         );
       } else {
         // No HTTP client injected — dev/test path.

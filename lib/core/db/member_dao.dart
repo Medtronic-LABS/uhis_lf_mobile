@@ -33,6 +33,13 @@ class HouseholdMemberEntity {
     this.localSignatureFile,
     this.motherPatientId,
     this.motherReferenceId,
+    this.maritalStatus,
+    this.disability,
+    this.guardianId,
+    this.guardianFhirId,
+    this.latitude,
+    this.longitude,
+    this.idType,
     this.version,
     this.lastUpdated,
     this.createdAt,
@@ -68,6 +75,13 @@ class HouseholdMemberEntity {
   final String? localSignatureFile;
   final String? motherPatientId;
   final String? motherReferenceId;
+  final String? maritalStatus;
+  final String? disability;
+  final String? guardianId;
+  final String? guardianFhirId;
+  final double? latitude;
+  final double? longitude;
+  final String? idType;
   final String? version;
   final String? lastUpdated;
   final int? createdAt;
@@ -102,6 +116,13 @@ class HouseholdMemberEntity {
         'local_signature_file': localSignatureFile,
         'mother_patient_id': motherPatientId,
         'mother_reference_id': motherReferenceId,
+        'marital_status': maritalStatus,
+        'disability': disability,
+        'guardian_id': guardianId,
+        'guardian_fhir_id': guardianFhirId,
+        'latitude': latitude,
+        'longitude': longitude,
+        'id_type': idType,
         'version': version,
         'last_updated': lastUpdated,
         'created_at': createdAt,
@@ -143,6 +164,13 @@ class HouseholdMemberEntity {
       localSignatureFile: localSignatureFile,
       motherPatientId: motherPatientId,
       motherReferenceId: motherReferenceId,
+      maritalStatus: maritalStatus,
+      disability: disability,
+      guardianId: guardianId,
+      guardianFhirId: guardianFhirId,
+      latitude: latitude,
+      longitude: longitude,
+      idType: idType,
       version: version,
       lastUpdated: lastUpdated,
       createdAt: createdAt,
@@ -180,6 +208,13 @@ class HouseholdMemberEntity {
       localSignatureFile: row['local_signature_file'] as String?,
       motherPatientId: row['mother_patient_id'] as String?,
       motherReferenceId: row['mother_reference_id'] as String?,
+      maritalStatus: row['marital_status'] as String?,
+      disability: row['disability'] as String?,
+      guardianId: row['guardian_id'] as String?,
+      guardianFhirId: row['guardian_fhir_id'] as String?,
+      latitude: (row['latitude'] as num?)?.toDouble(),
+      longitude: (row['longitude'] as num?)?.toDouble(),
+      idType: row['id_type'] as String?,
       version: row['version'] as String?,
       lastUpdated: row['last_updated'] as String?,
       createdAt: row['created_at'] as int?,
@@ -257,6 +292,13 @@ class HouseholdMemberEntity {
       localSignatureFile: str('localSignatureFile') ?? str('local_signature_file'),
       motherPatientId: str('motherPatientId') ?? str('mother_patient_id') ?? str('parentId'),
       motherReferenceId: str('motherReferenceId') ?? str('mother_reference_id'),
+      maritalStatus: str('maritalStatus') ?? str('marital_status'),
+      disability: str('disability'),
+      guardianId: str('guardianId') ?? str('guardian_id'),
+      guardianFhirId: str('guardianFhirId') ?? str('guardian_fhir_id'),
+      latitude: (json['latitude'] as num?)?.toDouble(),
+      longitude: (json['longitude'] as num?)?.toDouble(),
+      idType: str('idType') ?? str('id_type'),
       version: str('version'),
       lastUpdated: str('lastUpdated') ?? str('last_updated'),
       createdAt: createdAt,
@@ -333,6 +375,7 @@ class MemberDao {
       orderBy: 'name ASC',
       limit: limit,
     );
+    debugPrint('[MemberDao] searchByName q="$query" hits=${rows.length}');
     return rows.map(HouseholdMemberEntity.fromDb).toList();
   }
 

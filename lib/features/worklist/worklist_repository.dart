@@ -77,6 +77,7 @@ class WorklistRepository {
       patientId: p.id,
       displayName: p.name ?? '(Unnamed patient)',
       age: age,
+      phoneNumber: p.phone,
       householdNo: p.householdId,
       householdName: null, // Could be populated from household cache
       villageId: p.villageId,

@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -20,6 +19,7 @@ import '../../core/db/local_dashboard_repository.dart';
 import '../../core/models/dashboard_tier.dart';
 import '../../core/models/mission_queue_item.dart';
 import '../../core/models/programme.dart';
+import '../../core/widgets/patient_filter_panel.dart';
 import '../referral/referral_repository.dart';
 import '../search/global_search_bar.dart';
 import '../visit/visit_controller.dart';
@@ -28,18 +28,7 @@ import 'dashboard_repository.dart';
 import 'sk_performance_screen.dart';
 import 'mission_dashboard_repository.dart';
 import '../household/enrollment/enrollment_entry_sheet.dart';
-
-enum _NeedFilter {
-  highRisk,
-  ancMnch,
-  childImmunisation,
-  ncd,
-  eyeCare,
-  missedFollowUp,
-  pendingReferral,
-  homeVisit,
-  facilityReferral,
-}
+import 'widgets/notification_drawer.dart';
 
 /// AI Mission Dashboard — the operational command center for the SK.
 ///
@@ -63,8 +52,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // Mission data futures consumed by the HTML dashboard composition.
   Future<List<MissionQueueItem>>? _queueFuture;
-  Future<ReferralSummary>? _referralSummaryFuture;
-  
+
 
   // Cached reference to mission repository for change listening.
   MissionDashboardRepository? _missionRepo;
@@ -76,16 +64,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Version counter for forcing FutureBuilder rebuilds.
   int _refreshVersion = 0;
 
+  // Notification badge count — referral critical + active counts.
+  int _notificationCount = 0;
+
   // Completed patient IDs for today — cards remain visible but non-navigable.
   Set<String> _completedIds = const {};
 
   // Inline village chip + need filter
   List<String> _inlineVillages = const [];
   String? _selectedVillageChipName;
-  Set<_NeedFilter> _selectedNeeds = const {};
-  Set<_NeedFilter> _availableNeeds = const {};
+  Set<NeedFilter> _selectedNeeds = const {};
+  Set<NeedFilter> _availableNeeds = const {};
   Set<Programme> _selectedProgrammes = const {};
-  List<Programme> _availableProgrammes = const [];
 
   @override
   void initState() {
@@ -110,6 +100,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _missionListenerAdded = true;
       _missionRepo!.changes.addListener(_onMissionChanges);
     }
+    _refreshNotificationCount();
+  }
+
+  Future<void> _refreshNotificationCount() async {
+    try {
+      final counts = await context.read<ReferralRepository>().counts();
+      if (!mounted) return;
+      setState(() => _notificationCount = counts.critical + counts.active);
+    } catch (_) {}
   }
 
   @override
@@ -206,7 +205,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       debugPrint('[Dashboard] Loading mission data, version=$_refreshVersion');
       // Load completed patient IDs and filter queue to exclude them
       _queueFuture = _loadFilteredQueue(missionRepo, encounterDao);
-      _referralSummaryFuture = missionRepo.loadReferralSummary();
     });
   }
   
@@ -239,22 +237,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .toList()
       ..sort();
 
-    // Derive available programmes from the queue (for dynamic programme chips).
-    // PILOT-SCOPE v1: only pilot programmes shown as filter chips.
-    // To restore all programmes: remove the `.where((p) => p.isPilot)` filter.
-    final allProgrammes = withoutCompleted
-        .expand((i) => i.programmes)
-        .where((p) => p != Programme.unknown && p.isPilot)
-        .toSet()
-        .toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
-
-    final availableNeeds = _computeAvailableNeeds(withoutCompleted);
+    final availableNeeds = computeAvailableNeeds(withoutCompleted);
     if (mounted) {
       // ignore: use_build_context_synchronously
       setState(() {
         _inlineVillages = allVillageLabels;
-        _availableProgrammes = allProgrammes;
         _availableNeeds = availableNeeds;
       });
     }
@@ -453,77 +440,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (mounted) context.push('/tasks');
   }
 
-  Set<_NeedFilter> _computeAvailableNeeds(List<MissionQueueItem> items) {
-    final available = <_NeedFilter>{};
-    for (final item in items) {
-      if (item.priority == MissionPriority.critical ||
-          item.priority == MissionPriority.high) {
-        available.add(_NeedFilter.highRisk);
-      }
-      if (item.programmes.any((p) => p == Programme.anc || p == Programme.pnc)) {
-        available.add(_NeedFilter.ancMnch);
-      }
-      // PILOT-SCOPE v1: child chip matches imci only (epi not in pilot).
-      // To restore epi: change to `p == Programme.imci || p == Programme.epi`.
-      if (item.programmes.contains(Programme.imci)) {
-        available.add(_NeedFilter.childImmunisation);
-      }
-      if (item.programmes.contains(Programme.ncd)) {
-        available.add(_NeedFilter.ncd);
-      }
-      // PILOT-SCOPE v1: eyeCare/cataract chip disabled (not in pilot).
-      // To restore: un-comment the block below.
-      // if (item.programmes.any((p) => p == Programme.eyeCare || p == Programme.cataract)) {
-      //   available.add(_NeedFilter.eyeCare);
-      // }
-      if (item.daysOverdue != null && item.daysOverdue! > 0) {
-        available.add(_NeedFilter.missedFollowUp);
-      }
-      if (item.referralId != null) {
-        available.add(_NeedFilter.pendingReferral);
-      }
-      if (item.type == MissionItemType.patientVisit ||
-          item.type == MissionItemType.householdOpportunity) {
-        available.add(_NeedFilter.homeVisit);
-      }
-      if (item.type == MissionItemType.referral || item.referralId != null) {
-        available.add(_NeedFilter.facilityReferral);
-      }
-    }
-    return available;
-  }
-
   bool _needMatches(MissionQueueItem item) {
-    final needs = _selectedNeeds;
-    if (needs.isEmpty) return true;
-    for (final need in needs) {
-      switch (need) {
-        case _NeedFilter.highRisk:
-          if (item.priority == MissionPriority.critical ||
-              item.priority == MissionPriority.high) { return true; }
-        case _NeedFilter.ancMnch:
-          if (item.programmes.any((p) => p == Programme.anc || p == Programme.pnc)) { return true; }
-        case _NeedFilter.childImmunisation:
-          // PILOT-SCOPE v1: imci only (epi not in pilot).
-          if (item.programmes.contains(Programme.imci)) { return true; }
-        case _NeedFilter.ncd:
-          if (item.programmes.contains(Programme.ncd)) { return true; }
-        case _NeedFilter.eyeCare:
-          // PILOT-SCOPE v1: eyeCare/cataract not in pilot — chip never added to availableNeeds.
-          if (item.programmes.any((p) => p == Programme.eyeCare || p == Programme.cataract)) { return true; }
-        case _NeedFilter.missedFollowUp:
-          if (item.daysOverdue != null && item.daysOverdue! > 0) { return true; }
-        case _NeedFilter.pendingReferral:
-          if (item.referralId != null) { return true; }
-        case _NeedFilter.homeVisit:
-          if (item.type == MissionItemType.patientVisit ||
-              item.type == MissionItemType.householdOpportunity) { return true; }
-        case _NeedFilter.facilityReferral:
-          if (item.type == MissionItemType.referral ||
-              item.referralId != null) { return true; }
-      }
-    }
-    return false;
+    if (_selectedNeeds.isEmpty) return true;
+    return _selectedNeeds.any((need) => need.matches(item));
   }
 
   @override
@@ -551,36 +470,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _DashboardHeader(
               greeting: _greeting(),
               locationLine: _locationLine(),
-              onNotifications: () => context.push('/referrals'),
               onPerformance: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
                   builder: (_) => const SkPerformanceScreen(),
                 ),
               ),
               settingsMenu: _SettingsMenu(onOfferBiometric: _offerBiometric),
+              notificationCount: _notificationCount,
+              onNotificationTap: () => showNotificationDrawer(context),
+            ),
+            // Referral alert strip — sits between header/search and village tabs
+            // so it reads as a system-level alert before the worklist.
+            _ReferralAlertBanner(
+              key: ValueKey('referral_banner_$_refreshVersion'),
+              onTap: () => showNotificationDrawer(context),
             ),
             Expanded(
               child: RefreshIndicator(
                 onRefresh: _refresh,
                 child: ListView(
+                  physics: const ClampingScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(14, 12, 14, 100),
                   children: [
-                    _AiSortedInfoCard(
-                      key: ValueKey('ai_sorted_$_refreshVersion'),
-                      queueFuture: _queueFuture,
-                    ),
-                    const SizedBox(height: 10),
-                    _DashboardStatsRow(
-                      key: ValueKey('stats_$_refreshVersion'),
-                      queueFuture: _queueFuture,
-                      referralFuture: _referralSummaryFuture,
-                      onTapVisits: _navigateToFirstQueueItem,
-                      onTapReferrals: () => context.push('/referrals'),
-                    ),
-                    const SizedBox(height: 14),
-                    _VisitFilterPanel(
-                      villages: _inlineVillages,
-                      selectedVillage: _selectedVillageChipName,
+                    PatientFilterPanel(
+                      villages: _inlineVillages
+                          .map((name) => (value: name, label: name))
+                          .toList(),
+                      selectedVillageValue: _selectedVillageChipName,
                       onVillageSelected: (name) {
                         setState(() => _selectedVillageChipName = name);
                         _loadMissionData();
@@ -589,7 +505,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       selectedNeeds: _selectedNeeds,
                       onNeedToggled: (need) {
                         setState(() {
-                          final updated = Set<_NeedFilter>.from(_selectedNeeds);
+                          final updated = Set<NeedFilter>.from(_selectedNeeds);
                           if (updated.contains(need)) {
                             updated.remove(need);
                           } else {
@@ -606,22 +522,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         });
                         _loadMissionData();
                       },
-                      availableProgrammes: _availableProgrammes,
-                      selectedProgrammes: _selectedProgrammes,
-                      onProgrammeToggled: (prog) {
-                        setState(() {
-                          final updated = Set<Programme>.from(_selectedProgrammes);
-                          if (updated.contains(prog)) {
-                            updated.remove(prog);
-                          } else {
-                            updated.add(prog);
-                          }
-                          _selectedProgrammes = updated;
-                        });
-                        _loadMissionData();
-                      },
                     ),
-                    const SizedBox(height: 4),
                     FutureBuilder<List<MissionQueueItem>>(
                       key: ValueKey('queue_$_refreshVersion'),
                       future: _queueFuture,
@@ -637,7 +538,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              const _TodaysVisitsHeader(),
+                              _TodaysVisitsHeader(
+                                queueFuture: _queueFuture,
+                                onTap: _navigateToFirstQueueItem,
+                              ),
                               const SizedBox(height: 8),
                               if (hasFilters)
                                 _FilterEmptyCard(
@@ -749,7 +653,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            const _TodaysVisitsHeader(),
+                            _TodaysVisitsHeader(
+                                queueFuture: _queueFuture,
+                                onTap: _navigateToFirstQueueItem,
+                              ),
                             const SizedBox(height: 8),
                             ...widgets,
                             if (overflow > 0)
@@ -963,95 +870,10 @@ class _SettingsMenu extends StatelessWidget {
   }
 }
 
-/// Notification bell button for referrals in the AppBar.
-class _ReferralNotificationButton extends StatefulWidget {
-  const _ReferralNotificationButton({required this.onTap});
-  final VoidCallback onTap;
-
-  @override
-  State<_ReferralNotificationButton> createState() =>
-      _ReferralNotificationButtonState();
-}
-
-class _ReferralNotificationButtonState
-    extends State<_ReferralNotificationButton> {
-  Future<({int critical, int active})>? _future;
-  ReferralRepository? _repo;
-  bool _listenerAdded = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _repo = context.read<ReferralRepository>();
-    if (!_listenerAdded) {
-      _listenerAdded = true;
-      _future = _repo!.counts();
-      _repo!.changes.addListener(_onChanges);
-    }
-  }
-
-  @override
-  void dispose() {
-    _repo?.changes.removeListener(_onChanges);
-    super.dispose();
-  }
-
-  void _onChanges() {
-    if (!mounted) return;
-    _reload();
-  }
-
-  void _reload() {
-    if (!mounted) return;
-    final repo = _repo;
-    if (repo == null) return;
-    final future = repo.counts();
-    setState(() {
-      _future = future;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return FutureBuilder<({int critical, int active})>(
-      future: _future,
-      builder: (context, snap) {
-        final critical = snap.data?.critical ?? 0;
-        final active = snap.data?.active ?? 0;
-        final total = critical + active;
-        final hasUrgent = critical > 0;
-        return IconButton(
-          tooltip: ReferralStrings.dashboardTitle,
-          onPressed: widget.onTap,
-          icon: Badge(
-            isLabelVisible: total > 0,
-            offset: const Offset(2, -2),
-            label: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: Text(
-                total > 99 ? '99+' : total.toString(),
-                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
-              ),
-            ),
-            backgroundColor: hasUrgent ? scheme.error : scheme.primary,
-            child: Icon(
-              hasUrgent
-                  ? Icons.notification_important
-                  : Icons.notifications_outlined,
-              color: Colors.white,
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // HTML-composition widgets
-// Match `Leapfrog .html` dashboard: navy header, AI ribbon, two-stat row,
-// "Today's visits" priority-ordered patient cards with colored left border.
+// Match `Leapfrog .html` dashboard: navy header, stat card, referral banner,
+// village tabs, category bubbles, priority-ordered patient cards.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Pink "Enroll new" compact pill FAB — Apon Sushashthya V1 §2.1.
@@ -1103,16 +925,18 @@ class _DashboardHeader extends StatelessWidget {
   const _DashboardHeader({
     required this.greeting,
     required this.locationLine,
-    required this.onNotifications,
     required this.onPerformance,
     required this.settingsMenu,
+    required this.notificationCount,
+    required this.onNotificationTap,
   });
 
   final String greeting;
   final String? locationLine;
-  final VoidCallback onNotifications;
   final VoidCallback onPerformance;
   final Widget settingsMenu;
+  final int notificationCount;
+  final VoidCallback onNotificationTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1163,7 +987,10 @@ class _DashboardHeader extends StatelessWidget {
                   ],
                 ),
               ),
-              _ReferralNotificationButton(onTap: onNotifications),
+              _NotificationBell(
+                count: notificationCount,
+                onTap: onNotificationTap,
+              ),
               IconButton(
                 icon: const Icon(
                   Icons.leaderboard_rounded,
@@ -1184,216 +1011,164 @@ class _DashboardHeader extends StatelessWidget {
   }
 }
 
-class _DashboardStatsRow extends StatelessWidget {
-  const _DashboardStatsRow({
-    super.key,
-    required this.queueFuture,
-    required this.referralFuture,
-    required this.onTapVisits,
-    required this.onTapReferrals,
-  });
-
-  final Future<List<MissionQueueItem>>? queueFuture;
-  final Future<ReferralSummary>? referralFuture;
-  final VoidCallback onTapVisits;
-  final VoidCallback onTapReferrals;
-
-  @override
-  Widget build(BuildContext context) {
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-        Expanded(
-          child: FutureBuilder<List<MissionQueueItem>>(
-            future: queueFuture,
-            builder: (context, snap) {
-              final isLoading = snap.connectionState == ConnectionState.waiting;
-              final queue = snap.data ?? const <MissionQueueItem>[];
-              final count = queue.length;
-              final villageCount = queue
-                  .map((i) => i.village)
-                  .whereType<String>()
-                  .where((v) => v.trim().isNotEmpty)
-                  .toSet()
-                  .length;
-              return _DashboardStatCard(
-                value: '$count',
-                label: MissionDashboardStrings.visitsToday,
-                accentVariant: _DashboardStatVariant.navy,
-                subline: isLoading
-                    ? 'Loading...'
-                    : MissionDashboardStrings.visitsTodaySubline(villageCount),
-                onTap: onTapVisits,
-                isLoading: isLoading,
-              );
-            },
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: FutureBuilder<ReferralSummary>(
-            future: referralFuture,
-            builder: (context, snap) {
-              final isLoading = snap.connectionState == ConnectionState.waiting;
-              final s = snap.data ?? ReferralSummary.empty;
-              final alerts = s.breached + s.awaitingReview;
-              return _DashboardStatCard(
-                value: '$alerts',
-                label: MissionDashboardStrings.referralAlertsLabel,
-                accentVariant: _DashboardStatVariant.pink,
-                subline: isLoading
-                    ? 'Loading...'
-                    : MissionDashboardStrings.tapToFollowUp,
-                footnote: MissionDashboardStrings.referralCceComingSoon,
-                showPulse: s.hasBreaches,
-                onTap: onTapReferrals,
-                isLoading: isLoading,
-              );
-            },
-          ),
-        ),
-      ],
-    ),
-    );
-  }
-}
-
-enum _DashboardStatVariant { navy, pink }
-
-class _DashboardStatCard extends StatelessWidget {
-  const _DashboardStatCard({
-    required this.value,
-    required this.label,
-    required this.accentVariant,
-    required this.subline,
-    required this.onTap,
-    this.footnote,
-    this.showPulse = false,
-    this.isLoading = false,
-  });
-
-  final String value;
-  final String label;
-  final _DashboardStatVariant accentVariant;
-  final String subline;
-  final String? footnote;
-  final bool showPulse;
-  final bool isLoading;
+class _ReferralAlertBanner extends StatefulWidget {
+  const _ReferralAlertBanner({super.key, required this.onTap});
   final VoidCallback onTap;
 
   @override
+  State<_ReferralAlertBanner> createState() => _ReferralAlertBannerState();
+}
+
+class _ReferralAlertBannerState extends State<_ReferralAlertBanner>
+    with SingleTickerProviderStateMixin {
+  Future<({int critical, int active})>? _future;
+  ReferralRepository? _repo;
+  bool _listenerAdded = false;
+  late final AnimationController _pulseCtrl;
+  late final Animation<double> _pulseAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+    _pulseAnim = Tween<double>(begin: 0.4, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _repo = context.read<ReferralRepository>();
+    if (!_listenerAdded) {
+      _listenerAdded = true;
+      _future = _repo!.counts();
+      _repo!.changes.addListener(_onChanges);
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulseCtrl.dispose();
+    _repo?.changes.removeListener(_onChanges);
+    super.dispose();
+  }
+
+  void _onChanges() {
+    if (!mounted) return;
+    setState(() { _future = _repo!.counts(); });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
-    final accent = accentVariant == _DashboardStatVariant.pink
-        ? tokens.brandPink
-        : tokens.brandNavy;
-    return Semantics(
-      label: '$label: $value',
-      button: true,
-      child: Material(
-      color: Theme.of(context).colorScheme.surface,
-      borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
-      child: InkWell(
-        key: const Key('dashboard_stat_card_tap'),
-        onTap: isLoading ? null : onTap,
-        borderRadius: BorderRadius.circular(LeapfrogColors.radiusLg),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (isLoading)
-                      SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2.5, color: accent),
-                      )
-                    else
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
+    return FutureBuilder<({int critical, int active})>(
+      future: _future,
+      builder: (context, snap) {
+        final total = (snap.data?.critical ?? 0) + (snap.data?.active ?? 0);
+        return Semantics(
+          button: true,
+          label: 'Referral alerts: $total',
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFFDC2626),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFDC2626).withValues(alpha: 0.25),
+                  offset: const Offset(0, 2),
+                  blurRadius: 6,
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                key: const Key('dashboard_referral_banner_tap'),
+                onTap: widget.onTap,
+                splashColor: Colors.white.withValues(alpha: 0.15),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      // Circle badge with count + yellow pulse dot
+                      Stack(
+                        clipBehavior: Clip.none,
                         children: [
-                          Text(
-                            value,
-                            style: TextStyle(
-                              fontSize: 26,
-                              fontWeight: FontWeight.w900,
-                              color: accent,
-                              height: 1,
+                          Container(
+                            width: 16,
+                            height: 16,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Color(0x40FFFFFF),
                             ),
-                          ),
-                          if (showPulse) ...[
-                            const SizedBox(width: 5),
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: accent,
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: accent.withValues(alpha: 0.4),
-                                    blurRadius: 5,
-                                    spreadRadius: 1,
-                                  ),
-                                ],
+                            child: Center(
+                              child: Text(
+                                total > 99 ? '99+' : '$total',
+                                style: const TextStyle(
+                                  fontFamily: 'Nunito',
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
-                          ],
+                          ),
+                          Positioned(
+                            top: -2,
+                            right: -2,
+                            child: AnimatedBuilder(
+                              animation: _pulseAnim,
+                              builder: (_, __) => Opacity(
+                                opacity: _pulseAnim.value,
+                                child: Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Color(0xFFFEF08A),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
-                    const SizedBox(height: 3),
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: Theme.of(context).colorScheme.onSurface,
-                        height: 1.2,
-                      ),
-                    ),
-                    const SizedBox(height: 1),
-                    Text(
-                      subline,
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: accent,
-                        height: 1.2,
-                      ),
-                    ),
-                    if (footnote != null) ...[
-                      const SizedBox(height: 1),
-                      Text(
-                        footnote!,
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w500,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          height: 1.2,
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Text(
+                          MissionDashboardStrings.referralAlertsLabel,
+                          style: const TextStyle(
+                            fontFamily: 'NunitoSans',
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        color: Colors.white.withValues(alpha: 0.85),
+                        size: 13,
+                      ),
                     ],
-                  ],
+                  ),
                 ),
               ),
-              Icon(Icons.chevron_right_rounded, size: 14, color: accent.withValues(alpha: 0.4)),
-            ],
+            ),
           ),
-        ),
-      ),
-      ),
+        );
+      },
     );
   }
 }
 
 class _TodaysVisitsHeader extends StatelessWidget {
-  const _TodaysVisitsHeader();
+  const _TodaysVisitsHeader({this.queueFuture, this.onTap});
+
+  final Future<List<MissionQueueItem>>? queueFuture;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1402,32 +1177,56 @@ class _TodaysVisitsHeader extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
             child: Text(
               MissionDashboardStrings.todaysVisits(dateLabel),
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w800,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
+              style: AppTextStyles.worklistRowLabel,
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: tokens.aiSurfaceStart,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              MissionDashboardStrings.aiSortedBadge,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: tokens.aiPurple,
+          if (queueFuture != null)
+            FutureBuilder<List<MissionQueueItem>>(
+              future: queueFuture,
+              builder: (context, snap) {
+                final count = snap.data?.length ?? 0;
+                final loading = snap.connectionState == ConnectionState.waiting;
+                final label = loading
+                    ? MissionDashboardStrings.aiSortedBadge
+                    : '${MissionDashboardStrings.aiSortedBadge} $count visits today';
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: tokens.aiSurfaceStart,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: tokens.aiPurple,
+                    ),
+                  ),
+                );
+              },
+            )
+          else
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: tokens.aiSurfaceStart,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                MissionDashboardStrings.aiSortedBadge,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: tokens.aiPurple,
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -1531,158 +1330,6 @@ class _EmptyVisitsCard extends StatelessWidget {
   }
 }
 
-/// AI sorted info banner — sits above the stats strip.
-/// Navy gradient matching the app header; shows overnight sort count + 3 tags.
-class _AiSortedInfoCard extends StatefulWidget {
-  const _AiSortedInfoCard({super.key, required this.queueFuture});
-
-  final Future<List<MissionQueueItem>>? queueFuture;
-
-  @override
-  State<_AiSortedInfoCard> createState() => _AiSortedInfoCardState();
-}
-
-class _AiSortedInfoCardState extends State<_AiSortedInfoCard> {
-  static const _storage = FlutterSecureStorage();
-  static const _storageKey = 'ai_sorted_banner_last_shown';
-
-  bool _visible = false;
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    _checkAndShow();
-  }
-
-  Future<void> _checkAndShow() async {
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    final stored = await _storage.read(key: _storageKey);
-    if (stored != today) {
-      await _storage.write(key: _storageKey, value: today);
-      if (!mounted) return;
-      setState(() => _visible = true);
-      _timer = Timer(const Duration(seconds: 5), () {
-        if (mounted) setState(() => _visible = false);
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedSize(
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeInOut,
-      child: _visible
-          ? FutureBuilder<List<MissionQueueItem>>(
-              future: widget.queueFuture,
-              builder: (context, snap) {
-                final count = snap.data?.length ?? 0;
-                final isLoading =
-                    snap.connectionState == ConnectionState.waiting;
-                const tags = <String>[
-                  MissionDashboardStrings.aiSortedTagRisk,
-                  MissionDashboardStrings.aiSortedTagOverdue,
-                  MissionDashboardStrings.aiSortedTagCce,
-                ];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 0),
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [AppColors.navy, AppColors.navyMid],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.navy.withValues(alpha: 0.18),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 22,
-                              height: 22,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.16),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: const Icon(Icons.auto_awesome,
-                                  size: 12, color: Colors.white),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                isLoading
-                                    ? 'AI sorted your visits overnight'
-                                    : MissionDashboardStrings.aiSortedVisits(
-                                        count),
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.white,
-                                  height: 1.2,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: tags
-                              .map(
-                                (t) => Container(
-                                  margin: const EdgeInsets.only(right: 6),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 7, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        Colors.white.withValues(alpha: 0.14),
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
-                                        color: Colors.white
-                                            .withValues(alpha: 0.18)),
-                                  ),
-                                  child: Text(
-                                    t,
-                                    style: const TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            )
-          : const SizedBox.shrink(),
-    );
-  }
-}
-
 /// Empty state shown when filters are active but no items match.
 /// Apon Sushashthya V1 §2.7 — magnifying glass illustration + helpful text.
 class _FilterEmptyCard extends StatelessWidget {
@@ -1759,312 +1406,61 @@ class _FilterEmptyCard extends StatelessWidget {
   }
 }
 
-/// Two-row inline filter panel for the dashboard visit list.
-///
-/// Row 1 — village chips (single-select, from queue items)
-/// Row 2 — need chips (multi-select, programme/priority-based)
-class _VisitFilterPanel extends StatelessWidget {
-  const _VisitFilterPanel({
-    required this.villages,
-    required this.selectedVillage,
-    required this.onVillageSelected,
-    required this.availableNeeds,
-    required this.selectedNeeds,
-    required this.onNeedToggled,
-    required this.onClearNeeds,
-    required this.availableProgrammes,
-    required this.selectedProgrammes,
-    required this.onProgrammeToggled,
-  });
+// ─── Notification bell ────────────────────────────────────────────────────────
 
-  final List<String> villages;
-  final String? selectedVillage;
-  final void Function(String? name) onVillageSelected;
-  final Set<_NeedFilter> availableNeeds;
-  final Set<_NeedFilter> selectedNeeds;
-  final void Function(_NeedFilter need) onNeedToggled;
-  final VoidCallback onClearNeeds;
-  final List<Programme> availableProgrammes;
-  final Set<Programme> selectedProgrammes;
-  final void Function(Programme prog) onProgrammeToggled;
+class _NotificationBell extends StatelessWidget {
+  const _NotificationBell({required this.count, required this.onTap});
 
-
-  String _needLabel(_NeedFilter need) {
-    switch (need) {
-      case _NeedFilter.highRisk:
-        return MissionDashboardStrings.needHighRisk;
-      case _NeedFilter.ancMnch:
-        return MissionDashboardStrings.needAncMnch;
-      case _NeedFilter.childImmunisation:
-        return MissionDashboardStrings.needChildImmunisation;
-      case _NeedFilter.ncd:
-        return MissionDashboardStrings.needNcd;
-      case _NeedFilter.eyeCare:
-        return MissionDashboardStrings.needEyeCare;
-      case _NeedFilter.missedFollowUp:
-        return MissionDashboardStrings.needMissedFollowUp;
-      case _NeedFilter.pendingReferral:
-        return MissionDashboardStrings.needPendingReferral;
-      case _NeedFilter.homeVisit:
-        return MissionDashboardStrings.needHomeVisit;
-      case _NeedFilter.facilityReferral:
-        return MissionDashboardStrings.needFacilityReferral;
-    }
-  }
-
-  String _programmeLabel(Programme programme) {
-    switch (programme) {
-      case Programme.imci:
-        return PathwayStrings.programmeImci;
-      case Programme.anc:
-        return PathwayStrings.programmeAnc;
-      case Programme.pnc:
-        return PathwayStrings.programmePnc;
-      case Programme.ncd:
-        return PathwayStrings.programmeNcd;
-      case Programme.tb:
-        return PathwayStrings.programmeTb;
-      case Programme.epi:
-        return PathwayStrings.programmeEpi;
-      case Programme.nutrition:
-        return PathwayStrings.programmeNutrition;
-      case Programme.familyPlanning:
-        return PathwayStrings.programmeFamilyPlanning;
-      case Programme.cataract:
-        return PathwayStrings.programmeCataract;
-      case Programme.eyeCare:
-        return PathwayStrings.programmeEyeCare;
-      case Programme.unknown:
-        return PathwayStrings.programmeUnknown;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // ── Row 1: village chips ──────────────────────────────────────────
-        if (villages.isNotEmpty) ...[
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Text(
-              MissionDashboardStrings.whichVillageVisiting,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
-            ),
-          ),
-          SizedBox(
-            height: 34,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: EdgeInsets.zero,
-              children: [
-                _VillageChip(
-                  label: MissionDashboardStrings.allVillages,
-                  isActive: selectedVillage == null,
-                  onTap: () => onVillageSelected(null),
-                ),
-                ...villages.map((v) => _VillageChip(
-                  label: v,
-                  isActive: selectedVillage == v,
-                  onTap: () => onVillageSelected(selectedVillage == v ? null : v),
-                )),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          Divider(height: 1, color: Theme.of(context).colorScheme.outlineVariant),
-          const SizedBox(height: 8),
-        ],
-
-        // ── Row 2: filter label + clear ───────────────────────────────────
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Row(
-            children: [
-              Text(
-                MissionDashboardStrings.filterByNeed,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                '(${MissionDashboardStrings.filterByNeedOptional})',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w400,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const Spacer(),
-              if (selectedNeeds.isNotEmpty || selectedProgrammes.isNotEmpty)
-                Semantics(
-                  label: 'Clear all filters',
-                  button: true,
-                  child: GestureDetector(
-                    key: const Key('dashboard_filter_clear_needs_tap'),
-                    onTap: onClearNeeds,
-                    child: Text(
-                      MissionDashboardStrings.clearNeedFilters,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        // ── Row 3: single scrollable row — need chips then programme chips ──
-        SizedBox(
-          height: 34,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: EdgeInsets.zero,
-            children: [
-              ..._NeedFilter.values
-                  .where((n) => availableNeeds.contains(n))
-                  .map((need) {
-                final active = selectedNeeds.contains(need);
-                final cs = Theme.of(context).colorScheme;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: Semantics(
-                    label: active
-                        ? 'Filter by need: ${_needLabel(need)}, selected'
-                        : 'Filter by need: ${_needLabel(need)}',
-                    button: true,
-                    child: GestureDetector(
-                      key: ValueKey('dashboard_need_filter_${need.name}'),
-                      onTap: () => onNeedToggled(need),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: active ? AppColors.aiPurple : cs.surface,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: active
-                                ? AppColors.aiPurple
-                                : cs.outlineVariant,
-                            width: 1,
-                          ),
-                        ),
-                        child: Text(
-                          _needLabel(need),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight:
-                                active ? FontWeight.w800 : FontWeight.w500,
-                            color:
-                                active ? Colors.white : cs.onSurface,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }),
-              ...availableProgrammes.map((prog) {
-                final active = selectedProgrammes.contains(prog);
-                final cs = Theme.of(context).colorScheme;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: Semantics(
-                    label: active
-                        ? 'Filter by programme: ${_programmeLabel(prog)}, selected'
-                        : 'Filter by programme: ${_programmeLabel(prog)}',
-                    button: true,
-                    child: GestureDetector(
-                      key: ValueKey('dashboard_prog_filter_${prog.name}'),
-                      onTap: () => onProgrammeToggled(prog),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: active ? AppColors.aiPurple : cs.surface,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: active
-                                ? AppColors.aiPurple
-                                : cs.outlineVariant,
-                            width: 1,
-                          ),
-                        ),
-                        child: Text(
-                          _programmeLabel(prog),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight:
-                                active ? FontWeight.w800 : FontWeight.w500,
-                            color:
-                                active ? Colors.white : cs.onSurface,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _VillageChip extends StatelessWidget {
-  const _VillageChip({
-    required this.label,
-    required this.isActive,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool isActive;
+  final int count;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
-      child: Semantics(
-        label: isActive ? 'Village filter: $label, selected' : 'Filter by village: $label',
-        button: true,
-        child: GestureDetector(
-          key: const Key('dashboard_filter_chip_tap'),
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: isActive ? AppColors.navy : Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: isActive ? AppColors.navy : Theme.of(context).colorScheme.outlineVariant,
-                width: 1,
+    return Semantics(
+      label: count > 0 ? '$count notifications' : 'Notifications',
+      button: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              const Icon(
+                Icons.notifications_outlined,
+                color: Colors.white,
+                size: 24,
               ),
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: isActive ? Colors.white : Theme.of(context).colorScheme.onSurface,
-              ),
-            ),
+              if (count > 0)
+                Positioned(
+                  top: -4,
+                  right: -4,
+                  child: Container(
+                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.statusCritical,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.navy, width: 1.5),
+                    ),
+                    child: Text(
+                      count > 99 ? '99+' : '$count',
+                      style: const TextStyle(
+                        fontFamily: 'NunitoSans',
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        height: 1.4,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ),
     );
   }
 }
+

@@ -50,7 +50,7 @@ class Endpoints {
 
   /// Live streaming ASR + on-demand clinical extraction (WebSocket).
   static const String scribeRealtimeTranscribe =
-      '/ai-scribe/scribe/realtime/transcribe';
+      '/ai-scribe-service/scribe/realtime/transcribe';
 
   // ── AI Visit Briefing: pre-visit guidance cards ───────────────────────────
   static const String visitBriefingGenerate =

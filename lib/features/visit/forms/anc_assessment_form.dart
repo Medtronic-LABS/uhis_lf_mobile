@@ -62,7 +62,10 @@ class _AncAssessmentFormState extends State<AncAssessmentForm> {
   final _calciumConsumedController = TextEditingController();
   final _calciumProvidedController = TextEditingController();
 
-  // Danger signs by trimester
+  // Danger signs — flat set for UI; serialised into the current-trimester
+  // bucket on save (backend keeps the trimester shape).
+  final Set<String> _dangerSignsFlat = {};
+  // Kept so previously-recorded trimester data round-trips correctly.
   final Set<String> _dangerSigns12 = {};
   final Set<String> _dangerSigns13To27 = {};
   final Set<String> _dangerSigns28To40 = {};
@@ -241,6 +244,11 @@ class _AncAssessmentFormState extends State<AncAssessmentForm> {
       _dangerSigns12.addAll(danger.dangerSignsExperienced12);
       _dangerSigns13To27.addAll(danger.dangerSignsExperienced13To27);
       _dangerSigns28To40.addAll(danger.dangerSignsExperienced28To40);
+      // Union into the flat UI set so previously recorded signs pre-select.
+      _dangerSignsFlat
+        ..addAll(_dangerSigns12)
+        ..addAll(_dangerSigns13To27)
+        ..addAll(_dangerSigns28To40);
     }
   }
 
@@ -284,9 +292,12 @@ class _AncAssessmentFormState extends State<AncAssessmentForm> {
         calciumProvided: int.tryParse(_calciumProvidedController.text),
       ),
       dangerSignsRiskIdentification: DangerSignsRiskIdentification(
-        dangerSignsExperienced12: _dangerSigns12.toList(),
-        dangerSignsExperienced13To27: _dangerSigns13To27.toList(),
-        dangerSignsExperienced28To40: _dangerSigns28To40.toList(),
+        dangerSignsExperienced12:
+            _trimester == 1 ? _dangerSignsFlat.toList() : _dangerSigns12.toList(),
+        dangerSignsExperienced13To27:
+            _trimester == 2 ? _dangerSignsFlat.toList() : _dangerSigns13To27.toList(),
+        dangerSignsExperienced28To40:
+            _trimester >= 3 ? _dangerSignsFlat.toList() : _dangerSigns28To40.toList(),
       ),
       medicalHistoryPhysicalExamination: MedicalHistoryPhysicalExamination(
         bloodPressureSystolic: int.tryParse(_systolicController.text),
@@ -1390,17 +1401,6 @@ class _AncAssessmentFormState extends State<AncAssessmentForm> {
   // ─── Danger signs ─────────────────────────────────────────────
 
   Widget _buildDangerSignsSection() {
-    final trimesterOptions = _trimester == 1
-        ? AncDangerSignsOptions.firstTrimester
-        : _trimester == 2
-            ? AncDangerSignsOptions.secondTrimester
-            : AncDangerSignsOptions.thirdTrimester;
-    final trimesterSigns = _trimester == 1
-        ? _dangerSigns12
-        : _trimester == 2
-            ? _dangerSigns13To27
-            : _dangerSigns28To40;
-
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -1428,17 +1428,17 @@ class _AncAssessmentFormState extends State<AncAssessmentForm> {
           const SizedBox(height: 8),
           Column(
             children: [
-              ...trimesterOptions.map((sign) {
-                final selected = trimesterSigns.contains(sign);
+              ...AncDangerSignsOptions.all.map((sign) {
+                final selected = _dangerSignsFlat.contains(sign);
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 5),
                   child: GestureDetector(
                     onTap: () {
                       setState(() {
                         if (selected) {
-                          trimesterSigns.remove(sign);
+                          _dangerSignsFlat.remove(sign);
                         } else {
-                          trimesterSigns.add(sign);
+                          _dangerSignsFlat.add(sign);
                         }
                       });
                       _updateData();
@@ -1480,7 +1480,7 @@ class _AncAssessmentFormState extends State<AncAssessmentForm> {
               // None of these
               GestureDetector(
                 onTap: () {
-                  setState(() => trimesterSigns.clear());
+                  setState(() => _dangerSignsFlat.clear());
                   _updateData();
                 },
                 child: Container(
@@ -1490,14 +1490,14 @@ class _AncAssessmentFormState extends State<AncAssessmentForm> {
                     vertical: 9,
                   ),
                   decoration: BoxDecoration(
-                    color: trimesterSigns.isEmpty
+                    color: _dangerSignsFlat.isEmpty
                         ? AppColors.statusSuccessSurface
                         : Colors.white,
                     border: Border.all(
-                      color: trimesterSigns.isEmpty
+                      color: _dangerSignsFlat.isEmpty
                           ? AppColors.statusSuccess
                           : AppColors.border,
-                      width: trimesterSigns.isEmpty ? 2 : 1.5,
+                      width: _dangerSignsFlat.isEmpty ? 2 : 1.5,
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -1506,7 +1506,7 @@ class _AncAssessmentFormState extends State<AncAssessmentForm> {
                     style: TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w700,
-                      color: trimesterSigns.isEmpty
+                      color: _dangerSignsFlat.isEmpty
                           ? AppColors.statusSuccessText
                           : AppColors.textPrimary,
                     ),
