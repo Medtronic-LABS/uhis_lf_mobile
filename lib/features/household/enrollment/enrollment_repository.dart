@@ -24,6 +24,14 @@ class EnrollmentResult {
   final List<String> memberReferenceIds;
 }
 
+/// Result from [EnrollmentRepository.submitStandaloneMember].
+class StandaloneMemberResult {
+  const StandaloneMemberResult({required this.memberReferenceId});
+
+  /// UUID assigned to the new member in the sync payload.
+  final String memberReferenceId;
+}
+
 /// Submits a completed household enrollment to
 /// `POST /offline-service/offline-sync/create`.
 ///
@@ -170,6 +178,116 @@ class EnrollmentRepository extends ApiRepository {
       hhReferenceId: hhReferenceId,
       memberReferenceIds: [headRefId, ...extraRefIds],
     );
+  }
+
+  /// Submit a **single member** to an **already-synced household**.
+  ///
+  /// Matches Android's OfflineSyncRepository path:
+  ///   request["households"]       = []
+  ///   request["householdMembers"] = [HouseHoldMember(householdId=fhirId, ...)]
+  ///
+  /// [householdId] is the household's FHIR/server ID (HouseholdEntity.fhirId).
+  /// [householdReferenceId] is the household's local reference ID (HouseholdEntity.id).
+  ///
+  /// Returns a [StandaloneMemberResult] containing the UUID that was assigned
+  /// to the new member so the controller can persist it locally immediately.
+  Future<StandaloneMemberResult> submitStandaloneMember({
+    required HouseholdMember member,
+    required String householdId,
+    required String householdReferenceId,
+    required String villageName,
+    required String villageId,
+    String? subVillageId,
+    String? subVillageName,
+    required int userId,
+    required String userFhirId,
+    required String organizationId,
+    required String deviceId,
+    double latitude = 0.0,
+    double longitude = 0.0,
+    String appVersionName = AppConfig.appVersionName,
+    int appVersionCode = AppConfig.appVersionCode,
+  }) async {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final memberRefId = _uuid.v4();
+
+    final provenance = ProvanceDto.fromMap({
+      'modifiedDate': DateTime.now().toUtc().toIso8601String(),
+      'organizationId': organizationId,
+      'spiceUserId': userId,
+      'userId': userFhirId,
+      'spiceRole': _skRole,
+    });
+
+    final vId = int.tryParse(villageId) ?? 0;
+    final svId = int.tryParse(subVillageId ?? '') ?? 0;
+    final ssWorkerId = userId;
+
+    final normDob = _normaliseDob(member.dateOfBirth);
+
+    // Member payload mirroring Android HouseHoldMember DTO when household
+    // already has a fhirId (server has already processed the household).
+    final memberPayload = {
+      'referenceId': memberRefId,
+      'householdId': householdId,           // FHIR ID of the existing household
+      'householdReferenceId': householdReferenceId, // local UUID / ref
+      'name': member.name,
+      'nationalId': member.idNumber ?? '',
+      'idType': _normalizeIdType(member.idType),
+      'dateOfBirth': normDob,
+      'gender': member.gender.toLowerCase(),
+      'isHouseholdHead': false,
+      'isActive': true,
+      'isChild': _isChild(member.age, normDob),
+      'maritalStatus': member.maritalStatus.toLowerCase(),
+      'disability': _disabilityValue(member.disabilityStatus),
+      'villageId': vId,
+      if (svId > 0) 'subVillageId': svId,
+      if (subVillageName?.isNotEmpty == true) 'subVillage': subVillageName,
+      'village': villageName,
+      'phoneNumber': member.mobileNumber ?? '',
+      'phoneNumberCategory': '',
+      'shasthyaShebikaId': ssWorkerId,
+      'shasthyaKormiId': userId,
+      'createdByRoleName': _skRole,
+      'createdBySpiceUserId': userId,
+      'assignHousehold': false,
+      'isPregnant': false,
+      'hasTbContactTracing': false,
+      'children': <dynamic>[],
+      'latitude': latitude,
+      'longitude': longitude,
+      'provenance': provenance.toJson(),
+      'assessments': <dynamic>[],
+      'rxBuddies': <dynamic>[],
+      'createdAt': nowMs,
+      'updatedAt': nowMs,
+    };
+
+    final body = {
+      'requestId': _uuid.v4(),
+      'appVersionName': appVersionName,
+      'appVersionCode': appVersionCode,
+      'deviceId': deviceId,
+      'appType': AppConfig.appType,
+      'syncMode': 'AutomaticSync',
+      'households': <dynamic>[],
+      'householdMembers': [memberPayload],
+      'assessments': <dynamic>[],
+      'followUps': <dynamic>[],
+      'householdMemberLinks': <dynamic>[],
+      'communityProfiles': <dynamic>[],
+      'rxBuddies': <dynamic>[],
+    };
+
+    if (kDebugMode) {
+      debugPrint('[EnrollmentRepository] standalone member payload:\n'
+          '${const JsonEncoder.withIndent('  ').convert(body)}');
+    }
+    await postOk(Endpoints.offlineSyncCreate,
+        data: body, action: 'LinkMemberToHousehold');
+
+    return StandaloneMemberResult(memberReferenceId: memberRefId);
   }
 
   Map<String, dynamic> _memberPayload({

@@ -190,6 +190,36 @@ abstract final class SettingsStrings {
 
 /// Real-Time ASR screen — live streaming transcription + live clinical
 /// extraction against the ai-scribe-service, triggered from Settings.
+/// Strings for Step 2 ambient listening / form-fill banner.
+abstract final class Step2AsrStrings {
+  Step2AsrStrings._();
+
+  static const String bannerTitle = 'AI Form Fill';
+  static const String bannerSubtitle =
+      'Speak naturally — AI fills form fields as you talk.';
+  static const String startListening = 'Start Listening';
+  static const String stopListening = 'Stop';
+  static const String connecting = 'Connecting…';
+  static const String listening = 'Listening…';
+  static const String stopping = 'Stopping…';
+  static const String notListening = 'Tap to start ambient form-fill';
+  static const String transcriptEmpty =
+      'Speak — transcript will appear here.';
+  static const String noFieldsYet = 'No fields extracted yet.';
+  static const String extractNow = 'Fill Now';
+  static const String extracting = 'Filling…';
+  static const String notSupportedOnWeb =
+      'Step 2 AI form-fill is not available in the web preview.';
+  static const String micPermissionDenied =
+      'Microphone permission is required.';
+  static const String fieldsFilled = 'fields filled';
+  static const String tapToEdit =
+      'Review highlighted fields in the form below.';
+  static const String unmappedLabel = 'Not matched:';
+
+  static String filledCount(int n) => '$n $fieldsFilled';
+}
+
 abstract final class RealtimeAsrStrings {
   RealtimeAsrStrings._();
 
@@ -3887,3 +3917,28 @@ abstract final class HouseholdFollowUpStrings {
   static const String urgentLabel = 'Urgent';
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Select Household screen (link member to existing household)
+// ─────────────────────────────────────────────────────────────────────────────
+abstract final class SelectHouseholdStrings {
+  static const String title = 'Select Household';
+  static const String subtitle = 'Choose the household to link this member to';
+  static const String searchHint = 'Search by name, house number, or village...';
+  static const String catchmentCount = 'households in your catchment';
+  static const String emptyState = 'No households found';
+  static const String ctaPrefix = 'Link & Enrol';
+  static const String unknownFamily = 'Unknown family';
+  static const String membersLabel = 'members';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Link Member screen (member registration form for existing household)
+// ─────────────────────────────────────────────────────────────────────────────
+abstract final class LinkMemberStrings {
+  static const String title = 'Add Member';
+  static const String selectedHouseholdLabel = 'Selected household';
+  static const String ctaLabel = 'Link & Enrol Member';
+  static const String submitting = 'Submitting…';
+  static const String successMessage = 'Member linked successfully';
+  static const String errorPrefix = 'Could not link member';
+}

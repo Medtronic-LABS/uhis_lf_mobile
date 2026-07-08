@@ -34,6 +34,8 @@ import '../features/household/enrollment/create_household_screen.dart';
 import '../features/household/enrollment/household_created_screen.dart';
 import '../features/household/enrollment/add_household_member_screen.dart';
 import '../features/household/enrollment/enrollment_controller.dart';
+import '../features/household/enrollment/select_household_screen.dart';
+import '../features/household/enrollment/link_member_screen.dart';
 import '../core/db/household_dao.dart';
 import '../core/db/member_dao.dart';
 import '../core/db/patient_dao.dart';
@@ -404,6 +406,39 @@ GoRouter buildRouter(AuthState auth) {
             ),
           ),
         ],
+      ),
+
+      // Select existing household → link new member
+      GoRoute(
+        path: '/household/enrollment/select-household',
+        pageBuilder: (context, state) => const MaterialPage(
+          key: ValueKey('select-household'),
+          child: SelectHouseholdScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/household/enrollment/link-member',
+        pageBuilder: (context, state) {
+          final extra = state.extra is Map<String, dynamic>
+              ? state.extra as Map<String, dynamic>
+              : <String, dynamic>{};
+          return MaterialPage(
+            key: const ValueKey('link-member'),
+            child: LinkMemberScreen(
+              householdId: extra['householdId'] as String? ?? '',
+              householdReferenceId:
+                  extra['householdReferenceId'] as String? ??
+                      extra['householdId'] as String? ??
+                      '',
+              householdName: extra['householdName'] as String?,
+              householdNo: extra['householdNo'] as String?,
+              villageId: extra['villageId'] as String?,
+              villageName: extra['villageName'] as String?,
+              subVillageId: extra['subVillageId'] as String?,
+              subVillageName: extra['subVillageName'] as String?,
+            ),
+          );
+        },
       ),
 
       // ─────────────────────────────────────────────────────────────────────
