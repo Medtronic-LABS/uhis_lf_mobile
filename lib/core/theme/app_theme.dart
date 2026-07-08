@@ -307,6 +307,32 @@ abstract final class AppColors {
   // deliberately distinct from AppColors.whatsapp/waHeader (the in-app accent).
   static const Color whatsappPreviewHeader = Color(0xFF075E54);
   static const Color whatsappPreviewBubble = Color(0xFFDCF8C6);
+
+  // ─── v13 Dashboard / AI Worklist additions ──────────────────
+  // v13 updated --pink to #EC4899 (FAB, village tab active underline).
+  // Existing AppColors.pink (#E8356D) is retained for all pre-v13 screens;
+  // use pinkWorklist for the dashboard FAB and village chip indicator.
+  static const Color pinkWorklist     = Color(0xFFEC4899);
+  static const Color pinkWorklistDark = Color(0xFFEC4899);
+
+  // Category filter bubble surfaces — lighter/distinct from status palette:
+  static const Color catHighriskSurface  = Color(0xFFFEF2F2); // lighter than statusCriticalSurface
+  static const Color catChildSurface     = Color(0xFFFFFBEB); // yellow-50
+  static const Color catNcdBorder        = Color(0xFF0D9488); // teal-600
+  static const Color catNcdSurface       = Color(0xFFF0FDFA); // teal-50
+  static const Color catMissedSurface    = Color(0xFFF9FAFB); // gray-50
+  static const Color catReferralBorder   = Color(0xFF8B5CF6); // violet-500
+  static const Color catHomeSurface      = Color(0xFFECFDF5); // green-50
+  static const Color catFacilityBorder   = Color(0xFF6366F1); // indigo-500
+  static const Color catFacilitySurface  = Color(0xFFEEF2FF); // indigo-50
+
+  // Referral alert strip (dashboard urgent banner):
+  static const Color referralAlertBg     = Color(0xFFDC2626); // explicit #DC2626 from v13
+  static const Color referralAlertBgDark = Color(0xFFB91C1C);
+
+  // QR search result card accent:
+  static const Color qrResultBorder     = aiPurple;
+  static const Color qrResultShadow     = Color(0x26633BD4); // rgba(107,99,212,0.15)
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -602,6 +628,36 @@ abstract final class AppTextStyles {
   /// literal; do not use it in new code, use [scorePill]/[chip] instead.
   static const TextStyle microTag = TextStyle(
     fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 9, fontWeight: FontWeight.w800,
+  );
+
+  // ─── v13 Dashboard / AI Worklist text styles ───────────────
+  // .patient-name: Nunito 13.5px w800 --text
+  static const TextStyle worklistPatientName = TextStyle(
+    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 13.5, fontWeight: FontWeight.w800,
+    color: AppColors.textPrimary,
+  );
+  // .patient-meta age row: NunitoSans 11.5px w800 #111827
+  static const TextStyle worklistPatientMeta = TextStyle(
+    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 11.5, fontWeight: FontWeight.w800,
+    color: Color(0xFF111827),
+  );
+  // .worklist-row-label: Nunito 13.5px w800 --text
+  static const TextStyle worklistRowLabel = TextStyle(
+    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 13.5, fontWeight: FontWeight.w800,
+    color: AppColors.textPrimary,
+  );
+  // .v-status status pill: NunitoSans 10px w800 (color applied per band)
+  static const TextStyle worklistStatusPill = TextStyle(
+    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 10, fontWeight: FontWeight.w800,
+  );
+  // .cat-bubble label: NunitoSans 9px w700 #6B7280
+  static const TextStyle categoryBubbleLabel = TextStyle(
+    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 9, fontWeight: FontWeight.w700,
+    color: AppColors.textMuted,
+  );
+  // Village tab: NunitoSans 13px w700
+  static const TextStyle villageTab = TextStyle(
+    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 13, fontWeight: FontWeight.w700,
   );
 }
 
@@ -1469,6 +1525,137 @@ class PartnerColors extends ThemeExtension<PartnerColors> {
   }
 }
 
+/// Category filter bubble tokens for the AI Worklist (Screen 2, v13).
+/// Each of the 9 filter categories has a border accent and a surface tint.
+/// Use via `Theme.of(context).extension<WorklistCategoryColors>()!`.
+@immutable
+class WorklistCategoryColors extends ThemeExtension<WorklistCategoryColors> {
+  const WorklistCategoryColors({
+    required this.highRiskBorder,  required this.highRiskSurface,
+    required this.ancBorder,       required this.ancSurface,
+    required this.childBorder,     required this.childSurface,
+    required this.ncdBorder,       required this.ncdSurface,
+    required this.eyeBorder,       required this.eyeSurface,
+    required this.missedBorder,    required this.missedSurface,
+    required this.referralBorder,  required this.referralSurface,
+    required this.homeBorder,      required this.homeSurface,
+    required this.facilityBorder,  required this.facilitySurface,
+    required this.villageTabIndicator,
+    required this.fabBackground,
+    required this.fabShadow,
+  });
+
+  final Color highRiskBorder;  final Color highRiskSurface;
+  final Color ancBorder;       final Color ancSurface;
+  final Color childBorder;     final Color childSurface;
+  final Color ncdBorder;       final Color ncdSurface;
+  final Color eyeBorder;       final Color eyeSurface;
+  final Color missedBorder;    final Color missedSurface;
+  final Color referralBorder;  final Color referralSurface;
+  final Color homeBorder;      final Color homeSurface;
+  final Color facilityBorder;  final Color facilitySurface;
+
+  // Village tab active underline — v13 uses #EC4899 (pinkWorklist).
+  final Color villageTabIndicator;
+  // Enrol FAB — v13 uses #EC4899 + rgba(232,53,109,0.45) shadow.
+  final Color fabBackground;
+  final Color fabShadow;
+
+  static const WorklistCategoryColors light = WorklistCategoryColors(
+    highRiskBorder:  AppColors.statusCritical,        highRiskSurface:  AppColors.catHighriskSurface,
+    ancBorder:       AppColors.pinkWorklist,           ancSurface:       AppColors.ancSurface,
+    childBorder:     AppColors.statusWarning,          childSurface:     AppColors.catChildSurface,
+    ncdBorder:       AppColors.catNcdBorder,           ncdSurface:       AppColors.catNcdSurface,
+    eyeBorder:       AppColors.infoAccent,             eyeSurface:       AppColors.childSurface,
+    missedBorder:    AppColors.textMuted,              missedSurface:    AppColors.catMissedSurface,
+    referralBorder:  AppColors.catReferralBorder,      referralSurface:  AppColors.pncSurface,
+    homeBorder:      AppColors.statusSuccess,          homeSurface:      AppColors.catHomeSurface,
+    facilityBorder:  AppColors.catFacilityBorder,      facilitySurface:  AppColors.catFacilitySurface,
+    villageTabIndicator: AppColors.pinkWorklist,
+    fabBackground:       AppColors.pinkWorklist,
+    fabShadow:           Color(0x73E8356D), // rgba(232,53,109,0.45)
+  );
+
+  static const WorklistCategoryColors dark = WorklistCategoryColors(
+    highRiskBorder:  AppColors.statusCriticalDark,     highRiskSurface:  AppColors.statusCriticalSurfaceDark,
+    ancBorder:       AppColors.pinkWorklistDark,        ancSurface:       AppColors.ancSurfaceDark,
+    childBorder:     AppColors.statusWarningDark,       childSurface:     AppColors.ncdSurfaceDark,
+    ncdBorder:       AppColors.catNcdBorder,            ncdSurface:       AppColors.tbSurfaceDark,
+    eyeBorder:       AppColors.infoAccentDarkDark,      eyeSurface:       AppColors.childSurfaceDark,
+    missedBorder:    AppColors.textMutedDark,           missedSurface:    AppColors.cardSurfaceMutedDark,
+    referralBorder:  AppColors.catReferralBorder,       referralSurface:  AppColors.pncSurfaceDark,
+    homeBorder:      AppColors.statusSuccessDark,       homeSurface:      AppColors.statusSuccessSurfaceDark,
+    facilityBorder:  AppColors.catFacilityBorder,       facilitySurface:  AppColors.aiSurfaceStartDark,
+    villageTabIndicator: AppColors.pinkWorklistDark,
+    fabBackground:       AppColors.pinkWorklistDark,
+    fabShadow:           Color(0x73E8356D),
+  );
+
+  @override
+  WorklistCategoryColors copyWith({
+    Color? highRiskBorder, Color? highRiskSurface,
+    Color? ancBorder, Color? ancSurface,
+    Color? childBorder, Color? childSurface,
+    Color? ncdBorder, Color? ncdSurface,
+    Color? eyeBorder, Color? eyeSurface,
+    Color? missedBorder, Color? missedSurface,
+    Color? referralBorder, Color? referralSurface,
+    Color? homeBorder, Color? homeSurface,
+    Color? facilityBorder, Color? facilitySurface,
+    Color? villageTabIndicator, Color? fabBackground, Color? fabShadow,
+  }) => WorklistCategoryColors(
+    highRiskBorder:  highRiskBorder  ?? this.highRiskBorder,
+    highRiskSurface: highRiskSurface ?? this.highRiskSurface,
+    ancBorder:       ancBorder       ?? this.ancBorder,
+    ancSurface:      ancSurface      ?? this.ancSurface,
+    childBorder:     childBorder     ?? this.childBorder,
+    childSurface:    childSurface    ?? this.childSurface,
+    ncdBorder:       ncdBorder       ?? this.ncdBorder,
+    ncdSurface:      ncdSurface      ?? this.ncdSurface,
+    eyeBorder:       eyeBorder       ?? this.eyeBorder,
+    eyeSurface:      eyeSurface      ?? this.eyeSurface,
+    missedBorder:    missedBorder    ?? this.missedBorder,
+    missedSurface:   missedSurface   ?? this.missedSurface,
+    referralBorder:  referralBorder  ?? this.referralBorder,
+    referralSurface: referralSurface ?? this.referralSurface,
+    homeBorder:      homeBorder      ?? this.homeBorder,
+    homeSurface:     homeSurface     ?? this.homeSurface,
+    facilityBorder:  facilityBorder  ?? this.facilityBorder,
+    facilitySurface: facilitySurface ?? this.facilitySurface,
+    villageTabIndicator: villageTabIndicator ?? this.villageTabIndicator,
+    fabBackground:   fabBackground   ?? this.fabBackground,
+    fabShadow:       fabShadow       ?? this.fabShadow,
+  );
+
+  @override
+  WorklistCategoryColors lerp(ThemeExtension<WorklistCategoryColors>? other, double t) {
+    if (other is! WorklistCategoryColors) return this;
+    return WorklistCategoryColors(
+      highRiskBorder:  Color.lerp(highRiskBorder,  other.highRiskBorder,  t)!,
+      highRiskSurface: Color.lerp(highRiskSurface, other.highRiskSurface, t)!,
+      ancBorder:       Color.lerp(ancBorder,       other.ancBorder,       t)!,
+      ancSurface:      Color.lerp(ancSurface,      other.ancSurface,      t)!,
+      childBorder:     Color.lerp(childBorder,     other.childBorder,     t)!,
+      childSurface:    Color.lerp(childSurface,    other.childSurface,    t)!,
+      ncdBorder:       Color.lerp(ncdBorder,       other.ncdBorder,       t)!,
+      ncdSurface:      Color.lerp(ncdSurface,      other.ncdSurface,      t)!,
+      eyeBorder:       Color.lerp(eyeBorder,       other.eyeBorder,       t)!,
+      eyeSurface:      Color.lerp(eyeSurface,      other.eyeSurface,      t)!,
+      missedBorder:    Color.lerp(missedBorder,    other.missedBorder,    t)!,
+      missedSurface:   Color.lerp(missedSurface,   other.missedSurface,   t)!,
+      referralBorder:  Color.lerp(referralBorder,  other.referralBorder,  t)!,
+      referralSurface: Color.lerp(referralSurface, other.referralSurface, t)!,
+      homeBorder:      Color.lerp(homeBorder,      other.homeBorder,      t)!,
+      homeSurface:     Color.lerp(homeSurface,     other.homeSurface,     t)!,
+      facilityBorder:  Color.lerp(facilityBorder,  other.facilityBorder,  t)!,
+      facilitySurface: Color.lerp(facilitySurface, other.facilitySurface, t)!,
+      villageTabIndicator: Color.lerp(villageTabIndicator, other.villageTabIndicator, t)!,
+      fabBackground:   Color.lerp(fabBackground,   other.fabBackground,   t)!,
+      fabShadow:       Color.lerp(fabShadow,       other.fabShadow,       t)!,
+    );
+  }
+}
+
 /// Motion tokens as instance fields (wraps [AppAnimations]). Gives a single
 /// seam to later swap in a reduced-motion variant (loops → static); motion
 /// has no brightness semantics so `.light`/`.dark` are identical.
@@ -1711,6 +1898,7 @@ ThemeData buildAppTheme() {
 
   return ThemeData(
     useMaterial3: true,
+    fontFamily: 'NunitoSans',
     colorScheme: scheme,
     textTheme: textTheme,
     primaryTextTheme: textTheme,
@@ -1722,6 +1910,7 @@ ThemeData buildAppTheme() {
       OnDarkColors.light,
       PartnerColors.light,
       MotionTheme.light,
+      WorklistCategoryColors.light,
     ],
     scaffoldBackgroundColor: AppColors.canvas,
     appBarTheme: AppBarTheme(
@@ -1986,6 +2175,7 @@ ThemeData buildDarkTheme() {
 
   return ThemeData(
     useMaterial3: true,
+    fontFamily: 'NunitoSans',
     brightness: Brightness.dark,
     colorScheme: scheme,
     textTheme: textTheme,
@@ -1998,6 +2188,7 @@ ThemeData buildDarkTheme() {
       OnDarkColors.dark,
       PartnerColors.dark,
       MotionTheme.dark,
+      WorklistCategoryColors.dark,
     ],
     scaffoldBackgroundColor: AppColors.canvasDark,
     appBarTheme: AppBarTheme(

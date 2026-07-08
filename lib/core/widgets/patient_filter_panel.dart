@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import '../constants/app_strings.dart';
 import '../models/mission_queue_item.dart';
 import '../models/programme.dart';
+import '../theme/app_theme.dart';
+
+String _sentenceCase(String s) =>
+    s.isEmpty ? s : s[0].toUpperCase() + s.substring(1).toLowerCase();
 
 /// Shared filter category for need-based patient filtering.
 /// Used by Dashboard and Patients tab.
@@ -65,26 +69,33 @@ extension NeedFilterHelpers on NeedFilter {
     }
   }
 
+  // v13 border accent colors (--bcolor per category)
   Color get activeColor {
     switch (this) {
-      case NeedFilter.highRisk:
-        return const Color(0xFFDC2626);
-      case NeedFilter.ancMnch:
-        return const Color(0xFF831843);
-      case NeedFilter.childImmunisation:
-        return const Color(0xFF1B2B5E);
-      case NeedFilter.ncd:
-        return const Color(0xFF854F0B);
-      case NeedFilter.eyeCare:
-        return const Color(0xFF0E7490);
-      case NeedFilter.missedFollowUp:
-        return const Color(0xFFD97706);
-      case NeedFilter.pendingReferral:
-        return const Color(0xFF6B21A8);
-      case NeedFilter.homeVisit:
-        return const Color(0xFF047857);
-      case NeedFilter.facilityReferral:
-        return const Color(0xFF0369A1);
+      case NeedFilter.highRisk:          return const Color(0xFFEF4444);
+      case NeedFilter.ancMnch:           return const Color(0xFFEC4899);
+      case NeedFilter.childImmunisation: return const Color(0xFFF59E0B);
+      case NeedFilter.ncd:               return const Color(0xFF0D9488);
+      case NeedFilter.eyeCare:           return const Color(0xFF3B82F6);
+      case NeedFilter.missedFollowUp:    return const Color(0xFF6B7280);
+      case NeedFilter.pendingReferral:   return const Color(0xFF8B5CF6);
+      case NeedFilter.homeVisit:         return const Color(0xFF10B981);
+      case NeedFilter.facilityReferral:  return const Color(0xFF6366F1);
+    }
+  }
+
+  // v13 surface tint colors (--bbg per category)
+  Color get activeSurface {
+    switch (this) {
+      case NeedFilter.highRisk:          return const Color(0xFFFEF2F2);
+      case NeedFilter.ancMnch:           return const Color(0xFFFDF2F8);
+      case NeedFilter.childImmunisation: return const Color(0xFFFFFBEB);
+      case NeedFilter.ncd:               return const Color(0xFFF0FDFA);
+      case NeedFilter.eyeCare:           return const Color(0xFFEFF6FF);
+      case NeedFilter.missedFollowUp:    return const Color(0xFFF9FAFB);
+      case NeedFilter.pendingReferral:   return const Color(0xFFF5F3FF);
+      case NeedFilter.homeVisit:         return const Color(0xFFECFDF5);
+      case NeedFilter.facilityReferral:  return const Color(0xFFEEF2FF);
     }
   }
 
@@ -190,31 +201,34 @@ class PatientFilterPanel extends StatelessWidget {
       children: [
         // ── Row 1: village tabs ───────────────────────────────────────────
         if (villages.isNotEmpty) ...[
-          SizedBox(
-            height: 38,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: EdgeInsets.zero,
-              children: [
-                VillageFilterTab(
-                  label: MissionDashboardStrings.allVillages,
-                  isActive: selectedVillageValue == null,
-                  onTap: () => onVillageSelected(null),
-                ),
-                ...villages.map((v) => VillageFilterTab(
-                      label: v.label,
-                      isActive: selectedVillageValue == v.value,
-                      onTap: () => onVillageSelected(
-                          selectedVillageValue == v.value ? null : v.value),
-                    )),
-              ],
+          DecoratedBox(
+            decoration: const BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: AppColors.border, width: 1.5),
+              ),
+            ),
+            child: SizedBox(
+              height: 38,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: EdgeInsets.zero,
+                children: [
+                  VillageFilterTab(
+                    label: MissionDashboardStrings.allVillages,
+                    isActive: selectedVillageValue == null,
+                    onTap: () => onVillageSelected(null),
+                  ),
+                  ...villages.map((v) => VillageFilterTab(
+                        label: _sentenceCase(v.label),
+                        isActive: selectedVillageValue == v.value,
+                        onTap: () => onVillageSelected(
+                            selectedVillageValue == v.value ? null : v.value),
+                      )),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 10),
-          Divider(
-              height: 1,
-              color: Theme.of(context).colorScheme.outlineVariant),
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
         ],
 
         // ── Row 2: clear filters (only when active) ───────────────────────
@@ -257,6 +271,7 @@ class PatientFilterPanel extends StatelessWidget {
                             label: need.label,
                             icon: need.icon,
                             activeColor: need.activeColor,
+                            activeSurface: need.activeSurface,
                             isActive: selectedNeeds.contains(need),
                             onTap: () => onNeedToggled(need),
                           ),
@@ -284,29 +299,33 @@ class VillageFilterTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const activeColor = Color(0xFF1B2B5E);
-    const activeLine = Color(0xFFEC4899);
+    final activeLine = Theme.of(context)
+            .extension<WorklistCategoryColors>()
+            ?.villageTabIndicator ??
+        AppColors.pinkWorklist;
     return GestureDetector(
       key: const Key('patient_filter_village_tap'),
       onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(right: 16),
-        padding: const EdgeInsets.only(bottom: 8),
+      child: AnimatedContainer(
+        duration: AppAnimations.control,
+        curve: AppAnimations.standard,
+        margin: const EdgeInsets.only(right: 18),
+        padding: const EdgeInsets.fromLTRB(1, 8, 1, 9),
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
               color: isActive ? activeLine : Colors.transparent,
-              width: 2,
+              width: 2.5,
             ),
           ),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-            color: isActive ? activeColor : const Color(0xFF6B7280),
+        child: AnimatedDefaultTextStyle(
+          duration: AppAnimations.control,
+          curve: AppAnimations.standard,
+          style: AppTextStyles.villageTab.copyWith(
+            color: isActive ? const Color(0xFF111827) : AppColors.textMuted,
           ),
+          child: Text(label),
         ),
       ),
     );
@@ -320,13 +339,15 @@ class NeedCategoryBubble extends StatelessWidget {
     required this.label,
     required this.icon,
     required this.activeColor,
+    required this.activeSurface,
     required this.isActive,
     required this.onTap,
   });
 
   final String label;
   final IconData icon;
-  final Color activeColor;
+  final Color activeColor;   // border accent (--bcolor)
+  final Color activeSurface; // surface tint  (--bbg)
   final bool isActive;
   final VoidCallback onTap;
 
@@ -338,51 +359,50 @@ class NeedCategoryBubble extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         child: SizedBox(
-          width: 68,
+          width: 56,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 52,
-                height: 52,
+              AnimatedContainer(
+                duration: AppAnimations.control,
+                curve: AppAnimations.standard,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: isActive
-                      ? activeColor
-                      : activeColor.withValues(alpha: 0.08),
+                  color: isActive ? activeSurface : AppColors.cardSurface,
                   border: Border.all(
-                    color: isActive
-                        ? activeColor
-                        : activeColor.withValues(alpha: 0.30),
-                    width: 1.5,
+                    color: isActive ? activeColor : AppColors.border,
+                    width: 2,
                   ),
                   boxShadow: isActive
-                      ? [
+                      ? const [
                           BoxShadow(
-                            color: activeColor.withValues(alpha: 0.25),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
+                            color: Color(0x14000000), // rgba(0,0,0,0.08)
+                            blurRadius: 6,
+                            offset: Offset(0, 2),
                           )
                         ]
                       : null,
                 ),
                 child: Icon(
                   icon,
-                  size: 22,
-                  color: isActive ? Colors.white : activeColor,
+                  size: 19,
+                  color: activeColor,
                 ),
               ),
               const SizedBox(height: 5),
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 9.5,
-                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                  color: isActive ? activeColor : activeColor.withValues(alpha: 0.75),
-                  height: 1.2,
+              AnimatedDefaultTextStyle(
+                duration: AppAnimations.control,
+                curve: AppAnimations.standard,
+                style: AppTextStyles.categoryBubbleLabel.copyWith(
+                  color: isActive ? AppColors.textPrimary : AppColors.textMuted,
+                ),
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],

@@ -28,6 +28,7 @@ import 'dashboard_repository.dart';
 import 'sk_performance_screen.dart';
 import 'mission_dashboard_repository.dart';
 import '../household/enrollment/enrollment_entry_sheet.dart';
+import 'widgets/notification_drawer.dart';
 
 /// AI Mission Dashboard — the operational command center for the SK.
 ///
@@ -63,6 +64,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Version counter for forcing FutureBuilder rebuilds.
   int _refreshVersion = 0;
 
+  // Notification badge count — referral critical + active counts.
+  int _notificationCount = 0;
+
   // Completed patient IDs for today — cards remain visible but non-navigable.
   Set<String> _completedIds = const {};
 
@@ -96,6 +100,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _missionListenerAdded = true;
       _missionRepo!.changes.addListener(_onMissionChanges);
     }
+    _refreshNotificationCount();
+  }
+
+  Future<void> _refreshNotificationCount() async {
+    try {
+      final counts = await context.read<ReferralRepository>().counts();
+      if (!mounted) return;
+      setState(() => _notificationCount = counts.critical + counts.active);
+    } catch (_) {}
   }
 
   @override
@@ -463,6 +476,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
               settingsMenu: _SettingsMenu(onOfferBiometric: _offerBiometric),
+              notificationCount: _notificationCount,
+              onNotificationTap: () => showNotificationDrawer(context),
             ),
             // Referral alert strip — sits between header/search and village tabs
             // so it reads as a system-level alert before the worklist.
@@ -912,12 +927,16 @@ class _DashboardHeader extends StatelessWidget {
     required this.locationLine,
     required this.onPerformance,
     required this.settingsMenu,
+    required this.notificationCount,
+    required this.onNotificationTap,
   });
 
   final String greeting;
   final String? locationLine;
   final VoidCallback onPerformance;
   final Widget settingsMenu;
+  final int notificationCount;
+  final VoidCallback onNotificationTap;
 
   @override
   Widget build(BuildContext context) {
@@ -967,6 +986,10 @@ class _DashboardHeader extends StatelessWidget {
                     ),
                   ],
                 ),
+              ),
+              _NotificationBell(
+                count: notificationCount,
+                onTap: onNotificationTap,
               ),
               IconButton(
                 icon: const Icon(
@@ -1144,11 +1167,7 @@ class _TodaysVisitsHeader extends StatelessWidget {
           Expanded(
             child: Text(
               MissionDashboardStrings.todaysVisits(dateLabel),
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w800,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
+              style: AppTextStyles.worklistRowLabel,
             ),
           ),
           if (queueFuture != null)
@@ -1367,6 +1386,64 @@ class _FilterEmptyCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Notification bell ────────────────────────────────────────────────────────
+
+class _NotificationBell extends StatelessWidget {
+  const _NotificationBell({required this.count, required this.onTap});
+
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: count > 0 ? '$count notifications' : 'Notifications',
+      button: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              const Icon(
+                Icons.notifications_outlined,
+                color: Colors.white,
+                size: 24,
+              ),
+              if (count > 0)
+                Positioned(
+                  top: -4,
+                  right: -4,
+                  child: Container(
+                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.statusCritical,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.navy, width: 1.5),
+                    ),
+                    child: Text(
+                      count > 99 ? '99+' : '$count',
+                      style: const TextStyle(
+                        fontFamily: 'NunitoSans',
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        height: 1.4,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
