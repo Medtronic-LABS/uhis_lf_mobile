@@ -182,11 +182,12 @@ abstract final class UnifiedPayloadMapper {
         {'systolic': sys.toInt(), 'diastolic': dia.toInt()}
       ];
     }
-    final weight = d.getValue('weight');
+    // weight/height/bmi coerced to num — Android sends numbers, not strings.
+    final weight = asDouble(d.getValue('weight'));
     if (weight != null) bpLog['weight'] = weight;
-    final height = d.getValue('height');
+    final height = asDouble(d.getValue('height'));
     if (height != null) bpLog['height'] = height;
-    final bmi = d.getValue('bmi');
+    final bmi = asDouble(d.getValue('bmi'));
     if (bmi != null) bpLog['bmi'] = bmi;
     final isRegularSmoker = d.getValue('isRegularSmoker');
     if (isRegularSmoker != null) bpLog['isRegularSmoker'] = isRegularSmoker;
