@@ -32,6 +32,7 @@ class LocalAssessmentEntity {
     this.referralStatus,
     this.referredReasons,
     this.followUpId,
+    this.pregnancyEpisodeId,
     this.latitude = 0.0,
     this.longitude = 0.0,
     this.syncStatus = AssessmentSyncStatus.pending,
@@ -79,6 +80,11 @@ class LocalAssessmentEntity {
   /// Follow-up ID if this is a follow-up assessment.
   final int? followUpId;
 
+  /// Pregnancy episode UUID — generated once per ANC/PNC episode, matching
+  /// Android's pregnancyEpisodeId in PregnancyDetails. Required by the server
+  /// to link sequential ANC/PNC assessments to the same pregnancy.
+  final String? pregnancyEpisodeId;
+
   /// GPS coordinates.
   final double latitude;
   final double longitude;
@@ -109,6 +115,7 @@ class LocalAssessmentEntity {
         'referral_status': referralStatus,
         'referred_reasons': referredReasons,
         'follow_up_id': followUpId,
+        'pregnancy_episode_id': pregnancyEpisodeId,
         'latitude': latitude,
         'longitude': longitude,
         'sync_status': syncStatus.name,
@@ -132,6 +139,7 @@ class LocalAssessmentEntity {
       referralStatus: row['referral_status'] as String?,
       referredReasons: row['referred_reasons'] as String?,
       followUpId: row['follow_up_id'] as int?,
+      pregnancyEpisodeId: row['pregnancy_episode_id'] as String?,
       latitude: (row['latitude'] as num?)?.toDouble() ?? 0.0,
       longitude: (row['longitude'] as num?)?.toDouble() ?? 0.0,
       syncStatus: AssessmentSyncStatus.values.firstWhere(
@@ -162,6 +170,7 @@ class LocalAssessmentEntity {
     String? referralStatus,
     String? referredReasons,
     int? followUpId,
+    String? pregnancyEpisodeId,
     double? latitude,
     double? longitude,
     AssessmentSyncStatus? syncStatus,
@@ -184,6 +193,7 @@ class LocalAssessmentEntity {
         referralStatus: referralStatus ?? this.referralStatus,
         referredReasons: referredReasons ?? this.referredReasons,
         followUpId: followUpId ?? this.followUpId,
+        pregnancyEpisodeId: pregnancyEpisodeId ?? this.pregnancyEpisodeId,
         latitude: latitude ?? this.latitude,
         longitude: longitude ?? this.longitude,
         syncStatus: syncStatus ?? this.syncStatus,
@@ -213,15 +223,21 @@ class LocalAssessmentEntity {
     // ANC → {"anc": <AncDTO>}, NCD → {"ncd": <NcdDTO>}, etc.
     final wrappedDetails = _wrapDetailsForType(assessmentType, details);
 
+    // visitNumber — server sequences ANC/PNC visits by this field.
+    final visitNum = _extractVisitNumber(assessmentType, details);
+
+    final type = assessmentType.toUpperCase();
+
     return {
       'referenceId': householdMemberLocalId,
-      'assessmentType': assessmentType.toUpperCase(),
+      'assessmentType': type,
       'assessmentDetails': wrappedDetails,
       'villageId': villageId,
       'assessmentDate': createdAt?.toUtc().toIso8601String(),
       'patientStatus': referralStatus ?? 'Recovered',
       'peerSupervisorId': ?peerSupervisorId,
-      'referredReasons': ?referredReasons,
+      // Android sends a joined String, not a JSON array.
+      'referredReasons': _joinedReferredReasons(referredReasons),
       if (otherDetails != null) 'summary': jsonDecode(otherDetails!),
       'encounter': {
         'householdId': householdId,
@@ -233,10 +249,58 @@ class LocalAssessmentEntity {
         'longitude': longitude,
         'startTime': createdAt?.toUtc().toIso8601String(),
         'endTime': updatedAt?.toUtc().toIso8601String(),
+        'visitNumber': ?visitNum,
+        if (type == 'ANC' || type == 'PNC') 'pregnancyEpisodeId': ?pregnancyEpisodeId,
+        // Android sends customStatus list to track patient state server-side.
+        'customStatus': _buildCustomStatus(isReferred, referralStatus),
       },
       if (followUpId != null) 'followUpId': followUpId,
       'updatedAt': updatedAt?.millisecondsSinceEpoch ?? 0,
     };
+  }
+
+  /// Joins a JSON-encoded `List<String>` into the ", "-delimited string format
+  /// that Android's offline-sync/create sends for `referredReasons`.
+  static String? _joinedReferredReasons(String? encoded) {
+    if (encoded == null || encoded.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(encoded);
+      if (decoded is List) {
+        final joined = decoded.whereType<String>().join(', ');
+        return joined.isEmpty ? null : joined;
+      }
+      if (decoded is String) return decoded.isEmpty ? null : decoded;
+    } catch (_) {}
+    return encoded;
+  }
+
+  /// Extracts the sequential ANC/PNC visit number from the flat assessment
+  /// details map. Android populates `visitNumber` on the encounter object.
+  static int? _extractVisitNumber(String type, Map<String, dynamic> d) {
+    final t = type.toUpperCase();
+    String? raw;
+    if (t == 'ANC') {
+      raw = d['ancVisitNumber']?.toString() ??
+          (d['anc'] is Map
+              ? (d['anc'] as Map)['ancVisitNumber']?.toString()
+              : null);
+    } else if (t == 'PNC') {
+      raw = d['pncVisitNumber']?.toString() ??
+          (d['pncMother'] is Map
+              ? (d['pncMother'] as Map)['pncVisitNumber']?.toString()
+              : null);
+    }
+    if (raw == null) return null;
+    return int.tryParse(raw.trim());
+  }
+
+  /// Derives customStatus list from referral state, matching Android's
+  /// Assessment.status field sent in offline-sync/create.
+  static List<String> _buildCustomStatus(bool isReferred, String? referralStatus) {
+    if (isReferred) return ['Referred'];
+    final s = referralStatus?.trim();
+    if (s == null || s.isEmpty) return ['Recovered'];
+    return [s];
   }
 
   /// Build bpLog / glucoseLog nested objects from flat projection fields so
@@ -336,6 +400,7 @@ class LocalAssessmentDao {
         referral_status TEXT,
         referred_reasons TEXT,
         follow_up_id INTEGER,
+        pregnancy_episode_id TEXT,
         latitude REAL DEFAULT 0.0,
         longitude REAL DEFAULT 0.0,
         sync_status TEXT DEFAULT 'pending',

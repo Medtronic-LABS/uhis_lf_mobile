@@ -20,7 +20,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 18;
+  static const int schemaVersion = 19;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -362,6 +362,7 @@ class AppDatabase {
         referral_status TEXT,
         referred_reasons TEXT,
         follow_up_id INTEGER,
+        pregnancy_episode_id TEXT,
         latitude REAL DEFAULT 0.0,
         longitude REAL DEFAULT 0.0,
         sync_status TEXT DEFAULT 'pending',
@@ -1000,6 +1001,15 @@ class AppDatabase {
       await addCol18('ALTER TABLE $tableMembers ADD COLUMN latitude REAL');
       await addCol18('ALTER TABLE $tableMembers ADD COLUMN longitude REAL');
       await addCol18('ALTER TABLE $tableMembers ADD COLUMN id_type TEXT');
+    }
+    if (from < 19) {
+      // v19 — pregnancyEpisodeId on local_assessments, matching Android's
+      // PregnancyDetails.pregnancyEpisodeId sent in offline-sync/create for
+      // ANC/PNC encounters so the server can link sequential visits.
+      try {
+        await db.execute(
+            'ALTER TABLE $tableLocalAssessments ADD COLUMN pregnancy_episode_id TEXT');
+      } catch (_) {/* column already present */}
     }
   }
 

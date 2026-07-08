@@ -56,6 +56,7 @@ class AssessmentRepository extends ChangeNotifier {
     bool isReferred = false,
     String? referralStatus,
     List<String>? referredReasons,
+    String? pregnancyEpisodeId,
     int? followUpId,
     double latitude = 0.0,
     double longitude = 0.0,
@@ -63,6 +64,13 @@ class AssessmentRepository extends ChangeNotifier {
   }) async {
     final id = const Uuid().v4();
     final now = DateTime.now();
+    // Android generates a pregnancyEpisodeId per ANC/PNC assessment to let the
+    // server link sequential visits to the same pregnancy episode.
+    final resolvedEpisodeId = pregnancyEpisodeId ??
+        (assessmentType.toUpperCase() == 'ANC' ||
+                assessmentType.toUpperCase() == 'PNC'
+            ? const Uuid().v4()
+            : null);
 
     // Include encounterId in otherDetails for persistence and API request
     final enrichedOtherDetails = <String, dynamic>{
@@ -87,6 +95,7 @@ class AssessmentRepository extends ChangeNotifier {
       referredReasons:
           referredReasons != null ? jsonEncode(referredReasons) : null,
       followUpId: followUpId,
+      pregnancyEpisodeId: resolvedEpisodeId,
       latitude: latitude,
       longitude: longitude,
       syncStatus: AssessmentSyncStatus.pending,
