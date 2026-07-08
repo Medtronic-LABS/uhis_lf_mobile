@@ -83,8 +83,9 @@ abstract final class UnifiedPayloadMapper {
 
   static Map<String, dynamic> _toAnc(CanonicalVisitData d) {
     return _compact({
-      'bloodPressureSystolic': d.getValue('bloodPressureSystolic'),
-      'bloodPressureDiastolic': d.getValue('bloodPressureDiastolic'),
+      // field_library.json uses 'systolic'/'diastolic'; _injectVitalLogs reads these same keys
+      'bloodPressureSystolic': d.getValue('bloodPressureSystolic') ?? d.getValue('systolic'),
+      'bloodPressureDiastolic': d.getValue('bloodPressureDiastolic') ?? d.getValue('diastolic'),
       'weight': d.getValue('weight'),
       'height': d.getValue('height'),
       'bmi': d.getValue('bmi'),
@@ -139,8 +140,8 @@ abstract final class UnifiedPayloadMapper {
 
   static Map<String, dynamic> _toNcd(CanonicalVisitData d) {
     return _compact({
-      'bloodPressureSystolic': d.getValue('bloodPressureSystolic'),
-      'bloodPressureDiastolic': d.getValue('bloodPressureDiastolic'),
+      'bloodPressureSystolic': d.getValue('bloodPressureSystolic') ?? d.getValue('systolic'),
+      'bloodPressureDiastolic': d.getValue('bloodPressureDiastolic') ?? d.getValue('diastolic'),
       'weight': d.getValue('weight'),
       'height': d.getValue('height'),
       'bmi': d.getValue('bmi'),
@@ -158,8 +159,8 @@ abstract final class UnifiedPayloadMapper {
 
   static Map<String, dynamic> _toPncMother(CanonicalVisitData d) {
     return _compact({
-      'bloodPressureSystolic': d.getValue('bloodPressureSystolic'),
-      'bloodPressureDiastolic': d.getValue('bloodPressureDiastolic'),
+      'bloodPressureSystolic': d.getValue('bloodPressureSystolic') ?? d.getValue('systolic'),
+      'bloodPressureDiastolic': d.getValue('bloodPressureDiastolic') ?? d.getValue('diastolic'),
       'weight': d.getValue('weight'),
       'height': d.getValue('height'),
       'pncVisitNumber': d.getValue('pncVisitNumber'),
