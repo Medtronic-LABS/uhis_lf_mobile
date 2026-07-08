@@ -81,6 +81,12 @@ abstract final class PathwayThresholds {
   /// Source: WHO PEN / AAP Guidelines
   static const int pediatricHtnMinAgeMonths = 60; // 5 years
 
+  /// Minimum biologically plausible age for pregnancy / ANC / PNC (months).
+  /// 10 years (120 months) is the WHO lower bound for reproductive risk.
+  /// Prevents corrupted `isPregnant=true` flags on infants/toddlers from
+  /// activating ANC or PNC forms.
+  static const int reproductiveMinAgeMonths = 120; // 10 years
+
   // ═══════════════════════════════════════════════════════════════════════════
   // PNC WINDOW
   // ═══════════════════════════════════════════════════════════════════════════
@@ -266,7 +272,7 @@ abstract final class PathwayRulesV1 {
     ),
 
     // ═════════════════════════════════════════════════════════════════════════
-    // ANC (Priority 20) — Pregnant women
+    // ANC (Priority 20) — Confirmed pregnant women
     // Source: WHO ANC 2016
     // ═════════════════════════════════════════════════════════════════════════
     PathwayRule(
@@ -276,23 +282,58 @@ abstract final class PathwayRulesV1 {
         'pregnant',
         'vaginal_bleeding',
         'water_break',
+        'leaking_fluid_vagina', // amniotic fluid leak — labor sign
         'reduced_fetal_movement',
         'labor_signs',
+        'painful_uterine_contractions',
+        'heavy_bleeding',
+        'foul_smelling_vaginal_discharge',
         'swelling_face_hands',
         'abdominal_pain',
         'blurred_vision',
         'headache_severe',
+        'edema', // WHO ANC danger sign
       },
+      // Female-only, pregnant, minimum 10 years — prevents ANC firing on
+      // male patients or infants with corrupted isPregnant flags.
       gate: DemographicGate(
         sex: Sex.female,
         requiresPregnancy: true,
+        minAgeMonths: PathwayThresholds.reproductiveMinAgeMonths,
       ),
       historyTriggers: {'PREGNANCY', 'ANC'},
       rationaleKey: 'pathwayAncRationale',
     ),
 
     // ═════════════════════════════════════════════════════════════════════════
-    // PNC (Priority 25) — Postpartum women (< 6 weeks)
+    // ANC Symptom-Detected (Priority 21) — Pregnancy implied by symptoms
+    //
+    // Activates ANC when the patient selects symptoms that are only possible
+    // during pregnancy/labour, even if the SK has not yet recorded pregnancy.
+    // This handles the common field case where the SK picks symptoms first
+    // and records demographics after.
+    // Source: WHO ANC 2016 danger signs
+    // ═════════════════════════════════════════════════════════════════════════
+    PathwayRule(
+      programme: Programme.anc,
+      priority: 21,
+      anyOf: {
+        'reduced_fetal_movement',   // unambiguous — fetus must be present
+        'leaking_fluid_vagina',     // amniotic fluid — pregnancy only
+        'painful_uterine_contractions', // labour — pregnancy only
+        'water_break',              // rupture of membranes — pregnancy only
+      },
+      gate: DemographicGate(
+        sex: Sex.female,
+        // requiresPregnancy intentionally false: symptoms themselves imply
+        // pregnancy when the profile hasn't been updated yet.
+        minAgeMonths: PathwayThresholds.reproductiveMinAgeMonths,
+      ),
+      rationaleKey: 'pathwayAncRationale',
+    ),
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // PNC (Priority 25) — Confirmed postpartum women (< 6 weeks)
     // Source: WHO PNC Guidelines
     // ═════════════════════════════════════════════════════════════════════════
     PathwayRule(
@@ -305,12 +346,40 @@ abstract final class PathwayRulesV1 {
         'blurred_vision',
         'swelling_face_hands',
         'abdominal_pain',
+        'perineal_wound_discharge', // postpartum wound complication
+        'breast_pain',              // mastitis / engorgement
+        'breast_swelling',          // mastitis / engorgement
+        'foul_smelling_vaginal_discharge', // postpartum infection
       },
+      // Female-only, postpartum, minimum 10 years — same guard as ANC.
       gate: DemographicGate(
         sex: Sex.female,
         requiresPostpartum: true,
+        minAgeMonths: PathwayThresholds.reproductiveMinAgeMonths,
       ),
       historyTriggers: {'PNC', 'POSTNATAL'},
+      rationaleKey: 'pathwayPncRationale',
+    ),
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // PNC Symptom-Detected (Priority 26) — Postpartum implied by symptoms
+    //
+    // Activates PNC when the patient selects symptoms only possible after
+    // delivery, even if isPostpartum is not yet recorded in the profile.
+    // Source: WHO PNC Guidelines
+    // ═════════════════════════════════════════════════════════════════════════
+    PathwayRule(
+      programme: Programme.pnc,
+      priority: 26,
+      anyOf: {
+        'perineal_wound_discharge', // only after vaginal delivery
+      },
+      gate: DemographicGate(
+        sex: Sex.female,
+        // requiresPostpartum intentionally false: symptom itself implies
+        // recent delivery when postpartum status isn't yet recorded.
+        minAgeMonths: PathwayThresholds.reproductiveMinAgeMonths,
+      ),
       rationaleKey: 'pathwayPncRationale',
     ),
 
@@ -340,6 +409,8 @@ abstract final class PathwayRulesV1 {
     // ═════════════════════════════════════════════════════════════════════════
     // NCD-HTN (Priority 40)
     // Source: WHO HEARTS Technical Package
+    // Gate: age ≥ 5 years (60 months) — starts where ICCM ends so that
+    // adolescents and adults with BP/neuro symptoms are not left without a form.
     // ═════════════════════════════════════════════════════════════════════════
     PathwayRule(
       programme: Programme.ncd,
@@ -347,12 +418,17 @@ abstract final class PathwayRulesV1 {
       anyOf: {
         'high_bp_known',
         'headache_severe',
+        'headache',
         'dizziness',
         'chest_pain',
         'blurred_vision',
+        'weakness',
+        'fatigue',
+        'breathlessness',
+        'numbness',
       },
       gate: DemographicGate(
-        minAgeMonths: PathwayThresholds.adultMinAgeMonths,
+        minAgeMonths: PathwayThresholds.imciMaxAgeMonths, // 60 months / 5 yrs
       ),
       historyTriggers: {'HYPERTENSION', 'HTN', 'I10'},
       rationaleKey: 'pathwayNcdHtnRationale',
@@ -361,6 +437,7 @@ abstract final class PathwayRulesV1 {
     // ═════════════════════════════════════════════════════════════════════════
     // NCD-DM (Priority 41)
     // Source: WHO PEN Protocol
+    // Gate: age ≥ 5 years (60 months) — same lower bound as NCD-HTN.
     // ═════════════════════════════════════════════════════════════════════════
     PathwayRule(
       programme: Programme.ncd,
@@ -374,7 +451,9 @@ abstract final class PathwayRulesV1 {
         'foot_wound',
         'weight_loss',
       },
-      gate: DemographicGate(minAgeMonths: 216),
+      gate: DemographicGate(
+        minAgeMonths: PathwayThresholds.imciMaxAgeMonths, // 60 months / 5 yrs
+      ),
       historyTriggers: {'DIABETES', 'DM', 'E11'},
       rationaleKey: 'pathwayNcdDmRationale',
     ),

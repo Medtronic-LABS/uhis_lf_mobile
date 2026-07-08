@@ -741,7 +741,13 @@ class OfflineSyncService extends ChangeNotifier {
       phone: m.phone,
       nationalId: m.nationalId,
       householdId: m.householdId,
-      villageId: m.villageId,
+      // Mirror Android AssessmentEntity: use the sub-village ID as the canonical
+      // villageId so that assessment payloads scope to the same granularity that
+      // the Android SK's pull request uses (getAllSubVillageIds → [203, 204, 206]).
+      // Without this, Flutter tags assessments with the parent village (34) and
+      // Android's member-assessment-history pull (scoped to sub-villages) never
+      // finds them.
+      villageId: m.subVillageId ?? m.villageId,
       villageName: m.subVillageName ?? m.villageName,
       isActive: m.isActive,
       updatedAt: m.updatedAt,

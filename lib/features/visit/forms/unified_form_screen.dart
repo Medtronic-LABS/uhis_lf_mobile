@@ -214,17 +214,25 @@ class _SectionCard extends StatelessWidget {
 
       case WidgetHint.numeric:
       case WidgetHint.bloodGlucose:
+        // inputType 2 = numberDecimal; "decimal" string (from EditText fields) is
+        // also treated as decimal — use isDecimal flag.
+        final isDecimal = ref.inputType == 2 ||
+            (currentValue is double) ||
+            (def.unitMeasurement != null &&
+                !def.unitMeasurement!.contains('whole'));
         return _NumericField(
           key: Key('unified_form_${def.id}_input'),
           label: def.label,
           isMandatory: ref.isMandatory,
-          isDecimal: ref.inputType == 2,
+          isDecimal: isDecimal,
+          unit: def.unitMeasurement,
+          hint: def.hintText,
           initialValue: currentValue?.toString(),
           onChanged: (v) {
             if (v == null || v.isEmpty) {
               onFieldChanged(def.id, null);
             } else {
-              final parsed = ref.inputType == 2
+              final parsed = isDecimal
                   ? double.tryParse(v)
                   : int.tryParse(v) ?? double.tryParse(v);
               onFieldChanged(def.id, parsed ?? v);
@@ -241,6 +249,14 @@ class _SectionCard extends StatelessWidget {
         );
 
       case WidgetHint.infoLabel:
+        // Computed read-only value (e.g. BMI, CVD risk). Show value when
+        // available; otherwise show a muted placeholder.
+        return _InfoLabelField(
+          key: Key('unified_form_${def.id}_info'),
+          label: def.label,
+          value: currentValue?.toString(),
+        );
+
       case WidgetHint.textLabel:
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
@@ -248,6 +264,18 @@ class _SectionCard extends StatelessWidget {
         );
 
       case WidgetHint.bpField:
+        // Render a systolic / diastolic pair. Stores value as a list of
+        // reading maps to match Android's bpLogDetails wire format.
+        final readings = (currentValue is List)
+            ? currentValue.cast<Map<String, dynamic>>()
+            : <Map<String, dynamic>>[];
+        return _BpReadingField(
+          key: Key('unified_form_${def.id}_bp'),
+          label: def.label,
+          readings: readings,
+          onChanged: (v) => onFieldChanged(def.id, v),
+        );
+
       case WidgetHint.ageYmd:
       case WidgetHint.pregnancyProfile:
       case WidgetHint.unknown:
@@ -275,6 +303,8 @@ class _NumericField extends StatelessWidget {
     required this.isDecimal,
     required this.onChanged,
     this.initialValue,
+    this.unit,
+    this.hint,
   });
 
   final String label;
@@ -282,6 +312,8 @@ class _NumericField extends StatelessWidget {
   final bool isDecimal;
   final String? initialValue;
   final ValueChanged<String?> onChanged;
+  final String? unit;
+  final String? hint;
 
   @override
   Widget build(BuildContext context) {
@@ -298,6 +330,8 @@ class _NumericField extends StatelessWidget {
       ],
       decoration: InputDecoration(
         labelText: isMandatory ? '$label *' : label,
+        suffixText: unit,
+        hintText: hint,
       ),
       onChanged: onChanged,
     );
@@ -392,6 +426,170 @@ class _DateFieldState extends State<_DateField> {
           widget.onChanged(picked.toIso8601String().substring(0, 10));
         }
       },
+    );
+  }
+}
+
+// ── BP reading field ──────────────────────────────────────────────────────────
+
+/// Systolic / diastolic pair that matches Android's `bpLogDetails` wire format.
+///
+/// Stores value as `List<Map<String, dynamic>>` with one entry per reading:
+/// `[{'systolic': 120, 'diastolic': 80, 'pulse': 72}]`.
+class _BpReadingField extends StatefulWidget {
+  const _BpReadingField({
+    super.key,
+    required this.label,
+    required this.readings,
+    required this.onChanged,
+  });
+
+  final String label;
+  final List<Map<String, dynamic>> readings;
+  final ValueChanged<List<Map<String, dynamic>>> onChanged;
+
+  @override
+  State<_BpReadingField> createState() => _BpReadingFieldState();
+}
+
+class _BpReadingFieldState extends State<_BpReadingField> {
+  late final TextEditingController _sys;
+  late final TextEditingController _dia;
+  late final TextEditingController _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    final first =
+        widget.readings.isNotEmpty ? widget.readings.first : const {};
+    _sys = TextEditingController(text: first['systolic']?.toString() ?? '');
+    _dia = TextEditingController(text: first['diastolic']?.toString() ?? '');
+    _pulse = TextEditingController(text: first['pulse']?.toString() ?? '');
+  }
+
+  @override
+  void dispose() {
+    _sys.dispose();
+    _dia.dispose();
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  void _emit() {
+    final sys = int.tryParse(_sys.text);
+    final dia = int.tryParse(_dia.text);
+    if (sys == null && dia == null) {
+      widget.onChanged([]);
+      return;
+    }
+    final reading = <String, dynamic>{};
+    if (sys != null) reading['systolic'] = sys;
+    if (dia != null) reading['diastolic'] = dia;
+    final pulse = int.tryParse(_pulse.text);
+    if (pulse != null) reading['pulse'] = pulse;
+    widget.onChanged([reading]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          widget.label,
+          style: theme.textTheme.labelLarge
+              ?.copyWith(color: AppColors.textMuted),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: _sys,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: const InputDecoration(
+                  labelText: 'Systolic',
+                  suffixText: 'mmHg',
+                ),
+                onChanged: (_) => _emit(),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextFormField(
+                controller: _dia,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: const InputDecoration(
+                  labelText: 'Diastolic',
+                  suffixText: 'mmHg',
+                ),
+                onChanged: (_) => _emit(),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextFormField(
+                controller: _pulse,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: const InputDecoration(
+                  labelText: 'Pulse',
+                  suffixText: '/min',
+                ),
+                onChanged: (_) => _emit(),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+// ── Info label field ──────────────────────────────────────────────────────────
+
+/// Read-only display for computed values (BMI, CVD risk score, etc.).
+class _InfoLabelField extends StatelessWidget {
+  const _InfoLabelField({
+    super.key,
+    required this.label,
+    this.value,
+  });
+
+  final String label;
+  final String? value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(color: AppColors.textMuted)),
+          if (value != null && value!.isNotEmpty)
+            Text(value!,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.navy,
+                ))
+          else
+            Text('—',
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: AppColors.textMuted)),
+        ],
+      ),
     );
   }
 }

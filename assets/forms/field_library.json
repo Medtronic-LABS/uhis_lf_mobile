@@ -8590,6 +8590,21 @@
         "workflowName": "NCD"
       }
     ],
+    "optionsList": [
+      { "id": "Headache", "name": "Headache", "cultureValue": "মাথাব্যথা" },
+      { "id": "Blurred Vision", "name": "Blurred Vision", "cultureValue": "ঝাপসা দৃষ্টি" },
+      { "id": "Chest Pain", "name": "Chest Pain", "cultureValue": "বুকে ব্যথা" },
+      { "id": "Shortness of Breath", "name": "Shortness of Breath", "cultureValue": "শ্বাসকষ্ট" },
+      { "id": "Weakness", "name": "Weakness", "cultureValue": "দুর্বলতা" },
+      { "id": "Numbness", "name": "Numbness", "cultureValue": "অসাড়তা" },
+      { "id": "Dizziness", "name": "Dizziness", "cultureValue": "মাথা ঘোরা" },
+      { "id": "Palpitations", "name": "Palpitations", "cultureValue": "বুক ধড়ফড়" },
+      { "id": "Leg Swelling", "name": "Leg Swelling", "cultureValue": "পায়ে ফোলা" },
+      { "id": "Frequent Urination", "name": "Frequent Urination", "cultureValue": "ঘন ঘন প্রস্রাব" },
+      { "id": "Excessive Thirst", "name": "Excessive Thirst", "cultureValue": "অতিরিক্ত তৃষ্ণা" },
+      { "id": "Unexplained Weight Loss", "name": "Unexplained Weight Loss", "cultureValue": "অকারণ ওজন হ্রাস" },
+      { "id": "None", "name": "None", "cultureValue": "কোনোটি নয়" }
+    ],
     "condition": []
   },
   "newWorseningSymptoms": {

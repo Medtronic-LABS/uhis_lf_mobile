@@ -410,22 +410,33 @@ class LocalAssessmentDao {
     );
   }
 
-  /// Get all unsynced assessments.
+  /// Get all assessments eligible for upload.
+  ///
+  /// Returns both [AssessmentSyncStatus.pending] (never attempted) and
+  /// [AssessmentSyncStatus.networkError] (previous attempt failed due to
+  /// connectivity — eligible for retry), matching Android's
+  /// `getUnSyncedAssessmentByHHMId` query that filters on both states.
   Future<List<LocalAssessmentEntity>> getUnsynced() async {
     final rows = await _db.db.query(
       tableName,
-      where: 'sync_status = ?',
-      whereArgs: [AssessmentSyncStatus.pending.name],
+      where: 'sync_status IN (?, ?)',
+      whereArgs: [
+        AssessmentSyncStatus.pending.name,
+        AssessmentSyncStatus.networkError.name,
+      ],
       orderBy: 'created_at ASC',
     );
     return rows.map(LocalAssessmentEntity.fromDb).toList();
   }
 
-  /// Get unsynced count.
+  /// Count of assessments pending upload (pending + networkError eligible for retry).
   Future<int> getUnsyncedCount() async {
     final result = await _db.db.rawQuery(
-      'SELECT COUNT(*) as count FROM $tableName WHERE sync_status = ?',
-      [AssessmentSyncStatus.pending.name],
+      'SELECT COUNT(*) as count FROM $tableName WHERE sync_status IN (?, ?)',
+      [
+        AssessmentSyncStatus.pending.name,
+        AssessmentSyncStatus.networkError.name,
+      ],
     );
     return result.first['count'] as int? ?? 0;
   }

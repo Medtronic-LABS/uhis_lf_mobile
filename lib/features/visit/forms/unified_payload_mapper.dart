@@ -108,9 +108,19 @@ abstract final class UnifiedPayloadMapper {
     final pulse = d.getValue('pulse');
     final fundalHeight = asNum(d.getValue('fundalHeight'));
 
+    // Android sends systolic/diastolic as integer strings ("139", "88").
+    // If the value came in as a double (e.g. 80.0), truncate to int first so
+    // Java's Integer deserializer doesn't reject "80.0".
+    String? _bpStr(dynamic v) {
+      if (v == null) return null;
+      final n = asNum(v);
+      if (n != null) return n.toInt().toString();
+      return v.toString();
+    }
+
     final medHx = _compact({
-      if (rawSys != null) 'systolic': rawSys.toString(),
-      if (rawDia != null) 'diastolic': rawDia.toString(),
+      if (rawSys != null) 'systolic': _bpStr(rawSys),
+      if (rawDia != null) 'diastolic': _bpStr(rawDia),
       if (rawSys != null) 'systolicUnit': 'mmHg',
       if (rawDia != null) 'diastolicUnit': 'mmHg',
       if (weight != null) 'weight': weight,
@@ -209,14 +219,23 @@ abstract final class UnifiedPayloadMapper {
 
   // ── NCD ────────────────────────────────────────────────────────────────────
   // Android NCD payload (from reference + AssessmentViewModel.kt):
-  //   ncd.bpLog        = { avgSystolic, avgDiastolic, avgBloodPressure,
-  //                        weight, height, bmi, isRegularSmoker, bpLogDetails[] }
-  //   ncd.glucoseLog   = { glucose, glucoseType, glucoseUnit, hba1c,
+  //   ncd.bpLog        = { diagnosedBP, diagnosedBPMedication, avgSystolic,
+  //                        avgDiastolic, avgBloodPressure, weight, height, bmi,
+  //                        isRegularSmoker, cvdRisk, bpLogDetails[] }
+  //   ncd.glucoseLog   = { diagnosedGlucose, diagnosedGlucoseMedication,
+  //                        glucose, glucoseType, glucoseUnit, hba1c,
   //                        glucoseDateTime, hba1cDateTime }
-  //   ncd.symptomsLog  = { compliance, hasSymptoms, ncdSymptoms[] }
+  //   ncd.symptomsLog  = { compliance:"Yes"/"No", hasSymptoms:"Yes"/"No",
+  //                        ncdSymptoms[], newWorseningSymptoms,
+  //                        ncdSymptomsMedication }
   //
   // weight/height/bmi/isRegularSmoker INSIDE bpLog as numbers.
   // NCD avgSystolic/avgDiastolic are INTEGER on the wire (not strings).
+  // compliance and hasSymptoms are "Yes"/"No" STRINGS (not booleans).
+  //
+  // Multiple BP readings: form may supply bp_reading_1..3 as JSON list under
+  // 'bpReadings', or flat systolic_1/diastolic_1 etc. When present, the
+  // bpLogDetails array carries all readings and averages are computed here.
 
   static Map<String, dynamic> _toNcd(CanonicalVisitData d) {
     double? asNum(dynamic v) {
@@ -225,22 +244,94 @@ abstract final class UnifiedPayloadMapper {
       return null;
     }
 
-    final sys = asNum(d.getValue('systolic') ?? d.getValue('bloodPressureSystolic'));
-    final dia = asNum(d.getValue('diastolic') ?? d.getValue('bloodPressureDiastolic'));
-    final pulse = asNum(d.getValue('pulse'));
+    // Normalize boolean-like values to Android "Yes"/"No" string convention.
+    String? yesNo(dynamic v) {
+      if (v == null) return null;
+      if (v == true || v == 'true' || v == 'yes' || v == 'Yes' || v == 1) return 'Yes';
+      if (v == false || v == 'false' || v == 'no' || v == 'No' || v == 0) return 'No';
+      // Already a string — normalize casing
+      final s = v.toString().toLowerCase();
+      if (s == 'yes') return 'Yes';
+      if (s == 'no') return 'No';
+      return v.toString();
+    }
 
+    // Coerce to Dart bool for fields where the DTO expects Boolean (not string).
+    bool? _toBool(dynamic v) {
+      if (v == null) return null;
+      if (v is bool) return v;
+      final s = v.toString().toLowerCase();
+      if (s == 'true' || s == 'yes' || s == '1') return true;
+      if (s == 'false' || s == 'no' || s == '0') return false;
+      return null;
+    }
+
+    // ── BP readings ──────────────────────────────────────────────────────────
+    // Support up to 3 indexed readings (systolic_1/diastolic_1 … _3) or a
+    // single flat systolic/diastolic. Averages and bpLogDetails are derived
+    // from whichever readings are present.
     final bpLog = <String, dynamic>{};
-    if (sys != null && dia != null) {
-      bpLog['avgSystolic'] = sys.toInt();
-      bpLog['avgDiastolic'] = dia.toInt();
-      bpLog['avgBloodPressure'] = '${sys.toInt()}/${dia.toInt()}';
-      final detail = <String, dynamic>{
-        'systolic': sys.toInt(),
-        'diastolic': dia.toInt(),
-      };
-      if (pulse != null) detail['pulse'] = pulse.toInt();
-      bpLog['bpLogDetails'] = [detail];
-      // weight/height/bmi only meaningful in bpLog when BP is present
+    final bpDetails = <Map<String, dynamic>>[];
+
+    // Priority: bpLogDetails (stored by the _BpReadingField widget in the
+    // unified form — field ID matches field_library.json), then bpReadings
+    // (legacy AI Scribe pre-fill), then indexed/flat fields.
+    final bpReadingsRaw =
+        d.getValue('bpLogDetails') ?? d.getValue('bpReadings');
+    if (bpReadingsRaw is List && bpReadingsRaw.isNotEmpty) {
+      for (final r in bpReadingsRaw) {
+        if (r is! Map) continue;
+        final s = asNum(r['systolic']);
+        final di = asNum(r['diastolic']);
+        if (s != null && di != null) {
+          final detail = <String, dynamic>{
+            'systolic': s.toInt(),
+            'diastolic': di.toInt(),
+          };
+          final p = asNum(r['pulse']);
+          if (p != null) detail['pulse'] = p.toInt();
+          bpDetails.add(detail);
+        }
+      }
+    } else {
+      // Fall back to indexed flat fields, then to plain systolic/diastolic.
+      for (var i = 1; i <= 3; i++) {
+        final s = asNum(d.getValue('systolic_$i'));
+        final di = asNum(d.getValue('diastolic_$i'));
+        if (s != null && di != null) {
+          final detail = <String, dynamic>{
+            'systolic': s.toInt(),
+            'diastolic': di.toInt(),
+          };
+          final p = asNum(d.getValue('pulse_$i'));
+          if (p != null) detail['pulse'] = p.toInt();
+          bpDetails.add(detail);
+        }
+      }
+      // Fallback: single reading from plain fields.
+      if (bpDetails.isEmpty) {
+        final s = asNum(d.getValue('systolic') ?? d.getValue('bloodPressureSystolic'));
+        final di = asNum(d.getValue('diastolic') ?? d.getValue('bloodPressureDiastolic'));
+        if (s != null && di != null) {
+          final detail = <String, dynamic>{
+            'systolic': s.toInt(),
+            'diastolic': di.toInt(),
+          };
+          final pulse = asNum(d.getValue('pulse'));
+          if (pulse != null) detail['pulse'] = pulse.toInt();
+          bpDetails.add(detail);
+        }
+      }
+    }
+
+    if (bpDetails.isNotEmpty) {
+      final avgSys = (bpDetails.map((r) => r['systolic'] as int).reduce((a, b) => a + b) / bpDetails.length).round();
+      final avgDia = (bpDetails.map((r) => r['diastolic'] as int).reduce((a, b) => a + b) / bpDetails.length).round();
+      bpLog['avgSystolic'] = avgSys;
+      bpLog['avgDiastolic'] = avgDia;
+      bpLog['avgBloodPressure'] = '$avgSys/$avgDia';
+      bpLog['bpLogDetails'] = bpDetails;
+      // Biometric data inside bpLog (Android stores weight/height/bmi here).
       final weight = asNum(d.getValue('weight'));
       if (weight != null) bpLog['weight'] = weight;
       final height = asNum(d.getValue('height'));
@@ -248,31 +339,60 @@ abstract final class UnifiedPayloadMapper {
       final bmi = asNum(d.getValue('bmi'));
       if (bmi != null) bpLog['bmi'] = bmi;
       final isRegularSmoker = d.getValue('isRegularSmoker');
-      if (isRegularSmoker != null) bpLog['isRegularSmoker'] = isRegularSmoker;
+      if (isRegularSmoker != null) {
+        // Spice-service BpLogDTO field is Boolean — coerce "Yes"/"yes"/true → true.
+        bpLog['isRegularSmoker'] = _toBool(isRegularSmoker);
+      }
+      // Prior diagnosis fields (from history section of the form).
+      final diagBp = d.getValue('diagnosedBP');
+      if (diagBp != null) bpLog['diagnosedBP'] = diagBp;
+      final diagBpMed = d.getValue('diagnosedBPMedication');
+      if (diagBpMed != null) bpLog['diagnosedBPMedication'] = diagBpMed;
+      final cvdRisk = d.getValue('cvdRisk');
+      if (cvdRisk != null) bpLog['cvdRisk'] = cvdRisk;
     }
 
-    final glucoseNum = asNum(d.getValue('glucoseValue'));
+    // ── Glucose log ──────────────────────────────────────────────────────────
+    final glucoseNum = asNum(d.getValue('glucoseValue') ?? d.getValue('glucose'));
     final glucoseLog = <String, dynamic>{};
     if (glucoseNum != null) {
-      glucoseLog['glucose'] = glucoseNum;
+      // Spice-service BpLogDTO / FHIR mapper both read `glucoseValue`, not `glucose`.
+      glucoseLog['glucoseValue'] = glucoseNum;
       final glucoseType = d.getValue('glucoseType');
       if (glucoseType != null) glucoseLog['glucoseType'] = glucoseType;
       glucoseLog['glucoseUnit'] =
           d.getValue('glucoseUnit') as String? ?? 'mmol/L';
-      final hba1c = d.getValue('hba1c');
+      final hba1c = asNum(d.getValue('hba1c'));
       if (hba1c != null) {
         glucoseLog['hba1c'] = hba1c;
-        glucoseLog['hba1cUnit'] = '%';
+        glucoseLog['hba1cUnit'] = d.getValue('hba1cUnit') as String? ?? '%';
       }
+      final glucoseDateTime = d.getValue('glucoseDateTime');
+      if (glucoseDateTime != null) glucoseLog['glucoseDateTime'] = glucoseDateTime;
+      final hba1cDateTime = d.getValue('hba1cDateTime');
+      if (hba1cDateTime != null) glucoseLog['hba1cDateTime'] = hba1cDateTime;
+      // Prior diagnosis.
+      final diagGlucose = d.getValue('diagnosedGlucose');
+      if (diagGlucose != null) glucoseLog['diagnosedGlucose'] = diagGlucose;
+      final diagGlucoseMed = d.getValue('diagnosedGlucoseMedication');
+      if (diagGlucoseMed != null) glucoseLog['diagnosedGlucoseMedication'] = diagGlucoseMed;
     }
 
+    // ── Symptoms log ─────────────────────────────────────────────────────────
+    // Android always sends compliance and hasSymptoms as "Yes"/"No" strings.
     final symptomsLog = <String, dynamic>{};
-    final compliance = d.getValue('compliance');
-    if (compliance != null) symptomsLog['compliance'] = compliance;
-    final hasSymptoms = d.getValue('hasSymptoms');
-    if (hasSymptoms != null) symptomsLog['hasSymptoms'] = hasSymptoms;
+    final complianceRaw = d.getValue('compliance');
+    final complianceStr = yesNo(complianceRaw);
+    if (complianceStr != null) symptomsLog['compliance'] = complianceStr;
+    final hasSymptomsRaw = d.getValue('hasSymptoms');
+    final hasSymptomsStr = yesNo(hasSymptomsRaw);
+    if (hasSymptomsStr != null) symptomsLog['hasSymptoms'] = hasSymptomsStr;
     final ncdSymptoms = d.getValue('ncdSymptoms');
     if (ncdSymptoms != null) symptomsLog['ncdSymptoms'] = ncdSymptoms;
+    final newWorseningSymptoms = d.getValue('newWorseningSymptoms');
+    if (newWorseningSymptoms != null) symptomsLog['newWorseningSymptoms'] = newWorseningSymptoms;
+    final ncdSymptomsMedication = d.getValue('ncdSymptomsMedication');
+    if (ncdSymptomsMedication != null) symptomsLog['ncdSymptomsMedication'] = ncdSymptomsMedication;
 
     return {
       if (bpLog.isNotEmpty) 'bpLog': bpLog,
@@ -281,6 +401,8 @@ abstract final class UnifiedPayloadMapper {
       if (d.getValue('htnScreening') != null) 'htnScreening': d.getValue('htnScreening'),
       if (d.getValue('generalInformation') != null)
         'generalInformation': d.getValue('generalInformation'),
+      if (d.getValue('referralFacilityType') != null)
+        'referralFacilityType': d.getValue('referralFacilityType'),
     };
   }
 
@@ -314,17 +436,25 @@ abstract final class UnifiedPayloadMapper {
     final weight = asNum(d.getValue('weight'));
     final temperature = asNum(d.getValue('temperature'));
 
+    // Android sends BP/pulse as integer strings; truncate doubles before stringify.
+    String? _bpStr(dynamic v) {
+      if (v == null) return null;
+      final n = asNum(v);
+      if (n != null) return n.toInt().toString();
+      return v.toString();
+    }
+
     final glucoseType = d.getValue('glucoseType') as String?;
     final glucoseValue = asNum(d.getValue('glucoseValue'));
     final hasFbs = glucoseType == 'fbs' && glucoseValue != null;
     final hasRbs = glucoseType != null && glucoseType != 'fbs' && glucoseValue != null;
 
     final maternal = _compact({
-      if (rawSys != null) 'systolic': rawSys.toString(),
+      if (rawSys != null) 'systolic': _bpStr(rawSys),
       if (rawSys != null) 'systolicUnit': 'mmHg',
-      if (rawDia != null) 'diastolic': rawDia.toString(),
+      if (rawDia != null) 'diastolic': _bpStr(rawDia),
       if (rawDia != null) 'diastolicUnit': 'mmHg',
-      if (rawPulse != null) 'pulse': rawPulse.toString(),
+      if (rawPulse != null) 'pulse': _bpStr(rawPulse),
       if (rawPulse != null) 'pulseUnit': 'per minute',
       if (weight != null) 'weight': weight,
       if (weight != null) 'weightUnit': 'kg',

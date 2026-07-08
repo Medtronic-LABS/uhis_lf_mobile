@@ -94,6 +94,15 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   /// form — so the SK still sees three top-level progress dots.
   static const int _totalSteps = 3;
 
+  /// Resolved householdMemberLocalId — caller-supplied wins; falls back to
+  /// parsing memberId as int (works when server issues numeric member IDs
+  /// like "823260"). Android uses this numeric ID as `referenceId` in the
+  /// offline-sync payload.
+  int get _householdMemberLocalId =>
+      widget.householdMemberLocalId ??
+      int.tryParse(widget.memberId ?? '') ??
+      0;
+
   /// Current step index — 0..2.
   late int _step =
       widget.debugInitialStep?.clamp(0, _totalSteps - 1) ?? 0;
@@ -260,7 +269,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           memberId: widget.memberId,
           householdId: widget.householdId,
           villageId: widget.villageId,
-          householdMemberLocalId: widget.householdMemberLocalId,
+          householdMemberLocalId: _householdMemberLocalId,
           patientAge: widget.patientAge,
           patientName: widget.patientName,
           patientGender: widget.patientGender,

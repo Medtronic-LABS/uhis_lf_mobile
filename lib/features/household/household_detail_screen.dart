@@ -14,6 +14,7 @@ import '../dashboard/dashboard_repository.dart';
 class HouseholdMemberData {
   HouseholdMemberData({
     this.id,
+    this.referenceId,
     this.patientId,
     this.name,
     this.relation,
@@ -30,6 +31,10 @@ class HouseholdMemberData {
   });
 
   final String? id;
+  /// Numeric server-assigned member referenceId (e.g. "823260").
+  /// Used as encounter.memberId in the sync payload so the FHIR mapper
+  /// can resolve the RelatedPerson. Distinct from [id] (FHIR ID).
+  final String? referenceId;
   final String? patientId;
   final String? name;
   final String? relation;
@@ -90,6 +95,7 @@ class HouseholdMemberData {
 
     return HouseholdMemberData(
       id: str('id'),
+      referenceId: str('referenceId') ?? str('memberId'),
       patientId: str('patientId'),
       name: str('name') ?? str('firstName'),
       relation: relation,
@@ -100,7 +106,10 @@ class HouseholdMemberData {
       isHead: isHead,
       isPregnant: isPregnant,
       householdId: str('householdId'),
-      villageId: str('villageId'),
+      // Mirror Android AssessmentEntity: prefer sub-village ID over parent village
+      // so assessments get tagged with the same granularity the Android SK's pull
+      // request uses (getAllSubVillageIds → e.g. [203, 204, 206]).
+      villageId: str('subVillageId') ?? str('villageId'),
     );
   }
 
@@ -110,6 +119,7 @@ class HouseholdMemberData {
   }) =>
       HouseholdMemberData(
         id: id,
+        referenceId: referenceId,
         patientId: patientId,
         name: name,
         relation: relation,
@@ -140,6 +150,7 @@ class HouseholdMemberData {
     }
     return HouseholdMemberData(
       id: e.id,
+      referenceId: e.referenceId,
       patientId: e.patientId,
       name: e.name,
       relation: e.relation,
@@ -150,7 +161,9 @@ class HouseholdMemberData {
       isHead: e.isHouseholdHead,
       isPregnant: e.isPregnant,
       householdId: e.householdId,
-      villageId: e.villageId,
+      // Mirror Android AssessmentEntity: prefer sub-village ID so assessment
+      // payloads scope to the same level used by getAllSubVillageIds() pull.
+      villageId: e.subVillageId ?? e.villageId,
     );
   }
 }
@@ -1068,10 +1081,19 @@ class _MemberDetailSheet extends StatelessWidget {
               onPressed: () {
                 Navigator.pop(context);
                 // Navigate to patient detail with member data
+                // Prefer patientId over member.id: patients table stores records
+                // under patientId when available (same logic as _memberToPatient
+                // in offline_sync_service.dart).
+                final navId = (member.patientId != null && member.patientId!.isNotEmpty)
+                    ? member.patientId!
+                    : member.id;
                 context.push(
-                  '/patient/${member.id}',
+                  '/patient/$navId',
                   extra: {
                     'id': member.id,
+                    // Numeric server-assigned referenceId — used as
+                    // encounter.memberId so FHIR mapper can resolve RelatedPerson.
+                    'referenceId': member.referenceId,
                     'name': member.name,
                     'gender': member.gender,
                     'age': member.age,

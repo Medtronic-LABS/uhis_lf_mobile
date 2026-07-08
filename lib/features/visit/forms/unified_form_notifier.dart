@@ -68,10 +68,32 @@ class UnifiedFormNotifier extends ChangeNotifier {
   }
 
   /// Update a single field and autosave draft.
+  ///
+  /// When `height` or `weight` changes, BMI is automatically recomputed and
+  /// stored under the `bmi` field so the `_InfoLabelField` stays in sync.
   void updateField(String fieldId, dynamic value) {
     _data = _data.setValue(fieldId, value);
+    if (fieldId == 'height' || fieldId == 'weight') {
+      _recomputeBmi();
+    }
     notifyListeners();
     _saveDraft();
+  }
+
+  void _recomputeBmi() {
+    final h = _toDouble(_data.getValue('height'));
+    final w = _toDouble(_data.getValue('weight'));
+    if (h != null && h > 0 && w != null && w > 0) {
+      final bmi = w / ((h / 100) * (h / 100));
+      _data = _data.setValue('bmi', double.parse(bmi.toStringAsFixed(1)));
+    }
+  }
+
+  static double? _toDouble(dynamic v) {
+    if (v is double) return v;
+    if (v is int) return v.toDouble();
+    if (v is String) return double.tryParse(v);
+    return null;
   }
 
   /// Merge AI Scribe pre-filled fields into canonical data.

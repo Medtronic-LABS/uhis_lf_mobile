@@ -33,6 +33,9 @@ enum WidgetHint {
     switch (raw) {
       case 'RadioGroup':
         return WidgetHint.radioGroup;
+      // SingleSelectionView is a Yes/No radio group in the Android SPICE app.
+      case 'SingleSelectionView':
+        return WidgetHint.radioGroup;
       case 'DialogCheckbox':
         return WidgetHint.dialogCheckbox;
       case 'Spinner':
@@ -42,15 +45,23 @@ enum WidgetHint {
       case 'pregnancyProfile':
         return WidgetHint.pregnancyProfile;
       case 'DateField':
+      case 'DatePicker':
         return WidgetHint.dateField;
+      // "BP" is the hint used in field_library.json (Android export).
+      case 'BP':
       case 'BpField':
         return WidgetHint.bpField;
       case 'AgeYmd':
         return WidgetHint.ageYmd;
       case 'InfoLabel':
+      case 'InformationLabel':
         return WidgetHint.infoLabel;
       case 'TextLabel':
+      case 'Instruction':
         return WidgetHint.textLabel;
+      // EditText is a generic text/numeric input; inputType governs decimals.
+      case 'EditText':
+        return WidgetHint.numeric;
       default:
         return WidgetHint.unknown;
     }
@@ -78,6 +89,8 @@ class FieldDef {
     required this.isMandatory,
     required this.options,
     required this.programmeIds,
+    this.unitMeasurement,
+    this.hintText,
   });
 
   final String id;
@@ -88,6 +101,12 @@ class FieldDef {
 
   /// Programme IDs from `"programmes[].id"` (e.g. `["anc", "ncd"]`).
   final List<String> programmeIds;
+
+  /// Optional unit label shown as `suffixText` on numeric fields (e.g. `"mmol/L"`, `"kg"`).
+  final String? unitMeasurement;
+
+  /// Optional placeholder text for text input fields.
+  final String? hintText;
 
   factory FieldDef.fromJson(String id, Map<String, dynamic> json) {
     final rawHint = json['widgetHint'] as String?;
@@ -108,6 +127,8 @@ class FieldDef {
       isMandatory: json['isMandatory'] as bool? ?? false,
       options: optionsList,
       programmeIds: programmeIds,
+      unitMeasurement: json['unitMeasurement'] as String?,
+      hintText: json['hint'] as String?,
     );
   }
 }
