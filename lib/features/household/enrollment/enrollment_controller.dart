@@ -67,6 +67,7 @@ class EnrollmentController extends ChangeNotifier {
 
   /// Update household information (step 1).
   void updateHousehold({
+    String? healthWorkerId,
     String? householdType,
     int? numberOfMembers,
     String? houseNumber,
@@ -82,6 +83,7 @@ class EnrollmentController extends ChangeNotifier {
     if (_household == null) return;
 
     _household = _household!.copyWith(
+      healthWorkerId: healthWorkerId,
       householdType: householdType,
       numberOfMembers: numberOfMembers,
       houseNumber: houseNumber,

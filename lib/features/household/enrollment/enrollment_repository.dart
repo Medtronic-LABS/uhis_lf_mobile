@@ -55,6 +55,8 @@ class EnrollmentRepository extends ApiRepository {
 
     final villageId = int.tryParse(household.villageId) ?? 0;
     final subVillageId = int.tryParse(household.subVillageId ?? '') ?? 0;
+    // SS worker assigned to the household — distinct from the SK (logged-in user).
+    final ssWorkerId = int.tryParse(household.healthWorkerId) ?? userId;
 
     // Build member rows — head first, then additional members.
     final allMembers = <Map<String, dynamic>>[
@@ -67,7 +69,8 @@ class EnrollmentRepository extends ApiRepository {
         villageName: household.villageName ?? '',
         provenance: provenance,
         nowMs: nowMs,
-        userId: userId,
+        skUserId: userId,
+        ssWorkerId: ssWorkerId,
         latitude: latitude,
         longitude: longitude,
       ),
@@ -81,7 +84,8 @@ class EnrollmentRepository extends ApiRepository {
           villageName: household.villageName ?? '',
           provenance: provenance,
           nowMs: nowMs,
-          userId: userId,
+          skUserId: userId,
+          ssWorkerId: ssWorkerId,
           latitude: latitude,
           longitude: longitude,
         ),
@@ -95,7 +99,7 @@ class EnrollmentRepository extends ApiRepository {
       'villageId': villageId,
       'subVillageId': subVillageId,
       'village': household.villageName ?? '',
-      'shasthyaShebikaId': userId,
+      'shasthyaShebikaId': ssWorkerId,
       'noOfPeople': household.numberOfMembers,
       'householdHeadOccupation': household.occupation,
       if (household.occupation.toLowerCase() == 'other')
@@ -142,7 +146,8 @@ class EnrollmentRepository extends ApiRepository {
     required String villageName,
     required ProvanceDto provenance,
     required int nowMs,
-    required int userId,
+    required int skUserId,
+    required int ssWorkerId,
     double latitude = 0.0,
     double longitude = 0.0,
   }) {
@@ -165,10 +170,10 @@ class EnrollmentRepository extends ApiRepository {
       'village': villageName,
       'phoneNumber': member.mobileNumber ?? '',
       'phoneNumberCategory': '',
-      'shasthyaShebikaId': userId,
-      'shasthyaKormiId': userId,
+      'shasthyaShebikaId': ssWorkerId,
+      'shasthyaKormiId': skUserId,
       'createdByRoleName': _skRole,
-      'createdBySpiceUserId': userId,
+      'createdBySpiceUserId': skUserId,
       'assignHousehold': false,
       'isPregnant': false,
       'hasTbContactTracing': false,

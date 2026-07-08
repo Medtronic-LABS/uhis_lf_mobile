@@ -44,7 +44,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
   late TextEditingController _incomeCtrl;
   late TextEditingController _disabilityCountCtrl;
 
-  String? _selectedHealthWorker;
+  SsWorker? _selectedSsWorker;
   VillageRef? _selectedVillage;
   SubVillageRef? _selectedSubVillage;
   String? _householdType;
@@ -123,13 +123,13 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
             subVillages.isNotEmpty ? subVillages.first : null;
 
         if (!mounted) return;
-        // Auto-fill health worker with the logged-in SK's own name from API.
+        // Auto-select first SS worker from the SK's assigned SS list.
+        final ssWorkers = hierarchy.ssWorkers ?? [];
         setState(() {
-          _selectedHealthWorker =
-              hierarchy.skProfile?.name ?? 'Health Worker';
+          _selectedSsWorker = ssWorkers.isNotEmpty ? ssWorkers.first : null;
         });
         controller.initializeHousehold(
-          healthWorkerId: userId?.toString() ?? '',
+          healthWorkerId: _selectedSsWorker?.id ?? userId?.toString() ?? '',
           villageId: firstVillage?.id.toString() ?? '',
           villageName: firstVillage?.name,
           subVillageId: firstSubVillage?.id.toString(),
@@ -167,7 +167,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
 
   bool get _isFormComplete =>
       // Household required
-      _selectedHealthWorker != null &&
+      _selectedSsWorker != null &&
       _selectedVillage != null &&
       _householdType != null &&
       _houseNumberCtrl.text.trim().isNotEmpty &&
@@ -217,6 +217,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
   void _handleContinue(EnrollmentController controller) {
     // Update both sections in the controller
     controller.updateHousehold(
+      healthWorkerId: _selectedSsWorker?.id,
       householdType: _householdType ?? '',
       numberOfMembers: int.tryParse(_totalMembersCtrl.text) ?? 0,
       houseNumber: _houseNumberCtrl.text,
@@ -304,18 +305,25 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    EnrollmentInputField(
-                      label: EnrollmentStrings.healthWorkerLabel,
-                      hint: EnrollmentStrings.healthWorkerHint,
-                      controller: TextEditingController(
-                        text: _selectedHealthWorker ?? '',
-                      ),
-                      readOnly: true,
-                      isRequired: true,
-                      customBorderColor: AppColors.statusSuccessBorder,
-                      customFillColor: AppColors.tbSurface,
-                      customTextColor: AppColors.statusSuccessAction,
-                    ),
+                    Builder(builder: (context) {
+                      final hierarchy =
+                          context.watch<UserHierarchyService>();
+                      final ssWorkers = hierarchy.ssWorkers ?? [];
+                      return EnrollmentDropdown(
+                        label: EnrollmentStrings.healthWorkerLabel,
+                        options: ssWorkers.map((s) => s.name).toList(),
+                        value: _selectedSsWorker?.name,
+                        onChanged: (name) {
+                          final ss = ssWorkers.firstWhere(
+                            (s) => s.name == name,
+                            orElse: () => ssWorkers.first,
+                          );
+                          setState(() => _selectedSsWorker = ss);
+                        },
+                        hint: EnrollmentStrings.healthWorkerHint,
+                        isRequired: true,
+                      );
+                    }),
                     const SizedBox(height: 14),
 
                     Builder(builder: (context) {
