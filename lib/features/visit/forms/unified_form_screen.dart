@@ -60,7 +60,8 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     try {
       final cfg = await FormConfig.load(rootBundle);
       if (mounted) setState(() { _config = cfg; _configLoading = false; });
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('[UnifiedForm] FormConfig.load failed: $e\n$st');
       if (mounted) setState(() { _configError = e; _configLoading = false; });
     }
   }

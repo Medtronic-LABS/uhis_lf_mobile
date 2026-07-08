@@ -127,7 +127,8 @@ class FieldRef {
   factory FieldRef.fromJson(Map<String, dynamic> json) => FieldRef(
         id: json['id'] as String? ?? '',
         isMandatory: json['isMandatory'] as bool? ?? false,
-        inputType: json['inputType'] as int? ?? 0,
+        // inputType may be double (e.g. 8192.0) in some JSON tooling exports
+        inputType: (json['inputType'] as num?)?.toInt() ?? 0,
       );
 }
 
