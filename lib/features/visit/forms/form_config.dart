@@ -64,8 +64,9 @@ class FieldOption {
   final String name;
 
   factory FieldOption.fromJson(Map<String, dynamic> json) => FieldOption(
-        id: json['id'] as String? ?? '',
-        name: json['name'] as String? ?? '',
+        // id can be bool (true/false) or int in some exports — coerce to string
+        id: json['id']?.toString() ?? '',
+        name: json['name']?.toString() ?? '',
       );
 }
 
