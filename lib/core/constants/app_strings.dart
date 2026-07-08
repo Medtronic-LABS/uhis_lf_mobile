@@ -550,6 +550,41 @@ abstract final class PatientContextStrings {
   static const String allAssessmentsTitle = 'All assessments';
 }
 
+/// Copy for the patient profile card — collapsible demographic section
+/// shown inside PatientContextScreen below the header.
+abstract final class PatientProfileStrings {
+  PatientProfileStrings._();
+
+  static const String profileTitle = 'Patient Profile';
+  static const String showMore = 'Show full profile';
+  static const String hide = 'Hide profile';
+
+  static const String sectionIdentity = 'Identity';
+  static const String sectionLocation = 'Location';
+  static const String sectionContact = 'Contact';
+  static const String sectionCareTeam = 'Care Team';
+  static const String sectionHousehold = 'Household Role';
+
+  static const String labelNid = 'NID / BRN';
+  static const String labelGender = 'Gender';
+  static const String labelDob = 'Date of Birth';
+  static const String labelIdType = 'ID Type';
+  static const String labelMaritalStatus = 'Marital Status';
+  static const String labelDisability = 'Disability';
+  static const String labelVillage = 'Village';
+  static const String labelPhone = 'Phone';
+  static const String labelIsHouseholdHead = 'HH Head';
+  static const String labelRelation = 'Relation to HH Head';
+  static const String labelSk = 'Assigned SK';
+  static const String labelGuardian = 'Guardian';
+  static const String labelMother = 'Mother Ref';
+  static const String labelGps = 'GPS';
+  static const String labelIsPregnant = 'Pregnant';
+  static const String yes = 'Yes';
+  static const String no = 'No';
+  static const String notAvailable = '—';
+}
+
 /// Copy for the Referral SLA dashboard, cards, banners, and notifications.
 /// Spec: `leapfrog-setup/designs/referral-sla-engine.md` §11.
 abstract final class ReferralStrings {

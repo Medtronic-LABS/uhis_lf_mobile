@@ -65,6 +65,20 @@ class PatientOrMemberData {
       localPatient?.patient.patientId ?? remoteMember?.patientId;
   int? get age => localPatient?.patient.age ?? remoteMember?.age;
   bool get isPregnant => remoteMember?.isPregnant ?? false;
+  String? get nationalId =>
+      localPatient?.patient.nationalId ?? remoteMember?.nationalId;
+  String? get dateOfBirth =>
+      localPatient?.patient.dob ?? remoteMember?.dateOfBirth;
+  String? get maritalStatus => remoteMember?.maritalStatus;
+  String? get disability => remoteMember?.disability;
+  bool get isHouseholdHead => remoteMember?.isHouseholdHead ?? false;
+  String? get shasthyaShebikaId => remoteMember?.shasthyaShebikaId;
+  String? get guardianId => remoteMember?.guardianId;
+  String? get guardianFhirId => remoteMember?.guardianFhirId;
+  String? get motherReferenceId => remoteMember?.motherReferenceId;
+  double? get latitude => remoteMember?.latitude;
+  double? get longitude => remoteMember?.longitude;
+  String? get idType => remoteMember?.idType;
   int? get riskScore => localPatient?.patient.riskScore;
   Band? get riskBand => localPatient?.patient.riskBand;
   Modifier? get riskModifier => localPatient?.patient.riskModifier;
@@ -550,6 +564,8 @@ class _PatientContextScreenState
                         programmes: data.programmes,
                         fallbackReasons: data.riskReasons,
                       ),
+                      const SizedBox(height: 10),
+                      _PatientProfileCard(data: data),
                       const SizedBox(height: 10),
                       _AssessmentsSection(assessments: data.assessments),
                       const SizedBox(height: 10),
@@ -1339,6 +1355,201 @@ class _DetailRow extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Patient Profile Card — collapsible demographic card. Shows identity,
+// location, contact, care-team, and household-role fields sourced from
+// HouseholdMemberEntity (Android-parity: matches HouseholdMemberEntity.kt).
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _PatientProfileCard extends StatefulWidget {
+  const _PatientProfileCard({required this.data});
+  final PatientOrMemberData data;
+
+  @override
+  State<_PatientProfileCard> createState() => _PatientProfileCardState();
+}
+
+class _PatientProfileCardState extends State<_PatientProfileCard> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final d = widget.data;
+
+    Widget buildRow(String label, String? value, {IconData? icon}) {
+      if (value == null || value.isEmpty) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 5),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 130,
+              child: Row(
+                children: [
+                  if (icon != null) ...[
+                    Icon(icon, size: 14, color: scheme.onSurfaceVariant),
+                    const SizedBox(width: 4),
+                  ],
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Text(
+                value,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget buildSection(String title, List<Widget> rows) {
+      final visible = rows.whereType<Padding>().isNotEmpty ||
+          rows.any((w) => w is! SizedBox);
+      if (!visible) return const SizedBox.shrink();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 10, bottom: 4),
+            child: Text(
+              title,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: scheme.primary,
+                letterSpacing: 0.6,
+              ),
+            ),
+          ),
+          ...rows,
+        ],
+      );
+    }
+
+    String? formatGps() {
+      final lat = d.latitude;
+      final lon = d.longitude;
+      if (lat == null || lon == null) return null;
+      return '${lat.toStringAsFixed(5)}, ${lon.toStringAsFixed(5)}';
+    }
+
+    String? boolLabel(bool v) => v ? PatientProfileStrings.yes : null;
+
+    final collapsed = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (d.nationalId != null)
+          buildRow(PatientProfileStrings.labelNid, d.nationalId,
+              icon: Icons.badge_outlined),
+        if (d.dateOfBirth != null)
+          buildRow(PatientProfileStrings.labelDob, d.dateOfBirth,
+              icon: Icons.cake_outlined),
+        if (d.phoneNumber != null)
+          buildRow(PatientProfileStrings.labelPhone, d.phoneNumber,
+              icon: Icons.phone_outlined),
+        if (d.villageName != null)
+          buildRow(PatientProfileStrings.labelVillage, d.villageName,
+              icon: Icons.location_on_outlined),
+      ],
+    );
+
+    final full = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        buildSection(PatientProfileStrings.sectionIdentity, [
+          buildRow(PatientProfileStrings.labelNid, d.nationalId,
+              icon: Icons.badge_outlined),
+          buildRow(PatientProfileStrings.labelGender, d.gender,
+              icon: Icons.person_outline),
+          buildRow(PatientProfileStrings.labelDob, d.dateOfBirth,
+              icon: Icons.cake_outlined),
+          buildRow(PatientProfileStrings.labelIdType, d.idType),
+          buildRow(PatientProfileStrings.labelMaritalStatus, d.maritalStatus),
+          buildRow(PatientProfileStrings.labelDisability, d.disability),
+          buildRow(PatientProfileStrings.labelIsPregnant,
+              d.isPregnant ? PatientProfileStrings.yes : null,
+              icon: Icons.pregnant_woman),
+        ]),
+        buildSection(PatientProfileStrings.sectionLocation, [
+          buildRow(PatientProfileStrings.labelVillage, d.villageName,
+              icon: Icons.location_on_outlined),
+          buildRow(PatientProfileStrings.labelGps, formatGps(),
+              icon: Icons.gps_fixed),
+        ]),
+        buildSection(PatientProfileStrings.sectionContact, [
+          buildRow(PatientProfileStrings.labelPhone, d.phoneNumber,
+              icon: Icons.phone_outlined),
+        ]),
+        buildSection(PatientProfileStrings.sectionCareTeam, [
+          buildRow(PatientProfileStrings.labelSk, d.shasthyaShebikaId,
+              icon: Icons.health_and_safety_outlined),
+          buildRow(PatientProfileStrings.labelGuardian, d.guardianId),
+          buildRow(PatientProfileStrings.labelMother, d.motherReferenceId),
+        ]),
+        buildSection(PatientProfileStrings.sectionHousehold, [
+          buildRow(PatientProfileStrings.labelIsHouseholdHead,
+              boolLabel(d.isHouseholdHead),
+              icon: Icons.house_outlined),
+        ]),
+      ],
+    );
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.person_pin_outlined, color: scheme.primary, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  PatientProfileStrings.profileTitle,
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const Spacer(),
+                TextButton(
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 32),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: () => setState(() => _expanded = !_expanded),
+                  child: Text(
+                    _expanded
+                        ? PatientProfileStrings.hide
+                        : PatientProfileStrings.showMore,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            _expanded ? full : collapsed,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // HTML-composition widgets for the Patient Detail screen.
 // Match `Leapfrog .html` patient summary view: purple header strip, greeting
 // card with bilingual prompt, AI summary card with lavender background.
@@ -1371,10 +1582,22 @@ class _PatientDetailHeader extends StatelessWidget {
     }
     final subtitle = subtitleParts.join(' · ');
 
+    final chips = <_HeaderChip>[
+      if (data.nationalId != null)
+        _HeaderChip(Icons.badge_outlined, data.nationalId!),
+      if (data.phoneNumber != null)
+        _HeaderChip(Icons.phone_outlined, data.phoneNumber!),
+      if (data.villageName != null)
+        _HeaderChip(Icons.location_on_outlined, data.villageName!),
+      if (data.isPregnant)
+        const _HeaderChip(Icons.pregnant_woman, 'Pregnant'),
+    ];
+
     return Container(
       color: tokens.aiPurpleDark,
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 14),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
@@ -1477,6 +1700,41 @@ class _PatientDetailHeader extends StatelessWidget {
               ],
             ),
           ),
+          if (chips.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: chips
+                    .map(
+                      (c) => Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(c.icon, size: 12, color: Colors.white70),
+                            const SizedBox(width: 4),
+                            Text(
+                              c.label,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
         ],
       ),
     );
@@ -1489,6 +1747,12 @@ class _PatientDetailHeader extends StatelessWidget {
     return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
         .toUpperCase();
   }
+}
+
+class _HeaderChip {
+  const _HeaderChip(this.icon, this.label);
+  final IconData icon;
+  final String label;
 }
 
 /// Gemini-powered 2-3 sentence patient summary shown at the top of the
