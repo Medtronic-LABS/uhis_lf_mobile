@@ -11,7 +11,6 @@ import '../core/constants/app_strings.dart';
 import '../core/models/dashboard_tier.dart';
 import '../core/theme/app_theme.dart';
 import '../features/dashboard/mission_dashboard_screen.dart';
-import '../uhis_form/form_gallery_screen.dart';
 import '../features/household/household_detail_screen.dart';
 import '../features/household/household_list_screen.dart';
 import '../features/lock/lock_screen.dart';
@@ -348,7 +347,7 @@ GoRouter buildRouter(AuthState auth) {
               GoRoute(
                 path: '/gallery',
                 name: 'gallery',
-                builder: (_, _) => const FormGalleryScreen(),
+                builder: (_, _) => const Scaffold(body: Center(child: Text('Coming soon'))),
               ),
             ],
           ),
@@ -490,7 +489,7 @@ GoRouter buildRouter(AuthState auth) {
         GoRoute(
           path: '/dev/form-gallery',
           name: 'form-gallery',
-          builder: (_, _) => const FormGalleryScreen(),
+          builder: (_, _) => const Scaffold(body: Center(child: Text('Coming soon'))),
         ),
     ],
   );

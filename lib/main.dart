@@ -62,8 +62,6 @@ import 'features/visit/assessment_repository.dart';
 import 'features/visit/encounter_repository.dart';
 import 'features/visit/household_repository.dart';
 import 'features/visit/observation_repository.dart';
-import 'features/visit/composer/sdk_field_projector.dart';
-import 'features/visit/submission/unified_submission_orchestrator.dart';
 import 'features/visit/briefing/visit_briefing_repository.dart';
 import 'features/visit/programme_selection/programme_recommendation_repository.dart';
 import 'features/visit/visit_controller.dart';
@@ -104,7 +102,6 @@ Future<void> main() async {
   // Offline-first: never fetch fonts from the network. Falls back to bundled
   // assets (if declared in pubspec fonts:) then to system fonts.
   GoogleFonts.config.allowRuntimeFetching = false;
-  await SdkFieldProjector.init();
   final api = await ApiClient.create();
   final authRepo = AuthRepository(api);
   final biometric = BiometricService();
@@ -249,8 +246,6 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final AiResponseCacheDao _aiCacheDao = AiResponseCacheDao(widget.appDb);
   late final UserHierarchyService _userHierarchy =
       UserHierarchyService(widget.api, widget.authRepo);
-  late final UnifiedSubmissionOrchestrator _submissionOrchestrator =
-      UnifiedSubmissionOrchestrator(_localAssessmentDao);
 
   // ── Micro-coaching ────────────────────────────────────────────────────────
   late final CoachingDao _coachingDao = CoachingDao(widget.appDb);
@@ -404,11 +399,8 @@ class _UhisNextAppState extends State<UhisNextApp>
         // Assessment offline-first repository
         ChangeNotifierProvider<AssessmentRepository>.value(
             value: _assessmentRepo),
-        // Sectioned assessment draft persistence + fan-out orchestration
         Provider<AssessmentDraftDao>.value(value: _draftDao),
         Provider<AiResponseCacheDao>.value(value: _aiCacheDao),
-        Provider<UnifiedSubmissionOrchestrator>.value(
-            value: _submissionOrchestrator),
         // AI Visit Briefing service
         Provider<VisitBriefingRepository>(
             create: (_) =>

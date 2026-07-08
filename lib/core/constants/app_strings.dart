@@ -819,7 +819,7 @@ abstract final class MissionDashboardStrings {
     return '$villageCount villages';
   }
 
-  static const String referralAlertsLabel = 'Referral alerts';
+  static const String referralAlertsLabel = 'Referral alerts need follow-up';
   static const String tapToFollowUp = 'Tap to follow up →';
   static const String referralCceComingSoon = 'CCE integration coming soon';
   static const String visitStartFailed =

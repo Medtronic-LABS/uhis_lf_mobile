@@ -483,7 +483,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             // so it reads as a system-level alert before the worklist.
             _ReferralAlertBanner(
               key: ValueKey('referral_banner_$_refreshVersion'),
-              onTap: () => context.push('/referrals'),
+              onTap: () => showNotificationDrawer(context),
             ),
             Expanded(
               child: RefreshIndicator(
@@ -1067,45 +1067,54 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner>
     return FutureBuilder<({int critical, int active})>(
       future: _future,
       builder: (context, snap) {
-        final critical = snap.data?.critical ?? 0;
-        final active = snap.data?.active ?? 0;
-        final total = critical + active;
-        if (total == 0) return const SizedBox.shrink();
+        final total = (snap.data?.critical ?? 0) + (snap.data?.active ?? 0);
         return Semantics(
           button: true,
           label: 'Referral alerts: $total',
-          child: Material(
-            color: const Color(0xFFDC2626),
-            child: InkWell(
-              key: const Key('dashboard_referral_banner_tap'),
-              onTap: widget.onTap,
-              splashColor: Colors.white.withValues(alpha: 0.15),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-                child: Row(
-                  children: [
-                    Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        Container(
-                          width: 20,
-                          height: 20,
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white24,
-                          ),
-                          child: Center(
-                            child: Text(
-                              total > 99 ? '99+' : '$total',
-                              style: const TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.white,
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFFDC2626),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFDC2626).withValues(alpha: 0.25),
+                  offset: const Offset(0, 2),
+                  blurRadius: 6,
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                key: const Key('dashboard_referral_banner_tap'),
+                onTap: widget.onTap,
+                splashColor: Colors.white.withValues(alpha: 0.15),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      // Circle badge with count + yellow pulse dot
+                      Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Container(
+                            width: 16,
+                            height: 16,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Color(0x40FFFFFF),
+                            ),
+                            child: Center(
+                              child: Text(
+                                total > 99 ? '99+' : '$total',
+                                style: const TextStyle(
+                                  fontFamily: 'Nunito',
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        if (critical > 0)
                           Positioned(
                             top: -2,
                             right: -2,
@@ -1124,21 +1133,27 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner>
                               ),
                             ),
                           ),
-                      ],
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        MissionDashboardStrings.referralAlertsLabel,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
+                        ],
+                      ),
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Text(
+                          MissionDashboardStrings.referralAlertsLabel,
+                          style: const TextStyle(
+                            fontFamily: 'NunitoSans',
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
-                    ),
-                    const Icon(Icons.chevron_right_rounded, color: Colors.white70, size: 16),
-                  ],
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        color: Colors.white.withValues(alpha: 0.85),
+                        size: 13,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

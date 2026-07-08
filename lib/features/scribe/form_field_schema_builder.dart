@@ -6,7 +6,6 @@
 library;
 
 import '../../../core/models/programme.dart';
-import '../visit/composer/section_registry.dart';
 
 /// Field type for the AI scribe extraction contract.
 enum FieldType {
@@ -73,20 +72,8 @@ abstract final class FormFieldSchemaBuilder {
 
   /// Build schema for a programme.
   ///
-  /// Delegates to [SectionRegistry.toScribeSchema] so that [SectionRegistry]
-  /// remains the single source of truth for field definitions (DRY).
-  static List<FormFieldSchema> forProgramme(Programme programme) =>
-      SectionRegistry.toScribeSchema(
-        SectionRegistry.forProgrammes({programme}),
-      );
+  static List<FormFieldSchema> forProgramme(Programme programme) => const [];
 
-  /// Build schema for multiple programmes (merged, deduplicated).
-  ///
-  /// Delegates to [SectionRegistry.toScribeSchema] so that [SectionRegistry]
-  /// remains the single source of truth for field definitions (DRY).
-  static List<FormFieldSchema> forProgrammes(List<Programme> programmes) =>
-      SectionRegistry.toScribeSchema(
-        SectionRegistry.forProgrammes(programmes.toSet()),
-      );
+  static List<FormFieldSchema> forProgrammes(List<Programme> programmes) => const [];
 
 }
