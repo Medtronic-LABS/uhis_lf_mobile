@@ -88,11 +88,23 @@ abstract final class UnifiedPayloadMapper {
   // BP lives in medicalHistoryPhysicalExamination.systolic/diastolic — NOT in bpLog.
 
   static Map<String, dynamic> _toAnc(CanonicalVisitData d) {
+    double? asDouble(dynamic v) {
+      if (v is num) return v.toDouble();
+      if (v is String) return double.tryParse(v);
+      return null;
+    }
+
+    // Coerce BP/weight/height to numbers — backend ANC DTO deserializes as numeric.
+    final sys = asDouble(d.getValue('systolic') ?? d.getValue('bloodPressureSystolic'));
+    final dia = asDouble(d.getValue('diastolic') ?? d.getValue('bloodPressureDiastolic'));
+    final weight = asDouble(d.getValue('weight'));
+    final height = asDouble(d.getValue('height'));
+
     final medHx = _compact({
-      'systolic': d.getValue('systolic') ?? d.getValue('bloodPressureSystolic'),
-      'diastolic': d.getValue('diastolic') ?? d.getValue('bloodPressureDiastolic'),
-      'weight': d.getValue('weight'),
-      'height': d.getValue('height'),
+      if (sys != null) 'systolic': sys.toInt(),
+      if (dia != null) 'diastolic': dia.toInt(),
+      if (weight != null) 'weight': weight,
+      if (height != null) 'height': height,
       'hemoglobin': d.getValue('hemoglobin'),
       'gestationalAge': d.getValue('gestationalAge'),
       'fundalHeight': d.getValue('fundalHeight'),
@@ -102,17 +114,25 @@ abstract final class UnifiedPayloadMapper {
       'oedema': d.getValue('oedema'),
       'pallor': d.getValue('pallor'),
       'parity': d.getValue('parity'),
-      'ancVisitNumber': d.getValue('ancVisitNumber'),
+      // ancVisitNumber is NOT placed here — backend DTO expects visitNo at top level.
     });
 
+    // Map glucoseType+glucoseValue to ANC POC DTO fields:
+    //   glucoseType == 'fbs' → bloodSugarFasting
+    //   glucoseType == 'rbs' / 'ppbs' / anything else → bloodSugarRandom
+    final glucoseType = d.getValue('glucoseType') as String?;
+    final glucoseValue = asDouble(d.getValue('glucoseValue'));
     final pointOfCare = _compact({
       'urinaryAlbumin': d.getValue('urinaryAlbumin'),
       'urinaryBilirubin': d.getValue('urinaryBilirubin'),
       'urinarySugar': d.getValue('urinarySugar'),
-      'bloodSugarFasting': d.getValue('bloodSugarFasting'),
-      'bloodSugarRandom': d.getValue('bloodSugarRandom'),
-      'glucoseType': d.getValue('glucoseType'),
-      'glucoseValue': d.getValue('glucoseValue'),
+      if (glucoseValue != null && glucoseType == 'fbs')
+        'bloodSugarFasting': glucoseValue,
+      if (glucoseValue != null && glucoseType != 'fbs')
+        'bloodSugarRandom': glucoseValue,
+      // Pass explicit values when no glucoseType-based routing needed
+      if (glucoseValue == null) 'bloodSugarFasting': d.getValue('bloodSugarFasting'),
+      if (glucoseValue == null) 'bloodSugarRandom': d.getValue('bloodSugarRandom'),
     });
 
     // dangerSigns lists are always present (empty = no danger signs reported)
@@ -145,7 +165,10 @@ abstract final class UnifiedPayloadMapper {
       'ultrasound': d.getValue('ultrasound'),
     });
 
+    final visitNo = d.getValue('ancVisitNumber') ?? d.getValue('visitNo');
+
     return {
+      if (visitNo != null) 'visitNo': visitNo,
       if (medHx.isNotEmpty) 'medicalHistoryPhysicalExamination': medHx,
       if (pointOfCare.isNotEmpty) 'pointOfCareInvestigations': pointOfCare,
       'dangerSignsRiskIdentification': dangerSigns,

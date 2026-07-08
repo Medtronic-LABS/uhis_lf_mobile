@@ -282,8 +282,10 @@ class LocalAssessmentEntity {
     final t = type.toUpperCase();
     String? raw;
     if (t == 'ANC') {
+      // Top-level visitNo (current mapper output)
+      raw = d['visitNo']?.toString();
       // Flat legacy
-      raw = d['ancVisitNumber']?.toString();
+      raw ??= d['ancVisitNumber']?.toString();
       // Nested: medicalHistoryPhysicalExamination.ancVisitNumber
       raw ??= (d['medicalHistoryPhysicalExamination'] is Map
           ? (d['medicalHistoryPhysicalExamination'] as Map)['ancVisitNumber']
