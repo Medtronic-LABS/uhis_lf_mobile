@@ -79,10 +79,11 @@ class EnrollmentRepository extends ApiRepository {
       'name': head.name,
       'householdNo': household.householdNumber,
       'householdType': household.householdType,
-      // Backend villageId = sub-village ID (what fetch-synced-data filters on).
-      // hierarchy.villages = unions (id=40), hierarchy.subVillages = actual villages (id=262).
-      'villageId': subVillageId,
-      'subVillageId': villageId,
+      // HouseholdDTO.villageId is String on the server — send as string.
+      // Swap: hierarchy.villages = unions (id=40), hierarchy.subVillages = actual villages (id=262).
+      // The sub-village ID is what the server filters on for SK assignment.
+      'villageId': subVillageId.toString(),
+      'subVillageId': villageId.toString(),
       'village': household.subVillageName ?? household.villageName ?? '',
       'shasthyaShebikaId': userId,
       'noOfPeople': household.numberOfMembers,
