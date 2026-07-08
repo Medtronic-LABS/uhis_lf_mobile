@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import '../api/api_client.dart';
 import '../api/endpoints.dart';
 import '../auth/auth_repository.dart';
+import '../auth/user_hierarchy_service.dart';
 import '../config/app_config.dart';
 import '../models/assessment_history_item.dart';
 import '../db/assessment_dao.dart';
@@ -49,6 +50,9 @@ class OfflineSyncService extends ChangeNotifier {
     PregnancySnapshotDao? pregnancySnapshot,
     TreatmentPresenceDao? treatmentPresence,
     EncounterDao? encounterDao,
+    // P1: injected so OfflineSyncService can reuse already-fetched static-data
+    // instead of making a second user-data HTTP call on every full sync.
+    UserHierarchyService? hierarchy,
   })  : _api = api,
         _auth = auth,
         _patients = patients,
@@ -61,7 +65,8 @@ class OfflineSyncService extends ChangeNotifier {
         _members = members,
         _pregnancySnapshot = pregnancySnapshot,
         _treatmentPresence = treatmentPresence,
-        _encounterDao = encounterDao;
+        _encounterDao = encounterDao,
+        _hierarchy = hierarchy;
 
   static const String _entityKey = 'worklist';
 
@@ -78,6 +83,8 @@ class OfflineSyncService extends ChangeNotifier {
   final PregnancySnapshotDao? _pregnancySnapshot;
   final TreatmentPresenceDao? _treatmentPresence;
   final EncounterDao? _encounterDao;
+  // P1: shared hierarchy service — avoids second user-data call on full sync
+  final UserHierarchyService? _hierarchy;
 
   bool _running = false;
 
@@ -137,12 +144,34 @@ class OfflineSyncService extends ChangeNotifier {
         );
       }
 
-      var villageIds = await _auth.villageIds();
+      // Resolve village IDs for the bundle fetch. On a full sync we need the
+      // most authoritative scope (shasthyaShebikas[].subVillages) to avoid
+      // over-broad bundles. Two paths:
+      //
+      // P1 fast-path: if UserHierarchyService has already fetched static-data
+      // (e.g. it ran prefetch() during login), reuse the cached ids already
+      // persisted to AuthRepository — no second HTTP call.
+      //
+      // Fallback: call _fetchAndSaveVillageIds() ourselves so that a cold
+      // OfflineSyncService start (no UserHierarchyService, or hierarchy not
+      // yet fetched) still gets the authoritative ids.
+      var villageIds = <int>[];
+      if (fullSync) {
+        final hierarchyReady = _hierarchy?.ssWorkers != null;
+        if (hierarchyReady) {
+          villageIds = await _auth.villageIds();
+          debugPrint(
+            '[OfflineSyncService] P1: reusing hierarchy cache — '
+            '${villageIds.length} village IDs, no 2nd user-data call',
+          );
+        } else {
+          villageIds = await _fetchAndSaveVillageIds();
+        }
+      }
       if (villageIds.isEmpty) {
-        // Profile endpoint returned no villages (common for kakina_sk accounts
-        // whose villages come from static-data, not /user-service/user/profile).
-        // Fetch the authoritative list now and persist it so this sync — and
-        // every subsequent one — succeeds without requiring a filter-sheet open.
+        villageIds = await _auth.villageIds();
+      }
+      if (villageIds.isEmpty) {
         villageIds = await _fetchAndSaveVillageIds();
       }
       if (villageIds.isEmpty) {
@@ -184,15 +213,14 @@ class OfflineSyncService extends ChangeNotifier {
       debugPrint(
         '[OfflineSyncService] Bundle top-level keys: ${bundle.keys.toList()}',
       );
-      // Bundle is village-wide (every member in every assigned sub-village).
-      // Each member row carries `shasthyaKormiId` — the SK who owns them.
-      // Pass our user id so the bridge layer keeps only the SK's own patients
-      // on the dashboard worklist while the household list still sees the
-      // full village (the household screen reads from the members table,
-      // which we keep unfiltered).
+      // Filter the bundle to this SK's caseload using SS worker IDs.
+      // The bundle is village-wide; households are scoped to the SK by
+      // shasthyaShebikaId (the SS worker assigned to each household).
+      // Android filters the same way — no `shasthyaKormiId` on members.
       final ownerUserId = await _auth.userId();
-      debugPrint('[OfflineSyncService] Using ownerUserId=$ownerUserId for member-patient filtering');
-      var out = await _persistBundle(bundle, ownerUserId: ownerUserId);
+      final ssWorkerIds = await _auth.ssWorkerIds();
+      debugPrint('[OfflineSyncService] Bundle filter: ownerUserId=$ownerUserId ssWorkerIds=$ssWorkerIds');
+      var out = await _persistBundle(bundle, ownerUserId: ownerUserId, ssWorkerIds: ssWorkerIds);
       debugPrint(
         '[OfflineSyncService] Bundle persisted: patients=${out.patients} '
         'households=${out.households} members=${out.members} '
@@ -311,6 +339,7 @@ class OfflineSyncService extends ChangeNotifier {
   Future<_PersistTotals> _persistBundle(
     Map<String, dynamic> bundle, {
     int? ownerUserId,
+    List<int> ssWorkerIds = const [],
   }) async {
     if (bundle.isEmpty) return const _PersistTotals();
 
@@ -344,6 +373,7 @@ class OfflineSyncService extends ChangeNotifier {
       'follow_ups',
       'followUpList',
     ]);
+    debugPrint('[OfflineSyncService] followUpNodes: ${followUpNodes.length} raw items in bundle');
     final immunisationNodes = _listFromAny(bundle, const [
       'immunisations',
       'immunizations',
@@ -366,10 +396,18 @@ class OfflineSyncService extends ChangeNotifier {
     }
 
     final followUps = <FollowUpRow>[];
+    int followUpDropped = 0;
     for (final raw in followUpNodes) {
       if (raw is! Map) continue;
       final row = _followUpRowFrom(raw);
-      if (row != null) followUps.add(row);
+      if (row != null) {
+        followUps.add(row);
+      } else {
+        followUpDropped++;
+      }
+    }
+    if (followUpDropped > 0) {
+      debugPrint('[OfflineSyncService] followUps: dropped $followUpDropped items (missing patientId)');
     }
     final immunisations = <ImmunisationRow>[];
     for (final raw in immunisationNodes) {
@@ -396,11 +434,37 @@ class OfflineSyncService extends ChangeNotifier {
     final hhRefToVillage = <String, String>{};
     final hhRefToSubVillage = <String, String>{};
 
+    // SS worker IDs used to scope the bundle to this SK's caseload.
+    // Android filters households by shasthyaShebikaId matching the SK's
+    // assigned SS worker IDs. When no SS IDs are known, all households are kept.
+    final ssIdSet = ssWorkerIds.toSet();
+    final filteredHouseholdIds = <String>{};
+
     for (final raw in householdNodes) {
       if (raw is! Map) continue;
       final rawMap = Map<String, dynamic>.from(raw);
+
+      // Apply SS worker filter: only include households whose shasthyaShebikaId
+      // matches one of the SK's assigned SS workers. Households with a null or
+      // missing shasthyaShebikaId are excluded when the filter is active —
+      // those are unassigned/legacy records not part of this SK's caseload.
+      // When no SS IDs are known (first-run before static-data completes) the
+      // filter is skipped so the sync isn't left empty.
+      if (ssIdSet.isNotEmpty) {
+        final ssRaw = rawMap['shasthyaShebikaId'];
+        final ssId = ssRaw is int
+            ? ssRaw
+            : (ssRaw is num
+                ? ssRaw.toInt()
+                : (ssRaw is String ? int.tryParse(ssRaw.trim()) : null));
+        if (ssId == null || !ssIdSet.contains(ssId)) continue;
+      }
+
       final hh = HouseholdEntity.fromApiJson(rawMap);
-      if (hh.id.isNotEmpty) households.add(hh);
+      if (hh.id.isNotEmpty) {
+        households.add(hh);
+        filteredHouseholdIds.add(hh.id);
+      }
 
       final ref = raw['referenceId']?.toString();
       if (ref != null && ref.isNotEmpty) {
@@ -412,19 +476,28 @@ class OfflineSyncService extends ChangeNotifier {
     }
     debugPrint(
       '[OfflineSyncService] Parsed ${households.length} households from bundle '
-      '(${hhRefToVillage.length} with referenceId→village mapping)',
+      '(${hhRefToVillage.length} with referenceId→village mapping, '
+      'ssFilter=${ssIdSet.isEmpty ? "none" : ssIdSet.toString()})',
     );
 
     // ── Parse members from bundle (Android: ResponseInitialDownload) ────────
-    // Members table stays village-wide so the household screen can render the
-    // full roster; ownership filtering is applied separately when bridging
-    // into the patients table below.
+    // Keep only members that belong to the SK's filtered households.
+    // When no household filter is active (filteredHouseholdIds empty and
+    // ssIdSet empty) all members pass through for backward compatibility.
     final members = <HouseholdMemberEntity>[];
     final ownedMemberIds = <String>{};
     for (final raw in memberNodes) {
       if (raw is! Map) continue;
       var m = HouseholdMemberEntity.fromApiJson(Map<String, dynamic>.from(raw));
       if (m.id.isEmpty) continue;
+
+      // Scope members to the SK's filtered households. When a household filter
+      // is active, exclude members with a null householdId (orphaned records)
+      // and members whose householdId isn't in the filtered set.
+      // Mirrors the household-level rule: null → exclude when filter is active.
+      if (filteredHouseholdIds.isNotEmpty) {
+        if (m.householdId == null || !filteredHouseholdIds.contains(m.householdId)) continue;
+      }
 
       // Enrich village/sub-village from household if missing.
       // Member.householdId = household.referenceId (the small internal ID).
@@ -477,24 +550,15 @@ class OfflineSyncService extends ChangeNotifier {
     // `treatmentDetails` arrays parsed elsewhere; here we only need the
     // identity columns the worklist query selects.
     //
-    // When we know who the SK is, keep only members whose `shasthyaKormiId`
-    // matches — every village member arrives in the bundle, but the
-    // dashboard worklist must reflect the SK's own caseload.
+    // Household-level filtering by shasthyaShebikaId already scoped members
+    // to this SK's caseload in the parsing loop above. Bridge all parsed
+    // members directly; no secondary ownership filter is needed.
     if (patients.isEmpty && members.isNotEmpty) {
       debugPrint(
-        '[OfflineSyncService] Bridge filter: ownerUserId=$ownerUserId, '
-        'ownedMemberIds=${ownedMemberIds.length}/${members.length}',
+        '[OfflineSyncService] Bridging ${members.length} members → patients '
+        '(households filtered by ssIds=${ssIdSet.isEmpty ? "none" : ssIdSet.toString()})',
       );
-      final bridgeSource = ownedMemberIds.isNotEmpty
-          ? members.where((m) => ownedMemberIds.contains(m.id))
-          : members;
-      if (ownedMemberIds.isEmpty && ownerUserId != null) {
-        debugPrint(
-          '[OfflineSyncService] WARNING: No members matched shasthyaKormiId=$ownerUserId. '
-          'Bridging all ${members.length} members to patients table.',
-        );
-      }
-      for (final m in bridgeSource) {
+      for (final m in members) {
         final p = _memberToPatient(m);
         if (p != null) patients.add(p);
       }
@@ -760,8 +824,10 @@ class OfflineSyncService extends ChangeNotifier {
   }
 
   FollowUpRow? _followUpRowFrom(Map raw) {
-    final id = JsonRead.firstString(raw, const ['id', 'fhirId', 'uuid']);
-    if (id == null) return null;
+    // Android FollowUp.id is Long? — server may return null for newly-created
+    // records not yet server-committed. Generate a deterministic synthetic ID
+    // so those records are not silently dropped (P3 fix).
+    String? id = JsonRead.firstString(raw, const ['id', 'fhirId', 'uuid']);
     final patientId = JsonRead.firstString(raw, const [
       'patientId',
       'memberId',
@@ -769,6 +835,13 @@ class OfflineSyncService extends ChangeNotifier {
       'patientReference',
     ]);
     if (patientId == null) return null;
+    if (id == null) {
+      // Derive a stable key from (patientId, type, dueDate) so a re-sync
+      // produces the same row rather than inserting duplicates.
+      final kind = JsonRead.firstString(raw, const ['type', 'followUpType', 'encounterType']);
+      final due = JsonRead.firstString(raw, const ['nextFollowUpDate', 'dueDate', 'nextVisitDate']);
+      id = 'fu-$patientId-${kind ?? "generic"}-${due ?? "0"}';
+    }
     final kind = JsonRead.firstString(raw, const ['type', 'followUpType']);
     final dueAt = JsonRead.epochMillis(raw, const [
       'nextFollowUpDate',
@@ -1078,6 +1151,32 @@ class OfflineSyncService extends ChangeNotifier {
         schedUpdated++;
       }
 
+      // P3: Synthesise FollowUpRow entries from assessment-history nextFollowUpDate
+      // so the follow_ups table is populated even when the bulk-sync bundle
+      // contains no followUps (e.g. for NCD patients whose open follow-up was not
+      // yet included in the bundle). Mirrors Android's behaviour: every assessment
+      // with a scheduled nextVisitDate creates/updates a follow-up record.
+      // Uses a deterministic id keyed on (patientId, programme, dueDate) so
+      // re-syncing is idempotent.
+      final historyFollowUps = <FollowUpRow>[];
+      for (final pid in nextFollowUpMs.keys) {
+        final dueAt = nextFollowUpMs[pid]!;
+        final programme = newProgrammes[pid]?.firstOrNull?.name ?? 'generic';
+        historyFollowUps.add(FollowUpRow(
+          id: 'hist-fu-$pid-$programme',
+          patientId: pid,
+          kind: _normaliseFollowUpKind(programme),
+          dueAt: dueAt,
+          rawJson: '{"source":"assessment-history"}',
+        ));
+      }
+      if (historyFollowUps.isNotEmpty) {
+        await _followUps.upsertMany(historyFollowUps);
+        debugPrint(
+          '[OfflineSyncService] P3: seeded ${historyFollowUps.length} follow-up rows from assessment history',
+        );
+      }
+
       // Write encounter rows with extracted vitals so VitalsRepository can
       // render Recent Vitals without a new network call. Only rows that carry
       // clinical assessmentDetails (NCD/ANC/PNC have BP/weight etc.) get an
@@ -1226,25 +1325,72 @@ class OfflineSyncService extends ChangeNotifier {
         debugPrint('[OfflineSyncService] WARNING: orgFhirId not found — entity keys: ${entity.keys.toList()}');
       }
 
-      // fetch-synced-data filters at sub-village granularity, so use
-      // subVillages[].id rather than villages[].id (village IDs return no data).
-      final subVillagesRaw = entity['subVillages'];
-      if (subVillagesRaw is! List) return const [];
-      final ids = subVillagesRaw
-          .whereType<Map>()
-          .map((m) {
-            final id = m['id'];
-            if (id is int) return id;
-            if (id is num) return id.toInt();
-            if (id is String) return int.tryParse(id);
-            return null;
-          })
-          .whereType<int>()
-          .toList();
+      // Mirror Android MetaRepository: use sub-villages nested within
+      // shasthyaShebikas (most specific scope) before falling back to the
+      // top-level subVillages list or village IDs.
+      List<int> extractSubVillageIds(dynamic raw) => (raw is List)
+          ? raw
+              .whereType<Map>()
+              .map((m) {
+                final id = m['id'];
+                if (id is int) return id;
+                if (id is num) return id.toInt();
+                if (id is String) return int.tryParse(id);
+                return null;
+              })
+              .whereType<int>()
+              .toList()
+          : const <int>[];
+
+      // 1. shasthyaShebikas[].subVillages — SK's specific area
+      final ssRaw = entity['shasthyaShebikas'];
+      final ssSubIds = (ssRaw is List)
+          ? ssRaw
+              .whereType<Map>()
+              .expand((ss) => extractSubVillageIds(ss['subVillages']))
+              .toList()
+          : const <int>[];
+
+      // 2. Top-level subVillages
+      final topSubIds = extractSubVillageIds(entity['subVillages']);
+
+      // 3. Top-level villages (broadest, last resort)
+      final villageIds = extractSubVillageIds(entity['villages']);
+
+      final ids = ssSubIds.isNotEmpty
+          ? ssSubIds
+          : (topSubIds.isNotEmpty ? topSubIds : villageIds);
+
+      debugPrint(
+          '[OfflineSyncService] static-data village candidates: '
+          'ssSubIds=${ssSubIds.length} topSubIds=${topSubIds.length} '
+          'villageIds=${villageIds.length} → using ${ids.length}');
+
       if (ids.isNotEmpty) {
         await _auth.saveLinkedVillageIds(ids);
         debugPrint('[OfflineSyncService] Fetched ${ids.length} sub-village IDs from static-data fallback');
       }
+
+      // Extract SS worker IDs (shasthyaShebikas[].id) — used to filter bundle
+      // households by shasthyaShebikaId so only the SK's caseload is stored.
+      final ssWorkerIds = (ssRaw is List)
+          ? ssRaw
+              .whereType<Map>()
+              .map((ss) {
+                final id = ss['id'];
+                if (id is int) return id;
+                if (id is num) return id.toInt();
+                if (id is String) return int.tryParse(id);
+                return null;
+              })
+              .whereType<int>()
+              .toList()
+          : const <int>[];
+      if (ssWorkerIds.isNotEmpty) {
+        await _auth.saveSsWorkerIds(ssWorkerIds);
+        debugPrint('[OfflineSyncService] Saved ${ssWorkerIds.length} SS worker IDs: $ssWorkerIds');
+      }
+
       return ids;
     } catch (e) {
       debugPrint('[OfflineSyncService] static-data fallback failed: $e');

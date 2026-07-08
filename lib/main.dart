@@ -187,6 +187,9 @@ class _UhisNextAppState extends State<UhisNextApp>
     pregnancySnapshot: _pregnancySnapshotDao,
     treatmentPresence: _treatmentPresenceDao,
     encounterDao: _encounterDao,
+    // P1: share the same UserHierarchyService instance so OfflineSyncService
+    // can reuse already-fetched static-data without a second user-data call.
+    hierarchy: _userHierarchy,
   );
   late final WorklistRepository _worklist = WorklistRepository(
     patients: _patientDao,
