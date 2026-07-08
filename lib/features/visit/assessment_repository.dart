@@ -233,14 +233,6 @@ class AssessmentRepository extends ChangeNotifier {
   }
 }
 
-enum AssessmentSyncStatus {
-  pending,
-  inProgress,
-  success,
-  failed,
-  networkError,
-}
-
 class SaveAssessmentResult {
   const SaveAssessmentResult({
     required this.localId,

@@ -1,8 +1,5 @@
-import 'package:flutter/foundation.dart';
-import '../auth/auth_repository.dart';
-
 /// Provenance DTO matching Android's ProvanceDto.
-/// Auto-initializes organizationId, userId, spiceUserId from AuthRepository on instantiation.
+/// Contains organizationId, userId, spiceUserId, modifiedDate for sync operations.
 class ProvanceDto {
   final String? userId;
   final String? organizationId;
@@ -17,8 +14,7 @@ class ProvanceDto {
     required this.modifiedDate,
   });
 
-  /// Factory constructor that fetches from AuthRepository (async-like pattern via static).
-  /// Since Dart doesn't support async factories, use [fromAuthRepository] instead.
+  /// Factory constructor from a map (used during provenance construction).
   factory ProvanceDto.fromMap(Map<String, dynamic> map) {
     return ProvanceDto._(
       userId: map['userId'] as String?,

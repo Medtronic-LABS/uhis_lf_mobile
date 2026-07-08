@@ -16,6 +16,7 @@ class EnrollmentRepository extends ApiRepository {
   EnrollmentRepository(super.api);
 
   static const _uuid = Uuid();
+  static const _skRole = 'SHASTIYA_KORMI';
 
   /// Build and POST the offline-sync/create payload matching Android.
   ///
@@ -32,8 +33,8 @@ class EnrollmentRepository extends ApiRepository {
     required int userId,
     required String organizationId,
     required String deviceId,
-    String appVersionName = '2.0.3',
-    int appVersionCode = 10,
+    String appVersionName = AppConfig.appVersionName,
+    int appVersionCode = AppConfig.appVersionCode,
   }) async {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final hhReferenceId = _uuid.v4();
@@ -43,6 +44,7 @@ class EnrollmentRepository extends ApiRepository {
       'organizationId': organizationId,
       'spiceUserId': userId,
       'userId': userId.toString(),
+      'spiceRole': _skRole,
     });
 
     final villageId = int.tryParse(household.villageId) ?? 0;
@@ -153,6 +155,8 @@ class EnrollmentRepository extends ApiRepository {
       'phoneNumberCategory': '',
       'shasthyaShebikaId': userId,
       'shasthyaKormiId': userId,
+      'createdByRoleName': _skRole,
+      'createdBySpiceUserId': userId,
       'assignHousehold': false,
       'isPregnant': false,
       'hasTbContactTracing': false,

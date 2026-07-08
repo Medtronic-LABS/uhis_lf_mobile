@@ -2,10 +2,8 @@ import 'dart:convert';
 
 import 'package:sqflite/sqflite.dart';
 
-import '../models/risk.dart';
 import '../models/provance_dto.dart';
 import 'app_database.dart';
-
 /// Sync status for local assessments, matching Android's OfflineSyncStatus.
 enum AssessmentSyncStatus {
   pending,
