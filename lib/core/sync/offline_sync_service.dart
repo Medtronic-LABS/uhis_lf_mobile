@@ -125,6 +125,18 @@ class OfflineSyncService extends ChangeNotifier {
     var report = SyncReport(startedAt: started, finishedAt: started)
         .copyWith(wasFullSync: fullSync);
     try {
+      // userId is required by the server — fail fast rather than sending a
+      // request without it and getting an empty/rejected bundle silently.
+      final syncUserId = await _auth.userId();
+      if (syncUserId == null) {
+        const msg = 'userId not available — re-login required before sync';
+        _emitProgress(SyncProgress.failed(msg));
+        return report.copyWith(
+          finishedAt: DateTime.now(),
+          errors: const [msg],
+        );
+      }
+
       var villageIds = await _auth.villageIds();
       if (villageIds.isEmpty) {
         // Profile endpoint returned no villages (common for kakina_sk accounts
@@ -239,17 +251,26 @@ class OfflineSyncService extends ChangeNotifier {
   // honoured and a single `--dart-define` bump propagates to both headers
   // (set in `ApiClient`) and request bodies.
 
+  /// Formats [dt] as `"2024-01-15T10:30:00+00:00"` — matching Android's
+  /// `DateTimeFormatter.ISO_OFFSET_DATE_TIME` output (no millis, explicit offset).
+  static String _toOffsetDateTime(DateTime dt) {
+    final s = dt.toUtc().toIso8601String().replaceFirst(RegExp(r'\.\d+'), '');
+    return s.endsWith('Z') ? '${s.substring(0, s.length - 1)}+00:00' : s;
+  }
+
   Future<Map<String, dynamic>> _fetchBundle({
     required List<int> villageIds,
     DateTime? since,
   }) async {
     // Match Android RequestAllEntities format: integer villageIds + metadata
     final userId = await _auth.userId();
+    if (userId == null) {
+      debugPrint('[OfflineSyncService] WARNING: userId is null — sync may return empty bundle');
+    }
     final deviceId = await _auth.deviceId();
     final body = <String, dynamic>{
-      'villageIds': villageIds, // integers, not strings
-      if (since != null)
-        'lastSyncTime': since.toUtc().toIso8601String(),
+      'villageIds': villageIds,
+      if (since != null) 'lastSyncTime': _toOffsetDateTime(since),
       'userId': ?userId,
       'appVersionName': AppConfig.appVersionName,
       'appVersionCode': AppConfig.appVersionCode,
@@ -1191,10 +1212,13 @@ class OfflineSyncService extends ChangeNotifier {
     // memberId in the body silently excludes every row. The endpoint already
     // scopes by `villageIds`; we filter to the requested member client-side
     // via [_filterHistoryForMember] in the calling repository.
+    if (userId == null) {
+      debugPrint('[OfflineSyncService] WARNING: userId is null for assessment-history request');
+    }
     final body = <String, dynamic>{
       'appType': AppConfig.appType,
       'villageIds': scope,
-      if (since != null) 'lastSyncTime': since.toUtc().toIso8601String(),
+      if (since != null) 'lastSyncTime': _toOffsetDateTime(since),
       'userId': ?userId,
       'appVersionName': AppConfig.appVersionName,
       'appVersionCode': AppConfig.appVersionCode,
@@ -1214,7 +1238,7 @@ class OfflineSyncService extends ChangeNotifier {
         return const [];
       }
       final data = resp.data;
-      debugPrint('[OfflineSyncService] member-assessment-history raw response keys=${data is Map ? (data as Map).keys.toList() : "list"} totalCount=${data is Map ? data["totalCount"] : "n/a"}');
+      debugPrint('[OfflineSyncService] member-assessment-history raw response keys=${data is Map ? data.keys.toList() : "list"} totalCount=${data is Map ? data["totalCount"] : "n/a"}');
       final raw = _extractHistoryList(data);
       final items = <AssessmentHistoryItem>[];
       for (final row in raw) {
