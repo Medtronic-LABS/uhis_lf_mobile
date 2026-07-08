@@ -252,7 +252,8 @@ class LocalAssessmentEntity {
         'startTime': createdAt?.toUtc().toIso8601String(),
         'endTime': updatedAt?.toUtc().toIso8601String(),
         'visitNumber': ?visitNum,
-        if (type == 'ANC' || type == 'PNC') 'pregnancyEpisodeId': ?pregnancyEpisodeId,
+        if (type == 'ANC' || type == 'PNC' || type == 'PNC_MOTHER' || type == 'PNC_CHILD')
+          'pregnancyEpisodeId': ?pregnancyEpisodeId,
         // Android sends customStatus list to track patient state server-side.
         'customStatus': _buildCustomStatus(isReferred, referralStatus),
       },
@@ -295,10 +296,8 @@ class LocalAssessmentEntity {
       raw ??= (d['anc'] is Map
           ? (d['anc'] as Map)['ancVisitNumber']?.toString()
           : null);
-    } else if (t == 'PNC') {
-      // Nested: visitNo at pncMother top level
+    } else if (t == 'PNC' || t == 'PNC_MOTHER') {
       raw = d['visitNo']?.toString() ?? d['pncVisitNumber']?.toString();
-      // Double-wrapped legacy
       raw ??= (d['pncMother'] is Map
           ? ((d['pncMother'] as Map)['visitNo']?.toString() ??
               (d['pncMother'] as Map)['pncVisitNumber']?.toString())
@@ -334,7 +333,8 @@ class LocalAssessmentEntity {
     final key = switch (assessmentType.toUpperCase()) {
       'ANC' => 'anc',
       'NCD' => 'ncd',
-      'PNC' => 'pncMother',
+      'PNC' || 'PNC_MOTHER' => 'pncMother',
+      'PNC_CHILD' || 'PNC_NEONATAL' => 'pncChild',
       'TB' => 'tb',
       'ICCM' || 'IMCI' => 'iccm',
       'EPI' => null,
@@ -560,6 +560,11 @@ class LocalAssessmentDao {
         if (gLog is Map) {
           flat['glucoseValue'] ??= gLog['glucose'];
           flat['glucoseType'] ??= gLog['glucoseType'];
+        }
+      } else if (type == 'PNC_MOTHER' || type == 'PNC') {
+        final mha = map['maternalHealthAssessment'];
+        if (mha is Map) {
+          flat.addAll(mha.cast<String, dynamic>());
         }
       }
 
