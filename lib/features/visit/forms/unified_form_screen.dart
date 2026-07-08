@@ -299,7 +299,7 @@ class _SectionCard extends StatelessWidget {
 
 // ── Inline micro-widgets (no hardcoded strings, tokens only) ─────────────────
 
-class _NumericField extends StatelessWidget {
+class _NumericField extends StatefulWidget {
   const _NumericField({
     super.key,
     required this.label,
@@ -320,24 +320,55 @@ class _NumericField extends StatelessWidget {
   final String? hint;
 
   @override
+  State<_NumericField> createState() => _NumericFieldState();
+}
+
+class _NumericFieldState extends State<_NumericField> {
+  late final TextEditingController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: widget.initialValue ?? '');
+  }
+
+  @override
+  void didUpdateWidget(_NumericField old) {
+    super.didUpdateWidget(old);
+    if (old.initialValue != widget.initialValue) {
+      final newText = widget.initialValue ?? '';
+      if (_ctrl.text != newText) {
+        _ctrl.text = newText;
+        _ctrl.selection = TextSelection.collapsed(offset: newText.length);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return TextFormField(
-      initialValue: initialValue,
-      keyboardType: isDecimal
+      controller: _ctrl,
+      keyboardType: widget.isDecimal
           ? const TextInputType.numberWithOptions(decimal: true)
           : TextInputType.number,
       inputFormatters: [
-        if (isDecimal)
+        if (widget.isDecimal)
           FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
         else
           FilteringTextInputFormatter.digitsOnly,
       ],
       decoration: InputDecoration(
-        labelText: isMandatory ? '$label *' : label,
-        suffixText: unit,
-        hintText: hint,
+        labelText: widget.isMandatory ? '${widget.label} *' : widget.label,
+        suffixText: widget.unit,
+        hintText: widget.hint,
       ),
-      onChanged: onChanged,
+      onChanged: widget.onChanged,
     );
   }
 }
@@ -359,8 +390,13 @@ class _SpinnerField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final ids = options.map((o) => o.id).toSet();
+    // Guard: only pass value if it matches a known option; avoids assertion.
+    final safeValue = (currentValue != null && ids.contains(currentValue))
+        ? currentValue
+        : null;
     return DropdownButtonFormField<String>(
-      initialValue: currentValue,
+      value: safeValue,
       decoration: InputDecoration(labelText: label),
       items: options
           .map((o) => DropdownMenuItem(value: o.id, child: Text(o.name)))
@@ -457,9 +493,9 @@ class _BpReadingField extends StatefulWidget {
 }
 
 class _BpReadingFieldState extends State<_BpReadingField> {
-  late final TextEditingController _sys;
-  late final TextEditingController _dia;
-  late final TextEditingController _pulse;
+  late TextEditingController _sys;
+  late TextEditingController _dia;
+  late TextEditingController _pulse;
 
   @override
   void initState() {
@@ -469,6 +505,25 @@ class _BpReadingFieldState extends State<_BpReadingField> {
     _sys = TextEditingController(text: first['systolic']?.toString() ?? '');
     _dia = TextEditingController(text: first['diastolic']?.toString() ?? '');
     _pulse = TextEditingController(text: first['pulse']?.toString() ?? '');
+  }
+
+  @override
+  void didUpdateWidget(_BpReadingField old) {
+    super.didUpdateWidget(old);
+    if (old.readings != widget.readings) {
+      final first =
+          widget.readings.isNotEmpty ? widget.readings.first : const {};
+      _syncCtrl(_sys, first['systolic']?.toString() ?? '');
+      _syncCtrl(_dia, first['diastolic']?.toString() ?? '');
+      _syncCtrl(_pulse, first['pulse']?.toString() ?? '');
+    }
+  }
+
+  void _syncCtrl(TextEditingController ctrl, String newText) {
+    if (ctrl.text != newText) {
+      ctrl.text = newText;
+      ctrl.selection = TextSelection.collapsed(offset: newText.length);
+    }
   }
 
   @override

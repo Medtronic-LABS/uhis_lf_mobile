@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
-import '../../../core/auth/auth_repository.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/db/household_dao.dart';
 import '../../../core/theme/app_theme.dart';
@@ -43,12 +42,11 @@ class _SelectHouseholdScreenState extends State<SelectHouseholdScreen> {
 
   Future<void> _loadHouseholds() async {
     final dao = context.read<HouseholdDao>();
-    final auth = context.read<AuthRepository>();
-    final ids = await auth.villageIds();
-    final strIds = ids.map((e) => e.toString()).toList();
-    final hhs = strIds.isEmpty
-        ? await dao.getAll(limit: 200)
-        : await dao.getByVillageIds(strIds);
+    // The local DB already contains only this SK's assigned households
+    // (synced by village scope). Village-ID filtering would use sub-village
+    // IDs from auth, which don't match the parent villageId stored on
+    // households — so we load all local households and let search filter.
+    final hhs = await dao.getAll(limit: 500);
     if (mounted) {
       setState(() {
         _households = hhs;
