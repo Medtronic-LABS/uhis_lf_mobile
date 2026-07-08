@@ -153,7 +153,7 @@ abstract final class UnifiedPayloadMapper {
       'urinarySugar': d.getValue('urinarySugar'),
       'hemoglobin': d.getValue('hemoglobin'),
       if (d.getValue('hemoglobin') != null) 'hemoglobinUnit': 'g/dL',
-      if (glucoseType != null) 'bloodSugar': glucoseType == 'fbs' ? 'fasting' : 'random',
+      if (glucoseType != null && glucoseValue != null) 'bloodSugar': glucoseType == 'fbs' ? 'fasting' : 'random',
       if (hasFbs) 'bloodSugarFasting': glucoseValue,
       if (hasFbs) 'bloodSugarFastingUnit': d.getValue('glucoseUnit') as String? ?? 'mmol/L',
       if (hasRbs) 'bloodSugarRandom': glucoseValue,
@@ -346,7 +346,7 @@ abstract final class UnifiedPayloadMapper {
       'ifaTabletsConsumed': d.getValue('ifaTabletsConsumed'),
       'calciumTabletsProvided': d.getValue('calciumTabletsProvided'),
       'calciumTabletsConsumed': d.getValue('calciumTabletsConsumed'),
-      if (glucoseType != null)
+      if (glucoseType != null && glucoseValue != null)
         'bloodSugar': glucoseType == 'fbs' ? 'fasting' : 'random',
       if (hasFbs) 'fastingBloodSugar': glucoseValue,
       if (hasFbs) 'fastingBloodSugarUnit': 'mmol/L',
