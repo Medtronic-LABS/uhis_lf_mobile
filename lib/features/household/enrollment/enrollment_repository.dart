@@ -57,6 +57,7 @@ class EnrollmentRepository extends ApiRepository {
         subVillageName: household.subVillageName ?? '',
         provenance: provenance,
         nowMs: nowMs,
+        userId: userId,
       ),
       for (final m in members)
         _memberPayload(
@@ -69,6 +70,7 @@ class EnrollmentRepository extends ApiRepository {
           subVillageName: household.subVillageName ?? '',
           provenance: provenance,
           nowMs: nowMs,
+          userId: userId,
         ),
     ];
 
@@ -79,8 +81,8 @@ class EnrollmentRepository extends ApiRepository {
       'householdType': household.householdType,
       // Backend villageId = sub-village ID (what fetch-synced-data filters on).
       // hierarchy.villages = unions (id=40), hierarchy.subVillages = actual villages (id=262).
-      'villageId': subVillageId.toString(),
-      'subVillageId': villageId.toString(),
+      'villageId': subVillageId,
+      'subVillageId': villageId,
       'village': household.subVillageName ?? household.villageName ?? '',
       'shasthyaShebikaId': userId,
       'noOfPeople': household.numberOfMembers,
@@ -126,6 +128,7 @@ class EnrollmentRepository extends ApiRepository {
     required String subVillageName,
     required Map<String, dynamic> provenance,
     required int nowMs,
+    required int userId,
   }) {
     final normDob = _normaliseDob(member.dateOfBirth);
     return {
@@ -146,6 +149,8 @@ class EnrollmentRepository extends ApiRepository {
       'village': subVillageName.isNotEmpty ? subVillageName : villageName,
       'subVillage': villageName,
       'phoneNumber': member.mobileNumber ?? '',
+      'phoneNumberCategory': '',
+      'shasthyaKormiId': userId,
       'latitude': 0.0,
       'longitude': 0.0,
       'provenance': provenance,
