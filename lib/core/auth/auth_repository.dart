@@ -84,6 +84,7 @@ class AuthRepository {
   static const _kHouseholdCountCache = 'householdCountCache';
   static const _kVillageIds = 'villageIds';
   static const _kSubVillageIds = 'subVillageIds';
+  static const _kSsWorkerIds = 'ssWorkerIds';
   static const _kUserId = 'userId';
   static const _kUserFhirId = 'userFhirId';
   static const _kDeviceId = 'deviceId';
@@ -300,6 +301,26 @@ class AuthRepository {
     final joined = ids.join(',');
     await _storage.write(key: _kVillageIds, value: joined);
     await _storage.write(key: _kSubVillageIds, value: joined);
+  }
+
+  /// Returns the SS worker IDs assigned to this SK (shasthyaShebikas[].id).
+  /// Used to filter households from the sync bundle to just the SK's caseload.
+  Future<List<int>> ssWorkerIds() async {
+    final stored = await _storage.read(key: _kSsWorkerIds);
+    if (stored == null || stored.isEmpty) return const [];
+    return stored
+        .split(',')
+        .map((s) => int.tryParse(s.trim()))
+        .whereType<int>()
+        .toList();
+  }
+
+  /// Persists SS worker IDs from `shasthyaShebikas[].id` in the static-data
+  /// response. These are used to filter households by `shasthyaShebikaId`
+  /// so only the SK's own caseload is shown — mirroring Android's approach.
+  Future<void> saveSsWorkerIds(List<int> ids) async {
+    if (ids.isEmpty) return;
+    await _storage.write(key: _kSsWorkerIds, value: ids.join(','));
   }
 
   Future<void> saveUpazila(String? name) async {

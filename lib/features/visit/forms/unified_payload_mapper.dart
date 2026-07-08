@@ -240,15 +240,16 @@ abstract final class UnifiedPayloadMapper {
       };
       if (pulse != null) detail['pulse'] = pulse.toInt();
       bpLog['bpLogDetails'] = [detail];
+      // weight/height/bmi only meaningful in bpLog when BP is present
+      final weight = asNum(d.getValue('weight'));
+      if (weight != null) bpLog['weight'] = weight;
+      final height = asNum(d.getValue('height'));
+      if (height != null) bpLog['height'] = height;
+      final bmi = asNum(d.getValue('bmi'));
+      if (bmi != null) bpLog['bmi'] = bmi;
+      final isRegularSmoker = d.getValue('isRegularSmoker');
+      if (isRegularSmoker != null) bpLog['isRegularSmoker'] = isRegularSmoker;
     }
-    final weight = asNum(d.getValue('weight'));
-    if (weight != null) bpLog['weight'] = weight;
-    final height = asNum(d.getValue('height'));
-    if (height != null) bpLog['height'] = height;
-    final bmi = asNum(d.getValue('bmi'));
-    if (bmi != null) bpLog['bmi'] = bmi;
-    final isRegularSmoker = d.getValue('isRegularSmoker');
-    if (isRegularSmoker != null) bpLog['isRegularSmoker'] = isRegularSmoker;
 
     final glucoseNum = asNum(d.getValue('glucoseValue'));
     final glucoseLog = <String, dynamic>{};
