@@ -120,6 +120,16 @@ class AuthRepository {
     }
   }
 
+  /// Persists the FHIR Organization resource ID (e.g. "496427") so provenance
+  /// uses the correct onBehalfOf reference — mirrors Android's
+  /// SecuredPreference.ORGANIZATION_FHIR_ID stored from healthFacility.fhirId.
+  Future<void> saveOrganizationFhirId(String? fhirId) async {
+    if (fhirId != null && fhirId.isNotEmpty) {
+      await _storage.write(key: _kOrganizationFhirId, value: fhirId);
+      _api.setOrganizationFhirId(fhirId);
+    }
+  }
+
   /// Returns a stable device ID, generating one on first access.
   Future<String> deviceId() async {
     var stored = await _storage.read(key: _kDeviceId);

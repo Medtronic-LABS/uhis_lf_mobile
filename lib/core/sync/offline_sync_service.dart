@@ -1155,15 +1155,75 @@ class OfflineSyncService extends ChangeNotifier {
         return const [];
       }
 
+      // Log entity top-level keys so we can identify org FHIR ID field name.
+      debugPrint('[OfflineSyncService] entity keys: ${entity.keys.toList()}');
+
       // Persist FHIR Practitioner ID from userProfile so provenance.userId
       // references a real Practitioner resource (mirrors Android saveFhirId()).
       final userProfile = entity['userProfile'];
       if (userProfile is Map) {
+        debugPrint('[OfflineSyncService] userProfile keys: ${userProfile.keys.toList()}');
         final fhirId = userProfile['fhirId'] as String?;
         if (fhirId != null && fhirId.isNotEmpty) {
           await _auth.saveUserFhirId(fhirId);
           debugPrint('[OfflineSyncService] Saved userFhirId: $fhirId');
         }
+      }
+
+      // Persist FHIR Organization ID (mirrors Android healthFacility.fhirId →
+      // SecuredPreference.ORGANIZATION_FHIR_ID). Try common response key names.
+      String? orgFhirId;
+      for (final key in const [
+        'defaultHealthFacility',
+        'healthFacility',
+        'organization',
+        'facility',
+      ]) {
+        final fac = entity[key];
+        if (fac is Map) {
+          debugPrint('[OfflineSyncService] $key keys: ${fac.keys.toList()}');
+          final fid = fac['fhirId'] as String? ?? fac['fhir_id'] as String?;
+          if (fid != null && fid.isNotEmpty) {
+            orgFhirId = fid;
+            debugPrint('[OfflineSyncService] orgFhirId from $key.fhirId: $fid');
+            break;
+          }
+        }
+      }
+      // Fallback: iterate healthFacilities list for isDefault=true.
+      if (orgFhirId == null) {
+        final facilities = entity['healthFacilities'];
+        if (facilities is List) {
+          debugPrint('[OfflineSyncService] healthFacilities count: ${facilities.length}');
+          for (final fac in facilities) {
+            if (fac is! Map) continue;
+            final isDefault = fac['isDefault'] == true || fac['isDefault'] == 1;
+            debugPrint('[OfflineSyncService] facility id=${fac['id']} fhirId=${fac['fhirId']} isDefault=$isDefault');
+            if (isDefault) {
+              final fid = fac['fhirId'] as String?;
+              if (fid != null && fid.isNotEmpty) {
+                orgFhirId = fid;
+                debugPrint('[OfflineSyncService] orgFhirId from healthFacilities[default].fhirId: $fid');
+                break;
+              }
+            }
+          }
+          if (orgFhirId == null && facilities.isNotEmpty) {
+            final first = facilities.first;
+            if (first is Map) {
+              final fid = first['fhirId'] as String?;
+              if (fid != null && fid.isNotEmpty) {
+                orgFhirId = fid;
+                debugPrint('[OfflineSyncService] orgFhirId from healthFacilities[0].fhirId: $fid');
+              }
+            }
+          }
+        }
+      }
+      if (orgFhirId != null) {
+        await _auth.saveOrganizationFhirId(orgFhirId);
+      } else {
+        debugPrint('[OfflineSyncService] WARNING: orgFhirId not found — entity keys: ${entity.keys.toList()}');
       }
 
       // fetch-synced-data filters at sub-village granularity, so use

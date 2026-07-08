@@ -172,20 +172,23 @@ class AssessmentRepository extends ChangeNotifier {
             ))
         .toList();
 
-    debugPrint('[AssessmentSync] Request payload:');
-    debugPrint('  requestId: $requestId');
-    debugPrint('  tenantId: ${_api.tenantIdAsNum}');
-    debugPrint('  appVersionName: ${AppConfig.appVersionName}');
-    debugPrint('  appType: ${AppConfig.appType}');
-    debugPrint('  assessments[${assessmentPayloads.length}]:');
+    void logChunked(String tag, String text) {
+      const limit = 900;
+      for (var start = 0; start < text.length; start += limit) {
+        final end = (start + limit).clamp(0, text.length);
+        // ignore: avoid_print
+        print('$tag ${text.substring(start, end)}');
+      }
+    }
+
+    debugPrint('[AssessmentSync] requestId: $requestId  tenantId: ${_api.tenantIdAsNum}  appType: ${AppConfig.appType}');
+    debugPrint('[AssessmentSync] assessments[${assessmentPayloads.length}]:');
     for (var i = 0; i < assessmentPayloads.length; i++) {
       final a = assessmentPayloads[i];
       final assessType = a['assessmentType'] as String? ?? 'unknown';
-      debugPrint('    [$i] === $assessType ===');
-      debugPrint('    [$i] patient=${a['encounter']?['patientId']} referred=${a['encounter']?['referred']}');
-      debugPrint('    [$i] provenance=${a['encounter']?['provenance']}');
-      debugPrint('    [$i] villageId=${a['villageId']} referenceId=${a['referenceId']}');
-      debugPrint('    [$i] assessmentDetails: ${jsonEncode(a['assessmentDetails'])}');
+      debugPrint('[AssessmentSync][$i] === $assessType ===');
+      debugPrint('[AssessmentSync][$i] patient=${a['encounter']?['patientId']} provenance=${a['encounter']?['provenance']}');
+      logChunked('[AssessmentSync][$i] details:', jsonEncode(a['assessmentDetails']));
     }
 
     final request = {
