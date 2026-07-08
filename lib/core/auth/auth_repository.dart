@@ -261,15 +261,17 @@ class AuthRepository {
     // ignore: avoid_print
     print('[Auth] profile → phoneNumber=$phoneNumber');
 
-    // organizationIds[] carries numeric org IDs; store first as orgFhirId.
-    // Upazila is populated when user-data loads (chiefdoms[0].name).
+    // organizationIds[] carries numeric IDs — NOT FHIR Organization resource IDs.
+    // The real FHIR org ID comes from defaultHealthFacility.fhirId in user-data
+    // and is persisted by saveOrganizationFhirId() (called from OfflineSyncService).
+    // Only set on the ApiClient in-memory so login-time requests have a header value;
+    // do NOT persist to _kOrganizationFhirId — that would overwrite the correct FHIR
+    // ID saved by the last full sync, causing provenance HAPI-1094 on subsequent sessions.
     final orgIds = data['organizationIds'];
-    String? orgFhirId;
-    if (orgIds is List && orgIds.isNotEmpty) {
-      orgFhirId = orgIds.first?.toString();
-    }
-    await writeOrDelete(_kOrganizationFhirId, orgFhirId);
-    _api.setOrganizationFhirId(orgFhirId);
+    final numericOrgId = (orgIds is List && orgIds.isNotEmpty)
+        ? orgIds.first?.toString()
+        : null;
+    _api.setOrganizationFhirId(numericOrgId);
   }
 
   /// Returns the user's assigned village IDs from the profile.
