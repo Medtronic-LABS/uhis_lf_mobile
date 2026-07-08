@@ -5,8 +5,10 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/models/dashboard_tier.dart';
 import '../../../core/models/mission_queue_item.dart';
 
-String _sentenceCase(String s) =>
-    s.isEmpty ? s : s[0].toUpperCase() + s.substring(1).toLowerCase();
+String _titleCase(String s) => s
+    .split(' ')
+    .map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1).toLowerCase())
+    .join(' ');
 
 /// Shared patient card widget for mission queue items.
 /// Used by both Dashboard (home) and Tasks screens.
@@ -123,7 +125,7 @@ class MissionQueueCard extends StatelessWidget {
                             Builder(builder: (context) {
                               final address = [
                                 item.householdDisplay,
-                                _sentenceCase(item.village ?? ''),
+                                _titleCase(item.village ?? ''),
                               ].where((s) => s.isNotEmpty).join(', ');
                               if (address.isEmpty) return const SizedBox.shrink();
                               return Padding(

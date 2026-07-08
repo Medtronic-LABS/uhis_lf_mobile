@@ -5,8 +5,10 @@ import '../models/mission_queue_item.dart';
 import '../models/programme.dart';
 import '../theme/app_theme.dart';
 
-String _sentenceCase(String s) =>
-    s.isEmpty ? s : s[0].toUpperCase() + s.substring(1).toLowerCase();
+String _titleCase(String s) => s
+    .split(' ')
+    .map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1).toLowerCase())
+    .join(' ');
 
 /// Shared filter category for need-based patient filtering.
 /// Used by Dashboard and Patients tab.
@@ -219,7 +221,7 @@ class PatientFilterPanel extends StatelessWidget {
                     onTap: () => onVillageSelected(null),
                   ),
                   ...villages.map((v) => VillageFilterTab(
-                        label: _sentenceCase(v.label),
+                        label: _titleCase(v.label),
                         isActive: selectedVillageValue == v.value,
                         onTap: () => onVillageSelected(
                             selectedVillageValue == v.value ? null : v.value),
