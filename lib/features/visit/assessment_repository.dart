@@ -180,10 +180,12 @@ class AssessmentRepository extends ChangeNotifier {
     debugPrint('  assessments[${assessmentPayloads.length}]:');
     for (var i = 0; i < assessmentPayloads.length; i++) {
       final a = assessmentPayloads[i];
-      debugPrint('    [$i] type=${a['assessmentType']} patient=${a['encounter']?['patientId']} referred=${a['encounter']?['referred']}');
+      final assessType = a['assessmentType'] as String? ?? 'unknown';
+      debugPrint('    [$i] === $assessType ===');
+      debugPrint('    [$i] patient=${a['encounter']?['patientId']} referred=${a['encounter']?['referred']}');
       debugPrint('    [$i] provenance=${a['encounter']?['provenance']}');
-      final det = a['assessmentDetails'] as Map<String, dynamic>?;
-      debugPrint('    [$i] villageId=${a['villageId']} referenceId=${a['referenceId']} bpLog=${det?['bpLog']} glucoseLog=${det?['glucoseLog']}');
+      debugPrint('    [$i] villageId=${a['villageId']} referenceId=${a['referenceId']}');
+      debugPrint('    [$i] assessmentDetails: ${jsonEncode(a['assessmentDetails'])}');
     }
 
     final request = {

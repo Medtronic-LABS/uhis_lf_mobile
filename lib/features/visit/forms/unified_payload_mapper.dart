@@ -11,27 +11,27 @@ class ProgrammePayload {
   /// Wire-format assessment type: `'ANC'`, `'NCD'`, `'PNC'`, `'PNC_CHILD'`, etc.
   final String assessmentType;
 
-  /// FLAT map stored as [LocalAssessmentEntity.assessmentDetails] JSON.
+  /// Nested programme-specific map stored as [LocalAssessmentEntity.assessmentDetails] JSON.
   ///
-  /// Must be FLAT (no programme key wrapper, no bpLog/glucoseLog sub-objects).
-  /// [LocalAssessmentEntity.toApiRequest] handles:
-  ///   1. `_wrapDetailsForType` → wraps to `{ "anc": flat }` before POST.
-  ///   2. `_injectVitalLogs`    → builds bpLog/glucoseLog from flat fields.
+  /// Matches Android's form-group structure exactly:
+  ///   ANC  → medicalHistoryPhysicalExamination / pointOfCareInvestigations /
+  ///           dangerSignsRiskIdentification / vaccinationAndSupplements /
+  ///           ancServicesBirthPreparedness
+  ///   NCD  → bpLog (with weight/height/bmi inside) / glucoseLog / symptomsLog
+  ///   PNC  → maternalHealthAssessment / pregnancyHistory / postpartumContraception
+  ///
+  /// [LocalAssessmentEntity.toApiRequest] wraps to `{ "anc": details }` etc.
+  /// bpLog/glucoseLog are embedded here — no injection needed at sync time.
   final Map<String, dynamic> details;
 }
 
 /// Decomposes a [CanonicalVisitData] into per-programme [ProgrammePayload]s.
 ///
-/// Field names must match exactly what [LocalAssessmentEntity._injectVitalLogs]
-/// and [LocalAssessmentDao.latestClinicalVitalsForMany] read.
+/// Output structure matches Android AssessmentDefinedParams group keys so the
+/// backend offline-service deserializes correctly into its DTO hierarchy.
 abstract final class UnifiedPayloadMapper {
   UnifiedPayloadMapper._();
 
-  /// Decomposes canonical field values into one payload per active formType.
-  ///
-  /// [activeFormTypes] uses layout_manifests.json keys:
-  /// `'anc'`, `'pncMother'`, `'pncChild'`, `'pncNeonatal'`, `'ncd'`,
-  /// `'pregnancyOutcome'`, `'pwProfile'`, etc.
   static List<ProgrammePayload> decompose(
     CanonicalVisitData data,
     Set<String> activeFormTypes,
@@ -78,17 +78,21 @@ abstract final class UnifiedPayloadMapper {
   }
 
   // ── ANC ────────────────────────────────────────────────────────────────────
-  // Field names match [LocalAssessmentEntity._injectVitalLogs] aliases and
-  // [LocalAssessmentDao.latestClinicalVitalsForMany] read keys.
+  // Android group constants (AssessmentDefinedParams.kt):
+  //   GROUP_MEDICAL_HISTORY_PHYSICAL_EXAMINATION = "medicalHistoryPhysicalExamination"
+  //   GROUP_POINT_OF_CARE_INVESTIGATIONS         = "pointOfCareInvestigations"
+  //   GROUP_DANGER_SIGNS_RISK_IDENTIFICATION     = "dangerSignsRiskIdentification"
+  //   GROUP_VACCINATION_AND_SUPPLEMENTS          = "vaccinationAndSupplements"
+  //   GROUP_ANC_SERVICES_BIRTH_PREPAREDNESS      = "ancServicesBirthPreparedness"
+  //
+  // BP lives in medicalHistoryPhysicalExamination.systolic/diastolic — NOT in bpLog.
 
   static Map<String, dynamic> _toAnc(CanonicalVisitData d) {
-    return _compact({
-      // field_library.json uses 'systolic'/'diastolic'; _injectVitalLogs reads these same keys
-      'bloodPressureSystolic': d.getValue('bloodPressureSystolic') ?? d.getValue('systolic'),
-      'bloodPressureDiastolic': d.getValue('bloodPressureDiastolic') ?? d.getValue('diastolic'),
+    final medHx = _compact({
+      'systolic': d.getValue('systolic') ?? d.getValue('bloodPressureSystolic'),
+      'diastolic': d.getValue('diastolic') ?? d.getValue('bloodPressureDiastolic'),
       'weight': d.getValue('weight'),
       'height': d.getValue('height'),
-      'bmi': d.getValue('bmi'),
       'hemoglobin': d.getValue('hemoglobin'),
       'gestationalAge': d.getValue('gestationalAge'),
       'fundalHeight': d.getValue('fundalHeight'),
@@ -99,16 +103,31 @@ abstract final class UnifiedPayloadMapper {
       'pallor': d.getValue('pallor'),
       'parity': d.getValue('parity'),
       'ancVisitNumber': d.getValue('ancVisitNumber'),
-      // Urine tests
+    });
+
+    final pointOfCare = _compact({
       'urinaryAlbumin': d.getValue('urinaryAlbumin'),
       'urinaryBilirubin': d.getValue('urinaryBilirubin'),
       'urinarySugar': d.getValue('urinarySugar'),
-      // Blood tests
       'bloodSugarFasting': d.getValue('bloodSugarFasting'),
       'bloodSugarRandom': d.getValue('bloodSugarRandom'),
       'glucoseType': d.getValue('glucoseType'),
       'glucoseValue': d.getValue('glucoseValue'),
-      // Vaccination & supplements
+    });
+
+    // dangerSigns lists are always present (empty = no danger signs reported)
+    final dangerSigns = <String, dynamic>{
+      'dangerSignsExperienced12':
+          d.getValue('dangerSignsExperienced12') ?? <String>[],
+      'dangerSignsExperienced13To27':
+          d.getValue('dangerSignsExperienced13To27') ?? <String>[],
+      'dangerSignsExperienced28To40':
+          d.getValue('dangerSignsExperienced28To40') ?? <String>[],
+    };
+    final eclampsia = d.getValue('eclampsia');
+    if (eclampsia != null) dangerSigns['eclampsia'] = eclampsia;
+
+    final vaccination = _compact({
       'ttTdCompleted': d.getValue('ttTdCompleted'),
       'folicAcidTotalConsumed': d.getValue('folicAcidTotalConsumed'),
       'folicAcidProvided': d.getValue('folicAcidProvided'),
@@ -116,63 +135,128 @@ abstract final class UnifiedPayloadMapper {
       'ifaProvided': d.getValue('ifaProvided'),
       'calciumTotalConsumed': d.getValue('calciumTotalConsumed'),
       'calciumProvided': d.getValue('calciumProvided'),
-      // Danger signs — always included (empty list = no danger signs)
-      'dangerSignsExperienced12':
-          d.getValue('dangerSignsExperienced12') ?? <String>[],
-      'dangerSignsExperienced13To27':
-          d.getValue('dangerSignsExperienced13To27') ?? <String>[],
-      'dangerSignsExperienced28To40':
-          d.getValue('dangerSignsExperienced28To40') ?? <String>[],
-      'eclampsia': d.getValue('eclampsia'),
-      // Birth preparedness
+    });
+
+    final birthPrep = _compact({
       'facilityIdentifiedForDelivery':
           d.getValue('facilityIdentifiedForDelivery'),
       'ancVisitsOtherProviders': d.getValue('ancVisitsOtherProviders'),
       'ancFromMedicalDoctor': d.getValue('ancFromMedicalDoctor'),
       'ultrasound': d.getValue('ultrasound'),
     });
+
+    return {
+      if (medHx.isNotEmpty) 'medicalHistoryPhysicalExamination': medHx,
+      if (pointOfCare.isNotEmpty) 'pointOfCareInvestigations': pointOfCare,
+      'dangerSignsRiskIdentification': dangerSigns,
+      if (vaccination.isNotEmpty) 'vaccinationAndSupplements': vaccination,
+      if (birthPrep.isNotEmpty) 'ancServicesBirthPreparedness': birthPrep,
+    };
   }
 
   // ── NCD ────────────────────────────────────────────────────────────────────
-  // Shares weight/height/BP from canonical — no re-entry when ANC also active.
-  // _injectVitalLogs builds bpLog from bloodPressureSystolic/Diastolic.
-  // _injectVitalLogs builds glucoseLog from glucoseValue/glucoseType.
+  // Android NCD payload structure (from reference payload + AssessmentViewModel):
+  //   ncd.bpLog   = { avgSystolic, avgDiastolic, avgBloodPressure,
+  //                   weight, height, bmi, isRegularSmoker, bpLogDetails[] }
+  //   ncd.glucoseLog = { glucose, glucoseType, glucoseUnit, hba1c }
+  //   ncd.symptomsLog = { compliance, hasSymptoms, ncdSymptoms[] }
+  //
+  // weight/height/bmi/isRegularSmoker are INSIDE bpLog, not at top level.
 
   static Map<String, dynamic> _toNcd(CanonicalVisitData d) {
-    return _compact({
-      'bloodPressureSystolic': d.getValue('bloodPressureSystolic') ?? d.getValue('systolic'),
-      'bloodPressureDiastolic': d.getValue('bloodPressureDiastolic') ?? d.getValue('diastolic'),
-      'weight': d.getValue('weight'),
-      'height': d.getValue('height'),
-      'bmi': d.getValue('bmi'),
-      'temperature': d.getValue('temperature'),
-      'glucoseValue': d.getValue('glucoseValue'),
-      'glucoseType': d.getValue('glucoseType'),
-      'hba1c': d.getValue('hba1c'),
-      'isRegularSmoker': d.getValue('isRegularSmoker'),
-      // HTN screening — stored as a nested map; backend reads htnScreening.*
-      'htnScreening': d.getValue('htnScreening'),
-    });
+    double? asDouble(dynamic v) {
+      if (v is num) return v.toDouble();
+      if (v is String) return double.tryParse(v);
+      return null;
+    }
+
+    final sys = asDouble(d.getValue('systolic') ?? d.getValue('bloodPressureSystolic'));
+    final dia = asDouble(d.getValue('diastolic') ?? d.getValue('bloodPressureDiastolic'));
+
+    final bpLog = <String, dynamic>{};
+    if (sys != null && dia != null) {
+      bpLog['avgSystolic'] = sys.toInt();
+      bpLog['avgDiastolic'] = dia.toInt();
+      bpLog['avgBloodPressure'] = '${sys.toInt()}/${dia.toInt()}';
+      bpLog['bpLogDetails'] = [
+        {'systolic': sys.toInt(), 'diastolic': dia.toInt()}
+      ];
+    }
+    final weight = d.getValue('weight');
+    if (weight != null) bpLog['weight'] = weight;
+    final height = d.getValue('height');
+    if (height != null) bpLog['height'] = height;
+    final bmi = d.getValue('bmi');
+    if (bmi != null) bpLog['bmi'] = bmi;
+    final isRegularSmoker = d.getValue('isRegularSmoker');
+    if (isRegularSmoker != null) bpLog['isRegularSmoker'] = isRegularSmoker;
+
+    final glucoseNum = asDouble(d.getValue('glucoseValue'));
+    final glucoseLog = <String, dynamic>{};
+    if (glucoseNum != null) {
+      glucoseLog['glucose'] = glucoseNum;
+      final glucoseType = d.getValue('glucoseType');
+      if (glucoseType != null) glucoseLog['glucoseType'] = glucoseType;
+      glucoseLog['glucoseUnit'] =
+          d.getValue('glucoseUnit') as String? ?? 'mmol/L';
+      final hba1c = d.getValue('hba1c');
+      if (hba1c != null) glucoseLog['hba1c'] = hba1c;
+    }
+
+    final symptomsLog = <String, dynamic>{};
+    final compliance = d.getValue('compliance');
+    if (compliance != null) symptomsLog['compliance'] = compliance;
+    final hasSymptoms = d.getValue('hasSymptoms');
+    if (hasSymptoms != null) symptomsLog['hasSymptoms'] = hasSymptoms;
+    final ncdSymptoms = d.getValue('ncdSymptoms');
+    if (ncdSymptoms != null) symptomsLog['ncdSymptoms'] = ncdSymptoms;
+
+    return {
+      if (bpLog.isNotEmpty) 'bpLog': bpLog,
+      if (glucoseLog.isNotEmpty) 'glucoseLog': glucoseLog,
+      if (symptomsLog.isNotEmpty) 'symptomsLog': symptomsLog,
+      if (d.getValue('temperature') != null) 'temperature': d.getValue('temperature'),
+      if (d.getValue('htnScreening') != null) 'htnScreening': d.getValue('htnScreening'),
+    };
   }
 
   // ── PNC Mother ─────────────────────────────────────────────────────────────
+  // Android PNC Mother payload (from reference payload + RMNCH.kt constants):
+  //   pncMother.maternalHealthAssessment = { systolic, diastolic, weight,
+  //                                          hemoglobin, urinaryAlbumin, ... }
+  //   pncMother.pregnancyHistory         = { parity, gravida, livingChildren }
+  //   pncMother.postpartumContraception  = { familyPlanningMethods }
+  //   pncMother.visitNo                  = <int>
+  //   pncMother.daysSinceDelivery        = <int>
 
   static Map<String, dynamic> _toPncMother(CanonicalVisitData d) {
-    return _compact({
-      'bloodPressureSystolic': d.getValue('bloodPressureSystolic') ?? d.getValue('systolic'),
-      'bloodPressureDiastolic': d.getValue('bloodPressureDiastolic') ?? d.getValue('diastolic'),
+    final maternal = _compact({
+      'systolic': d.getValue('systolic') ?? d.getValue('bloodPressureSystolic'),
+      'diastolic': d.getValue('diastolic') ?? d.getValue('bloodPressureDiastolic'),
       'weight': d.getValue('weight'),
-      'height': d.getValue('height'),
-      'pncVisitNumber': d.getValue('pncVisitNumber'),
-      'deliveryType': d.getValue('deliveryType'),
-      'deliveryAt': d.getValue('deliveryAt'),
-      'deliveryStatus': d.getValue('deliveryStatus'),
-      'deliveryDate': d.getValue('deliveryDate'),
-      'motherAlive': d.getValue('motherAlive'),
-      // Supplements
-      'folicAcidTotalConsumed': d.getValue('folicAcidTotalConsumed'),
-      'ifaTotalConsumed': d.getValue('ifaTotalConsumed'),
-      'calciumTotalConsumed': d.getValue('calciumTotalConsumed'),
+      'hemoglobin': d.getValue('hemoglobin'),
+      'urinaryAlbumin': d.getValue('urinaryAlbumin'),
+      'urinaryBilirubin': d.getValue('urinaryBilirubin'),
+      'temperature': d.getValue('temperature'),
+      'pulse': d.getValue('pulse'),
+    });
+
+    final pregnancy = _compact({
+      'parity': d.getValue('parity'),
+      'gravida': d.getValue('gravida'),
+      'livingChildren': d.getValue('livingChildren'),
+    });
+
+    final contraception = _compact({
+      'familyPlanningMethods': d.getValue('familyPlanningMethods'),
+    });
+
+    return _compact({
+      if (maternal.isNotEmpty) 'maternalHealthAssessment': maternal,
+      if (pregnancy.isNotEmpty) 'pregnancyHistory': pregnancy,
+      if (contraception.isNotEmpty) 'postpartumContraception': contraception,
+      'visitNo': d.getValue('pncVisitNumber') ?? d.getValue('visitNo'),
+      'daysSinceDelivery': d.getValue('daysSinceDelivery'),
     });
   }
 
@@ -206,7 +290,6 @@ abstract final class UnifiedPayloadMapper {
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
-  /// Removes null entries; always-present list fields are kept as-is.
   static Map<String, dynamic> _compact(Map<String, dynamic> src) {
     return Map.fromEntries(
       src.entries.where((e) => e.value != null),
