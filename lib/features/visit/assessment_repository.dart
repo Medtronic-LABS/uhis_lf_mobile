@@ -8,8 +8,9 @@ import '../../core/api/endpoints.dart' show Endpoints;
 import '../../core/auth/auth_repository.dart';
 import '../../core/config/app_config.dart';
 import '../../core/db/local_assessment_dao.dart';
+import '../../core/models/provance_dto.dart';
 
-/// Repository for offline-first assessment management.
+/// Repository for offline-first assessment management matching Android pattern.
 ///
 /// Follows Android spice-2.0 pattern:
 /// 1. Save to local DB with sync_status = pending
@@ -64,15 +65,12 @@ class AssessmentRepository extends ChangeNotifier {
   }) async {
     final id = const Uuid().v4();
     final now = DateTime.now();
-    // Android generates a pregnancyEpisodeId per ANC/PNC assessment to let the
-    // server link sequential visits to the same pregnancy episode.
     final resolvedEpisodeId = pregnancyEpisodeId ??
         (assessmentType.toUpperCase() == 'ANC' ||
                 assessmentType.toUpperCase() == 'PNC'
             ? const Uuid().v4()
             : null);
 
-    // Include encounterId in otherDetails for persistence and API request
     final enrichedOtherDetails = <String, dynamic>{
       ...?otherDetails,
       'encounterId': ?encounterId,
@@ -103,14 +101,13 @@ class AssessmentRepository extends ChangeNotifier {
       updatedAt: now,
     );
 
-    // Save locally (offline-first). Sync happens via offline-sync/create.
     await _dao.insert(entity);
     await _refreshPendingCount();
 
     return id;
   }
 
-  /// Batch sync all pending assessments via `offline-sync/create`.
+  /// Batch sync all pending assessments via `offline-sync/create` matching Android.
   ///
   /// This is the only write path — no direct assessment/create call.
   Future<int> syncPendingAssessments() async {
@@ -140,28 +137,25 @@ class AssessmentRepository extends ChangeNotifier {
     }
   }
 
-  /// Batch sync via offline-service/offline-sync/create.
+  /// Batch sync via offline-service/offline-sync/create matching Android.
   Future<int> _batchSync(List<LocalAssessmentEntity> assessments) async {
     final ids = assessments.map((e) => e.id).toList();
     debugPrint('[AssessmentSync] Marking ${ids.length} as in-progress: $ids');
 
-    // Mark as in-progress
     await _dao.updateSyncStatus(ids, AssessmentSyncStatus.inProgress);
 
-    // Resolve provenance from auth once for the whole batch
     final userId = await _auth.userId();
     final orgId = await _auth.organizationFhirId();
     final deviceId = await _auth.deviceId();
     debugPrint('[AssessmentSync] Provenance — userId=$userId, orgId=$orgId, deviceId=$deviceId');
 
-    final provenance = <String, dynamic>{
+    final provenance = ProvanceDto.fromMap({
       'modifiedDate': DateTime.now().toUtc().toIso8601String(),
-      'organizationId': ?orgId,
-      'spiceUserId': ?userId,
+      'organizationId': orgId,
+      'spiceUserId': userId,
       if (userId != null) 'userId': userId.toString(),
-    };
+    });
 
-    // Build batch request matching Android's offline-sync/create format
     final requestId = const Uuid().v4();
     final assessmentPayloads = assessments
         .map((e) => e.toApiRequest(
@@ -219,31 +213,34 @@ class AssessmentRepository extends ChangeNotifier {
     }
   }
 
-  /// Refresh pending count.
   Future<void> _refreshPendingCount() async {
     _pendingCount = await _dao.getUnsyncedCount();
     notifyListeners();
   }
 
-  /// Get pending count (call to refresh).
   Future<int> getPendingCount() async {
     await _refreshPendingCount();
     return _pendingCount;
   }
 
-  /// Get all assessments for a patient.
   Future<List<LocalAssessmentEntity>> getAssessmentsForPatient(
       String patientId) async {
     return _dao.getByPatientId(patientId);
   }
 
-  /// Get assessment by local ID.
   Future<LocalAssessmentEntity?> getAssessmentById(String id) async {
     return _dao.getById(id);
   }
 }
 
-/// Result of saving an assessment.
+enum AssessmentSyncStatus {
+  pending,
+  inProgress,
+  success,
+  failed,
+  networkError,
+}
+
 class SaveAssessmentResult {
   const SaveAssessmentResult({
     required this.localId,
