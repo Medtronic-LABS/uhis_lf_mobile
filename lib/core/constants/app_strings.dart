@@ -3348,6 +3348,16 @@ abstract final class VisitFormStrings {
       'Could not save the assessment. It is kept on this device — please try again.';
 }
 
+/// Unified JSON-driven form screen strings.
+abstract final class UnifiedFormStrings {
+  UnifiedFormStrings._();
+
+  static const String submitLabel = 'Submit Assessment';
+  static const String configLoadError =
+      'Form configuration could not be loaded. Please restart the app.';
+  static const String noPathways = 'No assessment pathways activated.';
+}
+
 abstract final class FormGalleryStrings {
   FormGalleryStrings._();
   static const String tabLabel     = 'Gallery';
