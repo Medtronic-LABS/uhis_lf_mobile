@@ -80,10 +80,10 @@ class EnrollmentRepository extends ApiRepository {
       'householdNo': household.householdNumber,
       'householdType': household.householdType,
       // HouseholdDTO.villageId is String on the server — send as string.
-      // Swap: hierarchy.villages = unions (id=40), hierarchy.subVillages = actual villages (id=262).
-      // The sub-village ID is what the server filters on for SK assignment.
-      'villageId': subVillageId.toString(),
-      'subVillageId': villageId.toString(),
+      // villageId = village table ID (VillageRef), subVillageId = sub_village table ID (SubVillageRef).
+      // fhirmapper.generatePatientId queries village table via villageId; no swap needed.
+      'villageId': villageId.toString(),
+      'subVillageId': subVillageId.toString(),
       'village': household.subVillageName ?? household.villageName ?? '',
       'shasthyaShebikaId': userId,
       'noOfPeople': household.numberOfMembers,
@@ -145,8 +145,8 @@ class EnrollmentRepository extends ApiRepository {
       'isChild': _isChild(member.age, normDob),
       'maritalStatus': member.maritalStatus.toLowerCase(),
       'disability': _disabilityValue(member.disabilityStatus),
-      'villageId': subVillageId,
-      'subVillageId': villageId,
+      'villageId': villageId,
+      'subVillageId': subVillageId,
       'village': subVillageName.isNotEmpty ? subVillageName : villageName,
       'subVillage': villageName,
       'phoneNumber': member.mobileNumber ?? '',
