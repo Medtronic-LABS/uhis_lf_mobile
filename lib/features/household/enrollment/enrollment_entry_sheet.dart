@@ -219,17 +219,16 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
                   Navigator.of(context).pop();
                   context.push('/household/enrollment/create');
                 },
-                onLinkToExisting: () {
-                  Navigator.of(context).pop();
-                  context.push('/household/enrollment/select-household');
-                },
                 onCancel: () => Navigator.of(context).pop(),
               ),
               if (_overlayState == _OverlayState.postScan)
                 _PostScanSheet(
                   data: _scanned,
                   existing: _existingPatient,
-                  onLinkExisting: () => Navigator.of(context).pop(),
+                  onLinkExisting: () {
+                    Navigator.of(context).pop();
+                    context.push('/household/enrollment/select-household');
+                  },
                   onCreateNew: () {
                     Navigator.of(context).pop();
                     context.push(

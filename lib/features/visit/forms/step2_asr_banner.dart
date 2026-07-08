@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/api/realtime_asr_service.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../realtime_asr/realtime_asr_controller.dart';
 import '../../scribe/form_field_schema_builder.dart';
 import '../../scribe/models/ai_extracted_field.dart';
@@ -37,11 +38,6 @@ class Step2AsrBanner extends StatefulWidget {
 class _Step2AsrBannerState extends State<Step2AsrBanner> {
   late final RealtimeAsrController _ctrl;
   FormPrefillResult? _lastApplied;
-
-  static const _gradStart = Color(0xFF1B2B5E); // navy
-  static const _gradEnd = Color(0xFF2563EB); // blue
-  static const _activeGradStart = Color(0xFF7C3AED); // purple (listening)
-  static const _activeGradEnd = Color(0xFF5B21B6);
 
   @override
   void initState() {
@@ -112,53 +108,77 @@ class _Step2AsrBannerState extends State<Step2AsrBanner> {
 
   // ── Build ──────────────────────────────────────────────────────────────────
 
+  static LinearGradient _gradient(RealtimeAsrState state, bool hasFill) {
+    const begin = Alignment.topLeft;
+    const end = Alignment.bottomRight;
+    switch (state) {
+      case RealtimeAsrState.listening:
+        return const LinearGradient(
+          begin: begin,
+          end: end,
+          colors: [AppColors.statusCriticalText, AppColors.statusCritical],
+        );
+      case RealtimeAsrState.idle when hasFill:
+        return const LinearGradient(
+          begin: begin,
+          end: end,
+          colors: [AppColors.statusSuccessAction, AppColors.statusSuccessDark],
+        );
+      default:
+        return const LinearGradient(
+          begin: begin,
+          end: end,
+          colors: [AppColors.aiPurpleDark, AppColors.aiPurple],
+        );
+    }
+  }
+
+  static Color _shadowColor(RealtimeAsrState state, bool hasFill) {
+    switch (state) {
+      case RealtimeAsrState.listening:
+        return AppColors.statusCritical.withValues(alpha: 0.3);
+      case RealtimeAsrState.idle when hasFill:
+        return AppColors.statusSuccess.withValues(alpha: 0.3);
+      default:
+        return AppColors.aiPurple.withValues(alpha: 0.3);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = _ctrl.state;
     final isActive = _ctrl.isActive;
     final fill = _ctrl.formFill;
+    final hasFill = fill != null;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isActive
-              ? [_activeGradStart, _activeGradEnd]
-              : [_gradStart, _gradEnd],
-        ),
-        borderRadius: BorderRadius.circular(14),
+        gradient: _gradient(state, hasFill),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: (isActive ? _activeGradStart : _gradStart)
-                .withValues(alpha: 0.35),
+            color: _shadowColor(state, hasFill),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
         ],
       ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _Header(state: state, isActive: isActive, ctrl: _ctrl),
-              if (isActive) ...[
-                const SizedBox(height: 10),
-                _LivePanel(ctrl: _ctrl, fill: fill),
-              ] else if (fill != null) ...[
-                const SizedBox(height: 8),
-                _ResultSummary(fill: fill),
-              ],
-            ],
-          ),
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _Header(state: state, isActive: isActive, ctrl: _ctrl),
+          if (isActive) ...[
+            const SizedBox(height: 10),
+            _LivePanel(ctrl: _ctrl, fill: fill),
+          ] else if (hasFill) ...[
+            const SizedBox(height: 8),
+            _ResultSummary(fill: fill),
+          ],
+        ],
       ),
     );
   }
@@ -181,21 +201,23 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        // Icon
+        // 48×48 rounded-square icon box — matches Step 1 _MicIconBox
         Container(
-          width: 32,
-          height: 32,
+          width: 48,
+          height: 48,
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.18),
-            shape: BoxShape.circle,
+            color: Colors.white.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(14),
           ),
-          child: Icon(
-            isActive ? Icons.mic : Icons.auto_awesome,
-            color: Colors.white,
-            size: 16,
+          child: Center(
+            child: Icon(
+              isActive ? Icons.mic : Icons.auto_awesome,
+              color: Colors.white,
+              size: 22,
+            ),
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 12),
         // Title + subtitle
         Expanded(
           child: Column(
@@ -207,14 +229,15 @@ class _Header extends StatelessWidget {
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
-                  fontSize: 13,
+                  fontSize: 14,
                 ),
               ),
+              const SizedBox(height: 2),
               Text(
                 _statusText(state),
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.75),
-                  fontSize: 10,
+                  color: Colors.white.withValues(alpha: 0.65),
+                  fontSize: 11,
                 ),
               ),
             ],
@@ -270,17 +293,14 @@ class _ToggleButton extends StatelessWidget {
               ? ctrl.stop
               : ctrl.start,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: busy
               ? Colors.white.withValues(alpha: 0.15)
               : isListening
-                  ? Colors.red.withValues(alpha: 0.85)
-                  : Colors.white.withValues(alpha: 0.25),
+                  ? Colors.white.withValues(alpha: 0.25)
+                  : Colors.white.withValues(alpha: 0.2),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.4),
-          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -354,7 +374,7 @@ class _LivePanel extends StatelessWidget {
                         : ctrl.fullTranscript,
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.9),
-                      fontSize: 11,
+                      fontSize: 12,
                       fontStyle: ctrl.segments.isEmpty
                           ? FontStyle.italic
                           : null,
@@ -423,7 +443,7 @@ class _ResultSummary extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
+        color: Colors.white.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -432,15 +452,15 @@ class _ResultSummary extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.check_circle_outline,
-                  color: Colors.greenAccent, size: 14),
+              const Icon(Icons.auto_awesome,
+                  color: Colors.white, size: 14),
               const SizedBox(width: 6),
               Text(
                 Step2AsrStrings.filledCount(applied.length),
                 style: const TextStyle(
                   color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 11,
                 ),
               ),
             ],
@@ -494,10 +514,10 @@ class _FieldChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final confidenceColor = field.confidenceLevel == AIConfidenceLevel.high
-        ? Colors.greenAccent
+        ? AppColors.statusSuccess
         : field.confidenceLevel == AIConfidenceLevel.medium
-            ? Colors.amberAccent
-            : Colors.redAccent;
+            ? AppColors.slaOverdueText
+            : AppColors.statusCritical;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -597,11 +617,11 @@ class _PulsingDotState extends State<_PulsingDot>
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _opacity,
-      builder: (_, _x) => Container(
+      builder: (_, snap) => Container(
         width: 8,
         height: 8,
         decoration: BoxDecoration(
-          color: Colors.redAccent.withValues(alpha: _opacity.value),
+          color: AppColors.statusCritical.withValues(alpha: _opacity.value),
           shape: BoxShape.circle,
         ),
       ),
