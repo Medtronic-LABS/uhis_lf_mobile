@@ -3413,6 +3413,8 @@ abstract final class EnrollmentStrings {
 
   static const String villageLabel = 'Village';
   static const String villageHint = 'Select village';
+  static const String subVillageLabel = 'Sub-Village';
+  static const String subVillageHint = 'Select sub-village';
 
   static const String householdTypeLabel = 'Household Type';
   static const List<String> householdTypes = [

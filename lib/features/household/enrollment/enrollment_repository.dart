@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/api/api_repository.dart';
@@ -31,8 +34,11 @@ class EnrollmentRepository extends ApiRepository {
     required HouseholdHeadInfo head,
     required List<HouseholdMember> members,
     required int userId,
+    required String userFhirId,
     required String organizationId,
     required String deviceId,
+    double latitude = 0.0,
+    double longitude = 0.0,
     String appVersionName = AppConfig.appVersionName,
     int appVersionCode = AppConfig.appVersionCode,
   }) async {
@@ -43,7 +49,7 @@ class EnrollmentRepository extends ApiRepository {
       'modifiedDate': DateTime.now().toUtc().toIso8601String(),
       'organizationId': organizationId,
       'spiceUserId': userId,
-      'userId': userId.toString(),
+      'userId': userFhirId,
       'spiceRole': _skRole,
     });
 
@@ -59,10 +65,11 @@ class EnrollmentRepository extends ApiRepository {
         villageId: villageId,
         subVillageId: subVillageId,
         villageName: household.villageName ?? '',
-        subVillageName: household.subVillageName ?? '',
         provenance: provenance,
         nowMs: nowMs,
         userId: userId,
+        latitude: latitude,
+        longitude: longitude,
       ),
       for (final m in members)
         _memberPayload(
@@ -72,21 +79,22 @@ class EnrollmentRepository extends ApiRepository {
           villageId: villageId,
           subVillageId: subVillageId,
           villageName: household.villageName ?? '',
-          subVillageName: household.subVillageName ?? '',
           provenance: provenance,
           nowMs: nowMs,
           userId: userId,
+          latitude: latitude,
+          longitude: longitude,
         ),
     ];
 
     final hhPayload = {
       'referenceId': hhReferenceId,
       'name': head.name,
-      'householdNo': household.householdNumber,
+      'householdNo': nowMs,
       'householdType': household.householdType,
-      'villageId': villageId.toString(),
-      'subVillageId': subVillageId.toString(),
-      'village': household.subVillageName ?? household.villageName ?? '',
+      'villageId': villageId,
+      'subVillageId': subVillageId,
+      'village': household.villageName ?? '',
       'shasthyaShebikaId': userId,
       'noOfPeople': household.numberOfMembers,
       'householdHeadOccupation': household.occupation,
@@ -94,8 +102,8 @@ class EnrollmentRepository extends ApiRepository {
         'otherOccupation': household.occupation,
       'monthlyIncome': _incomeToInt(household.monthlyIncome),
       'disabilityPersonsCount': household.disabilityQuestion ? 1 : 0,
-      'latitude': 0.0,
-      'longitude': 0.0,
+      'latitude': latitude,
+      'longitude': longitude,
       'provenance': provenance.toJson(),
       'householdMembers': allMembers,
       'createdAt': nowMs,
@@ -118,6 +126,10 @@ class EnrollmentRepository extends ApiRepository {
       'rxBuddies': <dynamic>[],
     };
 
+    if (kDebugMode) {
+      debugPrint('[EnrollmentRepository] offline-sync/create payload:\n'
+          '${const JsonEncoder.withIndent('  ').convert(body)}');
+    }
     await postOk(Endpoints.offlineSyncCreate, data: body, action: 'Enrollment');
   }
 
@@ -128,10 +140,11 @@ class EnrollmentRepository extends ApiRepository {
     required int villageId,
     required int subVillageId,
     required String villageName,
-    required String subVillageName,
     required ProvanceDto provenance,
     required int nowMs,
     required int userId,
+    double latitude = 0.0,
+    double longitude = 0.0,
   }) {
     final normDob = _normaliseDob(member.dateOfBirth);
     return {
@@ -149,8 +162,7 @@ class EnrollmentRepository extends ApiRepository {
       'disability': _disabilityValue(member.disabilityStatus),
       'villageId': villageId,
       'subVillageId': subVillageId,
-      'village': subVillageName.isNotEmpty ? subVillageName : villageName,
-      'subVillage': villageName,
+      'village': villageName,
       'phoneNumber': member.mobileNumber ?? '',
       'phoneNumberCategory': '',
       'shasthyaShebikaId': userId,
@@ -167,8 +179,8 @@ class EnrollmentRepository extends ApiRepository {
       'householdHeadRelationship': isHouseholdHead ? 'Self' : '',
       'motherMemberId': '',
       'children': <dynamic>[],
-      'latitude': 0.0,
-      'longitude': 0.0,
+      'latitude': latitude,
+      'longitude': longitude,
       'provenance': provenance.toJson(),
       'assessments': <dynamic>[],
       'rxBuddies': <dynamic>[],

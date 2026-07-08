@@ -45,7 +45,8 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
   late TextEditingController _disabilityCountCtrl;
 
   String? _selectedHealthWorker;
-  String? _selectedVillage;
+  VillageRef? _selectedVillage;
+  SubVillageRef? _selectedSubVillage;
   String? _householdType;
   String? _selectedOccupation;
   String _hasDisability = 'No';
@@ -122,6 +123,11 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
             subVillages.isNotEmpty ? subVillages.first : null;
 
         if (!mounted) return;
+        // Auto-fill health worker with the logged-in SK's own name from API.
+        setState(() {
+          _selectedHealthWorker =
+              hierarchy.skProfile?.name ?? 'Health Worker';
+        });
         controller.initializeHousehold(
           healthWorkerId: userId?.toString() ?? '',
           villageId: firstVillage?.id.toString() ?? '',
@@ -219,6 +225,10 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       disabilityQuestion: _hasDisability == 'Yes',
       disabilityDetails:
           _hasDisability == 'Yes' ? _disabilityCountCtrl.text : null,
+      villageId: _selectedVillage?.id,
+      villageName: _selectedVillage?.name,
+      subVillageId: _selectedSubVillage?.id ?? '',
+      subVillageName: _selectedSubVillage?.name ?? '',
     );
 
     controller.updateHead(
@@ -294,26 +304,75 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    EnrollmentDropdown(
+                    EnrollmentInputField(
                       label: EnrollmentStrings.healthWorkerLabel,
-                      options: EnrollmentStrings.healthWorkerOptions,
-                      value: _selectedHealthWorker,
-                      onChanged: (v) =>
-                          setState(() => _selectedHealthWorker = v),
-                      hint: 'Select health worker',
+                      hint: EnrollmentStrings.healthWorkerHint,
+                      controller: TextEditingController(
+                        text: _selectedHealthWorker ?? '',
+                      ),
+                      readOnly: true,
                       isRequired: true,
+                      customBorderColor: AppColors.statusSuccessBorder,
+                      customFillColor: AppColors.tbSurface,
+                      customTextColor: AppColors.statusSuccessAction,
                     ),
                     const SizedBox(height: 14),
 
-                    EnrollmentDropdown(
-                      label: EnrollmentStrings.villageLabel,
-                      options: EnrollmentStrings.villageOptions,
-                      value: _selectedVillage,
-                      onChanged: (v) => setState(() => _selectedVillage = v),
-                      hint: EnrollmentStrings.villageHint,
-                      isRequired: true,
-                    ),
+                    Builder(builder: (context) {
+                      final hierarchy =
+                          context.watch<UserHierarchyService>();
+                      final villages = hierarchy.villages ?? [];
+                      return EnrollmentDropdown(
+                        label: EnrollmentStrings.villageLabel,
+                        options: villages.map((v) => v.name).toList(),
+                        value: _selectedVillage?.name,
+                        onChanged: (name) {
+                          final village = villages.firstWhere(
+                            (v) => v.name == name,
+                            orElse: () => villages.first,
+                          );
+                          setState(() {
+                            _selectedVillage = village;
+                            _selectedSubVillage = null;
+                          });
+                        },
+                        hint: EnrollmentStrings.villageHint,
+                        isRequired: true,
+                      );
+                    }),
                     const SizedBox(height: 14),
+                    Builder(builder: (context) {
+                      final hierarchy =
+                          context.watch<UserHierarchyService>();
+                      final allSubVillages = hierarchy.subVillages ?? [];
+                      final subVillages = _selectedVillage == null
+                          ? allSubVillages
+                          : allSubVillages
+                              .where((sv) =>
+                                  sv.villageId == _selectedVillage!.id)
+                              .toList();
+                      if (subVillages.isEmpty) return const SizedBox.shrink();
+                      return Column(
+                        children: [
+                          EnrollmentDropdown(
+                            label: EnrollmentStrings.subVillageLabel,
+                            options:
+                                subVillages.map((sv) => sv.name).toList(),
+                            value: _selectedSubVillage?.name,
+                            onChanged: (name) {
+                              setState(() {
+                                _selectedSubVillage = subVillages.firstWhere(
+                                  (sv) => sv.name == name,
+                                  orElse: () => subVillages.first,
+                                );
+                              });
+                            },
+                            hint: EnrollmentStrings.subVillageHint,
+                          ),
+                          const SizedBox(height: 14),
+                        ],
+                      );
+                    }),
 
                     EnrollmentSegmentedButtons(
                       label: EnrollmentStrings.householdTypeLabel,
