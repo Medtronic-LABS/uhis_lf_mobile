@@ -1112,45 +1112,66 @@ class _AssessmentDetailSheet extends StatelessWidget {
   Widget _buildTypeSpecificInfo(BuildContext context, Color typeColor) {
     final raw = assessment.rawJson;
     // assessmentDetails is the nested clinical object from member-assessment-history
-    final details = raw['assessmentDetails'] is Map<String, dynamic>
-        ? raw['assessmentDetails'] as Map<String, dynamic>
+    final details = raw['assessmentDetails'] is Map
+        ? Map<String, dynamic>.from(raw['assessmentDetails'] as Map)
+        : <String, dynamic>{};
+    // observations is the vitals snapshot keyed by the server (bp, weight, height, bg, bgType,
+    // hemoglobin, ancVisitNumber, pncVisitNumber, fundalHeight, gravida, parity …)
+    final obs = raw['observations'] is Map
+        ? Map<String, dynamic>.from(raw['observations'] as Map)
         : <String, dynamic>{};
 
-    // Helper: extract a numeric value from details or rawJson
+    // Lookup priority: assessmentDetails → observations → rawJson top-level
     double? num_(String key) {
-      Object? v = details[key] ?? raw[key];
+      Object? v = details[key] ?? obs[key] ?? raw[key];
       if (v is num) return v.toDouble();
       if (v is String) return double.tryParse(v);
       return null;
     }
 
     String? str_(String key) {
-      final v = details[key] ?? raw[key];
+      final v = details[key] ?? obs[key] ?? raw[key];
       if (v == null) return null;
       final s = v.toString().trim();
       return s.isEmpty || s == 'null' ? null : s;
     }
 
     bool? bool_(String key) {
-      final v = details[key] ?? raw[key];
+      final v = details[key] ?? obs[key] ?? raw[key];
       if (v is bool) return v;
       if (v == true || v == 1 || v == 'true' || v == 'YES') return true;
       if (v == false || v == 0 || v == 'false' || v == 'NO') return false;
       return null;
     }
 
+    // Parse "systolic/diastolic" string (server observations['bp'] format e.g. "120/80")
+    (double, double)? parseBpString(String? s) {
+      if (s == null) return null;
+      final parts = s.split('/');
+      if (parts.length != 2) return null;
+      final sys = double.tryParse(parts[0].trim());
+      final dia = double.tryParse(parts[1].trim());
+      if (sys == null || dia == null) return null;
+      return (sys, dia);
+    }
+
     final fields = <_ClinicalField>[];
 
     switch (assessment.type) {
       case 'NCD':
-        final sys = num_('avgSystolic') ?? num_('systolicBp') ?? num_('systolic');
-        final dia = num_('avgDiastolic') ?? num_('diastolicBp') ?? num_('diastolic');
+        // BP: try numeric fields first, then obs['bp'] string
+        var sys = num_('avgSystolic') ?? num_('systolicBp') ?? num_('systolic');
+        var dia = num_('avgDiastolic') ?? num_('diastolicBp') ?? num_('diastolic');
+        if (sys == null || dia == null) {
+          final parsed = parseBpString(str_('bp'));
+          if (parsed != null) { sys = parsed.$1; dia = parsed.$2; }
+        }
         if (sys != null && dia != null) {
           fields.add(_ClinicalField('Blood Pressure', '${sys.toInt()}/${dia.toInt()} mmHg',
               icon: Icons.favorite, urgent: sys >= 140 || dia >= 90));
         }
-        final glucose = num_('glucoseValue') ?? num_('bloodGlucose');
-        final glucoseType = str_('glucoseType');
+        final glucose = num_('glucoseValue') ?? num_('bloodGlucose') ?? num_('bg');
+        final glucoseType = str_('glucoseType') ?? str_('bgType');
         if (glucose != null) {
           final label = glucoseType != null ? 'Glucose (${glucoseType.toLowerCase()})' : 'Glucose';
           fields.add(_ClinicalField(label, '${glucose.toStringAsFixed(1)} mg/dL',
@@ -1160,26 +1181,54 @@ class _AssessmentDetailSheet extends StatelessWidget {
         if (height != null) fields.add(_ClinicalField('Height', '${height.toInt()} cm', icon: Icons.straighten));
         if (weight != null) fields.add(_ClinicalField('Weight', '${weight.toStringAsFixed(1)} kg', icon: Icons.monitor_weight));
         if (bmi != null) fields.add(_ClinicalField('BMI', bmi.toStringAsFixed(1), icon: Icons.calculate));
+        final hb = num_('hemoglobin');
+        if (hb != null) {
+          fields.add(_ClinicalField('Haemoglobin', '${hb.toStringAsFixed(1)} g/dL',
+              icon: Icons.opacity, urgent: hb < 10.0));
+        }
         final smoker = bool_('isRegularSmoker') ?? bool_('isSmoking');
         if (smoker != null) fields.add(_ClinicalField('Smoking', smoker ? 'Yes' : 'No', icon: Icons.smoking_rooms));
         final alcohol = bool_('isDrinkingAlcohol') ?? bool_('alcoholConsumption');
         if (alcohol != null) fields.add(_ClinicalField('Alcohol', alcohol ? 'Yes' : 'No', icon: Icons.local_bar));
 
       case 'ANC':
+        final ancVisit = str_('ancVisitNumber');
+        if (ancVisit != null) fields.add(_ClinicalField('ANC Visit', ancVisit, icon: Icons.calendar_today));
         final ga = num_('gestationalAge') ?? num_('gestationAge');
         if (ga != null) fields.add(_ClinicalField('Gestational Age', '${ga.toInt()} weeks', icon: Icons.calendar_month));
+        final gravida = str_('gravida');
+        final parity = str_('parity');
+        if (gravida != null || parity != null) {
+          fields.add(_ClinicalField('G/P', 'G${gravida ?? '?'} P${parity ?? '?'}', icon: Icons.child_friendly));
+        }
         final fetuses = num_('noOfFetus') ?? num_('numberOfFetus');
         if (fetuses != null && fetuses > 1) fields.add(_ClinicalField('Fetuses', fetuses.toInt().toString(), icon: Icons.group));
         final fh = num_('fundalHeight');
         if (fh != null) fields.add(_ClinicalField('Fundal Height', '${fh.toStringAsFixed(1)} cm', icon: Icons.height));
-        final sys = num_('avgSystolic') ?? num_('systolicBp');
-        final dia = num_('avgDiastolic') ?? num_('diastolicBp');
+        // BP: try numeric fields first, then obs['bp'] string
+        var sys = num_('avgSystolic') ?? num_('systolicBp');
+        var dia = num_('avgDiastolic') ?? num_('diastolicBp');
+        if (sys == null || dia == null) {
+          final parsed = parseBpString(str_('bp'));
+          if (parsed != null) { sys = parsed.$1; dia = parsed.$2; }
+        }
         if (sys != null && dia != null) {
           fields.add(_ClinicalField('Blood Pressure', '${sys.toInt()}/${dia.toInt()} mmHg',
               icon: Icons.favorite, urgent: sys >= 140 || dia >= 90));
         }
         final weight = num_('weight');
         if (weight != null) fields.add(_ClinicalField('Weight', '${weight.toStringAsFixed(1)} kg', icon: Icons.monitor_weight));
+        final hb = num_('hemoglobin');
+        if (hb != null) {
+          fields.add(_ClinicalField('Haemoglobin', '${hb.toStringAsFixed(1)} g/dL',
+              icon: Icons.opacity, urgent: hb < 10.0));
+        }
+        final glucose = num_('bg') ?? num_('glucoseValue') ?? num_('bloodGlucose');
+        final glucoseType = str_('bgType') ?? str_('glucoseType');
+        if (glucose != null) {
+          final label = glucoseType != null ? 'Glucose (${glucoseType.toLowerCase()})' : 'Glucose';
+          fields.add(_ClinicalField(label, '${glucose.toStringAsFixed(1)} mg/dL', icon: Icons.bloodtype));
+        }
         final fetalMovement = bool_('fetalMovement') ?? bool_('isFetalMovementNormal');
         if (fetalMovement != null) {
           fields.add(_ClinicalField('Fetal Movement', fetalMovement ? 'Normal' : 'Abnormal',
@@ -1187,14 +1236,26 @@ class _AssessmentDetailSheet extends StatelessWidget {
         }
 
       case 'PNC':
-        final sys = num_('avgSystolic') ?? num_('systolicBp');
-        final dia = num_('avgDiastolic') ?? num_('diastolicBp');
+        final pncVisit = str_('pncVisitNumber');
+        if (pncVisit != null) fields.add(_ClinicalField('PNC Visit', pncVisit, icon: Icons.calendar_today));
+        // BP: try numeric fields first, then obs['bp'] string
+        var sys = num_('avgSystolic') ?? num_('systolicBp');
+        var dia = num_('avgDiastolic') ?? num_('diastolicBp');
+        if (sys == null || dia == null) {
+          final parsed = parseBpString(str_('bp'));
+          if (parsed != null) { sys = parsed.$1; dia = parsed.$2; }
+        }
         if (sys != null && dia != null) {
           fields.add(_ClinicalField('Blood Pressure', '${sys.toInt()}/${dia.toInt()} mmHg',
               icon: Icons.favorite, urgent: sys >= 140 || dia >= 90));
         }
         final weight = num_('weight');
         if (weight != null) fields.add(_ClinicalField('Weight', '${weight.toStringAsFixed(1)} kg', icon: Icons.monitor_weight));
+        final hb = num_('hemoglobin');
+        if (hb != null) {
+          fields.add(_ClinicalField('Haemoglobin', '${hb.toStringAsFixed(1)} g/dL',
+              icon: Icons.opacity, urgent: hb < 10.0));
+        }
         final breastfeeding = bool_('isBreastfeeding') ?? bool_('breastfeeding');
         if (breastfeeding != null) fields.add(_ClinicalField('Breastfeeding', breastfeeding ? 'Yes' : 'No', icon: Icons.child_friendly));
 
