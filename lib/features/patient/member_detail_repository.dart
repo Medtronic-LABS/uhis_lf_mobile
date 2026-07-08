@@ -282,6 +282,11 @@ class MemberDetailRepository extends ApiRepository {
         if (entity.patientId != null && entity.patientId!.isNotEmpty) {
           acceptableIds.add(entity.patientId!);
         }
+        // referenceId is the server's internal integer PK — assessment-history
+        // rows use this as householdMemberId, so it must be in the match set.
+        if (entity.referenceId != null && entity.referenceId!.isNotEmpty) {
+          acceptableIds.add(entity.referenceId!);
+        }
       }
     }
 

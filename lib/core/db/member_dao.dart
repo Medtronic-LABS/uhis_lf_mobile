@@ -333,6 +333,7 @@ class MemberDao {
       orderBy: 'name ASC',
       limit: limit,
     );
+    debugPrint('[MemberDao] searchByName q="$query" hits=${rows.length}');
     return rows.map(HouseholdMemberEntity.fromDb).toList();
   }
 
