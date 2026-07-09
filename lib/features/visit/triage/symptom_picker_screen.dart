@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_strings.dart';
-import '../../../core/models/programme.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/db/encounter_dao.dart';
 import '../../../core/db/patient_dao.dart';
@@ -633,24 +632,6 @@ class _AncVisitSummaryChip extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
       child: Row(
         children: [
-          // ANC badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: AppColors.ancText,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              ComposerStrings.ancSummaryEyebrow,
-              style: const TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-                letterSpacing: 0.6,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
           // Patient name
           Expanded(
             child: Text(
@@ -665,7 +646,7 @@ class _AncVisitSummaryChip extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          // Pill chips — GA · parity · visit number
+          // Pill chips — GA · parity · key trend
           Wrap(
             spacing: 5,
             children: [
@@ -678,12 +659,6 @@ class _AncVisitSummaryChip extends StatelessWidget {
               if (g != null && p != null)
                 _SummaryPill(
                   label: ComposerStrings.ancSummaryParity(g, p),
-                  color: AppColors.ancText,
-                  surface: AppColors.ancBorder,
-                ),
-              if (visitCount != null)
-                _SummaryPill(
-                  label: '${ComposerStrings.ancSummaryVisitPrefix}$visitCount',
                   color: AppColors.ancText,
                   surface: AppColors.ancBorder,
                 ),
