@@ -25,30 +25,19 @@ class LockProgramHeader extends StatelessWidget {
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.h5xl,
+            0,
+            AppSpacing.h5xl,
+            AppSpacing.h4xl,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontFamily: 'Nunito',
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                ),
-              ),
+              Text(title, style: AppTextStyles.headerTitle),
               const SizedBox(height: 2),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  fontFamily: 'NunitoSans',
-                  fontSize: 12,
-                  fontWeight: FontWeight.w400,
-                  color: Colors.white.withValues(alpha: 0.60),
-                ),
-              ),
-              const SizedBox(height: 14),
+              Text(subtitle, style: AppTextStyles.headerSub),
+              const SizedBox(height: AppSpacing.xxl),
               Center(child: LockPageDots(count: pageCount, current: currentPage)),
             ],
           ),
@@ -58,11 +47,16 @@ class LockProgramHeader extends StatelessWidget {
   }
 }
 
+/// Stepper dots — `.flow-dot`/`.flow-dot.active`: 6x6 circle at 0.30 alpha,
+/// active dot grows into a 20x6 pill at full opacity.
 class LockPageDots extends StatelessWidget {
   const LockPageDots({super.key, required this.count, required this.current});
 
   final int count;
   final int current;
+
+  static const double _inactiveSize = 6;
+  static const double _activeWidth = 20;
 
   @override
   Widget build(BuildContext context) {
@@ -71,17 +65,15 @@ class LockPageDots extends StatelessWidget {
       children: List.generate(count, (i) {
         final active = i == current;
         return Padding(
-          padding: EdgeInsets.only(right: i < count - 1 ? 6 : 0),
-          child: SizedBox(
-            width: 8,
-            height: 8,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(4),
-                color: active
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: 0.30),
-              ),
+          padding: EdgeInsets.only(right: i < count - 1 ? AppSpacing.sm : 0),
+          child: AnimatedContainer(
+            duration: AppAnimations.control,
+            curve: AppAnimations.standard,
+            width: active ? _activeWidth : _inactiveSize,
+            height: _inactiveSize,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(active ? 3 : _inactiveSize / 2),
+              color: active ? Colors.white : Colors.white.withValues(alpha: 0.30),
             ),
           ),
         );

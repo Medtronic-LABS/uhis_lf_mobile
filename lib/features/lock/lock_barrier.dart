@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -24,6 +26,7 @@ class _LockBarrierState extends State<LockBarrier> {
   bool _failed = false;
   UserProfileSummary? _summary;
   bool _isOnline = true;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
 
   @override
   void initState() {
@@ -32,6 +35,17 @@ class _LockBarrierState extends State<LockBarrier> {
       _loadSummary();
       _checkConnectivity();
     });
+    // Re-check on every connectivity change so the status row reflects the
+    // live network state instead of only the value at screen load.
+    _connectivitySub = Connectivity().onConnectivityChanged.listen(
+      (_) => _checkConnectivity(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _connectivitySub?.cancel();
+    super.dispose();
   }
 
   Future<void> _checkConnectivity() async {

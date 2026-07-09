@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
+import '../../core/theme/app_theme.dart';
 import '../household/enrollment/enrollment_entry_sheet.dart';
 import '../household/household_detail_screen.dart';
 import 'global_search_repository.dart';
@@ -39,7 +40,7 @@ class _GlobalSearchBarState extends State<GlobalSearchBar> {
       barSide: WidgetStateProperty.all(BorderSide.none),
       barShape: WidgetStateProperty.all(
         RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(AppRadius.patRow),
         ),
       ),
       barPadding: WidgetStateProperty.all(
@@ -47,7 +48,7 @@ class _GlobalSearchBarState extends State<GlobalSearchBar> {
       ),
       barHintStyle: WidgetStateProperty.all(
         const TextStyle(
-          color: Color(0xFF9CA3AF),
+          color: AppColors.textDisabled,
           fontSize: 14,
           fontWeight: FontWeight.w400,
         ),
@@ -57,7 +58,7 @@ class _GlobalSearchBarState extends State<GlobalSearchBar> {
       ),
       barLeading: const Icon(
         Icons.search_rounded,
-        color: Color(0xFF9CA3AF),
+        color: AppColors.textDisabled,
         size: 20,
       ),
       barTrailing: [
@@ -68,12 +69,14 @@ class _GlobalSearchBarState extends State<GlobalSearchBar> {
             Container(
               width: 1,
               height: 22,
-              color: const Color(0xFFE5E7EB),
+              color: AppColors.border,
             ),
             IconButton(
               icon: const Icon(
                 Icons.qr_code_2_rounded,
-                color: Color(0xFFE8356D),
+                // AppColors.pink, not .pinkWorklist — this bar predates the
+                // v13 dashboard pink and hasn't been migrated to it.
+                color: AppColors.pink,
                 size: 22,
               ),
               tooltip: SearchStrings.scanNidTooltip,

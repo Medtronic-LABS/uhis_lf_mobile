@@ -41,7 +41,9 @@ class _NotificationDrawerState extends State<_NotificationDrawer> {
       height: mq.size.height * 0.72,
       decoration: BoxDecoration(
         color: tokens.cardSurface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(AppRadius.pill),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -184,7 +186,7 @@ class _NotificationTile extends StatelessWidget {
               height: 40,
               decoration: BoxDecoration(
                 color: iconBg,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(AppRadius.field),
               ),
               child: Icon(icon, color: iconColor, size: 20),
             ),
