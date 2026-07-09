@@ -223,28 +223,29 @@ class _LoginScreenState extends State<LoginScreen> {
                             )
                           : const Text(LoginStrings.signIn),
                     ),
-                    const SizedBox(height: 48),
-                    Column(
-                      children: [
-                        Text(
-                          AppStrings.poweredBy,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                              ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 8),
-                        Image.asset(
-                          'assets/images/medtronic-labs-logo.png',
-                          height: 32,
-                          fit: BoxFit.contain,
-                          semanticLabel: 'Medtronic Labs logo',
-                        ),
-                      ],
-                    ),
+                    // Medtronic Labs branding + logo temporarily hidden.
+                    // const SizedBox(height: 48),
+                    // Column(
+                    //   children: [
+                    //     Text(
+                    //       AppStrings.poweredBy,
+                    //       style: Theme.of(context).textTheme.bodySmall
+                    //           ?.copyWith(
+                    //             color: Theme.of(
+                    //               context,
+                    //             ).colorScheme.onSurfaceVariant,
+                    //           ),
+                    //       textAlign: TextAlign.center,
+                    //     ),
+                    //     const SizedBox(height: 8),
+                    //     Image.asset(
+                    //       'assets/images/medtronic-labs-logo.png',
+                    //       height: 32,
+                    //       fit: BoxFit.contain,
+                    //       semanticLabel: 'Medtronic Labs logo',
+                    //     ),
+                    //   ],
+                    // ),
                   ],
                 ),
               ),

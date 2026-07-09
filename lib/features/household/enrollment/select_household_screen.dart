@@ -268,7 +268,8 @@ class _HouseholdCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Center(
-                child: Text('🏠', style: TextStyle(fontSize: 22)),
+                child: Icon(Icons.home_outlined,
+                    size: 22, color: AppColors.navy),
               ),
             ),
             const SizedBox(width: 12),

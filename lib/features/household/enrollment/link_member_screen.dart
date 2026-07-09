@@ -337,7 +337,8 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
                   ),
                   child: Row(
                     children: [
-                      const Text('🏠', style: TextStyle(fontSize: 18)),
+                      const Icon(Icons.home_outlined,
+                          size: 18, color: AppColors.navy),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
