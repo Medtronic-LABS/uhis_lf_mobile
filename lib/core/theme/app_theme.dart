@@ -467,6 +467,9 @@ abstract final class AppAnimations {
   static const Duration hero        = Duration(milliseconds: 600);
   static const Duration sweep       = Duration(milliseconds: 900);
   static const Duration blink       = Duration(milliseconds: 1000);
+  // notifBadgePulse keyframe half-cycle — repeat(reverse:true) doubles this
+  // to the full 2s pulse (0%→50%→100%), peak scale at the 1s midpoint.
+  static const Duration badgePulse  = Duration(milliseconds: 1000);
   static const Duration pulseSlow   = Duration(milliseconds: 1200);
   static const Duration scan        = Duration(milliseconds: 1500);
   static const Duration shimmer     = Duration(milliseconds: 3000);
