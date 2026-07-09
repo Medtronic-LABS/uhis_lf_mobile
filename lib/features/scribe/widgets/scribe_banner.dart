@@ -149,16 +149,6 @@ class _ScribeBannerState extends State<ScribeBanner> {
                                 ? _LiveBannerText(state: _liveCtrl.state)
                                 : _BannerText(state: state, session: session),
                           ),
-                          // Idle: single ASR start button (ASR is the only mode).
-                          if (idleChoice) ...[
-                            const SizedBox(width: 8),
-                            _ModeButton(
-                              key: const Key('scribe_banner_mode_start'),
-                              label: ScribeBannerStrings.modeAsr,
-                              icon: Icons.podcasts,
-                              onTap: _liveCtrl.start,
-                            ),
-                          ],
                           // Live mode active: stop control.
                           if (liveActive) ...[
                             const SizedBox(width: 8),
@@ -590,57 +580,6 @@ class _WaveBarsState extends State<_WaveBars> with TickerProviderStateMixin {
           ),
         );
       }),
-    );
-  }
-}
-
-/// Explicit mode-chooser button, shown only at idle (see [ScribeBanner]) —
-/// replaces the old implicit "tap the whole card to start batch recording"
-/// behavior so it's always clear which engine a tap will start.
-class _ModeButton extends StatelessWidget {
-  const _ModeButton({
-    super.key,
-    required this.label,
-    required this.icon,
-    required this.onTap,
-  });
-
-  final String label;
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      label: 'Start $label mode',
-      button: true,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.18),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: Colors.white, size: 14),
-              const SizedBox(width: 4),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.3,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

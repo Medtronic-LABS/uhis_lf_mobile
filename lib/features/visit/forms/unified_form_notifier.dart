@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/db/local_assessment_dao.dart';
+import '../../../core/db/patient_dao.dart';
+import '../../../core/db/pregnancy_snapshot_dao.dart';
 import '../assessment_repository.dart';
 import 'canonical_visit_data.dart';
 import 'unified_payload_mapper.dart';
@@ -20,6 +22,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
     required List<String> activeFormTypes,
     required AssessmentDraftDao draftDao,
     required AssessmentRepository assessmentRepo,
+    required PatientDao patientDao,
+    required PregnancySnapshotDao pregnancySnapshotDao,
     String? memberId,
     String? householdId,
     String? villageId,
@@ -30,6 +34,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
         _activeFormTypes = activeFormTypes,
         _draftDao = draftDao,
         _assessmentRepo = assessmentRepo,
+        _patientDao = patientDao,
+        _pregnancySnapshotDao = pregnancySnapshotDao,
         _memberId = memberId,
         _householdId = householdId,
         _villageId = villageId,
@@ -41,11 +47,26 @@ class UnifiedFormNotifier extends ChangeNotifier {
   final List<String> _activeFormTypes;
   final AssessmentDraftDao _draftDao;
   final AssessmentRepository _assessmentRepo;
+  final PatientDao _patientDao;
+  final PregnancySnapshotDao _pregnancySnapshotDao;
   final String? _memberId;
   final String? _householdId;
   final String? _villageId;
   final int _householdMemberLocalId;
   final String? _pregnancyEpisodeId;
+
+  DateTime? _lmpDate;
+  DateTime? _eddDate;
+  int? _gestationalWeeks;
+
+  /// LMP date loaded from patient raw JSON at init.
+  DateTime? get lmpDate => _lmpDate;
+
+  /// Estimated delivery date (LMP + 280 days).
+  DateTime? get eddDate => _eddDate;
+
+  /// Gestational weeks loaded from patient raw JSON at init.
+  int? get gestationalWeeks => _gestationalWeeks;
 
   CanonicalVisitData _data = const CanonicalVisitData();
   bool _submitting = false;
@@ -56,6 +77,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
   bool get submitting => _submitting;
   String? get submitError => _submitError;
   Set<String> get validationErrors => _validationErrors;
+
+  /// FHIR encounter id for this visit.
+  String get encounterId => _encounterId;
 
   /// FHIR patient id for this visit (empty when unknown). Exposed so the
   /// vitals-trend card can look up prior-visit history.
@@ -92,6 +116,76 @@ class UnifiedFormNotifier extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('[UnifiedForm] draft parse error: $e');
+    }
+  }
+
+  /// Load LMP and EDD for this ANC visit.
+  ///
+  /// Priority order:
+  /// 1. `lmpDate` / `gestationalWeeks` in patient rawJson (from bulk sync).
+  /// 2. LMP derived from server-synced past ANC assessments via
+  ///    [AssessmentRepository.lmpDateFromHistory].
+  Future<void> loadPregnancyData() async {
+    try {
+      // ── 1. Try patient rawJson ─────────────────────────────────────────────
+      final patient = await _patientDao.byId(_patientId);
+      if (patient == null) {
+        debugPrint('[UnifiedForm] pregnancy data: patient $_patientId not found in DB');
+      }
+      debugPrint('[UnifiedForm] pregnancy data: rawJson length=${patient?.rawJson.length ?? 0}');
+
+      DateTime? lmp;
+      int? weeks;
+
+      if (patient != null) {
+        try {
+          final json = jsonDecode(patient.rawJson) as Map<String, dynamic>;
+          debugPrint('[UnifiedForm] pregnancy data: lmpDate=${json['lmpDate']} '
+              'gestationalWeeks=${json['gestationalWeeks']}');
+          if (json['lmpDate'] != null) {
+            lmp = DateTime.tryParse(json['lmpDate'] as String);
+            if (lmp != null) weeks = DateTime.now().difference(lmp).inDays ~/ 7;
+          } else if (json['gestationalWeeks'] != null) {
+            weeks = (json['gestationalWeeks'] as num).toInt();
+            lmp = DateTime.now().subtract(Duration(days: weeks * 7));
+          }
+        } catch (_) {}
+      }
+
+      // ── 2. Fallback: scan server-synced ANC assessment history ────────────
+      if (lmp == null) {
+        debugPrint('[UnifiedForm] pregnancy data: rawJson had no LMP — '
+            'trying assessment history fallback');
+        lmp = await _assessmentRepo.lmpDateFromHistory(_patientId);
+        if (lmp != null) weeks = DateTime.now().difference(lmp).inDays ~/ 7;
+      }
+
+      // ── 3. Fallback: LMP / EDD from pregnancy snapshot stored at sync time ──
+      DateTime? edd;
+      if (lmp == null) {
+        debugPrint('[UnifiedForm] pregnancy data: history had no LMP — '
+            'trying pregnancy snapshot');
+        final snap = await _pregnancySnapshotDao.byPatient(_patientId);
+        debugPrint('[UnifiedForm] pregnancy data: snapshot lmpDate=${snap?.lmpDate} eddDate=${snap?.eddDate}');
+        if (snap?.lmpDate != null) {
+          lmp = DateTime.fromMillisecondsSinceEpoch(snap!.lmpDate!);
+          weeks = DateTime.now().difference(lmp).inDays ~/ 7;
+          debugPrint('[UnifiedForm] pregnancy data: from snapshot LMP=$lmp weeks=$weeks');
+        } else if (snap?.eddDate != null) {
+          edd = DateTime.fromMillisecondsSinceEpoch(snap!.eddDate!);
+          lmp = edd.subtract(const Duration(days: 280));
+          weeks = DateTime.now().difference(lmp).inDays ~/ 7;
+          debugPrint('[UnifiedForm] pregnancy data: derived from snapshot EDD=$edd lmp=$lmp weeks=$weeks');
+        }
+      }
+      edd ??= lmp?.add(const Duration(days: 280));
+      _lmpDate = lmp;
+      _eddDate = edd;
+      _gestationalWeeks = weeks;
+      debugPrint('[UnifiedForm] pregnancy data: resolved lmp=$lmp weeks=$weeks edd=$edd');
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[UnifiedForm] pregnancy data load failed: $e');
     }
   }
 

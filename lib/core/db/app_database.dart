@@ -21,7 +21,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 20;
+  static const int schemaVersion = 22;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -1043,6 +1043,26 @@ class AppDatabase {
         // ignore: avoid_print
         print('[DB v20] villageId backfill failed (non-fatal): $e');
       }
+    }
+    if (from < 21) {
+      // v21 — Store EDD (epoch ms) on the pregnancy snapshot so Form 2 can
+      // derive gestational age without requiring the server to include LMP in
+      // individual assessment history rows.
+      try {
+        await db.execute(
+          'ALTER TABLE $tablePregnancySnapshot ADD COLUMN edd_date INTEGER',
+        );
+      } catch (_) {/* column already present — safe to ignore */}
+    }
+    if (from < 22) {
+      // v22 — Store LMP (epoch ms) directly from pregnancyInfos[].lmpDate.
+      // Preferred over deriving from EDD; avoids rounding errors and handles
+      // cases where server omits EDD but includes LMP.
+      try {
+        await db.execute(
+          'ALTER TABLE $tablePregnancySnapshot ADD COLUMN lmp_date INTEGER',
+        );
+      } catch (_) {/* column already present — safe to ignore */}
     }
   }
 

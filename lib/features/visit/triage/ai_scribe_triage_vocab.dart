@@ -33,9 +33,9 @@ abstract final class AiScribeTriageVocab {
   AiScribeTriageVocab._();
 
   /// Reproductive age window for the maternal gate, in months.
-  /// 12 years (menarche floor) → 55 years (post-menopausal ceiling).
-  static const int _maternalMinAgeMonths = 144;
-  static const int _maternalMaxAgeMonths = 660;
+  /// 14 years → 44 years (pilot programme scope: female patients who may be pregnant).
+  static const int maternalMinAgeMonths = 168;
+  static const int maternalMaxAgeMonths = 528;
 
   /// Adult threshold for the NCD gate, in months (18 years).
   static const int _ncdMinAgeMonths = 216;
@@ -138,8 +138,8 @@ abstract final class AiScribeTriageVocab {
         return true;
       case SymptomCategory.maternal:
         return ctx.sex == Sex.female &&
-            ctx.ageMonths >= _maternalMinAgeMonths &&
-            ctx.ageMonths <= _maternalMaxAgeMonths;
+            ctx.ageMonths >= maternalMinAgeMonths &&
+            ctx.ageMonths <= maternalMaxAgeMonths;
       case SymptomCategory.ncd:
         return ctx.ageMonths >= _ncdMinAgeMonths;
       case SymptomCategory.pediatric:

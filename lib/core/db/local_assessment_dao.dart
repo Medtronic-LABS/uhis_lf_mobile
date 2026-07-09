@@ -452,6 +452,18 @@ class LocalAssessmentDao {
     return rows.map(LocalAssessmentEntity.fromDb).toList();
   }
 
+  /// Get assessments by member ID string (server household-member ID).
+  /// Fallback for rows stored before FHIR patient ID was reliably set.
+  Future<List<LocalAssessmentEntity>> getByMemberId(String memberId) async {
+    final rows = await _db.db.query(
+      tableName,
+      where: 'member_id = ?',
+      whereArgs: [memberId],
+      orderBy: 'created_at DESC',
+    );
+    return rows.map(LocalAssessmentEntity.fromDb).toList();
+  }
+
   /// Get assessment by local ID.
   Future<LocalAssessmentEntity?> getById(String id) async {
     final rows = await _db.db.query(

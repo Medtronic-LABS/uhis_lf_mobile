@@ -191,15 +191,18 @@ abstract final class VitalsTrendAnalyzer {
     );
   }
 
-  /// Builds a metric trend, or `null` when fewer than two readings exist
-  /// (not enough to describe movement).
+  /// Builds a metric trend, or `null` when NO readings exist at all.
+  ///
+  /// A row is shown with a single value (e.g. today only, no prior history) so
+  /// the SK always sees the current reading — rising is only computed when ≥2
+  /// non-null values are available.
   static VitalMetricTrend? _numericTrend(VitalMetric metric, List<double?> raw) {
     final present = raw.whereType<double>().toList();
-    if (present.length < 2) return null;
+    if (present.isEmpty) return null;
     return VitalMetricTrend(
       metric: metric,
       values: raw,
-      rising: _isRising(present),
+      rising: present.length >= 2 && _isRising(present),
     );
   }
 

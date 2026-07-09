@@ -11,6 +11,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/patient_dao.dart';
+import '../../core/db/pregnancy_snapshot_dao.dart';
 import '../../core/models/programme.dart';
 import '../dashboard/mission_dashboard_repository.dart';
 import '../scribe/scribe_controller.dart';
@@ -314,6 +315,8 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
       activeFormTypes: formTypes,
       draftDao: draftDao,
       assessmentRepo: assessmentRepo,
+      patientDao: ctx.read<PatientDao>(),
+      pregnancySnapshotDao: ctx.read<PregnancySnapshotDao>(),
       memberId: widget.memberId,
       householdId: widget.householdId,
       villageId: widget.villageId,
@@ -344,7 +347,10 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
   /// - `imci` → `iccm` (no manifest yet; harmlessly ignored by form engine)
   /// - others → passed through unchanged
   static List<String> _toFormTypes(List<String> programmeNames) {
-    final out = <String>[];
+    // commonVitals is always injected first — it holds the shared measurements
+    // (height, weight, BMI, BP, pulse, blood glucose) captured exactly once
+    // regardless of how many programmes are active.
+    final out = <String>['commonVitals'];
     for (final p in programmeNames) {
       switch (p) {
         case 'pnc':

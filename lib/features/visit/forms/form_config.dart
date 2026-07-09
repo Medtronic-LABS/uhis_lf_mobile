@@ -20,6 +20,7 @@ enum WidgetHint {
   dialogCheckbox,
   spinner,
   bloodGlucose,
+  bloodGlucoseEntry,
   pregnancyProfile,
   numeric,
   dateField,
@@ -42,6 +43,8 @@ enum WidgetHint {
         return WidgetHint.spinner;
       case 'bloodGlucose':
         return WidgetHint.bloodGlucose;
+      case 'BloodGlucoseEntry':
+        return WidgetHint.bloodGlucoseEntry;
       case 'pregnancyProfile':
         return WidgetHint.pregnancyProfile;
       case 'DateField':
