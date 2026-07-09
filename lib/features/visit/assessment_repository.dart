@@ -340,9 +340,11 @@ class AssessmentRepository extends ChangeNotifier {
           'for patient $patientId');
       for (final row in historyRows) {
         final kind = row.kind?.toUpperCase() ?? '';
-        // ANC visits may arrive as "ANC", "ANTENATAL_CARE", "ANTENATAL", etc.
-        if (!kind.contains('ANC') && !kind.contains('ANTENATAL')) continue;
+        debugPrint('[AssessmentRepo] history row kind="$kind" id=${row.id}');
+        if (!_isAncKind(kind)) continue;
         final snap = _snapshotFromServerRaw(row.rawJson, row.occurredAt);
+        debugPrint('[AssessmentRepo] history snap: sys=${snap.systolic} dia=${snap.diastolic} '
+            'wt=${snap.weight} urine=${snap.urineProtein}');
         if (!snap.isEmpty) snapshots.add(snap);
       }
     }
@@ -359,22 +361,37 @@ class AssessmentRepository extends ChangeNotifier {
     return snapshots;
   }
 
-  /// Reads the most-recent ANC assessment from server history and returns the
-  /// LMP date (or null when unavailable).  Used as a fallback by
-  /// [UnifiedFormNotifier.loadPregnancyData] when the patient rawJson is empty.
+  /// Reads the most-recent assessment row for [patientId] and returns the LMP
+  /// date (or null when unavailable).  Scans ALL rows newest-first — LMP data
+  /// only exists for maternal patients so no programme filter is needed.
   Future<DateTime?> lmpDateFromHistory(String patientId) async {
     if (patientId.isEmpty || _historyDao == null) return null;
     final historyMap = await _historyDao.forMany([patientId]);
     final rows = List<AssessmentRow>.from(historyMap[patientId] ?? const [])
       ..sort((a, b) => (b.occurredAt ?? 0).compareTo(a.occurredAt ?? 0));
+    debugPrint('[AssessmentRepo] lmpFromHistory: ${rows.length} total rows '
+        'for patient $patientId');
     for (final row in rows) {
-      final kind = row.kind?.toUpperCase() ?? '';
-      if (!kind.contains('ANC') && !kind.contains('ANTENATAL')) continue;
+      debugPrint('[AssessmentRepo] lmpFromHistory row kind="${row.kind}" id=${row.id}');
       final lmp = _extractLmpFromRaw(row.rawJson);
       debugPrint('[AssessmentRepo] lmpFromHistory row ${row.id}: lmp=$lmp');
       if (lmp != null) return lmp;
     }
     return null;
+  }
+
+  /// True when [kind] (already uppercased) looks like an ANC visit tag.
+  /// Covers the many variants the backend may send:
+  ///   "ANC", "ANTENATAL", "ANTENATAL_CARE", "ANTENATAL CARE",
+  ///   "PRENATAL", "MATERNITY", "OBSTETRIC", "PREGNANCY"
+  static bool _isAncKind(String kind) {
+    if (kind.isEmpty) return false;
+    return kind.contains('ANC') ||
+        kind.contains('ANTENATAL') ||
+        kind.contains('PRENATAL') ||
+        kind.contains('MATERNITY') ||
+        kind.contains('OBSTETRIC') ||
+        kind.contains('PREGNANCY');
   }
 
   /// Extracts LMP from a server assessment row's rawJson, trying several key
