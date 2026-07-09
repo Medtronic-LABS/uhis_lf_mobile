@@ -1853,6 +1853,12 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             const SizedBox(height: 16),
           ],
 
+          // ── Gestational age card (ANC / PNC patients only) ─────────
+          if (widget.gestationalWeeks != null) ...[
+            _GestationalAgeCard(gestationalWeeks: widget.gestationalWeeks!),
+            const SizedBox(height: 12),
+          ],
+
           // ── 1. Vitals summary ───────────────────────────────────────
           _VitalsSummaryCard(
             programme: widget.primaryProgramme,
@@ -1919,6 +1925,205 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 }
 
 // ── Supporting widgets ────────────────────────────────────────────────────────
+
+/// Pink/lavender gestational age summary shown at the top of Step 3
+/// for any patient who has a gestational week count recorded.
+///
+/// LMP and EDD are back-calculated from [gestationalWeeks]:
+///   LMP ≈ today − (weeks × 7) days
+///   EDD ≈ LMP + 280 days
+class _GestationalAgeCard extends StatelessWidget {
+  const _GestationalAgeCard({required this.gestationalWeeks});
+
+  final int gestationalWeeks;
+
+  @override
+  Widget build(BuildContext context) {
+    final today = DateTime.now();
+    final lmp = today.subtract(Duration(days: gestationalWeeks * 7));
+    final edd = lmp.add(const Duration(days: 280));
+
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    final lmpLabel = '${lmp.day} ${months[lmp.month - 1]} ${lmp.year}';
+    final eddLabel = '${edd.day} ${months[edd.month - 1]} ${edd.year}';
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppColors.ancSurface, AppColors.pncSurface],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.ancBorder.withValues(alpha: 0.6)),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.ancBorder.withValues(alpha: 0.30),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // ── Pregnant woman avatar ──────────────────────────────────
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.ancBorder, width: 1.5),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.ancBorder.withValues(alpha: 0.40),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                ),
+              ],
+            ),
+            child: const Center(
+              child: Text('🤰', style: TextStyle(fontSize: 26)),
+            ),
+          ),
+          const SizedBox(width: 14),
+
+          // ── Gestational age details ────────────────────────────────
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Label
+                Text(
+                  'GESTATIONAL AGE',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.1,
+                    color: AppColors.ancText,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                // Large weeks display
+                RichText(
+                  text: TextSpan(
+                    children: [
+                      TextSpan(
+                        text: '$gestationalWeeks ',
+                        style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.navy,
+                          height: 1.0,
+                        ),
+                      ),
+                      const TextSpan(
+                        text: 'wks',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.navy,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // LMP + EDD row
+                Row(
+                  children: [
+                    Expanded(
+                      child: _DatePill(
+                        icon: '📅',
+                        label: 'LMP',
+                        value: lmpLabel,
+                        valueColor: AppColors.navy,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _DatePill(
+                        icon: '🍼',
+                        label: 'EDD',
+                        value: eddLabel,
+                        valueColor: AppColors.pink,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DatePill extends StatelessWidget {
+  const _DatePill({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.valueColor,
+  });
+
+  final String icon;
+  final String label;
+  final String value;
+  final Color valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.70),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: AppColors.ancBorder.withValues(alpha: 0.50),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(icon, style: const TextStyle(fontSize: 12)),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textMuted,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: valueColor,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _VitalsSummaryCard extends StatelessWidget {
   const _VitalsSummaryCard({
