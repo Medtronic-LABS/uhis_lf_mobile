@@ -163,12 +163,13 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
     return Scaffold(
       body: SafeArea(
         child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
               children: [
                 // Logo
                 Image.asset(
@@ -309,8 +310,9 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildProgressRing(ColorScheme scheme) {
     return SizedBox(

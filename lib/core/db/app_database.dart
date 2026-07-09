@@ -20,7 +20,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 22;
+  static const int schemaVersion = 23;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -386,7 +386,9 @@ class AppDatabase {
         is_near_term_anc INTEGER NOT NULL DEFAULT 0,
         had_delivery_complications INTEGER NOT NULL DEFAULT 0,
         has_pnc_illness INTEGER NOT NULL DEFAULT 0,
-        updated_at INTEGER
+        updated_at INTEGER,
+        edd_date INTEGER,
+        lmp_date INTEGER
       )''');
     await db.execute('''
       CREATE TABLE $tableTreatmentPresence (
@@ -791,7 +793,9 @@ class AppDatabase {
           is_near_term_anc INTEGER NOT NULL DEFAULT 0,
           had_delivery_complications INTEGER NOT NULL DEFAULT 0,
           has_pnc_illness INTEGER NOT NULL DEFAULT 0,
-          updated_at INTEGER
+          updated_at INTEGER,
+          edd_date INTEGER,
+          lmp_date INTEGER
         )''');
       await addTbl8('''
         CREATE TABLE IF NOT EXISTS $tableTreatmentPresence (
@@ -1062,6 +1066,22 @@ class AppDatabase {
           'ALTER TABLE $tablePregnancySnapshot ADD COLUMN lmp_date INTEGER',
         );
       } catch (_) {/* column already present — safe to ignore */}
+    }
+    if (from < 23) {
+      // v23 — Remediation: devices that reached schemaVersion=22 before the
+      // v21/v22 ALTER TABLE migrations were included in the build still lack
+      // edd_date and/or lmp_date. Re-apply both; the try/catch makes this
+      // idempotent if they already exist.
+      try {
+        await db.execute(
+          'ALTER TABLE $tablePregnancySnapshot ADD COLUMN edd_date INTEGER',
+        );
+      } catch (_) {/* already present */}
+      try {
+        await db.execute(
+          'ALTER TABLE $tablePregnancySnapshot ADD COLUMN lmp_date INTEGER',
+        );
+      } catch (_) {/* already present */}
     }
   }
 
