@@ -389,6 +389,7 @@ abstract final class AppRadius {
   static const double card     = 16.0;  // .card, .ai-card, .call-box, SK identity card
   static const double pill     = 20.0;  // .score-pill, .chip border-radius
   static const double xl       = 24.0;  // bottom sheet top radius
+  static const double fabPill  = 28.0;  // dashboard "+ Enrol new" extended FAB
   static const double waIcon   =  7.0;  // .wa-icon
   static const double full     = 999.0; // full circle (avatars, FAB, chat-send)
 
@@ -657,22 +658,26 @@ abstract final class AppTextStyles {
   );
 
   // ─── v13 Dashboard / AI Worklist text styles ───────────────
-  // .patient-name: Nunito 13.5px w800 --text
+  // Legibility bump over the literal .patient-name spec (13.5px) — CHWs
+  // read these outdoors on varied devices; restored after a pixel-match
+  // pass briefly shrank it back to the literal mockup size.
   static const TextStyle worklistPatientName = TextStyle(
     fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 15.5, fontWeight: FontWeight.w800,
     color: AppColors.textPrimary,
   );
-  // .patient-meta age row: NunitoSans 11.5px w700 #111827 — lighter than name (w800) for hierarchy
+  // .patient-meta age row: legibility-bumped size; w800 matches spec exactly
+  // (was w700, a pixel mismatch — also was previously unwired dead code,
+  // now actually referenced by mission_queue_card.dart's age text).
   static const TextStyle worklistPatientMeta = TextStyle(
-    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 13, fontWeight: FontWeight.w700,
+    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 13, fontWeight: FontWeight.w800,
     color: Color(0xFF111827),
   );
-  // .worklist-row-label: Nunito 13.5px w800 --text
+  // .worklist-row-label: legibility-bumped over the literal 13.5px spec.
   static const TextStyle worklistRowLabel = TextStyle(
     fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 15.5, fontWeight: FontWeight.w800,
     color: AppColors.textPrimary,
   );
-  // .v-status status pill: NunitoSans 11px w800 (color applied per band)
+  // .v-status status pill: legibility-bumped over the literal 10px spec.
   static const TextStyle worklistStatusPill = TextStyle(
     fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 12.5, fontWeight: FontWeight.w800,
   );
@@ -681,18 +686,18 @@ abstract final class AppTextStyles {
     fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 11, fontWeight: FontWeight.w700,
     color: AppColors.textMuted,
   );
-  // Village tab: NunitoSans 13px w700
+  // Village tab: legibility-bumped over the literal 13px spec.
   static const TextStyle villageTab = TextStyle(
     fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 15, fontWeight: FontWeight.w700,
   );
-  // Worklist card address line — no v13 CSS class identified, promoted from
-  // mission_queue_card.dart's inline literal. No baked-in color (like
-  // [worklistStatusPill]) — caller supplies the theme-aware muted color.
+  // Worklist card address line — legibility-bumped size/weight (w600, not
+  // the spec's plain w400 — lighter text is harder to read outdoors). No
+  // baked-in color (like [worklistStatusPill]) — caller supplies the
+  // theme-aware muted color.
   static const TextStyle worklistAddress = TextStyle(
     fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 14, fontWeight: FontWeight.w600,
   );
-  // Worklist card phone line — no v13 CSS class identified, promoted from
-  // mission_queue_card.dart's inline literal.
+  // Worklist card phone line — legibility-bumped over the literal 11.5px spec.
   static const TextStyle worklistPhone = TextStyle(
     fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 13, fontWeight: FontWeight.w400,
   );

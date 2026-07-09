@@ -1116,13 +1116,13 @@ abstract final class MissionDashboardStrings {
   static const String filterByNeedOptional = 'optional';
   static const String needHighRisk = 'High-risk';
   static const String needAncMnch = 'ANC / MNCH';
-  static const String needChildImmunisation = 'Child / Immunisation';
+  static const String needChildImmunisation = 'Child / Immun.';
   static const String needNcd = 'NCD';
   static const String needEyeCare = 'Eye care';
-  static const String needMissedFollowUp = 'Missed follow-up';
-  static const String needPendingReferral = 'Pending referral';
+  static const String needMissedFollowUp = 'Missed';
+  static const String needPendingReferral = 'Referral';
   static const String needHomeVisit = 'Home visit';
-  static const String needFacilityReferral = 'Facility referral';
+  static const String needFacilityReferral = 'Facility';
   static const String clearNeedFilters = 'Clear';
   static const String filterByProgramme = 'Programme';
   static const String noNeedsInQueue = 'No priority needs in today\'s list';

@@ -36,9 +36,6 @@ class MissionQueueCard extends StatelessWidget {
     final (dotLabel, dotColor) = isCompleted
         ? ('Done', tokens.statusSuccess)
         : _statusDotStyle(item.tier, tokens);
-    final borderColor = isCompleted
-        ? tokens.statusSuccess
-        : _borderColor(item.tier, tokens);
 
     return Opacity(
       opacity: isCompleted ? 0.6 : 1.0,
@@ -51,13 +48,13 @@ class MissionQueueCard extends StatelessWidget {
           button: true,
           child: Container(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppRadius.patRow),
+              borderRadius: BorderRadius.circular(AppRadius.button),
               color: tokens.cardSurface,
               boxShadow: AppShadows.card,
             ),
             child: Material(
               color: Colors.transparent,
-              borderRadius: BorderRadius.circular(AppRadius.patRow),
+              borderRadius: BorderRadius.circular(AppRadius.button),
               child: InkWell(
                 key: const Key('visit_queue_card_tap'),
                 onTap: isCompleted
@@ -71,14 +68,17 @@ class MissionQueueCard extends StatelessWidget {
                           ),
                         )
                     : onTap,
-                borderRadius: BorderRadius.circular(AppRadius.patRow),
+                borderRadius: BorderRadius.circular(AppRadius.button),
                 child: Container(
                   decoration: BoxDecoration(
                     borderRadius: const BorderRadius.all(
-                      Radius.circular(AppRadius.patRow),
+                      Radius.circular(AppRadius.button),
                     ),
-                    border: Border(
-                      left: BorderSide(color: borderColor, width: 4),
+                    // Left border is always neutral — the mockup never
+                    // color-codes it by status; status is conveyed only by
+                    // the right-side status pill (_StatusDot below).
+                    border: const Border(
+                      left: BorderSide(color: AppColors.border, width: 4),
                     ),
                   ),
                   padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -106,12 +106,7 @@ class MissionQueueCard extends StatelessWidget {
                                 if (item.age != null)
                                   Text(
                                     '${item.age}y',
-                                    style: const TextStyle(
-                                      fontFamily: 'NunitoSans',
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFF111827),
-                                    ),
+                                    style: AppTextStyles.worklistPatientMeta,
                                   ),
                                 if (isCompleted)
                                   _VisitedBadge(tokens: tokens)
@@ -169,21 +164,6 @@ class MissionQueueCard extends StatelessWidget {
     );
   }
 
-  /// Left-border accent color keyed by urgency tier.
-  Color _borderColor(DashboardTier tier, LeapfrogColors tokens) {
-    switch (tier) {
-      case DashboardTier.critical:
-      case DashboardTier.dueToday:
-        return tokens.statusSuccess;
-      case DashboardTier.overdue:
-        return tokens.statusCritical;
-      case DashboardTier.thisWeek:
-        return tokens.statusWarning;
-      case DashboardTier.upcoming:
-        return tokens.brandNavy.withValues(alpha: 0.25);
-    }
-  }
-
   /// Status dot style: (label, dotColor) keyed by tier.
   (String, Color) _statusDotStyle(DashboardTier tier, LeapfrogColors tokens) {
     switch (tier) {
@@ -218,7 +198,7 @@ class MissionReasonBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(AppRadius.sm),
+        borderRadius: BorderRadius.circular(AppRadius.flag),
       ),
       child: Text(
         item.reason,
@@ -295,7 +275,7 @@ class _VisitedBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: tokens.statusSuccess.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(AppRadius.flag),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
