@@ -277,15 +277,18 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         return Column(
           children: [
             // ── Step 2 AI ambient listening banner ──────────────────────────
-            Step2AsrBanner(activeFormTypes: widget.activeFormTypes),
+            // Horizontally inset to match the ListView's content alignment.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.xxxl, AppSpacing.xl, AppSpacing.xxxl, 0),
+              child: Step2AsrBanner(activeFormTypes: widget.activeFormTypes),
+            ),
             // ── Assessment form sections ────────────────────────────────────
             Expanded(
               child: ListView(
                 controller: _scrollCtrl,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.xxxl,
-                  vertical: AppSpacing.xxxl,
-                ),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.xxxl, AppSpacing.md, AppSpacing.xxxl, AppSpacing.xxxl),
                 children: items,
               ),
             ),
@@ -2017,7 +2020,7 @@ class _InlineListSelectField extends StatelessWidget {
             isMandatory: isMandatory,
             hasError: hasError,
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
         ],
         // Option rows.
         for (final option in options) ...[
@@ -2027,7 +2030,7 @@ class _InlineListSelectField extends StatelessWidget {
             isNone: _isNone(option),
             onTap: () => _toggle(option),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
         ],
         // Red error hint below the list.
         if (hasError) ...[
@@ -2148,7 +2151,7 @@ class _InlineListRow extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(_kFieldCardRadius),
