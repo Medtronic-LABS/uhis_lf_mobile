@@ -3493,6 +3493,38 @@ abstract final class UnifiedFormStrings {
       'Each reading is below its alert line — but they are climbing together '
       'across visits. No single rule fires.';
 
+  // ── Live vital-status badge labels (rule-based, no ML) ─────────────────────
+  static const String vsBpNormal           = 'Normal';
+  static const String vsBpElevated         = 'Elevated';
+  static const String vsBpSlightlyElevated = 'Slightly Elevated';
+  static const String vsBpHigh             = 'High';
+  static const String vsBpSevere           = 'Severe';
+
+  static const String vsHbNormal           = 'Normal';
+  static const String vsHbMild             = 'Mild Anaemia';
+  static const String vsHbModerate         = 'Moderate Anaemia';
+  static const String vsHbSevere           = 'Severe Anaemia';
+  static const String vsHbWarningShort     = 'Anaemia';
+  static const String vsHbWarningLong      =
+      'Below 11 g/dL — Anaemia. Counsel on iron-rich diet and IFA adherence.';
+
+  static const String vsUrineAbsent  = 'Absent';
+  static const String vsUrineTrace   = 'Trace';
+  static const String vsUrinePresent = 'Present';
+
+  static String vsWeightDelta(double delta) {
+    final sign = delta >= 0 ? '+' : '';
+    return '$sign${delta.toStringAsFixed(1)} kg';
+  }
+
+  static String vsLastWeight(double kg) => 'Last: ${kg.toStringAsFixed(1)} kg';
+
+  static String vsFhLag(int cm)   => '$cm cm lag ⚠️';
+  static String vsFhAhead(int cm) => '$cm cm ahead';
+  static const String vsFhExpected = 'Expected';
+  static String vsFhExpectedSubLabel(int gestWeeks) =>
+      'Expected ~$gestWeeks cm at $gestWeeks wks';
+
   /// Human-readable label for a formType key shown as a programme badge.
   ///
   /// Returns `null` for the synthetic `vitals` formType (no badge needed).

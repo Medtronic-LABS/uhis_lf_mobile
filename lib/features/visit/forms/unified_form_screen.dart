@@ -260,6 +260,10 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             data: notifier.data,
             validationErrors: notifier.validationErrors,
             onFieldChanged: notifier.updateField,
+            previousWeight: _priorAncVisits.isNotEmpty
+                ? _priorAncVisits.last.weight
+                : null,
+            gestationalWeeks: widget.gestationalWeeks,
           ));
         }
 
@@ -849,6 +853,8 @@ class _SectionCard extends StatelessWidget {
     required this.data,
     required this.validationErrors,
     required this.onFieldChanged,
+    this.previousWeight,
+    this.gestationalWeeks,
   });
 
   final FormSection section;
@@ -856,6 +862,14 @@ class _SectionCard extends StatelessWidget {
   final CanonicalVisitData data;
   final Set<String> validationErrors;
   final void Function(String fieldId, dynamic value) onFieldChanged;
+
+  /// Weight (kg) from the patient's most-recent prior ANC visit — used to
+  /// compute the weight-delta badge.  `null` when unavailable.
+  final double? previousWeight;
+
+  /// Patient's current gestational age in weeks — used to compute the
+  /// fundal-height expected value and lag/ahead badge.  `null` when unknown.
+  final int? gestationalWeeks;
 
   // ── Supplement pair detection ─────────────────────────────────────────────
   // Maps each "consumed" field id → (set of possible "provided" field ids,
@@ -1023,6 +1037,10 @@ class _SectionCard extends StatelessWidget {
         sysRef.isMandatory ||
         diaDef.isMandatory ||
         diaRef.isMandatory;
+    final bpStatus = _VitalStatusEval.bloodPressure(
+      _VitalStatusEval.asInt(data.getValue('systolic')),
+      _VitalStatusEval.asInt(data.getValue('diastolic')),
+    );
     return _FieldShell(
       label: UnifiedFormStrings.bpCardLabel,
       subLabel: '${UnifiedFormStrings.bpCardSubLabel} · ${UnifiedFormStrings.bpUnit}',
@@ -1030,6 +1048,9 @@ class _SectionCard extends StatelessWidget {
       emojiBg: const Color(0xFFEEF0FF),
       isMandatory: isMandatory,
       hasError: hasError,
+      statusBadge: bpStatus != null
+          ? _VitalBadge(label: bpStatus.label, color: bpStatus.color)
+          : null,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
@@ -1171,8 +1192,13 @@ class _SectionCard extends StatelessWidget {
   /// Builds one field row: self-contained fields (info / text label) render
   /// bare; [dialogCheckbox] renders fully standalone (owns its own label +
   /// option list).  Every other editable field is wrapped in [_FieldShell].
+  ///
+  /// For the handful of vital-sign fields that have clinical rules (weight,
+  /// fundal height, urine albumin, haemoglobin), a [_VitalBadge] and optional
+  /// inline warning are computed from the current field value and appended.
   Widget _fieldRow(BuildContext context, FieldDef def, FieldRef ref) {
-    final control = _buildField(context, def, ref, data.getValue(ref.id));
+    final currentValue = data.getValue(ref.id);
+    final control = _buildField(context, def, ref, currentValue);
     switch (def.widgetHint) {
       case WidgetHint.infoLabel:
       case WidgetHint.textLabel:
@@ -1184,11 +1210,49 @@ class _SectionCard extends StatelessWidget {
       default:
         final glyph = FormFieldVisuals.forField(def.id);
         final unit = def.unitMeasurement;
-        final subParts = <String>[
+
+        // ── Vital-status enrichment (per-field rules) ─────────────────────
+        _VitalStatus? vitalStatus;
+        List<String> subParts = [
           if (def.labelCulture != null && def.labelCulture!.isNotEmpty)
             def.labelCulture!,
           if (unit != null && unit.isNotEmpty) unit,
         ];
+
+        switch (ref.id) {
+          case 'weight':
+            final w = _VitalStatusEval.asDouble(currentValue);
+            vitalStatus = _VitalStatusEval.weight(w, previousWeight);
+            if (previousWeight != null) {
+              subParts = [
+                if (def.labelCulture != null && def.labelCulture!.isNotEmpty)
+                  def.labelCulture!,
+                if (unit != null && unit.isNotEmpty) unit,
+                UnifiedFormStrings.vsLastWeight(previousWeight!),
+              ];
+            }
+
+          case 'fundalHeight':
+            final fh = _VitalStatusEval.asDouble(currentValue);
+            vitalStatus = _VitalStatusEval.fundalHeight(fh, gestationalWeeks);
+            if (gestationalWeeks != null) {
+              subParts = [
+                if (def.labelCulture != null && def.labelCulture!.isNotEmpty)
+                  def.labelCulture!,
+                if (unit != null && unit.isNotEmpty) unit,
+                UnifiedFormStrings.vsFhExpectedSubLabel(gestationalWeeks!),
+              ];
+            }
+
+          case 'urinaryAlbumin':
+            vitalStatus =
+                _VitalStatusEval.urinaryAlbumin(currentValue as String?);
+
+          case 'hemoglobin':
+            vitalStatus =
+                _VitalStatusEval.hemoglobin(_VitalStatusEval.asDouble(currentValue));
+        }
+
         return _FieldShell(
           label: def.label,
           subLabel: subParts.isEmpty ? null : subParts.join(' · '),
@@ -1196,6 +1260,10 @@ class _SectionCard extends StatelessWidget {
           emojiBg: glyph?.background,
           isMandatory: def.isMandatory || ref.isMandatory,
           hasError: validationErrors.contains(ref.id),
+          statusBadge: vitalStatus != null
+              ? _VitalBadge(label: vitalStatus.label, color: vitalStatus.color)
+              : null,
+          inlineWarning: vitalStatus?.warning,
           child: control,
         );
     }
@@ -1354,6 +1422,220 @@ class _SectionCard extends StatelessWidget {
   }
 }
 
+// ── Vital status evaluation ────────────────────────────────────────────────────
+
+/// Compact value object returned by [_VitalStatusEval] methods.
+///
+/// [label] is the display text for the badge pill.
+/// [color] drives the badge's background tint and text color.
+/// [warning] is optional inline text rendered below the field control.
+class _VitalStatus {
+  const _VitalStatus({
+    required this.label,
+    required this.color,
+    this.warning,
+  });
+
+  final String label;
+  final Color color;
+  final String? warning;
+}
+
+/// Pure rule-based evaluator — no ML, fully explainable.
+///
+/// Each method returns `null` when the input is absent or out of the
+/// evaluable range so the caller can simply skip the badge.
+abstract final class _VitalStatusEval {
+  _VitalStatusEval._();
+
+  // ── Blood pressure ───────────────────────────────────────────────────────
+  // Thresholds from the ANC / NCD clinical spec in CLAUDE.md.
+  static _VitalStatus? bloodPressure(int? sys, int? dia) {
+    if (sys == null && dia == null) return null;
+    final s = sys ?? 0;
+    final d = dia ?? 0;
+    if (s >= 160 || d >= 110) {
+      return _VitalStatus(
+        label: UnifiedFormStrings.vsBpSevere,
+        color: AppColors.statusCritical,
+      );
+    }
+    if (s >= 140 || d >= 90) {
+      return _VitalStatus(
+        label: UnifiedFormStrings.vsBpHigh,
+        color: AppColors.statusCritical,
+      );
+    }
+    if (s >= 130 || d >= 85) {
+      return _VitalStatus(
+        label: UnifiedFormStrings.vsBpSlightlyElevated,
+        color: AppColors.statusWarning,
+      );
+    }
+    if (s >= 120) {
+      return _VitalStatus(
+        label: UnifiedFormStrings.vsBpElevated,
+        color: AppColors.statusWarning,
+      );
+    }
+    if (s > 0 || d > 0) {
+      return _VitalStatus(
+        label: UnifiedFormStrings.vsBpNormal,
+        color: AppColors.statusSuccess,
+      );
+    }
+    return null;
+  }
+
+  // ── Weight delta ─────────────────────────────────────────────────────────
+  static _VitalStatus? weight(double? current, double? previous) {
+    if (current == null || previous == null) return null;
+    final delta = current - previous;
+    final abs = delta.abs();
+    // Colour by gain magnitude (ANC context — 0.5–2 kg/4 wks is normal).
+    Color color;
+    if (delta >= 0 && abs <= 2.0) {
+      color = AppColors.statusSuccess;
+    } else if (abs <= 3.5) {
+      color = AppColors.statusWarning;
+    } else {
+      color = AppColors.statusCritical;
+    }
+    return _VitalStatus(
+      label: UnifiedFormStrings.vsWeightDelta(delta),
+      color: color,
+    );
+  }
+
+  // ── Fundal height ────────────────────────────────────────────────────────
+  // Bartholomew's rule: FH (cm) ≈ gestational age (weeks).
+  static _VitalStatus? fundalHeight(double? measured, int? gestWeeks) {
+    if (measured == null || gestWeeks == null || gestWeeks <= 0) return null;
+    final diff = (measured - gestWeeks).round();
+    if (diff <= -2) {
+      return _VitalStatus(
+        label: UnifiedFormStrings.vsFhLag(diff.abs()),
+        color: AppColors.statusWarning,
+      );
+    }
+    if (diff >= 2) {
+      return _VitalStatus(
+        label: UnifiedFormStrings.vsFhAhead(diff),
+        color: AppColors.navy,
+      );
+    }
+    return _VitalStatus(
+      label: UnifiedFormStrings.vsFhExpected,
+      color: AppColors.statusSuccess,
+    );
+  }
+
+  // ── Urinary albumin / urine protein ─────────────────────────────────────
+  static _VitalStatus? urinaryAlbumin(String? value) {
+    if (value == null || value.isEmpty) return null;
+    final v = value.toLowerCase();
+    if (v.contains('absent') || v.contains('neg')) {
+      return _VitalStatus(
+        label: UnifiedFormStrings.vsUrineAbsent,
+        color: AppColors.statusSuccess,
+      );
+    }
+    if (v.contains('trace')) {
+      return _VitalStatus(
+        label: UnifiedFormStrings.vsUrineTrace,
+        color: AppColors.statusWarning,
+      );
+    }
+    if (v.contains('present') || v.contains('pos')) {
+      return _VitalStatus(
+        label: UnifiedFormStrings.vsUrinePresent,
+        color: AppColors.statusCritical,
+      );
+    }
+    return null;
+  }
+
+  // ── Haemoglobin ──────────────────────────────────────────────────────────
+  // WHO thresholds for pregnant women (≥11 g/dL = normal).
+  static _VitalStatus? hemoglobin(double? value) {
+    if (value == null) return null;
+    if (value < 7.0) {
+      return _VitalStatus(
+        label: UnifiedFormStrings.vsHbSevere,
+        color: AppColors.statusCritical,
+        warning: UnifiedFormStrings.vsHbWarningLong,
+      );
+    }
+    if (value < 10.0) {
+      return _VitalStatus(
+        label: UnifiedFormStrings.vsHbModerate,
+        color: AppColors.statusCritical,
+        warning: UnifiedFormStrings.vsHbWarningLong,
+      );
+    }
+    if (value < 11.0) {
+      return _VitalStatus(
+        label: UnifiedFormStrings.vsHbMild,
+        color: AppColors.statusWarning,
+        warning: UnifiedFormStrings.vsHbWarningLong,
+      );
+    }
+    return _VitalStatus(
+      label: UnifiedFormStrings.vsHbNormal,
+      color: AppColors.statusSuccess,
+    );
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  static double? asDouble(dynamic v) {
+    if (v == null) return null;
+    if (v is double) return v;
+    if (v is int) return v.toDouble();
+    if (v is String) return double.tryParse(v);
+    return null;
+  }
+
+  static int? asInt(dynamic v) {
+    if (v == null) return null;
+    if (v is int) return v;
+    if (v is double) return v.toInt();
+    if (v is String) return int.tryParse(v);
+    return null;
+  }
+}
+
+/// Small coloured pill that shows a vital-status label.
+///
+/// Uses a translucent background tinted from [color] so it works over both
+/// white field cards and the dark card borders.
+class _VitalBadge extends StatelessWidget {
+  const _VitalBadge({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.45), width: 1),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: color,
+          height: 1.2,
+        ),
+      ),
+    );
+  }
+}
+
 // ── Field chrome (v13 visual system) ─────────────────────────────────────────
 
 /// Local visual constants for the Step 2 form, mirroring the `apon_sushashthya`
@@ -1448,6 +1730,8 @@ class _FieldShell extends StatelessWidget {
     this.emojiBg,
     this.isMandatory = false,
     this.hasError = false,
+    this.statusBadge,
+    this.inlineWarning,
   });
 
   final String label;
@@ -1463,9 +1747,17 @@ class _FieldShell extends StatelessWidget {
   final bool isMandatory;
   final bool hasError;
 
+  /// Optional status pill rendered at the far right of the header row.
+  /// Typically a [_VitalBadge] instance.
+  final Widget? statusBadge;
+
+  /// Optional inline warning shown below the field control (⚠ text).
+  final String? inlineWarning;
+
   @override
   Widget build(BuildContext context) {
     final hasSubLabel = subLabel != null && subLabel!.isNotEmpty;
+    final hasWarning  = inlineWarning != null && inlineWarning!.isNotEmpty;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(12, 11, 12, 12),
@@ -1509,11 +1801,35 @@ class _FieldShell extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (statusBadge != null) ...[
+                  const SizedBox(width: 6),
+                  statusBadge!,
+                ],
               ],
             ),
             const SizedBox(height: 9),
           ],
           child,
+          if (hasWarning) ...[
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('⚠', style: TextStyle(fontSize: 12)),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    inlineWarning!,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.statusWarningText,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
