@@ -631,10 +631,24 @@ class OfflineSyncService extends ChangeNotifier {
       if (patientId == null || patientId.isEmpty) continue;
       final facts = _pregnancyFactsFrom(raw, now: now);
       if (facts == null) continue;
+      final eddRaw = raw['estimatedDeliveryDate'] ?? raw['edd'];
+      final eddMs = JsonRead.epochMillis({'_': eddRaw}, const ['_']);
+      // LMP: try several field names the server may use.
+      final lmpMs = JsonRead.epochMillis(raw, const [
+        'lmpDate',
+        'lastMenstrualPeriod',
+        'lastMenstrualPeriodDate',
+        'lmp',
+        'lmpValue',
+        'menstrualDate',
+        'lastPeriodDate',
+      ]);
       pregnancyRows.add(PregnancySnapshotRow(
         patientId: patientId,
         facts: facts,
         updatedAt: nowMs,
+        eddDate: eddMs,
+        lmpDate: lmpMs,
       ));
     }
 

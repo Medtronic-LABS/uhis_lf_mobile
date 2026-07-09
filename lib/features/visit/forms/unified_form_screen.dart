@@ -211,54 +211,35 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
 
         // Build the list items: programme-name dividers (with inline per-
         // programme symptom chips) + section cards.
-        // The top-level banner is removed — symptoms appear inline under each
-        // programme they are relevant to.
+        // ANC-specific cards are pinned to fixed positions:
+        //   • Gestational age card → first item (below the AI Scribe banner)
+        //   • Vitals trend card    → last item before submit
         final items = <Widget>[];
+        final isAnc = widget.activeFormTypes.contains('anc');
 
-        // ancTrend is no longer pre-computed here — _VitalsTrendCard watches
-        // the notifier directly so every field keystroke triggers a re-render
-        // without depending on the Consumer → prop chain.
+        // ── Gestational age card (ANC) — top of scroll area ────────────────
+        if (isAnc) {
+          items.add(_GestationalAgeCard(
+            lmpDate: notifier.lmpDate,
+            eddDate: notifier.eddDate,
+            gestationalWeeks: notifier.gestationalWeeks,
+          ));
+        }
 
         String? lastFormType;
         for (final annotatedSection in annotated) {
           final ft = annotatedSection.section.formType;
           if (ft != lastFormType) {
-            final label = annotatedSection.group == SectionGroup.vitals
-                ? UnifiedFormStrings.vitalsGroupLabel
-                : UnifiedFormStrings.programmeBadgeLabel(ft) ??
-                    ft.toUpperCase();
-
-            // For programme sections (non-vitals), compute which triage
-            // symptoms are relevant to this formType to show as inline chips.
-            final relevantCodes =
-                annotatedSection.group == SectionGroup.vitals
-                    ? const <String>[]
-                    : TriageSymptomMapper.relevantCodes(
-                        ft,
-                        widget.confirmedSymptoms,
-                      );
-
-            items.add(_ProgrammeDivider(
-              label: label,
-              relevantSymptomCodes: relevantCodes,
-              aiPickedSymptomCodes: widget.aiPickedSymptoms,
-            ));
             lastFormType = ft;
-
-            // ── ANC-specific context cards ──────────────────────────────────
-            // Inserted right after the ANC divider so the SK sees pregnancy
-            // context and prior-visit trends before filling in today's readings.
-            if (ft == 'anc') {
-              // Always show gestational age card for ANC — shows placeholders
-              // when LMP/EDD not yet loaded or not available in sync data.
-              items.add(_GestationalAgeCard(
-                lmpDate: notifier.lmpDate,
-                eddDate: notifier.eddDate,
-                gestationalWeeks: notifier.gestationalWeeks,
+            if (annotatedSection.group != SectionGroup.vitals) {
+              final label = UnifiedFormStrings.programmeBadgeLabel(ft) ??
+                  ft.toUpperCase();
+              items.add(_ProgrammeDivider(
+                label: label,
+                relevantSymptomCodes: TriageSymptomMapper.relevantCodes(
+                    ft, widget.confirmedSymptoms),
+                aiPickedSymptomCodes: widget.aiPickedSymptoms,
               ));
-              if (_priorAncVisits.isNotEmpty) {
-                items.add(_VitalsTrendCard(priorVisits: _priorAncVisits));
-              }
             }
           }
           items.add(_SectionCard(
@@ -270,6 +251,11 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             previousWeight: _lastRecordedWeight,
             gestationalWeeks: widget.gestationalWeeks,
           ));
+        }
+
+        // ── Vitals trend card (ANC) — bottom of scroll area ────────────────
+        if (isAnc && _priorAncVisits.isNotEmpty) {
+          items.add(_VitalsTrendCard(priorVisits: _priorAncVisits));
         }
 
         // Submit button lives inside the scroll view so it appears after the

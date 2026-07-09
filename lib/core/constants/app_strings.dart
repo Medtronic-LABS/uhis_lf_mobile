@@ -3167,6 +3167,7 @@ abstract final class VisitCompleteStrings {
   static const String sendCounsellingMessage = 'Send Counselling Message';
   static const String createReferral = 'Create Referral';
   static const String backToHome = 'Back to Home';
+  static const String doneForNow = 'Done for Now';
   static const String ncdCallDoctor = '📱 Call a doctor now';
   static const String ncdBookHospital = '🏥 Book hospital visit & refer';
 
@@ -3271,7 +3272,7 @@ abstract final class NabaStrings {
   static const String smsNotAvailable =
       'SMS is not available on this device.';
 
-  static const String acceptProposal = 'Accept & continue';
+  static const String acceptProposal = 'Save & Go Home';
   static const String proposalNote =
       'This is an AI proposal. Review and accept to proceed.';
 
@@ -3570,7 +3571,7 @@ abstract final class UnifiedFormStrings {
   static String? programmeBadgeLabel(String formType) {
     switch (formType) {
       case 'commonVitals':
-        return 'Common Vitals';
+        return 'Vitals';
       case 'anc':
         return 'ANC';
       case 'ncd':

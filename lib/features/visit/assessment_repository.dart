@@ -373,8 +373,48 @@ class AssessmentRepository extends ChangeNotifier {
         'for patient $patientId');
     for (final row in rows) {
       debugPrint('[AssessmentRepo] lmpFromHistory row kind="${row.kind}" id=${row.id}');
+      // Print up to 400 chars of rawJson so we can see what keys the server sends.
+      final preview = row.rawJson.length > 400
+          ? '${row.rawJson.substring(0, 400)}…'
+          : row.rawJson;
+      debugPrint('[AssessmentRepo] lmpFromHistory row ${row.id} rawJson=$preview');
       final lmp = _extractLmpFromRaw(row.rawJson);
       debugPrint('[AssessmentRepo] lmpFromHistory row ${row.id}: lmp=$lmp');
+      if (lmp != null) return lmp;
+    }
+
+    // Fallback: scan local assessments (may contain PWPROFILE or ANC submissions
+    // with LMP / gestational-weeks data that the server history summary omits).
+    // Try both patient_id and member_id columns since legacy rows may be stored
+    // under the numeric server household-member ID instead of the FHIR patient ID.
+    debugPrint('[AssessmentRepo] lmpFromHistory: no LMP in server history — '
+        'scanning local assessments for $patientId');
+    var localRows = await _dao.getByPatientId(patientId);
+    debugPrint('[AssessmentRepo] lmpFromHistory: ${localRows.length} local rows by patientId');
+
+    if (localRows.isEmpty) {
+      // Extract unique member IDs from history rawJson rows.
+      final memberIds = <String>{};
+      for (final row in rows) {
+        try {
+          final raw = jsonDecode(row.rawJson) as Map<String, dynamic>;
+          final mid = raw['householdMemberId']?.toString() ??
+              raw['memberId']?.toString();
+          if (mid != null && mid.isNotEmpty) memberIds.add(mid);
+        } catch (_) {}
+      }
+      debugPrint('[AssessmentRepo] lmpFromHistory: trying memberIds=$memberIds');
+      for (final mid in memberIds) {
+        final byMember = await _dao.getByMemberId(mid);
+        localRows = [...localRows, ...byMember];
+      }
+      debugPrint('[AssessmentRepo] lmpFromHistory: ${localRows.length} local rows by memberId');
+    }
+
+    for (final local in localRows) {
+      debugPrint('[AssessmentRepo] lmpFromHistory local type=${local.assessmentType} memberId=${local.memberId}');
+      final lmp = _extractLmpFromRaw(local.assessmentDetails);
+      debugPrint('[AssessmentRepo] lmpFromHistory local ${local.id}: lmp=$lmp');
       if (lmp != null) return lmp;
     }
     return null;
@@ -401,12 +441,19 @@ class AssessmentRepository extends ChangeNotifier {
     try {
       final raw = jsonDecode(rawJson) as Map<String, dynamic>;
       // Flatten sub-objects that may carry the LMP key.
+      // Server uses different wrappers for ANC vs PWPROFILE assessment types.
       final flat = <String, dynamic>{...raw};
       for (final sub in const [
         'observations',
         'assessmentDetails',
         'medicalHistoryPhysicalExamination',
         'pointOfCareInvestigations',
+        'medicalHistory',
+        'pregnancyDetails',
+        'pwProfile',
+        'clinicalDetails',
+        'pregnancyProfile',
+        'obstetricHistory',
       ]) {
         if (raw[sub] is Map) {
           flat.addAll((raw[sub] as Map).cast<String, dynamic>());
@@ -420,6 +467,8 @@ class AssessmentRepository extends ChangeNotifier {
         'lastMenstrualPeriodDate',
         'lmp',
         'lmpValue',
+        'menstrualDate',
+        'lastPeriodDate',
       ]) {
         final v = flat[key];
         if (v is String && v.isNotEmpty) {

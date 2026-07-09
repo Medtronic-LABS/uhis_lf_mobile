@@ -500,7 +500,7 @@
     "sections": [
       {
         "sectionId": "commonVitals",
-        "title": "Common Vitals",
+        "title": "Vitals",
         "fieldRefs": [
           {
             "id": "height",

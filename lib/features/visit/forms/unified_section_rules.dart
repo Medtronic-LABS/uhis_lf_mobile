@@ -271,7 +271,7 @@ abstract final class UnifiedSectionRules {
 
   /// Returns a human-readable programme name from a formType key.
   static String _programmeLabel(String formType) => switch (formType) {
-        'commonVitals' => 'Common Vitals',
+        'commonVitals' => 'Vitals',
         'anc' => 'ANC',
         'pncMother' => 'PNC (Mother)',
         'pncChild' => 'PNC (Child)',

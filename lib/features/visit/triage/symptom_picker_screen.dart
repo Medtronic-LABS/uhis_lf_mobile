@@ -627,20 +627,6 @@ class _AncVisitSummaryChip extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
       child: Row(
         children: [
-          // Patient name
-          Expanded(
-            child: Text(
-              patientName ?? '',
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: AppColors.ancText,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 8),
           // Pill chips — GA · parity · key trend
           Wrap(
             spacing: 5,

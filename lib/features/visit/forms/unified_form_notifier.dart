@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/db/patient_dao.dart';
+import '../../../core/db/pregnancy_snapshot_dao.dart';
 import '../assessment_repository.dart';
 import 'canonical_visit_data.dart';
 import 'unified_payload_mapper.dart';
@@ -22,6 +23,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
     required AssessmentDraftDao draftDao,
     required AssessmentRepository assessmentRepo,
     required PatientDao patientDao,
+    required PregnancySnapshotDao pregnancySnapshotDao,
     String? memberId,
     String? householdId,
     String? villageId,
@@ -33,6 +35,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
         _draftDao = draftDao,
         _assessmentRepo = assessmentRepo,
         _patientDao = patientDao,
+        _pregnancySnapshotDao = pregnancySnapshotDao,
         _memberId = memberId,
         _householdId = householdId,
         _villageId = villageId,
@@ -45,6 +48,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
   final AssessmentDraftDao _draftDao;
   final AssessmentRepository _assessmentRepo;
   final PatientDao _patientDao;
+  final PregnancySnapshotDao _pregnancySnapshotDao;
   final String? _memberId;
   final String? _householdId;
   final String? _villageId;
@@ -156,7 +160,25 @@ class UnifiedFormNotifier extends ChangeNotifier {
         if (lmp != null) weeks = DateTime.now().difference(lmp).inDays ~/ 7;
       }
 
-      final edd = lmp?.add(const Duration(days: 280));
+      // ── 3. Fallback: LMP / EDD from pregnancy snapshot stored at sync time ──
+      DateTime? edd;
+      if (lmp == null) {
+        debugPrint('[UnifiedForm] pregnancy data: history had no LMP — '
+            'trying pregnancy snapshot');
+        final snap = await _pregnancySnapshotDao.byPatient(_patientId);
+        debugPrint('[UnifiedForm] pregnancy data: snapshot lmpDate=${snap?.lmpDate} eddDate=${snap?.eddDate}');
+        if (snap?.lmpDate != null) {
+          lmp = DateTime.fromMillisecondsSinceEpoch(snap!.lmpDate!);
+          weeks = DateTime.now().difference(lmp).inDays ~/ 7;
+          debugPrint('[UnifiedForm] pregnancy data: from snapshot LMP=$lmp weeks=$weeks');
+        } else if (snap?.eddDate != null) {
+          edd = DateTime.fromMillisecondsSinceEpoch(snap!.eddDate!);
+          lmp = edd.subtract(const Duration(days: 280));
+          weeks = DateTime.now().difference(lmp).inDays ~/ 7;
+          debugPrint('[UnifiedForm] pregnancy data: derived from snapshot EDD=$edd lmp=$lmp weeks=$weeks');
+        }
+      }
+      edd ??= lmp?.add(const Duration(days: 280));
       _lmpDate = lmp;
       _eddDate = edd;
       _gestationalWeeks = weeks;
