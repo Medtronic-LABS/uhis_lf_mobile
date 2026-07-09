@@ -430,42 +430,6 @@ class _ProgrammeDividerState extends State<_ProgrammeDivider> {
               ),
               const SizedBox(width: AppSpacing.md),
               Expanded(child: Divider(color: AppColors.border, height: 1)),
-              // AI pre-fill badge — shown when triage symptoms were mapped
-              // to this programme's fields.
-              if (hasChips) ...[
-                const SizedBox(width: AppSpacing.md),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [AppColors.aiPurpleDark, AppColors.aiPurple],
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.auto_awesome,
-                        size: 10,
-                        color: Colors.white,
-                      ),
-                      const SizedBox(width: 3),
-                      Text(
-                        UnifiedFormStrings.aiBadgeLabel,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 10,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
             ],
           ),
           // ── Collapsible symptom strip ─────────────────────────────────
