@@ -49,6 +49,8 @@ class VisitFormScreen extends StatefulWidget {
     this.triageNotes,
     this.origin,
     this.onAdvance,
+    this.enrolledProgrammes = const {},
+    this.confirmedSymptoms = const [],
   });
 
   final String visitId;
@@ -73,6 +75,14 @@ class VisitFormScreen extends StatefulWidget {
   /// [VisitFlowScreen] to keep the SK on the same route for all 3 steps.
   final void Function(Programme primaryProgramme, bool referralRecommended)?
       onAdvance;
+
+  /// Programmes the patient is already enrolled in (from [PatientProgrammesDao]).
+  /// Used to order enrolled sections before pathway-recommended sections.
+  final Set<Programme> enrolledProgrammes;
+
+  /// Symptom codes selected in Step 1 (triage). Carried over to Step 2 for
+  /// display and conditional section logic.
+  final List<String> confirmedSymptoms;
 
   @override
   State<VisitFormScreen> createState() => _VisitFormScreenState();
@@ -285,6 +295,12 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         '[VisitForm] Sectioned mode — programmes: ${widget.activatedPathways?.join(', ')}');
 
     final formTypes = _toFormTypes(widget.activatedPathways ?? const []);
+    final enrolledFormTypes = _toFormTypes(
+      widget.enrolledProgrammes
+          .where((p) => p != Programme.unknown)
+          .map((p) => p.name)
+          .toList(),
+    );
     final draftDao = ctx.read<AssessmentDraftDao>();
     final assessmentRepo = ctx.read<AssessmentRepository>();
 
@@ -305,6 +321,8 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
       child: UnifiedFormScreen(
         activeFormTypes: formTypes,
         gestationalWeeks: widget.gestationalWeeks,
+        enrolledFormTypes: enrolledFormTypes,
+        confirmedSymptoms: widget.confirmedSymptoms,
         onSubmitComplete: () =>
             _onSectionedSubmit(ctx, visitCtrl, session),
       ),

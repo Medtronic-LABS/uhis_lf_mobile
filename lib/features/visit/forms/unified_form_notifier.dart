@@ -64,12 +64,17 @@ class UnifiedFormNotifier extends ChangeNotifier {
   }
 
   /// Load existing draft from DB on screen init.
+  ///
+  /// Merges draft values ON TOP of any values already in [_data] (e.g. triage
+  /// pre-fills seeded before this call).  This means the draft wins for any
+  /// field it contains, but triage-derived defaults are preserved for fields
+  /// not yet saved in the draft.
   Future<void> loadDraft() async {
     final row = await _draftDao.getDraft(_encounterId);
     if (row == null) return;
     try {
       final map = jsonDecode(row.fieldValues) as Map<String, dynamic>;
-      _data = CanonicalVisitData(map);
+      _data = _data.merge(CanonicalVisitData(map));
       notifyListeners();
     } catch (e) {
       debugPrint('[UnifiedForm] draft parse error: $e');

@@ -774,6 +774,8 @@ class _Step2VitalsForm extends StatelessWidget {
     this.pathwayNames,
     this.triageNotes,
     this.origin,
+    this.enrolledProgrammes = const {},
+    this.confirmedSymptoms = const [],
   });
 
   final String visitId;
@@ -787,6 +789,10 @@ class _Step2VitalsForm extends StatelessWidget {
   final List<String>? pathwayNames;
   final String? triageNotes;
   final String? origin;
+  /// Enrolled programmes from the patient record — used to order sections.
+  final Set<Programme> enrolledProgrammes;
+  /// Symptom codes selected in Step 1.
+  final List<String> confirmedSymptoms;
   final void Function(Programme primaryProgramme, bool referralRecommended)
       onAdvance;
 
@@ -804,6 +810,8 @@ class _Step2VitalsForm extends StatelessWidget {
       activatedPathways: pathwayNames,
       triageNotes: triageNotes,
       origin: origin,
+      enrolledProgrammes: enrolledProgrammes,
+      confirmedSymptoms: confirmedSymptoms,
       onAdvance: onAdvance,
     );
   }
@@ -966,6 +974,8 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
           .toList(),
       triageNotes: widget.otherSymptoms,
       origin: widget.origin,
+      enrolledProgrammes: _currentProgrammes,
+      confirmedSymptoms: widget.confirmedSymptoms.toList(),
       onAdvance: widget.onAdvance,
     );
   }
