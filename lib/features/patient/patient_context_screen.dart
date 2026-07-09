@@ -264,6 +264,18 @@ class _PatientContextScreenState
     return out;
   }
 
+  /// Returns 'RelatedPerson/<id>' only when [id] is a numeric backend PK
+  /// (< 10^10, i.e. a real server-assigned integer). FHIR patient IDs like
+  /// '07007104021868' are 14-digit numbers that parse as int but are NOT
+  /// backend member PKs — returning them would cause [getRecentVisits] to
+  /// filter out every assessment-history row. Returning null instead tells
+  /// [getRecentVisits] to skip client-side member filtering.
+  String? _numericMemberRef(String id) {
+    final n = int.tryParse(id);
+    if (n == null || n >= 10000000000) return null; // not a backend PK
+    return 'RelatedPerson/$id';
+  }
+
   /// Resolves the numeric server-assigned member referenceId required by the
   /// FHIR mapper for [encounter.memberId].
   ///
@@ -344,9 +356,10 @@ class _PatientContextScreenState
       // ignore: avoid_print
       print('[PatientContextScreen] Found ${assessments.length} remote assessments');
       
-      // Fetch recent visits
+      // Fetch recent visits — use numeric backend member PK so the client-side
+      // filter in getRecentVisits matches householdMemberId from the API.
       final patientIdForVisits = localPatient.patient.patientId ?? widget.patientId;
-      final memberRef = 'RelatedPerson/${widget.patientId}';
+      final memberRef = _numericMemberRef(resolvedMemberId);
       // ignore: avoid_print
       print('[PatientContextScreen] Fetching recent visits for patient: $patientIdForVisits, member: $memberRef, householdId: ${localPatient.patient.householdId}');
       final visits = await memberRepo.getRecentVisits(
@@ -397,9 +410,10 @@ class _PatientContextScreenState
         }
       }
       
-      // Fetch recent visits
+      // Fetch recent visits — use numeric backend member PK so the client-side
+      // filter in getRecentVisits matches householdMemberId from the API.
       final patientIdForVisits = member.patientId ?? widget.patientId;
-      final memberRef = 'RelatedPerson/${member.id}';
+      final memberRef = _numericMemberRef(resolvedMemberId);
       // ignore: avoid_print
       print('[PatientContextScreen] Fetching recent visits for patient: $patientIdForVisits, member: $memberRef, householdId: ${member.householdId}');
       final visits = await memberRepo.getRecentVisits(
@@ -474,7 +488,8 @@ class _PatientContextScreenState
       List<PatientVisit> visits = [];
       try {
         final patientIdForVisits = data['patientId'] as String? ?? widget.patientId;
-        final memberRef = 'RelatedPerson/$memberId';
+        // Use numeric backend member PK so the client-side filter matches.
+        final memberRef = _numericMemberRef(resolvedMemberId);
         final householdIdForVisits = data['householdId']?.toString();
         // ignore: avoid_print
         print('[PatientContextScreen] Fetching recent visits for patient: $patientIdForVisits, member: $memberRef, householdId: $householdIdForVisits');
