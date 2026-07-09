@@ -14,13 +14,11 @@ import '../../../../core/theme/app_theme.dart';
 class DialogMultiSelectField extends StatelessWidget {
   const DialogMultiSelectField({
     super.key,
-    required this.labelText,
     required this.options,
     required this.onChanged,
     this.currentValue = const [],
   });
 
-  final String labelText;
   final List<String> options;
   final List<String> currentValue;
   final ValueChanged<List<String>> onChanged;
@@ -28,51 +26,41 @@ class DialogMultiSelectField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          labelText,
-          style: theme.textTheme.labelLarge?.copyWith(
-            color: AppColors.textMuted,
-          ),
+    // Label is provided by the enclosing field shell; this widget renders the
+    // filled trigger + selected chips only.
+    return InkWell(
+      onTap: () => _openSheet(context),
+      borderRadius: BorderRadius.circular(AppRadius.field),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.border, width: 1.5),
+          borderRadius: BorderRadius.circular(AppRadius.field),
+          color: AppColors.cardSurfaceMuted,
         ),
-        const SizedBox(height: 6),
-        InkWell(
-          onTap: () => _openSheet(context),
-          borderRadius: BorderRadius.circular(9),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              border: Border.all(color: AppColors.border),
-              borderRadius: BorderRadius.circular(9),
-              color: AppColors.cardSurface,
+        child: Row(
+          children: [
+            Expanded(
+              child: currentValue.isEmpty
+                  ? Text(
+                      ComposerStrings.noneSelected,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: AppColors.textMuted,
+                      ),
+                    )
+                  : Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: currentValue
+                          .map((v) => _SelectionChip(label: v))
+                          .toList(),
+                    ),
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: currentValue.isEmpty
-                      ? Text(
-                          ComposerStrings.noneSelected,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: AppColors.textMuted,
-                          ),
-                        )
-                      : Wrap(
-                          spacing: 6,
-                          runSpacing: 4,
-                          children: currentValue
-                              .map((v) => _SelectionChip(label: v))
-                              .toList(),
-                        ),
-                ),
-                const SizedBox(width: 8),
-                const Icon(Icons.expand_more, color: AppColors.textMuted, size: 20),
-              ],
-            ),
-          ),
+            const SizedBox(width: 8),
+            const Icon(Icons.expand_more, color: AppColors.textMuted, size: 20),
+          ],
         ),
-      ],
+      ),
     );
   }
 

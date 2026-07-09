@@ -52,6 +52,75 @@ abstract final class UnifiedSectionRules {
   /// ANC uses `todaysVitals`; NCD/cataract use `bpLog`.
   static const _vitalsSectionIds = {'todaysVitals', 'bpLog'};
 
+  /// Semantic field equivalence groups.
+  ///
+  /// When any field in a group is claimed, the entire group is pre-claimed so
+  /// that two programmes that represent the same measurement with different
+  /// field IDs do not both render a capture widget.
+  ///
+  /// Groups are ordered from most-specific to least-specific.  The first group
+  /// that contains the claimed field wins.
+  ///
+  /// BP: ANC uses {bloodPressure, systolic, diastolic} while NCD uses
+  ///   {bpLogDetails}.  Claiming one set pre-claims the other.
+  /// IFA: ANC uses {ifaTotalConsumed, ifaProvided}; PNC uses
+  ///   {ifaTablets (TextLabel), ifaTabletsConsumed, ifaTabletsProvided}.
+  /// Calcium: ANC uses {calciumTotalConsumed, calciumProvided}; PNC uses
+  ///   {calciumTablets (TextLabel), calciumTabletsConsumed, calciumTabletsProvided}.
+  /// Glucose: PNC uses {bloodSugar (selector), fastingBloodSugar, randomBloodSugar};
+  ///   NCD uses {glucoseType, glucose}.
+  static const List<Set<String>> _semanticFieldGroups = [
+    // ── Blood pressure ──────────────────────────────────────────────────────
+    {'bloodPressure', 'systolic', 'diastolic', 'bpLogDetails'},
+    // ── Folic acid supplements ───────────────────────────────────────────────
+    {'folicAcidTotalConsumed', 'folicAcidTablets'},
+    {'folicAcidProvided'},
+    // ── IFA / iron supplements ──────────────────────────────────────────────
+    {'ifaTotalConsumed', 'ifaTabletsConsumed', 'ifaTablets'},
+    {'ifaProvided', 'ifaTabletsProvided'},
+    // ── Calcium supplements ─────────────────────────────────────────────────
+    {'calciumTotalConsumed', 'calciumTabletsConsumed', 'calciumTablets'},
+    {'calciumProvided', 'calciumTabletsProvided'},
+    // ── Blood glucose ────────────────────────────────────────────────────────
+    {'glucoseType', 'bloodSugar'},
+    {'glucose', 'fastingBloodSugar', 'randomBloodSugar', 'ancBloodGlucose'},
+  ];
+
+  /// Returns a human-readable description of which semantic groups had members
+  /// present in [activeFieldIds].  Used by the debug log at form-open time.
+  static List<String> mergedGroupDescriptions(Set<String> activeFieldIds) {
+    const groupLabels = <Set<String>, String>{
+      {'bloodPressure', 'systolic', 'diastolic', 'bpLogDetails'}: 'BP (systolic|diastolic)',
+      {'folicAcidTotalConsumed', 'folicAcidTablets'}: 'Folic acid consumed',
+      {'ifaTotalConsumed', 'ifaTabletsConsumed', 'ifaTablets'}: 'IFA consumed',
+      {'ifaProvided', 'ifaTabletsProvided'}: 'IFA provided',
+      {'calciumTotalConsumed', 'calciumTabletsConsumed', 'calciumTablets'}: 'Calcium consumed',
+      {'calciumProvided', 'calciumTabletsProvided'}: 'Calcium provided',
+      {'glucoseType', 'bloodSugar'}: 'Glucose type',
+      {'glucose', 'fastingBloodSugar', 'randomBloodSugar', 'ancBloodGlucose'}: 'Glucose value',
+    };
+    final merged = <String>[];
+    for (final entry in groupLabels.entries) {
+      final presentCount = entry.key.where(activeFieldIds.contains).length;
+      if (presentCount > 1) {
+        merged.add(entry.value);
+      }
+    }
+    return merged;
+  }
+
+  /// Claim [fieldId] in [claimed] and also pre-claim every field in the same
+  /// semantic equivalence group (if any).
+  static void _claimField(String fieldId, Set<String> claimed) {
+    claimed.add(fieldId);
+    for (final group in _semanticFieldGroups) {
+      if (group.contains(fieldId)) {
+        claimed.addAll(group);
+        return;
+      }
+    }
+  }
+
   /// Returns ordered, deduplicated [AnnotatedFormSection]s for rendering.
   ///
   /// [enrolledFormTypes] — the expanded formType keys (from `_toFormTypes()`)
@@ -83,7 +152,7 @@ abstract final class UnifiedSectionRules {
         final remaining =
             section.fieldRefs.where((r) => !claimedFieldIds.contains(r.id)).toList();
         if (remaining.isEmpty) { continue; }
-        for (final ref in remaining) { claimedFieldIds.add(ref.id); }
+        for (final ref in remaining) { _claimField(ref.id, claimedFieldIds); }
 
         vitalsSections.add(AnnotatedFormSection(
           section: remaining.length == section.fieldRefs.length
@@ -126,7 +195,7 @@ abstract final class UnifiedSectionRules {
               .where((r) => !claimedFieldIds.contains(r.id))
               .toList();
           if (remaining.isEmpty) { continue; }
-          for (final ref in remaining) { claimedFieldIds.add(ref.id); }
+          for (final ref in remaining) { _claimField(ref.id, claimedFieldIds); }
 
           (sectionGroup == SectionGroup.enrolled
                   ? enrolledSections
@@ -146,8 +215,70 @@ abstract final class UnifiedSectionRules {
       }
     }
 
-    return [...vitalsSections, ...enrolledSections, ...recommendedSections];
+    final result = [...vitalsSections, ...enrolledSections, ...recommendedSections];
+
+    // Debug log is intentionally NOT called here — the caller
+    // (UnifiedFormScreen) gates it so it only fires when the section shape
+    // actually changes, suppressing per-field-change spam.
+
+    return result;
   }
+
+  static void debugLogSections(
+      List<AnnotatedFormSection> result, int uniqueFieldCount) {
+    // Collect all field IDs that are present across ALL sections (before
+    // dedup) so mergedGroupDescriptions can flag cross-program duplicates.
+    final allFieldIds = <String>{};
+    for (final a in result) {
+      for (final r in a.section.fieldRefs) {
+        allFieldIds.add(r.id);
+      }
+    }
+    final merged = mergedGroupDescriptions(allFieldIds);
+    // ignore: avoid_print
+    print('[Form] ── Section breakdown '
+        '(${result.length} sections · $uniqueFieldCount unique fields) ──');
+    if (merged.isNotEmpty) {
+      // ignore: avoid_print
+      print('[Form]   📎 Common fields merged (captured once): ${merged.join(', ')}');
+    }
+
+    String? lastHeader;
+    for (final a in result) {
+      final formType = a.section.formType;
+      final programme = _programmeLabel(formType);
+      final header = switch (a.group) {
+        SectionGroup.vitals => '📊 COMMON VITALS',
+        SectionGroup.enrolled => '✅ $programme (enrolled)',
+        SectionGroup.recommended => '🔵 $programme (recommended)',
+      };
+      if (header != lastHeader) {
+        // ignore: avoid_print
+        print('[Form]   $header');
+        lastHeader = header;
+      }
+      final fields = a.section.fieldRefs.map((r) => r.id).join(' · ');
+      // ignore: avoid_print
+      print('[Form]     · ${a.section.sectionId}: $fields');
+    }
+    // ignore: avoid_print
+    print('[Form] ── end ──────────────────────────────────────────────');
+  }
+
+  /// Returns a human-readable programme name from a formType key.
+  static String _programmeLabel(String formType) => switch (formType) {
+        'anc' => 'ANC',
+        'pncMother' => 'PNC (Mother)',
+        'pncChild' => 'PNC (Child)',
+        'pncNeonatal' => 'PNC (Neonate)',
+        'pregnancyOutcome' => 'Pregnancy Outcome',
+        'ncd' => 'NCD',
+        'cataract' => 'Cataract',
+        'eye_care' => 'Eye Care',
+        'family_planning' => 'Family Planning',
+        'pwProfile' => 'PW Profile',
+        _ => formType.toUpperCase(),
+      };
 
   static bool _isSectionVisible({
     required FormSection section,

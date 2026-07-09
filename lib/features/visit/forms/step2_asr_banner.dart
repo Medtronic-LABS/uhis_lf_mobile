@@ -153,8 +153,8 @@ class _Step2AsrBannerState extends State<Step2AsrBanner> {
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         gradient: _gradient(state, hasFill),
         borderRadius: BorderRadius.circular(16),
