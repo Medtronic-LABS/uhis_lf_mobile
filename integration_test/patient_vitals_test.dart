@@ -5,7 +5,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:uhis_next/main.dart' as app;
 import 'package:uhis_next/core/constants/app_strings.dart';
 
-const _kTestPin = ['1', '2', '3', '4', '5', '6'];
+const _kTestPin = ['1', '2', '3', '4'];
 const _kPatientName = 'Saidul';
 
 Future<void> _settle(WidgetTester tester, [int seconds = 5]) =>
@@ -64,7 +64,7 @@ void main() {
         await _settle(tester);
       }
 
-      if (find.text(PinStrings.createTitle(6)).evaluate().isNotEmpty) {
+      if (find.text(PinStrings.createTitle(4)).evaluate().isNotEmpty) {
         await _enterPinDigits(tester);
         await _settle(tester, 5);
         if (find.text(PinStrings.confirmTitle).evaluate().isNotEmpty) {

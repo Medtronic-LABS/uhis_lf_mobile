@@ -73,6 +73,7 @@ class AuthRepository {
   static const _kPinHash = 'pin_hash';
   static const _kPinSalt = 'pin_salt';
   static const _kPinAttempts = 'pin_failed_attempts';
+  static const _kPinLength = 'pin_length';
   static const _kOnboardingComplete = 'onboarding_complete';
   static const _kFirstName = 'firstName';
   static const _kLastName = 'lastName';
@@ -456,8 +457,25 @@ class AuthRepository {
   Future<bool> isReentryEnabled() async =>
       (await isBiometricEnabled()) || (await isPinSet());
 
-  Future<bool> isPinSet() async =>
-      (await _storage.read(key: _kPinEnabled)) == 'true';
+  /// True if a PIN is set AND usable with the app's current [AppConfig.pinLength].
+  /// A PIN created under a different digit length (e.g. before the 6→4 digit
+  /// migration) can never be re-entered via the current UI — self-heals by
+  /// clearing it so the user falls back to biometric/password instead of a
+  /// permanent "incorrect PIN" loop.
+  Future<bool> isPinSet() async {
+    final enabled = (await _storage.read(key: _kPinEnabled)) == 'true';
+    if (!enabled) return false;
+    // No stored length means the PIN predates this migration, i.e. it was
+    // created under the historical default of 6 (no build in this repo has
+    // ever overridden PIN_LENGTH) — treat that as the implicit length.
+    final storedLen =
+        int.tryParse(await _storage.read(key: _kPinLength) ?? '') ?? 6;
+    if (storedLen != AppConfig.pinLength) {
+      await clearPin();
+      return false;
+    }
+    return true;
+  }
 
   /// Stores a salted hash of [pin] and persists the shared re-entry session so
   /// the PIN can later restore it (mirrors [enableBiometric]).
@@ -467,6 +485,7 @@ class AuthRepository {
     await _storage.write(key: _kPinHash, value: hashPin(pin, salt));
     await _storage.write(key: _kPinAttempts, value: '0');
     await _storage.write(key: _kPinEnabled, value: 'true');
+    await _storage.write(key: _kPinLength, value: '${pin.length}');
     await _persistReentrySession();
   }
 
@@ -494,6 +513,7 @@ class AuthRepository {
     await _storage.delete(key: _kPinHash);
     await _storage.delete(key: _kPinSalt);
     await _storage.delete(key: _kPinAttempts);
+    await _storage.delete(key: _kPinLength);
   }
 
   /// Disables the PIN. The shared re-entry session is cleared only if biometric

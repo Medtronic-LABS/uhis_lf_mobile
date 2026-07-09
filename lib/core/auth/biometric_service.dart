@@ -60,7 +60,7 @@ class BiometricService {
           // biometricOnly: false allows both biometrics (fingerprint/face) AND
           // device credentials (PIN/pattern/password). The Android system shows
           // whatever the user has set up. This is separate from the app's own
-          // 6-digit PIN which has its own /pin-unlock screen.
+          // 4-digit PIN which has its own /pin-unlock screen.
           biometricOnly: false,
           stickyAuth: true,
           useErrorDialogs: true,
