@@ -400,7 +400,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         int.tryParse(member?.id ?? '') ??
         0;
     final memberId = member?.id;
-    final villageId = member?.villageId;
+    // Mirror Android: use sub-village ID for assessment scope so that Android's
+    // member-assessment-history pull (scoped to [203, 204, 206]) can find
+    // Flutter-submitted assessments. Parent villageId (34) is invisible to it.
+    final villageId = member?.subVillageId ?? member?.villageId;
     debugPrint('[Dashboard] member lookup: patientId=$patientId referenceId=${member?.referenceId} memberId=$memberId villageId=$villageId → householdMemberLocalId=$householdMemberLocalId');
     final encounterId = await controller.startVisit(
       patientId: patientId,
@@ -417,6 +420,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         extra: {
           'patientId': patientId,
           'patientName': item.patientName,
+          'patientGender': member?.gender,
           'householdId': item.householdId,
           'patientAge': item.age,
           'memberId': memberId,

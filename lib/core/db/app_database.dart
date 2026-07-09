@@ -20,7 +20,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 19;
+  static const int schemaVersion = 20;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -1010,6 +1010,38 @@ class AppDatabase {
         await db.execute(
             'ALTER TABLE $tableLocalAssessments ADD COLUMN pregnancy_episode_id TEXT');
       } catch (_) {/* column already present */}
+    }
+    if (from < 20) {
+      // v20 — Backfill patients.village_id with the sub-village ID from the
+      // members table for any record that still holds the parent village ID.
+      // Android scopes member-assessment-history pulls to sub-village IDs
+      // (e.g. [203, 204, 206]) — assessments tagged with the parent village (34)
+      // are invisible to Android. The offline_sync_service now writes
+      // sub_village_id → patients.village_id for new syncs; this migration
+      // repairs existing rows from before that fix.
+      try {
+        await db.execute('''
+          UPDATE $tablePatients
+          SET village_id = (
+            SELECT sub_village_id FROM $tableMembers
+            WHERE ($tableMembers.patient_id = $tablePatients.id
+                   OR $tableMembers.id = $tablePatients.id)
+              AND $tableMembers.sub_village_id IS NOT NULL
+            LIMIT 1
+          )
+          WHERE EXISTS (
+            SELECT 1 FROM $tableMembers
+            WHERE ($tableMembers.patient_id = $tablePatients.id
+                   OR $tableMembers.id = $tablePatients.id)
+              AND $tableMembers.sub_village_id IS NOT NULL
+          )
+        ''');
+      } catch (e) {
+        // Non-fatal: existing records fall back to current villageId;
+        // the next full sync will refresh them correctly.
+        // ignore: avoid_print
+        print('[DB v20] villageId backfill failed (non-fatal): $e');
+      }
     }
   }
 

@@ -319,6 +319,8 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       ),
       builder: (_) => _ProgrammeConfirmSheet(
         pathways: pathways,
+        patientGender: widget.patientGender,
+        patientAgeYears: widget.patientAge,
         onConfirm: (selected) {
           if (!mounted) return;
           setState(() {
@@ -3020,14 +3022,58 @@ class _ProgrammeConfirmSheet extends StatefulWidget {
   const _ProgrammeConfirmSheet({
     required this.pathways,
     required this.onConfirm,
+    this.patientGender,
+    this.patientAgeYears,
   });
 
   final List<ActivatedPathway> pathways;
   final void Function(Set<Programme>) onConfirm;
 
+  /// Patient demographics used to hide clinically-impossible programmes from
+  /// the manual "Add manually" list (e.g. ANC/PNC for a male patient). Without
+  /// this filter, an ineligible selection reaches the FHIR mapper which 500s
+  /// while trying to build maternal/pregnancy resources for the patient.
+  final String? patientGender;
+  final int? patientAgeYears;
+
   @override
   State<_ProgrammeConfirmSheet> createState() =>
       _ProgrammeConfirmSheetState();
+}
+
+/// Filters [candidates] to programmes the patient is demographically eligible
+/// for. Mirrors the demographic gates in `pathway_rules_v1.dart` so a manual
+/// selection can never produce a payload the backend rejects:
+///   - ANC / PNC → female, reproductive age (≥10y); never male.
+///   - IMCI      → under 5.
+///   - NCD       → 5y and older.
+/// When a demographic fact is unknown the programme is allowed through rather
+/// than over-restricting (matches the PathwayEngine's permissive-on-unknown
+/// stance).
+Set<Programme> _eligibleProgrammes(
+  Iterable<Programme> candidates, {
+  String? gender,
+  int? ageYears,
+}) {
+  final g = gender?.trim().toLowerCase();
+  final isMale = g == 'male' || g == 'm';
+  return candidates.where((p) {
+    switch (p) {
+      case Programme.anc:
+      case Programme.pnc:
+        if (isMale) return false;
+        if (ageYears != null && ageYears < 10) return false;
+        return true;
+      case Programme.imci:
+        if (ageYears != null && ageYears > 5) return false;
+        return true;
+      case Programme.ncd:
+        if (ageYears != null && ageYears < 5) return false;
+        return true;
+      default:
+        return true;
+    }
+  }).toSet();
 }
 
 class _ProgrammeConfirmSheetState extends State<_ProgrammeConfirmSheet> {
@@ -3048,9 +3094,14 @@ class _ProgrammeConfirmSheetState extends State<_ProgrammeConfirmSheet> {
   @override
   Widget build(BuildContext context) {
     final matched = widget.pathways.map((p) => p.programme).toSet();
-    final unmatched = Programme.kPilotProgrammes
-        .where((p) => !matched.contains(p))
-        .toList();
+    // Only offer manually-addable programmes the patient is demographically
+    // eligible for — prevents e.g. ANC being added for a male patient, which
+    // the FHIR mapper rejects with a 500.
+    final unmatched = _eligibleProgrammes(
+      Programme.kPilotProgrammes.where((p) => !matched.contains(p)),
+      gender: widget.patientGender,
+      ageYears: widget.patientAgeYears,
+    ).toList();
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
