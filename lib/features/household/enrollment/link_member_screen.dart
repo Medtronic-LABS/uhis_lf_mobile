@@ -210,15 +210,17 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
         relationshipToHead: 'Other',
       );
 
-      // Use sub-village as canonical village (mirrors _memberToPatient in sync service).
-      final canonicalVillageId =
-          (effSubVillageId?.isNotEmpty == true ? effSubVillageId : null) ??
-              widget.villageId ??
-              '';
-      final canonicalVillageName =
-          (effSubVillageName?.isNotEmpty == true ? effSubVillageName : null) ??
-              widget.villageName ??
-              '';
+      // canonicalVillageId = PARENT village ID (e.g. 34).
+      // effSubVillageId    = sub-village ID (e.g. 203).
+      // Both are needed: spice-service stores villageId on the household row
+      // and subVillageId on the member row. Sending the same ID for both causes
+      // a 500 from the FHIR mapper when it tries to resolve the hierarchy.
+      final canonicalVillageId = widget.villageId?.isNotEmpty == true
+          ? widget.villageId!
+          : effSubVillageId ?? '';
+      final canonicalVillageName = widget.villageName?.isNotEmpty == true
+          ? widget.villageName!
+          : effSubVillageName ?? '';
 
       final result = await repo.submitStandaloneMember(
         member: member,
