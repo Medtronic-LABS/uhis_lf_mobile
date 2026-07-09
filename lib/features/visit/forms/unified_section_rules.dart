@@ -173,13 +173,14 @@ abstract final class UnifiedSectionRules {
 
     final result = [...vitalsSections, ...enrolledSections, ...recommendedSections];
 
-    // ── Debug: grouped programme breakdown ─────────────────────────────────
-    _debugLogSections(result, claimedFieldIds.length);
+    // Debug log is intentionally NOT called here — the caller
+    // (UnifiedFormScreen) gates it so it only fires when the section shape
+    // actually changes, suppressing per-field-change spam.
 
     return result;
   }
 
-  static void _debugLogSections(
+  static void debugLogSections(
       List<AnnotatedFormSection> result, int uniqueFieldCount) {
     // ignore: avoid_print
     print('[Form] ── Section breakdown '

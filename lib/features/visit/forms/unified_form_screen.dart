@@ -74,6 +74,11 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   Object? _configError;
   final ScrollController _scrollCtrl = ScrollController();
 
+  // Used to suppress duplicate [Form] debug logs — only log when the section
+  // count or field count actually changes between rebuilds.
+  int _lastLoggedSectionCount = -1;
+  int _lastLoggedFieldCount = -1;
+
   @override
   void initState() {
     super.initState();
@@ -143,6 +148,17 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
           gestationalWeeks: widget.gestationalWeeks,
           enrolledFormTypes: widget.enrolledFormTypes,
         );
+
+        // Only emit the [Form] debug summary when the section/field count
+        // changes — suppresses per-keystroke log spam during form filling.
+        final totalFields = annotated.fold<int>(
+          0, (sum, a) => sum + a.section.fieldRefs.length);
+        if (annotated.length != _lastLoggedSectionCount ||
+            totalFields != _lastLoggedFieldCount) {
+          _lastLoggedSectionCount = annotated.length;
+          _lastLoggedFieldCount = totalFields;
+          UnifiedSectionRules.debugLogSections(annotated, totalFields);
+        }
 
         // Build the list items: programme-name dividers (with inline per-
         // programme symptom chips) + section cards.

@@ -74,7 +74,31 @@ abstract final class UnifiedPayloadMapper {
       ));
     }
 
+    // ── Debug: log what each programme payload contains ──────────────────
+    _debugLogPayloads(payloads);
+
     return payloads;
+  }
+
+  static void _debugLogPayloads(List<ProgrammePayload> payloads) {
+    // ignore: avoid_print
+    print('[Payload] ── decompose → ${payloads.length} programme payloads ──');
+    for (final p in payloads) {
+      final nonNull = p.details.entries
+          .where((e) => e.value != null)
+          .map((e) {
+            final v = e.value;
+            // Summarise nested maps/lists instead of dumping raw JSON
+            if (v is Map) return '${e.key}:{${v.keys.join(',')}}';
+            if (v is List) return '${e.key}:[${v.length}]';
+            return '${e.key}=${e.value}';
+          })
+          .join(' · ');
+      // ignore: avoid_print
+      print('[Payload]   ${p.assessmentType}: $nonNull');
+    }
+    // ignore: avoid_print
+    print('[Payload] ── end ───────────────────────────────────────────────');
   }
 
   // ── ANC ────────────────────────────────────────────────────────────────────
