@@ -57,6 +57,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
   String? get submitError => _submitError;
   Set<String> get validationErrors => _validationErrors;
 
+  /// FHIR encounter id for this visit.
+  String get encounterId => _encounterId;
+
   /// FHIR patient id for this visit (empty when unknown). Exposed so the
   /// vitals-trend card can look up prior-visit history.
   String get patientId => _patientId;

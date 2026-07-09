@@ -9,25 +9,17 @@ import '../../../core/db/encounter_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/db/patient_programmes_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
-import '../../../core/api/scribe_api_service.dart' show ScribeMode;
-import '../../../core/api/realtime_asr_service.dart';
 import '../../patient/followup_repository.dart';
 import '../../patient/vitals_repository.dart';
 import '../../realtime_asr/chief_complaint_matcher.dart';
-import '../../realtime_asr/models/realtime_clinical_fields.dart';
-import '../../realtime_asr/realtime_asr_controller.dart';
 import '../../scribe/models/ai_extracted_field.dart';
-import '../../scribe/scribe_controller.dart';
-import '../../scribe/scribe_mic_waveform.dart';
-import '../../scribe/scribe_permission_service.dart';
-import '../../scribe/scribe_session.dart';
+import '../../scribe/widgets/ai_scribe_banner.dart';
 import '../briefing/briefing_models.dart';
 import '../briefing/visit_briefing_repository.dart';
 import '../pathway/pathway_engine.dart';
 import 'patient_context_builder.dart';
 import 'visit_step_header.dart';
 import 'triage_view_model.dart';
-import 'ai_scribe_triage_vocab.dart';
 
 /// Symptom picker screen for the triage step.
 ///
@@ -468,10 +460,40 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                      child: _AiScribeTriageBanner(
+                      child: AiScribeBanner(
                         encounterId: widget.encounterId,
                         patientId: widget.patientId,
-                        viewModel: vm,
+                        isFemale:
+                            vm.patientContext.sex == Sex.female,
+                        tapStartsLiveAsr: true,
+                        onReviewReady: (ctrl) {
+                          final result = ctrl.session.triageExtractionResult;
+                          if (result != null) {
+                            vm.applyScribeTriageResult(result);
+                          }
+                          ctrl.resetSession();
+                        },
+                        onLiveFields: (fields, transcript) {
+                          if (fields.chiefComplaints.isEmpty) return;
+                          final codes = ChiefComplaintMatcher.match(
+                            fields.chiefComplaints,
+                          );
+                          if (codes.isEmpty) return;
+                          vm.applyScribeTriageResult(
+                            TriageExtractionResult(
+                              symptomCodes: [
+                                for (final code in codes)
+                                  AIExtractedField(
+                                    fieldId: code,
+                                    value: true,
+                                    confidence:
+                                        ChiefComplaintMatcher.matchConfidence,
+                                  ),
+                              ],
+                              transcriptText: transcript,
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ),
@@ -1103,518 +1125,6 @@ class _BriefingFallbackContent extends StatelessWidget {
     );
   }
 }
-
-// ── _AiScribeTriageBanner ────────────────────────────────────────────────────
-//
-// Prominent purple banner at the top of Step 1. Spec §4.1.2 (ANC) / §5.1.1
-// (NCD): tap-to-record. Result symptoms render as pre-ticked chips in the
-// list below; SK can untick AI picks or add missed ones manually.
-//
-// State machine driven by [ScribeController.session]:
-//   idle       → mic icon, "tap to fill the form by voice"
-//   recording  → red pulse, "Listening… tap to stop"
-//   processing → spinner, "AI is reviewing the recording"
-//   reviewReady (mode==triage) → silently transitions back to idle once the
-//   [TriageViewModel] has consumed the result and the controller is reset.
-
-class _AiScribeTriageBanner extends StatefulWidget {
-  const _AiScribeTriageBanner({
-    required this.encounterId,
-    required this.patientId,
-    required this.viewModel,
-  });
-
-  final String encounterId;
-  final String patientId;
-  final TriageViewModel viewModel;
-
-  @override
-  State<_AiScribeTriageBanner> createState() => _AiScribeTriageBannerState();
-}
-
-class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
-  static const Color _gradStart = AppColors.aiPurpleDark;
-  static const Color _gradEnd = AppColors.aiPurple;
-  static const Color _iconBg = AppColors.aiPurple;
-  static const Color _recordingIconBg = AppColors.aiPurpleLight;
-  static const Color _errorGradStart = AppColors.statusCriticalText;
-  static const Color _errorGradEnd = AppColors.rangeCritical;
-
-  bool _showDone = false;
-  bool _triageResultConsumed = false;
-  ScribeController? _scribe;
-
-  // Independent "Live ASR" mode — see ScribeBanner's docs for the same
-  // pattern. Never runs at the same time as the batch triage recording
-  // above; both would otherwise try to capture the mic at once.
-  late final RealtimeAsrController _liveCtrl;
-  RealtimeClinicalFields? _lastAppliedLiveFields;
-
-  @override
-  void initState() {
-    super.initState();
-    _liveCtrl = RealtimeAsrController(
-      service: context.read<RealtimeAsrService>(),
-      permissionService: ScribePermissionService(),
-    );
-    _liveCtrl.addListener(_onLiveChanged);
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final next = context.read<ScribeController>();
-    if (!identical(_scribe, next)) {
-      _scribe?.removeListener(_onScribeChanged);
-      _scribe = next;
-      _scribe!.addListener(_onScribeChanged);
-      _onScribeChanged();
-    }
-    _liveCtrl.bindContext(context);
-  }
-
-  @override
-  void dispose() {
-    _scribe?.removeListener(_onScribeChanged);
-    _liveCtrl.removeListener(_onLiveChanged);
-    _liveCtrl.dispose();
-    super.dispose();
-  }
-
-  void _onLiveChanged() {
-    if (!mounted) return;
-    final fields = _liveCtrl.fields;
-    if (fields != null && !identical(fields, _lastAppliedLiveFields)) {
-      _lastAppliedLiveFields = fields;
-      debugPrint('[RealtimeASR/Triage] chiefComplaints: ${fields.chiefComplaints}');
-      if (fields.chiefComplaints.isNotEmpty) {
-        final matchedCodes = ChiefComplaintMatcher.match(fields.chiefComplaints);
-        debugPrint('[RealtimeASR/Triage] matched vocab codes: $matchedCodes');
-        if (matchedCodes.isNotEmpty) {
-          widget.viewModel.applyScribeTriageResult(
-            TriageExtractionResult(
-              symptomCodes: [
-                for (final code in matchedCodes)
-                  AIExtractedField(
-                    fieldId: code,
-                    value: true,
-                    confidence: ChiefComplaintMatcher.matchConfidence,
-                  ),
-              ],
-              transcriptText: _liveCtrl.fullTranscript,
-            ),
-          );
-        }
-      }
-    }
-    setState(() {});
-  }
-
-  void _startAsr() {
-    if (_showDone) {
-      setState(() {
-        _showDone = false;
-        _triageResultConsumed = false;
-      });
-    }
-    _liveCtrl.start();
-  }
-
-  void _onScribeChanged() {
-    if (!mounted || _showDone) return;
-    final session = _scribe!.session;
-    if (session.state == ScribeState.reviewReady &&
-        session.mode == ScribeMode.triage &&
-        !_triageResultConsumed) {
-      _consumeTriageResult(_scribe!);
-    } else if (session.state == ScribeState.error) {
-      setState(() {});
-    }
-  }
-
-  void _consumeTriageResult(ScribeController controller) {
-    _triageResultConsumed = true;
-    final triageResult = controller.session.triageExtractionResult;
-    if (triageResult != null) {
-      widget.viewModel.applyScribeTriageResult(triageResult);
-    }
-    controller.resetSession();
-    setState(() => _showDone = true);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    ScribeController controller;
-    try {
-      controller = context.watch<ScribeController>();
-    } catch (_) {
-      return const SizedBox.shrink();
-    }
-
-    final session = controller.session;
-    final liveActive = _liveCtrl.isActive;
-    final isRecording = !liveActive && session.state == ScribeState.recording;
-    final isError =
-        !liveActive && !_showDone && session.state == ScribeState.error;
-    final isProcessing =
-        !liveActive &&
-        !_showDone &&
-        !isError &&
-        (session.state == ScribeState.uploading ||
-            session.state == ScribeState.processing);
-    // True idle OR the terminal "done" state — both offer the ASR/Other
-    // chooser instead of an implicit whole-card tap-to-start.
-    final idleChoice = !liveActive && !isRecording && !isError && !isProcessing;
-
-    final title = liveActive
-        ? RealtimeAsrStrings.title
-        : _showDone
-        ? SymptomPickerStrings.scribeBannerDone
-        : isError
-        ? SymptomPickerStrings.scribeBannerError
-        : isRecording
-        ? SymptomPickerStrings.scribeBannerRecording
-        : isProcessing
-        ? SymptomPickerStrings.scribeBannerProcessing
-        : SymptomPickerStrings.scribeBannerTitleFor(
-            isFemale: widget.viewModel.patientContext.sex == Sex.female,
-          );
-
-    final subtitle = liveActive
-        ? (switch (_liveCtrl.state) {
-            RealtimeAsrState.connecting => RealtimeAsrStrings.connecting,
-            RealtimeAsrState.stopping => RealtimeAsrStrings.stopping,
-            _ => RealtimeAsrStrings.listening,
-          })
-        : _showDone
-        ? SymptomPickerStrings.scribeBannerDoneSubtitle
-        : isError
-        ? SymptomPickerStrings.scribeBannerErrorSubtitle
-        : isRecording
-        ? SymptomPickerStrings.scribeBannerRecordingSubtitle
-        : idleChoice
-        ? ScribeBannerStrings.idleSub
-        : SymptomPickerStrings.scribeBannerSubtitle;
-
-    void onTap() {
-      controller.bindContext(context);
-      if (idleChoice) {
-        _startAsr();
-      } else if (liveActive) {
-        _liveCtrl.stop();
-      } else if (isRecording) {
-        controller.stopRecording(
-          patientId: widget.patientId,
-          encounterId: widget.encounterId,
-        );
-      } else if (isError) {
-        setState(() {
-          _showDone = false;
-          _triageResultConsumed = false;
-        });
-        controller.resetSession();
-      }
-    }
-
-    return Material(
-      color: Colors.transparent,
-      child: Semantics(
-        button: !isProcessing,
-        label: liveActive
-            ? 'Stop live ASR'
-            : isRecording
-            ? SymptomPickerStrings.scribeStopRecordingLabel
-            : isError
-            ? SymptomPickerStrings.scribeBannerError
-            : _showDone
-            ? SymptomPickerStrings.scribeBannerDone
-            : SymptomPickerStrings.scribeBannerTitleFor(
-                isFemale: widget.viewModel.patientContext.sex == Sex.female,
-              ),
-        child: InkWell(
-          onTap: isProcessing ? null : onTap,
-          borderRadius: BorderRadius.circular(14),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 280),
-            curve: Curves.easeOut,
-            padding: const EdgeInsets.fromLTRB(12, 14, 16, 14),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: liveActive
-                    ? const [_gradStart, _gradEnd]
-                    : _showDone
-                    ? const [
-                        AppColors.statusSuccessAction,
-                        AppColors.statusSuccess,
-                      ]
-                    : isError
-                    ? const [_errorGradStart, _errorGradEnd]
-                    : const [_gradStart, _gradEnd],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(14),
-              border: _showDone
-                  ? Border.all(
-                      color: AppColors.textOnNavy.withValues(alpha: 0.35),
-                      width: 1,
-                    )
-                  : null,
-              boxShadow: [
-                BoxShadow(
-                  color: (_showDone ? AppColors.statusSuccess : _gradStart)
-                      .withValues(alpha: 0.25),
-                  blurRadius: 14,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    // idle → mic · recording → waveform · processing → spinner
-                    // · done → green check · live → podcast icon → idle.
-                    SizedBox(
-                      width: 52,
-                      height: 52,
-                      child: Center(
-                        child: _buildCircleContent(
-                          controller: controller,
-                          isRecording: isRecording,
-                          isProcessing: isProcessing,
-                          isError: isError,
-                          showDone: _showDone,
-                          liveActive: liveActive,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
-                            children: [
-                              if (isRecording) ...[
-                                const ScribeRecordingLiveDot(),
-                                const SizedBox(width: 8),
-                              ],
-                              Expanded(
-                                child: Text(
-                                  title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: AppColors.textOnNavy,
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            subtitle,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: AppColors.textOnNavy.withValues(alpha: 0.78),
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                if (liveActive) ...[
-                  const SizedBox(height: 10),
-                  _TriageLiveAsrPanel(controller: _liveCtrl),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCircleContent({
-    required ScribeController controller,
-    required bool isRecording,
-    required bool isProcessing,
-    required bool isError,
-    required bool showDone,
-    required bool liveActive,
-  }) {
-    if (liveActive) {
-      // Spinner while the socket is coming up or the session is winding down,
-      // so tapping start/stop gives immediate feedback; podcast icon while the
-      // session is actively listening.
-      final busy = _liveCtrl.state == RealtimeAsrState.connecting ||
-          _liveCtrl.state == RealtimeAsrState.stopping;
-      return Container(
-        width: 44,
-        height: 44,
-        decoration: const BoxDecoration(
-          color: _recordingIconBg,
-          shape: BoxShape.circle,
-        ),
-        alignment: Alignment.center,
-        child: busy
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppColors.textOnNavy,
-                ),
-              )
-            : const Icon(Icons.podcasts, color: AppColors.textOnNavy, size: 22),
-      );
-    }
-    if (showDone) {
-      return const ScribeDoneMicOrb();
-    }
-    if (isRecording) {
-      return ScribeRecordingMicOrb(
-        recorderController: controller.waveformRecorder,
-        backgroundColor: _recordingIconBg,
-      );
-    }
-    if (isProcessing) {
-      return const ScribeProcessingMicOrb(backgroundColor: _iconBg);
-    }
-    if (isError) {
-      return Container(
-        width: 44,
-        height: 44,
-        decoration: const BoxDecoration(color: _iconBg, shape: BoxShape.circle),
-        alignment: Alignment.center,
-        child: const Icon(Icons.refresh_rounded, color: AppColors.textOnNavy, size: 22),
-      );
-    }
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: const BoxDecoration(color: _iconBg, shape: BoxShape.circle),
-      alignment: Alignment.center,
-      child: const Icon(Icons.mic_rounded, color: AppColors.textOnNavy, size: 22),
-    );
-  }
-}
-
-/// Live transcript + on-demand detected-symptoms preview for the triage
-/// banner's "ASR" mode — content mirrors ScribeBanner's `_LiveAsrPanel`.
-/// Independent of the batch triage flow: nothing here feeds
-/// [TriageViewModel] or the pre-ticked symptom chips below.
-class _TriageLiveAsrPanel extends StatelessWidget {
-  const _TriageLiveAsrPanel({required this.controller});
-  final RealtimeAsrController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final fields = controller.fields;
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        // [MANUAL: no token — 20% black inset panel on the dark ASR surface]
-        color: Colors.black.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(AppRadius.rxIcon),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (controller.micWarning != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.warning_amber_rounded, color: AppColors.statusWarningDark, size: 16),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      controller.micWarning!,
-                      style: const TextStyle(color: AppColors.statusWarningDark, fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          if (controller.errorMessage != null)
-            Text(
-              controller.errorMessage!,
-              style: const TextStyle(color: AppColors.textOnNavy, fontSize: 12),
-            )
-          else ...[
-            Text(
-              controller.segments.isEmpty
-                  ? RealtimeAsrStrings.transcriptEmpty
-                  : controller.fullTranscript,
-              style: TextStyle(
-                color: AppColors.textOnNavy.withValues(alpha: 0.9),
-                fontSize: 12,
-                fontStyle: controller.segments.isEmpty
-                    ? FontStyle.italic
-                    : null,
-              ),
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    fields == null || fields.isEmpty
-                        ? RealtimeAsrStrings.symptomsEmpty
-                        : _summarize(fields),
-                    style: TextStyle(
-                      color: AppColors.textOnNavy.withValues(alpha: 0.75),
-                      fontSize: 11,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                GestureDetector(
-                  onTap: controller.isExtracting ? null : controller.extractNow,
-                  child: Text(
-                    controller.isExtracting
-                        ? RealtimeAsrStrings.extracting
-                        : RealtimeAsrStrings.extractNow,
-                    style: const TextStyle(
-                      color: AppColors.textOnNavy,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  String _summarize(RealtimeClinicalFields f) {
-    final parts = <String>[
-      if (f.diagnosis != null) f.diagnosis!,
-      if (f.bloodPressure != null) 'BP ${f.bloodPressure}',
-      if (f.bloodGlucose != null) 'BG ${f.bloodGlucose}',
-      ...f.chiefComplaints,
-    ];
-    return parts.isEmpty ? RealtimeAsrStrings.symptomsEmpty : parts.join(' · ');
-  }
-}
-
 // ── Unified symptom section ───────────────────────────────────────────────────
 //
 // Inline chip grid that replaces the old text-field + modal-sheet pattern.

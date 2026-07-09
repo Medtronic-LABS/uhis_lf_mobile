@@ -8,9 +8,7 @@ import '../widgets/form_fields/radio_form_field.dart';
 import 'canonical_visit_data.dart';
 import 'form_config.dart';
 import 'form_field_visuals.dart';
-import '../../scribe/scribe_controller.dart';
-import '../../scribe/widgets/scribe_banner.dart';
-import '../../scribe/widgets/scribe_review_sheet.dart';
+import '../../scribe/widgets/ai_scribe_banner.dart';
 import 'triage_symptom_mapper.dart';
 import 'unified_form_notifier.dart';
 import 'unified_section_rules.dart';
@@ -302,16 +300,14 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 AppSpacing.xxxl, AppSpacing.xl, AppSpacing.xxxl, 0),
-              child: Builder(
-                builder: (ctx) {
-                  final scribeCtrl = ctx.read<ScribeController>();
-                  return ScribeBanner(
-                    onStartRecording: scribeCtrl.startRecording,
-                    onStopRecording: scribeCtrl.stopRecording,
-                    onOpenReview: () => showScribeReviewSheet(ctx),
-                    onRetry: scribeCtrl.retryUpload,
-                  );
-                },
+              child: AiScribeBanner(
+                encounterId: notifier.encounterId,
+                patientId: notifier.patientId,
+                isFemale: widget.activeFormTypes.contains('anc') ||
+                    widget.activeFormTypes.contains('pnc'),
+                // VisitFormScreen watches ScribeController state and auto-opens
+                // the SOAP review sheet when reviewReady — no action needed here.
+                onReviewReady: (_) {},
               ),
             ),
             // ── Assessment form sections + submit button ────────────────────
