@@ -3495,6 +3495,12 @@ abstract final class UnifiedFormStrings {
       'Each reading is below its alert line — but they are climbing together '
       'across visits. No single rule fires.';
 
+  // ── BMI classification labels (WHO thresholds) ──────────────────────────────
+  static const String vsBmiUnderweight = 'Underweight';
+  static const String vsBmiNormal      = 'Normal';
+  static const String vsBmiOverweight  = 'Overweight';
+  static const String vsBmiObese       = 'Obese';
+
   // ── Live vital-status badge labels (rule-based, no ML) ─────────────────────
   static const String vsBpNormal           = 'Normal';
   static const String vsBpElevated         = 'Elevated';

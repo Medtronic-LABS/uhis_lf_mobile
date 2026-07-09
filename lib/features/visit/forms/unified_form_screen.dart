@@ -1172,6 +1172,21 @@ class _SectionCard extends StatelessWidget {
     final control = _buildField(context, def, ref, currentValue);
     switch (def.widgetHint) {
       case WidgetHint.infoLabel:
+        // For BMI, enrich the read-only display with a WHO classification badge.
+        if (ref.id == 'bmi') {
+          final bmiStatus = _VitalStatusEval.bmi(
+            _VitalStatusEval.asDouble(currentValue),
+          );
+          return _InfoLabelField(
+            key: Key('unified_form_${def.id}_info'),
+            label: def.label,
+            value: currentValue?.toString(),
+            statusBadge: bmiStatus != null
+                ? _VitalBadge(label: bmiStatus.label, color: bmiStatus.color)
+                : null,
+          );
+        }
+        return control;
       case WidgetHint.textLabel:
         return control;
       // dialogCheckbox renders as a self-contained inline list with its own
@@ -1554,6 +1569,34 @@ abstract final class _VitalStatusEval {
     return _VitalStatus(
       label: UnifiedFormStrings.vsHbNormal,
       color: AppColors.statusSuccess,
+    );
+  }
+
+  // ── BMI ──────────────────────────────────────────────────────────────────
+  // WHO adult classification thresholds.
+  static _VitalStatus? bmi(double? value) {
+    if (value == null) return null;
+    if (value < 18.5) {
+      return _VitalStatus(
+        label: UnifiedFormStrings.vsBmiUnderweight,
+        color: AppColors.navy,
+      );
+    }
+    if (value < 25.0) {
+      return _VitalStatus(
+        label: UnifiedFormStrings.vsBmiNormal,
+        color: AppColors.statusSuccess,
+      );
+    }
+    if (value < 30.0) {
+      return _VitalStatus(
+        label: UnifiedFormStrings.vsBmiOverweight,
+        color: AppColors.statusWarning,
+      );
+    }
+    return _VitalStatus(
+      label: UnifiedFormStrings.vsBmiObese,
+      color: AppColors.statusCritical,
     );
   }
 
@@ -2172,15 +2215,23 @@ class _BpReadingFieldState extends State<_BpReadingField> {
 // ── Info label field ──────────────────────────────────────────────────────────
 
 /// Read-only display for computed values (BMI, CVD risk score, etc.).
+///
+/// Accepts an optional [statusBadge] (e.g. a [_VitalBadge]) that is shown
+/// to the right of the numeric value so the SK gets instant classification
+/// context (e.g. "Normal", "Overweight") without reading a table.
 class _InfoLabelField extends StatelessWidget {
   const _InfoLabelField({
     super.key,
     required this.label,
     this.value,
+    this.statusBadge,
   });
 
   final String label;
   final String? value;
+
+  /// Optional status pill rendered to the right of the displayed value.
+  final Widget? statusBadge;
 
   @override
   Widget build(BuildContext context) {
@@ -2224,14 +2275,23 @@ class _InfoLabelField extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 3),
-          Text(
-            hasValue ? value! : UnifiedFormStrings.autoComputedPlaceholder,
-            style: const TextStyle(
-              fontFamily: 'Nunito',
-              fontWeight: FontWeight.w800,
-              fontSize: 16,
-              color: AppColors.navy,
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                hasValue ? value! : UnifiedFormStrings.autoComputedPlaceholder,
+                style: const TextStyle(
+                  fontFamily: 'Nunito',
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                  color: AppColors.navy,
+                ),
+              ),
+              if (statusBadge != null && hasValue) ...[
+                const SizedBox(width: 8),
+                statusBadge!,
+              ],
+            ],
           ),
         ],
       ),
