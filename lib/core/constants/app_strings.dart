@@ -3470,15 +3470,16 @@ abstract final class UnifiedFormStrings {
 
   /// Column sub-label describing how long ago a prior visit was.
   static String trendWeeksAgo(int days) {
-    if (days < 7) return days <= 1 ? '1 d ago' : '$days d ago';
+    if (days < 7) return days <= 1 ? '1d' : '${days}d';
     final weeks = (days / 7).round();
-    return '$weeks wk ago';
+    return '${weeks}wks';
   }
 
   /// Metric row labels.
   static const String trendSystolic = 'Systolic';
   static const String trendDiastolic = 'Diastolic';
   static const String trendWeight = 'Weight';
+  static const String trendWeightGain = 'Weight gain';
   static const String trendUrineProtein = 'Urine protein';
 
   /// Urine-protein grade labels used in the trend table.
@@ -3562,6 +3563,8 @@ abstract final class UnifiedFormStrings {
   /// Returns `null` for the synthetic `vitals` formType (no badge needed).
   static String? programmeBadgeLabel(String formType) {
     switch (formType) {
+      case 'commonVitals':
+        return 'Common Vitals';
       case 'anc':
         return 'ANC';
       case 'ncd':
