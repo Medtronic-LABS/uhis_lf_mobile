@@ -1910,8 +1910,19 @@ class _NumericFieldState extends State<_NumericField> {
     if (old.initialValue != widget.initialValue) {
       final newText = widget.initialValue ?? '';
       if (_ctrl.text != newText) {
-        _ctrl.text = newText;
-        _ctrl.selection = TextSelection.collapsed(offset: newText.length);
+        // Skip the update when the controller text and the incoming value
+        // represent the same number but differ only in float representation
+        // (e.g. "1" vs "1.0").  Without this guard, storing a parsed double
+        // after every keystroke causes "120" to become "1.20": the controller
+        // is reset to "1.0" after the first "1", and the next character
+        // inserts at the wrong cursor position.
+        final ctrlNum = double.tryParse(_ctrl.text);
+        final newNum  = double.tryParse(newText);
+        final sameValue = ctrlNum != null && newNum != null && ctrlNum == newNum;
+        if (!sameValue) {
+          _ctrl.text = newText;
+          _ctrl.selection = TextSelection.collapsed(offset: newText.length);
+        }
       }
     }
   }
