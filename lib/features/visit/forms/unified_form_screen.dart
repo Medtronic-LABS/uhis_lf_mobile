@@ -278,6 +278,13 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
           if (trend.show) items.add(_VitalsTrendCard(result: trend));
         }
 
+        // Submit button lives inside the scroll view so it appears after the
+        // last form field — not pinned to the screen bottom.
+        items.add(_SubmitBar(
+          submitting: notifier.submitting,
+          onSubmit: () => _onSubmit(ctx, notifier, annotated),
+        ));
+
         return Column(
           children: [
             // ── Step 2 AI ambient listening banner ──────────────────────────
@@ -287,7 +294,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
                 AppSpacing.xxxl, AppSpacing.xl, AppSpacing.xxxl, 0),
               child: Step2AsrBanner(activeFormTypes: widget.activeFormTypes),
             ),
-            // ── Assessment form sections ────────────────────────────────────
+            // ── Assessment form sections + submit button ────────────────────
             Expanded(
               child: ListView(
                 controller: _scrollCtrl,
@@ -295,10 +302,6 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
                   AppSpacing.xxxl, AppSpacing.md, AppSpacing.xxxl, AppSpacing.xxxl),
                 children: items,
               ),
-            ),
-            _SubmitBar(
-              submitting: notifier.submitting,
-              onSubmit: () => _onSubmit(ctx, notifier, annotated),
             ),
           ],
         );
@@ -1278,6 +1281,11 @@ class _SectionCard extends StatelessWidget {
           options: def.options.map((o) => o.name).toList(),
           currentValue: displayName,
           onChanged: (name) {
+            if (name == null) {
+              // Toggle-deselect: tapping the active pill clears the value.
+              onFieldChanged(def.id, null);
+              return;
+            }
             final id = def.options
                 .cast<FieldOption?>()
                 .firstWhere((o) => o!.name == name, orElse: () => null)
@@ -1990,6 +1998,11 @@ class _SpinnerField extends StatelessWidget {
       options: options.map((o) => o.name).toList(),
       currentValue: displayName,
       onChanged: (name) {
+        if (name == null) {
+          // Toggle-deselect.
+          onChanged(null);
+          return;
+        }
         final id = options
                 .cast<FieldOption?>()
                 .firstWhere((o) => o!.name == name, orElse: () => null)

@@ -19,7 +19,10 @@ class RadioFormField extends StatelessWidget {
 
   final List<String> options;
   final String? currentValue;
-  final ValueChanged<String> onChanged;
+
+  /// Called with the tapped option's string, or `null` when the already-
+  /// selected option is tapped again (toggle-deselect).
+  final ValueChanged<String?> onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +47,9 @@ class RadioFormField extends StatelessWidget {
       final tile = _PillButton(
         label: opt,
         selected: selected,
-        onTap: () => onChanged(opt),
+        // Tapping the already-selected pill deselects (sends null); tapping
+        // an unselected pill selects it.
+        onTap: () => onChanged(selected ? null : opt),
       );
       if (withFlex) {
         items.add(Expanded(child: tile));
