@@ -3019,6 +3019,13 @@ abstract final class SymptomPickerStrings {
   static const String detectedSymptomsSubtitleFilled =
       'Review each symptom. Tap × to remove anything incorrect, or add what is missing.';
   static const String addSymptomSearchHint = 'Search or type symptom…';
+  static const String searchSymptomsHint = 'Search symptoms…';
+  static const String searchMoreHint = 'Type 3+ letters to find more symptoms';
+  static const String searchNoResults = 'No symptoms found';
+  static const String symptomsSelectedCount =
+      'symptom selected'; // prefix with count: "$n symptom(s) selected"
+  static String symptomsSelected(int n) =>
+      '$n ${n == 1 ? 'symptom' : 'symptoms'} selected';
   static const String addSymptomInlineHint = 'Or type a symptom manually…';
   static const String addSymptomInlineButton = '+ Add';
   static const String addSymptomListExpand = 'Show symptom list';
