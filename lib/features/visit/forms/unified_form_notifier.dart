@@ -49,18 +49,32 @@ class UnifiedFormNotifier extends ChangeNotifier {
   CanonicalVisitData _data = const CanonicalVisitData();
   bool _submitting = false;
   String? _submitError;
+  Set<String> _validationErrors = const {};
 
   CanonicalVisitData get data => _data;
   bool get submitting => _submitting;
   String? get submitError => _submitError;
+  Set<String> get validationErrors => _validationErrors;
+
+  /// Marks the given field IDs as having validation errors and notifies
+  /// listeners so the form can highlight them.
+  void setValidationErrors(Set<String> errors) {
+    _validationErrors = errors;
+    notifyListeners();
+  }
 
   /// Load existing draft from DB on screen init.
+  ///
+  /// Merges draft values ON TOP of any values already in [_data] (e.g. triage
+  /// pre-fills seeded before this call).  This means the draft wins for any
+  /// field it contains, but triage-derived defaults are preserved for fields
+  /// not yet saved in the draft.
   Future<void> loadDraft() async {
     final row = await _draftDao.getDraft(_encounterId);
     if (row == null) return;
     try {
       final map = jsonDecode(row.fieldValues) as Map<String, dynamic>;
-      _data = CanonicalVisitData(map);
+      _data = _data.merge(CanonicalVisitData(map));
       notifyListeners();
     } catch (e) {
       debugPrint('[UnifiedForm] draft parse error: $e');

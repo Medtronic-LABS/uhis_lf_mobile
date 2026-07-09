@@ -9,6 +9,7 @@ import '../widgets/form_fields/radio_form_field.dart';
 import 'canonical_visit_data.dart';
 import 'form_config.dart';
 import 'step2_asr_banner.dart';
+import 'triage_symptom_mapper.dart';
 import 'unified_form_notifier.dart';
 import 'unified_section_rules.dart';
 
@@ -18,6 +19,15 @@ import 'unified_section_rules.dart';
 /// an ordered, deduplicated section list, and renders each field using the
 /// appropriate existing field widget. Delegates state to [UnifiedFormNotifier].
 ///
+/// ## Section ordering
+///
+/// 1. **Vitals** — BP, weight, and other physical measurements, always first.
+/// 2. **Enrolled programmes** — sections from [enrolledFormTypes] come next.
+/// 3. **Recommended programmes** — new pathway-activated sections follow.
+///
+/// A read-only banner of triage symptoms selected in Step 1 is displayed at
+/// the top of the form so the SK can see what was reported.
+///
 /// The caller wraps this widget in a [ChangeNotifierProvider<UnifiedFormNotifier>]
 /// and supplies [onSubmitComplete] to handle post-submit navigation.
 class UnifiedFormScreen extends StatefulWidget {
@@ -26,6 +36,8 @@ class UnifiedFormScreen extends StatefulWidget {
     required this.activeFormTypes,
     required this.onSubmitComplete,
     this.gestationalWeeks,
+    this.enrolledFormTypes = const [],
+    this.confirmedSymptoms = const [],
   });
 
   /// Ordered formType keys (e.g. `['anc', 'ncd']`) from activated pathways.
@@ -37,6 +49,15 @@ class UnifiedFormScreen extends StatefulWidget {
   /// Passed to [UnifiedSectionRules] for conditional `birthPreparedness` visibility.
   final int? gestationalWeeks;
 
+  /// FormType keys of programmes the patient is already enrolled in.
+  /// These sections render after the Vitals group and before recommended ones.
+  final List<String> enrolledFormTypes;
+
+  /// Symptom codes selected in Step 1 (triage).  Displayed read-only at the
+  /// top of the form and seeded into [CanonicalVisitData] so section rules can
+  /// drive conditional visibility.
+  final List<String> confirmedSymptoms;
+
   @override
   State<UnifiedFormScreen> createState() => _UnifiedFormScreenState();
 }
@@ -45,16 +66,42 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   FormConfig? _config;
   bool _configLoading = true;
   Object? _configError;
+  final ScrollController _scrollCtrl = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _loadConfig();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        context.read<UnifiedFormNotifier>().loadDraft();
+      if (!mounted) return;
+      final notifier = context.read<UnifiedFormNotifier>();
+
+      if (widget.confirmedSymptoms.isNotEmpty) {
+        // Store raw codes so section-rules can drive conditional visibility.
+        notifier.updateField('_triageSymptoms', widget.confirmedSymptoms);
+
+        // Pre-fill symptom fields derived from triage selections.
+        // Done BEFORE loadDraft so that a saved draft can override these
+        // suggestions (draft values win over triage-derived defaults).
+        for (final ft in widget.activeFormTypes) {
+          final prefills = TriageSymptomMapper.prefillsFor(
+            ft,
+            widget.confirmedSymptoms,
+          );
+          for (final entry in prefills.entries) {
+            notifier.updateField(entry.key, entry.value);
+          }
+        }
       }
+
+      notifier.loadDraft();
     });
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _loadConfig() async {
@@ -83,11 +130,53 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
 
     return Consumer<UnifiedFormNotifier>(
       builder: (ctx, notifier, _) {
-        final sections = UnifiedSectionRules.activeSections(
+        final annotated = UnifiedSectionRules.activeSections(
           config: _config!,
           activeFormTypes: widget.activeFormTypes,
           currentData: notifier.data,
+          gestationalWeeks: widget.gestationalWeeks,
+          enrolledFormTypes: widget.enrolledFormTypes,
         );
+
+        // Build the list items: programme-name dividers (with inline per-
+        // programme symptom chips) + section cards.
+        // The top-level banner is removed — symptoms appear inline under each
+        // programme they are relevant to.
+        final items = <Widget>[];
+
+        String? lastFormType;
+        for (final annotatedSection in annotated) {
+          final ft = annotatedSection.section.formType;
+          if (ft != lastFormType) {
+            final label = annotatedSection.group == SectionGroup.vitals
+                ? UnifiedFormStrings.vitalsGroupLabel
+                : UnifiedFormStrings.programmeBadgeLabel(ft) ??
+                    ft.toUpperCase();
+
+            // For programme sections (non-vitals), compute which triage
+            // symptoms are relevant to this formType to show as inline chips.
+            final relevantCodes =
+                annotatedSection.group == SectionGroup.vitals
+                    ? const <String>[]
+                    : TriageSymptomMapper.relevantCodes(
+                        ft,
+                        widget.confirmedSymptoms,
+                      );
+
+            items.add(_ProgrammeDivider(
+              label: label,
+              relevantSymptomCodes: relevantCodes,
+            ));
+            lastFormType = ft;
+          }
+          items.add(_SectionCard(
+            section: annotatedSection.section,
+            config: _config!,
+            data: notifier.data,
+            validationErrors: notifier.validationErrors,
+            onFieldChanged: notifier.updateField,
+          ));
+        }
 
         return Column(
           children: [
@@ -95,24 +184,18 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             Step2AsrBanner(activeFormTypes: widget.activeFormTypes),
             // ── Assessment form sections ────────────────────────────────────
             Expanded(
-              child: ListView.builder(
+              child: ListView(
+                controller: _scrollCtrl,
                 padding: const EdgeInsets.symmetric(
                   horizontal: AppSpacing.xxxl,
                   vertical: AppSpacing.xxxl,
                 ),
-                itemCount: sections.length,
-                itemBuilder: (ctx, i) =>
-                    _SectionCard(
-                      section: sections[i],
-                      config: _config!,
-                      data: notifier.data,
-                      onFieldChanged: notifier.updateField,
-                    ),
+                children: items,
               ),
             ),
             _SubmitBar(
               submitting: notifier.submitting,
-              onSubmit: () => _onSubmit(ctx, notifier),
+              onSubmit: () => _onSubmit(ctx, notifier, annotated),
             ),
           ],
         );
@@ -120,7 +203,37 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     );
   }
 
-  Future<void> _onSubmit(BuildContext ctx, UnifiedFormNotifier notifier) async {
+  Future<void> _onSubmit(
+    BuildContext ctx,
+    UnifiedFormNotifier notifier,
+    List<AnnotatedFormSection> annotated,
+  ) async {
+    if (_config == null) return;
+
+    // Validate mandatory fields before submitting.
+    final errors = _computeValidationErrors(notifier, annotated);
+    if (errors.isNotEmpty) {
+      notifier.setValidationErrors(errors);
+      // Scroll to top so the SK sees the highlighted fields.
+      _scrollCtrl.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+            UnifiedFormStrings.validationFieldsRequired(errors.length),
+          ),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ));
+      }
+      return;
+    }
+
+    // Clear any previous errors before submitting.
+    notifier.setValidationErrors(const {});
+
     try {
       await notifier.submit();
       widget.onSubmitComplete();
@@ -132,6 +245,315 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
       ));
     }
   }
+
+  /// Returns the set of mandatory field IDs that have no value in [notifier].
+  Set<String> _computeValidationErrors(
+    UnifiedFormNotifier notifier,
+    List<AnnotatedFormSection> annotated,
+  ) {
+    final errors = <String>{};
+    for (final a in annotated) {
+      for (final ref in a.section.fieldRefs) {
+        final def = _config!.fields[ref.id];
+        if (def == null) continue;
+        final mandatory = def.isMandatory || ref.isMandatory;
+        if (!mandatory) continue;
+        final v = notifier.data.getValue(ref.id);
+        final empty = v == null ||
+            (v is String && v.trim().isEmpty) ||
+            (v is List && v.isEmpty);
+        if (empty) errors.add(ref.id);
+      }
+    }
+    return errors;
+  }
+}
+
+// ── Triage symptoms banner ────────────────────────────────────────────────────
+
+/// Collapsible summary of ALL symptom codes selected in Step 1.
+///
+/// Collapsed by default — shows a count badge and a chevron.  Tap to expand
+/// the full pill-chip list.  Always rendered at the top of the form so the SK
+/// can review what was reported without navigating away.
+class _TriageSymptomsBanner extends StatefulWidget {
+  const _TriageSymptomsBanner({required this.symptomCodes});
+
+  final List<String> symptomCodes;
+
+  @override
+  State<_TriageSymptomsBanner> createState() => _TriageSymptomsBannerState();
+}
+
+class _TriageSymptomsBannerState extends State<_TriageSymptomsBanner> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final count = widget.symptomCodes.length;
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: AppSpacing.xxxl),
+      decoration: BoxDecoration(
+        color: AppColors.navy.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.navy.withValues(alpha: 0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header row (always visible) ────────────────────────────────
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.xl,
+                vertical: AppSpacing.md,
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.format_list_bulleted_rounded,
+                    size: 15,
+                    color: AppColors.navy,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      UnifiedFormStrings.triageSymptomsTitle,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: AppColors.navy,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                  ),
+                  // Count badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.navy.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '$count',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: AppColors.navy,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 18,
+                      color: AppColors.navy,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // ── Expandable chip list ───────────────────────────────────────
+          AnimatedCrossFade(
+            firstChild: const SizedBox.shrink(),
+            secondChild: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.xl,
+                0,
+                AppSpacing.xl,
+                AppSpacing.md,
+              ),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: widget.symptomCodes.map((code) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.navy.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      TriageStrings.symptomLabel(code),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: AppColors.navy,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            crossFadeState: _expanded
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 220),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Programme divider ─────────────────────────────────────────────────────────
+
+/// Labelled horizontal divider shown when the formType changes in the section
+/// list.  The label is the programme name ("ANC", "NCD", "PNC", …) or
+/// "Vitals" for the shared vitals group.
+///
+/// When [relevantSymptomCodes] is non-empty a collapsible chip row is shown
+/// below the divider line, listing the triage symptoms that were reported and
+/// are relevant to this programme.  Collapsed to the first 3 chips by default;
+/// tap "N more" to reveal the rest.
+class _ProgrammeDivider extends StatefulWidget {
+  const _ProgrammeDivider({
+    required this.label,
+    this.relevantSymptomCodes = const [],
+  });
+
+  final String label;
+  final List<String> relevantSymptomCodes;
+
+  @override
+  State<_ProgrammeDivider> createState() => _ProgrammeDividerState();
+}
+
+class _ProgrammeDividerState extends State<_ProgrammeDivider> {
+  /// Controls whether the symptom chip list is visible.
+  bool _symptomsExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final codes = widget.relevantSymptomCodes;
+    final hasChips = codes.isNotEmpty;
+
+    return Padding(
+      padding: const EdgeInsets.only(
+        bottom: AppSpacing.sm,
+        top: AppSpacing.sm,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Divider row — label left-aligned, divider extends right ───
+          Row(
+            children: [
+              Text(
+                widget.label.toUpperCase(),
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: AppColors.textPrimary,
+                  letterSpacing: 0.6,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(child: Divider(color: AppColors.border, height: 1)),
+            ],
+          ),
+          // ── Collapsible symptom strip ─────────────────────────────────
+          if (hasChips) ...[
+            const SizedBox(height: 6),
+            // Tappable toggle row
+            GestureDetector(
+              onTap: () =>
+                  setState(() => _symptomsExpanded = !_symptomsExpanded),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.assignment_outlined,
+                    size: 11,
+                    color: AppColors.textMuted,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Symptoms from Step 1 (${codes.length})',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: AppColors.textMuted,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 10.5,
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  AnimatedRotation(
+                    turns: _symptomsExpanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    child: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 14,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Chip list — revealed when expanded
+            AnimatedCrossFade(
+              firstChild: const SizedBox.shrink(),
+              secondChild: Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Wrap(
+                  spacing: 5,
+                  runSpacing: 5,
+                  children: codes.map((c) => _TriageChip(code: c)).toList(),
+                ),
+              ),
+              crossFadeState: _symptomsExpanded
+                  ? CrossFadeState.showSecond
+                  : CrossFadeState.showFirst,
+              duration: const Duration(milliseconds: 200),
+            ),
+          ],
+          const SizedBox(height: AppSpacing.xl),
+        ],
+      ),
+    );
+  }
+}
+
+/// A single read-only triage symptom pill used inside programme dividers and
+/// the collapsible banner.
+class _TriageChip extends StatelessWidget {
+  const _TriageChip({required this.code});
+
+  final String code;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.statusWarningSurface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: AppColors.statusWarning.withValues(alpha: 0.30),
+        ),
+      ),
+      child: Text(
+        TriageStrings.symptomLabel(code),
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: AppColors.statusWarningText,
+          fontWeight: FontWeight.w500,
+          fontSize: 11,
+        ),
+      ),
+    );
+  }
 }
 
 // ── Section card ──────────────────────────────────────────────────────────────
@@ -141,12 +563,14 @@ class _SectionCard extends StatelessWidget {
     required this.section,
     required this.config,
     required this.data,
+    required this.validationErrors,
     required this.onFieldChanged,
   });
 
   final FormSection section;
   final FormConfig config;
   final CanonicalVisitData data;
+  final Set<String> validationErrors;
   final void Function(String fieldId, dynamic value) onFieldChanged;
 
   @override
@@ -168,9 +592,25 @@ class _SectionCard extends StatelessWidget {
             ...section.fieldRefs.map((ref) {
               final def = config.fields[ref.id];
               if (def == null) return const SizedBox.shrink();
+              final hasError = validationErrors.contains(ref.id);
               return Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.xl),
-                child: _buildField(context, def, ref, data.getValue(ref.id)),
+                child: hasError
+                    ? DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: AppColors.statusCritical,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(AppSpacing.sm),
+                          child: _buildField(
+                              context, def, ref, data.getValue(ref.id)),
+                        ),
+                      )
+                    : _buildField(context, def, ref, data.getValue(ref.id)),
               );
             }),
           ],
@@ -187,24 +627,60 @@ class _SectionCard extends StatelessWidget {
   ) {
     switch (def.widgetHint) {
       case WidgetHint.radioGroup:
+        // Canonical store uses option id; RadioFormField works with display names.
+        // Translate: stored id → display name for render, selected name → id on change.
+        final storedId = currentValue as String?;
+        final displayName = def.options
+            .cast<FieldOption?>()
+            .firstWhere(
+              (o) => o!.id == storedId || o.name == storedId,
+              orElse: () => null,
+            )
+            ?.name;
         return RadioFormField(
           key: Key('unified_form_${def.id}_input'),
           labelText: def.label,
           options: def.options.map((o) => o.name).toList(),
-          currentValue: currentValue as String?,
-          onChanged: (v) => onFieldChanged(def.id, v),
+          currentValue: displayName,
+          onChanged: (name) {
+            final id = def.options
+                .cast<FieldOption?>()
+                .firstWhere((o) => o!.name == name, orElse: () => null)
+                ?.id ?? name;
+            onFieldChanged(def.id, id);
+          },
         );
 
       case WidgetHint.dialogCheckbox:
-        final selected = (currentValue is List)
+        // Canonical store uses list of option ids; widget works with display names.
+        final storedIds = (currentValue is List)
             ? currentValue.cast<String>()
             : <String>[];
+        final displayNames = storedIds.map((sid) {
+          return def.options
+                  .cast<FieldOption?>()
+                  .firstWhere(
+                    (o) => o!.id == sid || o.name == sid,
+                    orElse: () => null,
+                  )
+                  ?.name ??
+              sid;
+        }).toList();
         return DialogMultiSelectField(
           key: Key('unified_form_${def.id}_input'),
           labelText: def.label,
           options: def.options.map((o) => o.name).toList(),
-          currentValue: selected,
-          onChanged: (v) => onFieldChanged(def.id, v),
+          currentValue: displayNames,
+          onChanged: (names) {
+            final ids = names.map((n) {
+              return def.options
+                      .cast<FieldOption?>()
+                      .firstWhere((o) => o!.name == n, orElse: () => null)
+                      ?.id ??
+                  n;
+            }).toList();
+            onFieldChanged(def.id, ids);
+          },
         );
 
       case WidgetHint.spinner:
@@ -396,7 +872,8 @@ class _SpinnerField extends StatelessWidget {
         ? currentValue
         : null;
     return DropdownButtonFormField<String>(
-      value: safeValue,
+      initialValue: safeValue,
+      isExpanded: true,
       decoration: InputDecoration(labelText: label),
       items: options
           .map((o) => DropdownMenuItem(value: o.id, child: Text(o.name)))
@@ -569,8 +1046,8 @@ class _BpReadingFieldState extends State<_BpReadingField> {
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 decoration: const InputDecoration(
-                  labelText: 'Systolic',
-                  suffixText: 'mmHg',
+                  labelText: UnifiedFormStrings.bpSystolicLabel,
+                  suffixText: UnifiedFormStrings.bpUnit,
                 ),
                 onChanged: (_) => _emit(),
               ),
@@ -582,8 +1059,8 @@ class _BpReadingFieldState extends State<_BpReadingField> {
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 decoration: const InputDecoration(
-                  labelText: 'Diastolic',
-                  suffixText: 'mmHg',
+                  labelText: UnifiedFormStrings.bpDiastolicLabel,
+                  suffixText: UnifiedFormStrings.bpUnit,
                 ),
                 onChanged: (_) => _emit(),
               ),
@@ -595,8 +1072,8 @@ class _BpReadingFieldState extends State<_BpReadingField> {
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 decoration: const InputDecoration(
-                  labelText: 'Pulse',
-                  suffixText: '/min',
+                  labelText: UnifiedFormStrings.bpPulseLabel,
+                  suffixText: UnifiedFormStrings.bpPulseUnit,
                 ),
                 onChanged: (_) => _emit(),
               ),

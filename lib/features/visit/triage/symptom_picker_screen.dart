@@ -315,23 +315,8 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       return;
     }
 
-    if (vm.activatedPathways.isEmpty) {
-      // Legacy direct-route entry: no pathways → go straight to form.
-      _navigateToForm([]);
-      return;
-    }
-
-    context.go(
-      '/patients/visit/${widget.encounterId}/triage-result',
-      extra: {
-        'patientId': widget.patientId,
-        'memberId': widget.memberId,
-        'householdId': widget.householdId,
-        'patientAge': widget.patientAge,
-        'patientLabel': 'Visit',
-        'pathwayObjects': vm.activatedPathways,
-      },
-    );
+    // Bypass the triage-result interstitial and go straight to the form.
+    _navigateToForm(vm.activatedPathways);
   }
 
   void _navigateToForm(List<ActivatedPathway> pathways) {
@@ -494,21 +479,58 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                   ),
                 ),
 
-                // Continue button scrolls with content — tap after reviewing
+                // Status bar + Start Checkup CTA
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
                   sliver: SliverToBoxAdapter(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        // ── Status row ────────────────────────────────────
+                        if (vm.selectedSymptoms.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Text(
+                              SymptomPickerStrings.symptomsSelectedStatus(
+                                vm.selectedSymptoms.length,
+                              ),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.navy,
+                              ),
+                            ),
+                          ),
+                        if (vm.activatedPathways.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Text(
+                              SymptomPickerStrings.servicesOpeningStatus(
+                                vm.activatedPathways.length,
+                                vm.activatedPathways
+                                    .map((p) => p.programme.wireTag)
+                                    .toList(),
+                              ),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.navy,
+                              ),
+                            ),
+                          ),
+
+                        // ── Routine visit fallback link ────────────────────
                         if (vm.isRoutineVisit && vm.activatedPathways.isEmpty)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 8),
                             child: TextButton(
                               onPressed: () => _navigateToForm([]),
-                              child: const Text(TriageStrings.noSymptomsRoutineVisit),
+                              child: const Text(
+                                  TriageStrings.noSymptomsRoutineVisit),
                             ),
                           ),
+
+                        // ── Start Checkup button ───────────────────────────
                         SizedBox(
                           width: double.infinity,
                           child: FilledButton(
@@ -517,11 +539,8 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                               backgroundColor: AppColors.pink,
                               foregroundColor: AppColors.textOnNavy,
                             ),
-                            child: Text(
-                              vm.activatedPathways.isNotEmpty
-                                  ? SymptomPickerStrings.ctaWithPathways
-                                  : SymptomPickerStrings.ctaRoutine,
-                            ),
+                            child: const Text(
+                                SymptomPickerStrings.ctaStartCheckup),
                           ),
                         ),
                       ],
@@ -595,24 +614,6 @@ class _AncVisitSummaryChip extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
       child: Row(
         children: [
-          // ANC badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: AppColors.ancText,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              ComposerStrings.ancSummaryEyebrow,
-              style: const TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-                letterSpacing: 0.6,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
           // Patient name
           Expanded(
             child: Text(
@@ -627,7 +628,7 @@ class _AncVisitSummaryChip extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          // Pill chips — GA · parity · visit number
+          // Pill chips — GA · parity · key trend
           Wrap(
             spacing: 5,
             children: [
@@ -640,12 +641,6 @@ class _AncVisitSummaryChip extends StatelessWidget {
               if (g != null && p != null)
                 _SummaryPill(
                   label: ComposerStrings.ancSummaryParity(g, p),
-                  color: AppColors.ancText,
-                  surface: AppColors.ancBorder,
-                ),
-              if (visitCount != null)
-                _SummaryPill(
-                  label: '${ComposerStrings.ancSummaryVisitPrefix}$visitCount',
                   color: AppColors.ancText,
                   surface: AppColors.ancBorder,
                 ),
@@ -1835,8 +1830,6 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
             ? vm.applicableVocabCodes
             : vm.primaryVocabCodes;
         final primaryCodes = vm.primaryVocabCodes;
-        final hasSecondary =
-            vm.applicableVocabCodes.length > primaryCodes.length;
 
         // Determine which codes to show in the grid.
         final List<String> gridCodes;
@@ -1952,37 +1945,6 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                         color: AppColors.navy,
-                      ),
-                    ),
-                  if (selected.isNotEmpty && hasSecondary && !isSearching)
-                    const Text(
-                      '  ·  ',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                  if (hasSecondary && !isSearching)
-                    Expanded(
-                      child: Row(
-                        children: const [
-                          Icon(
-                            Icons.search_rounded,
-                            size: 11,
-                            color: AppColors.textMuted,
-                          ),
-                          SizedBox(width: 3),
-                          Flexible(
-                            child: Text(
-                              SymptomPickerStrings.searchMoreHint,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: AppColors.textMuted,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
                       ),
                     ),
                 ],

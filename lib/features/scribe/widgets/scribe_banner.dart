@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../../../core/api/realtime_asr_service.dart';
 import '../../../core/constants/app_strings.dart';
-import '../../../core/preferences/scribe_engine_notifier.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../realtime_asr/models/realtime_clinical_fields.dart';
 import '../../realtime_asr/realtime_asr_controller.dart';
@@ -150,67 +149,22 @@ class _ScribeBannerState extends State<ScribeBanner> {
                                 ? _LiveBannerText(state: _liveCtrl.state)
                                 : _BannerText(state: state, session: session),
                           ),
-                          if (!liveActive &&
-                              !idleChoice &&
-                              state == ScribeState.recording)
-                            const _WaveBars(),
-                          if (!liveActive &&
-                              !idleChoice &&
-                              (state == ScribeState.uploading ||
-                                  state == ScribeState.processing))
-                            const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            ),
-                          if (!liveActive &&
-                              !idleChoice &&
-                              state == ScribeState.fieldsPopulated &&
-                              session.pendingFieldCount > 0) ...[
-                            _AcceptAllButton(onTap: widget.onAcceptAll),
-                          ],
-                          // Idle: single mode button driven by persisted engine
-                          // preference + a settings icon to switch the preference.
+                          // Idle: single ASR start button (ASR is the only mode).
                           if (idleChoice) ...[
                             const SizedBox(width: 8),
-                            Consumer<ScribeEngineNotifier>(
-                              builder: (ctx, enginePref, _) => _ModeButton(
-                                key: const Key('scribe_banner_mode_start'),
-                                label: enginePref.isLiveAsr
-                                    ? ScribeBannerStrings.modeAsr
-                                    : ScribeBannerStrings.modeGemini,
-                                icon: enginePref.isLiveAsr
-                                    ? Icons.podcasts
-                                    : Icons.mic,
-                                onTap: enginePref.isLiveAsr
-                                    ? _liveCtrl.start
-                                    : widget.onStartRecording,
-                              ),
+                            _ModeButton(
+                              key: const Key('scribe_banner_mode_start'),
+                              label: ScribeBannerStrings.modeAsr,
+                              icon: Icons.podcasts,
+                              onTap: _liveCtrl.start,
                             ),
-                            const SizedBox(width: 6),
-                            _EngineSettingsButton(liveCtrl: _liveCtrl),
                           ],
-                          // Live mode active: only its own stop control shows.
+                          // Live mode active: stop control.
                           if (liveActive) ...[
                             const SizedBox(width: 8),
                             _LiveStopButton(
                               controller: _liveCtrl,
                               state: _liveCtrl.state,
-                            ),
-                          ],
-                          // Batch mode active: badge makes the active engine
-                          // explicit at a glance.
-                          if (!liveActive && !idleChoice) ...[
-                            const SizedBox(width: 8),
-                            Consumer<ScribeEngineNotifier>(
-                              builder: (ctx, ep, _) => _ModeBadge(
-                                label: ep.isLiveAsr
-                                    ? ScribeBannerStrings.modeAsr
-                                    : ScribeBannerStrings.modeGemini,
-                              ),
                             ),
                           ],
                         ],
@@ -219,25 +173,6 @@ class _ScribeBannerState extends State<ScribeBanner> {
                       if (liveActive) ...[
                         const SizedBox(height: 10),
                         _LiveAsrPanel(controller: _liveCtrl),
-                      ],
-                      // Batch mode: live transcript during recording
-                      if (!liveActive &&
-                          state == ScribeState.recording &&
-                          session.liveTranscript != null) ...[
-                        const SizedBox(height: 10),
-                        _LiveTranscriptBox(transcript: session.liveTranscript!),
-                      ],
-                      // Batch mode: transcript preview after processing
-                      if (!liveActive &&
-                          state == ScribeState.fieldsPopulated &&
-                          session.transcriptText != null) ...[
-                        const SizedBox(height: 10),
-                        _TranscriptPreview(
-                          transcript: session.transcriptText!,
-                          fieldCount:
-                              session.pendingFieldCount +
-                              session.acceptedFieldCount,
-                        ),
                       ],
                     ],
                   ),
@@ -330,139 +265,6 @@ class _ScribeBannerState extends State<ScribeBanner> {
   }
 }
 
-/// Accept all button shown when fields are populated.
-class _AcceptAllButton extends StatelessWidget {
-  const _AcceptAllButton({required this.onTap});
-
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      label: 'Accept AI note',
-      button: true,
-      child: GestureDetector(
-        key: const Key('scribe_accept_all_tap'),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.2),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.check_circle, color: Colors.white, size: 16),
-              const SizedBox(width: 4),
-              const Text(
-                'Accept All',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Live transcript display during recording.
-class _LiveTranscriptBox extends StatelessWidget {
-  const _LiveTranscriptBox({required this.transcript});
-
-  final String transcript;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          const _PulsingDot(),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              transcript,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.9),
-                fontSize: 12,
-                fontStyle: FontStyle.italic,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Transcript preview after processing.
-class _TranscriptPreview extends StatelessWidget {
-  const _TranscriptPreview({
-    required this.transcript,
-    required this.fieldCount,
-  });
-
-  final String transcript;
-  final int fieldCount;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.auto_awesome, color: Colors.white, size: 14),
-              const SizedBox(width: 6),
-              Text(
-                '$fieldCount fields auto-filled',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '"${_truncate(transcript, 80)}"',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.7),
-              fontSize: 11,
-              fontStyle: FontStyle.italic,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _truncate(String text, int maxLen) {
-    if (text.length <= maxLen) return text;
-    return '${text.substring(0, maxLen)}...';
-  }
-}
 
 class _PulsingDot extends StatefulWidget {
   const _PulsingDot();
@@ -843,34 +645,6 @@ class _ModeButton extends StatelessWidget {
   }
 }
 
-/// Non-interactive tag making the active engine explicit at a glance —
-/// shown once the "Other" (standard/batch) mode is running. The live-mode
-/// equivalent is [_LiveBannerText]'s "Live ASR" title plus [_LiveStopButton].
-class _ModeBadge extends StatelessWidget {
-  const _ModeBadge({required this.label});
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.85),
-          fontSize: 10,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.4,
-        ),
-      ),
-    );
-  }
-}
-
 /// Stop control shown only while the "ASR" (live streaming) mode is active.
 ///
 /// While [state] is connecting or stopping it becomes a non-interactive
@@ -1074,204 +848,5 @@ class _LiveAsrPanel extends StatelessWidget {
       ...f.chiefComplaints,
     ];
     return parts.isEmpty ? RealtimeAsrStrings.symptomsEmpty : parts.join(' · ');
-  }
-}
-
-/// Small settings/tune icon on the banner (idle state only) — opens
-/// [_ScribeModeSheet] to switch the persisted engine preference.
-class _EngineSettingsButton extends StatelessWidget {
-  const _EngineSettingsButton({required this.liveCtrl});
-  final RealtimeAsrController liveCtrl;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      label: 'Change AI Scribe mode',
-      button: true,
-      child: GestureDetector(
-        key: const Key('scribe_banner_engine_settings'),
-        onTap: () => showModalBottomSheet<void>(
-          context: context,
-          backgroundColor: Colors.transparent,
-          builder: (_) => _ScribeModeSheet(liveCtrl: liveCtrl),
-        ),
-        child: Container(
-          padding: const EdgeInsets.all(7),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.18),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
-          ),
-          child: const Icon(Icons.tune, color: Colors.white, size: 15),
-        ),
-      ),
-    );
-  }
-}
-
-/// Bottom sheet for switching the persisted AI Scribe engine preference.
-class _ScribeModeSheet extends StatelessWidget {
-  const _ScribeModeSheet({required this.liveCtrl});
-  final RealtimeAsrController liveCtrl;
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<ScribeEngineNotifier>(
-      builder: (ctx, enginePref, _) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                ScribeBannerStrings.modeSheetTitle,
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 12),
-              _ModeOption(
-                title: ScribeBannerStrings.modeGeminiTitle,
-                description: ScribeBannerStrings.modeGeminiDesc,
-                icon: Icons.mic,
-                badge: ScribeBannerStrings.modeGeminiDefault,
-                selected: !enginePref.isLiveAsr,
-                onTap: () {
-                  enginePref.set(ScribeEngine.gemini);
-                  Navigator.of(context).pop();
-                },
-              ),
-              const SizedBox(height: 8),
-              _ModeOption(
-                title: ScribeBannerStrings.modeAsrTitle,
-                description: ScribeBannerStrings.modeAsrDesc,
-                icon: Icons.podcasts,
-                badge: null,
-                selected: enginePref.isLiveAsr,
-                onTap: () {
-                  enginePref.set(ScribeEngine.liveAsr);
-                  Navigator.of(context).pop();
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _ModeOption extends StatelessWidget {
-  const _ModeOption({
-    required this.title,
-    required this.description,
-    required this.icon,
-    required this.selected,
-    required this.onTap,
-    this.badge,
-  });
-
-  final String title;
-  final String description;
-  final IconData icon;
-  final String? badge;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    const navy = Color(0xFF1B2B5E);
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFFF0F0FF) : Colors.grey[50],
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: selected ? navy : Colors.grey[200]!,
-            width: selected ? 1.5 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: selected ? navy : Colors.grey[200],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, color: Colors.white, size: 18),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                        ),
-                      ),
-                      if (badge != null) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.green[50],
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: Colors.green[200]!),
-                          ),
-                          child: Text(
-                            badge!,
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.green[700],
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    description,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (selected)
-              const Icon(Icons.check_circle, color: Color(0xFF1B2B5E), size: 20),
-          ],
-        ),
-      ),
-    );
   }
 }

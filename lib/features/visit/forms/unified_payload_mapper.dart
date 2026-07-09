@@ -111,7 +111,7 @@ abstract final class UnifiedPayloadMapper {
     // Android sends systolic/diastolic as integer strings ("139", "88").
     // If the value came in as a double (e.g. 80.0), truncate to int first so
     // Java's Integer deserializer doesn't reject "80.0".
-    String? _bpStr(dynamic v) {
+    String? bpStr(dynamic v) {
       if (v == null) return null;
       final n = asNum(v);
       if (n != null) return n.toInt().toString();
@@ -119,8 +119,8 @@ abstract final class UnifiedPayloadMapper {
     }
 
     final medHx = _compact({
-      if (rawSys != null) 'systolic': _bpStr(rawSys),
-      if (rawDia != null) 'diastolic': _bpStr(rawDia),
+      if (rawSys != null) 'systolic': bpStr(rawSys),
+      if (rawDia != null) 'diastolic': bpStr(rawDia),
       if (rawSys != null) 'systolicUnit': 'mmHg',
       if (rawDia != null) 'diastolicUnit': 'mmHg',
       if (weight != null) 'weight': weight,
@@ -257,7 +257,7 @@ abstract final class UnifiedPayloadMapper {
     }
 
     // Coerce to Dart bool for fields where the DTO expects Boolean (not string).
-    bool? _toBool(dynamic v) {
+    bool? toBool(dynamic v) {
       if (v == null) return null;
       if (v is bool) return v;
       final s = v.toString().toLowerCase();
@@ -341,7 +341,7 @@ abstract final class UnifiedPayloadMapper {
       final isRegularSmoker = d.getValue('isRegularSmoker');
       if (isRegularSmoker != null) {
         // Spice-service BpLogDTO field is Boolean — coerce "Yes"/"yes"/true → true.
-        bpLog['isRegularSmoker'] = _toBool(isRegularSmoker);
+        bpLog['isRegularSmoker'] = toBool(isRegularSmoker);
       }
       // Prior diagnosis fields (from history section of the form).
       final diagBp = d.getValue('diagnosedBP');
@@ -437,7 +437,7 @@ abstract final class UnifiedPayloadMapper {
     final temperature = asNum(d.getValue('temperature'));
 
     // Android sends BP/pulse as integer strings; truncate doubles before stringify.
-    String? _bpStr(dynamic v) {
+    String? bpStr(dynamic v) {
       if (v == null) return null;
       final n = asNum(v);
       if (n != null) return n.toInt().toString();
@@ -450,11 +450,11 @@ abstract final class UnifiedPayloadMapper {
     final hasRbs = glucoseType != null && glucoseType != 'fbs' && glucoseValue != null;
 
     final maternal = _compact({
-      if (rawSys != null) 'systolic': _bpStr(rawSys),
+      if (rawSys != null) 'systolic': bpStr(rawSys),
       if (rawSys != null) 'systolicUnit': 'mmHg',
-      if (rawDia != null) 'diastolic': _bpStr(rawDia),
+      if (rawDia != null) 'diastolic': bpStr(rawDia),
       if (rawDia != null) 'diastolicUnit': 'mmHg',
-      if (rawPulse != null) 'pulse': _bpStr(rawPulse),
+      if (rawPulse != null) 'pulse': bpStr(rawPulse),
       if (rawPulse != null) 'pulseUnit': 'per minute',
       if (weight != null) 'weight': weight,
       if (weight != null) 'weightUnit': 'kg',

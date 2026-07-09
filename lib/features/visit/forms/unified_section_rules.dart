@@ -1,90 +1,178 @@
 import 'canonical_visit_data.dart';
 import 'form_config.dart';
 
+/// Section-group tag attached to each [FormSection] in the result of
+/// [UnifiedSectionRules.activeSections].  Consumers use this to render
+/// group-divider rows (Vitals / Enrolled Programmes / Recommended Programmes).
+enum SectionGroup { vitals, enrolled, recommended }
+
+/// A [FormSection] annotated with its [SectionGroup].
+class AnnotatedFormSection {
+  const AnnotatedFormSection({required this.section, required this.group});
+
+  final FormSection section;
+  final SectionGroup group;
+}
+
 /// Pure-Dart rules engine: given active formTypes + current field values,
-/// returns the ordered, deduplicated list of [FormSection]s to render.
+/// returns the ordered, deduplicated list of [AnnotatedFormSection]s to render.
+///
+/// ## Ordering contract
+///
+/// 1. **Vitals** — sections whose [FormSection.sectionId] is in
+///    [_vitalsSectionIds] are collected first, across all active form types.
+///    Their field IDs are claimed before any other pass so they never appear
+///    duplicated in programme sections.
+/// 2. **Enrolled programme sections** — sections from form types listed in
+///    [enrolledFormTypes] are collected next, deduplicating against vitals.
+/// 3. **Recommended programme sections** — sections from the remaining
+///    (pathway-recommended) form types are collected last.
+///
+/// ## Dedup rule
+///
+/// A fieldId is claimed the first time a section that owns it is added to the
+/// result. All later sections that reference the same fieldId have it stripped.
+/// A section left with no remaining fieldRefs is omitted entirely.
+///
+/// ## Conditional visibility rules
+///
+/// - `birthPreparedness`: `anc` active AND gestational age ≥ 28 weeks.
+///   [gestationalWeeks] (from PatientContext at launch) takes precedence over
+///   the in-form `gestationalAge` field the SK may not have filled yet.
+/// - `pregnancyOutcome`: always shown when `pncMother` active.
+/// - `pncChild` / `pncNeonatal`: only when `isChildAlive` == `'yes'`.
+/// - NCD `bpReadings`: only when NCD active and ANC is NOT active.
 abstract final class UnifiedSectionRules {
   UnifiedSectionRules._();
 
-  /// Returns ordered, deduplicated [FormSection]s for rendering.
+  /// Section IDs whose sections are pinned to the top as the "Vitals" group.
   ///
-  /// Dedup rule: if the same fieldId appears in sections from multiple
-  /// formTypes, it is shown only in the first formType's section that claims
-  /// it. Subsequent sections drop already-claimed fieldIds from their
-  /// [FormSection.fieldRefs].  A section with no remaining fieldRefs is
-  /// omitted entirely.
+  /// Chosen because they capture the physical measurements (weight, BP, BMI,
+  /// pulse, temperature) that are identical across all clinical programmes.
+  /// ANC uses `todaysVitals`; NCD/cataract use `bpLog`.
+  static const _vitalsSectionIds = {'todaysVitals', 'bpLog'};
+
+  /// Returns ordered, deduplicated [AnnotatedFormSection]s for rendering.
   ///
-  /// Conditional rules (applied after dedup):
-  /// - `birthPreparedness` section: only when `anc` active AND
-  ///   `gestationalAge` ≥ 28 (weeks).
-  /// - `pncChild` / `pncNeonatal` sections: only when `isChildAlive` == `'yes'`.
-  /// - NCD `bpReadings` section: only when NCD active AND `anc` is NOT active
-  ///   (when ANC is active the single BP reading is captured there and reused
-  ///   by the NCD payload mapper — no second BP entry needed).
-  static List<FormSection> activeSections({
+  /// [enrolledFormTypes] — the expanded formType keys (from `_toFormTypes()`)
+  /// of programmes the patient is already enrolled in.  These sections are
+  /// rendered between Vitals and the pathway-recommended sections.
+  static List<AnnotatedFormSection> activeSections({
     required FormConfig config,
     required List<String> activeFormTypes,
     required CanonicalVisitData currentData,
+    int? gestationalWeeks,
+    List<String> enrolledFormTypes = const [],
   }) {
     final claimedFieldIds = <String>{};
-    final result = <FormSection>[];
+    final vitalsSections = <AnnotatedFormSection>[];
+    final enrolledSections = <AnnotatedFormSection>[];
+    final recommendedSections = <AnnotatedFormSection>[];
 
+    // ── Pass 1: vitals sections (pinned first, claimed first) ──────────────
     for (final formType in activeFormTypes) {
-      final sections = config.forms[formType] ?? [];
-      for (final section in sections) {
-        // Apply conditional visibility rules before dedup.
+      for (final section in config.forms[formType] ?? []) {
+        if (!_vitalsSectionIds.contains(section.sectionId)) { continue; }
         if (!_isSectionVisible(
           section: section,
           activeFormTypes: activeFormTypes,
           currentData: currentData,
-        )) {
-          continue;
-        }
+          gestationalWeeks: gestationalWeeks,
+        )) { continue; }
 
-        // Dedup: keep only fieldRefs not already claimed.
-        final remainingRefs = section.fieldRefs
-            .where((ref) => !claimedFieldIds.contains(ref.id))
-            .toList();
+        final remaining =
+            section.fieldRefs.where((r) => !claimedFieldIds.contains(r.id)).toList();
+        if (remaining.isEmpty) { continue; }
+        for (final ref in remaining) { claimedFieldIds.add(ref.id); }
 
-        if (remainingRefs.isEmpty) continue;
+        vitalsSections.add(AnnotatedFormSection(
+          section: remaining.length == section.fieldRefs.length
+              ? section
+              : FormSection(
+                  sectionId: section.sectionId,
+                  title: section.title,
+                  formType: section.formType,
+                  fieldRefs: remaining,
+                ),
+          group: SectionGroup.vitals,
+        ));
+      }
+    }
 
-        // Claim all fieldIds in this section.
-        for (final ref in remainingRefs) {
-          claimedFieldIds.add(ref.id);
-        }
+    // ── Pass 2: non-vitals sections — enrolled first, then recommended ─────
+    //
+    // Preserve the relative order within each group by walking activeFormTypes
+    // twice (enrolled-only, then non-enrolled-only).
+    final enrolledPass = activeFormTypes.where(enrolledFormTypes.contains);
+    final recommendedPass =
+        activeFormTypes.where((ft) => !enrolledFormTypes.contains(ft));
 
-        // Return a section with only the unclaimed refs.
-        if (remainingRefs.length == section.fieldRefs.length) {
-          result.add(section);
-        } else {
-          result.add(FormSection(
-            sectionId: section.sectionId,
-            title: section.title,
-            formType: section.formType,
-            fieldRefs: remainingRefs,
+    for (final group in [
+      (enrolledPass, SectionGroup.enrolled),
+      (recommendedPass, SectionGroup.recommended),
+    ]) {
+      final (formTypes, sectionGroup) = group;
+      for (final formType in formTypes) {
+        for (final section in config.forms[formType] ?? []) {
+          if (_vitalsSectionIds.contains(section.sectionId)) { continue; }
+          if (!_isSectionVisible(
+            section: section,
+            activeFormTypes: activeFormTypes,
+            currentData: currentData,
+            gestationalWeeks: gestationalWeeks,
+          )) { continue; }
+
+          final remaining = section.fieldRefs
+              .where((r) => !claimedFieldIds.contains(r.id))
+              .toList();
+          if (remaining.isEmpty) { continue; }
+          for (final ref in remaining) { claimedFieldIds.add(ref.id); }
+
+          (sectionGroup == SectionGroup.enrolled
+                  ? enrolledSections
+                  : recommendedSections)
+              .add(AnnotatedFormSection(
+            section: remaining.length == section.fieldRefs.length
+                ? section
+                : FormSection(
+                    sectionId: section.sectionId,
+                    title: section.title,
+                    formType: section.formType,
+                    fieldRefs: remaining,
+                  ),
+            group: sectionGroup,
           ));
         }
       }
     }
 
-    return result;
+    return [...vitalsSections, ...enrolledSections, ...recommendedSections];
   }
 
   static bool _isSectionVisible({
     required FormSection section,
     required List<String> activeFormTypes,
     required CanonicalVisitData currentData,
+    int? gestationalWeeks,
   }) {
     final id = section.sectionId;
 
-    // birthPreparedness: ANC active + gestational age >= 28 weeks.
+    // birthPreparedness: ANC active + GA >= 28 weeks.
     if (id == 'birthPreparedness') {
       if (!activeFormTypes.contains('anc')) return false;
-      final gestAge = currentData.getValue('gestationalAge');
-      final weeks = gestAge is num
-          ? gestAge.toInt()
-          : int.tryParse(gestAge?.toString() ?? '') ?? 0;
+      final weeks = gestationalWeeks ??
+          () {
+            final v = currentData.getValue('gestationalAge');
+            return v is num
+                ? v.toInt()
+                : int.tryParse(v?.toString() ?? '') ?? 0;
+          }();
       return weeks >= 28;
+    }
+
+    // pregnancyOutcome: always shown when pncMother is active.
+    if (id == 'pregnancyOutcome') {
+      return activeFormTypes.contains('pncMother');
     }
 
     // pncChild / pncNeonatal: child alive field must be 'yes'.
@@ -96,7 +184,6 @@ abstract final class UnifiedSectionRules {
     }
 
     // NCD bpReadings: show only when NCD active and ANC is NOT active.
-    // When ANC is active, BP is collected in the ANC vitals section.
     if (id == 'bpReadings') {
       return activeFormTypes.contains('ncd') &&
           !activeFormTypes.contains('anc');

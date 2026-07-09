@@ -3005,9 +3005,22 @@ abstract final class SymptomPickerStrings {
   static const String durationValue4plus = '4+';
 
   // ── CTA button ───────────────────────────────────────────────────────────
-  static const String ctaWithPathways =
-      'AI is checking — see what to do next →';
-  static const String ctaRoutine = 'Continue (routine visit)';
+  static const String ctaStartCheckup = 'Start Checkup →';
+  static const String ctaRoutine = 'Start Checkup →';
+
+  // ── Status bar above CTA ────────────────────────────────────────────────
+  static String symptomsSelectedStatus(int n) =>
+      '$n ${n == 1 ? 'symptom' : 'symptoms'} selected';
+  static String servicesOpeningStatus(int count, List<String> labels) {
+    if (labels.isEmpty) return '';
+    final caps = labels.map((l) => l.toUpperCase()).toList();
+    if (caps.length == 1) {
+      return 'This visit will cover ${caps[0]} screening';
+    }
+    final primary = caps.first;
+    final rest = caps.sublist(1).join(', ');
+    return 'This visit will cover $primary screening in addition to the $rest care';
+  }
 
   // ── Other symptoms free-text ─────────────────────────────────────────────
   static const String otherSymptomsLabel = 'Other symptoms / Notes';
@@ -3397,6 +3410,57 @@ abstract final class UnifiedFormStrings {
   static const String configLoadError =
       'Form configuration could not be loaded. Please restart the app.';
   static const String noPathways = 'No assessment pathways activated.';
+
+  // BP reading field labels (must not be hardcoded in widget).
+  static const String bpSystolicLabel = 'Systolic';
+  static const String bpDiastolicLabel = 'Diastolic';
+  static const String bpPulseLabel = 'Pulse';
+  static const String bpUnit = 'mmHg';
+  static const String bpPulseUnit = '/min';
+
+  // Validation messages.
+  static const String validationBannerTitle = 'Please complete required fields';
+  static String validationFieldsRequired(int n) =>
+      '$n required ${n == 1 ? 'field' : 'fields'} must be filled before submitting.';
+
+  // Triage symptoms carry-over banner.
+  static const String triageSymptomsTitle = 'Symptoms from Step 1';
+  static const String triageSymptomsEmpty = 'No symptoms selected in Step 1.';
+
+  // Section group labels shown as divider rows.
+  static const String vitalsGroupLabel = 'Vitals';
+  static const String enrolledGroupLabel = 'Enrolled Programmes';
+  static const String recommendedGroupLabel = 'Recommended Programmes';
+
+  /// Human-readable label for a formType key shown as a programme badge.
+  ///
+  /// Returns `null` for the synthetic `vitals` formType (no badge needed).
+  static String? programmeBadgeLabel(String formType) {
+    switch (formType) {
+      case 'anc':
+        return 'ANC';
+      case 'ncd':
+        return 'NCD';
+      case 'pncMother':
+        return 'PNC';
+      case 'pncChild':
+        return 'Child';
+      case 'pncNeonatal':
+        return 'Neonate';
+      case 'pregnancyOutcome':
+        return 'Preg. Outcome';
+      case 'cataract':
+        return 'Cataract';
+      case 'eye_care':
+        return 'Eye Care';
+      case 'family_planning':
+        return 'FP';
+      case 'pwProfile':
+        return 'Profile';
+      default:
+        return null;
+    }
+  }
 }
 
 abstract final class FormGalleryStrings {
