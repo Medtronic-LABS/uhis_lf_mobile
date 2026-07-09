@@ -58,12 +58,52 @@ abstract final class UnifiedSectionRules {
   /// that two programmes that represent the same measurement with different
   /// field IDs do not both render a capture widget.
   ///
-  /// Example: ANC uses {bloodPressure, systolic, diastolic} for BP entry while
-  /// NCD uses {bpLogDetails}.  Claiming one set pre-claims the other, so only
-  /// the first-encountered BP section renders a BP widget.
+  /// Groups are ordered from most-specific to least-specific.  The first group
+  /// that contains the claimed field wins.
+  ///
+  /// BP: ANC uses {bloodPressure, systolic, diastolic} while NCD uses
+  ///   {bpLogDetails}.  Claiming one set pre-claims the other.
+  /// IFA: ANC uses {ifaTotalConsumed, ifaProvided}; PNC uses
+  ///   {ifaTablets (TextLabel), ifaTabletsConsumed, ifaTabletsProvided}.
+  /// Calcium: ANC uses {calciumTotalConsumed, calciumProvided}; PNC uses
+  ///   {calciumTablets (TextLabel), calciumTabletsConsumed, calciumTabletsProvided}.
+  /// Glucose: PNC uses {bloodSugar (selector), fastingBloodSugar, randomBloodSugar};
+  ///   NCD uses {glucoseType, glucose}.
   static const List<Set<String>> _semanticFieldGroups = [
+    // ── Blood pressure ──────────────────────────────────────────────────────
     {'bloodPressure', 'systolic', 'diastolic', 'bpLogDetails'},
+    // ── IFA / iron supplements ──────────────────────────────────────────────
+    {'ifaTotalConsumed', 'ifaTabletsConsumed', 'ifaTablets'},
+    {'ifaProvided', 'ifaTabletsProvided'},
+    // ── Calcium supplements ─────────────────────────────────────────────────
+    {'calciumTotalConsumed', 'calciumTabletsConsumed', 'calciumTablets'},
+    {'calciumProvided', 'calciumTabletsProvided'},
+    // ── Blood glucose ────────────────────────────────────────────────────────
+    {'glucoseType', 'bloodSugar'},
+    {'glucose', 'fastingBloodSugar', 'randomBloodSugar', 'ancBloodGlucose'},
   ];
+
+  /// Returns a human-readable description of which semantic groups had members
+  /// present in [activeFieldIds].  Used by the debug log at form-open time.
+  static List<String> mergedGroupDescriptions(Set<String> activeFieldIds) {
+    const groupLabels = <Set<String>, String>{
+      {'bloodPressure', 'systolic', 'diastolic', 'bpLogDetails'}: 'BP (systolic|diastolic)',
+      {'ifaTotalConsumed', 'ifaTabletsConsumed', 'ifaTablets'}: 'IFA consumed',
+      {'ifaProvided', 'ifaTabletsProvided'}: 'IFA provided',
+      {'calciumTotalConsumed', 'calciumTabletsConsumed', 'calciumTablets'}: 'Calcium consumed',
+      {'calciumProvided', 'calciumTabletsProvided'}: 'Calcium provided',
+      {'glucoseType', 'bloodSugar'}: 'Glucose type',
+      {'glucose', 'fastingBloodSugar', 'randomBloodSugar', 'ancBloodGlucose'}: 'Glucose value',
+    };
+    final merged = <String>[];
+    for (final entry in groupLabels.entries) {
+      final presentCount = entry.key.where(activeFieldIds.contains).length;
+      if (presentCount > 1) {
+        merged.add(entry.value);
+      }
+    }
+    return merged;
+  }
 
   /// Claim [fieldId] in [claimed] and also pre-claim every field in the same
   /// semantic equivalence group (if any).
@@ -182,9 +222,22 @@ abstract final class UnifiedSectionRules {
 
   static void debugLogSections(
       List<AnnotatedFormSection> result, int uniqueFieldCount) {
+    // Collect all field IDs that are present across ALL sections (before
+    // dedup) so mergedGroupDescriptions can flag cross-program duplicates.
+    final allFieldIds = <String>{};
+    for (final a in result) {
+      for (final r in a.section.fieldRefs) {
+        allFieldIds.add(r.id);
+      }
+    }
+    final merged = mergedGroupDescriptions(allFieldIds);
     // ignore: avoid_print
     print('[Form] ── Section breakdown '
         '(${result.length} sections · $uniqueFieldCount unique fields) ──');
+    if (merged.isNotEmpty) {
+      // ignore: avoid_print
+      print('[Form]   📎 Common fields merged (captured once): ${merged.join(', ')}');
+    }
 
     String? lastHeader;
     for (final a in result) {

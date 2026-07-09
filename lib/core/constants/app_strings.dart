@@ -3418,6 +3418,10 @@ abstract final class UnifiedFormStrings {
   static const String bpUnit = 'mmHg';
   static const String bpPulseUnit = '/min';
 
+  // Combined BP card (v13 reference — one card, side-by-side systolic|diastolic).
+  static const String bpCardLabel = 'Blood Pressure';
+  static const String bpCardSubLabel = 'রক্তচাপ';
+
   /// Trailing tag shown on read-only computed fields (e.g. BMI, EDD, gest. week)
   /// to signal the value is auto-derived and not manually entered.
   static const String autoComputedTag = '(auto)';

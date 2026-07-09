@@ -74,10 +74,31 @@ abstract final class UnifiedPayloadMapper {
       ));
     }
 
-    // ── Debug: log what each programme payload contains ──────────────────
+    // ── Debug: log merged common fields then per-programme payloads ─────
+    _debugLogMergedCommons(data);
     _debugLogPayloads(payloads);
 
     return payloads;
+  }
+
+  /// Logs the merged common field values at submit time so the developer can
+  /// verify that a single captured value fans out to every programme payload.
+  static void _debugLogMergedCommons(CanonicalVisitData d) {
+    // ignore: avoid_print
+    print('[Payload] submit → merged common fields:');
+    // ignore: avoid_print
+    print('[Payload]   systolic=${d.getValue('systolic')} '
+        'diastolic=${d.getValue('diastolic')} '
+        'weight=${d.getValue('weight')}');
+    // ignore: avoid_print
+    print('[Payload]   ifaConsumed=${d.getValue('ifaTotalConsumed') ?? d.getValue('ifaTabletsConsumed') ?? d.getValue('ifaTablets')} '
+        'ifaProvided=${d.getValue('ifaProvided') ?? d.getValue('ifaTabletsProvided')}');
+    // ignore: avoid_print
+    print('[Payload]   calciumConsumed=${d.getValue('calciumTotalConsumed') ?? d.getValue('calciumTabletsConsumed') ?? d.getValue('calciumTablets')} '
+        'calciumProvided=${d.getValue('calciumProvided') ?? d.getValue('calciumTabletsProvided')}');
+    // ignore: avoid_print
+    print('[Payload]   glucoseType=${d.getValue('glucoseType') ?? d.getValue('bloodSugar')} '
+        'glucoseValue=${d.getValue('glucoseValue') ?? d.getValue('glucose') ?? d.getValue('fastingBloodSugar') ?? d.getValue('randomBloodSugar')}');
   }
 
   static void _debugLogPayloads(List<ProgrammePayload> payloads) {
@@ -177,8 +198,16 @@ abstract final class UnifiedPayloadMapper {
     //   glucoseType == 'fbs'         → bloodSugarFasting + bloodSugar: 'fasting'
     //   glucoseType == 'rbs'/'ppbs'  → bloodSugarRandom  + bloodSugar: 'random'
     //   hemoglobin already in medHx; hemoglobinUnit added here for POC DTO shape.
-    final glucoseType = d.getValue('glucoseType') as String?;
-    final glucoseValue = asNum(d.getValue('glucoseValue'));
+    //
+    // Fan-out: union reads so the single captured glucose value populates ANC,
+    // PNC, and NCD payloads regardless of which field ID survived dedup.
+    final glucoseType = (d.getValue('glucoseType') ??
+        d.getValue('bloodSugar')) as String?;
+    final glucoseValue = asNum(d.getValue('glucoseValue') ??
+        d.getValue('glucose') ??
+        d.getValue('ancBloodGlucose') ??
+        d.getValue('fastingBloodSugar') ??
+        d.getValue('randomBloodSugar'));
     final hasFbs = glucoseType == 'fbs' && glucoseValue != null;
     final hasRbs = glucoseType != null && glucoseType != 'fbs' && glucoseValue != null;
     final pointOfCare = _compact({
@@ -210,14 +239,27 @@ abstract final class UnifiedPayloadMapper {
     // Always send at least the first-trimester key so backend danger-sign check has a target.
     dangerSigns.putIfAbsent('dangerSignsExperienced12', () => <String>[]);
 
+    // Fan-out: whichever IFA/Calcium field survived the semantic dedup feeds
+    // every relevant programme payload via union reads.
+    final ifaConsumed = d.getValue('ifaTotalConsumed') ??
+        d.getValue('ifaTabletsConsumed') ??
+        d.getValue('ifaTablets');
+    final ifaProvided =
+        d.getValue('ifaProvided') ?? d.getValue('ifaTabletsProvided');
+    final calciumConsumed = d.getValue('calciumTotalConsumed') ??
+        d.getValue('calciumTabletsConsumed') ??
+        d.getValue('calciumTablets');
+    final calciumProvided =
+        d.getValue('calciumProvided') ?? d.getValue('calciumTabletsProvided');
+
     final vaccination = _compact({
       'ttTdCompleted': d.getValue('ttTdCompleted'),
       'folicAcidTotalConsumed': d.getValue('folicAcidTotalConsumed'),
       'folicAcidProvided': d.getValue('folicAcidProvided'),
-      'ifaTotalConsumed': d.getValue('ifaTotalConsumed'),
-      'ifaProvided': d.getValue('ifaProvided'),
-      'calciumTotalConsumed': d.getValue('calciumTotalConsumed'),
-      'calciumProvided': d.getValue('calciumProvided'),
+      'ifaTotalConsumed': ifaConsumed,
+      'ifaProvided': ifaProvided,
+      'calciumTotalConsumed': calciumConsumed,
+      'calciumProvided': calciumProvided,
     });
 
     final birthPrep = _compact({
@@ -377,12 +419,20 @@ abstract final class UnifiedPayloadMapper {
     }
 
     // ── Glucose log ──────────────────────────────────────────────────────────
-    final glucoseNum = asNum(d.getValue('glucoseValue') ?? d.getValue('glucose'));
+    // Fan-out: union reads so whichever glucose field survived the semantic
+    // dedup (NCD: glucoseType/glucoseValue vs PNC: bloodSugar/fastingBloodSugar)
+    // populates the NCD payload.
+    final glucoseNum = asNum(d.getValue('glucoseValue') ??
+        d.getValue('glucose') ??
+        d.getValue('fastingBloodSugar') ??
+        d.getValue('randomBloodSugar') ??
+        d.getValue('ancBloodGlucose'));
     final glucoseLog = <String, dynamic>{};
     if (glucoseNum != null) {
       // Spice-service BpLogDTO / FHIR mapper both read `glucoseValue`, not `glucose`.
       glucoseLog['glucoseValue'] = glucoseNum;
-      final glucoseType = d.getValue('glucoseType');
+      final glucoseType =
+          d.getValue('glucoseType') ?? d.getValue('bloodSugar');
       if (glucoseType != null) glucoseLog['glucoseType'] = glucoseType;
       glucoseLog['glucoseUnit'] =
           d.getValue('glucoseUnit') as String? ?? 'mmol/L';
@@ -468,10 +518,29 @@ abstract final class UnifiedPayloadMapper {
       return v.toString();
     }
 
-    final glucoseType = d.getValue('glucoseType') as String?;
-    final glucoseValue = asNum(d.getValue('glucoseValue'));
+    // Fan-out: union reads so the single captured glucose / IFA / Calcium
+    // value populates the PNC payload regardless of which field ID survived
+    // the semantic dedup (ANC fields vs PNC fields).
+    final glucoseType = (d.getValue('glucoseType') ??
+        d.getValue('bloodSugar')) as String?;
+    final glucoseValue = asNum(d.getValue('glucoseValue') ??
+        d.getValue('glucose') ??
+        d.getValue('ancBloodGlucose') ??
+        d.getValue('fastingBloodSugar') ??
+        d.getValue('randomBloodSugar'));
     final hasFbs = glucoseType == 'fbs' && glucoseValue != null;
     final hasRbs = glucoseType != null && glucoseType != 'fbs' && glucoseValue != null;
+
+    final ifaTabletsConsumed = d.getValue('ifaTabletsConsumed') ??
+        d.getValue('ifaTotalConsumed') ??
+        d.getValue('ifaTablets');
+    final ifaTabletsProvided =
+        d.getValue('ifaTabletsProvided') ?? d.getValue('ifaProvided');
+    final calciumTabletsConsumed = d.getValue('calciumTabletsConsumed') ??
+        d.getValue('calciumTotalConsumed') ??
+        d.getValue('calciumTablets');
+    final calciumTabletsProvided =
+        d.getValue('calciumTabletsProvided') ?? d.getValue('calciumProvided');
 
     final maternal = _compact({
       if (rawSys != null) 'systolic': bpStr(rawSys),
@@ -497,10 +566,10 @@ abstract final class UnifiedPayloadMapper {
       'onTreatmentHtnEclampsia': d.getValue('onTreatmentHtnEclampsia'),
       'onTreatmentDmGdm': d.getValue('onTreatmentDmGdm'),
       'vitaminAConsumed': d.getValue('vitaminAConsumed'),
-      'ifaTabletsProvided': d.getValue('ifaTabletsProvided'),
-      'ifaTabletsConsumed': d.getValue('ifaTabletsConsumed'),
-      'calciumTabletsProvided': d.getValue('calciumTabletsProvided'),
-      'calciumTabletsConsumed': d.getValue('calciumTabletsConsumed'),
+      'ifaTabletsProvided': ifaTabletsProvided,
+      'ifaTabletsConsumed': ifaTabletsConsumed,
+      'calciumTabletsProvided': calciumTabletsProvided,
+      'calciumTabletsConsumed': calciumTabletsConsumed,
       if (glucoseType != null && glucoseValue != null)
         'bloodSugar': glucoseType == 'fbs' ? 'fasting' : 'random',
       if (hasFbs) 'fastingBloodSugar': glucoseValue,

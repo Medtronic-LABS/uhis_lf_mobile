@@ -199,8 +199,27 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
           0, (sum, a) => sum + a.section.fieldRefs.length);
         if (annotated.length != _lastLoggedSectionCount ||
             totalFields != _lastLoggedFieldCount) {
+          final isFirstLoad = _lastLoggedSectionCount == -1;
           _lastLoggedSectionCount = annotated.length;
           _lastLoggedFieldCount = totalFields;
+          if (isFirstLoad) {
+            // Collect all field IDs across sections to report merged groups.
+            final allIds = <String>{};
+            for (final a in annotated) {
+              for (final r in a.section.fieldRefs) {
+                allIds.add(r.id);
+              }
+            }
+            final merged = UnifiedSectionRules.mergedGroupDescriptions(allIds);
+            // ignore: avoid_print
+            print('[Form] opening combined form — programmes: '
+                '${widget.activeFormTypes.join(', ')}');
+            if (merged.isNotEmpty) {
+              // ignore: avoid_print
+              print('[Form]   common fields captured once (merged): '
+                  '${merged.join(', ')}');
+            }
+          }
           UnifiedSectionRules.debugLogSections(annotated, totalFields);
         }
 
@@ -838,6 +857,52 @@ class _SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Pre-compute the set of ref IDs in this section so the BP pair detector
+    // works regardless of ordering.
+    final sectionIds = section.fieldRefs.map((r) => r.id).toSet();
+    final hasBpPair = sectionIds.contains('systolic') &&
+        sectionIds.contains('diastolic');
+
+    // IDs absorbed into a composite widget — skip when encountered individually.
+    final consumedIds = <String>{
+      // When a combined BP card is rendered, skip the standalone fields.
+      if (hasBpPair) ...const {'bloodPressure', 'diastolic'},
+    };
+
+    bool bpPairEmitted = false;
+
+    final fieldWidgets = <Widget>[];
+    for (final ref in section.fieldRefs) {
+      if (consumedIds.contains(ref.id)) continue;
+
+      final def = config.fields[ref.id];
+      if (def == null) continue;
+
+      Widget child;
+      if (ref.id == 'systolic' && hasBpPair) {
+        // Emit the combined BP pair card once.
+        if (!bpPairEmitted) {
+          bpPairEmitted = true;
+          final diaRef = section.fieldRefs.firstWhere((r) => r.id == 'diastolic');
+          final diaDef = config.fields['diastolic'];
+          if (diaDef != null) {
+            child = _bpPairCard(context, def, ref, diaDef, diaRef);
+          } else {
+            child = _fieldRow(context, def, ref);
+          }
+        } else {
+          continue;
+        }
+      } else {
+        child = _fieldRow(context, def, ref);
+      }
+
+      fieldWidgets.add(Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+        child: child,
+      ));
+    }
+
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.xxxl),
       child: Column(
@@ -850,14 +915,77 @@ class _SectionCard extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.lg),
           ],
-          ...section.fieldRefs.map((ref) {
-            final def = config.fields[ref.id];
-            if (def == null) return const SizedBox.shrink();
-            return Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.lg),
-              child: _fieldRow(context, def, ref),
-            );
-          }),
+          ...fieldWidgets,
+        ],
+      ),
+    );
+  }
+
+  /// Renders a combined Blood Pressure card with systolic and diastolic inputs
+  /// side-by-side in one [_FieldShell], matching the v13 reference design.
+  Widget _bpPairCard(
+    BuildContext context,
+    FieldDef sysDef,
+    FieldRef sysRef,
+    FieldDef diaDef,
+    FieldRef diaRef,
+  ) {
+    final hasError = validationErrors.contains(sysRef.id) ||
+        validationErrors.contains(diaRef.id);
+    final isMandatory = sysDef.isMandatory ||
+        sysRef.isMandatory ||
+        diaDef.isMandatory ||
+        diaRef.isMandatory;
+    return _FieldShell(
+      label: UnifiedFormStrings.bpCardLabel,
+      subLabel: '${UnifiedFormStrings.bpCardSubLabel} · ${UnifiedFormStrings.bpUnit}',
+      emoji: '🩺',
+      emojiBg: const Color(0xFFEEF0FF),
+      isMandatory: isMandatory,
+      hasError: hasError,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: _NumericField(
+              key: Key('unified_form_systolic_input'),
+              isDecimal: false,
+              hint: UnifiedFormStrings.bpSystolicLabel,
+              initialValue: data.getValue('systolic')?.toString(),
+              onChanged: (v) {
+                if (v == null || v.isEmpty) {
+                  onFieldChanged('systolic', null);
+                } else {
+                  onFieldChanged('systolic', int.tryParse(v) ?? double.tryParse(v) ?? v);
+                }
+              },
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10, left: 8, right: 8),
+            child: Text(
+              '/',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: AppColors.textMuted,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ),
+          Expanded(
+            child: _NumericField(
+              key: Key('unified_form_diastolic_input'),
+              isDecimal: false,
+              hint: UnifiedFormStrings.bpDiastolicLabel,
+              initialValue: data.getValue('diastolic')?.toString(),
+              onChanged: (v) {
+                if (v == null || v.isEmpty) {
+                  onFieldChanged('diastolic', null);
+                } else {
+                  onFieldChanged('diastolic', int.tryParse(v) ?? double.tryParse(v) ?? v);
+                }
+              },
+            ),
+          ),
         ],
       ),
     );
