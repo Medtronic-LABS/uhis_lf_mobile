@@ -106,8 +106,6 @@ Future<void> main() async {
   final api = await ApiClient.create();
   final authRepo = AuthRepository(api);
   final biometric = BiometricService();
-  final authState = AuthState(authRepo, biometric);
-  authState.bootstrap(); // fire-and-forget — splash shows while bootstrap runs async
   final appDb = await AppDatabase.open().onError((e, st) async {
     if (kIsWeb) {
       debugPrint('[main] Web DB open failed ($e) — retrying with in-memory path');
@@ -117,6 +115,12 @@ Future<void> main() async {
   });
   // Clear any legacy seeded test data (PAT-SEED-* entries)
   await _clearSeededTestData(appDb);
+  final authState = AuthState(
+    authRepo,
+    biometric,
+    onWipeLocalData: appDb.wipeAllData,
+  );
+  authState.bootstrap(); // fire-and-forget — splash shows while bootstrap runs async
   runApp(UhisNextApp(
     api: api,
     authRepo: authRepo,
@@ -177,6 +181,7 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final OfflineSyncService _sync = OfflineSyncService(
     api: widget.api,
     auth: widget.authRepo,
+    db: widget.appDb,
     patients: _patientDao,
     programmes: _progDao,
     followUps: _followUpDao,

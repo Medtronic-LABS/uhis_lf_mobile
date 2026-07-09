@@ -73,8 +73,9 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
       }
     });
 
-    // Start the sync
-    final report = await sync.coldSync();
+    // Start the sync — wipe stale local data first: /sync is reached only
+    // from a successful online login (never from biometric/PIN reentry).
+    final report = await sync.coldSync(wipeBeforeSync: true);
     
     if (!mounted) return;
     

@@ -11,6 +11,7 @@ import '../auth/auth_repository.dart';
 import '../auth/user_hierarchy_service.dart';
 import '../config/app_config.dart';
 import '../models/assessment_history_item.dart';
+import '../db/app_database.dart';
 import '../db/assessment_dao.dart';
 import '../db/encounter_dao.dart';
 import '../db/follow_up_dao.dart';
@@ -39,6 +40,7 @@ class OfflineSyncService extends ChangeNotifier {
   OfflineSyncService({
     required ApiClient api,
     required AuthRepository auth,
+    required AppDatabase db,
     required PatientDao patients,
     required PatientProgrammesDao programmes,
     required FollowUpDao followUps,
@@ -55,6 +57,7 @@ class OfflineSyncService extends ChangeNotifier {
     UserHierarchyService? hierarchy,
   })  : _api = api,
         _auth = auth,
+        _db = db,
         _patients = patients,
         _programmes = programmes,
         _followUps = followUps,
@@ -72,6 +75,7 @@ class OfflineSyncService extends ChangeNotifier {
 
   final ApiClient _api;
   final AuthRepository _auth;
+  final AppDatabase _db;
   final PatientDao _patients;
   final PatientProgrammesDao _programmes;
   final FollowUpDao _followUps;
@@ -115,12 +119,22 @@ class OfflineSyncService extends ChangeNotifier {
   }
 
   /// First sync after login — full pull, no `lastSyncTime` filter.
-  Future<SyncReport> coldSync() => _runSync(fullSync: true);
+  ///
+  /// [wipeBeforeSync] truncates every local table before the pull — set only
+  /// by the online-login flow (`SyncProgressScreen`), never by
+  /// `worklist_screen.dart`'s cold-sync safety net, so an already-signed-in
+  /// user who simply hasn't synced yet never has their data wiped.
+  Future<SyncReport> coldSync({bool wipeBeforeSync = false}) =>
+      _runSync(fullSync: true, wipeBeforeSync: wipeBeforeSync);
 
-  /// Pull-to-refresh — delta filter using the cached `lastSyncTime`.
+  /// Pull-to-refresh — delta filter using the cached `lastSyncTime`. Never
+  /// wipes local data.
   Future<SyncReport> warmSync() => _runSync(fullSync: false);
 
-  Future<SyncReport> _runSync({required bool fullSync}) async {
+  Future<SyncReport> _runSync({
+    required bool fullSync,
+    bool wipeBeforeSync = false,
+  }) async {
     if (_running) {
       return SyncReport.empty().copyWith(
         errors: const ['Sync already running'],
@@ -132,6 +146,10 @@ class OfflineSyncService extends ChangeNotifier {
     var report = SyncReport(startedAt: started, finishedAt: started)
         .copyWith(wasFullSync: fullSync);
     try {
+      if (wipeBeforeSync) {
+        await _db.wipeAllData();
+      }
+
       // userId is required by the server — fail fast rather than sending a
       // request without it and getting an empty/rejected bundle silently.
       final syncUserId = await _auth.userId();
