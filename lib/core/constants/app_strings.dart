@@ -260,8 +260,7 @@ abstract final class RealtimeAsrStrings {
 abstract final class SearchStrings {
   SearchStrings._();
 
-  static const String barHint =
-      'Search by name, phone, NID, household number or name';
+  static const String barHint = 'Name, Mobile, NID';
   static const String scopeAll = 'All';
   static const String scopePatients = 'Patients';
   static const String scopeHouseholds = 'Households';

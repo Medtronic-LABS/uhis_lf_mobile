@@ -707,6 +707,14 @@ class _SettingsMenu extends StatelessWidget {
     return Consumer<AuthState>(
       builder: (ctx, auth, _) => PopupMenuButton<String>(
         icon: const Icon(Icons.settings, color: Colors.white),
+        iconSize: 21,
+        padding: EdgeInsets.zero,
+        // padding/iconSize alone don't shrink Material 3's hidden 48x48
+        // minimum tap-target — this style override is what actually does.
+        style: IconButton.styleFrom(
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
         onSelected: (v) async {
           switch (v) {
             case 'enable_bio':
@@ -952,62 +960,50 @@ class _DashboardHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // .header-row: flex, space-between, align-items:center, margin-bottom:14px
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Text(greeting, style: AppTextStyles.headerTitle),
+                    const SizedBox(height: 1), // .header-sub margin-top:1px
                     Text(
-                      greeting,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        height: 1.2,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Icon(Icons.location_on_outlined,
-                            size: 14, color: Colors.white.withValues(alpha: 0.6)),
-                        const SizedBox(width: 4),
-                        Flexible(
-                          child: Text(
-                            locationLine ??
-                                DashboardStrings.communityAtAGlance,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.6),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
+                      locationLine ?? DashboardStrings.communityAtAGlance,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.headerSub,
                     ),
                   ],
                 ),
               ),
+              // Icon order fixed per spec: Performance → Settings → Notifications.
+              // Not an IconButton — Material 3's hidden 48x48 minimum tap-target
+              // would defeat the spec's tight 14px inter-icon gap even with
+              // padding/iconSize zeroed out.
+              Tooltip(
+                message: PerformanceStrings.iconTooltip,
+                child: GestureDetector(
+                  onTap: onPerformance,
+                  child: const Icon(
+                    Icons.leaderboard_rounded,
+                    size: 21,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xxl), // 14px per spec
+              settingsMenu,
+              const SizedBox(width: AppSpacing.xxl),
               _NotificationBell(
                 count: notificationCount,
                 onTap: onNotificationTap,
               ),
-              IconButton(
-                icon: const Icon(
-                  Icons.leaderboard_rounded,
-                  color: Colors.white,
-                ),
-                iconSize: 22,
-                tooltip: PerformanceStrings.iconTooltip,
-                onPressed: onPerformance,
-              ),
-              settingsMenu,
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.xxl), // .header-row margin-bottom:14px
           const GlobalSearchBar(),
         ],
       ),
@@ -1413,53 +1409,99 @@ class _FilterEmptyCard extends StatelessWidget {
 
 // ─── Notification bell ────────────────────────────────────────────────────────
 
-class _NotificationBell extends StatelessWidget {
+class _NotificationBell extends StatefulWidget {
   const _NotificationBell({required this.count, required this.onTap});
 
   final int count;
   final VoidCallback onTap;
 
   @override
+  State<_NotificationBell> createState() => _NotificationBellState();
+}
+
+class _NotificationBellState extends State<_NotificationBell>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulseCtrl;
+  late final Animation<double> _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: AppAnimations.badgePulse,
+    )..repeat(reverse: true);
+    _pulse = CurvedAnimation(parent: _pulseCtrl, curve: AppAnimations.gentle);
+  }
+
+  @override
+  void dispose() {
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    final count = widget.count;
     return Semantics(
       label: count > 0 ? '$count notifications' : 'Notifications',
       button: true,
       child: GestureDetector(
-        onTap: onTap,
+        onTap: widget.onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          padding: EdgeInsets.zero,
           child: Stack(
             clipBehavior: Clip.none,
             children: [
               const Icon(
                 Icons.notifications_outlined,
                 color: Colors.white,
-                size: 24,
+                size: 22,
               ),
               if (count > 0)
                 Positioned(
                   top: -4,
                   right: -4,
-                  child: Container(
-                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    decoration: BoxDecoration(
-                      color: tokens.statusCritical,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: tokens.brandNavy, width: 1.5),
-                    ),
-                    child: Text(
-                      count > 99 ? '99+' : '$count',
-                      style: const TextStyle(
-                        fontFamily: 'NunitoSans',
-                        fontSize: 9,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        height: 1.4,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
+                  child: AnimatedBuilder(
+                    animation: _pulse,
+                    builder: (context, _) {
+                      final t = _pulse.value;
+                      return Transform.scale(
+                        scale: 1 + 0.1 * t,
+                        child: Container(
+                          width: 16,
+                          height: 16,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            // Spec-exact #E8356D, not tokens.brandPink — that
+                            // token resolves to a different, brighter pink in
+                            // dark theme, but the badge must pixel-match the
+                            // spec regardless of theme mode.
+                            color: const Color(0xFFE8356D),
+                            border: Border.all(color: tokens.brandNavy, width: 2),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFE8356D)
+                                    .withValues(alpha: 0.5 * (1 - t)),
+                                spreadRadius: 4 * t,
+                              ),
+                            ],
+                          ),
+                          child: Text(
+                            count > 9 ? '9+' : '$count',
+                            style: const TextStyle(
+                              fontFamily: 'Nunito',
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
             ],
