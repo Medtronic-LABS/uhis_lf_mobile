@@ -254,7 +254,8 @@ abstract final class UnifiedPayloadMapper {
 
     final vaccination = _compact({
       'ttTdCompleted': d.getValue('ttTdCompleted'),
-      'folicAcidTotalConsumed': d.getValue('folicAcidTotalConsumed'),
+      'folicAcidTotalConsumed': d.getValue('folicAcidTotalConsumed') ??
+          d.getValue('folicAcidTablets'),
       'folicAcidProvided': d.getValue('folicAcidProvided'),
       'ifaTotalConsumed': ifaConsumed,
       'ifaProvided': ifaProvided,

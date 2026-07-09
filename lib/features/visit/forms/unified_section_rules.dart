@@ -72,6 +72,9 @@ abstract final class UnifiedSectionRules {
   static const List<Set<String>> _semanticFieldGroups = [
     // ── Blood pressure ──────────────────────────────────────────────────────
     {'bloodPressure', 'systolic', 'diastolic', 'bpLogDetails'},
+    // ── Folic acid supplements ───────────────────────────────────────────────
+    {'folicAcidTotalConsumed', 'folicAcidTablets'},
+    {'folicAcidProvided'},
     // ── IFA / iron supplements ──────────────────────────────────────────────
     {'ifaTotalConsumed', 'ifaTabletsConsumed', 'ifaTablets'},
     {'ifaProvided', 'ifaTabletsProvided'},
@@ -88,6 +91,7 @@ abstract final class UnifiedSectionRules {
   static List<String> mergedGroupDescriptions(Set<String> activeFieldIds) {
     const groupLabels = <Set<String>, String>{
       {'bloodPressure', 'systolic', 'diastolic', 'bpLogDetails'}: 'BP (systolic|diastolic)',
+      {'folicAcidTotalConsumed', 'folicAcidTablets'}: 'Folic acid consumed',
       {'ifaTotalConsumed', 'ifaTabletsConsumed', 'ifaTablets'}: 'IFA consumed',
       {'ifaProvided', 'ifaTabletsProvided'}: 'IFA provided',
       {'calciumTotalConsumed', 'calciumTabletsConsumed', 'calciumTablets'}: 'Calcium consumed',

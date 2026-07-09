@@ -3422,6 +3422,16 @@ abstract final class UnifiedFormStrings {
   static const String bpCardLabel = 'Blood Pressure';
   static const String bpCardSubLabel = 'রক্তচাপ';
 
+  // Supplement pair cards (consumed + provided side-by-side).
+  static const String supplementConsumedLabel = 'Consumed last month';
+  static const String supplementProvidedLabel = 'Provided this visit';
+  static const String folatePairLabel = 'Folic acid tablets';
+  static const String folatePairSubLabel = 'ফলিক অ্যাসিড';
+  static const String ifaPairLabel = 'IFA tablets';
+  static const String ifaPairSubLabel = 'আয়রন-ফলিক অ্যাসিড';
+  static const String calciumPairLabel = 'Calcium tablets';
+  static const String calciumPairSubLabel = 'ক্যালসিয়াম';
+
   /// Trailing tag shown on read-only computed fields (e.g. BMI, EDD, gest. week)
   /// to signal the value is auto-derived and not manually entered.
   static const String autoComputedTag = '(auto)';

@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_theme.dart';
-import '../widgets/form_fields/dialog_multi_select_field.dart';
 import '../widgets/form_fields/radio_form_field.dart';
 import 'canonical_visit_data.dart';
 import 'form_config.dart';
@@ -855,6 +854,61 @@ class _SectionCard extends StatelessWidget {
   final Set<String> validationErrors;
   final void Function(String fieldId, dynamic value) onFieldChanged;
 
+  // ── Supplement pair detection ─────────────────────────────────────────────
+  // Maps each "consumed" field id → (set of possible "provided" field ids,
+  // outer card label, Bengali sub-label, emoji).
+  static const Map<String, ({Set<String> providedIds, String label, String subLabel, String emoji})>
+      _supplementConsumedMap = {
+    'folicAcidTotalConsumed': (
+      providedIds: {'folicAcidProvided', 'folicAcidTablets'},
+      label: UnifiedFormStrings.folatePairLabel,
+      subLabel: UnifiedFormStrings.folatePairSubLabel,
+      emoji: '💊',
+    ),
+    'folicAcidTablets': (
+      providedIds: {'folicAcidProvided'},
+      label: UnifiedFormStrings.folatePairLabel,
+      subLabel: UnifiedFormStrings.folatePairSubLabel,
+      emoji: '💊',
+    ),
+    'ifaTotalConsumed': (
+      providedIds: {'ifaProvided', 'ifaTabletsProvided'},
+      label: UnifiedFormStrings.ifaPairLabel,
+      subLabel: UnifiedFormStrings.ifaPairSubLabel,
+      emoji: '🩸',
+    ),
+    'ifaTabletsConsumed': (
+      providedIds: {'ifaProvided', 'ifaTabletsProvided'},
+      label: UnifiedFormStrings.ifaPairLabel,
+      subLabel: UnifiedFormStrings.ifaPairSubLabel,
+      emoji: '🩸',
+    ),
+    'ifaTablets': (
+      providedIds: {'ifaProvided', 'ifaTabletsProvided'},
+      label: UnifiedFormStrings.ifaPairLabel,
+      subLabel: UnifiedFormStrings.ifaPairSubLabel,
+      emoji: '🩸',
+    ),
+    'calciumTotalConsumed': (
+      providedIds: {'calciumProvided', 'calciumTabletsProvided'},
+      label: UnifiedFormStrings.calciumPairLabel,
+      subLabel: UnifiedFormStrings.calciumPairSubLabel,
+      emoji: '🦴',
+    ),
+    'calciumTabletsConsumed': (
+      providedIds: {'calciumProvided', 'calciumTabletsProvided'},
+      label: UnifiedFormStrings.calciumPairLabel,
+      subLabel: UnifiedFormStrings.calciumPairSubLabel,
+      emoji: '🦴',
+    ),
+    'calciumTablets': (
+      providedIds: {'calciumProvided', 'calciumTabletsProvided'},
+      label: UnifiedFormStrings.calciumPairLabel,
+      subLabel: UnifiedFormStrings.calciumPairSubLabel,
+      emoji: '🦴',
+    ),
+  };
+
   @override
   Widget build(BuildContext context) {
     // Pre-compute the set of ref IDs in this section so the BP pair detector
@@ -863,10 +917,25 @@ class _SectionCard extends StatelessWidget {
     final hasBpPair = sectionIds.contains('systolic') &&
         sectionIds.contains('diastolic');
 
+    // For each supplement consumed field, find which provided field (if any) is
+    // present in the same section, so we can render a combined pair card.
+    final Map<String, String?> supplementConsumedToProvidedRef = {};
+    for (final entry in _supplementConsumedMap.entries) {
+      if (sectionIds.contains(entry.key)) {
+        final matchedProvided = entry.value.providedIds
+            .cast<String?>()
+            .firstWhere(sectionIds.contains, orElse: () => null);
+        supplementConsumedToProvidedRef[entry.key] = matchedProvided;
+      }
+    }
+
     // IDs absorbed into a composite widget — skip when encountered individually.
     final consumedIds = <String>{
       // When a combined BP card is rendered, skip the standalone fields.
       if (hasBpPair) ...const {'bloodPressure', 'diastolic'},
+      // For each supplement pair, skip the "provided" counterpart field —
+      // it will be rendered inline inside the consumed field's pair card.
+      for (final p in supplementConsumedToProvidedRef.values) ?p,
     };
 
     bool bpPairEmitted = false;
@@ -892,6 +961,21 @@ class _SectionCard extends StatelessWidget {
           }
         } else {
           continue;
+        }
+      } else if (_supplementConsumedMap.containsKey(ref.id) &&
+          supplementConsumedToProvidedRef.containsKey(ref.id)) {
+        // Emit supplement pair card (consumed + provided side-by-side).
+        final meta = _supplementConsumedMap[ref.id]!;
+        final providedId = supplementConsumedToProvidedRef[ref.id];
+        if (providedId != null) {
+          final providedDef = config.fields[providedId];
+          if (providedDef != null) {
+            child = _supplementPairCard(context, def, ref, providedDef, providedId, meta);
+          } else {
+            child = _fieldRow(context, def, ref);
+          }
+        } else {
+          child = _fieldRow(context, def, ref);
         }
       } else {
         child = _fieldRow(context, def, ref);
@@ -991,14 +1075,108 @@ class _SectionCard extends StatelessWidget {
     );
   }
 
+  /// Renders a supplement pair card — outer [_FieldShell] with the supplement
+  /// name and Bengali label, containing "consumed" and "provided" inputs
+  /// side-by-side.
+  Widget _supplementPairCard(
+    BuildContext context,
+    FieldDef consumedDef,
+    FieldRef consumedRef,
+    FieldDef providedDef,
+    String providedId,
+    ({Set<String> providedIds, String label, String subLabel, String emoji}) meta,
+  ) {
+    final hasError = validationErrors.contains(consumedRef.id) ||
+        validationErrors.contains(providedId);
+    final isMandatory = consumedDef.isMandatory ||
+        consumedRef.isMandatory ||
+        providedDef.isMandatory;
+    return _FieldShell(
+      label: meta.label,
+      subLabel: meta.subLabel,
+      emoji: meta.emoji,
+      emojiBg: const Color(0xFFF0FDF4),
+      isMandatory: isMandatory,
+      hasError: hasError,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  UnifiedFormStrings.supplementConsumedLabel,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                _NumericField(
+                  key: Key('unified_form_${consumedRef.id}_input'),
+                  isDecimal: false,
+                  hint: consumedDef.hintText,
+                  initialValue: data.getValue(consumedRef.id)?.toString(),
+                  onChanged: (v) {
+                    if (v == null || v.isEmpty) {
+                      onFieldChanged(consumedRef.id, null);
+                    } else {
+                      onFieldChanged(consumedRef.id, int.tryParse(v) ?? v);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  UnifiedFormStrings.supplementProvidedLabel,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                _NumericField(
+                  key: Key('unified_form_${providedId}_input'),
+                  isDecimal: false,
+                  hint: providedDef.hintText,
+                  initialValue: data.getValue(providedId)?.toString(),
+                  onChanged: (v) {
+                    if (v == null || v.isEmpty) {
+                      onFieldChanged(providedId, null);
+                    } else {
+                      onFieldChanged(providedId, int.tryParse(v) ?? v);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Builds one field row: self-contained fields (info / text label) render
-  /// bare; every editable field is wrapped in a [_FieldShell] that owns the
-  /// label, mandatory `*`, and the red error border.
+  /// bare; [dialogCheckbox] renders fully standalone (owns its own label +
+  /// option list).  Every other editable field is wrapped in [_FieldShell].
   Widget _fieldRow(BuildContext context, FieldDef def, FieldRef ref) {
     final control = _buildField(context, def, ref, data.getValue(ref.id));
     switch (def.widgetHint) {
       case WidgetHint.infoLabel:
       case WidgetHint.textLabel:
+        return control;
+      // dialogCheckbox renders as a self-contained inline list with its own
+      // label header — wrapping it in a _FieldShell would double the label.
+      case WidgetHint.dialogCheckbox:
         return control;
       default:
         final glyph = FormFieldVisuals.forField(def.id);
@@ -1052,7 +1230,7 @@ class _SectionCard extends StatelessWidget {
         );
 
       case WidgetHint.dialogCheckbox:
-        // Canonical store uses list of option ids; widget works with display names.
+        // Canonical store uses list of option ids; inline list works with display names.
         final storedIds = (currentValue is List)
             ? currentValue.cast<String>()
             : <String>[];
@@ -1066,10 +1244,18 @@ class _SectionCard extends StatelessWidget {
                   ?.name ??
               sid;
         }).toList();
-        return DialogMultiSelectField(
+        final subParts = <String>[
+          if (def.labelCulture != null && def.labelCulture!.isNotEmpty)
+            def.labelCulture!,
+        ];
+        return _InlineListSelectField(
           key: Key('unified_form_${def.id}_input'),
+          label: def.label,
+          subLabel: subParts.isEmpty ? null : subParts.first,
+          isMandatory: def.isMandatory || ref.isMandatory,
+          hasError: validationErrors.contains(ref.id),
           options: def.options.map((o) => o.name).toList(),
-          currentValue: displayNames,
+          selectedValues: displayNames,
           onChanged: (names) {
             final ids = names.map((n) {
               return def.options
@@ -1407,9 +1593,14 @@ class _NumericFieldState extends State<_NumericField> {
   Widget build(BuildContext context) {
     return TextFormField(
       controller: _ctrl,
-      keyboardType: widget.isDecimal
-          ? const TextInputType.numberWithOptions(decimal: true)
-          : TextInputType.number,
+      // Use the plain number keyboard for ALL numeric fields — even decimal
+      // ones.  Some Android keyboards in currency/decimal mode auto-insert a
+      // decimal point when `decimal: true` is set, causing "190" to appear
+      // as "1.90" without the user intending it.  The plain number keyboard
+      // never auto-inserts a point; users who need decimals (e.g. temperature
+      // "36.5") can still type the "." manually since the formatter below
+      // allows it.
+      keyboardType: TextInputType.number,
       inputFormatters: [
         if (widget.isDecimal)
           FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
@@ -1753,6 +1944,234 @@ class _InfoLabelField extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Inline list multi-select ──────────────────────────────────────────────────
+
+/// Multi-select field rendered as an inline tappable list — one rounded row per
+/// option.  Matches the "Any danger signs now?" UI in the v13 reference mockup:
+/// each option is a white card-row with a leading emoji tile (if provided) and
+/// the label, with a navy-filled style when selected.  The "None of these"
+/// option (detected by a case-insensitive "none" prefix) deselects everything
+/// else and shows a ✓ prefix.
+class _InlineListSelectField extends StatelessWidget {
+  const _InlineListSelectField({
+    super.key,
+    required this.options,
+    required this.selectedValues,
+    required this.onChanged,
+    this.hasError = false,
+    this.label,
+    this.subLabel,
+    this.isMandatory = false,
+  });
+
+  final List<String> options;
+  final List<String> selectedValues;
+  final ValueChanged<List<String>> onChanged;
+  final bool hasError;
+  final String? label;
+  final String? subLabel;
+  final bool isMandatory;
+
+  static const _noneKey = 'none';
+
+  String? get _noneOption =>
+      options.cast<String?>().firstWhere(
+            (o) => o!.toLowerCase().startsWith(_noneKey),
+            orElse: () => null,
+          );
+
+  bool _isNone(String opt) => opt.toLowerCase().startsWith(_noneKey);
+
+  void _toggle(String option) {
+    final current = List<String>.from(selectedValues);
+    if (_isNone(option)) {
+      // Selecting "None" clears all other selections.
+      onChanged(current.contains(option) ? [] : [option]);
+      return;
+    }
+    // Selecting any real option clears "None" if it was active.
+    if (current.contains(option)) {
+      current.remove(option);
+    } else {
+      current.remove(_noneOption);
+      current.add(option);
+    }
+    onChanged(current);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header: label + Bengali sublabel + mandatory marker.
+        if (label != null && label!.isNotEmpty) ...[
+          _InlineListHeader(
+            label: label!,
+            subLabel: subLabel,
+            isMandatory: isMandatory,
+            hasError: hasError,
+          ),
+          const SizedBox(height: 10),
+        ],
+        // Option rows.
+        for (final option in options) ...[
+          _InlineListRow(
+            label: option,
+            isSelected: selectedValues.contains(option),
+            isNone: _isNone(option),
+            onTap: () => _toggle(option),
+          ),
+          const SizedBox(height: 8),
+        ],
+        // Red error hint below the list.
+        if (hasError) ...[
+          const SizedBox(height: 2),
+          Text(
+            'Please select at least one option',
+            style: const TextStyle(
+              fontSize: 10.5,
+              color: AppColors.statusCritical,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Header section for [_InlineListSelectField]: bold English label + muted
+/// Bengali sub-label + mandatory `*`.
+class _InlineListHeader extends StatelessWidget {
+  const _InlineListHeader({
+    required this.label,
+    this.subLabel,
+    this.isMandatory = false,
+    this.hasError = false,
+  });
+
+  final String label;
+  final String? subLabel;
+  final bool isMandatory;
+  final bool hasError;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text.rich(
+          TextSpan(
+            text: label,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  color: hasError
+                      ? AppColors.statusCritical
+                      : AppColors.textPrimary,
+                  height: 1.25,
+                ),
+            children: isMandatory
+                ? const [
+                    TextSpan(
+                      text: ' *',
+                      style: TextStyle(
+                        color: AppColors.statusCritical,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ]
+                : null,
+          ),
+        ),
+        if (subLabel != null && subLabel!.isNotEmpty) ...[
+          const SizedBox(height: 2),
+          Text(
+            subLabel!,
+            style: const TextStyle(
+              fontSize: 11.5,
+              color: AppColors.textMuted,
+              height: 1.3,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// A single selectable row inside [_InlineListSelectField].
+///
+/// Unselected: white card with a `1.5px` grey border.
+/// Selected (normal): navy-filled card.
+/// Selected (none): light grey-filled card with ✓ prefix.
+class _InlineListRow extends StatelessWidget {
+  const _InlineListRow({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+    this.isNone = false,
+  });
+
+  final String label;
+  final bool isSelected;
+  final bool isNone;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color bg;
+    final Color fg;
+    final Color border;
+
+    if (isNone && isSelected) {
+      bg = AppColors.cardSurfaceMuted;
+      fg = AppColors.textPrimary;
+      border = AppColors.border;
+    } else if (isSelected) {
+      bg = AppColors.navy;
+      fg = AppColors.textOnNavy;
+      border = AppColors.navy;
+    } else {
+      bg = Colors.white;
+      fg = AppColors.textPrimary;
+      border = AppColors.border;
+    }
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(_kFieldCardRadius),
+          border: Border.all(color: border, width: 1.5),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                isNone && isSelected ? '✓ $label' : label,
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight:
+                      isSelected ? FontWeight.w600 : FontWeight.w500,
+                  color: fg,
+                  height: 1.3,
+                ),
+              ),
+            ),
+            if (isSelected && !isNone)
+              Icon(Icons.check_circle_rounded, size: 18, color: fg),
+          ],
+        ),
       ),
     );
   }
