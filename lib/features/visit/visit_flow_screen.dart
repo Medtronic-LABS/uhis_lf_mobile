@@ -255,7 +255,13 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           },
           onAdvance: (pathways) {
             _pathways = pathways;
-            _showProgrammeConfirmSheet(pathways);
+            // Bypass the "Opening forms for" confirmation sheet — proceed
+            // directly to Step 2 with all activated pathways confirmed.
+            setState(() {
+              _confirmedProgrammes =
+                  pathways.map((p) => p.programme).toSet();
+              _step = 1;
+            });
           },
         );
       case 1:

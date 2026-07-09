@@ -3005,9 +3005,16 @@ abstract final class SymptomPickerStrings {
   static const String durationValue4plus = '4+';
 
   // ── CTA button ───────────────────────────────────────────────────────────
-  static const String ctaWithPathways =
-      'AI is checking — see what to do next →';
-  static const String ctaRoutine = 'Continue (routine visit)';
+  static const String ctaStartCheckup = 'Start Checkup →';
+  static const String ctaRoutine = 'Start Checkup →';
+
+  // ── Status bar above CTA ────────────────────────────────────────────────
+  static String symptomsSelectedStatus(int n) =>
+      '$n ${n == 1 ? 'symptom' : 'symptoms'} selected';
+  static String servicesOpeningStatus(int count, List<String> labels) {
+    final joined = labels.join(', ');
+    return '$count ${count == 1 ? 'service' : 'services'} opening ($joined)';
+  }
 
   // ── Other symptoms free-text ─────────────────────────────────────────────
   static const String otherSymptomsLabel = 'Other symptoms / Notes';
@@ -3397,6 +3404,18 @@ abstract final class UnifiedFormStrings {
   static const String configLoadError =
       'Form configuration could not be loaded. Please restart the app.';
   static const String noPathways = 'No assessment pathways activated.';
+
+  // BP reading field labels (must not be hardcoded in widget).
+  static const String bpSystolicLabel = 'Systolic';
+  static const String bpDiastolicLabel = 'Diastolic';
+  static const String bpPulseLabel = 'Pulse';
+  static const String bpUnit = 'mmHg';
+  static const String bpPulseUnit = '/min';
+
+  // Validation messages.
+  static const String validationBannerTitle = 'Please complete required fields';
+  static String validationFieldsRequired(int n) =>
+      '$n required ${n == 1 ? 'field' : 'fields'} must be filled before submitting.';
 }
 
 abstract final class FormGalleryStrings {
