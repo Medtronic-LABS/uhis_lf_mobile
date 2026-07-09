@@ -344,9 +344,19 @@ class UserHierarchyService extends ChangeNotifier {
       await _auth.saveUpazila(upazilaName);
 
       // ── Persist LINKED_VILLAGE_IDS for offline sync ──────────────────────
-      // fetch-synced-data filters at sub-village granularity — use sub-village
-      // IDs when available; fall back to village IDs otherwise.
-      final subIds = _subVillages!
+      // Mirror Android MetaRepository: use sub-villages nested within each
+      // SS worker (shasthyaShebikas[].subVillages) as the primary scope —
+      // these are the most specific IDs and match exactly what the server
+      // used when it assigned data to this SK's caseload. Fall back to the
+      // top-level `subVillages` list, then to `villages` only as a last
+      // resort (village-level IDs return the entire village, not just this
+      // SK's area, and produce oversized bundles).
+      final ssSubIds = _ssWorkers!
+          .expand((ss) => ss.subVillages)
+          .map((sv) => int.tryParse(sv.id))
+          .whereType<int>()
+          .toList();
+      final topSubIds = _subVillages!
           .map((sv) => int.tryParse(sv.id))
           .whereType<int>()
           .toList();
@@ -354,9 +364,40 @@ class UserHierarchyService extends ChangeNotifier {
           .map((v) => v.idAsInt)
           .whereType<int>()
           .toList();
-      final linkedIds = subIds.isNotEmpty ? subIds : villageOnlyIds;
+      final linkedIds = ssSubIds.isNotEmpty
+          ? ssSubIds
+          : (topSubIds.isNotEmpty ? topSubIds : villageOnlyIds);
+      debugPrint(
+          '[UserHierarchyService] villageId candidates: '
+          'ssSubIds=${ssSubIds.length} topSubIds=${topSubIds.length} '
+          'villageIds=${villageOnlyIds.length} → using ${linkedIds.length}');
       if (linkedIds.isNotEmpty) {
         await _auth.saveLinkedVillageIds(linkedIds);
+      }
+
+      // Persist SS worker IDs so OfflineSyncService can filter bundle
+      // households by shasthyaShebikaId (mirrors Android caseload scoping).
+      final ssIds = _ssWorkers!
+          .map((ss) => int.tryParse(ss.id))
+          .whereType<int>()
+          .toList();
+      if (ssIds.isNotEmpty) {
+        await _auth.saveSsWorkerIds(ssIds);
+      }
+      debugPrint(
+          '[UserHierarchyService] Saved ${ssIds.length} SS worker IDs: $ssIds');
+
+      // Persist FHIR Practitioner ID and org FHIR ID so OfflineSyncService can
+      // read them from AuthRepository without a second user-data call (P1).
+      final userFhirId = _skProfile?.fhirId;
+      if (userFhirId != null && userFhirId.isNotEmpty) {
+        await _auth.saveUserFhirId(userFhirId);
+        debugPrint('[UserHierarchyService] Saved userFhirId: $userFhirId');
+      }
+      final orgFhirId = _defaultFacility?.fhirId;
+      if (orgFhirId != null && orgFhirId.isNotEmpty) {
+        await _auth.saveOrganizationFhirId(orgFhirId);
+        debugPrint('[UserHierarchyService] Saved orgFhirId: $orgFhirId');
       }
 
       debugPrint(

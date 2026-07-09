@@ -84,6 +84,7 @@ class AuthRepository {
   static const _kHouseholdCountCache = 'householdCountCache';
   static const _kVillageIds = 'villageIds';
   static const _kSubVillageIds = 'subVillageIds';
+  static const _kSsWorkerIds = 'ssWorkerIds';
   static const _kUserId = 'userId';
   static const _kUserFhirId = 'userFhirId';
   static const _kDeviceId = 'deviceId';
@@ -109,6 +110,26 @@ class AuthRepository {
 
   /// Returns the FHIR ID of the logged-in user (e.g. for provenance payloads).
   Future<String?> userFhirId() => _storage.read(key: _kUserFhirId);
+
+  /// Persists the FHIR Practitioner ID obtained from the MetaData /
+  /// static-data/user-data response (entity.userProfile.fhirId).
+  /// Called during offline-sync init so provenance payloads reference the
+  /// correct Practitioner resource rather than the numeric userId.
+  Future<void> saveUserFhirId(String? fhirId) async {
+    if (fhirId != null && fhirId.isNotEmpty) {
+      await _storage.write(key: _kUserFhirId, value: fhirId);
+    }
+  }
+
+  /// Persists the FHIR Organization resource ID (e.g. "496427") so provenance
+  /// uses the correct onBehalfOf reference — mirrors Android's
+  /// SecuredPreference.ORGANIZATION_FHIR_ID stored from healthFacility.fhirId.
+  Future<void> saveOrganizationFhirId(String? fhirId) async {
+    if (fhirId != null && fhirId.isNotEmpty) {
+      await _storage.write(key: _kOrganizationFhirId, value: fhirId);
+      _api.setOrganizationFhirId(fhirId);
+    }
+  }
 
   /// Returns a stable device ID, generating one on first access.
   Future<String> deviceId() async {
@@ -241,15 +262,17 @@ class AuthRepository {
     // ignore: avoid_print
     print('[Auth] profile → phoneNumber=$phoneNumber');
 
-    // organizationIds[] carries numeric org IDs; store first as orgFhirId.
-    // Upazila is populated when user-data loads (chiefdoms[0].name).
+    // organizationIds[] carries numeric IDs — NOT FHIR Organization resource IDs.
+    // The real FHIR org ID comes from defaultHealthFacility.fhirId in user-data
+    // and is persisted by saveOrganizationFhirId() (called from OfflineSyncService).
+    // Only set on the ApiClient in-memory so login-time requests have a header value;
+    // do NOT persist to _kOrganizationFhirId — that would overwrite the correct FHIR
+    // ID saved by the last full sync, causing provenance HAPI-1094 on subsequent sessions.
     final orgIds = data['organizationIds'];
-    String? orgFhirId;
-    if (orgIds is List && orgIds.isNotEmpty) {
-      orgFhirId = orgIds.first?.toString();
-    }
-    await writeOrDelete(_kOrganizationFhirId, orgFhirId);
-    _api.setOrganizationFhirId(orgFhirId);
+    final numericOrgId = (orgIds is List && orgIds.isNotEmpty)
+        ? orgIds.first?.toString()
+        : null;
+    _api.setOrganizationFhirId(numericOrgId);
   }
 
   /// Returns the user's assigned village IDs from the profile.
@@ -278,6 +301,26 @@ class AuthRepository {
     final joined = ids.join(',');
     await _storage.write(key: _kVillageIds, value: joined);
     await _storage.write(key: _kSubVillageIds, value: joined);
+  }
+
+  /// Returns the SS worker IDs assigned to this SK (shasthyaShebikas[].id).
+  /// Used to filter households from the sync bundle to just the SK's caseload.
+  Future<List<int>> ssWorkerIds() async {
+    final stored = await _storage.read(key: _kSsWorkerIds);
+    if (stored == null || stored.isEmpty) return const [];
+    return stored
+        .split(',')
+        .map((s) => int.tryParse(s.trim()))
+        .whereType<int>()
+        .toList();
+  }
+
+  /// Persists SS worker IDs from `shasthyaShebikas[].id` in the static-data
+  /// response. These are used to filter households by `shasthyaShebikaId`
+  /// so only the SK's own caseload is shown — mirroring Android's approach.
+  Future<void> saveSsWorkerIds(List<int> ids) async {
+    if (ids.isEmpty) return;
+    await _storage.write(key: _kSsWorkerIds, value: ids.join(','));
   }
 
   Future<void> saveUpazila(String? name) async {

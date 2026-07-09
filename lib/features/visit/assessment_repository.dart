@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
@@ -109,8 +110,15 @@ class AssessmentRepository extends ChangeNotifier {
 
   /// Batch sync all pending assessments via `offline-sync/create` matching Android.
   ///
+  /// [syncMode] mirrors Android's sync mode constants:
+  ///   - `'AutomaticSync'` — triggered by connectivity-restored event
+  ///   - `'ManualSync'` — triggered by the user tapping Sync
+  ///   - `'InitialSync'` — first login sync (pass when bootstrapping)
+  ///
   /// This is the only write path — no direct assessment/create call.
-  Future<int> syncPendingAssessments() async {
+  Future<int> syncPendingAssessments({
+    String syncMode = 'ManualSync',
+  }) async {
     if (_isSyncing) {
       debugPrint('[AssessmentSync] Already syncing — skip');
       return 0;
@@ -121,10 +129,10 @@ class AssessmentRepository extends ChangeNotifier {
 
     try {
       final pending = await _dao.getUnsynced();
-      debugPrint('[AssessmentSync] Pending count: ${pending.length}');
+      debugPrint('[AssessmentSync] Pending count: ${pending.length} (syncMode=$syncMode)');
       if (pending.isEmpty) return 0;
 
-      final synced = await _batchSync(pending);
+      final synced = await _batchSync(pending, syncMode: syncMode);
       await _refreshPendingCount();
       debugPrint('[AssessmentSync] ✓ Synced $synced assessment(s). Pending now: $_pendingCount');
       return synced;
@@ -138,22 +146,39 @@ class AssessmentRepository extends ChangeNotifier {
   }
 
   /// Batch sync via offline-service/offline-sync/create matching Android.
-  Future<int> _batchSync(List<LocalAssessmentEntity> assessments) async {
+  ///
+  /// Error classification mirrors Android `OfflineSyncRepository`:
+  /// - [DioException] with no server response → [AssessmentSyncStatus.networkError]
+  ///   (eligible for retry on next connectivity event)
+  /// - HTTP 4xx/5xx server response → [AssessmentSyncStatus.failed]
+  ///   (a server-side problem; not automatically retried)
+  Future<int> _batchSync(
+    List<LocalAssessmentEntity> assessments, {
+    required String syncMode,
+  }) async {
     final ids = assessments.map((e) => e.id).toList();
     debugPrint('[AssessmentSync] Marking ${ids.length} as in-progress: $ids');
 
     await _dao.updateSyncStatus(ids, AssessmentSyncStatus.inProgress);
 
     final userId = await _auth.userId();
+    // userFhirId = FHIR Practitioner resource ID (e.g. stored from login data['fhirId']).
+    // Android ProvanceDto.userId = getUserFhirId(), not the numeric userId.
+    // Sending numeric userId here causes HAPI-1094: Practitioner/<numericId> not found.
+    final userFhirId = await _auth.userFhirId();
     final orgId = await _auth.organizationFhirId();
     final deviceId = await _auth.deviceId();
-    debugPrint('[AssessmentSync] Provenance — userId=$userId, orgId=$orgId, deviceId=$deviceId');
+    debugPrint('[AssessmentSync] Provenance — userId=$userId, userFhirId=$userFhirId, orgId=$orgId, deviceId=$deviceId');
 
     final provenance = ProvanceDto.fromMap({
       'modifiedDate': DateTime.now().toUtc().toIso8601String(),
       'organizationId': orgId,
       'spiceUserId': userId,
-      if (userId != null) 'userId': userId.toString(),
+      // Use FHIR ID as userId; fall back to numeric string only if FHIR ID not yet stored
+      if (userFhirId != null && userFhirId.isNotEmpty)
+        'userId': userFhirId
+      else if (userId != null)
+        'userId': userId.toString(),
     });
 
     final requestId = const Uuid().v4();
@@ -164,52 +189,83 @@ class AssessmentRepository extends ChangeNotifier {
             ))
         .toList();
 
-    debugPrint('[AssessmentSync] Request payload:');
-    debugPrint('  requestId: $requestId');
-    debugPrint('  tenantId: ${_api.tenantIdAsNum}');
-    debugPrint('  appVersionName: ${AppConfig.appVersionName}');
-    debugPrint('  appType: ${AppConfig.appType}');
-    debugPrint('  assessments[${assessmentPayloads.length}]:');
-    for (var i = 0; i < assessmentPayloads.length; i++) {
-      final a = assessmentPayloads[i];
-      debugPrint('    [$i] type=${a['assessmentType']} patient=${a['encounter']?['patientId']} referred=${a['encounter']?['referred']}');
-      debugPrint('    [$i] provenance=${a['encounter']?['provenance']}');
-      final det = a['assessmentDetails'] as Map<String, dynamic>?;
-      debugPrint('    [$i] villageId=${a['villageId']} referenceId=${a['referenceId']} bpLog=${det?['bpLog']} glucoseLog=${det?['glucoseLog']}');
+    void logChunked(String tag, String text) {
+      const limit = 900;
+      for (var start = 0; start < text.length; start += limit) {
+        final end = (start + limit).clamp(0, text.length);
+        // ignore: avoid_print
+        print('$tag ${text.substring(start, end)}');
+      }
     }
 
+    debugPrint('[AssessmentSync] requestId: $requestId  tenantId: ${_api.tenantIdAsNum}  appType: ${AppConfig.appType}  syncMode: $syncMode');
+    debugPrint('[AssessmentSync] assessments[${assessmentPayloads.length}]:');
+    for (var i = 0; i < assessmentPayloads.length; i++) {
+      final a = assessmentPayloads[i];
+      final assessType = a['assessmentType'] as String? ?? 'unknown';
+      debugPrint('[AssessmentSync][$i] === $assessType ===');
+      debugPrint('[AssessmentSync][$i] patient=${a['encounter']?['patientId']} provenance=${a['encounter']?['provenance']}');
+      logChunked('[AssessmentSync][$i] details:', jsonEncode(a['assessmentDetails']));
+    }
+
+    // Build create request matching Android's OfflineSyncRepository.getRequestObject().
+    // communityProfiles and rxBuddies are included (empty arrays) so the server
+    // receives the full contract shape Android sends.
     final request = {
       'requestId': requestId,
       'tenantId': _api.tenantIdAsNum,
       'appVersionName': AppConfig.appVersionName,
       'appVersionCode': AppConfig.appVersionCode,
       'appType': AppConfig.appType,
-      'syncMode': 'ManualSync',
+      'syncMode': syncMode,
       if (deviceId.isNotEmpty) 'deviceId': deviceId,
       'households': <Map<String, dynamic>>[],
       'householdMembers': <Map<String, dynamic>>[],
       'assessments': assessmentPayloads,
       'followUps': <Map<String, dynamic>>[],
       'householdMemberLinks': <Map<String, dynamic>>[],
+      'communityProfiles': <Map<String, dynamic>>[],
+      'rxBuddies': <Map<String, dynamic>>[],
     };
 
     debugPrint('[AssessmentSync] POST ${Endpoints.offlineSyncCreate}');
-    final response = await _api.dio.post<Map<String, dynamic>>(
-      Endpoints.offlineSyncCreate,
-      data: request,
-    );
+    try {
+      final response = await _api.dio.post<Map<String, dynamic>>(
+        Endpoints.offlineSyncCreate,
+        data: request,
+      );
 
-    final status = response.statusCode ?? 0;
-    debugPrint('[AssessmentSync] Response HTTP $status — body: ${response.data}');
+      final status = response.statusCode ?? 0;
+      debugPrint('[AssessmentSync] Response HTTP $status — body: ${response.data}');
 
-    if (status >= 200 && status < 300) {
-      await _dao.updateSyncStatus(ids, AssessmentSyncStatus.success);
-      debugPrint('[AssessmentSync] Marked ${ids.length} as success');
-      return ids.length;
-    } else {
-      await _dao.updateSyncStatus(ids, AssessmentSyncStatus.failed);
-      debugPrint('[AssessmentSync] ✗ Marked ${ids.length} as failed');
-      throw StateError('Batch sync failed: HTTP $status — ${response.data}');
+      if (status >= 200 && status < 300) {
+        await _dao.updateSyncStatus(ids, AssessmentSyncStatus.success);
+        debugPrint('[AssessmentSync] Marked ${ids.length} as success');
+        return ids.length;
+      } else {
+        // Server returned an error response — mark as failed (not network error).
+        // Failed assessments are NOT automatically retried; require manual sync.
+        await _dao.updateSyncStatus(ids, AssessmentSyncStatus.failed);
+        debugPrint('[AssessmentSync] ✗ Marked ${ids.length} as failed (HTTP $status)');
+        throw StateError('Batch sync failed: HTTP $status — ${response.data}');
+      }
+    } on DioException catch (e) {
+      // Distinguish transport-level errors (no response) from server errors.
+      final isNetworkError = e.response == null ||
+          e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.sendTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.connectionError;
+      if (isNetworkError) {
+        // Mark networkError — these are retried automatically when connectivity
+        // is restored (matching Android's NotSynced | NetworkError query filter).
+        await _dao.updateSyncStatus(ids, AssessmentSyncStatus.networkError);
+        debugPrint('[AssessmentSync] ✗ Network error — marked ${ids.length} as networkError (will retry): ${e.type}');
+      } else {
+        await _dao.updateSyncStatus(ids, AssessmentSyncStatus.failed);
+        debugPrint('[AssessmentSync] ✗ Server error — marked ${ids.length} as failed: HTTP ${e.response?.statusCode}');
+      }
+      rethrow;
     }
   }
 

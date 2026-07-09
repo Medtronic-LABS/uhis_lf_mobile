@@ -133,27 +133,34 @@ class BpLog {
         bpTakenOn: bpTakenOn ?? this.bpTakenOn,
       );
 
-  Map<String, dynamic> toJson() => {
-        'bpLogDetails': bpLogDetails.map((e) => e.toJson()).toList(),
-        'avgSystolic': avgSystolic ?? computedAvgSystolic,
-        'avgDiastolic': avgDiastolic ?? computedAvgDiastolic,
-        if (avgPulse != null || computedAvgPulse != null)
-          'avgPulse': avgPulse ?? computedAvgPulse,
-        if (temperature != null) 'temperature': temperature,
-        if (cvdRiskLevel != null) 'cvdRiskLevel': cvdRiskLevel,
-        if (cvdRiskScore != null) 'cvdRiskScore': cvdRiskScore,
-        if (cvdRiskScoreDisplay != null)
-          'cvdRiskScoreDisplay': cvdRiskScoreDisplay,
-        if (isRegularSmoker != null) 'isRegularSmoker': isRegularSmoker,
-        if (isBeforeHtnDiagnosis != null)
-          'isBeforeHtnDiagnosis': isBeforeHtnDiagnosis,
-        if (weight != null) 'weight': weight,
-        if (height != null) 'height': height,
-        if (bmi != null) 'bmi': bmi,
-        if (bmiCategory != null) 'bmiCategory': bmiCategory,
-        if (symptoms.isNotEmpty) 'symptoms': symptoms,
-        if (bpTakenOn != null) 'bpTakenOn': bpTakenOn!.toIso8601String(),
-      };
+  /// Whether this log contains at least one real BP reading.
+  bool get hasReadings => bpLogDetails.isNotEmpty;
+
+  Map<String, dynamic> toJson() {
+    final hasBp = hasReadings;
+    return {
+      'bpLogDetails': bpLogDetails.map((e) => e.toJson()).toList(),
+      if (hasBp) 'avgSystolic': (avgSystolic ?? computedAvgSystolic).toInt(),
+      if (hasBp) 'avgDiastolic': (avgDiastolic ?? computedAvgDiastolic).toInt(),
+      if (hasBp && (avgPulse != null || computedAvgPulse != null))
+        'avgPulse': avgPulse ?? computedAvgPulse,
+      if (temperature != null) 'temperature': temperature,
+      if (cvdRiskLevel != null) 'cvdRiskLevel': cvdRiskLevel,
+      if (cvdRiskScore != null) 'cvdRiskScore': cvdRiskScore,
+      if (cvdRiskScoreDisplay != null)
+        'cvdRiskScoreDisplay': cvdRiskScoreDisplay,
+      // weight/height/bmi only meaningful alongside a real BP reading
+      if (hasBp && isRegularSmoker != null) 'isRegularSmoker': isRegularSmoker,
+      if (hasBp && isBeforeHtnDiagnosis != null)
+        'isBeforeHtnDiagnosis': isBeforeHtnDiagnosis,
+      if (hasBp && weight != null) 'weight': weight,
+      if (hasBp && height != null) 'height': height,
+      if (hasBp && bmi != null) 'bmi': bmi,
+      if (hasBp && bmiCategory != null) 'bmiCategory': bmiCategory,
+      if (symptoms.isNotEmpty) 'symptoms': symptoms,
+      if (bpTakenOn != null) 'bpTakenOn': bpTakenOn!.toIso8601String(),
+    };
+  }
 }
 
 /// Glucose log matching spice-service GlucoseLogDTO.
@@ -358,7 +365,7 @@ class NcdAssessment {
       );
 
   Map<String, dynamic> toJson() => {
-        if (bpLog != null) 'bpLog': bpLog!.toJson(),
+        if (bpLog != null && bpLog!.hasReadings) 'bpLog': bpLog!.toJson(),
         if (glucoseLog != null) 'glucoseLog': glucoseLog!.toJson(),
         if (htnScreening != null) 'htnScreening': htnScreening!.toJson(),
         if (cvdRiskLevel != null) 'cvdRiskLevel': cvdRiskLevel,

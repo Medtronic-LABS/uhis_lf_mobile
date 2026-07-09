@@ -220,11 +220,7 @@ class LocalAssessmentEntity {
     final details =
         jsonDecode(assessmentDetails) as Map<String, dynamic>;
 
-    // Inject bpLog / glucoseLog sub-objects that the backend offline-service
-    // extracts from assessmentDetails to create vitals records server-side.
-    // Mirrors Android AssessmentUtil.kt — flat projection fields → nested shape.
-    _injectVitalLogs(details);
-
+    // Mapper already produces the nested structure (bpLog/glucoseLog embedded).
     // Backend AssessmentDetailsDTO expects programme-specific nesting:
     // ANC → {"anc": <AncDTO>}, NCD → {"ncd": <NcdDTO>}, etc.
     final wrappedDetails = _wrapDetailsForType(assessmentType, details);
@@ -256,7 +252,8 @@ class LocalAssessmentEntity {
         'startTime': createdAt?.toUtc().toIso8601String(),
         'endTime': updatedAt?.toUtc().toIso8601String(),
         'visitNumber': ?visitNum,
-        if (type == 'ANC' || type == 'PNC') 'pregnancyEpisodeId': ?pregnancyEpisodeId,
+        if (type == 'ANC' || type == 'PNC' || type == 'PNC_MOTHER' || type == 'PNC_CHILD')
+          'pregnancyEpisodeId': ?pregnancyEpisodeId,
         // Android sends customStatus list to track patient state server-side.
         'customStatus': _buildCustomStatus(isReferred, referralStatus),
       },
@@ -280,21 +277,31 @@ class LocalAssessmentEntity {
     return encoded;
   }
 
-  /// Extracts the sequential ANC/PNC visit number from the flat assessment
-  /// details map. Android populates `visitNumber` on the encounter object.
+  /// Extracts the sequential ANC/PNC visit number from the stored details map.
+  /// Handles both legacy flat format and current nested format.
   static int? _extractVisitNumber(String type, Map<String, dynamic> d) {
     final t = type.toUpperCase();
     String? raw;
     if (t == 'ANC') {
-      raw = d['ancVisitNumber']?.toString() ??
-          (d['anc'] is Map
-              ? (d['anc'] as Map)['ancVisitNumber']?.toString()
-              : null);
-    } else if (t == 'PNC') {
-      raw = d['pncVisitNumber']?.toString() ??
-          (d['pncMother'] is Map
-              ? (d['pncMother'] as Map)['pncVisitNumber']?.toString()
-              : null);
+      // Top-level visitNo (current mapper output)
+      raw = d['visitNo']?.toString();
+      // Flat legacy
+      raw ??= d['ancVisitNumber']?.toString();
+      // Nested: medicalHistoryPhysicalExamination.ancVisitNumber
+      raw ??= (d['medicalHistoryPhysicalExamination'] is Map
+          ? (d['medicalHistoryPhysicalExamination'] as Map)['ancVisitNumber']
+              ?.toString()
+          : null);
+      // Double-wrapped legacy
+      raw ??= (d['anc'] is Map
+          ? (d['anc'] as Map)['ancVisitNumber']?.toString()
+          : null);
+    } else if (t == 'PNC' || t == 'PNC_MOTHER') {
+      raw = d['visitNo']?.toString() ?? d['pncVisitNumber']?.toString();
+      raw ??= (d['pncMother'] is Map
+          ? ((d['pncMother'] as Map)['visitNo']?.toString() ??
+              (d['pncMother'] as Map)['pncVisitNumber']?.toString())
+          : null);
     }
     if (raw == null) return null;
     return int.tryParse(raw.trim());
@@ -309,75 +316,32 @@ class LocalAssessmentEntity {
     return [s];
   }
 
-  /// Build bpLog / glucoseLog nested objects from flat projection fields so
-  /// the backend offline-service can extract and store them as vitals records.
-  /// Matches Android AssessmentDefinedParams + AssessmentUtil field names.
-  static void _injectVitalLogs(Map<String, dynamic> d) {
-    double? asDouble(Object? v) {
-      if (v is num) return v.toDouble();
-      if (v is String) return double.tryParse(v);
-      return null;
-    }
-
-    // ── bpLog ────────────────────────────────────────────────────────────────
-    if (!d.containsKey('bpLog')) {
-      final sys = asDouble(d['systolic'] ?? d['systolicBp'] ?? d['bloodPressureSystolic']);
-      final dia = asDouble(d['diastolic'] ?? d['diastolicBp'] ?? d['bloodPressureDiastolic']);
-      if (sys != null && dia != null) {
-        d['bpLog'] = {
-          'avgSystolic': sys.toInt(),
-          'avgDiastolic': dia.toInt(),
-          'avgBloodPressure': '${sys.toInt()}/${dia.toInt()}',
-          'bpLogDetails': [
-            {'systolic': sys.toInt(), 'diastolic': dia.toInt()}
-          ],
-        };
-      }
-    }
-
-    // ── glucoseLog ───────────────────────────────────────────────────────────
-    if (!d.containsKey('glucoseLog')) {
-      final glucose = asDouble(
-          d['glucoseValue'] ?? d['glucose'] ?? d['bloodGlucose'] ?? d['fbs'] ?? d['rbs']);
-      if (glucose != null) {
-        final type = d['glucoseType'] as String? ??
-            (d.containsKey('fbs') ? 'fbs' : d.containsKey('rbs') ? 'rbs' : 'rbs');
-        final unit = d['glucoseUnit'] as String? ?? 'mg/dL';
-        d['glucoseLog'] = {
-          'glucose': glucose,
-          'glucoseValue': glucose,
-          'glucoseType': type,
-          'glucoseUnit': unit,
-        };
-      }
-    }
-  }
-
-  /// Wrap a flat assessment payload under the programme-specific key that
+  /// Wrap a nested assessment payload under the programme-specific key that
   /// matches the backend's AssessmentDetailsDTO field names.
   ///
   /// The backend deserializes `assessmentDetails` as AssessmentDetailsDTO,
   /// which has typed fields per programme (e.g. `AncDTO anc`, `NcdDTO ncd`).
-  /// Sending a flat map means the backend finds no matching field and silently
-  /// drops all data. This method ensures the correct nesting.
+  /// The mapper already produces the nested sub-object structure; this method
+  /// adds the outer programme-key wrapper required by the DTO.
   ///
-  /// If `flat` already contains the programme key (legacy or re-entrant call),
-  /// it is returned unchanged to avoid double-wrapping.
+  /// If `details` already contains the programme key (re-entrant call), it is
+  /// returned unchanged to avoid double-wrapping.
   static Map<String, dynamic> _wrapDetailsForType(
     String assessmentType,
-    Map<String, dynamic> flat,
+    Map<String, dynamic> details,
   ) {
     final key = switch (assessmentType.toUpperCase()) {
       'ANC' => 'anc',
       'NCD' => 'ncd',
-      'PNC' => 'pncMother',
+      'PNC' || 'PNC_MOTHER' => 'pncMother',
+      'PNC_CHILD' || 'PNC_NEONATAL' => 'pncChild',
       'TB' => 'tb',
       'ICCM' || 'IMCI' => 'iccm',
       'EPI' => null,
       _ => null,
     };
-    if (key == null || flat.containsKey(key)) return flat;
-    return {key: flat};
+    if (key == null || details.containsKey(key)) return details;
+    return {key: details};
   }
 }
 
@@ -446,22 +410,33 @@ class LocalAssessmentDao {
     );
   }
 
-  /// Get all unsynced assessments.
+  /// Get all assessments eligible for upload.
+  ///
+  /// Returns both [AssessmentSyncStatus.pending] (never attempted) and
+  /// [AssessmentSyncStatus.networkError] (previous attempt failed due to
+  /// connectivity — eligible for retry), matching Android's
+  /// `getUnSyncedAssessmentByHHMId` query that filters on both states.
   Future<List<LocalAssessmentEntity>> getUnsynced() async {
     final rows = await _db.db.query(
       tableName,
-      where: 'sync_status = ?',
-      whereArgs: [AssessmentSyncStatus.pending.name],
+      where: 'sync_status IN (?, ?)',
+      whereArgs: [
+        AssessmentSyncStatus.pending.name,
+        AssessmentSyncStatus.networkError.name,
+      ],
       orderBy: 'created_at ASC',
     );
     return rows.map(LocalAssessmentEntity.fromDb).toList();
   }
 
-  /// Get unsynced count.
+  /// Count of assessments pending upload (pending + networkError eligible for retry).
   Future<int> getUnsyncedCount() async {
     final result = await _db.db.rawQuery(
-      'SELECT COUNT(*) as count FROM $tableName WHERE sync_status = ?',
-      [AssessmentSyncStatus.pending.name],
+      'SELECT COUNT(*) as count FROM $tableName WHERE sync_status IN (?, ?)',
+      [
+        AssessmentSyncStatus.pending.name,
+        AssessmentSyncStatus.networkError.name,
+      ],
     );
     return result.first['count'] as int? ?? 0;
   }
@@ -571,8 +546,41 @@ class LocalAssessmentDao {
         continue;
       }
 
+      // Unwrap nested programme sub-objects into a flat vitals map so
+      // extraction logic below works regardless of storage format.
+      // ANC: medicalHistoryPhysicalExamination + pointOfCareInvestigations + dangerSignsRiskIdentification
+      // NCD: bpLog (avgSystolic/avgDiastolic) + glucoseLog (glucose/glucoseType)
+      final flat = <String, dynamic>{...map};
+      if (type == 'ANC') {
+        for (final sub in [
+          'medicalHistoryPhysicalExamination',
+          'pointOfCareInvestigations',
+          'dangerSignsRiskIdentification',
+        ]) {
+          if (map[sub] is Map) {
+            flat.addAll((map[sub] as Map).cast<String, dynamic>());
+          }
+        }
+      } else if (type == 'NCD') {
+        final bpLog = map['bpLog'];
+        if (bpLog is Map) {
+          flat['bloodPressureSystolic'] ??= bpLog['avgSystolic'];
+          flat['bloodPressureDiastolic'] ??= bpLog['avgDiastolic'];
+        }
+        final gLog = map['glucoseLog'];
+        if (gLog is Map) {
+          flat['glucoseValue'] ??= gLog['glucose'];
+          flat['glucoseType'] ??= gLog['glucoseType'];
+        }
+      } else if (type == 'PNC_MOTHER' || type == 'PNC') {
+        final mha = map['maternalHealthAssessment'];
+        if (mha is Map) {
+          flat.addAll(mha.cast<String, dynamic>());
+        }
+      }
+
       int? parseInt(String key) {
-        final v = map[key];
+        final v = flat[key];
         if (v is int) return v;
         if (v is num) return v.toInt();
         if (v is String) return int.tryParse(v);
@@ -580,19 +588,19 @@ class LocalAssessmentDao {
       }
 
       double? parseDouble(String key) {
-        final v = map[key];
+        final v = flat[key];
         if (v is double) return v;
         if (v is num) return v.toDouble();
         if (v is String) return double.tryParse(v);
         return null;
       }
 
-      // BP — primary keys from SectionRegistry; fallback to API history shapes
-      int? sys = parseInt('bloodPressureSystolic') ??
+      // BP — handles both flat and nested (unwrapped above)
+      int? sys = parseInt('systolic') ??
+          parseInt('bloodPressureSystolic') ??
           parseInt('avgSystolic');
       if (sys == null) {
-        // bpLogDetails array shape
-        final log = map['bpLogDetails'];
+        final log = flat['bpLogDetails'];
         if (log is List && log.isNotEmpty) {
           final first = log.first;
           if (first is Map) {
@@ -602,7 +610,8 @@ class LocalAssessmentDao {
           }
         }
       }
-      final dia = parseInt('bloodPressureDiastolic') ??
+      final dia = parseInt('diastolic') ??
+          parseInt('bloodPressureDiastolic') ??
           parseInt('avgDiastolic');
 
       // Hb
@@ -613,7 +622,7 @@ class LocalAssessmentDao {
       // band thresholds reliably.
       double? fastingGluMmolL;
       final glucoseRaw = parseDouble('glucoseValue');
-      final glucoseType = (map['glucoseType'] as String?)?.toLowerCase();
+      final glucoseType = (flat['glucoseType'] as String?)?.toLowerCase();
       if (glucoseRaw != null) {
         if (glucoseType == 'fasting' || glucoseType == null) {
           fastingGluMmolL = glucoseRaw;
@@ -627,7 +636,7 @@ class LocalAssessmentDao {
         'dangerSignsExperienced13To27',
         'dangerSignsExperienced28To40',
       ]) {
-        final v = map[key];
+        final v = flat[key];
         if (v == true || (v is List && v.isNotEmpty) || v == 'true') {
           hasDanger = true;
           break;
@@ -635,28 +644,26 @@ class LocalAssessmentDao {
       }
 
       // Eclampsia
-      final eclampsiaRaw = map['eclampsia'];
+      final eclampsiaRaw = flat['eclampsia'];
       final hasEclampsia = eclampsiaRaw == true ||
           eclampsiaRaw == 'yes' ||
           eclampsiaRaw == '1';
 
-      // Parity
+      // Parity — in ANC nested under medicalHistoryPhysicalExamination (unwrapped above)
       final parity = parseInt('parity');
 
       // Diabetes (check for explicit diabetes field or fasting glucose ≥ 7.0
       // mmol/L per spec §2.8.2 DM diagnostic cutoff).
-      final diabetesRaw = map['diabetes'] ?? map['hasDiabetes'];
+      final diabetesRaw = flat['diabetes'] ?? flat['hasDiabetes'];
       final hasDiabetes = diabetesRaw == true ||
           diabetesRaw == 'yes' ||
           (fastingGluMmolL != null && fastingGluMmolL >= 7.0);
 
       // Spec §5.2.2 HTN screening + §2.8.2 stroke-sign Band 1 short-circuit.
-      // Accepts either flat fields (legacy form-prefill shape) or a nested
-      // `htnScreening` map (current NcdAssessment.toJson shape).
       bool readBoolFlag(String key) {
-        dynamic v = map[key];
-        if (v == null && map['htnScreening'] is Map) {
-          v = (map['htnScreening'] as Map)[key];
+        dynamic v = flat[key];
+        if (v == null && flat['htnScreening'] is Map) {
+          v = (flat['htnScreening'] as Map)[key];
         }
         return v == true || v == 'true' || v == 'yes' || v == 1;
       }

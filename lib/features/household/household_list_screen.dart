@@ -508,8 +508,9 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
       debugPrint('[HouseholdList] Skipping nav — member has no usable ID: ${member.name}');
       return;
     }
+    // Push directly to /patients/:id — the /patient/:id redirect drops extra.
     context.push(
-      '/patient/$id',
+      '/patients/$id',
       extra: {
         'id': member.id,
         'name': member.name,

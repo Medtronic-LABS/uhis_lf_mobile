@@ -18,6 +18,7 @@ class PatientActionsRow extends StatefulWidget {
     this.patientGender,
     this.householdId,
     this.villageId,
+    this.memberId,
     this.programmes = const {},
     this.origin,
   });
@@ -28,6 +29,10 @@ class PatientActionsRow extends StatefulWidget {
   final String? patientGender;
   final String? householdId;
   final String? villageId;
+  /// Server-assigned household member ID (id column in members table).
+  /// Populates encounter.memberId in the offline-sync payload so the
+  /// FHIR mapper can link the assessment to the correct RelatedPerson.
+  final String? memberId;
   final Set<Programme> programmes;
 
   /// Origin screen for return navigation ('dashboard' or 'tasks').
@@ -66,7 +71,8 @@ class _PatientActionsRowState extends State<PatientActionsRow> {
           'patientAge': widget.patientAge,
           'patientGender': widget.patientGender,
           'householdId': widget.householdId,
-          'memberId': null,
+          'villageId': widget.villageId,
+          'memberId': widget.memberId,
         },
       );
     } else {

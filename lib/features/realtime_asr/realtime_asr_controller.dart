@@ -8,6 +8,8 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../core/api/realtime_asr_service.dart';
 import '../../core/constants/app_strings.dart';
+import '../scribe/form_field_schema_builder.dart';
+import '../scribe/models/ai_extracted_field.dart';
 import '../scribe/scribe_permission_service.dart';
 import 'models/realtime_clinical_fields.dart';
 import 'realtime_asr_channel_io.dart'
@@ -73,6 +75,18 @@ class RealtimeAsrController extends ChangeNotifier {
   RealtimeClinicalFields? _fields;
   RealtimeClinicalFields? get fields => _fields;
 
+  /// Result from `form_fill` extraction — populated when [setFormSchema] has
+  /// been called before starting the session (Step 2 form mode).
+  FormPrefillResult? _formFill;
+  FormPrefillResult? get formFill => _formFill;
+
+  /// Active form schema sent with every extract frame.
+  ///
+  /// Set by [setFormSchema] before [start]; cleared by [stop] / [_teardown].
+  /// When non-null the extract frame includes `mode: "form_fill"` and the
+  /// server replies with `{"type": "form_fill", ...}` instead of `"symptoms"`.
+  List<FormFieldSchema>? _formSchema;
+
   bool _extracting = false;
   bool get isExtracting => _extracting;
 
@@ -92,6 +106,14 @@ class RealtimeAsrController extends ChangeNotifier {
       _state == RealtimeAsrState.listening ||
       _state == RealtimeAsrState.stopping;
 
+  /// Attach a form field schema so that subsequent [extractNow] calls send
+  /// `mode: "form_fill"` and populate [formFill] instead of [fields].
+  ///
+  /// Call before [start]. Pass `null` to revert to generic symptom extraction.
+  void setFormSchema(List<FormFieldSchema>? schema) {
+    _formSchema = schema;
+  }
+
   Future<void> start({String language = 'bn-IN'}) async {
     if (isActive) return;
 
@@ -109,6 +131,7 @@ class RealtimeAsrController extends ChangeNotifier {
     // visible feedback.
     _segments.clear();
     _fields = null;
+    _formFill = null;
     _errorMessage = null;
     _micWarning = null;
     _lastExtractedTranscript = null;
@@ -224,7 +247,18 @@ class RealtimeAsrController extends ChangeNotifier {
     _extractionCompleter = completer;
     notifyListeners();
     debugPrint('[RealtimeASR] extract requested (${transcript.length} chars): "$transcript"');
-    _send({'type': 'extract', 'transcript': transcript});
+
+    final schema = _formSchema;
+    if (schema != null && schema.isNotEmpty) {
+      _send({
+        'type': 'extract',
+        'transcript': transcript,
+        'mode': 'form_fill',
+        'formSchema': {'fields': schema.map((f) => f.toJson()).toList()},
+      });
+    } else {
+      _send({'type': 'extract', 'transcript': transcript});
+    }
 
     Future.delayed(_extractionSafetyTimeout, () {
       if (identical(_extractionCompleter, completer) && _extracting) {
@@ -312,9 +346,24 @@ class RealtimeAsrController extends ChangeNotifier {
       case 'symptoms':
         debugPrint('[RealtimeASR] recv symptoms: ${msg['data']}');
         _extracting = false;
-        _fields = RealtimeClinicalFields.fromJson(
-          (msg['data'] as Map<String, dynamic>?) ?? const {},
-        );
+        final symptomsData =
+            (msg['data'] as Map<String, dynamic>?) ?? const {};
+        _fields = RealtimeClinicalFields.fromJson(symptomsData);
+        // The backend does not yet support the form_fill mode — it always
+        // returns "symptoms".  When Step 2 form-fill mode is active (schema
+        // set), convert the symptoms response into a FormPrefillResult so
+        // the banner can still pre-fill the form fields.
+        if (_formSchema != null && _formSchema!.isNotEmpty) {
+          _formFill = _symptomsToFormFill(_fields!);
+        }
+        _extractionCompleter?.complete();
+        _extractionCompleter = null;
+        notifyListeners();
+      case 'form_fill':
+        debugPrint('[RealtimeASR] recv form_fill: ${msg['data']}');
+        _extracting = false;
+        final data = (msg['data'] as Map<String, dynamic>?) ?? const {};
+        _formFill = FormPrefillResult.fromJson(data);
         _extractionCompleter?.complete();
         _extractionCompleter = null;
         notifyListeners();
@@ -336,6 +385,100 @@ class RealtimeAsrController extends ChangeNotifier {
           debugPrint('[RealtimeASR] recv (type=${msg['type']}, no transcript): $msg');
         }
     }
+  }
+
+  /// Converts a [RealtimeClinicalFields] (returned by the server as
+  /// `"type":"symptoms"`) into a [FormPrefillResult] that Step 2 can apply
+  /// directly to form fields — used when the backend does not support
+  /// `form_fill` mode and falls back to the standard symptoms response.
+  ///
+  /// Field IDs match `field_library.json`:
+  ///   - `bpLogDetails` → `[{systolic, diastolic}]` list (WidgetHint.bpField)
+  ///   - `glucose`      → numeric value (WidgetHint.bloodGlucose)
+  ///   - `ncdSymptoms`  → List<String> (WidgetHint.dialogCheckbox)
+  FormPrefillResult _symptomsToFormFill(RealtimeClinicalFields f) {
+    final extracted = <AIExtractedField>[];
+    final unmapped = <String>[];
+
+    // Blood pressure: "170/80" → bpLogDetails list [{systolic, diastolic}]
+    // The form's _BpReadingField reads data.getValue('bpLogDetails') as a
+    // List<Map<String,dynamic>> — injecting a flat systolic key would be ignored.
+    final bp = f.bloodPressure;
+    if (bp != null && bp.isNotEmpty) {
+      final parts = bp.split('/');
+      if (parts.length == 2) {
+        final sys = int.tryParse(parts[0].trim());
+        final dia = int.tryParse(parts[1].trim());
+        if (sys != null || dia != null) {
+          extracted.add(AIExtractedField(
+            fieldId: 'bpLogDetails',
+            value: [
+              <String, dynamic>{
+                if (sys != null) 'systolic': sys,
+                if (dia != null) 'diastolic': dia,
+              }
+            ],
+            confidence: 0.9,
+            source: FieldSource.aiPending,
+            sourceSegment: bp,
+            extractedAt: DateTime.now(),
+          ));
+        }
+      } else {
+        unmapped.add('BP: $bp');
+      }
+    }
+
+    // Blood glucose: numeric string e.g. "7.3" → glucose (numeric field)
+    final glucose = f.bloodGlucose;
+    if (glucose != null && glucose.isNotEmpty) {
+      final v = double.tryParse(
+          glucose.replaceAll(RegExp(r'[^0-9.]'), ''));
+      if (v != null) {
+        extracted.add(AIExtractedField(
+          fieldId: 'glucose',
+          value: v,
+          confidence: 0.85,
+          source: FieldSource.aiPending,
+          sourceSegment: glucose,
+          extractedAt: DateTime.now(),
+        ));
+      } else {
+        unmapped.add('Glucose: $glucose');
+      }
+    }
+
+    // Chief complaints → ncdSymptoms (dialogCheckbox — List<String>)
+    if (f.chiefComplaints.isNotEmpty) {
+      extracted.add(AIExtractedField(
+        fieldId: 'ncdSymptoms',
+        value: f.chiefComplaints,
+        confidence: 0.75,
+        source: FieldSource.aiPending,
+        sourceSegment: f.chiefComplaints.join(', '),
+        extractedAt: DateTime.now(),
+      ));
+    }
+
+    // Surface remaining fields as unmapped so the banner shows them.
+    if (f.diagnosis != null) unmapped.add('Diagnosis: ${f.diagnosis}');
+    if (f.comorbidities.isNotEmpty) {
+      unmapped.add('Comorbidities: ${f.comorbidities.join(', ')}');
+    }
+    if (f.clinicalNotes != null && f.clinicalNotes!.isNotEmpty) {
+      unmapped.add(f.clinicalNotes!);
+    }
+
+    debugPrint(
+      '[RealtimeASR] _symptomsToFormFill: ${extracted.length} field(s) → '
+      '${extracted.map((e) => '${e.fieldId}=${e.value}').join(', ')}',
+    );
+
+    return FormPrefillResult(
+      fields: extracted,
+      unmappedFindings: unmapped,
+      transcriptText: fullTranscript,
+    );
   }
 
   void _onSocketDone() {

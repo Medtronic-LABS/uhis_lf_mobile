@@ -225,7 +225,10 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
                 _PostScanSheet(
                   data: _scanned,
                   existing: _existingPatient,
-                  onLinkExisting: () => Navigator.of(context).pop(),
+                  onLinkExisting: () {
+                    Navigator.of(context).pop();
+                    context.push('/household/enrollment/select-household');
+                  },
                   onCreateNew: () {
                     Navigator.of(context).pop();
                     context.push(
@@ -401,6 +404,7 @@ class _ScannerBody extends StatelessWidget {
     required this.onCreateHousehold,
     required this.onCancel,
     this.showCreateHousehold = true,
+    this.onLinkToExisting,
   });
 
   final bool isScanning;
@@ -415,6 +419,8 @@ class _ScannerBody extends StatelessWidget {
   final VoidCallback onCancel;
   /// When false, hides the "Create Household" card and "or" divider.
   final bool showCreateHousehold;
+  /// Optional: navigates to SelectHouseholdScreen.
+  final VoidCallback? onLinkToExisting;
 
   bool get _canCapture =>
       !isScanning && !readingCard && cameraController != null;
@@ -468,6 +474,51 @@ class _ScannerBody extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: 10),
+          // ── Link to Existing Household ─────────────────────────────────────
+          if (onLinkToExisting != null)
+            GestureDetector(
+              onTap: onLinkToExisting,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.20),
+                    width: 1.5,
+                  ),
+                  borderRadius: BorderRadius.circular(AppRadius.patRow),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.link, color: Colors.white, size: 18),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Add to Existing Household',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Link a new member to an existing household',
+                            style: TextStyle(fontSize: 10, color: AppColors.onDarkLow),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, color: AppColors.onDarkFaint, size: 16),
+                  ],
+                ),
+              ),
+            ),
           const SizedBox(height: 14),
           // Or divider
           Row(

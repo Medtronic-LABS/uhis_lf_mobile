@@ -176,7 +176,9 @@ class MemberHealthDetails {
       dateOfBirth: str('dateOfBirth'),
       phoneNumber: str('phoneNumber'),
       householdId: str('householdId'),
-      villageId: str('villageId'),
+      // Mirror Android: prefer sub-village ID so assessments scope to the same
+      // granularity that getAllSubVillageIds() uses for pull requests.
+      villageId: str('subVillageId') ?? str('villageId'),
       isPregnant: json['isPregnant'] == true,
       assessments: assessmentsList,
       rawJson: json,
@@ -261,7 +263,8 @@ class MemberDetailRepository extends ApiRepository {
       phoneNumber: m.phone,
       nationalId: m.nationalId,
       householdId: m.householdId,
-      villageId: m.villageId,
+      // Mirror Android AssessmentEntity: sub-village is the canonical scope ID.
+      villageId: m.subVillageId ?? m.villageId,
       villageName: m.villageName,
       isPregnant: m.isPregnant,
       isHouseholdHead: m.isHouseholdHead,

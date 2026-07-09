@@ -18,9 +18,10 @@ import '../scribe/scribe_permission_service.dart';
 import '../scribe/scribe_session.dart';
 import '../scribe/widgets/scribe_review_sheet.dart';
 import '../worklist/worklist_repository.dart';
-import '../../core/config/app_config.dart';
 import 'pathway/pathway_engine.dart';
 import 'assessment_repository.dart';
+import 'forms/unified_form_notifier.dart';
+import 'forms/unified_form_screen.dart';
 import 'triage/patient_context_builder.dart';
 import 'visit_controller.dart';
 import 'visit_session.dart';
@@ -282,21 +283,30 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
   ) {
     debugPrint(
         '[VisitForm] Sectioned mode — programmes: ${widget.activatedPathways?.join(', ')}');
-    // Form renderer removed — placeholder until new implementation lands.
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.assignment_outlined, size: 48, color: Colors.grey),
-          const SizedBox(height: 12),
-          const Text('Assessment form coming soon',
-              style: TextStyle(fontSize: 14, color: Colors.grey)),
-          const SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: () => _onSectionedSubmit(ctx, visitCtrl, session),
-            child: const Text('Submit'),
-          ),
-        ],
+
+    final formTypes = widget.activatedPathways ?? const [];
+    final draftDao = ctx.read<AssessmentDraftDao>();
+    final assessmentRepo = ctx.read<AssessmentRepository>();
+
+    final notifier = UnifiedFormNotifier(
+      encounterId: widget.visitId,
+      patientId: widget.patientId ?? '',
+      activeFormTypes: formTypes,
+      draftDao: draftDao,
+      assessmentRepo: assessmentRepo,
+      memberId: widget.memberId,
+      householdId: widget.householdId,
+      villageId: widget.villageId,
+      householdMemberLocalId: widget.householdMemberLocalId ?? 0,
+    );
+
+    return ChangeNotifierProvider<UnifiedFormNotifier>.value(
+      value: notifier,
+      child: UnifiedFormScreen(
+        activeFormTypes: formTypes,
+        gestationalWeeks: widget.gestationalWeeks,
+        onSubmitComplete: () =>
+            _onSectionedSubmit(ctx, visitCtrl, session),
       ),
     );
   }

@@ -69,6 +69,7 @@ import 'features/training/coaching_dao.dart';
 import 'features/training/coaching_repository.dart';
 import 'features/assistant/assistant_repository.dart';
 import 'features/worklist/worklist_repository.dart';
+import 'core/sync/sync_connectivity_service.dart';
 
 /// Remove any legacy seeded/demo test data from local SQLite.
 /// This ensures only real API data is shown in the worklist.
@@ -187,6 +188,9 @@ class _UhisNextAppState extends State<UhisNextApp>
     pregnancySnapshot: _pregnancySnapshotDao,
     treatmentPresence: _treatmentPresenceDao,
     encounterDao: _encounterDao,
+    // P1: share the same UserHierarchyService instance so OfflineSyncService
+    // can reuse already-fetched static-data without a second user-data call.
+    hierarchy: _userHierarchy,
   );
   late final WorklistRepository _worklist = WorklistRepository(
     patients: _patientDao,
@@ -247,6 +251,16 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final UserHierarchyService _userHierarchy =
       UserHierarchyService(widget.api, widget.authRepo);
 
+  // ── Connectivity-aware auto-sync ─────────────────────────────────────────
+  // Monitors network state changes and triggers AutomaticSync (outbound push +
+  // inbound warm pull) when connectivity is restored — mirrors Android's
+  // ScheduledSyncWork with NetworkType.CONNECTED constraint.
+  late final SyncConnectivityService _connectivitySync = SyncConnectivityService(
+    assessmentRepo: _assessmentRepo,
+    syncService: _sync,
+    authState: widget.authState,
+  );
+
   // ── Micro-coaching ────────────────────────────────────────────────────────
   late final CoachingDao _coachingDao = CoachingDao(widget.appDb);
   late final CoachingRepository _coachingRepo =
@@ -260,6 +274,8 @@ class _UhisNextAppState extends State<UhisNextApp>
     // from the last session. Both are idempotent.
     unawaited(_bootstrapNotifications());
     unawaited(_coachingRepo.initialize());
+    // Start connectivity monitoring for automatic offline sync retry.
+    _connectivitySync.start();
   }
 
   Future<void> _bootstrapNotifications() async {
@@ -279,6 +295,7 @@ class _UhisNextAppState extends State<UhisNextApp>
   @override
   void dispose() {
     _lockDebounce?.cancel();
+    _connectivitySync.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

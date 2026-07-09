@@ -264,14 +264,67 @@ class _PatientContextScreenState
     return out;
   }
 
+  /// Resolves the numeric server-assigned member referenceId required by the
+  /// FHIR mapper for [encounter.memberId].
+  ///
+  /// Priority:
+  ///   1. Explicit referenceId passed in navigation extras (most reliable).
+  ///   2. DB lookup by members.id (primary key = FHIR ID = widget.patientId).
+  ///   3. DB lookup by members.patient_id column.
+  ///   4. Fallback to extras['id'] or widget.patientId (FHIR ID — mapper may
+  ///      still fail, but it is the best available value).
+  Future<String> _resolveEncounterMemberId() async {
+    // 1. Prefer the numeric referenceId pre-resolved by HouseholdDetailScreen.
+    final fromExtras = widget.memberData?['referenceId'] as String?;
+    if (fromExtras != null && fromExtras.isNotEmpty) {
+      debugPrint('[PatientContext] memberId resolved from extras referenceId: $fromExtras');
+      return fromExtras;
+    }
+
+    // 2 & 3. Look up the member entity from local DB.
+    // The backend may store members with the numeric server PK as entity.id
+    // (when no FHIR UUID is present) or as entity.referenceId. Mirror the same
+    // resolution strategy used by MemberDetailRepository.getMemberAssessments:
+    // collect all known IDs from the entity and prefer the numeric one.
+    final memberDao = context.read<MemberDao>();
+    final entity = await memberDao.getById(widget.patientId) ??
+        await memberDao.getByPatientId(widget.patientId);
+
+    if (entity != null) {
+      // Prefer explicit referenceId field.
+      if (entity.referenceId?.isNotEmpty == true) {
+        debugPrint('[PatientContext] memberId resolved via entity.referenceId: ${entity.referenceId}');
+        return entity.referenceId!;
+      }
+      // When entity.id is a pure numeric string it IS the backend integer PK
+      // (the FHIR-ID slot was empty during sync and fell back to referenceId).
+      if (int.tryParse(entity.id) != null) {
+        debugPrint('[PatientContext] memberId resolved via entity.id (numeric): ${entity.id}');
+        return entity.id;
+      }
+    }
+
+    // 4. Fallback — FHIR ID; FHIR mapper will likely reject this but it is all
+    //    we have when the member has no referenceId (e.g. newly enrolled, not yet synced).
+    final fallback = widget.memberData?['id'] as String? ?? widget.patientId;
+    debugPrint('[PatientContext] memberId fallback to FHIR ID: $fallback');
+    return fallback;
+  }
+
   Future<PatientOrMemberData> _fetchData() async {
     // ignore: avoid_print
     print('[PatientContextScreen] _fetchData for patientId: ${widget.patientId}');
 
+    // Capture context-bound objects synchronously before any await to avoid
+    // use_build_context_synchronously linter warnings.
     final memberRepo = context.read<MemberDetailRepository>();
+    final patientRepo = context.read<PatientRepository>();
+
+    // Resolve encounter.memberId once — shared by all three code paths below.
+    // The FHIR mapper needs the numeric server-assigned referenceId, not the FHIR ID.
+    final resolvedMemberId = await _resolveEncounterMemberId();
 
     // First try local patient database
-    final patientRepo = context.read<PatientRepository>();
     final localPatient = await patientRepo.byId(widget.patientId);
     if (localPatient != null) {
       // ignore: avoid_print
@@ -312,7 +365,7 @@ class _PatientContextScreenState
         remoteAssessments: assessments,
         localAssessments: localAssessments,
         recentVisits: visits,
-        memberId: widget.patientId,
+        memberId: resolvedMemberId,
         householdName: await _householdName(localPatient.patient.householdId),
       );
     }
@@ -363,7 +416,7 @@ class _PatientContextScreenState
         programmes: progs,
         localAssessments: localAssessments,
         recentVisits: visits,
-        memberId: member.id,
+        memberId: resolvedMemberId,
         householdName: await _householdName(member.householdId),
       );
     }
@@ -377,6 +430,7 @@ class _PatientContextScreenState
       final age = data['age'] as int?;
       final gender = data['gender'] as String?;
       final isPregnant = data['isPregnant'] as bool? ?? false;
+      // Use the FHIR ID (member.id) only for resource references, not for encounter.memberId.
       final memberId = data['id']?.toString() ?? widget.patientId;
       
       // Try to fetch assessments but don't fail if API is unavailable.
@@ -455,7 +509,7 @@ class _PatientContextScreenState
         remoteAssessments: assessments,
         localAssessments: localAssessmentsList,
         recentVisits: visits,
-        memberId: memberId,
+        memberId: resolvedMemberId,
         householdName: await _householdName(data['householdId']?.toString()),
       );
     }
@@ -586,6 +640,7 @@ class _PatientContextScreenState
                         patientGender: data.gender,
                         householdId: data.householdId,
                         villageId: data.villageId,
+                        memberId: data.memberId,
                         programmes: data.programmes,
                         origin: widget.origin,
                       ),
