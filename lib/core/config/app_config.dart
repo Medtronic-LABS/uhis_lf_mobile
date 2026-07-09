@@ -99,12 +99,8 @@ class AppConfig {
   static bool get hasDevCredentials =>
       devUser.isNotEmpty && devPass.isNotEmpty;
 
-  /// Length of the app-specific fallback PIN. Supported values: 4 or 6.
-  /// Any other build-define value falls back to 6.
-  static int get pinLength {
-    const raw = int.fromEnvironment('PIN_LENGTH', defaultValue: 6);
-    return raw == 4 ? 4 : 6;
-  }
+  /// Length of the app-specific fallback PIN. Fixed at 4 digits.
+  static const int pinLength = 4;
 
   /// Base URL for the spice-coaching micro-coaching service.
   /// Default: Android emulator loopback to port 8000.

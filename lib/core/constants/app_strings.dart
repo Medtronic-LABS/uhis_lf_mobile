@@ -287,7 +287,7 @@ abstract final class SearchStrings {
 }
 
 /// App-specific fallback PIN: setup (create + confirm), unlock, and management.
-/// Length-aware copy so the same strings serve a 4- or 6-digit PIN.
+/// Length-aware copy, parameterized by [AppConfig.pinLength] (fixed at 4).
 abstract final class PinStrings {
   PinStrings._();
 

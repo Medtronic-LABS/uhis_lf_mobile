@@ -497,7 +497,7 @@ def page_screens():
             [
                 ["/login", "LoginScreen", "Multipart POST → JWT in Authorization header (not cookie)"],
                 ["/sync", "SyncProgressScreen", "Full sync on first login; warm sync on open"],
-                ["/pin/setup", "PIN creation", "6-digit, stored hashed in flutter_secure_storage"],
+                ["/pin/setup", "PIN creation", "4-digit, stored hashed in flutter_secure_storage"],
                 ["/pin/unlock", "PIN unlock", "Required after inactivity timeout"],
                 ["/visit/:id/assessment", "SectionedAssessmentScreen", "3-step visit form (see Assessment & CDS)"],
                 ["/patient/:id", "PatientDetailScreen", "Longitudinal history, risk trend, referrals"],

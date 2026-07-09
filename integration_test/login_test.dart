@@ -5,7 +5,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:uhis_next/main.dart' as app;
 import 'package:uhis_next/core/constants/app_strings.dart';
 
-const _kTestPin = ['1', '2', '3', '4', '5', '6'];
+const _kTestPin = ['1', '2', '3', '4'];
 
 /// Pause long enough for a human observer to see what just happened.
 Future<void> _pause(WidgetTester tester, [int seconds = 2]) =>
@@ -102,12 +102,12 @@ void main() {
         await _pause(tester, 2);
       }
 
-      // ── 6. Optional: 6-digit PIN creation ────────────────────────────────
-      if (find.text(PinStrings.createTitle(6)).evaluate().isNotEmpty) {
+      // ── 6. Optional: 4-digit PIN creation ────────────────────────────────
+      if (find.text(PinStrings.createTitle(4)).evaluate().isNotEmpty) {
         await _pause(tester, 3); // pause to read the PIN create screen
 
         await _enterPinDigits(tester);
-        await _pause(tester, 2); // pause to see all 6 dots filled
+        await _pause(tester, 2); // pause to see all 4 dots filled
 
         await tester.pumpAndSettle(const Duration(seconds: 3));
 
