@@ -6,6 +6,7 @@ import '../../../core/db/local_assessment_dao.dart';
 import '../assessment_repository.dart';
 import 'canonical_visit_data.dart';
 import 'unified_payload_mapper.dart';
+import 'vitals_trend.dart';
 
 /// Manages in-progress canonical form state for a single visit.
 ///
@@ -55,6 +56,14 @@ class UnifiedFormNotifier extends ChangeNotifier {
   bool get submitting => _submitting;
   String? get submitError => _submitError;
   Set<String> get validationErrors => _validationErrors;
+
+  /// FHIR patient id for this visit (empty when unknown). Exposed so the
+  /// vitals-trend card can look up prior-visit history.
+  String get patientId => _patientId;
+
+  /// Loads prior ANC visit snapshots for the vitals-trend card, oldest-first.
+  Future<List<VisitVitals>> ancVitalsHistory() =>
+      _assessmentRepo.ancVitalsHistory(_patientId);
 
   /// Marks the given field IDs as having validation errors and notifies
   /// listeners so the form can highlight them.

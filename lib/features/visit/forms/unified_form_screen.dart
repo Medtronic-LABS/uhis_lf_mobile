@@ -8,10 +8,12 @@ import '../widgets/form_fields/dialog_multi_select_field.dart';
 import '../widgets/form_fields/radio_form_field.dart';
 import 'canonical_visit_data.dart';
 import 'form_config.dart';
+import 'form_field_visuals.dart';
 import 'step2_asr_banner.dart';
 import 'triage_symptom_mapper.dart';
 import 'unified_form_notifier.dart';
 import 'unified_section_rules.dart';
+import 'vitals_trend.dart';
 
 /// JSON-driven assessment form.
 ///
@@ -79,6 +81,10 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   int _lastLoggedSectionCount = -1;
   int _lastLoggedFieldCount = -1;
 
+  /// Prior ANC visit snapshots for the vitals-trend card (oldest-first).
+  /// Loaded once after init; empty until then / for non-ANC visits.
+  List<VisitVitals> _priorAncVisits = const [];
+
   @override
   void initState() {
     super.initState();
@@ -106,7 +112,45 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
       }
 
       notifier.loadDraft();
+
+      // Load prior ANC visits for the vitals-trend card (ANC visits only).
+      if (widget.activeFormTypes.contains('anc') ||
+          widget.enrolledFormTypes.contains('anc')) {
+        notifier.ancVitalsHistory().then((history) {
+          if (mounted && history.isNotEmpty) {
+            setState(() => _priorAncVisits = history);
+          }
+        });
+      }
     });
+  }
+
+  /// Builds a snapshot of the current visit's live vitals from the form data,
+  /// for the last ("Today") column of the trend card.
+  VisitVitals _todaySnapshot(CanonicalVisitData data) {
+    int? asInt(String id) {
+      final v = data.getValue(id);
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      if (v is String) return int.tryParse(v);
+      return null;
+    }
+
+    double? asDouble(String id) {
+      final v = data.getValue(id);
+      if (v is double) return v;
+      if (v is num) return v.toDouble();
+      if (v is String) return double.tryParse(v);
+      return null;
+    }
+
+    final urine = data.getValue('urinaryAlbumin');
+    return VisitVitals(
+      systolic: asInt('systolic'),
+      diastolic: asInt('diastolic'),
+      weight: asDouble('weight'),
+      urineProtein: urine is String ? urine : urine?.toString(),
+    );
   }
 
   @override
@@ -199,6 +243,17 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             validationErrors: notifier.validationErrors,
             onFieldChanged: notifier.updateField,
           ));
+        }
+
+        // ── Rule-based vitals-trend card (ANC only) ──────────────────────────
+        // Recomputed each rebuild so "Today" reflects the live form values;
+        // prior visits are loaded once in initState.
+        if (_priorAncVisits.isNotEmpty) {
+          final trend = VitalsTrendAnalyzer.analyze(
+            priorVisits: _priorAncVisits,
+            today: _todaySnapshot(notifier.data),
+          );
+          if (trend.show) items.add(_VitalsTrendCard(result: trend));
         }
 
         return Column(
@@ -514,6 +569,256 @@ class _TriageChip extends StatelessWidget {
   }
 }
 
+// ── Vitals-trend card ─────────────────────────────────────────────────────────
+
+/// Collapsible amber accordion showing systolic / diastolic / weight / urine
+/// protein across the last few ANC visits, with a 📈 marker on rising metrics.
+///
+/// Purely presentational: the [result] is computed by [VitalsTrendAnalyzer] and
+/// the card is only inserted by the parent when [VitalsTrendResult.show] is true
+/// (i.e. blood pressure is climbing across visits).  Matches the v13 mockup's
+/// `#ancTrendCard` styling.
+class _VitalsTrendCard extends StatefulWidget {
+  const _VitalsTrendCard({required this.result});
+
+  final VitalsTrendResult result;
+
+  @override
+  State<_VitalsTrendCard> createState() => _VitalsTrendCardState();
+}
+
+class _VitalsTrendCardState extends State<_VitalsTrendCard> {
+  bool _expanded = false;
+
+  static const _rising = '📈';
+  static const _flat = '·';
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final result = widget.result;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xxxl),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.catChildSurface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.statusWarningBorder, width: 1.5),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Accordion header — always visible, tappable ─────────────────
+            InkWell(
+              onTap: () => setState(() => _expanded = !_expanded),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.star_rounded,
+                      size: 17,
+                      color: AppColors.fieldKindAmber,
+                    ),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        UnifiedFormStrings.trendCardTitle(result.columns.length),
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: AppColors.statusWarningText,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ),
+                    AnimatedRotation(
+                      turns: _expanded ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 180),
+                      child: const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 18,
+                        color: AppColors.fieldKindAmber,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // ── Accordion body — collapsed by default ───────────────────────
+            AnimatedCrossFade(
+              firstChild: const SizedBox(width: double.infinity),
+              secondChild: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 13),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      height: 1,
+                      color: AppColors.statusWarningBorder,
+                      margin: const EdgeInsets.only(bottom: 10),
+                    ),
+                    _buildTable(theme, result),
+                    const SizedBox(height: 9),
+                    Text(
+                      UnifiedFormStrings.trendFooter,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: AppColors.statusWarningText,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
+                        height: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              crossFadeState: _expanded
+                  ? CrossFadeState.showSecond
+                  : CrossFadeState.showFirst,
+              duration: const Duration(milliseconds: 200),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTable(ThemeData theme, VitalsTrendResult result) {
+    final headerStyle = theme.textTheme.labelSmall?.copyWith(
+      color: AppColors.statusWarningText,
+      fontWeight: FontWeight.w700,
+      fontSize: 11,
+    );
+    final subStyle = theme.textTheme.labelSmall?.copyWith(
+      color: AppColors.statusWarningText,
+      fontWeight: FontWeight.w500,
+      fontSize: 9.5,
+    );
+
+    return Table(
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      border: TableBorder(
+        horizontalInside: BorderSide(
+          color: AppColors.statusWarningBorder.withValues(alpha: 0.7),
+        ),
+      ),
+      columnWidths: const {0: FlexColumnWidth(2.2)},
+      children: [
+        // Header row
+        TableRow(
+          children: [
+            const SizedBox.shrink(),
+            for (final col in result.columns)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Column(
+                  children: [
+                    Text(
+                      col.isToday
+                          ? UnifiedFormStrings.trendTodayColumn
+                          : UnifiedFormStrings.trendVisitColumn(
+                              col.visitNumber ?? 0),
+                      textAlign: TextAlign.center,
+                      style: headerStyle,
+                    ),
+                    if (!col.isToday && col.daysAgo != null)
+                      Text(
+                        UnifiedFormStrings.trendWeeksAgo(col.daysAgo!),
+                        textAlign: TextAlign.center,
+                        style: subStyle,
+                      ),
+                  ],
+                ),
+              ),
+            Center(child: Text('↗', style: headerStyle)),
+          ],
+        ),
+        // Metric rows
+        for (final metric in result.metrics) _metricRow(theme, metric),
+      ],
+    );
+  }
+
+  TableRow _metricRow(ThemeData theme, VitalMetricTrend metric) {
+    final labelStyle = theme.textTheme.labelSmall?.copyWith(
+      color: AppColors.statusWarningText,
+      fontWeight: FontWeight.w600,
+      fontSize: 11,
+    );
+    final priorStyle = theme.textTheme.labelSmall?.copyWith(
+      color: AppColors.textMuted,
+      fontSize: 11,
+    );
+    final todayStyle = theme.textTheme.labelSmall?.copyWith(
+      color: AppColors.fieldKindAmber,
+      fontWeight: FontWeight.w800,
+      fontSize: 11.5,
+    );
+
+    final lastIndex = metric.values.length - 1;
+    return TableRow(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: Text(_metricLabel(metric.metric), style: labelStyle),
+        ),
+        for (var i = 0; i < metric.values.length; i++)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 5),
+            child: Text(
+              _formatValue(metric.metric, metric.values[i]),
+              textAlign: TextAlign.center,
+              style: i == lastIndex ? todayStyle : priorStyle,
+            ),
+          ),
+        Center(
+          child: Text(
+            metric.rising ? _rising : _flat,
+            style: TextStyle(fontSize: metric.rising ? 12 : 13,
+                color: AppColors.textMuted),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _metricLabel(VitalMetric metric) {
+    switch (metric) {
+      case VitalMetric.systolic:
+        return UnifiedFormStrings.trendSystolic;
+      case VitalMetric.diastolic:
+        return UnifiedFormStrings.trendDiastolic;
+      case VitalMetric.weight:
+        return UnifiedFormStrings.trendWeight;
+      case VitalMetric.urineProtein:
+        return UnifiedFormStrings.trendUrineProtein;
+    }
+  }
+
+  String _formatValue(VitalMetric metric, num? value) {
+    if (value == null) return UnifiedFormStrings.trendMissingValue;
+    switch (metric) {
+      case VitalMetric.systolic:
+      case VitalMetric.diastolic:
+        return value.toInt().toString();
+      case VitalMetric.weight:
+        return value.toStringAsFixed(1);
+      case VitalMetric.urineProtein:
+        switch (value.toInt()) {
+          case 0:
+            return UnifiedFormStrings.trendUrineAbsent;
+          case 1:
+            return UnifiedFormStrings.trendUrineTrace;
+          case 2:
+            return UnifiedFormStrings.trendUrinePresent;
+          default:
+            return UnifiedFormStrings.trendMissingValue;
+        }
+    }
+  }
+}
+
 // ── Section card ──────────────────────────────────────────────────────────────
 
 class _SectionCard extends StatelessWidget {
@@ -568,8 +873,18 @@ class _SectionCard extends StatelessWidget {
       case WidgetHint.textLabel:
         return control;
       default:
+        final glyph = FormFieldVisuals.forField(def.id);
+        final unit = def.unitMeasurement;
+        final subParts = <String>[
+          if (def.labelCulture != null && def.labelCulture!.isNotEmpty)
+            def.labelCulture!,
+          if (unit != null && unit.isNotEmpty) unit,
+        ];
         return _FieldShell(
           label: def.label,
+          subLabel: subParts.isEmpty ? null : subParts.join(' · '),
+          emoji: glyph?.emoji,
+          emojiBg: glyph?.background,
           isMandatory: def.isMandatory || ref.isMandatory,
           hasError: validationErrors.contains(ref.id),
           child: control,
@@ -803,24 +1118,37 @@ class _FieldLabel extends StatelessWidget {
 }
 
 /// The consistent chrome around every editable field: a white rounded card with
-/// a `1.5px` border (red when [hasError]), a bold label + mandatory `*`, then
-/// the control [child].  Replaces the previous per-field [DecoratedBox] error
-/// wrap and the doubled labels the inner widgets used to render.
+/// a `1.5px` border (red when [hasError]).  The header row mirrors the v13
+/// mockup's vitals cards — an optional pastel [emoji] tile, the bold English
+/// [label] + mandatory `*`, and a muted bilingual [subLabel] (Bengali · unit) —
+/// with the control [child] below.
 class _FieldShell extends StatelessWidget {
   const _FieldShell({
     required this.label,
     required this.child,
+    this.subLabel,
+    this.emoji,
+    this.emojiBg,
     this.isMandatory = false,
     this.hasError = false,
   });
 
   final String label;
   final Widget child;
+
+  /// Muted second line under the label (e.g. `"রক্তচাপ · mmHg"`).
+  final String? subLabel;
+
+  /// Optional decorative emoji shown in a pastel tile to the left of the label.
+  final String? emoji;
+  final Color? emojiBg;
+
   final bool isMandatory;
   final bool hasError;
 
   @override
   Widget build(BuildContext context) {
+    final hasSubLabel = subLabel != null && subLabel!.isNotEmpty;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(12, 11, 12, 12),
@@ -837,12 +1165,63 @@ class _FieldShell extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (label.isNotEmpty) ...[
-            _FieldLabel(label: label, isMandatory: isMandatory),
-            const SizedBox(height: 7),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (emoji != null) ...[
+                  _EmojiTile(emoji: emoji!, background: emojiBg),
+                  const SizedBox(width: 10),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _FieldLabel(label: label, isMandatory: isMandatory),
+                      if (hasSubLabel) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          subLabel!,
+                          style: const TextStyle(
+                            fontSize: 10.5,
+                            color: AppColors.textMuted,
+                            height: 1.2,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 9),
           ],
           child,
         ],
       ),
+    );
+  }
+}
+
+/// Rounded pastel tile holding a single decorative emoji, matching the v13
+/// mockup's `30x30` vitals-card icon tile.
+class _EmojiTile extends StatelessWidget {
+  const _EmojiTile({required this.emoji, this.background});
+
+  final String emoji;
+  final Color? background;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 30,
+      height: 30,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: background ?? AppColors.cardSurfaceMuted,
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Text(emoji, style: const TextStyle(fontSize: 15)),
     );
   }
 }
@@ -919,6 +1298,10 @@ class _NumericFieldState extends State<_NumericField> {
   }
 }
 
+/// Single-select field.  Rendered as the same chip/pill row as [RadioFormField]
+/// (not a dropdown) to match the v13 mockup: ≤3 options fill a row, more options
+/// wrap as chips.  The canonical store keeps the option id; the pill widget
+/// works with display names, so ids are translated in both directions.
 class _SpinnerField extends StatelessWidget {
   const _SpinnerField({
     super.key,
@@ -933,22 +1316,24 @@ class _SpinnerField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final ids = options.map((o) => o.id).toSet();
-    // Guard: only pass value if it matches a known option; avoids assertion.
-    final safeValue = (currentValue != null && ids.contains(currentValue))
-        ? currentValue
-        : null;
-    return DropdownButtonFormField<String>(
-      initialValue: safeValue,
-      isExpanded: true,
-      decoration: _filledInputDecoration(),
-      icon: const Icon(Icons.expand_more, color: AppColors.textMuted),
-      items: options
-          .map((o) => DropdownMenuItem(value: o.id, child: Text(o.name)))
-          .toList(),
-      onChanged: onChanged,
-      style: theme.textTheme.bodyMedium,
+    final displayName = options
+        .cast<FieldOption?>()
+        .firstWhere(
+          (o) => o!.id == currentValue || o.name == currentValue,
+          orElse: () => null,
+        )
+        ?.name;
+    return RadioFormField(
+      options: options.map((o) => o.name).toList(),
+      currentValue: displayName,
+      onChanged: (name) {
+        final id = options
+                .cast<FieldOption?>()
+                .firstWhere((o) => o!.name == name, orElse: () => null)
+                ?.id ??
+            name;
+        onChanged(id);
+      },
     );
   }
 }

@@ -1426,7 +1426,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       ]);
       followUp.add(const NabaFollowUpItem(
         activity: 'BP and glucose re-check',
-        timeline: 'In 4 weeks',
+        timeline: 'In 2 weeks',
         programme: 'NCD',
       ));
     }
@@ -1901,7 +1901,10 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 
           // ── 5. Follow-up timeline ──────────────────────────────────
           if (naba.followUp.isNotEmpty) ...[
-            _FollowUpTimeline(items: naba.followUp),
+            _FollowUpTimeline(
+              items: naba.followUp,
+              programme: widget.primaryProgramme,
+            ),
             const SizedBox(height: 16),
           ],
 
@@ -2576,14 +2579,18 @@ class _AiCounsellingCardState extends State<_AiCounsellingCard> {
 // Shows all follow-up items: first item has a date picker; remaining items
 // are compact left-border-coloured timeline rows.
 class _FollowUpTimeline extends StatelessWidget {
-  const _FollowUpTimeline({required this.items});
+  const _FollowUpTimeline({required this.items, this.programme = Programme.unknown});
   final List<NabaFollowUpItem> items;
+
+  /// Primary programme, used to apply the routine follow-up cadence
+  /// (ANC = 4 weeks, NCD = 2 weeks) to the editable date row.
+  final Programme programme;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _FollowUpDateRow(item: items.first),
+        _FollowUpDateRow(item: items.first, programme: programme),
         for (final item in items.skip(1)) ...[
           const SizedBox(height: 6),
           _FollowUpTimelineItem(item: item),
@@ -2685,8 +2692,9 @@ class _FollowUpTimelineItem extends StatelessWidget {
 }
 
 class _FollowUpDateRow extends StatefulWidget {
-  const _FollowUpDateRow({required this.item});
+  const _FollowUpDateRow({required this.item, this.programme = Programme.unknown});
   final NabaFollowUpItem item;
+  final Programme programme;
 
   @override
   State<_FollowUpDateRow> createState() => _FollowUpDateRowState();
@@ -2703,7 +2711,49 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
   @override
   void initState() {
     super.initState();
-    _date = _dateFromTimeline(widget.item.timeline);
+    _date = _initialDate();
+  }
+
+  /// Default follow-up date.
+  ///
+  /// Urgent, day-scoped timelines (danger signs / referrals, e.g. "In 2 days")
+  /// always win.  Otherwise the routine programme cadence applies — ANC = 4
+  /// weeks, NCD = 2 weeks — keyed off this item's own programme first, then the
+  /// screen's primary programme, and finally the item's own timeline for other
+  /// programmes.  The SK can still override via the date picker.
+  DateTime _initialDate() {
+    final t = widget.item.timeline.toLowerCase();
+    final isUrgentDays = RegExp(r'(\d+)\s*day').hasMatch(t);
+    if (!isUrgentDays) {
+      final days = _followUpDays(widget.item.programme) ??
+          _programmeFollowUpDays(widget.programme);
+      if (days != null) return DateTime.now().add(Duration(days: days));
+    }
+    return _dateFromTimeline(widget.item.timeline);
+  }
+
+  /// Routine follow-up interval (in days) for a programme name string.
+  static int? _followUpDays(String? programme) {
+    switch (programme?.toUpperCase()) {
+      case 'ANC':
+        return 28; // 4 weeks
+      case 'NCD':
+        return 14; // 2 weeks
+      default:
+        return null;
+    }
+  }
+
+  /// Routine follow-up interval (in days) for a [Programme] enum value.
+  static int? _programmeFollowUpDays(Programme programme) {
+    switch (programme) {
+      case Programme.anc:
+        return 28; // 4 weeks
+      case Programme.ncd:
+        return 14; // 2 weeks
+      default:
+        return null;
+    }
   }
 
   static DateTime _dateFromTimeline(String timeline) {

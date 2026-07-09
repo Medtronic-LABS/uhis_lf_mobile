@@ -3443,6 +3443,42 @@ abstract final class UnifiedFormStrings {
   static const String enrolledGroupLabel = 'Enrolled Programmes';
   static const String recommendedGroupLabel = 'Recommended Programmes';
 
+  // ── Vitals-trend card ("AI sees a trend across her N visits") ──────────────
+  /// Header title; [n] is the number of visits shown (priors + today).
+  static String trendCardTitle(int n) => 'AI sees a trend across her $n visits';
+
+  /// "Today" column header for the trend table.
+  static const String trendTodayColumn = 'Today';
+
+  /// Prior-visit column header, e.g. `V1`, `V2`.
+  static String trendVisitColumn(int n) => 'V$n';
+
+  /// Column sub-label describing how long ago a prior visit was.
+  static String trendWeeksAgo(int days) {
+    if (days < 7) return days <= 1 ? '1 d ago' : '$days d ago';
+    final weeks = (days / 7).round();
+    return '$weeks wk ago';
+  }
+
+  /// Metric row labels.
+  static const String trendSystolic = 'Systolic';
+  static const String trendDiastolic = 'Diastolic';
+  static const String trendWeight = 'Weight';
+  static const String trendUrineProtein = 'Urine protein';
+
+  /// Urine-protein grade labels used in the trend table.
+  static const String trendUrineAbsent = 'Neg';
+  static const String trendUrineTrace = 'Trace';
+  static const String trendUrinePresent = 'Present';
+
+  /// Placeholder for a metric not captured a given visit.
+  static const String trendMissingValue = '—';
+
+  /// Explanatory footer under the trend table.
+  static const String trendFooter =
+      'Each reading is below its alert line — but they are climbing together '
+      'across visits. No single rule fires.';
+
   /// Human-readable label for a formType key shown as a programme badge.
   ///
   /// Returns `null` for the synthetic `vitals` formType (no badge needed).

@@ -10,6 +10,7 @@ import '../../core/auth/auth_repository.dart';
 import '../../core/config/app_config.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/models/provance_dto.dart';
+import 'forms/vitals_trend.dart';
 
 /// Repository for offline-first assessment management matching Android pattern.
 ///
@@ -286,6 +287,84 @@ class AssessmentRepository extends ChangeNotifier {
 
   Future<LocalAssessmentEntity?> getAssessmentById(String id) async {
     return _dao.getById(id);
+  }
+
+  /// Prior locally-saved ANC visits for [patientId] as trend snapshots,
+  /// oldest-first.
+  ///
+  /// Used by the Step 2 vitals-trend card to plot systolic/diastolic/weight/
+  /// urine-protein movement across visits.  Reads only committed rows — the
+  /// current visit's live values come from the form notifier and are not yet
+  /// persisted here, so no explicit exclusion is required.
+  Future<List<VisitVitals>> ancVitalsHistory(String patientId) async {
+    if (patientId.isEmpty) return const [];
+    final rows = await _dao.getByPatientId(patientId); // created_at DESC
+    final snapshots = <VisitVitals>[];
+    for (final row in rows) {
+      if (row.assessmentType.toUpperCase() != 'ANC') continue;
+      final snap = _snapshotFromAnc(row.assessmentDetails, row.createdAt);
+      if (!snap.isEmpty) snapshots.add(snap);
+    }
+    // Rows are newest-first; the analyzer expects oldest-first.
+    return snapshots.reversed.toList();
+  }
+
+  /// Parses an ANC `assessment_details` JSON blob into a [VisitVitals],
+  /// unwrapping the nested programme sub-objects the same way the DAO's
+  /// clinical-vitals extractor does.
+  static VisitVitals _snapshotFromAnc(String detailsJson, DateTime? date) {
+    Map<String, dynamic> map;
+    try {
+      map = jsonDecode(detailsJson) as Map<String, dynamic>;
+    } catch (_) {
+      return const VisitVitals();
+    }
+    final flat = <String, dynamic>{...map};
+    for (final sub in const [
+      'medicalHistoryPhysicalExamination',
+      'pointOfCareInvestigations',
+      'dangerSignsRiskIdentification',
+    ]) {
+      if (map[sub] is Map) {
+        flat.addAll((map[sub] as Map).cast<String, dynamic>());
+      }
+    }
+
+    int? asInt(String key) {
+      final v = flat[key];
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      if (v is String) return int.tryParse(v);
+      return null;
+    }
+
+    double? asDouble(String key) {
+      final v = flat[key];
+      if (v is double) return v;
+      if (v is num) return v.toDouble();
+      if (v is String) return double.tryParse(v);
+      return null;
+    }
+
+    int? sys = asInt('systolic') ?? asInt('bloodPressureSystolic');
+    if (sys == null && flat['bpLogDetails'] is List) {
+      final log = flat['bpLogDetails'] as List;
+      if (log.isNotEmpty && log.first is Map) {
+        final s = (log.first as Map)['systolic'];
+        if (s is num) sys = s.toInt();
+      }
+    }
+    final dia = asInt('diastolic') ?? asInt('bloodPressureDiastolic');
+
+    final urine = flat['urinaryAlbumin'] ?? flat['urineProtein'];
+
+    return VisitVitals(
+      date: date,
+      systolic: sys,
+      diastolic: dia,
+      weight: asDouble('weight'),
+      urineProtein: urine is String ? urine : urine?.toString(),
+    );
   }
 }
 

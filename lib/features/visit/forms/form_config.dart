@@ -91,6 +91,8 @@ class FieldDef {
     required this.programmeIds,
     this.unitMeasurement,
     this.hintText,
+    this.labelCulture,
+    this.family,
   });
 
   final String id;
@@ -107,6 +109,14 @@ class FieldDef {
 
   /// Optional placeholder text for text input fields.
   final String? hintText;
+
+  /// Localized (Bengali) field label from `"titleCulture"`, rendered as the
+  /// second line of the field card's title so the SK sees both languages.
+  final String? labelCulture;
+
+  /// Field family/group from `"family"` (e.g. `"maternalHealthAssessment"`),
+  /// used to pick a fallback glyph when the field id is not explicitly mapped.
+  final String? family;
 
   factory FieldDef.fromJson(String id, Map<String, dynamic> json) {
     final rawHint = json['widgetHint'] as String?;
@@ -129,6 +139,8 @@ class FieldDef {
       programmeIds: programmeIds,
       unitMeasurement: json['unitMeasurement'] as String?,
       hintText: json['hint'] as String?,
+      labelCulture: json['titleCulture'] as String?,
+      family: json['family'] as String?,
     );
   }
 }
