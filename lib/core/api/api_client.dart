@@ -26,6 +26,11 @@ class ApiClient {
   // web AuthCookie; the token is replayed on every subsequent request.
   String? _authToken;
   void Function(String authCookie, DateTime expiry)? onAuthCookieRotated;
+  // Fired on every successful (2xx) authenticated response — lets
+  // AuthRepository extend the locally-persisted reentry-session TTL on real
+  // backend activity, so an actively-used mobile session doesn't hit the
+  // synthetic Bearer-token expiry wall while the SK is still working.
+  void Function()? onAuthenticatedActivity;
 
   static Future<ApiClient> create() async {
     final cookieJar = CookieJar();
@@ -58,6 +63,10 @@ class ApiClient {
             final authz = response.headers.value('authorization');
             if (authz != null && authz.isNotEmpty) {
               client._authToken = authz;
+            }
+            final status = response.statusCode;
+            if (status != null && status >= 200 && status < 300) {
+              client.onAuthenticatedActivity?.call();
             }
             handler.next(response);
           },
@@ -121,6 +130,10 @@ class ApiClient {
                   stored,
                 );
               }
+            }
+            final status = response.statusCode;
+            if (status != null && status >= 200 && status < 300) {
+              client.onAuthenticatedActivity?.call();
             }
             handler.next(response);
           },

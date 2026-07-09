@@ -29,6 +29,7 @@ class AuthState extends ChangeNotifier {
   bool _onboardingComplete = false;
   bool _notifyScheduled = false;
   bool _splashReady = false;
+  bool _sameUserRelogin = false;
 
   AuthStatus get status => _status;
   bool get splashReady => _splashReady;
@@ -55,6 +56,12 @@ class AuthState extends ChangeNotifier {
   bool get biometricAvailable => _biometricAvailable;
   bool get pinEnabled => _pinEnabled;
   bool get onboardingComplete => _onboardingComplete;
+
+  /// True when the just-completed [login] was the same SK re-authenticating
+  /// (e.g. after a forced session-expiry sign-out) rather than a first-time
+  /// setup or a different SK signing into a shared device. Read by the sync
+  /// screen to decide whether the post-login resync may skip the wipe.
+  bool get sameUserRelogin => _sameUserRelogin;
 
   /// Any local re-entry method enrolled (biometric OR PIN). Drives lock /
   /// barrier / router gating that must not be biometric-specific.
@@ -87,6 +94,8 @@ class AuthState extends ChangeNotifier {
     _error = null;
     _scheduleNotify();
     try {
+      // Must run BEFORE _repo.login(), which overwrites the cached username.
+      _sameUserRelogin = await _repo.isReturningUser(username);
       await _repo.login(username, password);
       _username = username;
       _biometricEnabled = await _repo.isBiometricEnabled();
@@ -118,12 +127,7 @@ class AuthState extends ChangeNotifier {
       );
       if (!ok) return false;
       final restored = await _repo.restorePersistedSession();
-      if (!restored) {
-        _error = AuthStrings.savedSessionExpired;
-        _status = AuthStatus.signedOut;
-        _locked = false;
-        return false;
-      }
+      if (!restored) return _failExpiredRestore();
       _username = await _repo.biometricLastUsername() ?? _username;
       _onboardingComplete = await _repo.isOnboardingComplete();
       _status = AuthStatus.signedIn;
@@ -138,6 +142,22 @@ class AuthState extends ChangeNotifier {
       // redirects during the current build phase.
       _scheduleNotify();
     }
+  }
+
+  /// Shared failure path for [biometricUnlock]/[pinUnlock] when the
+  /// persisted reentry session has genuinely expired. Clears
+  /// `biometricEnabled`/`pinEnabled` (matching [handleSessionExpired]) so
+  /// `reentryEnabled` becomes false and the router's `redirect` — which
+  /// re-evaluates on every `notifyListeners()` via `GoRouter(refreshListenable:
+  /// auth)` — sends the user to `/login` instead of leaving them stuck on a
+  /// "verification failed" retry loop.
+  bool _failExpiredRestore() {
+    _error = AuthStrings.savedSessionExpired;
+    _status = AuthStatus.signedOut;
+    _locked = false;
+    _biometricEnabled = false;
+    _pinEnabled = false;
+    return false;
   }
 
   Future<void> enrolBiometric() async {
@@ -195,12 +215,7 @@ class AuthState extends ChangeNotifier {
         return false;
       }
       final restored = await _repo.restorePersistedSession();
-      if (!restored) {
-        _error = AuthStrings.savedSessionExpired;
-        _status = AuthStatus.signedOut;
-        _locked = false;
-        return false;
-      }
+      if (!restored) return _failExpiredRestore();
       _username = await _repo.biometricLastUsername() ?? _username;
       _onboardingComplete = await _repo.isOnboardingComplete();
       _status = AuthStatus.signedIn;

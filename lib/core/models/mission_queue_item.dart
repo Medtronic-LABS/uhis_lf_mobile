@@ -102,6 +102,7 @@ class MissionQueueItem {
     this.householdId,
     this.householdNumber,
     this.age,
+    this.gender,
     this.village,
     this.programmes = const <Programme>{},
     required this.reason,
@@ -156,6 +157,11 @@ class MissionQueueItem {
 
   /// Patient age.
   final int? age;
+
+  /// Patient gender as stored in the sync payload ("Male", "Female", "Other",
+  /// or a single letter). Card formats it to a single uppercase letter via
+  /// [genderInitial].
+  final String? gender;
 
   /// Village name.
   final String? village;
@@ -233,6 +239,14 @@ class MissionQueueItem {
   /// existing value through the call site or build a fresh ctor. Used by
   /// `MissionDashboardService.computeTieredQueue` to swap [tier], [drivers],
   /// and [priorityScore] onto an already-built candidate.
+  /// Single uppercase initial for display ("M", "F", "O").
+  /// Returns null when gender is absent.
+  String? get genderInitial {
+    final g = gender?.trim();
+    if (g == null || g.isEmpty) return null;
+    return g[0].toUpperCase();
+  }
+
   MissionQueueItem copyWith({
     MissionItemType? type,
     MissionPriority? priority,
@@ -243,6 +257,7 @@ class MissionQueueItem {
     String? householdId,
     String? householdNumber,
     int? age,
+    String? gender,
     String? village,
     Set<Programme>? programmes,
     String? reason,
@@ -273,6 +288,7 @@ class MissionQueueItem {
       householdId: householdId ?? this.householdId,
       householdNumber: householdNumber ?? this.householdNumber,
       age: age ?? this.age,
+      gender: gender ?? this.gender,
       village: village ?? this.village,
       programmes: programmes ?? this.programmes,
       reason: reason ?? this.reason,

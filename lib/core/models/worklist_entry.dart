@@ -14,6 +14,7 @@ class WorklistEntry {
     required this.patientId,
     required this.displayName,
     this.age,
+    this.gender,
     this.phoneNumber,
     this.householdNo,
     this.householdName,
@@ -31,6 +32,7 @@ class WorklistEntry {
   final String patientId;
   final String displayName;
   final int? age;
+  final String? gender;
   final String? phoneNumber;
   final String? householdNo;
   final String? householdName;

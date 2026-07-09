@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
@@ -9,6 +10,14 @@ String _titleCase(String s) => s
     .split(' ')
     .map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1).toLowerCase())
     .join(' ');
+
+/// Formats age and gender initial into "22/F", "22", or "F" depending on
+/// which values are available.
+String _ageGender(int? age, String? genderInitial) {
+  if (age != null && genderInitial != null) return '$age/$genderInitial';
+  if (age != null) return '$age';
+  return genderInitial!;
+}
 
 /// Shared patient card widget for mission queue items.
 /// Used by both Dashboard (home) and Tasks screens.
@@ -104,10 +113,15 @@ class MissionQueueCard extends StatelessWidget {
                                     decoration: isCompleted ? TextDecoration.lineThrough : null,
                                   ),
                                 ),
-                                if (item.age != null)
+                                if (item.age != null || item.genderInitial != null)
                                   Text(
-                                    '${item.age}y',
-                                    style: AppTextStyles.worklistPatientMeta,
+                                    _ageGender(item.age, item.genderInitial),
+                                    style: const TextStyle(
+                                      fontFamily: 'NunitoSans',
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: Color(0xFF111827),
+                                    ),
                                   ),
                                 if (isCompleted)
                                   _VisitedBadge(tokens: tokens)
@@ -144,6 +158,37 @@ class MissionQueueCard extends StatelessWidget {
                                   item.phoneNumber!,
                                   style: AppTextStyles.worklistPhone.copyWith(
                                     color: tokens.textMuted,
+                                  ),
+                                ),
+                              ),
+
+                            // ── TEMP DEBUG: priority signal ─────────────
+                            // TODO: remove before merge
+                            if (kDebugMode)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFFF3CD),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                        color: const Color(0xFFFFC107),
+                                        width: 0.5),
+                                  ),
+                                  child: Text(
+                                    'band:${item.band.name}  '
+                                    'mod:${item.modifier.name}  '
+                                    'tier:${item.tier.name}  '
+                                    'score:${item.priorityScore}\n'
+                                    'drivers: ${item.drivers.isEmpty ? "—" : item.drivers.join(", ")}',
+                                    style: const TextStyle(
+                                      fontFamily: 'monospace',
+                                      fontSize: 9,
+                                      color: Color(0xFF374151),
+                                      height: 1.5,
+                                    ),
                                   ),
                                 ),
                               ),
