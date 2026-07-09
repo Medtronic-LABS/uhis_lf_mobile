@@ -52,6 +52,31 @@ abstract final class UnifiedSectionRules {
   /// ANC uses `todaysVitals`; NCD/cataract use `bpLog`.
   static const _vitalsSectionIds = {'todaysVitals', 'bpLog'};
 
+  /// Semantic field equivalence groups.
+  ///
+  /// When any field in a group is claimed, the entire group is pre-claimed so
+  /// that two programmes that represent the same measurement with different
+  /// field IDs do not both render a capture widget.
+  ///
+  /// Example: ANC uses {bloodPressure, systolic, diastolic} for BP entry while
+  /// NCD uses {bpLogDetails}.  Claiming one set pre-claims the other, so only
+  /// the first-encountered BP section renders a BP widget.
+  static const List<Set<String>> _semanticFieldGroups = [
+    {'bloodPressure', 'systolic', 'diastolic', 'bpLogDetails'},
+  ];
+
+  /// Claim [fieldId] in [claimed] and also pre-claim every field in the same
+  /// semantic equivalence group (if any).
+  static void _claimField(String fieldId, Set<String> claimed) {
+    claimed.add(fieldId);
+    for (final group in _semanticFieldGroups) {
+      if (group.contains(fieldId)) {
+        claimed.addAll(group);
+        return;
+      }
+    }
+  }
+
   /// Returns ordered, deduplicated [AnnotatedFormSection]s for rendering.
   ///
   /// [enrolledFormTypes] — the expanded formType keys (from `_toFormTypes()`)
@@ -83,7 +108,7 @@ abstract final class UnifiedSectionRules {
         final remaining =
             section.fieldRefs.where((r) => !claimedFieldIds.contains(r.id)).toList();
         if (remaining.isEmpty) { continue; }
-        for (final ref in remaining) { claimedFieldIds.add(ref.id); }
+        for (final ref in remaining) { _claimField(ref.id, claimedFieldIds); }
 
         vitalsSections.add(AnnotatedFormSection(
           section: remaining.length == section.fieldRefs.length
@@ -126,7 +151,7 @@ abstract final class UnifiedSectionRules {
               .where((r) => !claimedFieldIds.contains(r.id))
               .toList();
           if (remaining.isEmpty) { continue; }
-          for (final ref in remaining) { claimedFieldIds.add(ref.id); }
+          for (final ref in remaining) { _claimField(ref.id, claimedFieldIds); }
 
           (sectionGroup == SectionGroup.enrolled
                   ? enrolledSections
@@ -146,7 +171,21 @@ abstract final class UnifiedSectionRules {
       }
     }
 
-    return [...vitalsSections, ...enrolledSections, ...recommendedSections];
+    final result = [...vitalsSections, ...enrolledSections, ...recommendedSections];
+
+    // Debug: log section ordering and field counts.
+    // ignore: avoid_print
+    print('[UnifiedSectionRules] activeSections result '
+        '(${result.length} sections, '
+        '${claimedFieldIds.length} unique field IDs):');
+    for (final a in result) {
+      final ids = a.section.fieldRefs.map((r) => r.id).join(', ');
+      // ignore: avoid_print
+      print('  [${a.group.name}] ${a.section.sectionId} '
+          '(${a.section.formType}) → [$ids]');
+    }
+
+    return result;
   }
 
   static bool _isSectionVisible({
