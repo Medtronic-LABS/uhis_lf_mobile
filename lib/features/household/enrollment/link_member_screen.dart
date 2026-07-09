@@ -44,6 +44,10 @@ class LinkMemberScreen extends StatefulWidget {
     this.villageName,
     this.subVillageId,
     this.subVillageName,
+    this.fromNidScan = false,
+    this.scannedNidNumber,
+    this.scannedName,
+    this.scannedDateOfBirth,
   });
 
   final String householdId;
@@ -54,6 +58,10 @@ class LinkMemberScreen extends StatefulWidget {
   final String? villageName;
   final String? subVillageId;
   final String? subVillageName;
+  final bool fromNidScan;
+  final String? scannedNidNumber;
+  final String? scannedName;
+  final String? scannedDateOfBirth;
 
   @override
   State<LinkMemberScreen> createState() => _LinkMemberScreenState();
@@ -72,6 +80,43 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
   String _disabilityStatus = 'Absent';
   bool _mobileNotAvailable = false;
   bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-fill from NID scan when coming via the "link to existing" flow.
+    if (widget.fromNidScan) {
+      if (widget.scannedName?.isNotEmpty == true) {
+        _nameCtrl.text = widget.scannedName!;
+      }
+      if (widget.scannedNidNumber?.isNotEmpty == true) {
+        _idCtrl.text = widget.scannedNidNumber!;
+        _idType = 'NID';
+      }
+      if (widget.scannedDateOfBirth?.isNotEmpty == true) {
+        // Normalise to yyyy-MM-dd for the date field.
+        try {
+          final raw = widget.scannedDateOfBirth!;
+          // Accept ISO-8601 (yyyy-MM-dd) or dd/MM/yyyy from OCR.
+          DateTime? parsed;
+          if (raw.contains('/')) {
+            parsed = DateFormat('dd/MM/yyyy').parseLoose(raw);
+          } else {
+            parsed = DateTime.tryParse(raw);
+          }
+          if (parsed != null) {
+            _dobCtrl.text = DateFormat('yyyy-MM-dd').format(parsed);
+            final age = DateTime.now().year - parsed.year;
+            if (age > 0) _ageCtrl.text = age.toString();
+          } else {
+            _dobCtrl.text = raw;
+          }
+        } catch (_) {
+          _dobCtrl.text = widget.scannedDateOfBirth!;
+        }
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -165,15 +210,17 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
         relationshipToHead: 'Other',
       );
 
-      // Use sub-village as canonical village (mirrors _memberToPatient in sync service).
-      final canonicalVillageId =
-          (effSubVillageId?.isNotEmpty == true ? effSubVillageId : null) ??
-              widget.villageId ??
-              '';
-      final canonicalVillageName =
-          (effSubVillageName?.isNotEmpty == true ? effSubVillageName : null) ??
-              widget.villageName ??
-              '';
+      // canonicalVillageId = PARENT village ID (e.g. 34).
+      // effSubVillageId    = sub-village ID (e.g. 203).
+      // Both are needed: spice-service stores villageId on the household row
+      // and subVillageId on the member row. Sending the same ID for both causes
+      // a 500 from the FHIR mapper when it tries to resolve the hierarchy.
+      final canonicalVillageId = widget.villageId?.isNotEmpty == true
+          ? widget.villageId!
+          : effSubVillageId ?? '';
+      final canonicalVillageName = widget.villageName?.isNotEmpty == true
+          ? widget.villageName!
+          : effSubVillageName ?? '';
 
       final result = await repo.submitStandaloneMember(
         member: member,
