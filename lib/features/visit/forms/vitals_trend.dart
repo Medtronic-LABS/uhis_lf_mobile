@@ -1,3 +1,4 @@
+
 /// Pure-Dart rule-based trend detection across a patient's ANC visits.
 ///
 /// No Flutter dependencies and no user-facing strings — this is the business
