@@ -314,6 +314,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
       activeFormTypes: formTypes,
       draftDao: draftDao,
       assessmentRepo: assessmentRepo,
+      patientDao: ctx.read<PatientDao>(),
       memberId: widget.memberId,
       householdId: widget.householdId,
       villageId: widget.villageId,

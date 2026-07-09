@@ -130,6 +130,8 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             setState(() => _priorAncVisits = history);
           }
         });
+        // Load LMP/EDD from patient raw JSON for the gestational-age card.
+        notifier.loadPregnancyData();
       }
     });
   }
@@ -238,6 +240,15 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         // programme they are relevant to.
         final items = <Widget>[];
 
+        // Pre-compute ANC trend — recomputed each rebuild so "Today" reflects
+        // live form values; prior visits are loaded once in initState.
+        final ancTrend = _priorAncVisits.isNotEmpty
+            ? VitalsTrendAnalyzer.analyze(
+                priorVisits: _priorAncVisits,
+                today: _todaySnapshot(notifier.data),
+              )
+            : VitalsTrendResult.empty;
+
         String? lastFormType;
         for (final annotatedSection in annotated) {
           final ft = annotatedSection.section.formType;
@@ -263,6 +274,24 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
               aiPickedSymptomCodes: widget.aiPickedSymptoms,
             ));
             lastFormType = ft;
+
+            // ── ANC-specific context cards ──────────────────────────────────
+            // Inserted right after the ANC divider so the SK sees pregnancy
+            // context and prior-visit trends before filling in today's readings.
+            if (ft == 'anc') {
+              final hasPregnancyData =
+                  notifier.lmpDate != null || notifier.gestationalWeeks != null;
+              if (hasPregnancyData) {
+                items.add(_GestationalAgeCard(
+                  lmpDate: notifier.lmpDate,
+                  eddDate: notifier.eddDate,
+                  gestationalWeeks: notifier.gestationalWeeks,
+                ));
+              }
+              if (ancTrend.columns.isNotEmpty) {
+                items.add(_VitalsTrendCard(result: ancTrend));
+              }
+            }
           }
           items.add(_SectionCard(
             section: annotatedSection.section,
@@ -273,17 +302,6 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             previousWeight: _lastRecordedWeight,
             gestationalWeeks: widget.gestationalWeeks,
           ));
-        }
-
-        // ── Rule-based vitals-trend card (ANC only) ──────────────────────────
-        // Recomputed each rebuild so "Today" reflects the live form values;
-        // prior visits are loaded once in initState.
-        if (_priorAncVisits.isNotEmpty) {
-          final trend = VitalsTrendAnalyzer.analyze(
-            priorVisits: _priorAncVisits,
-            today: _todaySnapshot(notifier.data),
-          );
-          if (trend.show) items.add(_VitalsTrendCard(result: trend));
         }
 
         // Submit button lives inside the scroll view so it appears after the
@@ -677,7 +695,9 @@ class _VitalsTrendCardState extends State<_VitalsTrendCard> {
                     _buildTable(theme, result),
                     const SizedBox(height: 9),
                     Text(
-                      UnifiedFormStrings.trendFooter,
+                      result.show
+                          ? UnifiedFormStrings.trendFooter
+                          : UnifiedFormStrings.trendFooterStable,
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: AppColors.statusWarningText,
                         fontWeight: FontWeight.w600,
@@ -831,6 +851,164 @@ class _VitalsTrendCardState extends State<_VitalsTrendCard> {
             return UnifiedFormStrings.trendMissingValue;
         }
     }
+  }
+}
+
+// ── Gestational age card ──────────────────────────────────────────────────────
+
+/// Navy-gradient card shown at the top of the ANC section displaying the
+/// patient's gestational age, LMP, and EDD loaded from patient rawJson.
+class _GestationalAgeCard extends StatelessWidget {
+  const _GestationalAgeCard({
+    required this.lmpDate,
+    required this.eddDate,
+    required this.gestationalWeeks,
+  });
+
+  final DateTime? lmpDate;
+  final DateTime? eddDate;
+  final int? gestationalWeeks;
+
+  static const _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  static String _fmt(DateTime d) =>
+      '${d.day} ${_months[d.month - 1]} ${d.year}';
+
+  @override
+  Widget build(BuildContext context) {
+    int weeks = gestationalWeeks ?? 0;
+    int days = 0;
+    if (lmpDate != null) {
+      final total = DateTime.now().difference(lmpDate!).inDays;
+      weeks = total ~/ 7;
+      days = total % 7;
+    }
+    final lmpStr = lmpDate != null ? _fmt(lmpDate!) : null;
+    final eddStr = eddDate != null ? _fmt(eddDate!) : null;
+
+    final heroText = days > 0
+        ? '$weeks ${ComposerStrings.gestationalAgeWeeks} $days ${ComposerStrings.gestationalAgeDays}'
+        : '$weeks ${ComposerStrings.gestationalAgeWeeks}';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xl),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF1B2B5E), Color(0xFF2D3F7C)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text('🤰', style: TextStyle(fontSize: 15)),
+                const SizedBox(width: 7),
+                Text(
+                  ComposerStrings.gestationalAgeLabel.toUpperCase(),
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.9,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              heroText,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                height: 1.1,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _DateSubBox(
+                    emoji: '📅',
+                    label: ComposerStrings.pregnancyOverviewLmp,
+                    value: lmpStr,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _DateSubBox(
+                    emoji: '🍼',
+                    label: ComposerStrings.pregnancyOverviewEdd,
+                    value: eddStr,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DateSubBox extends StatelessWidget {
+  const _DateSubBox({
+    required this.emoji,
+    required this.label,
+    required this.value,
+  });
+
+  final String emoji;
+  final String label;
+  final String? value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(emoji, style: const TextStyle(fontSize: 12)),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white60,
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.4,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          Text(
+            value ?? '—',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

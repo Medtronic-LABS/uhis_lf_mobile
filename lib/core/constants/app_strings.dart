@@ -3489,10 +3489,14 @@ abstract final class UnifiedFormStrings {
   /// Placeholder for a metric not captured a given visit.
   static const String trendMissingValue = '—';
 
-  /// Explanatory footer under the trend table.
+  /// Explanatory footer under the trend table — shown when BP is rising.
   static const String trendFooter =
       'Each reading is below its alert line — but they are climbing together '
       'across visits. No single rule fires.';
+
+  /// Footer when readings are stable (no rising BP trend detected).
+  static const String trendFooterStable =
+      'Readings are stable across visits. No rising trend detected.';
 
   // ── BMI classification labels (WHO thresholds) ──────────────────────────────
   static const String vsBmiUnderweight = 'Underweight';

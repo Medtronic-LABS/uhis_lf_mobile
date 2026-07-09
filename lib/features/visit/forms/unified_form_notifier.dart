@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/db/local_assessment_dao.dart';
+import '../../../core/db/patient_dao.dart';
 import '../assessment_repository.dart';
 import 'canonical_visit_data.dart';
 import 'unified_payload_mapper.dart';
@@ -20,6 +21,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
     required List<String> activeFormTypes,
     required AssessmentDraftDao draftDao,
     required AssessmentRepository assessmentRepo,
+    required PatientDao patientDao,
     String? memberId,
     String? householdId,
     String? villageId,
@@ -30,6 +32,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
         _activeFormTypes = activeFormTypes,
         _draftDao = draftDao,
         _assessmentRepo = assessmentRepo,
+        _patientDao = patientDao,
         _memberId = memberId,
         _householdId = householdId,
         _villageId = villageId,
@@ -41,11 +44,25 @@ class UnifiedFormNotifier extends ChangeNotifier {
   final List<String> _activeFormTypes;
   final AssessmentDraftDao _draftDao;
   final AssessmentRepository _assessmentRepo;
+  final PatientDao _patientDao;
   final String? _memberId;
   final String? _householdId;
   final String? _villageId;
   final int _householdMemberLocalId;
   final String? _pregnancyEpisodeId;
+
+  DateTime? _lmpDate;
+  DateTime? _eddDate;
+  int? _gestationalWeeks;
+
+  /// LMP date loaded from patient raw JSON at init.
+  DateTime? get lmpDate => _lmpDate;
+
+  /// Estimated delivery date (LMP + 280 days).
+  DateTime? get eddDate => _eddDate;
+
+  /// Gestational weeks loaded from patient raw JSON at init.
+  int? get gestationalWeeks => _gestationalWeeks;
 
   CanonicalVisitData _data = const CanonicalVisitData();
   bool _submitting = false;
@@ -95,6 +112,45 @@ class UnifiedFormNotifier extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('[UnifiedForm] draft parse error: $e');
+    }
+  }
+
+  /// Load LMP and EDD from patient raw JSON.  Called once on screen init
+  /// when the ANC form type is active.
+  Future<void> loadPregnancyData() async {
+    try {
+      final patient = await _patientDao.byId(_patientId);
+      if (patient == null) {
+        debugPrint('[UnifiedForm] pregnancy data: patient $_patientId not found in DB');
+        return;
+      }
+      debugPrint('[UnifiedForm] pregnancy data: rawJson length=${patient.rawJson.length}');
+      final json = jsonDecode(patient.rawJson) as Map<String, dynamic>;
+      debugPrint('[UnifiedForm] pregnancy data: lmpDate=${json['lmpDate']} '
+          'gestationalWeeks=${json['gestationalWeeks']}');
+
+      DateTime? lmp;
+      int? weeks;
+
+      if (json['lmpDate'] != null) {
+        lmp = DateTime.tryParse(json['lmpDate'] as String);
+        if (lmp != null) {
+          weeks = DateTime.now().difference(lmp).inDays ~/ 7;
+        }
+      } else if (json['gestationalWeeks'] != null) {
+        weeks = (json['gestationalWeeks'] as num).toInt();
+        lmp = DateTime.now().subtract(Duration(days: weeks * 7));
+      }
+
+      final edd = lmp?.add(const Duration(days: 280));
+
+      _lmpDate = lmp;
+      _eddDate = edd;
+      _gestationalWeeks = weeks;
+      debugPrint('[UnifiedForm] pregnancy data: resolved lmp=$lmp weeks=$weeks edd=$edd');
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[UnifiedForm] pregnancy data load failed: $e');
     }
   }
 
