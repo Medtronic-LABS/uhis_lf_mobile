@@ -3546,6 +3546,12 @@ abstract final class UnifiedFormStrings {
   static const String vsGlucoseWarningHigh =
       'High blood sugar — refer urgently for diabetes evaluation.';
 
+  // ── Blood glucose combined entry card ───────────────────────────────────────
+  static const String bloodGlucoseEntryLabel    = 'Blood Glucose';
+  static const String bloodGlucoseEntrySubLabel = 'রক্তের শর্করা';
+  static const String bloodGlucoseEntryHint     = 'Enter value (mmol/L)';
+  static const String bloodGlucoseEntryUnit     = 'mmol/L';
+
   // ── Blood glucose pair-card chrome ──────────────────────────────────────────
   static const String glucosePairLabel    = 'Blood Sugar';
   static const String glucosePairSubLabel = 'রক্তের শর্করা · mmol/L';

@@ -542,12 +542,6 @@
             "id": "glucoseType",
             "fieldName": "Blood Glucose Type",
             "isMandatory": false
-          },
-          {
-            "id": "glucose",
-            "fieldName": "Blood Glucose (mmol/L)",
-            "inputType": 8192,
-            "isMandatory": false
           }
         ]
       }

@@ -8,14 +8,33 @@
     "visibility": "visible",
     "hint": "Select",
     "optionsList": [
-      {"id": "normal", "name": "Yes — normal"},
-      {"id": "lessThanUsual", "name": "Less than usual"},
-      {"id": "notFelt", "name": "Not felt"}
+      {
+        "id": "normal",
+        "name": "Yes — normal"
+      },
+      {
+        "id": "lessThanUsual",
+        "name": "Less than usual"
+      },
+      {
+        "id": "notFelt",
+        "name": "Not felt"
+      }
     ],
     "clinicalConcept": [
-      {"system": "SNOMED_CT", "code": "364645004", "display": "Fetal movement (observable entity)"}
+      {
+        "system": "SNOMED_CT",
+        "code": "364645004",
+        "display": "Fetal movement (observable entity)"
+      }
     ],
-    "programmes": [{"id": "anc", "workflowId": 4, "workflowName": "RMNCH"}]
+    "programmes": [
+      {
+        "id": "anc",
+        "workflowId": 4,
+        "workflowName": "RMNCH"
+      }
+    ]
   },
   "ancDangerSigns": {
     "id": "ancDangerSigns",
@@ -26,19 +45,53 @@
     "visibility": "visible",
     "hint": "Select danger signs",
     "optionsList": [
-      {"id": "vaginalBleeding", "name": "Vaginal bleeding"},
-      {"id": "leakingFluid", "name": "Leaking fluid from vagina"},
-      {"id": "painfulContractions", "name": "Regular / painful contractions"},
-      {"id": "headacheVision", "name": "Headache / blurred vision / facial swelling"},
-      {"id": "epigastricPain", "name": "Severe epigastric pain"},
-      {"id": "feverUrination", "name": "Fever / burning while urinating"},
-      {"id": "reducedFetalMovement", "name": "Reduced fetal movements"},
-      {"id": "none", "name": "None of these"}
+      {
+        "id": "vaginalBleeding",
+        "name": "Vaginal bleeding"
+      },
+      {
+        "id": "leakingFluid",
+        "name": "Leaking fluid from vagina"
+      },
+      {
+        "id": "painfulContractions",
+        "name": "Regular / painful contractions"
+      },
+      {
+        "id": "headacheVision",
+        "name": "Headache / blurred vision / facial swelling"
+      },
+      {
+        "id": "epigastricPain",
+        "name": "Severe epigastric pain"
+      },
+      {
+        "id": "feverUrination",
+        "name": "Fever / burning while urinating"
+      },
+      {
+        "id": "reducedFetalMovement",
+        "name": "Reduced fetal movements"
+      },
+      {
+        "id": "none",
+        "name": "None of these"
+      }
     ],
     "clinicalConcept": [
-      {"system": "SNOMED_CT", "code": "371568007", "display": "Maternal danger signs (finding)"}
+      {
+        "system": "SNOMED_CT",
+        "code": "371568007",
+        "display": "Maternal danger signs (finding)"
+      }
     ],
-    "programmes": [{"id": "anc", "workflowId": 4, "workflowName": "RMNCH"}]
+    "programmes": [
+      {
+        "id": "anc",
+        "workflowId": 4,
+        "workflowName": "RMNCH"
+      }
+    ]
   },
   "deliveryFacilityType": {
     "id": "deliveryFacilityType",
@@ -49,20 +102,57 @@
     "visibility": "visible",
     "hint": "Select facility",
     "optionsList": [
-      {"id": "uhfwc", "name": "UHFWC"},
-      {"id": "mcwc", "name": "MCWC"},
-      {"id": "uhc", "name": "UHC"},
-      {"id": "districtHospital", "name": "District Hospital"},
-      {"id": "medicalCollegeHospital", "name": "Medical College Hospital"},
-      {"id": "ngoFacility", "name": "NGO Facility"},
-      {"id": "privateFacility", "name": "Private Facility"},
-      {"id": "notIdentified", "name": "Not identified yet"},
-      {"id": "homeDelivery", "name": "Planned for home delivery"}
+      {
+        "id": "uhfwc",
+        "name": "UHFWC"
+      },
+      {
+        "id": "mcwc",
+        "name": "MCWC"
+      },
+      {
+        "id": "uhc",
+        "name": "UHC"
+      },
+      {
+        "id": "districtHospital",
+        "name": "District Hospital"
+      },
+      {
+        "id": "medicalCollegeHospital",
+        "name": "Medical College Hospital"
+      },
+      {
+        "id": "ngoFacility",
+        "name": "NGO Facility"
+      },
+      {
+        "id": "privateFacility",
+        "name": "Private Facility"
+      },
+      {
+        "id": "notIdentified",
+        "name": "Not identified yet"
+      },
+      {
+        "id": "homeDelivery",
+        "name": "Planned for home delivery"
+      }
     ],
     "clinicalConcept": [
-      {"system": "SNOMED_CT", "code": "182943000", "display": "Place of delivery (observable entity)"}
+      {
+        "system": "SNOMED_CT",
+        "code": "182943000",
+        "display": "Place of delivery (observable entity)"
+      }
     ],
-    "programmes": [{"id": "anc", "workflowId": 4, "workflowName": "RMNCH"}]
+    "programmes": [
+      {
+        "id": "anc",
+        "workflowId": 4,
+        "workflowName": "RMNCH"
+      }
+    ]
   },
   "ancBloodGlucose": {
     "id": "ancBloodGlucose",
@@ -73,10 +163,24 @@
     "visibility": "visible",
     "hint": "Enter value",
     "clinicalConcept": [
-      {"system": "SNOMED_CT", "code": "33747003", "display": "Blood glucose measurement (procedure)"},
-      {"system": "LOINC", "code": "2339-0", "display": "Glucose [Mass/volume] in Blood"}
+      {
+        "system": "SNOMED_CT",
+        "code": "33747003",
+        "display": "Blood glucose measurement (procedure)"
+      },
+      {
+        "system": "LOINC",
+        "code": "2339-0",
+        "display": "Glucose [Mass/volume] in Blood"
+      }
     ],
-    "programmes": [{"id": "anc", "workflowId": 4, "workflowName": "RMNCH"}]
+    "programmes": [
+      {
+        "id": "anc",
+        "workflowId": 4,
+        "workflowName": "RMNCH"
+      }
+    ]
   },
   "pregnancyProfile": {
     "id": "pregnancyProfile",
@@ -87,12 +191,28 @@
     "isEnabled": false,
     "visibility": "visible",
     "clinicalConcept": [
-      {"system": "SNOMED_CT", "code": "21840007", "display": "Date of last menstrual period"},
-      {"system": "SNOMED_CT", "code": "161714006", "display": "Estimated date of delivery"},
-      {"system": "SNOMED_CT", "code": "57036006", "display": "Gestational week"}
+      {
+        "system": "SNOMED_CT",
+        "code": "21840007",
+        "display": "Date of last menstrual period"
+      },
+      {
+        "system": "SNOMED_CT",
+        "code": "161714006",
+        "display": "Estimated date of delivery"
+      },
+      {
+        "system": "SNOMED_CT",
+        "code": "57036006",
+        "display": "Gestational week"
+      }
     ],
     "programmes": [
-      {"id": "anc", "workflowId": 4, "workflowName": "RMNCH"}
+      {
+        "id": "anc",
+        "workflowId": 4,
+        "workflowName": "RMNCH"
+      }
     ]
   },
   "pncNeonatal": {
@@ -8263,7 +8383,7 @@
   "glucoseType": {
     "id": "glucoseType",
     "label": "Name of Investigation",
-    "widgetHint": "Spinner",
+    "widgetHint": "BloodGlucoseEntry",
     "fieldName": "Name of Investigation",
     "family": "glucoseLog",
     "orderId": 1.0,
@@ -8591,19 +8711,71 @@
       }
     ],
     "optionsList": [
-      { "id": "Headache", "name": "Headache", "cultureValue": "মাথাব্যথা" },
-      { "id": "Blurred Vision", "name": "Blurred Vision", "cultureValue": "ঝাপসা দৃষ্টি" },
-      { "id": "Chest Pain", "name": "Chest Pain", "cultureValue": "বুকে ব্যথা" },
-      { "id": "Shortness of Breath", "name": "Shortness of Breath", "cultureValue": "শ্বাসকষ্ট" },
-      { "id": "Weakness", "name": "Weakness", "cultureValue": "দুর্বলতা" },
-      { "id": "Numbness", "name": "Numbness", "cultureValue": "অসাড়তা" },
-      { "id": "Dizziness", "name": "Dizziness", "cultureValue": "মাথা ঘোরা" },
-      { "id": "Palpitations", "name": "Palpitations", "cultureValue": "বুক ধড়ফড়" },
-      { "id": "Leg Swelling", "name": "Leg Swelling", "cultureValue": "পায়ে ফোলা" },
-      { "id": "Frequent Urination", "name": "Frequent Urination", "cultureValue": "ঘন ঘন প্রস্রাব" },
-      { "id": "Excessive Thirst", "name": "Excessive Thirst", "cultureValue": "অতিরিক্ত তৃষ্ণা" },
-      { "id": "Unexplained Weight Loss", "name": "Unexplained Weight Loss", "cultureValue": "অকারণ ওজন হ্রাস" },
-      { "id": "None", "name": "None", "cultureValue": "কোনোটি নয়" }
+      {
+        "id": "Headache",
+        "name": "Headache",
+        "cultureValue": "মাথাব্যথা"
+      },
+      {
+        "id": "Blurred Vision",
+        "name": "Blurred Vision",
+        "cultureValue": "ঝাপসা দৃষ্টি"
+      },
+      {
+        "id": "Chest Pain",
+        "name": "Chest Pain",
+        "cultureValue": "বুকে ব্যথা"
+      },
+      {
+        "id": "Shortness of Breath",
+        "name": "Shortness of Breath",
+        "cultureValue": "শ্বাসকষ্ট"
+      },
+      {
+        "id": "Weakness",
+        "name": "Weakness",
+        "cultureValue": "দুর্বলতা"
+      },
+      {
+        "id": "Numbness",
+        "name": "Numbness",
+        "cultureValue": "অসাড়তা"
+      },
+      {
+        "id": "Dizziness",
+        "name": "Dizziness",
+        "cultureValue": "মাথা ঘোরা"
+      },
+      {
+        "id": "Palpitations",
+        "name": "Palpitations",
+        "cultureValue": "বুক ধড়ফড়"
+      },
+      {
+        "id": "Leg Swelling",
+        "name": "Leg Swelling",
+        "cultureValue": "পায়ে ফোলা"
+      },
+      {
+        "id": "Frequent Urination",
+        "name": "Frequent Urination",
+        "cultureValue": "ঘন ঘন প্রস্রাব"
+      },
+      {
+        "id": "Excessive Thirst",
+        "name": "Excessive Thirst",
+        "cultureValue": "অতিরিক্ত তৃষ্ণা"
+      },
+      {
+        "id": "Unexplained Weight Loss",
+        "name": "Unexplained Weight Loss",
+        "cultureValue": "অকারণ ওজন হ্রাস"
+      },
+      {
+        "id": "None",
+        "name": "None",
+        "cultureValue": "কোনোটি নয়"
+      }
     ],
     "condition": []
   },
