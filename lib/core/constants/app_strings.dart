@@ -3417,19 +3417,141 @@ abstract final class UnifiedFormStrings {
   static const String bpUnit = 'mmHg';
   static const String bpPulseUnit = '/min';
 
+  // Combined BP card (v13 reference — one card, side-by-side systolic|diastolic).
+  static const String bpCardLabel = 'Blood Pressure';
+  static const String bpCardSubLabel = 'রক্তচাপ';
+
+  // Supplement pair cards (consumed + provided side-by-side).
+  static const String supplementConsumedLabel = 'Consumed last month';
+  static const String supplementProvidedLabel = 'Provided this visit';
+  static const String folatePairLabel = 'Folic acid tablets';
+  static const String folatePairSubLabel = 'ফলিক অ্যাসিড';
+  static const String ifaPairLabel = 'IFA tablets';
+  static const String ifaPairSubLabel = 'আয়রন-ফলিক অ্যাসিড';
+  static const String calciumPairLabel = 'Calcium tablets';
+  static const String calciumPairSubLabel = 'ক্যালসিয়াম';
+
+  /// Trailing tag shown on read-only computed fields (e.g. BMI, EDD, gest. week)
+  /// to signal the value is auto-derived and not manually entered.
+  static const String autoComputedTag = '(auto)';
+
+  /// Placeholder shown in a computed field before its value is available.
+  static const String autoComputedPlaceholder = '—';
+
   // Validation messages.
   static const String validationBannerTitle = 'Please complete required fields';
   static String validationFieldsRequired(int n) =>
       '$n required ${n == 1 ? 'field' : 'fields'} must be filled before submitting.';
 
+  /// Badge label shown on the programme divider when AI pre-filled symptoms
+  /// for that programme from triage Step 1.
+  static const String aiBadgeLabel = 'AI';
+
   // Triage symptoms carry-over banner.
   static const String triageSymptomsTitle = 'Symptoms from Step 1';
+  static String triageSymptomsCount(int n) =>
+      '$n ${n == 1 ? 'symptom' : 'symptoms'} from Step 1';
   static const String triageSymptomsEmpty = 'No symptoms selected in Step 1.';
 
   // Section group labels shown as divider rows.
   static const String vitalsGroupLabel = 'Vitals';
   static const String enrolledGroupLabel = 'Enrolled Programmes';
   static const String recommendedGroupLabel = 'Recommended Programmes';
+
+  // ── Vitals-trend card ("AI sees a trend across her N visits") ──────────────
+  /// Header title; [n] is the number of visits shown (priors + today).
+  static String trendCardTitle(int n) => 'AI sees a trend across her $n visits';
+
+  /// "Today" column header for the trend table.
+  static const String trendTodayColumn = 'Today';
+
+  /// Prior-visit column header, e.g. `V1`, `V2`.
+  static String trendVisitColumn(int n) => 'V$n';
+
+  /// Column sub-label describing how long ago a prior visit was.
+  static String trendWeeksAgo(int days) {
+    if (days < 7) return days <= 1 ? '1 d ago' : '$days d ago';
+    final weeks = (days / 7).round();
+    return '$weeks wk ago';
+  }
+
+  /// Metric row labels.
+  static const String trendSystolic = 'Systolic';
+  static const String trendDiastolic = 'Diastolic';
+  static const String trendWeight = 'Weight';
+  static const String trendUrineProtein = 'Urine protein';
+
+  /// Urine-protein grade labels used in the trend table.
+  static const String trendUrineAbsent = 'Neg';
+  static const String trendUrineTrace = 'Trace';
+  static const String trendUrinePresent = 'Present';
+
+  /// Placeholder for a metric not captured a given visit.
+  static const String trendMissingValue = '—';
+
+  /// Explanatory footer under the trend table.
+  static const String trendFooter =
+      'Each reading is below its alert line — but they are climbing together '
+      'across visits. No single rule fires.';
+
+  // ── BMI classification labels (WHO thresholds) ──────────────────────────────
+  static const String vsBmiUnderweight = 'Underweight';
+  static const String vsBmiNormal      = 'Normal';
+  static const String vsBmiOverweight  = 'Overweight';
+  static const String vsBmiObese       = 'Obese';
+
+  // ── Live vital-status badge labels (rule-based, no ML) ─────────────────────
+  static const String vsBpNormal           = 'Normal';
+  static const String vsBpElevated         = 'Elevated';
+  static const String vsBpSlightlyElevated = 'Slightly Elevated';
+  static const String vsBpHigh             = 'High';
+  static const String vsBpSevere           = 'Severe';
+
+  static const String vsHbNormal           = 'Normal';
+  static const String vsHbMild             = 'Mild Anaemia';
+  static const String vsHbModerate         = 'Moderate Anaemia';
+  static const String vsHbSevere           = 'Severe Anaemia';
+  static const String vsHbWarningShort     = 'Anaemia';
+  static const String vsHbWarningLong      =
+      'Below 11 g/dL — Anaemia. Counsel on iron-rich diet and IFA adherence.';
+
+  static const String vsUrineAbsent  = 'Absent';
+  static const String vsUrineTrace   = 'Trace';
+  static const String vsUrinePresent = 'Present';
+
+  static String vsWeightDelta(double delta) {
+    final sign = delta >= 0 ? '+' : '';
+    return '$sign${delta.toStringAsFixed(1)} kg';
+  }
+
+  static String vsLastWeight(double kg) => 'Last: ${kg.toStringAsFixed(1)} kg';
+
+  static String vsFhLag(int cm)   => '$cm cm lag ⚠️';
+  static String vsFhAhead(int cm) => '$cm cm ahead';
+  static const String vsFhExpected = 'Expected';
+  static String vsFhExpectedSubLabel(int gestWeeks) =>
+      'Expected ~$gestWeeks cm at $gestWeeks wks';
+
+  // ── Blood glucose status badges ─────────────────────────────────────────────
+  static const String vsGlucoseNormal   = 'Normal';
+  static const String vsGlucoseElevated = 'Elevated';
+  static const String vsGlucoseHigh     = 'High';
+  static const String vsGlucoseWarningElevated =
+      'Elevated — advise dietary modification and refer for GDM screening.';
+  static const String vsGlucoseWarningHigh =
+      'High blood sugar — refer urgently for diabetes evaluation.';
+
+  // ── Blood glucose pair-card chrome ──────────────────────────────────────────
+  static const String glucosePairLabel    = 'Blood Sugar';
+  static const String glucosePairSubLabel = 'রক্তের শর্করা · mmol/L';
+  static const String glucoseFastingLabel  = 'Fasting';
+  static const String glucoseRandomLabel   = 'Random';
+
+  // ── Height + Weight pair-card chrome ────────────────────────────────────────
+  static const String heightWeightPairLabel    = 'Height & Weight';
+  static const String heightWeightPairSubLabel = 'উচ্চতা ও ওজন';
+  static const String heightSubLabel = 'Height · cm';
+  static const String weightSubLabel = 'Weight · kg';
 
   /// Human-readable label for a formType key shown as a programme badge.
   ///

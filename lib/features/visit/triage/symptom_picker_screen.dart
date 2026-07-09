@@ -69,10 +69,15 @@ class SymptomPickerScreen extends StatefulWidget {
   /// finalised symptom selection + sickness duration. Used by the host to
   /// build the AI Programme Recommendation request — kept separate from
   /// [onAdvance] so existing pathway-only callers don't break.
+  ///
+  /// [aiPickedSymptoms] is the subset of [symptoms] that were pre-selected by
+  /// the AI Scribe; callers can use it to colour those chips differently in
+  /// subsequent steps.
   final void Function(
     Set<String> symptoms,
     String? sicknessDuration,
     String? otherSymptoms,
+    Set<String> aiPickedSymptoms,
   )?
   onSymptomsConfirmed;
 
@@ -310,6 +315,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         vm.selectedSymptoms,
         vm.sicknessDuration,
         vm.customSymptomText,
+        vm.scribePreTickedCodes,
       );
       onAdvance(vm.activatedPathways);
       return;
@@ -486,21 +492,6 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // ── Status row ────────────────────────────────────
-                        if (vm.selectedSymptoms.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: Text(
-                              SymptomPickerStrings.symptomsSelectedStatus(
-                                vm.selectedSymptoms.length,
-                              ),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.navy,
-                              ),
-                            ),
-                          ),
                         if (vm.activatedPathways.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 10),
@@ -1231,21 +1222,6 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
     setState(() {});
   }
 
-  void _startOther(ScribeController controller) {
-    controller.bindContext(context);
-    if (_showDone) {
-      setState(() {
-        _showDone = false;
-        _triageResultConsumed = false;
-      });
-    }
-    controller.startRecordingForTriage(
-      patientId: widget.patientId,
-      encounterId: widget.encounterId,
-      symptomCatalog: AiScribeTriageVocab.codes,
-    );
-  }
-
   void _startAsr() {
     if (_showDone) {
       setState(() {
@@ -1332,7 +1308,9 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
 
     void onTap() {
       controller.bindContext(context);
-      if (liveActive) {
+      if (idleChoice) {
+        _startAsr();
+      } else if (liveActive) {
         _liveCtrl.stop();
       } else if (isRecording) {
         controller.stopRecording(
@@ -1346,14 +1324,12 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
         });
         controller.resetSession();
       }
-      // idleChoice (true idle or done) is handled by the explicit ASR/Other
-      // buttons below, not by tapping the card.
     }
 
     return Material(
       color: Colors.transparent,
       child: Semantics(
-        button: !idleChoice,
+        button: !isProcessing,
         label: liveActive
             ? 'Stop live ASR'
             : isRecording
@@ -1364,7 +1340,7 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
             ? SymptomPickerStrings.scribeBannerDone
             : SymptomPickerStrings.scribeBannerTitle,
         child: InkWell(
-          onTap: (isProcessing || idleChoice) ? null : onTap,
+          onTap: isProcessing ? null : onTap,
           borderRadius: BorderRadius.circular(14),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 280),
@@ -1462,31 +1438,27 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
                         ],
                       ),
                     ),
-                    // Idle/done: explicit mode chooser — no implicit whole-card
-                    // tap-to-start, so it's always clear which engine runs.
+                    // Idle/done: icon-only ASR pill — whole card is tappable
+                    // to start ASR, this pill is just a visual affordance.
                     if (idleChoice) ...[
                       const SizedBox(width: 8),
-                      _TriageModeButton(
-                        key: const Key('triage_banner_mode_asr'),
-                        label: ScribeBannerStrings.modeAsr,
-                        icon: Icons.podcasts,
-                        onTap: _startAsr,
-                      ),
-                      const SizedBox(width: 6),
-                      _TriageModeButton(
-                        key: const Key('triage_banner_mode_other'),
-                        label: ScribeBannerStrings.modeOther,
-                        icon: Icons.mic,
-                        onTap: () => _startOther(controller),
-                      ),
-                    ],
-                    // Batch ("Other") mode active: badge makes the active
-                    // engine explicit at a glance (live mode's title already
-                    // says "Real-Time ASR").
-                    if (!liveActive && !idleChoice) ...[
-                      const SizedBox(width: 8),
-                      const _TriageModeBadge(
-                        label: ScribeBannerStrings.modeOtherBadge,
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 7,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.textOnNavy.withValues(alpha: 0.20),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: AppColors.textOnNavy.withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.podcasts,
+                          color: AppColors.textOnNavy,
+                          size: 16,
+                        ),
                       ),
                     ],
                   ],
@@ -1564,84 +1536,6 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
       decoration: const BoxDecoration(color: _iconBg, shape: BoxShape.circle),
       alignment: Alignment.center,
       child: const Icon(Icons.mic_rounded, color: AppColors.textOnNavy, size: 22),
-    );
-  }
-}
-
-/// Explicit mode-chooser button on the triage banner, shown only at idle —
-/// same purpose as ScribeBanner's `_ModeButton`, styled to match this
-/// screen's rounded-chip aesthetic instead.
-class _TriageModeButton extends StatelessWidget {
-  const _TriageModeButton({
-    super.key,
-    required this.label,
-    required this.icon,
-    required this.onTap,
-  });
-
-  final String label;
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      label: 'Start $label mode',
-      button: true,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-          decoration: BoxDecoration(
-            color: AppColors.textOnNavy.withValues(alpha: 0.18),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.textOnNavy.withValues(alpha: 0.35)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: AppColors.textOnNavy, size: 14),
-              const SizedBox(width: 4),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: AppColors.textOnNavy,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.3,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Non-interactive tag making the active engine explicit once "Other"
-/// (standard/batch triage) is running.
-class _TriageModeBadge extends StatelessWidget {
-  const _TriageModeBadge({required this.label});
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppColors.textOnNavy.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: AppColors.textOnNavy.withValues(alpha: 0.85),
-          fontSize: 10,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.4,
-        ),
-      ),
     );
   }
 }
@@ -1934,21 +1828,8 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                       .toList(),
                 ),
 
-              // ── Footer: count + "type more" hint ──────────────────────────
+              // ── Footer: "type more" hint ────────────────────────────────
               const SizedBox(height: 10),
-              Row(
-                children: [
-                  if (selected.isNotEmpty)
-                    Text(
-                      SymptomPickerStrings.symptomsSelected(selected.length),
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.navy,
-                      ),
-                    ),
-                ],
-              ),
             ],
           ),
         );

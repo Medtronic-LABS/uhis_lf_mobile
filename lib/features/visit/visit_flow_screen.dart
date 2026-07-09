@@ -170,6 +170,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   /// programme-recommendation request payload.
   Set<String> _confirmedSymptoms = const <String>{};
 
+  /// Subset of [_confirmedSymptoms] that were pre-selected by the AI Scribe.
+  Set<String> _aiPickedSymptoms = const <String>{};
+
   /// Sickness duration the SK picked in Step 1 ('1', '2-3', '4+').
   String? _sicknessDuration;
 
@@ -247,9 +250,10 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           patientName: widget.patientName,
           patientGender: widget.patientGender,
           origin: widget.origin,
-          onSymptomsConfirmed: (symptoms, duration, other) {
+          onSymptomsConfirmed: (symptoms, duration, other, aiPicked) {
             // Captured before onAdvance fires (see SymptomPickerScreen).
             _confirmedSymptoms = symptoms;
+            _aiPickedSymptoms = aiPicked;
             _sicknessDuration = duration;
             _otherSymptoms = other;
           },
@@ -283,6 +287,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           isPostpartum: _isPostpartum,
           postpartumWeeks: _postpartumWeeks,
           confirmedSymptoms: _confirmedSymptoms,
+          aiPickedSymptoms: _aiPickedSymptoms,
           sicknessDuration: _sicknessDuration,
           otherSymptoms: _otherSymptoms,
           seedProgrammes: _confirmedProgrammes,
@@ -732,6 +737,7 @@ class _Step1Symptoms extends StatelessWidget {
     Set<String> symptoms,
     String? sicknessDuration,
     String? otherSymptoms,
+    Set<String> aiPickedSymptoms,
   ) onSymptomsConfirmed;
 
   @override
@@ -776,6 +782,7 @@ class _Step2VitalsForm extends StatelessWidget {
     this.origin,
     this.enrolledProgrammes = const {},
     this.confirmedSymptoms = const [],
+    this.aiPickedSymptoms = const {},
   });
 
   final String visitId;
@@ -793,6 +800,8 @@ class _Step2VitalsForm extends StatelessWidget {
   final Set<Programme> enrolledProgrammes;
   /// Symptom codes selected in Step 1.
   final List<String> confirmedSymptoms;
+  /// Subset of [confirmedSymptoms] pre-selected by AI Scribe.
+  final Set<String> aiPickedSymptoms;
   final void Function(Programme primaryProgramme, bool referralRecommended)
       onAdvance;
 
@@ -812,6 +821,7 @@ class _Step2VitalsForm extends StatelessWidget {
       origin: origin,
       enrolledProgrammes: enrolledProgrammes,
       confirmedSymptoms: confirmedSymptoms,
+      aiPickedSymptoms: aiPickedSymptoms,
       onAdvance: onAdvance,
     );
   }
@@ -835,6 +845,7 @@ class _Step2ProgrammesThenForm extends StatefulWidget {
     required this.visitId,
     required this.patientId,
     required this.confirmedSymptoms,
+    required this.aiPickedSymptoms,
     required this.sicknessDuration,
     required this.otherSymptoms,
     required this.seedProgrammes,
@@ -865,6 +876,8 @@ class _Step2ProgrammesThenForm extends StatefulWidget {
   final bool isPostpartum;
   final int? postpartumWeeks;
   final Set<String> confirmedSymptoms;
+  /// Subset of [confirmedSymptoms] pre-selected by the AI Scribe.
+  final Set<String> aiPickedSymptoms;
   final String? sicknessDuration;
   final String? otherSymptoms;
   final Set<Programme> seedProgrammes;
@@ -976,6 +989,7 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
       origin: widget.origin,
       enrolledProgrammes: _currentProgrammes,
       confirmedSymptoms: widget.confirmedSymptoms.toList(),
+      aiPickedSymptoms: widget.aiPickedSymptoms,
       onAdvance: widget.onAdvance,
     );
   }
@@ -1412,7 +1426,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       ]);
       followUp.add(const NabaFollowUpItem(
         activity: 'BP and glucose re-check',
-        timeline: 'In 4 weeks',
+        timeline: 'In 2 weeks',
         programme: 'NCD',
       ));
     }
@@ -1839,6 +1853,12 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             const SizedBox(height: 16),
           ],
 
+          // ── Gestational age card (ANC / PNC patients only) ─────────
+          if (widget.gestationalWeeks != null) ...[
+            _GestationalAgeCard(gestationalWeeks: widget.gestationalWeeks!),
+            const SizedBox(height: 12),
+          ],
+
           // ── 1. Vitals summary ───────────────────────────────────────
           _VitalsSummaryCard(
             programme: widget.primaryProgramme,
@@ -1881,7 +1901,10 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 
           // ── 5. Follow-up timeline ──────────────────────────────────
           if (naba.followUp.isNotEmpty) ...[
-            _FollowUpTimeline(items: naba.followUp),
+            _FollowUpTimeline(
+              items: naba.followUp,
+              programme: widget.primaryProgramme,
+            ),
             const SizedBox(height: 16),
           ],
 
@@ -1905,6 +1928,205 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 }
 
 // ── Supporting widgets ────────────────────────────────────────────────────────
+
+/// Pink/lavender gestational age summary shown at the top of Step 3
+/// for any patient who has a gestational week count recorded.
+///
+/// LMP and EDD are back-calculated from [gestationalWeeks]:
+///   LMP ≈ today − (weeks × 7) days
+///   EDD ≈ LMP + 280 days
+class _GestationalAgeCard extends StatelessWidget {
+  const _GestationalAgeCard({required this.gestationalWeeks});
+
+  final int gestationalWeeks;
+
+  @override
+  Widget build(BuildContext context) {
+    final today = DateTime.now();
+    final lmp = today.subtract(Duration(days: gestationalWeeks * 7));
+    final edd = lmp.add(const Duration(days: 280));
+
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    final lmpLabel = '${lmp.day} ${months[lmp.month - 1]} ${lmp.year}';
+    final eddLabel = '${edd.day} ${months[edd.month - 1]} ${edd.year}';
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppColors.ancSurface, AppColors.pncSurface],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.ancBorder.withValues(alpha: 0.6)),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.ancBorder.withValues(alpha: 0.30),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // ── Pregnant woman avatar ──────────────────────────────────
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.ancBorder, width: 1.5),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.ancBorder.withValues(alpha: 0.40),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                ),
+              ],
+            ),
+            child: const Center(
+              child: Text('🤰', style: TextStyle(fontSize: 26)),
+            ),
+          ),
+          const SizedBox(width: 14),
+
+          // ── Gestational age details ────────────────────────────────
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Label
+                Text(
+                  'GESTATIONAL AGE',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.1,
+                    color: AppColors.ancText,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                // Large weeks display
+                RichText(
+                  text: TextSpan(
+                    children: [
+                      TextSpan(
+                        text: '$gestationalWeeks ',
+                        style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.navy,
+                          height: 1.0,
+                        ),
+                      ),
+                      const TextSpan(
+                        text: 'wks',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.navy,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // LMP + EDD row
+                Row(
+                  children: [
+                    Expanded(
+                      child: _DatePill(
+                        icon: '📅',
+                        label: 'LMP',
+                        value: lmpLabel,
+                        valueColor: AppColors.navy,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _DatePill(
+                        icon: '🍼',
+                        label: 'EDD',
+                        value: eddLabel,
+                        valueColor: AppColors.pink,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DatePill extends StatelessWidget {
+  const _DatePill({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.valueColor,
+  });
+
+  final String icon;
+  final String label;
+  final String value;
+  final Color valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.70),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: AppColors.ancBorder.withValues(alpha: 0.50),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(icon, style: const TextStyle(fontSize: 12)),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textMuted,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: valueColor,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _VitalsSummaryCard extends StatelessWidget {
   const _VitalsSummaryCard({
@@ -2357,14 +2579,18 @@ class _AiCounsellingCardState extends State<_AiCounsellingCard> {
 // Shows all follow-up items: first item has a date picker; remaining items
 // are compact left-border-coloured timeline rows.
 class _FollowUpTimeline extends StatelessWidget {
-  const _FollowUpTimeline({required this.items});
+  const _FollowUpTimeline({required this.items, this.programme = Programme.unknown});
   final List<NabaFollowUpItem> items;
+
+  /// Primary programme, used to apply the routine follow-up cadence
+  /// (ANC = 4 weeks, NCD = 2 weeks) to the editable date row.
+  final Programme programme;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _FollowUpDateRow(item: items.first),
+        _FollowUpDateRow(item: items.first, programme: programme),
         for (final item in items.skip(1)) ...[
           const SizedBox(height: 6),
           _FollowUpTimelineItem(item: item),
@@ -2466,8 +2692,9 @@ class _FollowUpTimelineItem extends StatelessWidget {
 }
 
 class _FollowUpDateRow extends StatefulWidget {
-  const _FollowUpDateRow({required this.item});
+  const _FollowUpDateRow({required this.item, this.programme = Programme.unknown});
   final NabaFollowUpItem item;
+  final Programme programme;
 
   @override
   State<_FollowUpDateRow> createState() => _FollowUpDateRowState();
@@ -2484,7 +2711,49 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
   @override
   void initState() {
     super.initState();
-    _date = _dateFromTimeline(widget.item.timeline);
+    _date = _initialDate();
+  }
+
+  /// Default follow-up date.
+  ///
+  /// Urgent, day-scoped timelines (danger signs / referrals, e.g. "In 2 days")
+  /// always win.  Otherwise the routine programme cadence applies — ANC = 4
+  /// weeks, NCD = 2 weeks — keyed off this item's own programme first, then the
+  /// screen's primary programme, and finally the item's own timeline for other
+  /// programmes.  The SK can still override via the date picker.
+  DateTime _initialDate() {
+    final t = widget.item.timeline.toLowerCase();
+    final isUrgentDays = RegExp(r'(\d+)\s*day').hasMatch(t);
+    if (!isUrgentDays) {
+      final days = _followUpDays(widget.item.programme) ??
+          _programmeFollowUpDays(widget.programme);
+      if (days != null) return DateTime.now().add(Duration(days: days));
+    }
+    return _dateFromTimeline(widget.item.timeline);
+  }
+
+  /// Routine follow-up interval (in days) for a programme name string.
+  static int? _followUpDays(String? programme) {
+    switch (programme?.toUpperCase()) {
+      case 'ANC':
+        return 28; // 4 weeks
+      case 'NCD':
+        return 14; // 2 weeks
+      default:
+        return null;
+    }
+  }
+
+  /// Routine follow-up interval (in days) for a [Programme] enum value.
+  static int? _programmeFollowUpDays(Programme programme) {
+    switch (programme) {
+      case Programme.anc:
+        return 28; // 4 weeks
+      case Programme.ncd:
+        return 14; // 2 weeks
+      default:
+        return null;
+    }
   }
 
   static DateTime _dateFromTimeline(String timeline) {
