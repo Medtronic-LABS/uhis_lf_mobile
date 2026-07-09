@@ -1,4 +1,4 @@
-t/// Pure-Dart rule-based trend detection across a patient's ANC visits.
+/// Pure-Dart rule-based trend detection across a patient's ANC visits.
 ///
 /// No Flutter dependencies and no user-facing strings — this is the business
 /// logic behind the "AI sees a trend across her N visits" card.  The rule is
