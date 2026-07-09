@@ -125,14 +125,32 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
         final subVillages = hierarchy.subVillages ?? [];
 
         final firstVillage = villages.isNotEmpty ? villages.first : null;
-        final firstSubVillage =
-            subVillages.isNotEmpty ? subVillages.first : null;
+        // Prefer the first sub-village that belongs to the chosen village;
+        // fall back to the global first only if none map to it.
+        final matchingSubs = firstVillage == null
+            ? subVillages
+            : subVillages
+                .where((sv) => sv.villageId == firstVillage.id)
+                .toList();
+        final firstSubVillage = matchingSubs.isNotEmpty
+            ? matchingSubs.first
+            : (subVillages.isNotEmpty ? subVillages.first : null);
 
         if (!mounted) return;
         // Auto-select first SS worker from the SK's assigned SS list.
         final ssWorkers = hierarchy.ssWorkers ?? [];
+        final firstSs = ssWorkers.isNotEmpty ? ssWorkers.first : null;
+        // The SS worker's own sub-villages are the authoritative pull scope;
+        // prefer them over the village-filtered top-level list.
+        final ssSeedSub = (firstSs != null && firstSs.subVillages.isNotEmpty)
+            ? firstSs.subVillages.first
+            : firstSubVillage;
         setState(() {
-          _selectedSsWorker = ssWorkers.isNotEmpty ? ssWorkers.first : null;
+          _selectedSsWorker = firstSs;
+          // Seed the dropdown selections so a valid village + sub-village are
+          // sent even when the SK does not manually change them.
+          _selectedVillage = firstVillage;
+          _selectedSubVillage = ssSeedSub;
         });
         controller.initializeHousehold(
           healthWorkerId: _selectedSsWorker?.id ?? userId?.toString() ?? '',
@@ -221,6 +239,33 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
   }
 
   void _handleContinue(EnrollmentController controller) {
+    // Guarantee a valid sub-village even if the SK never opened the dropdown.
+    // Android scopes member/assessment sync to sub-village IDs, so a household
+    // enrolled with an empty sub-village (→ 0) is invisible in the Spice app.
+    if (_selectedSubVillage == null) {
+      // Prefer the selected SS worker's caseload sub-villages (== pull scope),
+      // then fall back to the village-filtered top-level list.
+      final ssSubs = _selectedSsWorker?.subVillages ?? const [];
+      if (ssSubs.isNotEmpty) {
+        _selectedSubVillage = ssSubs.first;
+      } else if (_selectedVillage != null) {
+        final hierarchy = context.read<UserHierarchyService>();
+        final subs = (hierarchy.subVillages ?? [])
+            .where((sv) => sv.villageId == _selectedVillage!.id)
+            .toList();
+        if (subs.isNotEmpty) _selectedSubVillage = subs.first;
+      }
+    }
+
+    // Keep the village hierarchy internally consistent: when the chosen
+    // sub-village (which drives Android's pull scope) declares its own parent
+    // village, use that as the household villageId rather than the separately
+    // displayed village dropdown, which may not be the sub-village's parent.
+    final effectiveVillageId =
+        (_selectedSubVillage?.villageId?.isNotEmpty == true)
+            ? _selectedSubVillage!.villageId
+            : _selectedVillage?.id;
+
     // Update both sections in the controller
     controller.updateHousehold(
       healthWorkerId: _selectedSsWorker?.id,
@@ -232,7 +277,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       disabilityQuestion: _hasDisability == 'Yes',
       disabilityDetails:
           _hasDisability == 'Yes' ? _disabilityCountCtrl.text : null,
-      villageId: _selectedVillage?.id,
+      villageId: effectiveVillageId,
       villageName: _selectedVillage?.name,
       subVillageId: _selectedSubVillage?.id ?? '',
       subVillageName: _selectedSubVillage?.name ?? '',
@@ -324,7 +369,18 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                             (s) => s.name == name,
                             orElse: () => ssWorkers.first,
                           );
-                          setState(() => _selectedSsWorker = ss);
+                          // The chosen SS worker defines the caseload scope:
+                          // its assigned sub-villages are exactly the IDs the
+                          // SK's sync pulls are scoped to. Re-seed the
+                          // sub-village selection from this SS so the enrolled
+                          // member is guaranteed to be visible in the Spice app.
+                          final ssSubs = ss.subVillages;
+                          setState(() {
+                            _selectedSsWorker = ss;
+                            if (ssSubs.isNotEmpty) {
+                              _selectedSubVillage = ssSubs.first;
+                            }
+                          });
                         },
                         hint: EnrollmentStrings.healthWorkerHint,
                         isRequired: true,
@@ -345,9 +401,18 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                             (v) => v.name == name,
                             orElse: () => villages.first,
                           );
+                          // Auto-select the first sub-village belonging to the
+                          // chosen village. A member must carry a valid
+                          // sub-village ID (Android scopes member/assessment
+                          // pulls to sub-village IDs) — leaving it null sends 0
+                          // and makes the record invisible in the Spice app.
+                          final subs = (hierarchy.subVillages ?? [])
+                              .where((sv) => sv.villageId == village.id)
+                              .toList();
                           setState(() {
                             _selectedVillage = village;
-                            _selectedSubVillage = null;
+                            _selectedSubVillage =
+                                subs.isNotEmpty ? subs.first : null;
                           });
                         },
                         hint: EnrollmentStrings.villageHint,
@@ -358,13 +423,20 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
                     Builder(builder: (context) {
                       final hierarchy =
                           context.watch<UserHierarchyService>();
+                      // Prefer the selected SS worker's assigned sub-villages —
+                      // those IDs are exactly the SK's sync pull scope. Only
+                      // fall back to the village-filtered top-level list when
+                      // the SS carries none.
+                      final ssSubs = _selectedSsWorker?.subVillages ?? const [];
                       final allSubVillages = hierarchy.subVillages ?? [];
-                      final subVillages = _selectedVillage == null
-                          ? allSubVillages
-                          : allSubVillages
-                              .where((sv) =>
-                                  sv.villageId == _selectedVillage!.id)
-                              .toList();
+                      final List<SubVillageRef> subVillages = ssSubs.isNotEmpty
+                          ? ssSubs
+                          : (_selectedVillage == null
+                              ? allSubVillages
+                              : allSubVillages
+                                  .where((sv) =>
+                                      sv.villageId == _selectedVillage!.id)
+                                  .toList());
                       if (subVillages.isEmpty) return const SizedBox.shrink();
                       return Column(
                         children: [

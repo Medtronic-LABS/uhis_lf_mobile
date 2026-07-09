@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/auth/auth_repository.dart';
+import '../../../core/auth/user_hierarchy_service.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/db/member_dao.dart';
 import '../../../core/db/patient_dao.dart';
@@ -115,6 +116,29 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
       final api = context.read<ApiClient>();
       final memberDao = context.read<MemberDao>();
       final patientDao = context.read<PatientDao>();
+      final hierarchy = context.read<UserHierarchyService>();
+
+      // Resolve a valid sub-village. `SelectHouseholdScreen` cannot forward one
+      // (HouseholdEntity has no sub-village column), so fall back to the SK's
+      // SS-worker caseload — those IDs are exactly the sync pull scope, so the
+      // linked member is guaranteed to be visible in the Spice Android app.
+      // Mirrors Android's registration, which sources the sub-village from the
+      // Shasthya Shebika's assigned list.
+      var effSubVillageId = widget.subVillageId;
+      var effSubVillageName = widget.subVillageName;
+      if (effSubVillageId == null || effSubVillageId.isEmpty) {
+        await hierarchy.prefetch();
+        final ssSubs =
+            (hierarchy.ssWorkers ?? []).expand((s) => s.subVillages).toList();
+        final topSubs = hierarchy.subVillages ?? const <SubVillageRef>[];
+        final SubVillageRef? fallback = ssSubs.isNotEmpty
+            ? ssSubs.first
+            : (topSubs.isNotEmpty ? topSubs.first : null);
+        if (fallback != null) {
+          effSubVillageId = fallback.id;
+          effSubVillageName = fallback.name;
+        }
+      }
 
       final userId = await auth.userId() ?? 0;
       final userFhirId = await auth.userFhirId() ?? '';
@@ -143,11 +167,11 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
 
       // Use sub-village as canonical village (mirrors _memberToPatient in sync service).
       final canonicalVillageId =
-          (widget.subVillageId?.isNotEmpty == true ? widget.subVillageId : null) ??
+          (effSubVillageId?.isNotEmpty == true ? effSubVillageId : null) ??
               widget.villageId ??
               '';
       final canonicalVillageName =
-          (widget.subVillageName?.isNotEmpty == true ? widget.subVillageName : null) ??
+          (effSubVillageName?.isNotEmpty == true ? effSubVillageName : null) ??
               widget.villageName ??
               '';
 
@@ -157,8 +181,8 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
         householdReferenceId: widget.householdReferenceId,
         villageName: canonicalVillageName,
         villageId: canonicalVillageId,
-        subVillageId: widget.subVillageId,
-        subVillageName: widget.subVillageName,
+        subVillageId: effSubVillageId,
+        subVillageName: effSubVillageName,
         userId: userId,
         userFhirId: userFhirId,
         organizationId: orgId,
@@ -171,6 +195,8 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
         member: member,
         canonicalVillageId: canonicalVillageId,
         canonicalVillageName: canonicalVillageName,
+        subVillageId: effSubVillageId,
+        subVillageName: effSubVillageName,
         memberDao: memberDao,
         patientDao: patientDao,
       );
@@ -198,6 +224,8 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
     required HouseholdMember member,
     required String canonicalVillageId,
     required String canonicalVillageName,
+    required String? subVillageId,
+    required String? subVillageName,
     required MemberDao memberDao,
     required PatientDao patientDao,
   }) async {
@@ -217,8 +245,8 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
         idType: member.idType,
         villageId: canonicalVillageId,
         villageName: canonicalVillageName,
-        subVillageId: widget.subVillageId,
-        subVillageName: widget.subVillageName,
+        subVillageId: subVillageId,
+        subVillageName: subVillageName,
         maritalStatus: member.maritalStatus,
         disability: member.disabilityStatus.toLowerCase(),
         isHouseholdHead: false,
@@ -309,7 +337,8 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
                   ),
                   child: Row(
                     children: [
-                      const Text('🏠', style: TextStyle(fontSize: 18)),
+                      const Icon(Icons.home_outlined,
+                          size: 18, color: AppColors.navy),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
