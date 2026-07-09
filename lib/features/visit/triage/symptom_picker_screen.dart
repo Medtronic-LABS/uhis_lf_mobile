@@ -487,53 +487,35 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         // ── Status row ────────────────────────────────────
-                        if (vm.selectedSymptoms.isNotEmpty ||
-                            vm.activatedPathways.isNotEmpty)
+                        if (vm.selectedSymptoms.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Text(
+                              SymptomPickerStrings.symptomsSelectedStatus(
+                                vm.selectedSymptoms.length,
+                              ),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.navy,
+                              ),
+                            ),
+                          ),
+                        if (vm.activatedPathways.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 10),
-                            child: Row(
-                              children: [
-                                if (vm.selectedSymptoms.isNotEmpty)
-                                  Text(
-                                    SymptomPickerStrings.symptomsSelectedStatus(
-                                      vm.selectedSymptoms.length,
-                                    ),
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.navy,
-                                    ),
-                                  ),
-                                if (vm.selectedSymptoms.isNotEmpty &&
-                                    vm.activatedPathways.isNotEmpty)
-                                  const Padding(
-                                    padding:
-                                        EdgeInsets.symmetric(horizontal: 6),
-                                    child: Text(
-                                      '|',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: AppColors.textMuted,
-                                      ),
-                                    ),
-                                  ),
-                                if (vm.activatedPathways.isNotEmpty)
-                                  Flexible(
-                                    child: Text(
-                                      SymptomPickerStrings.servicesOpeningStatus(
-                                        vm.activatedPathways.length,
-                                        vm.activatedPathways
-                                            .map((p) => p.programme.wireTag)
-                                            .toList(),
-                                      ),
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: AppColors.textMuted,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                              ],
+                            child: Text(
+                              SymptomPickerStrings.servicesOpeningStatus(
+                                vm.activatedPathways.length,
+                                vm.activatedPathways
+                                    .map((p) => p.programme.wireTag)
+                                    .toList(),
+                              ),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.navy,
+                              ),
                             ),
                           ),
 
