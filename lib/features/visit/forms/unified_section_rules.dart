@@ -173,20 +173,54 @@ abstract final class UnifiedSectionRules {
 
     final result = [...vitalsSections, ...enrolledSections, ...recommendedSections];
 
-    // Debug: log section ordering and field counts.
-    // ignore: avoid_print
-    print('[UnifiedSectionRules] activeSections result '
-        '(${result.length} sections, '
-        '${claimedFieldIds.length} unique field IDs):');
-    for (final a in result) {
-      final ids = a.section.fieldRefs.map((r) => r.id).join(', ');
-      // ignore: avoid_print
-      print('  [${a.group.name}] ${a.section.sectionId} '
-          '(${a.section.formType}) → [$ids]');
-    }
+    // ── Debug: grouped programme breakdown ─────────────────────────────────
+    _debugLogSections(result, claimedFieldIds.length);
 
     return result;
   }
+
+  static void _debugLogSections(
+      List<AnnotatedFormSection> result, int uniqueFieldCount) {
+    // ignore: avoid_print
+    print('[Form] ── Section breakdown '
+        '(${result.length} sections · $uniqueFieldCount unique fields) ──');
+
+    String? lastHeader;
+    for (final a in result) {
+      final formType = a.section.formType;
+      final programme = _programmeLabel(formType);
+      final header = switch (a.group) {
+        SectionGroup.vitals => '📊 COMMON VITALS',
+        SectionGroup.enrolled => '✅ $programme (enrolled)',
+        SectionGroup.recommended => '🔵 $programme (recommended)',
+      };
+      if (header != lastHeader) {
+        // ignore: avoid_print
+        print('[Form]   $header');
+        lastHeader = header;
+      }
+      final fields = a.section.fieldRefs.map((r) => r.id).join(' · ');
+      // ignore: avoid_print
+      print('[Form]     · ${a.section.sectionId}: $fields');
+    }
+    // ignore: avoid_print
+    print('[Form] ── end ──────────────────────────────────────────────');
+  }
+
+  /// Returns a human-readable programme name from a formType key.
+  static String _programmeLabel(String formType) => switch (formType) {
+        'anc' => 'ANC',
+        'pncMother' => 'PNC (Mother)',
+        'pncChild' => 'PNC (Child)',
+        'pncNeonatal' => 'PNC (Neonate)',
+        'pregnancyOutcome' => 'Pregnancy Outcome',
+        'ncd' => 'NCD',
+        'cataract' => 'Cataract',
+        'eye_care' => 'Eye Care',
+        'family_planning' => 'Family Planning',
+        'pwProfile' => 'PW Profile',
+        _ => formType.toUpperCase(),
+      };
 
   static bool _isSectionVisible({
     required FormSection section,
