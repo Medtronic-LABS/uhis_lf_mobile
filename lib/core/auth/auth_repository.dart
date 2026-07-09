@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -54,10 +55,17 @@ class AuthRepository {
         }
       }
     };
+    _api.onAuthenticatedActivity = () {
+      unawaited(touchReentryExpiry());
+    };
   }
 
   final ApiClient _api;
   final FlutterSecureStorage _storage;
+
+  // Sliding-window renewal of the reentry-session TTL — see [touchReentryExpiry].
+  DateTime? _lastReentryTouch;
+  static const _reentryTouchThrottle = Duration(minutes: 5);
 
   static const _kTenantId = 'tenantId';
   static const _kUsername = 'lastUsername';
@@ -100,6 +108,16 @@ class AuthRepository {
   }
 
   Future<String?> lastUsername() => _storage.read(key: _kUsername);
+
+  /// True if [username] matches the last cached username on this device —
+  /// i.e. the same SK re-authenticating (e.g. after a forced session-expiry
+  /// sign-out), not a first-time setup or a different SK signing into a
+  /// shared device. Callers must check this BEFORE [login] runs, since
+  /// [login] overwrites the cached username as part of a successful attempt.
+  Future<bool> isReturningUser(String username) async {
+    final previous = await lastUsername();
+    return previous != null && previous == username;
+  }
 
   Future<String?> firstName() => _storage.read(key: _kFirstName);
 
@@ -169,7 +187,7 @@ class AuthRepository {
     // Clear any stale tenant/auth state before fresh login
     _api.setTenantId(null);
     await _api.clearSession();
-    
+
     final hashedPwd = hashPassword(password);
     // ignore: avoid_print
     print('[Auth] Login attempt: user=$username, hash=${hashedPwd.substring(0, 16)}...');
@@ -524,6 +542,30 @@ class AuthRepository {
       await _clearReentrySession();
       await _storage.delete(key: _kBioUsername);
     }
+  }
+
+  /// Extends the persisted reentry-session expiry on genuine backend
+  /// activity (called from [ApiClient.onAuthenticatedActivity]). Only
+  /// applies to the synthetic mobile-Bearer-token TTL — a real cookie-issued
+  /// expiry (web flow) already reflects the backend's actual session
+  /// lifetime and is left alone. Throttled so an active session doesn't
+  /// incur a secure-storage write on every single API call.
+  Future<void> touchReentryExpiry() async {
+    if (_api.authCookieExpiry != null) return;
+    final now = DateTime.now();
+    if (_lastReentryTouch != null &&
+        now.difference(_lastReentryTouch!) < _reentryTouchThrottle) {
+      return;
+    }
+    if (!await isReentryEnabled()) return;
+    final expiryStr = await _storage.read(key: _kBioAuthCookieExpiry);
+    if (expiryStr == null) return;
+    _lastReentryTouch = now;
+    await _storage.write(
+      key: _kBioAuthCookieExpiry,
+      value:
+          now.add(Duration(seconds: AppConfig.authCookieTtlSeconds)).toIso8601String(),
+    );
   }
 
   Future<bool> restorePersistedSession() async {

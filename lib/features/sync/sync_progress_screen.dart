@@ -12,6 +12,7 @@ import '../../core/sync/offline_sync_service.dart';
 import '../../core/sync/sync_progress.dart';
 import '../../core/sync/sync_report.dart';
 import '../dashboard/mission_dashboard_repository.dart';
+import '../visit/assessment_repository.dart';
 import '../worklist/worklist_repository.dart';
 
 /// Full-screen loading indicator shown during initial data sync after login.
@@ -73,10 +74,28 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
       }
     });
 
-    // Start the sync — wipe stale local data first: /sync is reached only
-    // from a successful online login (never from biometric/PIN reentry).
-    final report = await sync.coldSync(wipeBeforeSync: true);
-    
+    // /sync is reached only from a successful online login (never from
+    // biometric/PIN reentry). A first-time login or a different user signing
+    // into a shared device has no local data worth protecting — wipe stale
+    // data before pulling the new caseload. A same-user re-login (e.g. after
+    // a forced session-expiry sign-out) must NOT wipe: push any pending
+    // offline work first, then pull without wiping so in-progress
+    // assessments, drafts, and referrals created offline survive.
+    final auth = context.read<AuthState>();
+    SyncReport report;
+    if (auth.sameUserRelogin) {
+      try {
+        await context
+            .read<AssessmentRepository>()
+            .syncPendingAssessments(syncMode: 'InitialSync');
+      } catch (e) {
+        debugPrint('[Sync] pending-assessment push before re-login sync failed: $e');
+      }
+      report = await sync.coldSync();
+    } else {
+      report = await sync.coldSync(wipeBeforeSync: true);
+    }
+
     if (!mounted) return;
     
     setState(() => _report = report);
@@ -85,7 +104,6 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
     if (report.errors.isEmpty) {
       await _prepareDashboardData();
       if (mounted) {
-        final auth = context.read<AuthState>();
         // Check if first-time login needs onboarding (biometric/PIN setup)
         if (!auth.onboardingComplete && !auth.pinEnabled) {
           context.go('/onboarding');
