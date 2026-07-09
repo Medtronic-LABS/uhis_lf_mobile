@@ -485,7 +485,7 @@ class _ProgrammeDividerState extends State<_ProgrammeDivider> {
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    'Symptoms from Step 1 (${codes.length})',
+                    UnifiedFormStrings.triageSymptomsCount(codes.length),
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: AppColors.textMuted,
                       fontWeight: FontWeight.w600,

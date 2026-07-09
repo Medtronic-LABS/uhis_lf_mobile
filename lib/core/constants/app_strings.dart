@@ -3450,6 +3450,8 @@ abstract final class UnifiedFormStrings {
 
   // Triage symptoms carry-over banner.
   static const String triageSymptomsTitle = 'Symptoms from Step 1';
+  static String triageSymptomsCount(int n) =>
+      '$n ${n == 1 ? 'symptom' : 'symptoms'} from Step 1';
   static const String triageSymptomsEmpty = 'No symptoms selected in Step 1.';
 
   // Section group labels shown as divider rows.
