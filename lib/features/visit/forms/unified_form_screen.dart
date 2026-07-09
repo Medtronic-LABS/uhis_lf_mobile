@@ -543,6 +543,10 @@ class _ProgrammeDividerState extends State<_ProgrammeDivider> {
 /// AI-ticked chip style) to signal that this symptom was pre-selected by the
 /// AI Scribe.  Otherwise the amber warning palette is used for manually-selected
 /// symptoms.
+/// Read-only symptom chip shown in the Step 2 "Symptoms from Step 1" accordion.
+///
+/// Visually identical to [_PickerChip] in its **selected-AI** state so the SK
+/// immediately recognises the same chips they confirmed in Step 1.
 class _TriageChip extends StatelessWidget {
   const _TriageChip({required this.code, this.isAi = false});
 
@@ -551,41 +555,44 @@ class _TriageChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     final Color bg;
-    final Color border;
+    final Color borderColor;
     final Color textColor;
     if (isAi) {
+      // Mirror _PickerChip's selected-AI colours exactly.
       bg = AppColors.aiSurfaceStart;
-      border = AppColors.aiBorder;
+      borderColor = AppColors.aiBorder;
       textColor = AppColors.aiPurple;
     } else {
       bg = AppColors.statusWarningSurface;
-      border = AppColors.statusWarning.withValues(alpha: 0.30);
+      borderColor = AppColors.statusWarning.withValues(alpha: 0.30);
       textColor = AppColors.statusWarningText;
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      // Same padding as _PickerChip selected state.
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: border),
+        border: Border.all(color: borderColor, width: isAi ? 1.5 : 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (isAi) ...[
-            const Icon(Icons.auto_awesome, size: 9, color: AppColors.aiPurple),
-            const SizedBox(width: 3),
-          ],
+          // Sparkle icon — same size (13) and spacing (4) as _PickerChip.
+          Icon(
+            isAi ? Icons.auto_awesome : Icons.circle,
+            size: 13,
+            color: textColor,
+          ),
+          const SizedBox(width: 4),
           Text(
             TriageStrings.symptomLabel(code),
-            style: theme.textTheme.labelSmall?.copyWith(
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
               color: textColor,
-              fontWeight: FontWeight.w500,
-              fontSize: 11,
             ),
           ),
         ],
