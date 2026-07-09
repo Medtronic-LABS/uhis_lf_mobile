@@ -51,6 +51,7 @@ class VisitFormScreen extends StatefulWidget {
     this.onAdvance,
     this.enrolledProgrammes = const {},
     this.confirmedSymptoms = const [],
+    this.aiPickedSymptoms = const {},
   });
 
   final String visitId;
@@ -83,6 +84,9 @@ class VisitFormScreen extends StatefulWidget {
   /// Symptom codes selected in Step 1 (triage). Carried over to Step 2 for
   /// display and conditional section logic.
   final List<String> confirmedSymptoms;
+
+  /// Subset of [confirmedSymptoms] pre-selected by the AI Scribe.
+  final Set<String> aiPickedSymptoms;
 
   @override
   State<VisitFormScreen> createState() => _VisitFormScreenState();
@@ -323,6 +327,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         gestationalWeeks: widget.gestationalWeeks,
         enrolledFormTypes: enrolledFormTypes,
         confirmedSymptoms: widget.confirmedSymptoms,
+        aiPickedSymptoms: widget.aiPickedSymptoms,
         onSubmitComplete: () =>
             _onSectionedSubmit(ctx, visitCtrl, session),
       ),

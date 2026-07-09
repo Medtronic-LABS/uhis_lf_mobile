@@ -402,28 +402,51 @@ class TriageViewModel extends ChangeNotifier {
   List<String> get applicableVocabCodes =>
       AiScribeTriageVocab.applicableCodes(_patientContext);
 
-  /// Subset of [applicableVocabCodes] that are directly relevant to this
-  /// patient's active clinical context (their "workflow" symptoms).
+  /// Subset of vocab codes that are directly relevant to this patient's active
+  /// clinical context (their "workflow" symptoms).
   ///
   /// Shown as the default chip grid on Step 1 without requiring a search.
-  /// Symptoms outside this set (e.g. NCD symptoms for an ANC-only patient)
-  /// are surfaced only when the SK types 3+ characters in the search bar.
+  /// Symptoms outside this set are surfaced when the SK types 3+ characters.
+  ///
+  /// Unlike [applicableVocabCodes], this getter does NOT apply strict age-gates.
+  /// This matters when a patient's DOB/age is absent from the local DB (ageMonths
+  /// defaults to 0), which would otherwise hide NCD or maternal codes for enrolled
+  /// patients.  The secondary search pool ([applicableVocabCodes]) still applies
+  /// strict demographic gates so cross-programme "explore" symbols remain
+  /// demographically scoped.
   List<String> get primaryVocabCodes {
     final ctx = _patientContext;
-    final isMaternalContext = ctx.isPregnant || ctx.isPostpartum;
+
+    // Maternal context: pregnant, postpartum, OR enrolled in ANC/PNC.
+    // PNC patients (post-delivery) may have isPostpartum = false when the
+    // delivery date is unknown, so fall back to programme membership.
+    final isMaternalContext = ctx.isPregnant ||
+        ctx.isPostpartum ||
+        ctx.activeProgrammes.any(
+          (p) => p == Programme.anc || p == Programme.pnc,
+        );
+
     final isNcdContext = ctx.hasKnownHypertension ||
         ctx.hasKnownDiabetes ||
         ctx.activeProgrammes.any(
           (p) => p == Programme.ncd,
         );
+
     final isPediatricContext = ctx.isUnder5;
 
-    return applicableVocabCodes.where((code) {
+    // Sex gate: maternal symptoms are never appropriate for male patients
+    // regardless of programme (data entry error guard).
+    final isMale = ctx.sex == Sex.male;
+
+    // Iterate ALL vocab codes, not just demographically-applicable ones,
+    // so programme-enrolled patients always see their workflow symptoms even
+    // when age data is missing from the local DB.
+    return AiScribeTriageVocab.codes.where((code) {
       switch (AiScribeTriageVocab.categoryOf(code)) {
         case SymptomCategory.general:
           return true;
         case SymptomCategory.maternal:
-          return isMaternalContext;
+          return !isMale && isMaternalContext;
         case SymptomCategory.ncd:
           return isNcdContext;
         case SymptomCategory.pediatric:
@@ -431,6 +454,12 @@ class TriageViewModel extends ChangeNotifier {
       }
     }).toList();
   }
+
+  /// Set of symptom codes that were pre-selected by the AI scribe.
+  ///
+  /// Exposed so Step 2 can colour AI-sourced chips differently from
+  /// manually-selected ones.
+  Set<String> get scribePreTickedCodes => Set.unmodifiable(_scribePreTicked);
 
   /// Get the patient context.
   PatientContext get patientContext => _patientContext;

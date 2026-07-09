@@ -69,10 +69,15 @@ class SymptomPickerScreen extends StatefulWidget {
   /// finalised symptom selection + sickness duration. Used by the host to
   /// build the AI Programme Recommendation request — kept separate from
   /// [onAdvance] so existing pathway-only callers don't break.
+  ///
+  /// [aiPickedSymptoms] is the subset of [symptoms] that were pre-selected by
+  /// the AI Scribe; callers can use it to colour those chips differently in
+  /// subsequent steps.
   final void Function(
     Set<String> symptoms,
     String? sicknessDuration,
     String? otherSymptoms,
+    Set<String> aiPickedSymptoms,
   )?
   onSymptomsConfirmed;
 
@@ -310,6 +315,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         vm.selectedSymptoms,
         vm.sicknessDuration,
         vm.customSymptomText,
+        vm.scribePreTickedCodes,
       );
       onAdvance(vm.activatedPathways);
       return;

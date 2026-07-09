@@ -170,6 +170,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   /// programme-recommendation request payload.
   Set<String> _confirmedSymptoms = const <String>{};
 
+  /// Subset of [_confirmedSymptoms] that were pre-selected by the AI Scribe.
+  Set<String> _aiPickedSymptoms = const <String>{};
+
   /// Sickness duration the SK picked in Step 1 ('1', '2-3', '4+').
   String? _sicknessDuration;
 
@@ -247,9 +250,10 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           patientName: widget.patientName,
           patientGender: widget.patientGender,
           origin: widget.origin,
-          onSymptomsConfirmed: (symptoms, duration, other) {
+          onSymptomsConfirmed: (symptoms, duration, other, aiPicked) {
             // Captured before onAdvance fires (see SymptomPickerScreen).
             _confirmedSymptoms = symptoms;
+            _aiPickedSymptoms = aiPicked;
             _sicknessDuration = duration;
             _otherSymptoms = other;
           },
@@ -283,6 +287,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           isPostpartum: _isPostpartum,
           postpartumWeeks: _postpartumWeeks,
           confirmedSymptoms: _confirmedSymptoms,
+          aiPickedSymptoms: _aiPickedSymptoms,
           sicknessDuration: _sicknessDuration,
           otherSymptoms: _otherSymptoms,
           seedProgrammes: _confirmedProgrammes,
@@ -732,6 +737,7 @@ class _Step1Symptoms extends StatelessWidget {
     Set<String> symptoms,
     String? sicknessDuration,
     String? otherSymptoms,
+    Set<String> aiPickedSymptoms,
   ) onSymptomsConfirmed;
 
   @override
@@ -776,6 +782,7 @@ class _Step2VitalsForm extends StatelessWidget {
     this.origin,
     this.enrolledProgrammes = const {},
     this.confirmedSymptoms = const [],
+    this.aiPickedSymptoms = const {},
   });
 
   final String visitId;
@@ -793,6 +800,8 @@ class _Step2VitalsForm extends StatelessWidget {
   final Set<Programme> enrolledProgrammes;
   /// Symptom codes selected in Step 1.
   final List<String> confirmedSymptoms;
+  /// Subset of [confirmedSymptoms] pre-selected by AI Scribe.
+  final Set<String> aiPickedSymptoms;
   final void Function(Programme primaryProgramme, bool referralRecommended)
       onAdvance;
 
@@ -812,6 +821,7 @@ class _Step2VitalsForm extends StatelessWidget {
       origin: origin,
       enrolledProgrammes: enrolledProgrammes,
       confirmedSymptoms: confirmedSymptoms,
+      aiPickedSymptoms: aiPickedSymptoms,
       onAdvance: onAdvance,
     );
   }
@@ -835,6 +845,7 @@ class _Step2ProgrammesThenForm extends StatefulWidget {
     required this.visitId,
     required this.patientId,
     required this.confirmedSymptoms,
+    required this.aiPickedSymptoms,
     required this.sicknessDuration,
     required this.otherSymptoms,
     required this.seedProgrammes,
@@ -865,6 +876,8 @@ class _Step2ProgrammesThenForm extends StatefulWidget {
   final bool isPostpartum;
   final int? postpartumWeeks;
   final Set<String> confirmedSymptoms;
+  /// Subset of [confirmedSymptoms] pre-selected by the AI Scribe.
+  final Set<String> aiPickedSymptoms;
   final String? sicknessDuration;
   final String? otherSymptoms;
   final Set<Programme> seedProgrammes;
@@ -976,6 +989,7 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
       origin: widget.origin,
       enrolledProgrammes: _currentProgrammes,
       confirmedSymptoms: widget.confirmedSymptoms.toList(),
+      aiPickedSymptoms: widget.aiPickedSymptoms,
       onAdvance: widget.onAdvance,
     );
   }

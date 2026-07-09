@@ -39,6 +39,7 @@ class UnifiedFormScreen extends StatefulWidget {
     this.gestationalWeeks,
     this.enrolledFormTypes = const [],
     this.confirmedSymptoms = const [],
+    this.aiPickedSymptoms = const {},
   });
 
   /// Ordered formType keys (e.g. `['anc', 'ncd']`) from activated pathways.
@@ -58,6 +59,10 @@ class UnifiedFormScreen extends StatefulWidget {
   /// top of the form and seeded into [CanonicalVisitData] so section rules can
   /// drive conditional visibility.
   final List<String> confirmedSymptoms;
+
+  /// Subset of [confirmedSymptoms] pre-selected by the AI Scribe.
+  /// Used to colour AI-sourced chips purple in the programme divider strips.
+  final Set<String> aiPickedSymptoms;
 
   @override
   State<UnifiedFormScreen> createState() => _UnifiedFormScreenState();
@@ -167,6 +172,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             items.add(_ProgrammeDivider(
               label: label,
               relevantSymptomCodes: relevantCodes,
+              aiPickedSymptomCodes: widget.aiPickedSymptoms,
             ));
             lastFormType = ft;
           }
@@ -284,10 +290,14 @@ class _ProgrammeDivider extends StatefulWidget {
   const _ProgrammeDivider({
     required this.label,
     this.relevantSymptomCodes = const [],
+    this.aiPickedSymptomCodes = const {},
   });
 
   final String label;
   final List<String> relevantSymptomCodes;
+  /// Codes from Step 1 that were pre-selected by the AI Scribe.
+  /// Chips for these codes render with the purple AI palette.
+  final Set<String> aiPickedSymptomCodes;
 
   @override
   State<_ProgrammeDivider> createState() => _ProgrammeDividerState();
@@ -407,7 +417,14 @@ class _ProgrammeDividerState extends State<_ProgrammeDivider> {
                 child: Wrap(
                   spacing: 5,
                   runSpacing: 5,
-                  children: codes.map((c) => _TriageChip(code: c)).toList(),
+                  children: codes
+                      .map(
+                        (c) => _TriageChip(
+                          code: c,
+                          isAi: widget.aiPickedSymptomCodes.contains(c),
+                        ),
+                      )
+                      .toList(),
                 ),
               ),
               crossFadeState: _symptomsExpanded
@@ -425,30 +442,57 @@ class _ProgrammeDividerState extends State<_ProgrammeDivider> {
 
 /// A single read-only triage symptom pill used inside programme dividers and
 /// the collapsible banner.
+///
+/// When [isAi] is true the chip uses the purple AI palette (matching Step 1's
+/// AI-ticked chip style) to signal that this symptom was pre-selected by the
+/// AI Scribe.  Otherwise the amber warning palette is used for manually-selected
+/// symptoms.
 class _TriageChip extends StatelessWidget {
-  const _TriageChip({required this.code});
+  const _TriageChip({required this.code, this.isAi = false});
 
   final String code;
+  final bool isAi;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
+    final Color bg;
+    final Color border;
+    final Color textColor;
+    if (isAi) {
+      bg = AppColors.aiSurfaceStart;
+      border = AppColors.aiBorder;
+      textColor = AppColors.aiPurple;
+    } else {
+      bg = AppColors.statusWarningSurface;
+      border = AppColors.statusWarning.withValues(alpha: 0.30);
+      textColor = AppColors.statusWarningText;
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: AppColors.statusWarningSurface,
+        color: bg,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: AppColors.statusWarning.withValues(alpha: 0.30),
-        ),
+        border: Border.all(color: border),
       ),
-      child: Text(
-        TriageStrings.symptomLabel(code),
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: AppColors.statusWarningText,
-          fontWeight: FontWeight.w500,
-          fontSize: 11,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isAi) ...[
+            const Icon(Icons.auto_awesome, size: 9, color: AppColors.aiPurple),
+            const SizedBox(width: 3),
+          ],
+          Text(
+            TriageStrings.symptomLabel(code),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: textColor,
+              fontWeight: FontWeight.w500,
+              fontSize: 11,
+            ),
+          ),
+        ],
       ),
     );
   }
