@@ -48,26 +48,27 @@ extension NeedFilterHelpers on NeedFilter {
     }
   }
 
-  IconData get icon {
+  // v13 cat-bubble-icon glyph — literal emoji, matches the mockup exactly.
+  String get emoji {
     switch (this) {
       case NeedFilter.highRisk:
-        return Icons.warning_amber_rounded;
+        return '⚠️';
       case NeedFilter.ancMnch:
-        return Icons.pregnant_woman_rounded;
+        return '🤰';
       case NeedFilter.childImmunisation:
-        return Icons.child_care_rounded;
+        return '👶';
       case NeedFilter.ncd:
-        return Icons.monitor_heart_rounded;
+        return '💊';
       case NeedFilter.eyeCare:
-        return Icons.visibility_rounded;
+        return '👁️';
       case NeedFilter.missedFollowUp:
-        return Icons.event_busy_rounded;
+        return '⏰';
       case NeedFilter.pendingReferral:
-        return Icons.assignment_rounded;
+        return '📋';
       case NeedFilter.homeVisit:
-        return Icons.home_rounded;
+        return '🏠';
       case NeedFilter.facilityReferral:
-        return Icons.local_hospital_rounded;
+        return '🏥';
     }
   }
 
@@ -234,7 +235,7 @@ class PatientFilterPanel extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 8),
         ],
 
         // ── Row 2: clear filters (only when active) ───────────────────────
@@ -272,10 +273,10 @@ class PatientFilterPanel extends StatelessWidget {
                 ...NeedFilter.values
                     .where((n) => availableNeeds.contains(n))
                     .map((need) => Padding(
-                          padding: const EdgeInsets.only(right: 8),
+                          padding: const EdgeInsets.only(right: 11),
                           child: NeedCategoryBubble(
                             label: need.label,
-                            icon: need.icon,
+                            emoji: need.emoji,
                             activeColor: need.activeColor,
                             activeSurface: need.activeSurface,
                             isActive: selectedNeeds.contains(need),
@@ -329,7 +330,7 @@ class VillageFilterTab extends StatelessWidget {
           duration: AppAnimations.control,
           curve: AppAnimations.standard,
           style: AppTextStyles.villageTab.copyWith(
-            color: isActive ? const Color(0xFF111827) : AppColors.textMuted,
+            color: isActive ? AppColors.navy : AppColors.textMuted,
           ),
           child: Text(label),
         ),
@@ -343,7 +344,7 @@ class NeedCategoryBubble extends StatelessWidget {
   const NeedCategoryBubble({
     super.key,
     required this.label,
-    required this.icon,
+    required this.emoji,
     required this.activeColor,
     required this.activeSurface,
     required this.isActive,
@@ -351,7 +352,7 @@ class NeedCategoryBubble extends StatelessWidget {
   });
 
   final String label;
-  final IconData icon;
+  final String emoji;
   final Color activeColor;   // border accent (--bcolor)
   final Color activeSurface; // surface tint  (--bbg)
   final bool isActive;
@@ -372,8 +373,9 @@ class NeedCategoryBubble extends StatelessWidget {
               AnimatedContainer(
                 duration: AppAnimations.control,
                 curve: AppAnimations.standard,
-                width: 46,
-                height: 46,
+                alignment: Alignment.center,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: isActive ? activeSurface : AppColors.cardSurface,
@@ -391,10 +393,13 @@ class NeedCategoryBubble extends StatelessWidget {
                         ]
                       : null,
                 ),
-                child: Icon(
-                  icon,
-                  size: 20,
-                  color: activeColor,
+                // Literal emoji glyph — matches the mockup's .cat-bubble-icon
+                // exactly. No color applied: emoji are full-color glyphs and
+                // ignore TextStyle.color, same as the mockup itself never
+                // recolors this element on .active.
+                child: Text(
+                  emoji,
+                  style: const TextStyle(fontSize: 19),
                 ),
               ),
               const SizedBox(height: 5),

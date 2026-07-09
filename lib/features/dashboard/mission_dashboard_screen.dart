@@ -494,7 +494,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 onRefresh: _refresh,
                 child: ListView(
                   physics: const ClampingScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 100),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
                   children: [
                     PatientFilterPanel(
                       villages: _inlineVillages
@@ -527,6 +527,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         _loadMissionData();
                       },
                     ),
+                    const SizedBox(height: 6),
                     FutureBuilder<List<MissionQueueItem>>(
                       key: ValueKey('queue_$_refreshVersion'),
                       future: _queueFuture,
@@ -546,7 +547,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 queueFuture: _queueFuture,
                                 onTap: _navigateToFirstQueueItem,
                               ),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 10),
                               if (hasFilters)
                                 _FilterEmptyCard(
                                   onClearFilters: () {
@@ -661,7 +662,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 queueFuture: _queueFuture,
                                 onTap: _navigateToFirstQueueItem,
                               ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 10),
                             ...widgets,
                             if (overflow > 0)
                               _MoreVisitsLink(
@@ -894,37 +895,46 @@ class _EnrolNewFab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    final tokens = Theme.of(context).extension<WorklistCategoryColors>()!;
     return Semantics(
       button: true,
       label: MissionDashboardStrings.enrolNewCta,
-      child: Material(
+      child: Container(
         key: const Key('dashboard_enrol_new_fab'),
-        color: tokens.brandPink,
-        borderRadius: BorderRadius.circular(AppRadius.xl),
-        elevation: 2,
-        shadowColor: tokens.brandPink.withValues(alpha: 0.4),
-        child: InkWell(
-          onTap: () => showEnrollmentEntrySheet(context),
-          borderRadius: BorderRadius.circular(AppRadius.xl),
-          splashColor: Colors.white.withValues(alpha: 0.15),
-          child: const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.person_add_alt_1_rounded, size: 15, color: Colors.white),
-                SizedBox(width: 6),
-                Text(
-                  MissionDashboardStrings.enrolNewCta,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                    letterSpacing: 0.2,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppRadius.fabPill),
+          boxShadow: [
+            BoxShadow(
+              color: tokens.fabShadow,
+              blurRadius: 20,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Material(
+          color: tokens.fabBackground,
+          borderRadius: BorderRadius.circular(AppRadius.fabPill),
+          child: InkWell(
+            onTap: () => showEnrollmentEntrySheet(context),
+            borderRadius: BorderRadius.circular(AppRadius.fabPill),
+            splashColor: Colors.white.withValues(alpha: 0.15),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.person_add_alt_1_rounded, size: 16, color: Colors.white),
+                  SizedBox(width: 8),
+                  Text(
+                    MissionDashboardStrings.enrolNewCta,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -956,7 +966,7 @@ class _DashboardHeader extends StatelessWidget {
     final topPadding = MediaQuery.of(context).padding.top;
     return Container(
       color: tokens.brandNavy,
-      padding: EdgeInsets.fromLTRB(16, topPadding + 10, 8, 10),
+      padding: EdgeInsets.fromLTRB(20, topPadding, 20, 18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1064,7 +1074,12 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner>
 
   @override
   Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    // Spec-exact #DC2626/#B91C1C — deliberately not tokens.statusCritical
+    // (a different, more generic red), same rationale as the notification
+    // badge's hardcoded pink below.
+    final bannerColor = Theme.of(context).brightness == Brightness.dark
+        ? AppColors.referralAlertBgDark
+        : AppColors.referralAlertBg;
     return FutureBuilder<({int critical, int active})>(
       future: _future,
       builder: (context, snap) {
@@ -1074,10 +1089,10 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner>
           label: 'Referral alerts: $total',
           child: Container(
             decoration: BoxDecoration(
-              color: tokens.statusCritical,
+              color: bannerColor,
               boxShadow: [
                 BoxShadow(
-                  color: tokens.statusCritical.withValues(alpha: 0.25),
+                  color: bannerColor.withValues(alpha: 0.25),
                   offset: const Offset(0, 2),
                   blurRadius: 6,
                 ),
@@ -1199,7 +1214,7 @@ class _TodaysVisitsHeader extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: aiTokens.surface,
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                    borderRadius: BorderRadius.circular(AppRadius.rxIcon),
                   ),
                   child: Text(
                     label,
@@ -1217,7 +1232,7 @@ class _TodaysVisitsHeader extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
                 color: aiTokens.surface,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(AppRadius.rxIcon),
               ),
               child: Text(
                 MissionDashboardStrings.aiSortedBadge,

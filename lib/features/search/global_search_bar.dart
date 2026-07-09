@@ -31,7 +31,7 @@ class _GlobalSearchBarState extends State<GlobalSearchBar> {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 44,
+      height: 40,
       child: SearchAnchor.bar(
       searchController: _controller,
       barHintText: SearchStrings.barHint,
@@ -40,7 +40,7 @@ class _GlobalSearchBarState extends State<GlobalSearchBar> {
       barSide: WidgetStateProperty.all(BorderSide.none),
       barShape: WidgetStateProperty.all(
         RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.patRow),
+          borderRadius: BorderRadius.circular(AppRadius.button),
         ),
       ),
       barPadding: WidgetStateProperty.all(
@@ -56,35 +56,27 @@ class _GlobalSearchBarState extends State<GlobalSearchBar> {
       barTextStyle: WidgetStateProperty.all(
         const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
       ),
-      barLeading: const Icon(
-        Icons.search_rounded,
-        color: AppColors.textDisabled,
-        size: 20,
+      barLeading: const Padding(
+        padding: EdgeInsets.only(left: 10),
+        child: Icon(
+          Icons.search_rounded,
+          color: AppColors.textDisabled,
+          size: 16,
+        ),
       ),
       barTrailing: [
-        // Divider + QR button
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 1,
-              height: 22,
-              color: AppColors.border,
-            ),
-            IconButton(
-              icon: const Icon(
-                Icons.qr_code_2_rounded,
-                // AppColors.pink, not .pinkWorklist — this bar predates the
-                // v13 dashboard pink and hasn't been migrated to it.
-                color: AppColors.pink,
-                size: 22,
-              ),
-              tooltip: SearchStrings.scanNidTooltip,
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              onPressed: () => showEnrollmentEntrySheet(context),
-            ),
-          ],
+        IconButton(
+          icon: const Icon(
+            Icons.qr_code_2_rounded,
+            // AppColors.pink, not .pinkWorklist — this bar predates the
+            // v13 dashboard pink and hasn't been migrated to it.
+            color: AppColors.pink,
+            size: 20,
+          ),
+          tooltip: SearchStrings.scanNidTooltip,
+          visualDensity: VisualDensity.compact,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          onPressed: () => showEnrollmentEntrySheet(context),
         ),
       ],
       isFullScreen: true,
