@@ -402,6 +402,36 @@ class TriageViewModel extends ChangeNotifier {
   List<String> get applicableVocabCodes =>
       AiScribeTriageVocab.applicableCodes(_patientContext);
 
+  /// Subset of [applicableVocabCodes] that are directly relevant to this
+  /// patient's active clinical context (their "workflow" symptoms).
+  ///
+  /// Shown as the default chip grid on Step 1 without requiring a search.
+  /// Symptoms outside this set (e.g. NCD symptoms for an ANC-only patient)
+  /// are surfaced only when the SK types 3+ characters in the search bar.
+  List<String> get primaryVocabCodes {
+    final ctx = _patientContext;
+    final isMaternalContext = ctx.isPregnant || ctx.isPostpartum;
+    final isNcdContext = ctx.hasKnownHypertension ||
+        ctx.hasKnownDiabetes ||
+        ctx.activeProgrammes.any(
+          (p) => p == Programme.ncd,
+        );
+    final isPediatricContext = ctx.isUnder5;
+
+    return applicableVocabCodes.where((code) {
+      switch (AiScribeTriageVocab.categoryOf(code)) {
+        case SymptomCategory.general:
+          return true;
+        case SymptomCategory.maternal:
+          return isMaternalContext;
+        case SymptomCategory.ncd:
+          return isNcdContext;
+        case SymptomCategory.pediatric:
+          return isPediatricContext;
+      }
+    }).toList();
+  }
+
   /// Get the patient context.
   PatientContext get patientContext => _patientContext;
 }
