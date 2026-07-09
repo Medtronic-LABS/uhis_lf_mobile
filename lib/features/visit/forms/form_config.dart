@@ -168,11 +168,17 @@ class FormSection {
   final List<FieldRef> fieldRefs;
 
   factory FormSection.fromJson(String formType, Map<String, dynamic> json) {
-    final refs = (json['fieldRefs'] as List<dynamic>? ?? [])
-        .whereType<Map<String, dynamic>>()
-        .map(FieldRef.fromJson)
-        .where((r) => r.id.isNotEmpty)
-        .toList();
+    final rawRefs = json['fieldRefs'] as List<dynamic>? ?? [];
+    final refs = <FieldRef>[];
+    for (final r in rawRefs) {
+      if (r is Map<String, dynamic>) {
+        final ref = FieldRef.fromJson(r);
+        if (ref.id.isNotEmpty) refs.add(ref);
+      } else if (r is String && r.isNotEmpty) {
+        // Bare-string shorthand: id only, no override metadata.
+        refs.add(FieldRef(id: r, isMandatory: false, inputType: 0));
+      }
+    }
     return FormSection(
       sectionId: json['sectionId'] as String? ?? '',
       title: json['title'] as String? ?? '',

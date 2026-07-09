@@ -15,8 +15,10 @@ abstract final class UnifiedSectionRules {
   /// omitted entirely.
   ///
   /// Conditional rules (applied after dedup):
-  /// - `birthPreparedness` section: only when `anc` active AND
-  ///   `gestationalAge` ≥ 28 (weeks).
+  /// - `birthPreparedness` section: only when `anc` active AND GA ≥ 28 weeks.
+  ///   Weeks resolved from [gestationalWeeks] first; falls back to the
+  ///   `gestationalAge` field value the SK may have already entered.
+  /// - `pregnancyOutcome` sections: only when `pncMother` active.
   /// - `pncChild` / `pncNeonatal` sections: only when `isChildAlive` == `'yes'`.
   /// - NCD `bpReadings` section: only when NCD active AND `anc` is NOT active
   ///   (when ANC is active the single BP reading is captured there and reused
@@ -25,6 +27,7 @@ abstract final class UnifiedSectionRules {
     required FormConfig config,
     required List<String> activeFormTypes,
     required CanonicalVisitData currentData,
+    int? gestationalWeeks,
   }) {
     final claimedFieldIds = <String>{};
     final result = <FormSection>[];
@@ -37,6 +40,7 @@ abstract final class UnifiedSectionRules {
           section: section,
           activeFormTypes: activeFormTypes,
           currentData: currentData,
+          gestationalWeeks: gestationalWeeks,
         )) {
           continue;
         }
@@ -74,17 +78,28 @@ abstract final class UnifiedSectionRules {
     required FormSection section,
     required List<String> activeFormTypes,
     required CanonicalVisitData currentData,
+    int? gestationalWeeks,
   }) {
     final id = section.sectionId;
 
-    // birthPreparedness: ANC active + gestational age >= 28 weeks.
+    // birthPreparedness: ANC active + GA >= 28 weeks.
+    // Prefer the screen-level gestationalWeeks (from PatientContext at launch)
+    // over the in-form gestationalAge field the SK may not have entered yet.
     if (id == 'birthPreparedness') {
       if (!activeFormTypes.contains('anc')) return false;
-      final gestAge = currentData.getValue('gestationalAge');
-      final weeks = gestAge is num
-          ? gestAge.toInt()
-          : int.tryParse(gestAge?.toString() ?? '') ?? 0;
+      final weeks = gestationalWeeks ??
+          () {
+            final v = currentData.getValue('gestationalAge');
+            return v is num
+                ? v.toInt()
+                : int.tryParse(v?.toString() ?? '') ?? 0;
+          }();
       return weeks >= 28;
+    }
+
+    // pregnancyOutcome: always shown when pncMother is active.
+    if (id == 'pregnancyOutcome') {
+      return activeFormTypes.contains('pncMother');
     }
 
     // pncChild / pncNeonatal: child alive field must be 'yes'.

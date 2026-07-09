@@ -49,10 +49,19 @@ class UnifiedFormNotifier extends ChangeNotifier {
   CanonicalVisitData _data = const CanonicalVisitData();
   bool _submitting = false;
   String? _submitError;
+  Set<String> _validationErrors = const {};
 
   CanonicalVisitData get data => _data;
   bool get submitting => _submitting;
   String? get submitError => _submitError;
+  Set<String> get validationErrors => _validationErrors;
+
+  /// Marks the given field IDs as having validation errors and notifies
+  /// listeners so the form can highlight them.
+  void setValidationErrors(Set<String> errors) {
+    _validationErrors = errors;
+    notifyListeners();
+  }
 
   /// Load existing draft from DB on screen init.
   Future<void> loadDraft() async {

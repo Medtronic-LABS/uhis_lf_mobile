@@ -45,6 +45,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   FormConfig? _config;
   bool _configLoading = true;
   Object? _configError;
+  final ScrollController _scrollCtrl = ScrollController();
 
   @override
   void initState() {
@@ -55,6 +56,12 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         context.read<UnifiedFormNotifier>().loadDraft();
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _loadConfig() async {
@@ -87,6 +94,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
           config: _config!,
           activeFormTypes: widget.activeFormTypes,
           currentData: notifier.data,
+          gestationalWeeks: widget.gestationalWeeks,
         );
 
         return Column(
@@ -96,6 +104,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             // ── Assessment form sections ────────────────────────────────────
             Expanded(
               child: ListView.builder(
+                controller: _scrollCtrl,
                 padding: const EdgeInsets.symmetric(
                   horizontal: AppSpacing.xxxl,
                   vertical: AppSpacing.xxxl,
@@ -106,13 +115,14 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
                       section: sections[i],
                       config: _config!,
                       data: notifier.data,
+                      validationErrors: notifier.validationErrors,
                       onFieldChanged: notifier.updateField,
                     ),
               ),
             ),
             _SubmitBar(
               submitting: notifier.submitting,
-              onSubmit: () => _onSubmit(ctx, notifier),
+              onSubmit: () => _onSubmit(ctx, notifier, sections),
             ),
           ],
         );
@@ -120,7 +130,37 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     );
   }
 
-  Future<void> _onSubmit(BuildContext ctx, UnifiedFormNotifier notifier) async {
+  Future<void> _onSubmit(
+    BuildContext ctx,
+    UnifiedFormNotifier notifier,
+    List<FormSection> sections,
+  ) async {
+    if (_config == null) return;
+
+    // Validate mandatory fields before submitting.
+    final errors = _computeValidationErrors(notifier, sections);
+    if (errors.isNotEmpty) {
+      notifier.setValidationErrors(errors);
+      // Scroll to top so the SK sees the highlighted fields.
+      _scrollCtrl.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+            UnifiedFormStrings.validationFieldsRequired(errors.length),
+          ),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ));
+      }
+      return;
+    }
+
+    // Clear any previous errors before submitting.
+    notifier.setValidationErrors(const {});
+
     try {
       await notifier.submit();
       widget.onSubmitComplete();
@@ -132,6 +172,28 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
       ));
     }
   }
+
+  /// Returns the set of mandatory field IDs that have no value in [notifier].
+  Set<String> _computeValidationErrors(
+    UnifiedFormNotifier notifier,
+    List<FormSection> sections,
+  ) {
+    final errors = <String>{};
+    for (final section in sections) {
+      for (final ref in section.fieldRefs) {
+        final def = _config!.fields[ref.id];
+        if (def == null) continue;
+        final mandatory = def.isMandatory || ref.isMandatory;
+        if (!mandatory) continue;
+        final v = notifier.data.getValue(ref.id);
+        final empty = v == null ||
+            (v is String && v.trim().isEmpty) ||
+            (v is List && v.isEmpty);
+        if (empty) errors.add(ref.id);
+      }
+    }
+    return errors;
+  }
 }
 
 // ── Section card ──────────────────────────────────────────────────────────────
@@ -141,12 +203,14 @@ class _SectionCard extends StatelessWidget {
     required this.section,
     required this.config,
     required this.data,
+    required this.validationErrors,
     required this.onFieldChanged,
   });
 
   final FormSection section;
   final FormConfig config;
   final CanonicalVisitData data;
+  final Set<String> validationErrors;
   final void Function(String fieldId, dynamic value) onFieldChanged;
 
   @override
@@ -168,9 +232,25 @@ class _SectionCard extends StatelessWidget {
             ...section.fieldRefs.map((ref) {
               final def = config.fields[ref.id];
               if (def == null) return const SizedBox.shrink();
+              final hasError = validationErrors.contains(ref.id);
               return Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.xl),
-                child: _buildField(context, def, ref, data.getValue(ref.id)),
+                child: hasError
+                    ? DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: AppColors.statusCritical,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(AppSpacing.sm),
+                          child: _buildField(
+                              context, def, ref, data.getValue(ref.id)),
+                        ),
+                      )
+                    : _buildField(context, def, ref, data.getValue(ref.id)),
               );
             }),
           ],
@@ -187,24 +267,60 @@ class _SectionCard extends StatelessWidget {
   ) {
     switch (def.widgetHint) {
       case WidgetHint.radioGroup:
+        // Canonical store uses option id; RadioFormField works with display names.
+        // Translate: stored id → display name for render, selected name → id on change.
+        final storedId = currentValue as String?;
+        final displayName = def.options
+            .cast<FieldOption?>()
+            .firstWhere(
+              (o) => o!.id == storedId || o.name == storedId,
+              orElse: () => null,
+            )
+            ?.name;
         return RadioFormField(
           key: Key('unified_form_${def.id}_input'),
           labelText: def.label,
           options: def.options.map((o) => o.name).toList(),
-          currentValue: currentValue as String?,
-          onChanged: (v) => onFieldChanged(def.id, v),
+          currentValue: displayName,
+          onChanged: (name) {
+            final id = def.options
+                .cast<FieldOption?>()
+                .firstWhere((o) => o!.name == name, orElse: () => null)
+                ?.id ?? name;
+            onFieldChanged(def.id, id);
+          },
         );
 
       case WidgetHint.dialogCheckbox:
-        final selected = (currentValue is List)
+        // Canonical store uses list of option ids; widget works with display names.
+        final storedIds = (currentValue is List)
             ? currentValue.cast<String>()
             : <String>[];
+        final displayNames = storedIds.map((sid) {
+          return def.options
+                  .cast<FieldOption?>()
+                  .firstWhere(
+                    (o) => o!.id == sid || o.name == sid,
+                    orElse: () => null,
+                  )
+                  ?.name ??
+              sid;
+        }).toList();
         return DialogMultiSelectField(
           key: Key('unified_form_${def.id}_input'),
           labelText: def.label,
           options: def.options.map((o) => o.name).toList(),
-          currentValue: selected,
-          onChanged: (v) => onFieldChanged(def.id, v),
+          currentValue: displayNames,
+          onChanged: (names) {
+            final ids = names.map((n) {
+              return def.options
+                      .cast<FieldOption?>()
+                      .firstWhere((o) => o!.name == n, orElse: () => null)
+                      ?.id ??
+                  n;
+            }).toList();
+            onFieldChanged(def.id, ids);
+          },
         );
 
       case WidgetHint.spinner:
@@ -569,8 +685,8 @@ class _BpReadingFieldState extends State<_BpReadingField> {
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 decoration: const InputDecoration(
-                  labelText: 'Systolic',
-                  suffixText: 'mmHg',
+                  labelText: UnifiedFormStrings.bpSystolicLabel,
+                  suffixText: UnifiedFormStrings.bpUnit,
                 ),
                 onChanged: (_) => _emit(),
               ),
@@ -582,8 +698,8 @@ class _BpReadingFieldState extends State<_BpReadingField> {
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 decoration: const InputDecoration(
-                  labelText: 'Diastolic',
-                  suffixText: 'mmHg',
+                  labelText: UnifiedFormStrings.bpDiastolicLabel,
+                  suffixText: UnifiedFormStrings.bpUnit,
                 ),
                 onChanged: (_) => _emit(),
               ),
@@ -595,8 +711,8 @@ class _BpReadingFieldState extends State<_BpReadingField> {
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 decoration: const InputDecoration(
-                  labelText: 'Pulse',
-                  suffixText: '/min',
+                  labelText: UnifiedFormStrings.bpPulseLabel,
+                  suffixText: UnifiedFormStrings.bpPulseUnit,
                 ),
                 onChanged: (_) => _emit(),
               ),

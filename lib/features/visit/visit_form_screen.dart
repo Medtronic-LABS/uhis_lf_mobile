@@ -284,7 +284,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     debugPrint(
         '[VisitForm] Sectioned mode — programmes: ${widget.activatedPathways?.join(', ')}');
 
-    final formTypes = widget.activatedPathways ?? const [];
+    final formTypes = _toFormTypes(widget.activatedPathways ?? const []);
     final draftDao = ctx.read<AssessmentDraftDao>();
     final assessmentRepo = ctx.read<AssessmentRepository>();
 
@@ -309,6 +309,30 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
             _onSectionedSubmit(ctx, visitCtrl, session),
       ),
     );
+  }
+
+  /// Expands Programme enum names (from triage) to the formType keys used by
+  /// `layout_manifests.json` and `UnifiedPayloadMapper`.
+  ///
+  /// Rules:
+  /// - `pnc`  → `pncMother` + `pncChild` + `pregnancyOutcome`
+  /// - `anc`  → `anc` (unchanged)
+  /// - `ncd`  → `ncd` (unchanged)
+  /// - `imci` → `iccm` (no manifest yet; harmlessly ignored by form engine)
+  /// - others → passed through unchanged
+  static List<String> _toFormTypes(List<String> programmeNames) {
+    final out = <String>[];
+    for (final p in programmeNames) {
+      switch (p) {
+        case 'pnc':
+          out.addAll(['pncMother', 'pncChild', 'pregnancyOutcome']);
+        case 'imci':
+          out.add('iccm');
+        default:
+          out.add(p);
+      }
+    }
+    return out;
   }
 
   Future<void> _onSectionedSubmit(
