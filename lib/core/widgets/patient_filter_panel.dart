@@ -74,30 +74,34 @@ extension NeedFilterHelpers on NeedFilter {
   // v13 border accent colors (--bcolor per category)
   Color get activeColor {
     switch (this) {
-      case NeedFilter.highRisk:          return const Color(0xFFEF4444);
-      case NeedFilter.ancMnch:           return const Color(0xFFEC4899);
-      case NeedFilter.childImmunisation: return const Color(0xFFF59E0B);
-      case NeedFilter.ncd:               return const Color(0xFF0D9488);
-      case NeedFilter.eyeCare:           return const Color(0xFF3B82F6);
-      case NeedFilter.missedFollowUp:    return const Color(0xFF6B7280);
-      case NeedFilter.pendingReferral:   return const Color(0xFF8B5CF6);
-      case NeedFilter.homeVisit:         return const Color(0xFF10B981);
-      case NeedFilter.facilityReferral:  return const Color(0xFF6366F1);
+      case NeedFilter.highRisk:          return AppColors.statusCritical;
+      case NeedFilter.ancMnch:           return AppColors.pinkWorklist;
+      case NeedFilter.childImmunisation: return AppColors.statusWarning;
+      case NeedFilter.ncd:               return AppColors.catNcdBorder;
+      case NeedFilter.eyeCare:           return AppColors.infoAccent;
+      case NeedFilter.missedFollowUp:    return AppColors.textMuted;
+      case NeedFilter.pendingReferral:   return AppColors.catReferralBorder;
+      case NeedFilter.homeVisit:         return AppColors.statusSuccess;
+      case NeedFilter.facilityReferral:  return AppColors.catFacilityBorder;
     }
   }
 
   // v13 surface tint colors (--bbg per category)
   Color get activeSurface {
     switch (this) {
-      case NeedFilter.highRisk:          return const Color(0xFFFEF2F2);
-      case NeedFilter.ancMnch:           return const Color(0xFFFDF2F8);
-      case NeedFilter.childImmunisation: return const Color(0xFFFFFBEB);
-      case NeedFilter.ncd:               return const Color(0xFFF0FDFA);
-      case NeedFilter.eyeCare:           return const Color(0xFFEFF6FF);
-      case NeedFilter.missedFollowUp:    return const Color(0xFFF9FAFB);
-      case NeedFilter.pendingReferral:   return const Color(0xFFF5F3FF);
-      case NeedFilter.homeVisit:         return const Color(0xFFECFDF5);
-      case NeedFilter.facilityReferral:  return const Color(0xFFEEF2FF);
+      case NeedFilter.highRisk:          return AppColors.catHighriskSurface;
+      case NeedFilter.ancMnch:           return AppColors.ancSurface;
+      case NeedFilter.childImmunisation: return AppColors.catChildSurface;
+      case NeedFilter.ncd:               return AppColors.catNcdSurface;
+      // #EFF6FF == AppColors.childSurface — value shared with the programme
+      // "child" token, not semantically related to eye care.
+      case NeedFilter.eyeCare:           return AppColors.childSurface;
+      case NeedFilter.missedFollowUp:    return AppColors.catMissedSurface;
+      // #F5F3FF == AppColors.pncSurface — value shared with the programme
+      // "PNC" token, not semantically related to referrals.
+      case NeedFilter.pendingReferral:   return AppColors.pncSurface;
+      case NeedFilter.homeVisit:         return AppColors.catHomeSurface;
+      case NeedFilter.facilityReferral:  return AppColors.catFacilitySurface;
     }
   }
 
@@ -361,15 +365,15 @@ class NeedCategoryBubble extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         child: SizedBox(
-          width: 56,
+          width: 58,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               AnimatedContainer(
                 duration: AppAnimations.control,
                 curve: AppAnimations.standard,
-                width: 44,
-                height: 44,
+                width: 46,
+                height: 46,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: isActive ? activeSurface : AppColors.cardSurface,
@@ -389,7 +393,7 @@ class NeedCategoryBubble extends StatelessWidget {
                 ),
                 child: Icon(
                   icon,
-                  size: 19,
+                  size: 20,
                   color: activeColor,
                 ),
               ),

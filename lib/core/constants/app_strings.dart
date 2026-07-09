@@ -70,6 +70,10 @@ abstract final class LockStrings {
   static const String offlinePasswordDisabled =
       'You are offline. Connect to the internet to sign in with password.';
 
+  // Connectivity status row (bottom of the lock screen).
+  static const String onlineStatus = 'Online';
+  static const String offlineLoginAvailable = 'Offline login available';
+
   // Profile detail row labels.
   static const String skIdLabel = 'SK ID';
   static const String upazilaLabel = 'UPAZILA';

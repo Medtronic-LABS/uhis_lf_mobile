@@ -36,6 +36,9 @@ class MissionQueueCard extends StatelessWidget {
     final (dotLabel, dotColor) = isCompleted
         ? ('Done', tokens.statusSuccess)
         : _statusDotStyle(item.tier, tokens);
+    final borderColor = isCompleted
+        ? tokens.statusSuccess
+        : _borderColor(item.tier, tokens);
 
     return Opacity(
       opacity: isCompleted ? 0.6 : 1.0,
@@ -48,19 +51,13 @@ class MissionQueueCard extends StatelessWidget {
           button: true,
           child: Container(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppRadius.patRow),
               color: tokens.cardSurface,
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF000000).withValues(alpha: 0.06),
-                  offset: const Offset(0, 1),
-                  blurRadius: 6,
-                ),
-              ],
+              boxShadow: AppShadows.card,
             ),
             child: Material(
               color: Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppRadius.patRow),
               child: InkWell(
                 key: const Key('visit_queue_card_tap'),
                 onTap: isCompleted
@@ -74,12 +71,14 @@ class MissionQueueCard extends StatelessWidget {
                           ),
                         )
                     : onTap,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(AppRadius.patRow),
                 child: Container(
-                  decoration: const BoxDecoration(
-                    borderRadius: BorderRadius.all(Radius.circular(14)),
+                  decoration: BoxDecoration(
+                    borderRadius: const BorderRadius.all(
+                      Radius.circular(AppRadius.patRow),
+                    ),
                     border: Border(
-                      left: BorderSide(color: Color(0xFFE5E7EB), width: 4),
+                      left: BorderSide(color: borderColor, width: 4),
                     ),
                   ),
                   padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -110,7 +109,7 @@ class MissionQueueCard extends StatelessWidget {
                                     style: const TextStyle(
                                       fontFamily: 'NunitoSans',
                                       fontSize: 11.5,
-                                      fontWeight: FontWeight.w800,
+                                      fontWeight: FontWeight.w600,
                                       color: Color(0xFF111827),
                                     ),
                                   ),
@@ -134,11 +133,8 @@ class MissionQueueCard extends StatelessWidget {
                                   address,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontFamily: 'NunitoSans',
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w400,
-                                    color: AppColors.textMuted,
+                                  style: AppTextStyles.worklistAddress.copyWith(
+                                    color: tokens.textMuted,
                                   ),
                                 ),
                               );
@@ -150,11 +146,8 @@ class MissionQueueCard extends StatelessWidget {
                                 padding: const EdgeInsets.only(top: 2),
                                 child: Text(
                                   item.phoneNumber!,
-                                  style: const TextStyle(
-                                    fontFamily: 'NunitoSans',
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w400,
-                                    color: AppColors.textMuted,
+                                  style: AppTextStyles.worklistPhone.copyWith(
+                                    color: tokens.textMuted,
                                   ),
                                 ),
                               ),
@@ -167,27 +160,41 @@ class MissionQueueCard extends StatelessWidget {
                       _StatusDot(label: dotLabel, color: dotColor),
                     ],
                   ),
+                ),
               ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
   }
 
+  /// Left-border accent color keyed by urgency tier.
+  Color _borderColor(DashboardTier tier, LeapfrogColors tokens) {
+    switch (tier) {
+      case DashboardTier.critical:
+      case DashboardTier.dueToday:
+        return tokens.statusSuccess;
+      case DashboardTier.overdue:
+        return tokens.statusCritical;
+      case DashboardTier.thisWeek:
+        return tokens.statusWarning;
+      case DashboardTier.upcoming:
+        return tokens.brandNavy.withValues(alpha: 0.25);
+    }
+  }
 
-/// Status dot style: (label, dotColor) keyed by tier.
+  /// Status dot style: (label, dotColor) keyed by tier.
   (String, Color) _statusDotStyle(DashboardTier tier, LeapfrogColors tokens) {
     switch (tier) {
       case DashboardTier.critical:
-        return (MissionDashboardStrings.statusPillForTier(tier), const Color(0xFF16A34A)); // green — Now
+        return (MissionDashboardStrings.statusPillForTier(tier), tokens.statusSuccess);
       case DashboardTier.dueToday:
-        return (MissionDashboardStrings.statusPillForTier(tier), const Color(0xFF16A34A)); // green — Today
+        return (MissionDashboardStrings.statusPillForTier(tier), tokens.statusSuccess);
       case DashboardTier.overdue:
-        return (MissionDashboardStrings.statusPillForTier(tier), const Color(0xFFDC2626)); // red — Overdue
+        return (MissionDashboardStrings.statusPillForTier(tier), tokens.statusCritical);
       case DashboardTier.thisWeek:
-        return (MissionDashboardStrings.statusPillForTier(tier), const Color(0xFFB45309)); // amber — This week
+        return (MissionDashboardStrings.statusPillForTier(tier), tokens.statusWarning);
       case DashboardTier.upcoming:
         return (MissionDashboardStrings.statusPillForTier(tier), tokens.textMuted);
     }
@@ -211,7 +218,7 @@ class MissionReasonBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(5),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
       ),
       child: Text(
         item.reason,
@@ -260,8 +267,8 @@ class _StatusDot extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 6,
-              height: 6,
+              width: 7,
+              height: 7,
               decoration: BoxDecoration(shape: BoxShape.circle, color: color),
             ),
             const SizedBox(width: 4),

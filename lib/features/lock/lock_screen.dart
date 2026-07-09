@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -10,6 +11,7 @@ import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
+import 'lock_header.dart';
 
 class LockScreen extends StatefulWidget {
   const LockScreen({super.key});
@@ -22,6 +24,7 @@ class _LockScreenState extends State<LockScreen> {
   bool _failed = false;
   UserProfileSummary? _summary;
   bool _isOnline = true;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
 
   @override
   void initState() {
@@ -30,6 +33,17 @@ class _LockScreenState extends State<LockScreen> {
       _loadSummary();
       _checkConnectivity();
     });
+    // Re-check on every connectivity change so the status row reflects the
+    // live network state instead of only the value at screen load.
+    _connectivitySub = Connectivity().onConnectivityChanged.listen(
+      (_) => _checkConnectivity(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _connectivitySub?.cancel();
+    super.dispose();
   }
 
   Future<void> _checkConnectivity() async {
@@ -85,7 +99,11 @@ class _LockScreenState extends State<LockScreen> {
       body: Column(
         children: [
           // ── Dark navy header ────────────────────────────────────────────
-          _LockHeader(),
+          const LockProgramHeader(
+            title: LockStrings.aponSushashthya,
+            pageCount: 8,
+            currentPage: 0,
+          ),
           // ── Scrollable body ─────────────────────────────────────────────
           Expanded(
             child: SingleChildScrollView(
@@ -191,7 +209,12 @@ class _LockContentState extends State<LockContent>
     final s = widget.summary;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.h6xl,
+        AppSpacing.h8xl,
+        AppSpacing.h6xl,
+        AppSpacing.h8xl,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -203,14 +226,8 @@ class _LockContentState extends State<LockContent>
               height: 100,
               decoration: BoxDecoration(
                 color: AppColors.pink,
-                borderRadius: BorderRadius.circular(26),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.pink.withValues(alpha: 0.35),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
+                borderRadius: BorderRadius.circular(AppRadius.avatarLarge),
+                boxShadow: AppShadows.pinkIcon,
               ),
               child: const Icon(Icons.person, size: 54, color: Colors.white),
             ),
@@ -284,7 +301,7 @@ class _LockContentState extends State<LockContent>
                     ),
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(AppRadius.patRow),
                     ),
                     textStyle: const TextStyle(
                       fontFamily: 'NunitoSans',
@@ -304,6 +321,10 @@ class _LockContentState extends State<LockContent>
               ),
             ),
           ],
+
+          // ── Online/offline status ───────────────────────────────────────
+          const SizedBox(height: AppSpacing.xxl),
+          _ConnectivityStatusRow(isOnline: widget.isOnline),
         ],
       ),
     );
@@ -311,69 +332,6 @@ class _LockContentState extends State<LockContent>
 }
 
 // ── Dark navy header (app branding + stepper dots) ────────────────────────────
-
-class _LockHeader extends StatelessWidget {
-  const _LockHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      color: AppColors.navy,
-      padding: EdgeInsets.only(
-        top: MediaQuery.of(context).padding.top + 20,
-        left: 24,
-        right: 24,
-        bottom: 20,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            LockStrings.aponSushashthya,
-            style: const TextStyle(
-              fontFamily: 'Nunito',
-              fontSize: 26,
-              fontWeight: FontWeight.w900,
-              color: Colors.white,
-              letterSpacing: -0.5,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            LockStrings.programSubtitle,
-            style: TextStyle(
-              fontFamily: 'NunitoSans',
-              fontSize: 13,
-              color: Colors.white.withValues(alpha: 0.65),
-            ),
-          ),
-          const SizedBox(height: 16),
-          // Stepper dots
-          Row(
-            children: List.generate(7, (i) {
-              final active = i == 0;
-              return Padding(
-                padding: const EdgeInsets.only(right: 6),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: active ? 24 : 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: active
-                        ? Colors.white
-                        : Colors.white.withValues(alpha: 0.35),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-              );
-            }),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 // ── Simplified profile card ───────────────────────────────────────────────────
 
@@ -401,17 +359,16 @@ class _ProfileCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.h4xl,
+        AppSpacing.xxxl,
+        AppSpacing.h4xl,
+        AppSpacing.xxxl,
+      ),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.navy.withValues(alpha: 0.07),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(AppRadius.profileCard),
+        boxShadow: AppShadows.profileCard,
       ),
       child: Row(
         children: [
@@ -512,6 +469,52 @@ class _OrDivider extends StatelessWidget {
   }
 }
 
+// ── Connectivity status row ─────────────────────────────────────────────────
+
+class _ConnectivityStatusRow extends StatelessWidget {
+  const _ConnectivityStatusRow({required this.isOnline});
+
+  final bool isOnline;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isOnline
+                ? AppColors.statusSuccess
+                : AppColors.lockOfflineIndicator,
+          ),
+        ),
+        const SizedBox(width: 5),
+        Text(
+          isOnline
+              ? LockStrings.onlineStatus
+              : LockStrings.offlineLoginAvailable,
+          style: const TextStyle(
+            fontFamily: 'NunitoSans',
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textMuted,
+          ),
+        ),
+        const SizedBox(width: 2),
+        const Icon(
+          Icons.info_outline_rounded,
+          size: 13,
+          color: AppColors.textDisabled,
+        ),
+      ],
+    );
+  }
+}
+
 // ── Fingerprint / biometric card (unchanged from original) ────────────────────
 
 class _FingerprintCard extends StatefulWidget {
@@ -539,9 +542,9 @@ class _FingerprintCardState extends State<_FingerprintCard>
   bool _verified = false;
 
   static const _navy = AppColors.navy;
-  static const _iconBoxIdle = Color(0x1FFFFFFF);
-  static const _iconBoxScan = Color(0x33E8356D);
-  static const _iconBoxVerify = Color(0x3310B981);
+  static final _iconBoxIdle = Colors.white.withValues(alpha: 0.12);
+  static final _iconBoxScan = AppColors.pink.withValues(alpha: 0.20);
+  static final _iconBoxVerify = AppColors.statusSuccess.withValues(alpha: 0.20);
 
   @override
   void initState() {
@@ -707,14 +710,8 @@ class _FingerprintCardState extends State<_FingerprintCard>
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
             decoration: BoxDecoration(
               color: _navy,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: _navy.withValues(alpha: 0.25),
-                  blurRadius: 16,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+              borderRadius: BorderRadius.circular(AppRadius.card),
+              boxShadow: AppShadows.navyCta,
             ),
             child: Row(
               children: [

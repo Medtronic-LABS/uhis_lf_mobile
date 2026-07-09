@@ -1045,5 +1045,32 @@ class AppDatabase {
     }
   }
 
+  // Single source of truth for "every table" — used by wipeAllData() so a
+  // future new table can't be silently missed from a logout/login wipe.
+  static const List<String> _allTables = [
+    tableHouseholds, tableMembers, tablePatients, tableSyncMeta,
+    tablePatientProgrammes, tableFollowUps, tableImmunisations, tableAssessments,
+    tableReferrals, tableReferralStatusEvents, tableNotificationLog,
+    tableEncounters, tableLocalAssessments, tablePregnancySnapshot,
+    tableTreatmentPresence, tableAssessmentDraft, tableAiSuggestions,
+    tableEvalLog, tableAiResponseCache, tableCoachingModules, tableCoachingProgress,
+  ];
+
+  /// Test-only view of [_allTables] so wipe tests can assert against the
+  /// real list instead of duplicating it.
+  static const List<String> allTablesForTesting = _allTables;
+
+  /// Truncates every table, keeping the schema and the existing connection
+  /// intact (no file delete/reopen — that would orphan every DAO's shared
+  /// [Database] handle). Used on logout and after a successful online login,
+  /// before the subsequent full sync repopulates local data.
+  Future<void> wipeAllData() async {
+    await db.transaction((tx) async {
+      for (final table in _allTables) {
+        await tx.delete(table);
+      }
+    });
+  }
+
   Future<void> close() => db.close();
 }

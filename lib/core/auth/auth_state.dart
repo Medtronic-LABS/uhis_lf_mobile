@@ -9,10 +9,15 @@ import 'biometric_service.dart';
 enum AuthStatus { unknown, signedOut, signedIn }
 
 class AuthState extends ChangeNotifier {
-  AuthState(this._repo, this._biometric);
+  AuthState(this._repo, this._biometric, {Future<void> Function()? onWipeLocalData})
+      : _onWipeLocalData = onWipeLocalData;
 
   final AuthRepository _repo;
   final BiometricService _biometric;
+  // Truncates the local SQLCipher DB on logout — set from main.dart to
+  // AppDatabase.wipeAllData(). Optional (and non-fatal if it throws) so
+  // AuthState keeps no direct data-layer dependency.
+  final Future<void> Function()? _onWipeLocalData;
   AuthStatus _status = AuthStatus.unknown;
   String? _username;
   String? _error;
@@ -278,6 +283,14 @@ class AuthState extends ChangeNotifier {
 
   Future<void> logout() async {
     await _repo.logout();
+    if (_onWipeLocalData != null) {
+      try {
+        await _onWipeLocalData();
+      } catch (e) {
+        debugPrint('[AuthState] local data wipe failed during logout: $e');
+        // Non-fatal — sign-out must complete regardless; next login re-wipes.
+      }
+    }
     _status = AuthStatus.signedOut;
     _locked = false;
     _biometricEnabled = false;

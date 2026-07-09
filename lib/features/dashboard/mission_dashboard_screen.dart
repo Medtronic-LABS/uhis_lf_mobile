@@ -893,12 +893,12 @@ class _EnrolNewFab extends StatelessWidget {
       child: Material(
         key: const Key('dashboard_enrol_new_fab'),
         color: tokens.brandPink,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(AppRadius.xl),
         elevation: 2,
         shadowColor: tokens.brandPink.withValues(alpha: 0.4),
         child: InkWell(
           onTap: () => showEnrollmentEntrySheet(context),
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(AppRadius.xl),
           splashColor: Colors.white.withValues(alpha: 0.15),
           child: const Padding(
             padding: EdgeInsets.symmetric(horizontal: 14, vertical: 9),
@@ -910,8 +910,8 @@ class _EnrolNewFab extends StatelessWidget {
                 Text(
                   MissionDashboardStrings.enrolNewCta,
                   style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
                     color: Colors.white,
                     letterSpacing: 0.2,
                   ),
@@ -962,7 +962,7 @@ class _DashboardHeader extends StatelessWidget {
                       greeting,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 18,
+                        fontSize: 20,
                         fontWeight: FontWeight.w800,
                         height: 1.2,
                       ),
@@ -970,8 +970,8 @@ class _DashboardHeader extends StatelessWidget {
                     const SizedBox(height: 2),
                     Row(
                       children: [
-                        const Icon(Icons.location_on_outlined,
-                            size: 14, color: Colors.white70),
+                        Icon(Icons.location_on_outlined,
+                            size: 14, color: Colors.white.withValues(alpha: 0.6)),
                         const SizedBox(width: 4),
                         Flexible(
                           child: Text(
@@ -979,8 +979,8 @@ class _DashboardHeader extends StatelessWidget {
                                 DashboardStrings.communityAtAGlance,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white70,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.6),
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
                             ),
@@ -1036,10 +1036,10 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner>
     super.initState();
     _pulseCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: AppAnimations.pulseSlow,
     )..repeat(reverse: true);
     _pulseAnim = Tween<double>(begin: 0.4, end: 1.0).animate(
-      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
+      CurvedAnimation(parent: _pulseCtrl, curve: AppAnimations.gentle),
     );
   }
 
@@ -1068,6 +1068,7 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner>
 
   @override
   Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     return FutureBuilder<({int critical, int active})>(
       future: _future,
       builder: (context, snap) {
@@ -1077,10 +1078,10 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner>
           label: 'Referral alerts: $total',
           child: Container(
             decoration: BoxDecoration(
-              color: const Color(0xFFDC2626),
+              color: tokens.statusCritical,
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFDC2626).withValues(alpha: 0.25),
+                  color: tokens.statusCritical.withValues(alpha: 0.25),
                   offset: const Offset(0, 2),
                   blurRadius: 6,
                 ),
@@ -1103,9 +1104,9 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner>
                           Container(
                             width: 16,
                             height: 16,
-                            decoration: const BoxDecoration(
+                            decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: Color(0x40FFFFFF),
+                              color: Colors.white.withValues(alpha: 0.25),
                             ),
                             child: Center(
                               child: Text(
@@ -1124,14 +1125,14 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner>
                             right: -2,
                             child: AnimatedBuilder(
                               animation: _pulseAnim,
-                              builder: (_, __) => Opacity(
+                              builder: (_, _) => Opacity(
                                 opacity: _pulseAnim.value,
                                 child: Container(
                                   width: 6,
                                   height: 6,
                                   decoration: const BoxDecoration(
                                     shape: BoxShape.circle,
-                                    color: Color(0xFFFEF08A),
+                                    color: AppColors.referralPulseDot,
                                   ),
                                 ),
                               ),
@@ -1176,7 +1177,7 @@ class _TodaysVisitsHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    final aiTokens = Theme.of(context).extension<AiColors>()!;
     final dateLabel = DateFormat('EEE d MMM').format(DateTime.now());
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -1201,15 +1202,15 @@ class _TodaysVisitsHeader extends StatelessWidget {
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: tokens.aiSurfaceStart,
-                    borderRadius: BorderRadius.circular(8),
+                    color: aiTokens.surface,
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
                   ),
                   child: Text(
                     label,
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
-                      color: tokens.aiPurple,
+                      color: aiTokens.primary,
                     ),
                   ),
                 );
@@ -1219,7 +1220,7 @@ class _TodaysVisitsHeader extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: tokens.aiSurfaceStart,
+                color: aiTokens.surface,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
@@ -1227,7 +1228,7 @@ class _TodaysVisitsHeader extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
-                  color: tokens.aiPurple,
+                  color: aiTokens.primary,
                 ),
               ),
             ),
@@ -1271,7 +1272,7 @@ class _MoreVisitsLink extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w800,
-              color: Theme.of(context).colorScheme.onSurface,
+              color: Theme.of(context).extension<LeapfrogColors>()!.brandNavy,
             ),
           ),
         ),
@@ -1343,7 +1344,7 @@ class _FilterEmptyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    final aiTokens = Theme.of(context).extension<AiColors>()!;
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 28, 20, 24),
       decoration: BoxDecoration(
@@ -1357,7 +1358,7 @@ class _FilterEmptyCard extends StatelessWidget {
             width: 64,
             height: 64,
             decoration: BoxDecoration(
-              color: tokens.aiPurple.withValues(alpha: 0.10),
+              color: aiTokens.primary.withValues(alpha: 0.10),
               shape: BoxShape.circle,
             ),
             alignment: Alignment.center,
@@ -1391,8 +1392,8 @@ class _FilterEmptyCard extends StatelessWidget {
               icon: const Icon(Icons.cleaning_services_outlined, size: 16),
               label: Text(MissionDashboardStrings.clearNeedFilters),
               style: OutlinedButton.styleFrom(
-                foregroundColor: tokens.aiPurple,
-                side: BorderSide(color: tokens.aiPurple.withValues(alpha: 0.4)),
+                foregroundColor: aiTokens.primary,
+                side: BorderSide(color: aiTokens.primary.withValues(alpha: 0.4)),
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
@@ -1420,6 +1421,7 @@ class _NotificationBell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     return Semantics(
       label: count > 0 ? '$count notifications' : 'Notifications',
       button: true,
@@ -1443,9 +1445,9 @@ class _NotificationBell extends StatelessWidget {
                     constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     decoration: BoxDecoration(
-                      color: AppColors.statusCritical,
+                      color: tokens.statusCritical,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.navy, width: 1.5),
+                      border: Border.all(color: tokens.brandNavy, width: 1.5),
                     ),
                     child: Text(
                       count > 99 ? '99+' : '$count',
