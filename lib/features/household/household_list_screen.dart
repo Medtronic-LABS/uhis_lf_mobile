@@ -583,6 +583,22 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
       }).toList();
     }
 
+    // Village-wise sort: group members by village name so the SK visits
+    // one locality before moving to the next.
+    members.sort((a, b) {
+      final va = _inlineVillages
+          .where((v) => v.id == a.villageId)
+          .map((v) => v.name)
+          .firstOrNull ?? (a.villageId ?? '');
+      final vb = _inlineVillages
+          .where((v) => v.id == b.villageId)
+          .map((v) => v.name)
+          .firstOrNull ?? (b.villageId ?? '');
+      final cmp = va.compareTo(vb);
+      if (cmp != 0) return cmp;
+      return (a.name ?? '').compareTo(b.name ?? '');
+    });
+
     // Calculate total from noOfPeople if we don't have individual members
     final totalFromCount = items.fold<int>(0, (sum, h) => sum + (h.memberCount ?? 0));
 
@@ -1087,6 +1103,9 @@ class _PatientCard extends StatelessWidget {
     } else if (member.householdName != null) {
       metaParts.add(member.householdName!);
     }
+    if (member.householdMemberCount != null && member.householdMemberCount! > 1) {
+      metaParts.add('${member.householdMemberCount} members');
+    }
     final metaLine = metaParts.join(' · ');
 
     final showRelation = member.relation != null &&
@@ -1444,6 +1463,7 @@ class _MemberInfo {
     this.householdName,
     this.householdNo,
     this.villageId,
+    this.householdMemberCount,
   });
 
   final String? id;
@@ -1459,6 +1479,7 @@ class _MemberInfo {
   final String? householdName;
   final String? householdNo;
   final String? villageId;
+  final int? householdMemberCount;
 
   /// Calculate age from date of birth if not directly provided.
   static int? _calculateAge(String? dateOfBirth) {
@@ -1492,6 +1513,7 @@ class _MemberInfo {
       householdName: household.name,
       householdNo: household.householdNo,
       villageId: member.villageId,
+      householdMemberCount: household.memberCount,
     );
   }
 }

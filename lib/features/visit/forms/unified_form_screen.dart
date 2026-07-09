@@ -8,7 +8,9 @@ import '../widgets/form_fields/radio_form_field.dart';
 import 'canonical_visit_data.dart';
 import 'form_config.dart';
 import 'form_field_visuals.dart';
-import 'step2_asr_banner.dart';
+import '../../scribe/scribe_controller.dart';
+import '../../scribe/widgets/scribe_banner.dart';
+import '../../scribe/widgets/scribe_review_sheet.dart';
 import 'triage_symptom_mapper.dart';
 import 'unified_form_notifier.dart';
 import 'unified_section_rules.dart';
@@ -295,12 +297,22 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
 
         return Column(
           children: [
-            // ── Step 2 AI ambient listening banner ──────────────────────────
+            // ── Step 2 AI Scribe banner — same widget as Step 1 ────────────
             // Horizontally inset to match the ListView's content alignment.
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 AppSpacing.xxxl, AppSpacing.xl, AppSpacing.xxxl, 0),
-              child: Step2AsrBanner(activeFormTypes: widget.activeFormTypes),
+              child: Builder(
+                builder: (ctx) {
+                  final scribeCtrl = ctx.read<ScribeController>();
+                  return ScribeBanner(
+                    onStartRecording: scribeCtrl.startRecording,
+                    onStopRecording: scribeCtrl.stopRecording,
+                    onOpenReview: () => showScribeReviewSheet(ctx),
+                    onRetry: scribeCtrl.retryUpload,
+                  );
+                },
+              ),
             ),
             // ── Assessment form sections + submit button ────────────────────
             Expanded(
@@ -1484,6 +1496,18 @@ class _SectionCard extends StatelessWidget {
           case 'hemoglobin':
             vitalStatus =
                 _VitalStatusEval.hemoglobin(_VitalStatusEval.asDouble(currentValue));
+
+          case 'fastingBloodSugar':
+            vitalStatus = _VitalStatusEval.bloodGlucose(
+              _VitalStatusEval.asDouble(currentValue),
+              null,
+            );
+
+          case 'randomBloodSugar':
+            vitalStatus = _VitalStatusEval.bloodGlucose(
+              null,
+              _VitalStatusEval.asDouble(currentValue),
+            );
         }
 
         return _FieldShell(

@@ -1295,7 +1295,7 @@ abstract final class ScribeStrings {
 abstract final class ScribeBannerStrings {
   ScribeBannerStrings._();
 
-  static const String idle = 'AI Scribe';
+  static const String idle = '🎙 AI Scribe — tap and let him/her speak';
   static const String idleSub = 'Tap a mode to start';
   static const String recording = 'Recording…';
   static const String uploading = 'Uploading…';

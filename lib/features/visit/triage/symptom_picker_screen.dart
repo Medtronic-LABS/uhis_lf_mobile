@@ -931,40 +931,28 @@ class _GreetWarmlyCard extends StatelessWidget {
           if (loading && !hasAi)
             const _GreetLoadingSkeleton()
           else
-            Row(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Flexible(
-                  child: Text(
-                    bangla,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textOnNavy,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                Text(
+                  bangla,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textOnNavy,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  child: Text(
-                    '·',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textOnNavy.withValues(alpha: 0.5),
-                    ),
+                const SizedBox(height: 3),
+                Text(
+                  '"$english"',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textOnNavy.withValues(alpha: 0.6),
                   ),
-                ),
-                Flexible(
-                  child: Text(
-                    '"$english"',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textOnNavy.withValues(alpha: 0.6),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -1288,7 +1276,9 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
         ? SymptomPickerStrings.scribeBannerRecording
         : isProcessing
         ? SymptomPickerStrings.scribeBannerProcessing
-        : SymptomPickerStrings.scribeBannerTitle;
+        : SymptomPickerStrings.scribeBannerTitleFor(
+            isFemale: widget.viewModel.patientContext.sex == Sex.female,
+          );
 
     final subtitle = liveActive
         ? (switch (_liveCtrl.state) {
@@ -1338,7 +1328,9 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
             ? SymptomPickerStrings.scribeBannerError
             : _showDone
             ? SymptomPickerStrings.scribeBannerDone
-            : SymptomPickerStrings.scribeBannerTitle,
+            : SymptomPickerStrings.scribeBannerTitleFor(
+                isFemale: widget.viewModel.patientContext.sex == Sex.female,
+              ),
         child: InkWell(
           onTap: isProcessing ? null : onTap,
           borderRadius: BorderRadius.circular(14),
@@ -1438,29 +1430,6 @@ class _AiScribeTriageBannerState extends State<_AiScribeTriageBanner> {
                         ],
                       ),
                     ),
-                    // Idle/done: icon-only ASR pill — whole card is tappable
-                    // to start ASR, this pill is just a visual affordance.
-                    if (idleChoice) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 9,
-                          vertical: 7,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.textOnNavy.withValues(alpha: 0.20),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: AppColors.textOnNavy.withValues(alpha: 0.35),
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.podcasts,
-                          color: AppColors.textOnNavy,
-                          size: 16,
-                        ),
-                      ),
-                    ],
                   ],
                 ),
                 if (liveActive) ...[
