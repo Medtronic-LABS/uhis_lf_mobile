@@ -118,6 +118,17 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   late bool _isPostpartum = widget.isPostpartum;
   late final int? _postpartumWeeks = widget.postpartumWeeks;
 
+  /// Gestational weeks resolved from the pregnancy snapshot when the caller
+  /// did not supply it via the constructor.  The snapshot lookup runs in
+  /// [initState] alongside the postpartum check so that Step 3's
+  /// gestational-age card always has real data to show.
+  int? _resolvedGestationalWeeks;
+
+  /// Returns the best available gestational week count: constructor value
+  /// first, then snapshot-resolved value.
+  int? get _effectiveGestationalWeeks =>
+      widget.gestationalWeeks ?? _resolvedGestationalWeeks;
+
   @override
   void initState() {
     super.initState();
@@ -127,6 +138,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       }
       if (!_isPostpartum && widget.patientId.isNotEmpty) {
         _loadPostpartumFromDb();
+      }
+      if (widget.gestationalWeeks == null && widget.patientId.isNotEmpty) {
+        _loadPregnancySnapshotFromDb();
       }
     });
   }
@@ -158,6 +172,30 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       }
     } catch (e) {
       debugPrint('[VisitFlow] postpartum lookup failed: $e');
+    }
+  }
+
+  Future<void> _loadPregnancySnapshotFromDb() async {
+    try {
+      final dao = context.read<PregnancySnapshotDao>();
+      final snap = await dao.byPatient(widget.patientId);
+      if (!mounted || snap == null) return;
+      DateTime? lmp;
+      if (snap.lmpDate != null) {
+        lmp = DateTime.fromMillisecondsSinceEpoch(snap.lmpDate!);
+      } else if (snap.eddDate != null) {
+        final edd = DateTime.fromMillisecondsSinceEpoch(snap.eddDate!);
+        lmp = edd.subtract(const Duration(days: 280));
+      }
+      final weeks =
+          lmp != null ? DateTime.now().difference(lmp).inDays ~/ 7 : null;
+      if (weeks != null) {
+        setState(() {
+          _resolvedGestationalWeeks = weeks;
+        });
+      }
+    } catch (e) {
+      debugPrint('[VisitFlow] pregnancy snapshot lookup failed: $e');
     }
   }
 
@@ -283,7 +321,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           patientAge: widget.patientAge,
           patientName: widget.patientName,
           patientGender: widget.patientGender,
-          gestationalWeeks: widget.gestationalWeeks,
+          gestationalWeeks: _effectiveGestationalWeeks,
           isPostpartum: _isPostpartum,
           postpartumWeeks: _postpartumWeeks,
           confirmedSymptoms: _confirmedSymptoms,
@@ -309,7 +347,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           patientLabel: widget.patientName ?? widget.patientId,
           patientAge: widget.patientAge,
           patientGender: widget.patientGender,
-          gestationalWeeks: widget.gestationalWeeks,
+          gestationalWeeks: _effectiveGestationalWeeks,
           confirmedSymptoms: _confirmedSymptoms,
           confirmedProgrammes: _confirmedProgrammes,
           primaryProgramme: _primaryProgramme,
@@ -1943,8 +1981,8 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 
 // ── Supporting widgets ────────────────────────────────────────────────────────
 
-/// Pink/lavender gestational age summary shown at the top of Step 3
-/// for any patient who has a gestational week count recorded.
+/// Pink gestational age summary shown at the top of Step 3 for any patient
+/// who has a gestational week count recorded.
 ///
 /// LMP and EDD are back-calculated from [gestationalWeeks]:
 ///   LMP ≈ today − (weeks × 7) days
@@ -1954,127 +1992,143 @@ class _GestationalAgeCard extends StatelessWidget {
 
   final int gestationalWeeks;
 
+  static const _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+  static const _pinkAccent = Color(0xFF9D174D);
+  static const _navy = Color(0xFF1B2B5E);
+  static const _unitGrey = Color(0xFF6B7280);
+
   @override
   Widget build(BuildContext context) {
     final today = DateTime.now();
     final lmp = today.subtract(Duration(days: gestationalWeeks * 7));
     final edd = lmp.add(const Duration(days: 280));
+    final days = today.difference(lmp).inDays % 7;
 
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    final lmpLabel = '${lmp.day} ${months[lmp.month - 1]} ${lmp.year}';
-    final eddLabel = '${edd.day} ${months[edd.month - 1]} ${edd.year}';
+    final lmpLabel =
+        '${lmp.day} ${_months[lmp.month - 1]} ${lmp.year}';
+    final eddLabel =
+        '${edd.day} ${_months[edd.month - 1]} ${edd.year}';
 
     return Container(
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.ancSurface, AppColors.pncSurface],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.ancBorder.withValues(alpha: 0.6)),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.ancBorder.withValues(alpha: 0.30),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        color: const Color(0xFFFDF2F8),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFF9A8D4)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Pregnant woman avatar ──────────────────────────────────
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.ancBorder, width: 1.5),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.ancBorder.withValues(alpha: 0.40),
-                  blurRadius: 4,
-                  offset: const Offset(0, 1),
-                ),
-              ],
-            ),
-            child: const Center(
-              child: Text('🤰', style: TextStyle(fontSize: 26)),
-            ),
-          ),
-          const SizedBox(width: 14),
-
-          // ── Gestational age details ────────────────────────────────
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Label
-                Text(
-                  'GESTATIONAL AGE',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.1,
-                    color: AppColors.ancText,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                // Large weeks display
-                RichText(
-                  text: TextSpan(
-                    children: [
-                      TextSpan(
-                        text: '$gestationalWeeks ',
-                        style: const TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.navy,
-                          height: 1.0,
-                        ),
-                      ),
-                      const TextSpan(
-                        text: 'wks',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.navy,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                // LMP + EDD row
-                Row(
-                  children: [
-                    Expanded(
-                      child: _DatePill(
-                        icon: '📅',
-                        label: 'LMP',
-                        value: lmpLabel,
-                        valueColor: AppColors.navy,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _DatePill(
-                        icon: '🍼',
-                        label: 'EDD',
-                        value: eddLabel,
-                        valueColor: AppColors.pink,
-                      ),
+          // ── Hero row: circle avatar + label + number ─────────────
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.06),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
                     ),
                   ],
                 ),
-              ],
-            ),
+                alignment: Alignment.center,
+                child: const Text('🤰', style: TextStyle(fontSize: 19)),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'GESTATIONAL AGE',
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: _pinkAccent,
+                      letterSpacing: 0.6,
+                      height: 1,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  RichText(
+                    text: TextSpan(
+                      style: const TextStyle(
+                        fontFamily: 'Nunito',
+                        color: _navy,
+                        height: 1,
+                      ),
+                      children: [
+                        TextSpan(
+                          text: '$gestationalWeeks ',
+                          style: const TextStyle(
+                            fontSize: 21,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const TextSpan(
+                          text: 'wks',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: _unitGrey,
+                          ),
+                        ),
+                        if (days > 0) ...[
+                          TextSpan(
+                            text: ' $days ',
+                            style: const TextStyle(
+                              fontSize: 21,
+                              fontWeight: FontWeight.w900,
+                              color: _navy,
+                            ),
+                          ),
+                          const TextSpan(
+                            text: 'days',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: _unitGrey,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // ── LMP + EDD row ────────────────────────────────────────
+          Row(
+            children: [
+              Expanded(
+                child: _DatePill(
+                  icon: '📅',
+                  label: 'LMP',
+                  value: lmpLabel,
+                  valueColor: _navy,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _DatePill(
+                  icon: '🍼',
+                  label: 'EDD',
+                  value: eddLabel,
+                  valueColor: const Color(0xFFDB2777),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -2095,45 +2149,45 @@ class _DatePill extends StatelessWidget {
   final String value;
   final Color valueColor;
 
+  static const _pinkAccent = Color(0xFF9D174D);
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.70),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: AppColors.ancBorder.withValues(alpha: 0.50),
-        ),
+        color: Colors.white.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(9),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(icon, style: const TextStyle(fontSize: 12)),
-          const SizedBox(width: 4),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(icon, style: const TextStyle(fontSize: 12)),
+              const SizedBox(width: 4),
+              Text(
+                label.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: _pinkAccent,
+                  letterSpacing: 0.6,
+                ),
+              ),
+            ],
+          ),
           Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textMuted,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: valueColor,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: valueColor,
+              ),
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.end,
             ),
           ),
         ],
