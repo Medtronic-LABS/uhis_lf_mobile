@@ -281,6 +281,16 @@ class _UhisNextAppState extends State<UhisNextApp>
     unawaited(_coachingRepo.initialize());
     // Start connectivity monitoring for automatic offline sync retry.
     _connectivitySync.start();
+    // These repositories/services are single long-lived instances for the
+    // app's whole process (see the `late final` fields above — none are
+    // recreated per login), so each caches session data in memory that
+    // AppDatabase.wipeAllData() cannot reach. Without these hooks, the next
+    // user to log in on the same device would briefly see the previous
+    // user's dashboard snapshot, hierarchy/village assignment, or training
+    // progress until something else happened to refresh it.
+    widget.authState.registerLogoutHook(_missionDashboard.clearCache);
+    widget.authState.registerLogoutHook(_userHierarchy.invalidate);
+    widget.authState.registerLogoutHook(_coachingRepo.clear);
   }
 
   Future<void> _bootstrapNotifications() async {

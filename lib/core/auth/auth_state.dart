@@ -3,6 +3,7 @@ import 'package:flutter/scheduler.dart';
 
 import '../config/app_config.dart';
 import '../constants/app_strings.dart';
+import '../debug/console_log.dart';
 import 'auth_repository.dart';
 import 'biometric_service.dart';
 
@@ -18,6 +19,20 @@ class AuthState extends ChangeNotifier {
   // AppDatabase.wipeAllData(). Optional (and non-fatal if it throws) so
   // AuthState keeps no direct data-layer dependency.
   final Future<void> Function()? _onWipeLocalData;
+  // Additional in-memory caches to clear on logout (e.g.
+  // MissionDashboardRepository.clearCache) — registered post-construction via
+  // [registerLogoutHook] since some repositories are wired up in main.dart
+  // after AuthState already exists. Without this, a repository's cached
+  // snapshot from the previous session would still be visible to the next
+  // user who logs in on the same device, even though the DB itself is wiped.
+  final List<void Function()> _logoutHooks = [];
+
+  /// Registers a callback to run during [logout], after the local DB wipe.
+  /// Use this for any in-memory cache that would otherwise outlive a signed-
+  /// out session and leak into the next user's login.
+  void registerLogoutHook(void Function() hook) {
+    _logoutHooks.add(hook);
+  }
   AuthStatus _status = AuthStatus.unknown;
   String? _username;
   String? _error;
@@ -297,19 +312,35 @@ class AuthState extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    ConsoleLog.step('🔐 [AuthState] logout() Step 1/4 — ending server session...');
     await _repo.logout();
+    ConsoleLog.step('🔐 [AuthState] logout() Step 2/4 — truncating local database...');
     if (_onWipeLocalData != null) {
       try {
         await _onWipeLocalData();
       } catch (e) {
-        debugPrint('[AuthState] local data wipe failed during logout: $e');
+        ConsoleLog.warn('[AuthState] local data wipe failed during logout: $e');
         // Non-fatal — sign-out must complete regardless; next login re-wipes.
+      }
+    } else {
+      ConsoleLog.warn(
+          '[AuthState] logout() Step 2/4 — no wipe callback configured, skipped.');
+    }
+    ConsoleLog.step(
+        '🔐 [AuthState] logout() Step 3/4 — clearing ${_logoutHooks.length} in-memory cache(s)...');
+    for (final hook in _logoutHooks) {
+      try {
+        hook();
+      } catch (e) {
+        ConsoleLog.warn('[AuthState] logout cache-clear hook failed: $e');
+        // Non-fatal — same reasoning as the DB wipe above.
       }
     }
     _status = AuthStatus.signedOut;
     _locked = false;
     _biometricEnabled = false;
     _pinEnabled = false;
+    ConsoleLog.success('✅ [AuthState] logout() Step 4/4 — signed out.');
     // Defer to avoid build scope conflicts
     _scheduleNotify();
   }

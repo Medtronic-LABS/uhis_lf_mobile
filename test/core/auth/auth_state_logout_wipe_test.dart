@@ -74,4 +74,30 @@ void main() {
 
     expect(authState.status, AuthStatus.signedOut);
   });
+
+  test('logout() runs registered logout hooks, clearing in-memory caches',
+      () async {
+    final authState = AuthState(repo, biometric);
+    var hookCalls = 0;
+    authState.registerLogoutHook(() => hookCalls++);
+    authState.registerLogoutHook(() => hookCalls++);
+
+    await authState.logout();
+
+    expect(hookCalls, 2,
+        reason:
+            'every registered hook (e.g. MissionDashboardRepository.clearCache) '
+            'must run so no session data leaks into the next login');
+  });
+
+  test('logout() still completes and signs out if a logout hook throws',
+      () async {
+    final authState = AuthState(repo, biometric);
+    authState.registerLogoutHook(() => throw Exception('cache clear failed'));
+
+    await authState.logout();
+
+    expect(authState.status, AuthStatus.signedOut,
+        reason: 'sign-out must not be blocked by a hook failure');
+  });
 }

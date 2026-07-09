@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_sqlcipher/sqflite.dart' as sqlcipher;
 
+import '../debug/console_log.dart';
 import 'key_store.dart';
 
 /// Local SQLite store for the offline cache (households, members, patients)
@@ -1065,11 +1066,20 @@ class AppDatabase {
   /// [Database] handle). Used on logout and after a successful online login,
   /// before the subsequent full sync repopulates local data.
   Future<void> wipeAllData() async {
+    ConsoleLog.banner(
+        '🧹 [AppDatabase] wipeAllData() — truncating ${_allTables.length} tables...');
     await db.transaction((tx) async {
       for (final table in _allTables) {
+        final before = Sqflite.firstIntValue(
+                await tx.rawQuery('SELECT COUNT(*) FROM $table')) ??
+            0;
         await tx.delete(table);
+        ConsoleLog.step(
+            '  → truncated $table ($before row${before == 1 ? '' : 's'} removed)');
       }
     });
+    ConsoleLog.success(
+        '✅ [AppDatabase] wipeAllData() complete — all ${_allTables.length} tables empty.');
   }
 
   Future<void> close() => db.close();
