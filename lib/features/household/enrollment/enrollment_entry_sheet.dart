@@ -227,7 +227,15 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
                   existing: _existingPatient,
                   onLinkExisting: () {
                     Navigator.of(context).pop();
-                    context.push('/household/enrollment/select-household');
+                    context.push(
+                      '/household/enrollment/select-household',
+                      extra: {
+                        'fromNidScan': true,
+                        'nidNumber': _scanned?.nidNumber,
+                        'name': _scanned?.name,
+                        'dateOfBirth': _scanned?.dateOfBirth,
+                      },
+                    );
                   },
                   onCreateNew: () {
                     Navigator.of(context).pop();

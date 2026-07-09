@@ -44,6 +44,10 @@ class LinkMemberScreen extends StatefulWidget {
     this.villageName,
     this.subVillageId,
     this.subVillageName,
+    this.fromNidScan = false,
+    this.scannedNidNumber,
+    this.scannedName,
+    this.scannedDateOfBirth,
   });
 
   final String householdId;
@@ -54,6 +58,10 @@ class LinkMemberScreen extends StatefulWidget {
   final String? villageName;
   final String? subVillageId;
   final String? subVillageName;
+  final bool fromNidScan;
+  final String? scannedNidNumber;
+  final String? scannedName;
+  final String? scannedDateOfBirth;
 
   @override
   State<LinkMemberScreen> createState() => _LinkMemberScreenState();
@@ -72,6 +80,43 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
   String _disabilityStatus = 'Absent';
   bool _mobileNotAvailable = false;
   bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-fill from NID scan when coming via the "link to existing" flow.
+    if (widget.fromNidScan) {
+      if (widget.scannedName?.isNotEmpty == true) {
+        _nameCtrl.text = widget.scannedName!;
+      }
+      if (widget.scannedNidNumber?.isNotEmpty == true) {
+        _idCtrl.text = widget.scannedNidNumber!;
+        _idType = 'NID';
+      }
+      if (widget.scannedDateOfBirth?.isNotEmpty == true) {
+        // Normalise to yyyy-MM-dd for the date field.
+        try {
+          final raw = widget.scannedDateOfBirth!;
+          // Accept ISO-8601 (yyyy-MM-dd) or dd/MM/yyyy from OCR.
+          DateTime? parsed;
+          if (raw.contains('/')) {
+            parsed = DateFormat('dd/MM/yyyy').parseLoose(raw);
+          } else {
+            parsed = DateTime.tryParse(raw);
+          }
+          if (parsed != null) {
+            _dobCtrl.text = DateFormat('yyyy-MM-dd').format(parsed);
+            final age = DateTime.now().year - parsed.year;
+            if (age > 0) _ageCtrl.text = age.toString();
+          } else {
+            _dobCtrl.text = raw;
+          }
+        } catch (_) {
+          _dobCtrl.text = widget.scannedDateOfBirth!;
+        }
+      }
+    }
+  }
 
   @override
   void dispose() {

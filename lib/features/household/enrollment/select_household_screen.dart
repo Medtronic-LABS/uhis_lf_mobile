@@ -13,7 +13,18 @@ import '../../../core/theme/app_theme.dart';
 /// User selects one and taps the sticky "Link & Enrol" CTA which navigates
 /// to [LinkMemberScreen] with the chosen household's data.
 class SelectHouseholdScreen extends StatefulWidget {
-  const SelectHouseholdScreen({super.key});
+  const SelectHouseholdScreen({
+    super.key,
+    this.fromNidScan = false,
+    this.scannedNidNumber,
+    this.scannedName,
+    this.scannedDateOfBirth,
+  });
+
+  final bool fromNidScan;
+  final String? scannedNidNumber;
+  final String? scannedName;
+  final String? scannedDateOfBirth;
 
   @override
   State<SelectHouseholdScreen> createState() => _SelectHouseholdScreenState();
@@ -74,11 +85,17 @@ class _SelectHouseholdScreenState extends State<SelectHouseholdScreen> {
     if (hh == null) return;
     context.push('/household/enrollment/link-member', extra: {
       'householdId': hh.id,
+      'householdReferenceId': hh.id,
       'householdFhirId': hh.fhirId ?? hh.id,
       'householdName': hh.name ?? '',
       'householdNo': hh.householdNo ?? '',
       'villageId': hh.villageId ?? '',
       'villageName': hh.village ?? '',
+      // Thread NID scan data so LinkMemberScreen can pre-fill the form.
+      if (widget.fromNidScan) 'fromNidScan': true,
+      if (widget.scannedNidNumber != null) 'nidNumber': widget.scannedNidNumber,
+      if (widget.scannedName != null) 'name': widget.scannedName,
+      if (widget.scannedDateOfBirth != null) 'dateOfBirth': widget.scannedDateOfBirth,
     });
   }
 

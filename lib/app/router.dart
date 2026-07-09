@@ -411,10 +411,20 @@ GoRouter buildRouter(AuthState auth) {
       // Select existing household → link new member
       GoRoute(
         path: '/household/enrollment/select-household',
-        pageBuilder: (context, state) => const MaterialPage(
-          key: ValueKey('select-household'),
-          child: SelectHouseholdScreen(),
-        ),
+        pageBuilder: (context, state) {
+          final extra = state.extra is Map<String, dynamic>
+              ? state.extra as Map<String, dynamic>
+              : <String, dynamic>{};
+          return MaterialPage(
+            key: const ValueKey('select-household'),
+            child: SelectHouseholdScreen(
+              fromNidScan: extra['fromNidScan'] == true,
+              scannedNidNumber: extra['nidNumber'] as String?,
+              scannedName: extra['name'] as String?,
+              scannedDateOfBirth: extra['dateOfBirth'] as String?,
+            ),
+          );
+        },
       ),
       GoRoute(
         path: '/household/enrollment/link-member',
@@ -436,6 +446,10 @@ GoRouter buildRouter(AuthState auth) {
               villageName: extra['villageName'] as String?,
               subVillageId: extra['subVillageId'] as String?,
               subVillageName: extra['subVillageName'] as String?,
+              fromNidScan: extra['fromNidScan'] == true,
+              scannedNidNumber: extra['nidNumber'] as String?,
+              scannedName: extra['name'] as String?,
+              scannedDateOfBirth: extra['dateOfBirth'] as String?,
             ),
           );
         },
