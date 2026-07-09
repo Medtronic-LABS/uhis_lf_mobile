@@ -84,6 +84,10 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   /// Loaded once after init; empty until then / for non-ANC visits.
   List<VisitVitals> _priorAncVisits = const [];
 
+  /// Weight (kg) from the patient's most-recent prior visit across ALL
+  /// programme types — used for the weight-delta badge.  `null` until loaded.
+  double? _lastRecordedWeight;
+
   @override
   void initState() {
     super.initState();
@@ -111,6 +115,12 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
       }
 
       notifier.loadDraft();
+
+      // Load the patient's most-recent weight from ANY prior visit so the
+      // weight-delta badge shows "Last: X kg" regardless of programme type.
+      notifier.lastRecordedWeight().then((w) {
+        if (mounted && w != null) setState(() => _lastRecordedWeight = w);
+      });
 
       // Load prior ANC visits for the vitals-trend card (ANC visits only).
       if (widget.activeFormTypes.contains('anc') ||
@@ -260,9 +270,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             data: notifier.data,
             validationErrors: notifier.validationErrors,
             onFieldChanged: notifier.updateField,
-            previousWeight: _priorAncVisits.isNotEmpty
-                ? _priorAncVisits.last.weight
-                : null,
+            previousWeight: _lastRecordedWeight,
             gestationalWeeks: widget.gestationalWeeks,
           ));
         }
@@ -902,11 +910,20 @@ class _SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Pre-compute the set of ref IDs in this section so the BP pair detector
-    // works regardless of ordering.
+    // Pre-compute the set of ref IDs in this section so all pair detectors
+    // work regardless of field ordering.
     final sectionIds = section.fieldRefs.map((r) => r.id).toSet();
+
     final hasBpPair = sectionIds.contains('systolic') &&
         sectionIds.contains('diastolic');
+
+    // Blood-glucose pair: fasting + random shown side-by-side.
+    final hasGlucosePair = sectionIds.contains('fastingBloodSugar') &&
+        sectionIds.contains('randomBloodSugar');
+
+    // Height + weight pair: physical measurements shown side-by-side.
+    final hasHeightWeightPair = sectionIds.contains('height') &&
+        sectionIds.contains('weight');
 
     // For each supplement consumed field, find which provided field (if any) is
     // present in the same section, so we can render a combined pair card.
@@ -924,12 +941,18 @@ class _SectionCard extends StatelessWidget {
     final consumedIds = <String>{
       // When a combined BP card is rendered, skip the standalone fields.
       if (hasBpPair) ...const {'bloodPressure', 'diastolic'},
+      // Combined glucose pair — skip the random field (fasting card drives).
+      if (hasGlucosePair) 'randomBloodSugar',
+      // Combined height+weight pair — skip weight (height card drives).
+      if (hasHeightWeightPair) 'weight',
       // For each supplement pair, skip the "provided" counterpart field —
       // it will be rendered inline inside the consumed field's pair card.
       for (final p in supplementConsumedToProvidedRef.values) ?p,
     };
 
     bool bpPairEmitted = false;
+    bool glucosePairEmitted = false;
+    bool heightWeightPairEmitted = false;
 
     final fieldWidgets = <Widget>[];
     for (final ref in section.fieldRefs) {
@@ -947,6 +970,34 @@ class _SectionCard extends StatelessWidget {
           final diaDef = config.fields['diastolic'];
           if (diaDef != null) {
             child = _bpPairCard(context, def, ref, diaDef, diaRef);
+          } else {
+            child = _fieldRow(context, def, ref);
+          }
+        } else {
+          continue;
+        }
+      } else if (ref.id == 'fastingBloodSugar' && hasGlucosePair) {
+        // Emit the combined glucose pair card once (fasting drives, random follows).
+        if (!glucosePairEmitted) {
+          glucosePairEmitted = true;
+          final randomRef = section.fieldRefs.firstWhere((r) => r.id == 'randomBloodSugar');
+          final randomDef = config.fields['randomBloodSugar'];
+          if (randomDef != null) {
+            child = _glucosePairCard(context, def, ref, randomDef, randomRef);
+          } else {
+            child = _fieldRow(context, def, ref);
+          }
+        } else {
+          continue;
+        }
+      } else if (ref.id == 'height' && hasHeightWeightPair) {
+        // Emit the combined height + weight pair card once.
+        if (!heightWeightPairEmitted) {
+          heightWeightPairEmitted = true;
+          final weightRef = section.fieldRefs.firstWhere((r) => r.id == 'weight');
+          final weightDef = config.fields['weight'];
+          if (weightDef != null) {
+            child = _heightWeightPairCard(context, def, ref, weightDef, weightRef);
           } else {
             child = _fieldRow(context, def, ref);
           }
@@ -1152,6 +1203,199 @@ class _SectionCard extends StatelessWidget {
                       onFieldChanged(providedId, null);
                     } else {
                       onFieldChanged(providedId, int.tryParse(v) ?? v);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Renders a combined Blood Glucose card — fasting and random inputs
+  /// side-by-side under a shared header, with a rule-based elevation badge
+  /// and an inline GDM / diabetes warning when values are high.
+  Widget _glucosePairCard(
+    BuildContext context,
+    FieldDef fastingDef,
+    FieldRef fastingRef,
+    FieldDef randomDef,
+    FieldRef randomRef,
+  ) {
+    final fastingVal = _VitalStatusEval.asDouble(data.getValue(fastingRef.id));
+    final randomVal  = _VitalStatusEval.asDouble(data.getValue(randomRef.id));
+    final glucoseStatus = _VitalStatusEval.bloodGlucose(fastingVal, randomVal);
+    final hasError = validationErrors.contains(fastingRef.id) ||
+        validationErrors.contains(randomRef.id);
+    final isMandatory = fastingDef.isMandatory || fastingRef.isMandatory ||
+        randomDef.isMandatory || randomRef.isMandatory;
+    return _FieldShell(
+      label: UnifiedFormStrings.glucosePairLabel,
+      subLabel: UnifiedFormStrings.glucosePairSubLabel,
+      emoji: '🩸',
+      emojiBg: const Color(0xFFFFF1F2),
+      isMandatory: isMandatory,
+      hasError: hasError,
+      statusBadge: glucoseStatus != null
+          ? _VitalBadge(label: glucoseStatus.label, color: glucoseStatus.color)
+          : null,
+      inlineWarning: glucoseStatus?.warning,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  UnifiedFormStrings.glucoseFastingLabel,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                _NumericField(
+                  key: Key('unified_form_${fastingRef.id}_input'),
+                  isDecimal: true,
+                  unit: 'mmol/L',
+                  initialValue: data.getValue(fastingRef.id)?.toString(),
+                  onChanged: (v) {
+                    if (v == null || v.isEmpty) {
+                      onFieldChanged(fastingRef.id, null);
+                    } else {
+                      onFieldChanged(fastingRef.id, double.tryParse(v) ?? v);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  UnifiedFormStrings.glucoseRandomLabel,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                _NumericField(
+                  key: Key('unified_form_${randomRef.id}_input'),
+                  isDecimal: true,
+                  unit: 'mmol/L',
+                  initialValue: data.getValue(randomRef.id)?.toString(),
+                  onChanged: (v) {
+                    if (v == null || v.isEmpty) {
+                      onFieldChanged(randomRef.id, null);
+                    } else {
+                      onFieldChanged(randomRef.id, double.tryParse(v) ?? v);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Renders a combined Height + Weight card — both numeric inputs side-by-side
+  /// under a single header.  The weight-delta badge and "Last: X kg" sub-info
+  /// are shown in the header when prior weight data is available.
+  Widget _heightWeightPairCard(
+    BuildContext context,
+    FieldDef heightDef,
+    FieldRef heightRef,
+    FieldDef weightDef,
+    FieldRef weightRef,
+  ) {
+    final hasError = validationErrors.contains(heightRef.id) ||
+        validationErrors.contains(weightRef.id);
+    final isMandatory = heightDef.isMandatory || heightRef.isMandatory ||
+        weightDef.isMandatory || weightRef.isMandatory;
+    final currentWeight = _VitalStatusEval.asDouble(data.getValue(weightRef.id));
+    final weightStatus = _VitalStatusEval.weight(currentWeight, previousWeight);
+    // Sub-label: last weight info when available.
+    final subParts = <String>[UnifiedFormStrings.heightWeightPairSubLabel];
+    if (previousWeight != null) {
+      subParts.add(UnifiedFormStrings.vsLastWeight(previousWeight!));
+    }
+    return _FieldShell(
+      label: UnifiedFormStrings.heightWeightPairLabel,
+      subLabel: subParts.join(' · '),
+      emoji: '📐',
+      emojiBg: const Color(0xFFEEF2FF),
+      isMandatory: isMandatory,
+      hasError: hasError,
+      statusBadge: weightStatus != null
+          ? _VitalBadge(label: weightStatus.label, color: weightStatus.color)
+          : null,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  UnifiedFormStrings.heightSubLabel,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                _NumericField(
+                  key: Key('unified_form_${heightRef.id}_input'),
+                  isDecimal: true,
+                  unit: 'cm',
+                  initialValue: data.getValue(heightRef.id)?.toString(),
+                  onChanged: (v) {
+                    if (v == null || v.isEmpty) {
+                      onFieldChanged(heightRef.id, null);
+                    } else {
+                      onFieldChanged(heightRef.id, double.tryParse(v) ?? v);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  UnifiedFormStrings.weightSubLabel,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                _NumericField(
+                  key: Key('unified_form_${weightRef.id}_input'),
+                  isDecimal: true,
+                  unit: 'kg',
+                  initialValue: data.getValue(weightRef.id)?.toString(),
+                  onChanged: (v) {
+                    if (v == null || v.isEmpty) {
+                      onFieldChanged(weightRef.id, null);
+                    } else {
+                      onFieldChanged(weightRef.id, double.tryParse(v) ?? v);
                     }
                   },
                 ),
@@ -1576,6 +1820,40 @@ abstract final class _VitalStatusEval {
     }
     return _VitalStatus(
       label: UnifiedFormStrings.vsHbNormal,
+      color: AppColors.statusSuccess,
+    );
+  }
+
+  // ── Blood glucose ────────────────────────────────────────────────────────
+  // Uses the higher of fasting / random to determine severity.
+  // ADA / GDM thresholds: fasting ≥5.1 = GDM risk; fasting ≥7.0 = DM;
+  // random ≥7.8 = elevated; random ≥11.1 = DM.
+  static _VitalStatus? bloodGlucose(double? fasting, double? random) {
+    if (fasting == null && random == null) return null;
+    // High (diabetes level): fasting ≥7.0 OR random ≥11.1
+    final isHigh =
+        (fasting != null && fasting >= 7.0) ||
+        (random  != null && random  >= 11.1);
+    if (isHigh) {
+      return _VitalStatus(
+        label: UnifiedFormStrings.vsGlucoseHigh,
+        color: AppColors.statusCritical,
+        warning: UnifiedFormStrings.vsGlucoseWarningHigh,
+      );
+    }
+    // Elevated: fasting ≥5.1 OR random ≥7.8
+    final isElevated =
+        (fasting != null && fasting >= 5.1) ||
+        (random  != null && random  >= 7.8);
+    if (isElevated) {
+      return _VitalStatus(
+        label: UnifiedFormStrings.vsGlucoseElevated,
+        color: AppColors.statusWarning,
+        warning: UnifiedFormStrings.vsGlucoseWarningElevated,
+      );
+    }
+    return _VitalStatus(
+      label: UnifiedFormStrings.vsGlucoseNormal,
       color: AppColors.statusSuccess,
     );
   }

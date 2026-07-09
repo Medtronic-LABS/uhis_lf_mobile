@@ -289,6 +289,22 @@ class AssessmentRepository extends ChangeNotifier {
     return _dao.getById(id);
   }
 
+  /// Most-recent locally-saved weight reading for [patientId] from ANY visit
+  /// type.  Returns `null` when no prior visit has a weight value.
+  ///
+  /// Used by the Step 2 weight-delta badge to show "Last: X kg" regardless of
+  /// whether the patient's most recent visit was ANC, NCD, PNC, or any other
+  /// programme.  Rows are read newest-first; the first non-null weight wins.
+  Future<double?> lastRecordedWeight(String patientId) async {
+    if (patientId.isEmpty) return null;
+    final rows = await _dao.getByPatientId(patientId); // newest-first
+    for (final row in rows) {
+      final snap = _snapshotFromAnc(row.assessmentDetails, row.createdAt);
+      if (snap.weight != null) return snap.weight;
+    }
+    return null;
+  }
+
   /// Prior locally-saved ANC visits for [patientId] as trend snapshots,
   /// oldest-first.
   ///

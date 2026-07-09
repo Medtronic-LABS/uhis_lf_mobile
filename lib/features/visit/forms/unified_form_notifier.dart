@@ -65,6 +65,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
   Future<List<VisitVitals>> ancVitalsHistory() =>
       _assessmentRepo.ancVitalsHistory(_patientId);
 
+  /// Returns the most-recent weight (kg) recorded for this patient from ANY
+  /// prior visit, or `null` when no prior weight exists.
+  Future<double?> lastRecordedWeight() =>
+      _assessmentRepo.lastRecordedWeight(_patientId);
+
   /// Marks the given field IDs as having validation errors and notifies
   /// listeners so the form can highlight them.
   void setValidationErrors(Set<String> errors) {

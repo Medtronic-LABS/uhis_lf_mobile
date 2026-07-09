@@ -3533,6 +3533,27 @@ abstract final class UnifiedFormStrings {
   static String vsFhExpectedSubLabel(int gestWeeks) =>
       'Expected ~$gestWeeks cm at $gestWeeks wks';
 
+  // ── Blood glucose status badges ─────────────────────────────────────────────
+  static const String vsGlucoseNormal   = 'Normal';
+  static const String vsGlucoseElevated = 'Elevated';
+  static const String vsGlucoseHigh     = 'High';
+  static const String vsGlucoseWarningElevated =
+      'Elevated — advise dietary modification and refer for GDM screening.';
+  static const String vsGlucoseWarningHigh =
+      'High blood sugar — refer urgently for diabetes evaluation.';
+
+  // ── Blood glucose pair-card chrome ──────────────────────────────────────────
+  static const String glucosePairLabel    = 'Blood Sugar';
+  static const String glucosePairSubLabel = 'রক্তের শর্করা · mmol/L';
+  static const String glucoseFastingLabel  = 'Fasting';
+  static const String glucoseRandomLabel   = 'Random';
+
+  // ── Height + Weight pair-card chrome ────────────────────────────────────────
+  static const String heightWeightPairLabel    = 'Height & Weight';
+  static const String heightWeightPairSubLabel = 'উচ্চতা ও ওজন';
+  static const String heightSubLabel = 'Height · cm';
+  static const String weightSubLabel = 'Weight · kg';
+
   /// Human-readable label for a formType key shown as a programme badge.
   ///
   /// Returns `null` for the synthetic `vitals` formType (no badge needed).
