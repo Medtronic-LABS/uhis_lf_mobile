@@ -417,14 +417,19 @@ class TriageViewModel extends ChangeNotifier {
   List<String> get primaryVocabCodes {
     final ctx = _patientContext;
 
-    // Maternal context: pregnant, postpartum, OR enrolled in ANC/PNC.
+    // Maternal context: pregnant, postpartum, enrolled in ANC/PNC, OR a
+    // female patient in the 14–44 reproductive age window (she may be
+    // pregnant even if not yet confirmed or enrolled).
     // PNC patients (post-delivery) may have isPostpartum = false when the
     // delivery date is unknown, so fall back to programme membership.
     final isMaternalContext = ctx.isPregnant ||
         ctx.isPostpartum ||
         ctx.activeProgrammes.any(
           (p) => p == Programme.anc || p == Programme.pnc,
-        );
+        ) ||
+        (ctx.sex == Sex.female &&
+            ctx.ageMonths >= AiScribeTriageVocab.maternalMinAgeMonths &&
+            ctx.ageMonths <= AiScribeTriageVocab.maternalMaxAgeMonths);
 
     final isNcdContext = ctx.hasKnownHypertension ||
         ctx.hasKnownDiabetes ||
