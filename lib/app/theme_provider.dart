@@ -10,7 +10,7 @@ class ThemeProvider extends ChangeNotifier {
   static const _key = 'theme_mode';
   static const _storage = FlutterSecureStorage();
 
-  ThemeMode _mode = ThemeMode.system;
+  ThemeMode _mode = ThemeMode.light;
 
   ThemeMode get mode => _mode;
 
@@ -26,7 +26,7 @@ class ThemeProvider extends ChangeNotifier {
       } else if (stored == 'light') {
         _mode = ThemeMode.light;
       } else {
-        _mode = ThemeMode.system;
+        _mode = ThemeMode.light;
       }
       notifyListeners();
     } catch (_) {
