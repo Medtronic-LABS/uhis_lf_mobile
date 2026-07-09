@@ -197,6 +197,14 @@ enum Modifier {
   b,
   none;
 
+  /// Sort rank for intra-band comparisons (lower = higher priority).
+  /// a(0) → b(1) → none(2) — matches PRD §2.8 sort order within a band.
+  int get sortRank => switch (this) {
+        Modifier.a => 0,
+        Modifier.b => 1,
+        Modifier.none => 2,
+      };
+
   String get wireTag {
     switch (this) {
       case Modifier.a:
@@ -262,6 +270,7 @@ class ClinicalVitals {
     this.hasEclampsia = false,
     this.hasStrokeSign = false,
     this.hasAbnormalUrine = false,
+    this.hasSobWithHighBp = false,
     this.gestationalAgeWeeks,
     this.parity,
     this.hasDiabetes = false,
@@ -276,10 +285,15 @@ class ClinicalVitals {
   final bool hasEclampsia;              // ANC pre-eclampsia pattern (3-visit trend)
   final bool hasStrokeSign;             // NCD one-sided weakness / stroke warning
   final bool hasAbnormalUrine;          // ANC abnormal urine (protein/glucose/infection)
+  final bool hasSobWithHighBp;          // NCD Band 1: shortness of breath AND systolic ≥ 140
   final int? gestationalAgeWeeks;       // ANC GA in weeks
   final int? parity;                    // 0 = primigravida
   final bool hasDiabetes;               // patient is on DM register
   final String? assessmentType;         // 'NCD' or 'ANC'
+
+  bool get hasHypertension =>
+      (systolicBp != null && systolicBp! >= 140) ||
+      (diastolicBp != null && diastolicBp! >= 90);
 }
 
 /// Inputs to [RiskScoringService.score]. Built by the worklist repository as a

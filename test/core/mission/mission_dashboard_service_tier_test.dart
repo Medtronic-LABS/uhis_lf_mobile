@@ -184,24 +184,26 @@ void main() {
       expect(queue.first.drivers, contains('child-disability'));
     });
 
-    test('queue sorted by tier rank ascending across all tiers', () {
+    // PRD §2.8: sort is by band (not by scheduling tier). Tier labels are
+    // derived from _classify() for display only — they do not affect sort.
+    test('queue sorted by band rank — Band 1 before Band 4, tier is display-only', () {
       final input = MissionInputData(
         worklistEntries: [
-          _entry(patientId: 'crit', age: 0),
-          _entry(patientId: 'week', age: 30,
-              nextDueAt: today.add(const Duration(days: 5))),
-          _entry(patientId: 'today', age: 30, nextDueAt: today),
-          _entry(patientId: 'up', age: 30),
+          _entry(patientId: 'b4', band: Band.band4),
+          _entry(patientId: 'b2', band: Band.band2),
+          _entry(patientId: 'b1', band: Band.band1),
+          _entry(patientId: 'b3', band: Band.band3),
         ],
-        neonatePatientIds: const {'crit'},
       );
       final queue = service.computeTieredQueue(input);
-      expect(queue.map((q) => q.tier).toList(), [
-        DashboardTier.critical,
-        DashboardTier.dueToday,
-        DashboardTier.thisWeek,
-        DashboardTier.upcoming,
+      expect(queue.map((q) => q.band).toList(), [
+        Band.band1,
+        Band.band2,
+        Band.band3,
+        Band.band4,
       ]);
+      // Band 1 → CRITICAL tier (red-flag driver fires for band1 patients)
+      expect(queue[0].tier, DashboardTier.critical);
     });
   });
 

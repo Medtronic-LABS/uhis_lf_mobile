@@ -33,9 +33,10 @@ class MissionQueueCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    final urgency = Theme.of(context).extension<UrgencyTheme>()!;
     final (dotLabel, dotColor) = isCompleted
         ? ('Done', tokens.statusSuccess)
-        : _statusDotStyle(item.tier, tokens);
+        : _statusDotStyle(item.tier, tokens, urgency);
 
     return Opacity(
       opacity: isCompleted ? 0.6 : 1.0,
@@ -165,18 +166,23 @@ class MissionQueueCard extends StatelessWidget {
   }
 
   /// Status dot style: (label, dotColor) keyed by tier.
-  (String, Color) _statusDotStyle(DashboardTier tier, LeapfrogColors tokens) {
+  (String, Color) _statusDotStyle(
+    DashboardTier tier,
+    LeapfrogColors tokens,
+    UrgencyTheme urgency,
+  ) {
+    final label = MissionDashboardStrings.statusPillForTier(tier);
     switch (tier) {
       case DashboardTier.critical:
-        return (MissionDashboardStrings.statusPillForTier(tier), tokens.statusSuccess);
-      case DashboardTier.dueToday:
-        return (MissionDashboardStrings.statusPillForTier(tier), tokens.statusSuccess);
+        return (label, urgency.visitNow);       // red   — "Now"
       case DashboardTier.overdue:
-        return (MissionDashboardStrings.statusPillForTier(tier), tokens.statusCritical);
+        return (label, urgency.today);           // amber — "Overdue"
+      case DashboardTier.dueToday:
+        return (label, tokens.statusSuccess);    // green — "Today"
       case DashboardTier.thisWeek:
-        return (MissionDashboardStrings.statusPillForTier(tier), tokens.statusWarning);
+        return (label, urgency.thisWeek);        // teal  — "This week"
       case DashboardTier.upcoming:
-        return (MissionDashboardStrings.statusPillForTier(tier), tokens.textMuted);
+        return (label, urgency.routine);         // grey  — "Routine"
     }
   }
 }

@@ -670,6 +670,20 @@ class LocalAssessmentDao {
 
       final hasStrokeSign = readBoolFlag('oneSidedWeakness');
 
+      // Gestational age (ANC) — stored as 'gestationalWeeks' in the ANC form.
+      final gestationalAgeWeeks = parseInt('gestationalWeeks');
+
+      // Abnormal urine (ANC) — urineProtein / urinaryAlbumin / urinarySugar are
+      // inside pointOfCareInvestigations, already unwrapped into flat above.
+      final hasAbnormalUrine = flat['urineProtein'] == 'Present' ||
+          flat['urinaryAlbumin'] != null ||
+          flat['urinarySugar'] == 'Present';
+
+      // NCD Band 1: shortness of breath (chestTightnessOrSob from htnScreening)
+      // together with an elevated BP reading.
+      final hasSob = readBoolFlag('chestTightnessOrSob');
+      final hasSobWithHighBp = hasSob && sys != null && sys >= 140;
+
       result[pid] = ClinicalVitals(
         systolicBp: sys,
         diastolicBp: dia,
@@ -678,6 +692,9 @@ class LocalAssessmentDao {
         hasDangerSign: hasDanger,
         hasEclampsia: hasEclampsia,
         hasStrokeSign: hasStrokeSign,
+        hasAbnormalUrine: hasAbnormalUrine,
+        hasSobWithHighBp: hasSobWithHighBp,
+        gestationalAgeWeeks: gestationalAgeWeeks,
         parity: parity,
         hasDiabetes: hasDiabetes,
         assessmentType: type,

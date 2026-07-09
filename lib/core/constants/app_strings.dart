@@ -1143,18 +1143,24 @@ abstract final class MissionDashboardStrings {
       'QR enrolment flow coming soon. Use the Patients tab to view existing patients.';
 
   // ── Status pills (compact tier label shown in the card right-side pill) ───
+  static const String statusPillNow = 'Now';
+  static const String statusPillOverdue = 'Overdue';
+  static const String statusPillToday = 'Today';
+  static const String statusPillThisWeek = 'This week';
+  static const String statusPillRoutine = 'Routine';
+
   static String statusPillForTier(DashboardTier tier) {
     switch (tier) {
       case DashboardTier.critical:
-        return 'Now';
+        return statusPillNow;
       case DashboardTier.overdue:
-        return 'Today';
+        return statusPillOverdue;
       case DashboardTier.dueToday:
-        return 'Today';
+        return statusPillToday;
       case DashboardTier.thisWeek:
-        return 'This week';
+        return statusPillThisWeek;
       case DashboardTier.upcoming:
-        return 'Routine';
+        return statusPillRoutine;
     }
   }
 

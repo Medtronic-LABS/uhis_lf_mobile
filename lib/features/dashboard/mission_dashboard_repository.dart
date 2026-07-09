@@ -429,6 +429,18 @@ class MissionDashboardRepository {
       }
     }
 
+    // CD-2: patients whose active referral has a breached SLA → Band 1 override
+    // in _classify(). Derived here so the service stays pure (no DAO access).
+    final referralPatientById = <String, String>{
+      for (final r in referrals) r.id: r.patientId,
+    };
+    final slaBreachedReferralPatientIds = <String>{
+      for (final entry in referralAssessments.entries)
+        if (entry.value.level == SlaPriority.critical)
+          if (referralPatientById.containsKey(entry.key))
+            referralPatientById[entry.key]!,
+    };
+
     // ── Tier-classifier side maps (Phase 2 wiring) ─────────────────────────
     // Pull side-channel patient signals so MissionDashboardService.
     // computeTieredQueue can classify without re-reading the DB per row.
@@ -653,6 +665,7 @@ class MissionDashboardRepository {
       neonatePatientIds: neonatePatientIds,
       youngInfantPatientIds: youngInfantPatientIds,
       referralArrivalPendingPatientIds: referralArrivalPendingPatientIds,
+      slaBreachedReferralPatientIds: slaBreachedReferralPatientIds,
       villageNamesById: villageNamesById,
     );
 
