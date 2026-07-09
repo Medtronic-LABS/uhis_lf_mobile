@@ -3418,10 +3418,21 @@ abstract final class UnifiedFormStrings {
   static const String bpUnit = 'mmHg';
   static const String bpPulseUnit = '/min';
 
+  /// Trailing tag shown on read-only computed fields (e.g. BMI, EDD, gest. week)
+  /// to signal the value is auto-derived and not manually entered.
+  static const String autoComputedTag = '(auto)';
+
+  /// Placeholder shown in a computed field before its value is available.
+  static const String autoComputedPlaceholder = '—';
+
   // Validation messages.
   static const String validationBannerTitle = 'Please complete required fields';
   static String validationFieldsRequired(int n) =>
       '$n required ${n == 1 ? 'field' : 'fields'} must be filled before submitting.';
+
+  /// Badge label shown on the programme divider when AI pre-filled symptoms
+  /// for that programme from triage Step 1.
+  static const String aiBadgeLabel = 'AI';
 
   // Triage symptoms carry-over banner.
   static const String triageSymptomsTitle = 'Symptoms from Step 1';

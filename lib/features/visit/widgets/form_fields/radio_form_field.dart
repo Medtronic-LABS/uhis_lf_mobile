@@ -12,41 +12,28 @@ import '../../../../core/theme/app_theme.dart';
 class RadioFormField extends StatelessWidget {
   const RadioFormField({
     super.key,
-    required this.labelText,
     required this.options,
     required this.onChanged,
     this.currentValue,
   });
 
-  final String labelText;
   final List<String> options;
   final String? currentValue;
   final ValueChanged<String> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          labelText,
-          style: theme.textTheme.labelLarge?.copyWith(
-            color: AppColors.textMuted,
-          ),
-        ),
-        const SizedBox(height: 8),
-        options.length <= 3
-            ? Row(
-                children: _buildOptions(context, withFlex: true),
-              )
-            : Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _buildOptions(context, withFlex: false),
-              ),
-      ],
-    );
+    // Label is provided by the enclosing field shell; this widget renders the
+    // pill row only.
+    return options.length <= 3
+        ? Row(
+            children: _buildOptions(context, withFlex: true),
+          )
+        : Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _buildOptions(context, withFlex: false),
+          );
   }
 
   List<Widget> _buildOptions(BuildContext context, {required bool withFlex}) {

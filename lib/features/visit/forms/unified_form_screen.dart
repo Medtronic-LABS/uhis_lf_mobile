@@ -25,8 +25,9 @@ import 'unified_section_rules.dart';
 /// 2. **Enrolled programmes** — sections from [enrolledFormTypes] come next.
 /// 3. **Recommended programmes** — new pathway-activated sections follow.
 ///
-/// A read-only banner of triage symptoms selected in Step 1 is displayed at
-/// the top of the form so the SK can see what was reported.
+/// Triage symptoms selected in Step 1 are surfaced inline under each programme
+/// divider (see [_ProgrammeDivider]) rather than in a single top banner, so the
+/// SK sees only the symptoms relevant to the programme being assessed.
 ///
 /// The caller wraps this widget in a [ChangeNotifierProvider<UnifiedFormNotifier>]
 /// and supplies [onSubmitComplete] to handle post-submit navigation.
@@ -269,145 +270,6 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   }
 }
 
-// ── Triage symptoms banner ────────────────────────────────────────────────────
-
-/// Collapsible summary of ALL symptom codes selected in Step 1.
-///
-/// Collapsed by default — shows a count badge and a chevron.  Tap to expand
-/// the full pill-chip list.  Always rendered at the top of the form so the SK
-/// can review what was reported without navigating away.
-class _TriageSymptomsBanner extends StatefulWidget {
-  const _TriageSymptomsBanner({required this.symptomCodes});
-
-  final List<String> symptomCodes;
-
-  @override
-  State<_TriageSymptomsBanner> createState() => _TriageSymptomsBannerState();
-}
-
-class _TriageSymptomsBannerState extends State<_TriageSymptomsBanner> {
-  bool _expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final count = widget.symptomCodes.length;
-
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: AppSpacing.xxxl),
-      decoration: BoxDecoration(
-        color: AppColors.navy.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.navy.withValues(alpha: 0.15)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Header row (always visible) ────────────────────────────────
-          InkWell(
-            onTap: () => setState(() => _expanded = !_expanded),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.xl,
-                vertical: AppSpacing.md,
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.format_list_bulleted_rounded,
-                    size: 15,
-                    color: AppColors.navy,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      UnifiedFormStrings.triageSymptomsTitle,
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: AppColors.navy,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.4,
-                      ),
-                    ),
-                  ),
-                  // Count badge
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.navy.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      '$count',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: AppColors.navy,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  AnimatedRotation(
-                    turns: _expanded ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: const Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      size: 18,
-                      color: AppColors.navy,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          // ── Expandable chip list ───────────────────────────────────────
-          AnimatedCrossFade(
-            firstChild: const SizedBox.shrink(),
-            secondChild: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.xl,
-                0,
-                AppSpacing.xl,
-                AppSpacing.md,
-              ),
-              child: Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: widget.symptomCodes.map((code) {
-                  return Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.navy.withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      TriageStrings.symptomLabel(code),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: AppColors.navy,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-            crossFadeState: _expanded
-                ? CrossFadeState.showSecond
-                : CrossFadeState.showFirst,
-            duration: const Duration(milliseconds: 220),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 // ── Programme divider ─────────────────────────────────────────────────────────
 
 /// Labelled horizontal divider shown when the formType changes in the section
@@ -449,7 +311,7 @@ class _ProgrammeDividerState extends State<_ProgrammeDivider> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Divider row — label left-aligned, divider extends right ───
+          // ── Divider row — label left-aligned, AI badge on right ────────
           Row(
             children: [
               Text(
@@ -462,6 +324,42 @@ class _ProgrammeDividerState extends State<_ProgrammeDivider> {
               ),
               const SizedBox(width: AppSpacing.md),
               Expanded(child: Divider(color: AppColors.border, height: 1)),
+              // AI pre-fill badge — shown when triage symptoms were mapped
+              // to this programme's fields.
+              if (hasChips) ...[
+                const SizedBox(width: AppSpacing.md),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [AppColors.aiPurpleDark, AppColors.aiPurple],
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.auto_awesome,
+                        size: 10,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        UnifiedFormStrings.aiBadgeLabel,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
           // ── Collapsible symptom strip ─────────────────────────────────
@@ -575,48 +473,48 @@ class _SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: AppSpacing.xxxl),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xxxl),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (section.title.isNotEmpty) ...[
-              Text(
-                section.title.toUpperCase(),
-                style: AppTextStyles.sectionLabel,
-              ),
-              const SizedBox(height: AppSpacing.xl),
-            ],
-            ...section.fieldRefs.map((ref) {
-              final def = config.fields[ref.id];
-              if (def == null) return const SizedBox.shrink();
-              final hasError = validationErrors.contains(ref.id);
-              return Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.xl),
-                child: hasError
-                    ? DecoratedBox(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: AppColors.statusCritical,
-                            width: 1.5,
-                          ),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(AppSpacing.sm),
-                          child: _buildField(
-                              context, def, ref, data.getValue(ref.id)),
-                        ),
-                      )
-                    : _buildField(context, def, ref, data.getValue(ref.id)),
-              );
-            }),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xxxl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (section.title.isNotEmpty) ...[
+            Text(
+              section.title.toUpperCase(),
+              style: AppTextStyles.sectionLabel,
+            ),
+            const SizedBox(height: AppSpacing.lg),
           ],
-        ),
+          ...section.fieldRefs.map((ref) {
+            final def = config.fields[ref.id];
+            if (def == null) return const SizedBox.shrink();
+            return Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+              child: _fieldRow(context, def, ref),
+            );
+          }),
+        ],
       ),
     );
+  }
+
+  /// Builds one field row: self-contained fields (info / text label) render
+  /// bare; every editable field is wrapped in a [_FieldShell] that owns the
+  /// label, mandatory `*`, and the red error border.
+  Widget _fieldRow(BuildContext context, FieldDef def, FieldRef ref) {
+    final control = _buildField(context, def, ref, data.getValue(ref.id));
+    switch (def.widgetHint) {
+      case WidgetHint.infoLabel:
+      case WidgetHint.textLabel:
+        return control;
+      default:
+        return _FieldShell(
+          label: def.label,
+          isMandatory: def.isMandatory || ref.isMandatory,
+          hasError: validationErrors.contains(ref.id),
+          child: control,
+        );
+    }
   }
 
   Widget _buildField(
@@ -639,7 +537,6 @@ class _SectionCard extends StatelessWidget {
             ?.name;
         return RadioFormField(
           key: Key('unified_form_${def.id}_input'),
-          labelText: def.label,
           options: def.options.map((o) => o.name).toList(),
           currentValue: displayName,
           onChanged: (name) {
@@ -668,7 +565,6 @@ class _SectionCard extends StatelessWidget {
         }).toList();
         return DialogMultiSelectField(
           key: Key('unified_form_${def.id}_input'),
-          labelText: def.label,
           options: def.options.map((o) => o.name).toList(),
           currentValue: displayNames,
           onChanged: (names) {
@@ -686,7 +582,6 @@ class _SectionCard extends StatelessWidget {
       case WidgetHint.spinner:
         return _SpinnerField(
           key: Key('unified_form_${def.id}_input'),
-          label: def.label,
           options: def.options,
           currentValue: currentValue as String?,
           onChanged: (v) => onFieldChanged(def.id, v),
@@ -702,8 +597,6 @@ class _SectionCard extends StatelessWidget {
                 !def.unitMeasurement!.contains('whole'));
         return _NumericField(
           key: Key('unified_form_${def.id}_input'),
-          label: def.label,
-          isMandatory: ref.isMandatory,
           isDecimal: isDecimal,
           unit: def.unitMeasurement,
           hint: def.hintText,
@@ -723,7 +616,6 @@ class _SectionCard extends StatelessWidget {
       case WidgetHint.dateField:
         return _DateField(
           key: Key('unified_form_${def.id}_input'),
-          label: def.label,
           currentValue: currentValue as String?,
           onChanged: (v) => onFieldChanged(def.id, v),
         );
@@ -751,7 +643,6 @@ class _SectionCard extends StatelessWidget {
             : <Map<String, dynamic>>[];
         return _BpReadingField(
           key: Key('unified_form_${def.id}_bp'),
-          label: def.label,
           readings: readings,
           onChanged: (v) => onFieldChanged(def.id, v),
         );
@@ -763,8 +654,6 @@ class _SectionCard extends StatelessWidget {
         // Fall back to a numeric text field so data is never silently dropped.
         return _NumericField(
           key: Key('unified_form_${def.id}_input'),
-          label: def.label,
-          isMandatory: ref.isMandatory,
           isDecimal: true,
           initialValue: currentValue?.toString(),
           onChanged: (v) => onFieldChanged(def.id, v),
@@ -773,13 +662,136 @@ class _SectionCard extends StatelessWidget {
   }
 }
 
+// ── Field chrome (v13 visual system) ─────────────────────────────────────────
+
+/// Local visual constants for the Step 2 form, mirroring the `apon_sushashthya`
+/// v13 mockup's form styling.  Kept private to this screen so the shared global
+/// theme is untouched; all colours still come from [AppColors] tokens.
+const double _kFieldCardRadius = AppRadius.button; // 12 — white field card
+const double _kControlRadius = AppRadius.field; // 10 — filled input control
+const double _kControlBorderWidth = 1.5;
+
+/// Filled input decoration shared by every text / number / date / select
+/// control so their fill, border, radius, and padding are pixel-consistent
+/// with the v13 mockup (`#F8F9FC` fill, `1.5px #E5E7EB` border, radius 10).
+InputDecoration _filledInputDecoration({
+  String? hintText,
+  String? suffixText,
+  Widget? suffixIcon,
+}) {
+  final enabled = OutlineInputBorder(
+    borderRadius: BorderRadius.circular(_kControlRadius),
+    borderSide: const BorderSide(
+      color: AppColors.border,
+      width: _kControlBorderWidth,
+    ),
+  );
+  return InputDecoration(
+    isDense: true,
+    filled: true,
+    fillColor: AppColors.cardSurfaceMuted,
+    hintText: hintText,
+    suffixText: suffixText,
+    suffixIcon: suffixIcon,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 11, vertical: 11),
+    border: enabled,
+    enabledBorder: enabled,
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(_kControlRadius),
+      borderSide: const BorderSide(
+        color: AppColors.navy,
+        width: _kControlBorderWidth,
+      ),
+    ),
+  );
+}
+
+/// The label line shown above every field: bold dark text with a red `*` when
+/// the field is mandatory (matches the v13 `.field-label` styling).
+class _FieldLabel extends StatelessWidget {
+  const _FieldLabel({required this.label, this.isMandatory = false});
+
+  final String label;
+  final bool isMandatory;
+
+  @override
+  Widget build(BuildContext context) {
+    final base = Theme.of(context).textTheme.bodyMedium?.copyWith(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textPrimary,
+          height: 1.25,
+        );
+    return Text.rich(
+      TextSpan(
+        text: label,
+        style: base,
+        children: isMandatory
+            ? const [
+                TextSpan(
+                  text: ' *',
+                  style: TextStyle(
+                    color: AppColors.statusCritical,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ]
+            : const [],
+      ),
+    );
+  }
+}
+
+/// The consistent chrome around every editable field: a white rounded card with
+/// a `1.5px` border (red when [hasError]), a bold label + mandatory `*`, then
+/// the control [child].  Replaces the previous per-field [DecoratedBox] error
+/// wrap and the doubled labels the inner widgets used to render.
+class _FieldShell extends StatelessWidget {
+  const _FieldShell({
+    required this.label,
+    required this.child,
+    this.isMandatory = false,
+    this.hasError = false,
+  });
+
+  final String label;
+  final Widget child;
+  final bool isMandatory;
+  final bool hasError;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 11, 12, 12),
+      decoration: BoxDecoration(
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(_kFieldCardRadius),
+        border: Border.all(
+          color: hasError ? AppColors.statusCritical : AppColors.border,
+          width: _kControlBorderWidth,
+        ),
+        boxShadow: AppShadows.statBox,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (label.isNotEmpty) ...[
+            _FieldLabel(label: label, isMandatory: isMandatory),
+            const SizedBox(height: 7),
+          ],
+          child,
+        ],
+      ),
+    );
+  }
+}
+
 // ── Inline micro-widgets (no hardcoded strings, tokens only) ─────────────────
 
 class _NumericField extends StatefulWidget {
   const _NumericField({
     super.key,
-    required this.label,
-    required this.isMandatory,
     required this.isDecimal,
     required this.onChanged,
     this.initialValue,
@@ -787,8 +799,6 @@ class _NumericField extends StatefulWidget {
     this.hint,
   });
 
-  final String label;
-  final bool isMandatory;
   final bool isDecimal;
   final String? initialValue;
   final ValueChanged<String?> onChanged;
@@ -839,10 +849,10 @@ class _NumericFieldState extends State<_NumericField> {
         else
           FilteringTextInputFormatter.digitsOnly,
       ],
-      decoration: InputDecoration(
-        labelText: widget.isMandatory ? '${widget.label} *' : widget.label,
-        suffixText: widget.unit,
+      style: Theme.of(context).textTheme.bodyMedium,
+      decoration: _filledInputDecoration(
         hintText: widget.hint,
+        suffixText: widget.unit,
       ),
       onChanged: widget.onChanged,
     );
@@ -852,13 +862,11 @@ class _NumericFieldState extends State<_NumericField> {
 class _SpinnerField extends StatelessWidget {
   const _SpinnerField({
     super.key,
-    required this.label,
     required this.options,
     required this.onChanged,
     this.currentValue,
   });
 
-  final String label;
   final List<FieldOption> options;
   final String? currentValue;
   final ValueChanged<String?> onChanged;
@@ -874,7 +882,8 @@ class _SpinnerField extends StatelessWidget {
     return DropdownButtonFormField<String>(
       initialValue: safeValue,
       isExpanded: true,
-      decoration: InputDecoration(labelText: label),
+      decoration: _filledInputDecoration(),
+      icon: const Icon(Icons.expand_more, color: AppColors.textMuted),
       items: options
           .map((o) => DropdownMenuItem(value: o.id, child: Text(o.name)))
           .toList(),
@@ -887,12 +896,10 @@ class _SpinnerField extends StatelessWidget {
 class _DateField extends StatefulWidget {
   const _DateField({
     super.key,
-    required this.label,
     required this.onChanged,
     this.currentValue,
   });
 
-  final String label;
   final String? currentValue;
   final ValueChanged<String?> onChanged;
 
@@ -928,9 +935,13 @@ class _DateFieldState extends State<_DateField> {
     return TextFormField(
       readOnly: true,
       controller: _ctrl,
-      decoration: InputDecoration(
-        labelText: widget.label,
-        suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
+      style: Theme.of(context).textTheme.bodyMedium,
+      decoration: _filledInputDecoration(
+        suffixIcon: const Icon(
+          Icons.calendar_today_outlined,
+          size: 18,
+          color: AppColors.textMuted,
+        ),
       ),
       onTap: () async {
         final picked = await showDatePicker(
@@ -956,12 +967,10 @@ class _DateFieldState extends State<_DateField> {
 class _BpReadingField extends StatefulWidget {
   const _BpReadingField({
     super.key,
-    required this.label,
     required this.readings,
     required this.onChanged,
   });
 
-  final String label;
   final List<Map<String, dynamic>> readings;
   final ValueChanged<List<Map<String, dynamic>>> onChanged;
 
@@ -1028,57 +1037,78 @@ class _BpReadingFieldState extends State<_BpReadingField> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        // Systolic / diastolic pair joined by a "/" separator.
+        Expanded(
+          flex: 3,
+          child: _bpCell(
+            context,
+            caption: UnifiedFormStrings.bpSystolicLabel,
+            controller: _sys,
+            suffixText: UnifiedFormStrings.bpUnit,
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10, left: 6, right: 6),
+          child: Text(
+            '/',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: AppColors.textMuted,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+        ),
+        Expanded(
+          flex: 3,
+          child: _bpCell(
+            context,
+            caption: UnifiedFormStrings.bpDiastolicLabel,
+            controller: _dia,
+          ),
+        ),
+        const SizedBox(width: 10),
+        // Pulse.
+        Expanded(
+          flex: 3,
+          child: _bpCell(
+            context,
+            caption: UnifiedFormStrings.bpPulseLabel,
+            controller: _pulse,
+            suffixText: UnifiedFormStrings.bpPulseUnit,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// One captioned, filled numeric input used for systolic / diastolic / pulse.
+  Widget _bpCell(
+    BuildContext context, {
+    required String caption,
+    required TextEditingController controller,
+    String? suffixText,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          widget.label,
-          style: theme.textTheme.labelLarge
-              ?.copyWith(color: AppColors.textMuted),
+          caption,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: AppColors.textMuted,
+                fontWeight: FontWeight.w600,
+                fontSize: 10.5,
+              ),
         ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: TextFormField(
-                controller: _sys,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: const InputDecoration(
-                  labelText: UnifiedFormStrings.bpSystolicLabel,
-                  suffixText: UnifiedFormStrings.bpUnit,
-                ),
-                onChanged: (_) => _emit(),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextFormField(
-                controller: _dia,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: const InputDecoration(
-                  labelText: UnifiedFormStrings.bpDiastolicLabel,
-                  suffixText: UnifiedFormStrings.bpUnit,
-                ),
-                onChanged: (_) => _emit(),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextFormField(
-                controller: _pulse,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: const InputDecoration(
-                  labelText: UnifiedFormStrings.bpPulseLabel,
-                  suffixText: UnifiedFormStrings.bpPulseUnit,
-                ),
-                onChanged: (_) => _emit(),
-              ),
-            ),
-          ],
+        const SizedBox(height: 4),
+        TextFormField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          style: Theme.of(context).textTheme.bodyMedium,
+          decoration: _filledInputDecoration(suffixText: suffixText),
+          onChanged: (_) => _emit(),
         ),
       ],
     );
@@ -1101,29 +1131,54 @@ class _InfoLabelField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final hasValue = value != null && value!.isNotEmpty;
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.cardSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.border),
+        color: AppColors.cardSurfaceMuted,
+        borderRadius: BorderRadius.circular(_kControlRadius),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label,
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: AppColors.textMuted)),
-          if (value != null && value!.isNotEmpty)
-            Text(value!,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.navy,
-                ))
-          else
-            Text('—',
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(color: AppColors.textMuted)),
+          // Uppercase caption + purple (auto) tag.
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Flexible(
+                child: Text(
+                  label.toUpperCase(),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: AppColors.textMuted,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 9.5,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 5),
+              Text(
+                UnifiedFormStrings.autoComputedTag,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: AppColors.aiPurple,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 9.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          Text(
+            hasValue ? value! : UnifiedFormStrings.autoComputedPlaceholder,
+            style: const TextStyle(
+              fontFamily: 'Nunito',
+              fontWeight: FontWeight.w800,
+              fontSize: 16,
+              color: AppColors.navy,
+            ),
+          ),
         ],
       ),
     );
@@ -1152,11 +1207,30 @@ class _SubmitBar extends StatelessWidget {
           child: ElevatedButton(
             key: const Key('unified_form_submit_button'),
             onPressed: submitting ? null : onSubmit,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.pink,
+              foregroundColor: AppColors.textOnNavy,
+              disabledBackgroundColor: AppColors.pink.withValues(alpha: 0.5),
+              disabledForegroundColor: AppColors.textOnNavy,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(vertical: 15),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.button),
+              ),
+              textStyle: const TextStyle(
+                fontFamily: 'Nunito',
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
             child: submitting
                 ? const SizedBox(
                     height: 20,
                     width: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.textOnNavy,
+                    ),
                   )
                 : const Text(UnifiedFormStrings.submitLabel),
           ),
