@@ -8,6 +8,7 @@ import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart' show Endpoints;
 import '../../core/auth/auth_repository.dart';
 import '../../core/config/app_config.dart';
+import '../../core/db/assessment_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/models/provance_dto.dart';
 import 'forms/vitals_trend.dart';
@@ -26,13 +27,18 @@ class AssessmentRepository extends ChangeNotifier {
     required LocalAssessmentDao dao,
     required ApiClient api,
     required AuthRepository auth,
+    AssessmentDao? historyDao,
   })  : _dao = dao,
         _api = api,
-        _auth = auth;
+        _auth = auth,
+        _historyDao = historyDao;
 
   final LocalAssessmentDao _dao;
   final ApiClient _api;
   final AuthRepository _auth;
+  // Server-synced visit history (assessments table). May be null when not
+  // wired in (e.g., during unit tests where the full DB is not available).
+  final AssessmentDao? _historyDao;
 
   bool _isSyncing = false;
   bool get isSyncing => _isSyncing;
@@ -312,17 +318,121 @@ class AssessmentRepository extends ChangeNotifier {
   /// urine-protein movement across visits.  Reads only committed rows — the
   /// current visit's live values come from the form notifier and are not yet
   /// persisted here, so no explicit exclusion is required.
+  /// Returns ANC vital snapshots oldest-first from BOTH local submissions and
+  /// server-synced history.  The trend card needs ≥2 data points.
   Future<List<VisitVitals>> ancVitalsHistory(String patientId) async {
     if (patientId.isEmpty) return const [];
-    final rows = await _dao.getByPatientId(patientId); // created_at DESC
     final snapshots = <VisitVitals>[];
-    for (final row in rows) {
+
+    // 1. Locally-submitted assessments (pending or synced by this app).
+    final localRows = await _dao.getByPatientId(patientId);
+    for (final row in localRows) {
       if (row.assessmentType.toUpperCase() != 'ANC') continue;
       final snap = _snapshotFromAnc(row.assessmentDetails, row.createdAt);
       if (!snap.isEmpty) snapshots.add(snap);
     }
-    // Rows are newest-first; the analyzer expects oldest-first.
-    return snapshots.reversed.toList();
+
+    // 2. Server-synced assessment history stored during offline sync.
+    if (_historyDao != null) {
+      final historyMap = await _historyDao.forMany([patientId]);
+      final historyRows = historyMap[patientId] ?? const [];
+      debugPrint('[AssessmentRepo] ANC history lookup: ${historyRows.length} rows '
+          'for patient $patientId');
+      for (final row in historyRows) {
+        final kind = row.kind?.toUpperCase() ?? '';
+        // ANC visits may arrive as "ANC", "ANTENATAL_CARE", "ANTENATAL", etc.
+        if (!kind.contains('ANC') && !kind.contains('ANTENATAL')) continue;
+        final snap = _snapshotFromServerRaw(row.rawJson, row.occurredAt);
+        if (!snap.isEmpty) snapshots.add(snap);
+      }
+    }
+
+    // Sort oldest-first so VitalsTrendAnalyzer sees the correct sequence.
+    snapshots.sort((a, b) {
+      if (a.date == null && b.date == null) return 0;
+      if (a.date == null) return 1;
+      if (b.date == null) return -1;
+      return a.date!.compareTo(b.date!);
+    });
+    debugPrint('[AssessmentRepo] ancVitalsHistory: ${snapshots.length} snapshots '
+        'for patient $patientId');
+    return snapshots;
+  }
+
+  /// Reads the most-recent ANC assessment from server history and returns the
+  /// LMP date (or null when unavailable).  Used as a fallback by
+  /// [UnifiedFormNotifier.loadPregnancyData] when the patient rawJson is empty.
+  Future<DateTime?> lmpDateFromHistory(String patientId) async {
+    if (patientId.isEmpty || _historyDao == null) return null;
+    final historyMap = await _historyDao.forMany([patientId]);
+    final rows = List<AssessmentRow>.from(historyMap[patientId] ?? const [])
+      ..sort((a, b) => (b.occurredAt ?? 0).compareTo(a.occurredAt ?? 0));
+    for (final row in rows) {
+      final kind = row.kind?.toUpperCase() ?? '';
+      if (!kind.contains('ANC') && !kind.contains('ANTENATAL')) continue;
+      final lmp = _extractLmpFromRaw(row.rawJson);
+      debugPrint('[AssessmentRepo] lmpFromHistory row ${row.id}: lmp=$lmp');
+      if (lmp != null) return lmp;
+    }
+    return null;
+  }
+
+  /// Extracts LMP from a server assessment row's rawJson, trying several key
+  /// locations the backend may use.  Returns null when nothing recognisable
+  /// is found; falls back to deriving a synthetic LMP from gestational weeks.
+  static DateTime? _extractLmpFromRaw(String rawJson) {
+    try {
+      final raw = jsonDecode(rawJson) as Map<String, dynamic>;
+      // Flatten sub-objects that may carry the LMP key.
+      final flat = <String, dynamic>{...raw};
+      for (final sub in const [
+        'observations',
+        'assessmentDetails',
+        'medicalHistoryPhysicalExamination',
+        'pointOfCareInvestigations',
+      ]) {
+        if (raw[sub] is Map) {
+          flat.addAll((raw[sub] as Map).cast<String, dynamic>());
+        }
+      }
+
+      // Try ISO date strings under common LMP field names.
+      for (final key in const [
+        'lmpDate',
+        'lastMenstrualPeriod',
+        'lastMenstrualPeriodDate',
+        'lmp',
+        'lmpValue',
+      ]) {
+        final v = flat[key];
+        if (v is String && v.isNotEmpty) {
+          final d = DateTime.tryParse(v);
+          if (d != null) return d;
+        }
+        // Some backends send epoch millis.
+        if (v is num && v > 1_000_000_000) {
+          return DateTime.fromMillisecondsSinceEpoch(v.toInt());
+        }
+      }
+
+      // Fallback: derive LMP from gestational weeks.
+      for (final key in const [
+        'gestationalAge',
+        'gestationalWeeks',
+        'gaWeeks',
+        'weeksPregnant',
+      ]) {
+        final v = flat[key];
+        int? weeks;
+        if (v is int) weeks = v;
+        if (v is num) weeks = v.toInt();
+        if (v is String) weeks = int.tryParse(v);
+        if (weeks != null && weeks > 0 && weeks < 45) {
+          return DateTime.now().subtract(Duration(days: weeks * 7));
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
   /// Parses an ANC `assessment_details` JSON blob into a [VisitVitals],
@@ -335,11 +445,32 @@ class AssessmentRepository extends ChangeNotifier {
     } catch (_) {
       return const VisitVitals();
     }
+    return _vitalsFromFlattened(map, date);
+  }
+
+  /// Parses a server-synced assessment's `raw_json` into a [VisitVitals].
+  static VisitVitals _snapshotFromServerRaw(String rawJson, int? occurredAtMs) {
+    Map<String, dynamic> raw;
+    try {
+      raw = jsonDecode(rawJson) as Map<String, dynamic>;
+    } catch (_) {
+      return const VisitVitals();
+    }
+    final date = occurredAtMs != null
+        ? DateTime.fromMillisecondsSinceEpoch(occurredAtMs)
+        : null;
+    return _vitalsFromFlattened(raw, date);
+  }
+
+  static VisitVitals _vitalsFromFlattened(
+      Map<String, dynamic> map, DateTime? date) {
     final flat = <String, dynamic>{...map};
     for (final sub in const [
       'medicalHistoryPhysicalExamination',
       'pointOfCareInvestigations',
       'dangerSignsRiskIdentification',
+      'observations',
+      'assessmentDetails',
     ]) {
       if (map[sub] is Map) {
         flat.addAll((map[sub] as Map).cast<String, dynamic>());
@@ -371,7 +502,6 @@ class AssessmentRepository extends ChangeNotifier {
       }
     }
     final dia = asInt('diastolic') ?? asInt('bloodPressureDiastolic');
-
     final urine = flat['urinaryAlbumin'] ?? flat['urineProtein'];
 
     return VisitVitals(

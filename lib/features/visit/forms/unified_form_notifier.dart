@@ -115,35 +115,48 @@ class UnifiedFormNotifier extends ChangeNotifier {
     }
   }
 
-  /// Load LMP and EDD from patient raw JSON.  Called once on screen init
-  /// when the ANC form type is active.
+  /// Load LMP and EDD for this ANC visit.
+  ///
+  /// Priority order:
+  /// 1. `lmpDate` / `gestationalWeeks` in patient rawJson (from bulk sync).
+  /// 2. LMP derived from server-synced past ANC assessments via
+  ///    [AssessmentRepository.lmpDateFromHistory].
   Future<void> loadPregnancyData() async {
     try {
+      // ── 1. Try patient rawJson ─────────────────────────────────────────────
       final patient = await _patientDao.byId(_patientId);
       if (patient == null) {
         debugPrint('[UnifiedForm] pregnancy data: patient $_patientId not found in DB');
-        return;
       }
-      debugPrint('[UnifiedForm] pregnancy data: rawJson length=${patient.rawJson.length}');
-      final json = jsonDecode(patient.rawJson) as Map<String, dynamic>;
-      debugPrint('[UnifiedForm] pregnancy data: lmpDate=${json['lmpDate']} '
-          'gestationalWeeks=${json['gestationalWeeks']}');
+      debugPrint('[UnifiedForm] pregnancy data: rawJson length=${patient?.rawJson.length ?? 0}');
 
       DateTime? lmp;
       int? weeks;
 
-      if (json['lmpDate'] != null) {
-        lmp = DateTime.tryParse(json['lmpDate'] as String);
-        if (lmp != null) {
-          weeks = DateTime.now().difference(lmp).inDays ~/ 7;
-        }
-      } else if (json['gestationalWeeks'] != null) {
-        weeks = (json['gestationalWeeks'] as num).toInt();
-        lmp = DateTime.now().subtract(Duration(days: weeks * 7));
+      if (patient != null) {
+        try {
+          final json = jsonDecode(patient.rawJson) as Map<String, dynamic>;
+          debugPrint('[UnifiedForm] pregnancy data: lmpDate=${json['lmpDate']} '
+              'gestationalWeeks=${json['gestationalWeeks']}');
+          if (json['lmpDate'] != null) {
+            lmp = DateTime.tryParse(json['lmpDate'] as String);
+            if (lmp != null) weeks = DateTime.now().difference(lmp).inDays ~/ 7;
+          } else if (json['gestationalWeeks'] != null) {
+            weeks = (json['gestationalWeeks'] as num).toInt();
+            lmp = DateTime.now().subtract(Duration(days: weeks * 7));
+          }
+        } catch (_) {}
+      }
+
+      // ── 2. Fallback: scan server-synced ANC assessment history ────────────
+      if (lmp == null) {
+        debugPrint('[UnifiedForm] pregnancy data: rawJson had no LMP — '
+            'trying assessment history fallback');
+        lmp = await _assessmentRepo.lmpDateFromHistory(_patientId);
+        if (lmp != null) weeks = DateTime.now().difference(lmp).inDays ~/ 7;
       }
 
       final edd = lmp?.add(const Duration(days: 280));
-
       _lmpDate = lmp;
       _eddDate = edd;
       _gestationalWeeks = weeks;
