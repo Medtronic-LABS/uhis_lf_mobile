@@ -417,6 +417,12 @@ abstract final class AppShadows {
     BoxShadow(color: Color(0x0D000000), blurRadius: 6, offset: Offset(0, 2)),
   ];
 
+  /// Household card (v13 `renderHouseholds` card): 0 1px 6px rgba(0,0,0,0.06).
+  /// Distinct from [card] — same alpha, tighter blur/offset.
+  static const List<BoxShadow> householdCard = [
+    BoxShadow(color: Color(0x0F000000), blurRadius: 6, offset: Offset(0, 1)),
+  ];
+
   /// Stat box: 0 1px 4px rgba(0,0,0,0.05)
   static const List<BoxShadow> statBox = [
     BoxShadow(color: Color(0x0D000000), blurRadius: 4, offset: Offset(0, 1)),

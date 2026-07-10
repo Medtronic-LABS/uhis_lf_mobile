@@ -30,6 +30,7 @@ class MissionQueueCard extends StatelessWidget {
     this.onAction,
     this.showActionButton = true,
     this.compact = false,
+    this.embedded = false,
   });
 
   final MissionQueueItem item;
@@ -38,6 +39,13 @@ class MissionQueueCard extends StatelessWidget {
   final VoidCallback? onAction;
   final bool showActionButton;
   final bool compact;
+
+  /// When true, renders as a flush row with no card chrome of its own (no
+  /// background/shadow/rounded corners/left border) — for embedding inside
+  /// another surface that already provides the card boundary (e.g. a
+  /// household card's primary-member slot), matching the v13 mockup's
+  /// member row, which has no shadow/border of its own either.
+  final bool embedded;
 
   @override
   Widget build(BuildContext context) {
@@ -57,14 +65,17 @@ class MissionQueueCard extends StatelessWidget {
           label: 'View patient ${item.patientName}',
           button: true,
           child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppRadius.button),
-              color: tokens.cardSurface,
-              boxShadow: AppShadows.card,
-            ),
+            decoration: embedded
+                ? const BoxDecoration()
+                : BoxDecoration(
+                    borderRadius: BorderRadius.circular(AppRadius.button),
+                    color: tokens.cardSurface,
+                    boxShadow: AppShadows.card,
+                  ),
             child: Material(
               color: Colors.transparent,
-              borderRadius: BorderRadius.circular(AppRadius.button),
+              borderRadius:
+                  embedded ? BorderRadius.zero : BorderRadius.circular(AppRadius.button),
               child: InkWell(
                 key: const Key('visit_queue_card_tap'),
                 onTap: isCompleted
@@ -78,20 +89,25 @@ class MissionQueueCard extends StatelessWidget {
                           ),
                         )
                     : onTap,
-                borderRadius: BorderRadius.circular(AppRadius.button),
+                borderRadius:
+                    embedded ? BorderRadius.zero : BorderRadius.circular(AppRadius.button),
                 child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: const BorderRadius.all(
-                      Radius.circular(AppRadius.button),
-                    ),
-                    // Left border is always neutral — the mockup never
-                    // color-codes it by status; status is conveyed only by
-                    // the right-side status pill (_StatusDot below).
-                    border: const Border(
-                      left: BorderSide(color: AppColors.border, width: 4),
-                    ),
-                  ),
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                  decoration: embedded
+                      ? const BoxDecoration()
+                      : BoxDecoration(
+                          borderRadius: const BorderRadius.all(
+                            Radius.circular(AppRadius.button),
+                          ),
+                          // Left border is always neutral — the mockup never
+                          // color-codes it by status; status is conveyed only by
+                          // the right-side status pill (_StatusDot below).
+                          border: const Border(
+                            left: BorderSide(color: AppColors.border, width: 4),
+                          ),
+                        ),
+                  padding: embedded
+                      ? const EdgeInsets.symmetric(vertical: 12)
+                      : const EdgeInsets.fromLTRB(14, 12, 14, 12),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [

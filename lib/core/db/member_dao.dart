@@ -554,12 +554,19 @@ class MemberDao {
   }
 
   /// Returns distinct (villageId, villageName) pairs for filter UI.
+  ///
+  /// Grouped by village_id (not `DISTINCT village_id, village_name`) so a
+  /// village_id that was synced with more than one village_name spelling
+  /// still yields exactly one row. Two rows sharing a `value` would make the
+  /// filter-tab UI mark both tabs active for a single selection, since tab
+  /// selection is compared by that value alone.
   Future<List<({String id, String name})>> getDistinctVillages() async {
     final rows = await _db.db.rawQuery('''
-      SELECT DISTINCT village_id, village_name
+      SELECT village_id, MIN(NULLIF(TRIM(village_name), '')) AS village_name
       FROM ${AppDatabase.tableMembers}
       WHERE village_id IS NOT NULL AND village_id != ''
-      ORDER BY COALESCE(village_name, village_id) ASC
+      GROUP BY village_id
+      ORDER BY COALESCE(MIN(NULLIF(TRIM(village_name), '')), village_id) ASC
     ''');
     return rows.map((r) {
       final id = r['village_id'].toString();

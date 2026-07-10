@@ -401,20 +401,26 @@ abstract final class HouseholdListStrings {
   static const String loadError = 'Could not load data';
   static const String noHouseholds = 'No households found';
   static const String noMembers = 'No members found';
-  static const String noPatientsAssigned = 'No patients assigned to you';
   static const String unnamedHousehold = '(Unnamed household)';
   static const String unnamedMember = '(Unnamed)';
-
-  // Filter toggle labels
-  static const String myPatients = 'My Patients';
-  static const String allMembersFilter = 'All Members';
-  static String myPatientsCount(int n) => 'My Patients ($n)';
-  static String allMembersCount(int n) => 'All Members ($n)';
 
   static String householdsCount(int n) => '$n households';
   static String membersCount(int n) => '$n members';
   static String totalMembersCount(int n) => '$n total members';
   static String acrossHouseholds(int n) => 'across $n households';
+
+  // Header (v13 mockup: navy header, 🏠 title, combined live count)
+  static const String headerTitle = '🏠 Households & Patients';
+  static String headerSummary(int households, int patients) =>
+      '${householdsCount(households)} · ${_patientsCount(patients)}';
+  static String _patientsCount(int n) => '$n patient${n == 1 ? '' : 's'}';
+  static const String refreshTooltip = 'Refresh';
+  static const String searchHint = 'Search by name, house no. or village…';
+
+  // Household-card inline other-members panel
+  static String otherMembersToggle(int n) =>
+      '+$n other household member${n == 1 ? '' : 's'}';
+  static const String enrolledTag = 'Enrolled';
 
   // Location / SS filter strings
   static const String filterTitle = 'Filter';

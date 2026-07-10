@@ -708,14 +708,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 count: overflow,
                                 tier: overflowTier,
                                 onTap: () {
-                                  // Deep-link to /patients with the dominant
-                                  // overflow tier preselected as the filter
-                                  // chip. Router parses `?tier=` into
-                                  // `HouseholdListScreen.initialTier`.
-                                  final route = overflowTier == null
-                                      ? '/patients'
-                                      : '/patients?tier=${overflowTier.name}';
-                                  context.go(route);
+                                  // HouseholdListScreen no longer supports
+                                  // tier filtering (removed for parity with
+                                  // the v13 mockup's single household list),
+                                  // so this always lands on the unfiltered
+                                  // Patients tab now.
+                                  context.go('/patients');
                                 },
                               ),
                           ],
