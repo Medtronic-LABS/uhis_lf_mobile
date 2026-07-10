@@ -3049,6 +3049,33 @@ abstract final class SymptomPickerStrings {
   static const String searchSymptomsHint = 'Search symptoms…';
   static const String searchMoreHint = 'Type 3+ letters to find more symptoms';
   static const String searchNoResults = 'No symptoms found';
+
+  /// Shown below the default chip grid when enrolled-programme filtering is
+  /// active, to let the SK know general + other-programme symptoms are via search.
+  static const String searchOtherProgramsHint =
+      'Search to add more symptoms';
+
+  /// Shown as the empty-state body when the patient has no enrolled programmes
+  /// and the default grid is intentionally empty.
+  static const String searchOnlyEmptyHint =
+      'Search for symptoms';
+
+  // ── Non-enrolled programme enrollment prompt ──────────────────────────────
+  /// Title for the bottom sheet shown when the SK selects a symptom that
+  /// belongs to a programme the patient is not yet enrolled in.
+  static const String enrollProgrammeSheetTitle = 'New program assessment';
+
+  /// Body copy for the enrollment prompt. {symptom} and {programmes} are
+  /// interpolated by the caller.
+  static String enrollProgrammeSheetBody(
+    String symptomLabel,
+    String programmeNames,
+  ) =>
+      '"$symptomLabel" is associated with the $programmeNames program. '
+      'Adding it will include the $programmeNames assessment in this visit.';
+
+  static const String enrollProgrammeConfirmCta = 'Add to this visit';
+  static const String enrollProgrammeCancelCta = 'Skip for now';
   static const String symptomsSelectedCount =
       'symptom selected'; // prefix with count: "$n symptom(s) selected"
   static String symptomsSelected(int n) =>
