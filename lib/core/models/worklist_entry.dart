@@ -14,7 +14,9 @@ class WorklistEntry {
     required this.patientId,
     required this.displayName,
     this.age,
+    this.gender,
     this.phoneNumber,
+    this.nid,
     this.householdNo,
     this.householdName,
     this.villageId,
@@ -26,12 +28,16 @@ class WorklistEntry {
     this.rationale,
     this.nextDueAt,
     this.lastVisitAt,
+    this.ancVisitCount = 0,
+    this.pncVisitCount = 0,
   });
 
   final String patientId;
   final String displayName;
   final int? age;
+  final String? gender;
   final String? phoneNumber;
+  final String? nid;
   final String? householdNo;
   final String? householdName;
   final String? villageId;
@@ -46,6 +52,11 @@ class WorklistEntry {
 
   final DateTime? nextDueAt;
   final DateTime? lastVisitAt;
+
+  /// Completed ANC/PNC visits from server-synced assessments table — drives
+  /// the visit-count-aware dashboard card label (e.g. "ANC Visit 3 due").
+  final int ancVisitCount;
+  final int pncVisitCount;
 
   bool get isUrgent => band == Band.band1;
 

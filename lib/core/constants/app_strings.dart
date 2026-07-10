@@ -947,6 +947,15 @@ abstract final class MissionDashboardStrings {
   static String priorityRank(int rank) => 'Priority #$rank';
   static String daysOverdue(int days) => '$days Days Overdue';
   static const String aiInsight = 'AI Insight';
+
+  // ── Programme-smart reason badge (v13 design) ───────────────────────────
+  static const String enrolled = 'Enrolled';
+  static const String ancVisitLabel = 'ANC Visit';
+  static const String pncVisitLabel = 'PNC Visit';
+  static const String childImmunisation = 'Child immunisation';
+  static const String ncdCheckup = 'NCD checkup';
+  static const String tbCheck = 'TB check';
+  static const String newVisit = 'New visit';
   static const String aiPrioritisedBecause = 'AI Prioritised because:';
   static const String reason = 'Reason';
 
@@ -1143,18 +1152,24 @@ abstract final class MissionDashboardStrings {
       'QR enrolment flow coming soon. Use the Patients tab to view existing patients.';
 
   // ── Status pills (compact tier label shown in the card right-side pill) ───
+  static const String statusPillNow = 'Now';
+  static const String statusPillOverdue = 'Overdue';
+  static const String statusPillToday = 'Today';
+  static const String statusPillThisWeek = 'This week';
+  static const String statusPillRoutine = 'Routine';
+
   static String statusPillForTier(DashboardTier tier) {
     switch (tier) {
       case DashboardTier.critical:
-        return 'Now';
+        return statusPillToday;
       case DashboardTier.overdue:
-        return 'Today';
+        return statusPillOverdue;
       case DashboardTier.dueToday:
-        return 'Today';
+        return statusPillToday;
       case DashboardTier.thisWeek:
-        return 'This week';
+        return statusPillThisWeek;
       case DashboardTier.upcoming:
-        return 'Routine';
+        return statusPillRoutine;
     }
   }
 

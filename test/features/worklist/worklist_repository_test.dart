@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:uhis_next/core/db/app_database.dart';
+import 'package:uhis_next/core/db/assessment_dao.dart';
 import 'package:uhis_next/core/db/follow_up_dao.dart';
 import 'package:uhis_next/core/db/immunisation_dao.dart';
 import 'package:uhis_next/core/db/local_assessment_dao.dart';
@@ -24,6 +25,7 @@ void main() {
   late ImmunisationDao immunisations;
   late SyncMetaDao syncMeta;
   late LocalAssessmentDao localAssessments;
+  late AssessmentDao assessments;
   late WorklistRepository repo;
 
   setUp(() async {
@@ -41,6 +43,7 @@ void main() {
     immunisations = ImmunisationDao(appDb);
     syncMeta = SyncMetaDao(appDb);
     localAssessments = LocalAssessmentDao(appDb);
+    assessments = AssessmentDao(appDb);
     repo = WorklistRepository(
       patients: patients,
       programmes: programmes,
@@ -49,6 +52,7 @@ void main() {
       syncMeta: syncMeta,
       risk: const RiskScoringService(),
       localAssessments: localAssessments,
+      assessments: assessments,
     );
   });
 

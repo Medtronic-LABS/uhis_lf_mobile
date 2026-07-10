@@ -102,11 +102,11 @@ class MissionTierHeader extends StatelessWidget {
   ) {
     switch (tier) {
       case DashboardTier.critical:
-        return urgency.visitNow;
+        return urgency.visitNow;    // red
       case DashboardTier.overdue:
-        return urgency.visitNow;
+        return urgency.today;        // amber — was visitNow (red), now distinct from critical
       case DashboardTier.dueToday:
-        return urgency.today;
+        return tokens.statusSuccess; // green
       case DashboardTier.thisWeek:
         return urgency.thisWeek;
       case DashboardTier.upcoming:

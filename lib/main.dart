@@ -205,6 +205,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     syncMeta: _syncMetaDao,
     risk: _risk,
     localAssessments: _localAssessmentDao,
+    assessments: _assessmentDao,
   );
   late final PatientRepository _patientRepo = PatientRepository(
     patients: _patientDao,
