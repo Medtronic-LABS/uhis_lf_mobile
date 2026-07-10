@@ -416,37 +416,31 @@ class _ProgrammeDividerState extends State<_ProgrammeDivider> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Divider row — label left-aligned, AI badge on right ────────
-          Row(
-            children: [
-              Text(
-                widget.label.toUpperCase(),
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: AppColors.textPrimary,
-                  letterSpacing: 0.6,
-                  fontWeight: FontWeight.w800,
+          // ── Single divider row: LABEL ─── [symptom toggle] ────────────
+          GestureDetector(
+            onTap: hasChips
+                ? () => setState(() => _symptomsExpanded = !_symptomsExpanded)
+                : null,
+            child: Row(
+              children: [
+                Text(
+                  widget.label.toUpperCase(),
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: AppColors.textPrimary,
+                    letterSpacing: 0.6,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(child: Divider(color: AppColors.border, height: 1)),
-            ],
-          ),
-          // ── Collapsible symptom strip ─────────────────────────────────
-          if (hasChips) ...[
-            const SizedBox(height: 6),
-            // Tappable toggle row
-            GestureDetector(
-              onTap: () =>
-                  setState(() => _symptomsExpanded = !_symptomsExpanded),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(child: Divider(color: AppColors.border, height: 1)),
+                if (hasChips) ...[
+                  const SizedBox(width: AppSpacing.sm),
                   Icon(
                     Icons.assignment_outlined,
                     size: 11,
                     color: AppColors.textMuted,
                   ),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 3),
                   Text(
                     UnifiedFormStrings.triageSymptomsCount(codes.length),
                     style: theme.textTheme.labelSmall?.copyWith(
@@ -455,7 +449,7 @@ class _ProgrammeDividerState extends State<_ProgrammeDivider> {
                       fontSize: 10.5,
                     ),
                   ),
-                  const SizedBox(width: 2),
+                  const SizedBox(width: 1),
                   AnimatedRotation(
                     turns: _symptomsExpanded ? 0.5 : 0,
                     duration: const Duration(milliseconds: 180),
@@ -466,9 +460,11 @@ class _ProgrammeDividerState extends State<_ProgrammeDivider> {
                     ),
                   ),
                 ],
-              ),
+              ],
             ),
-            // Chip list — revealed when expanded
+          ),
+          // ── Chip list — revealed when expanded ────────────────────────
+          if (hasChips)
             AnimatedCrossFade(
               firstChild: const SizedBox.shrink(),
               secondChild: Padding(
@@ -491,7 +487,6 @@ class _ProgrammeDividerState extends State<_ProgrammeDivider> {
                   : CrossFadeState.showFirst,
               duration: const Duration(milliseconds: 200),
             ),
-          ],
           const SizedBox(height: AppSpacing.xl),
         ],
       ),
