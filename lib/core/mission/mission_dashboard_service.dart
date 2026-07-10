@@ -564,6 +564,7 @@ class MissionDashboardService {
       householdNumber: data.householdNumbersById[entry.householdNo],
       age: entry.age,
       gender: entry.gender,
+      nid: entry.nid,
       phoneNumber: entry.phoneNumber,
       village: entry.householdName ?? entry.villageName ?? entry.villageId,
       programmes: entry.programmes,

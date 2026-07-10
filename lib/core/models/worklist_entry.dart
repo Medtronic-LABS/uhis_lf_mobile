@@ -16,6 +16,7 @@ class WorklistEntry {
     this.age,
     this.gender,
     this.phoneNumber,
+    this.nid,
     this.householdNo,
     this.householdName,
     this.villageId,
@@ -34,6 +35,7 @@ class WorklistEntry {
   final int? age;
   final String? gender;
   final String? phoneNumber;
+  final String? nid;
   final String? householdNo;
   final String? householdName;
   final String? villageId;

@@ -80,6 +80,7 @@ class WorklistRepository {
       age: age,
       gender: p.gender,
       phoneNumber: p.phone,
+      nid: p.nationalId,
       householdNo: p.householdId,
       householdName: null, // Could be populated from household cache
       villageId: p.villageId,

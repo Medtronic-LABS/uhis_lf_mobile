@@ -103,6 +103,7 @@ class MissionQueueItem {
     this.householdNumber,
     this.age,
     this.gender,
+    this.nid,
     this.village,
     this.programmes = const <Programme>{},
     required this.reason,
@@ -162,6 +163,10 @@ class MissionQueueItem {
   /// or a single letter). Card formats it to a single uppercase letter via
   /// [genderInitial].
   final String? gender;
+
+  /// National ID / NID — used for inline dashboard search only, never shown
+  /// on the card itself.
+  final String? nid;
 
   /// Village name.
   final String? village;
@@ -258,6 +263,7 @@ class MissionQueueItem {
     String? householdNumber,
     int? age,
     String? gender,
+    String? nid,
     String? village,
     Set<Programme>? programmes,
     String? reason,
@@ -289,6 +295,7 @@ class MissionQueueItem {
       householdNumber: householdNumber ?? this.householdNumber,
       age: age ?? this.age,
       gender: gender ?? this.gender,
+      nid: nid ?? this.nid,
       village: village ?? this.village,
       programmes: programmes ?? this.programmes,
       reason: reason ?? this.reason,

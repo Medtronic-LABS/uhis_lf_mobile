@@ -190,7 +190,6 @@ class PatientFilterPanel extends StatelessWidget {
     required this.availableNeeds,
     required this.selectedNeeds,
     required this.onNeedToggled,
-    required this.onClearNeeds,
   });
 
   final List<VillageOption> villages;
@@ -199,7 +198,6 @@ class PatientFilterPanel extends StatelessWidget {
   final Set<NeedFilter> availableNeeds;
   final Set<NeedFilter> selectedNeeds;
   final void Function(NeedFilter need) onNeedToggled;
-  final VoidCallback onClearNeeds;
 
   @override
   Widget build(BuildContext context) {
@@ -238,31 +236,7 @@ class PatientFilterPanel extends StatelessWidget {
           const SizedBox(height: 8),
         ],
 
-        // ── Row 2: clear filters (only when active) ───────────────────────
-        if (selectedNeeds.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: Semantics(
-                label: 'Clear all filters',
-                button: true,
-                child: GestureDetector(
-                  onTap: onClearNeeds,
-                  child: Text(
-                    MissionDashboardStrings.clearNeedFilters,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: Theme.of(context).colorScheme.onSurface,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-        // ── Row 3: category bubbles ──────────────────────────────────────────
+        // ── Row 2: category bubbles ──────────────────────────────────────────
         if (availableNeeds.isNotEmpty)
           SizedBox(
             height: 88,
