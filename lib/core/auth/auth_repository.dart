@@ -269,11 +269,22 @@ class AuthRepository {
     // Only set on the ApiClient in-memory so login-time requests have a header value;
     // do NOT persist to _kOrganizationFhirId — that would overwrite the correct FHIR
     // ID saved by the last full sync, causing provenance HAPI-1094 on subsequent sessions.
+    //
+    // On re-authentication a valid FHIR org ID may already be persisted from an
+    // earlier user-data sync. Prefer it over the numeric internal ID so it does
+    // not leak into assessment provenance — FHIR IDs here are also numeric
+    // strings, so the two are indistinguishable by shape and a wrong one yields
+    // `HAPI-1094: Resource Organization/<internalId> not found`.
     final orgIds = data['organizationIds'];
     final numericOrgId = (orgIds is List && orgIds.isNotEmpty)
         ? orgIds.first?.toString()
         : null;
-    _api.setOrganizationFhirId(numericOrgId);
+    final persistedFhirOrgId = await _storage.read(key: _kOrganizationFhirId);
+    _api.setOrganizationFhirId(
+      (persistedFhirOrgId != null && persistedFhirOrgId.isNotEmpty)
+          ? persistedFhirOrgId
+          : numericOrgId,
+    );
   }
 
   /// Returns the user's assigned village IDs from the profile.
@@ -582,12 +593,23 @@ class AuthRepository {
   /// Returns the FHIR ID of the user's organization, persisted from the
   /// `/user-service/user/profile` response. Used by sync orchestration when
   /// the offline-sync request body wants the org id alongside the header.
+  ///
+  /// The persisted value is only ever written from `defaultHealthFacility.fhirId`
+  /// (via [saveOrganizationFhirId]) — the real FHIR Organization resource ID.
+  /// The in-memory cache may still hold the numeric `organizationIds[]` internal
+  /// ID set at login as a request-header stopgap; that internal ID is NOT a
+  /// valid FHIR reference and triggers `HAPI-1094: Resource Organization/[id]
+  /// not found` when it reaches assessment provenance. Prefer the persisted
+  /// FHIR ID whenever one exists, and reconcile the in-memory cache to it.
   Future<String?> organizationFhirId() async {
+    final stored = await _storage.read(key: _kOrganizationFhirId);
+    if (stored != null && stored.isNotEmpty) {
+      _api.setOrganizationFhirId(stored);
+      return stored;
+    }
     final cached = _api.organizationFhirId;
     if (cached != null && cached.isNotEmpty) return cached;
-    final stored = await _storage.read(key: _kOrganizationFhirId);
-    if (stored != null && stored.isNotEmpty) _api.setOrganizationFhirId(stored);
-    return stored;
+    return null;
   }
 }
 
