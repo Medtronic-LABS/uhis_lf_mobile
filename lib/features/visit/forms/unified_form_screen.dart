@@ -198,13 +198,21 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             }
             final merged = UnifiedSectionRules.mergedGroupDescriptions(allIds);
             // ignore: avoid_print
-            print('[Form] opening combined form — programmes: '
-                '${widget.activeFormTypes.join(', ')}');
+            print('[Form] ── section order (${widget.activeFormTypes.join('+')} · '
+                '${annotated.length} sections · $totalFields fields) ──────────');
             if (merged.isNotEmpty) {
               // ignore: avoid_print
-              print('[Form]   common fields captured once (merged): '
-                  '${merged.join(', ')}');
+              print('[Form]   merged (captured once): ${merged.join(', ')}');
             }
+            for (var i = 0; i < annotated.length; i++) {
+              final a = annotated[i];
+              final fieldIds = a.section.fieldRefs.map((r) => r.id).join(' · ');
+              // ignore: avoid_print
+              print('[Form]   ${i + 1}. [${a.section.sectionId}] '
+                  '${a.section.title} → $fieldIds');
+            }
+            // ignore: avoid_print
+            print('[Form] ────────────────────────────────────────────────────');
           }
           UnifiedSectionRules.debugLogSections(annotated, totalFields);
         }
@@ -408,37 +416,31 @@ class _ProgrammeDividerState extends State<_ProgrammeDivider> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Divider row — label left-aligned, AI badge on right ────────
-          Row(
-            children: [
-              Text(
-                widget.label.toUpperCase(),
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: AppColors.textPrimary,
-                  letterSpacing: 0.6,
-                  fontWeight: FontWeight.w800,
+          // ── Single divider row: LABEL ─── [symptom toggle] ────────────
+          GestureDetector(
+            onTap: hasChips
+                ? () => setState(() => _symptomsExpanded = !_symptomsExpanded)
+                : null,
+            child: Row(
+              children: [
+                Text(
+                  widget.label.toUpperCase(),
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: AppColors.textPrimary,
+                    letterSpacing: 0.6,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(child: Divider(color: AppColors.border, height: 1)),
-            ],
-          ),
-          // ── Collapsible symptom strip ─────────────────────────────────
-          if (hasChips) ...[
-            const SizedBox(height: 6),
-            // Tappable toggle row
-            GestureDetector(
-              onTap: () =>
-                  setState(() => _symptomsExpanded = !_symptomsExpanded),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(child: Divider(color: AppColors.border, height: 1)),
+                if (hasChips) ...[
+                  const SizedBox(width: AppSpacing.sm),
                   Icon(
                     Icons.assignment_outlined,
                     size: 11,
                     color: AppColors.textMuted,
                   ),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 3),
                   Text(
                     UnifiedFormStrings.triageSymptomsCount(codes.length),
                     style: theme.textTheme.labelSmall?.copyWith(
@@ -447,7 +449,7 @@ class _ProgrammeDividerState extends State<_ProgrammeDivider> {
                       fontSize: 10.5,
                     ),
                   ),
-                  const SizedBox(width: 2),
+                  const SizedBox(width: 1),
                   AnimatedRotation(
                     turns: _symptomsExpanded ? 0.5 : 0,
                     duration: const Duration(milliseconds: 180),
@@ -458,9 +460,11 @@ class _ProgrammeDividerState extends State<_ProgrammeDivider> {
                     ),
                   ),
                 ],
-              ),
+              ],
             ),
-            // Chip list — revealed when expanded
+          ),
+          // ── Chip list — revealed when expanded ────────────────────────
+          if (hasChips)
             AnimatedCrossFade(
               firstChild: const SizedBox.shrink(),
               secondChild: Padding(
@@ -483,7 +487,6 @@ class _ProgrammeDividerState extends State<_ProgrammeDivider> {
                   : CrossFadeState.showFirst,
               duration: const Duration(milliseconds: 200),
             ),
-          ],
           const SizedBox(height: AppSpacing.xl),
         ],
       ),
@@ -875,66 +878,143 @@ class _GestationalAgeCard extends StatelessWidget {
   static String _fmt(DateTime d) =>
       '${d.day} ${_months[d.month - 1]} ${d.year}';
 
+  static const _pinkAccent = Color(0xFF9D174D);
+  static const _navy = Color(0xFF1B2B5E);
+  static const _unitGrey = Color(0xFF6B7280);
+
   @override
   Widget build(BuildContext context) {
     final lmpStr = lmpDate != null ? _fmt(lmpDate!) : null;
     final eddStr = eddDate != null ? _fmt(eddDate!) : null;
 
-    final String heroText;
+    int? weeks;
+    int? days;
     if (lmpDate != null) {
       final total = DateTime.now().difference(lmpDate!).inDays;
-      final weeks = total ~/ 7;
-      final days = total % 7;
-      heroText = days > 0
-          ? '$weeks ${ComposerStrings.gestationalAgeWeeks} $days ${ComposerStrings.gestationalAgeDays}'
-          : '$weeks ${ComposerStrings.gestationalAgeWeeks}';
+      weeks = total ~/ 7;
+      days = total % 7;
     } else if (gestationalWeeks != null) {
-      heroText = '$gestationalWeeks ${ComposerStrings.gestationalAgeWeeks}';
-    } else {
-      heroText = '— ${ComposerStrings.gestationalAgeWeeks}';
+      weeks = gestationalWeeks;
+      days = 0;
     }
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.xl),
       child: Container(
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF1B2B5E), Color(0xFF2D3F7C)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          color: const Color(0xFFFDF2F8),
           borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFF9A8D4)),
         ),
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Hero row: circle avatar + label + number
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const Text('🤰', style: TextStyle(fontSize: 15)),
-                const SizedBox(width: 7),
-                Text(
-                  ComposerStrings.gestationalAgeLabel.toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.9,
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.06),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
                   ),
+                  alignment: Alignment.center,
+                  child: const Text('🤰', style: TextStyle(fontSize: 19)),
+                ),
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      ComposerStrings.gestationalAgeLabel.toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: _pinkAccent,
+                        letterSpacing: 0.6,
+                        height: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    RichText(
+                      text: TextSpan(
+                        style: const TextStyle(
+                          fontFamily: 'Nunito',
+                          color: _navy,
+                          height: 1,
+                        ),
+                        children: weeks != null
+                            ? [
+                                TextSpan(
+                                  text: '$weeks ',
+                                  style: const TextStyle(
+                                    fontSize: 21,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: ComposerStrings.gestationalAgeWeeks,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: _unitGrey,
+                                  ),
+                                ),
+                                if (days != null && days > 0) ...[
+                                  TextSpan(
+                                    text: ' $days ',
+                                    style: const TextStyle(
+                                      fontSize: 21,
+                                      fontWeight: FontWeight.w900,
+                                      color: _navy,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: ComposerStrings.gestationalAgeDays,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: _unitGrey,
+                                    ),
+                                  ),
+                                ],
+                              ]
+                            : [
+                                TextSpan(
+                                  text: '— ',
+                                  style: const TextStyle(
+                                    fontSize: 21,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: ComposerStrings.gestationalAgeWeeks,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: _unitGrey,
+                                  ),
+                                ),
+                              ],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-            const SizedBox(height: 6),
-            Text(
-              heroText,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                height: 1.1,
-              ),
-            ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
+            // LMP + EDD row
             Row(
               children: [
                 Expanded(
@@ -942,14 +1022,16 @@ class _GestationalAgeCard extends StatelessWidget {
                     emoji: '📅',
                     label: ComposerStrings.pregnancyOverviewLmp,
                     value: lmpStr,
+                    valueColor: _navy,
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 Expanded(
                   child: _DateSubBox(
                     emoji: '🍼',
                     label: ComposerStrings.pregnancyOverviewEdd,
                     value: eddStr,
+                    valueColor: const Color(0xFFDB2777),
                   ),
                 ),
               ],
@@ -966,45 +1048,49 @@ class _DateSubBox extends StatelessWidget {
     required this.emoji,
     required this.label,
     required this.value,
+    required this.valueColor,
   });
 
   final String emoji;
   final String label;
   final String? value;
+  final Color valueColor;
+
+  static const _pinkAccent = Color(0xFF9D174D);
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
+        color: Colors.white.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(9),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(emoji, style: const TextStyle(fontSize: 12)),
               const SizedBox(width: 4),
               Text(
                 label,
                 style: const TextStyle(
-                  color: Colors.white60,
-                  fontSize: 9.5,
+                  fontSize: 10,
                   fontWeight: FontWeight.w700,
-                  letterSpacing: 0.4,
+                  color: _pinkAccent,
+                  letterSpacing: 0.6,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 3),
           Text(
             value ?? '—',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12.5,
-              fontWeight: FontWeight.w700,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: valueColor,
             ),
           ),
         ],
@@ -1104,6 +1190,8 @@ class _SectionCard extends StatelessWidget {
     final hasBpPair = sectionIds.contains('systolic') &&
         sectionIds.contains('diastolic');
 
+    final hasBpPulseTriple = hasBpPair && sectionIds.contains('pulse');
+
     // Blood-glucose pair: fasting + random shown side-by-side.
     final hasGlucosePair = sectionIds.contains('fastingBloodSugar') &&
         sectionIds.contains('randomBloodSugar');
@@ -1128,6 +1216,8 @@ class _SectionCard extends StatelessWidget {
     final consumedIds = <String>{
       // When a combined BP card is rendered, skip the standalone fields.
       if (hasBpPair) ...const {'bloodPressure', 'diastolic'},
+      // When pulse is in the same section, absorb it into the BP card.
+      if (hasBpPulseTriple) 'pulse',
       // Combined glucose pair — skip the random field (fasting card drives).
       if (hasGlucosePair) 'randomBloodSugar',
       // Combined height+weight pair — skip weight (height card drives).
@@ -1150,13 +1240,21 @@ class _SectionCard extends StatelessWidget {
 
       Widget child;
       if (ref.id == 'systolic' && hasBpPair) {
-        // Emit the combined BP pair card once.
+        // Emit the combined BP card once (with optional pulse).
         if (!bpPairEmitted) {
           bpPairEmitted = true;
           final diaRef = section.fieldRefs.firstWhere((r) => r.id == 'diastolic');
           final diaDef = config.fields['diastolic'];
           if (diaDef != null) {
-            child = _bpPairCard(context, def, ref, diaDef, diaRef);
+            final pulseRef = hasBpPulseTriple
+                ? section.fieldRefs.cast<FieldRef?>().firstWhere(
+                    (r) => r?.id == 'pulse', orElse: () => null)
+                : null;
+            final pulseDef = pulseRef != null ? config.fields['pulse'] : null;
+            child = _bpPairCard(
+              context, def, ref, diaDef, diaRef,
+              pulseDef: pulseDef, pulseRef: pulseRef,
+            );
           } else {
             child = _fieldRow(context, def, ref);
           }
@@ -1234,28 +1332,39 @@ class _SectionCard extends StatelessWidget {
     );
   }
 
-  /// Renders a combined Blood Pressure card with systolic and diastolic inputs
-  /// side-by-side in one [_FieldShell], matching the v13 reference design.
+  /// Renders a combined Blood Pressure card with systolic / diastolic inputs
+  /// side-by-side in one [_FieldShell].  When [pulseDef] / [pulseRef] are
+  /// supplied the pulse input is appended in the same row after diastolic.
   Widget _bpPairCard(
     BuildContext context,
     FieldDef sysDef,
     FieldRef sysRef,
     FieldDef diaDef,
-    FieldRef diaRef,
-  ) {
+    FieldRef diaRef, {
+    FieldDef? pulseDef,
+    FieldRef? pulseRef,
+  }) {
     final hasError = validationErrors.contains(sysRef.id) ||
-        validationErrors.contains(diaRef.id);
+        validationErrors.contains(diaRef.id) ||
+        (pulseRef != null && validationErrors.contains(pulseRef.id));
     final isMandatory = sysDef.isMandatory ||
         sysRef.isMandatory ||
         diaDef.isMandatory ||
-        diaRef.isMandatory;
+        diaRef.isMandatory ||
+        (pulseDef?.isMandatory ?? false) ||
+        (pulseRef?.isMandatory ?? false);
     final bpStatus = _VitalStatusEval.bloodPressure(
       _VitalStatusEval.asInt(data.getValue('systolic')),
       _VitalStatusEval.asInt(data.getValue('diastolic')),
     );
+
+    final subLabel = pulseDef != null
+        ? '${UnifiedFormStrings.bpCardSubLabel} · ${UnifiedFormStrings.bpUnit}  ·  pulse bpm'
+        : '${UnifiedFormStrings.bpCardSubLabel} · ${UnifiedFormStrings.bpUnit}';
+
     return _FieldShell(
       label: UnifiedFormStrings.bpCardLabel,
-      subLabel: '${UnifiedFormStrings.bpCardSubLabel} · ${UnifiedFormStrings.bpUnit}',
+      subLabel: subLabel,
       emoji: '🩺',
       emojiBg: const Color(0xFFEEF0FF),
       isMandatory: isMandatory,
@@ -1268,7 +1377,7 @@ class _SectionCard extends StatelessWidget {
         children: [
           Expanded(
             child: _NumericField(
-              key: Key('unified_form_systolic_input'),
+              key: const Key('unified_form_systolic_input'),
               isDecimal: false,
               hint: UnifiedFormStrings.bpSystolicLabel,
               initialValue: data.getValue('systolic')?.toString(),
@@ -1282,7 +1391,7 @@ class _SectionCard extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.only(bottom: 10, left: 8, right: 8),
+            padding: const EdgeInsets.only(bottom: 10, left: 6, right: 6),
             child: Text(
               '/',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -1293,7 +1402,7 @@ class _SectionCard extends StatelessWidget {
           ),
           Expanded(
             child: _NumericField(
-              key: Key('unified_form_diastolic_input'),
+              key: const Key('unified_form_diastolic_input'),
               isDecimal: false,
               hint: UnifiedFormStrings.bpDiastolicLabel,
               initialValue: data.getValue('diastolic')?.toString(),
@@ -1306,6 +1415,33 @@ class _SectionCard extends StatelessWidget {
               },
             ),
           ),
+          if (pulseDef != null) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10, left: 6, right: 6),
+              child: Text(
+                '·',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: AppColors.textMuted,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ),
+            Expanded(
+              child: _NumericField(
+                key: const Key('unified_form_pulse_input'),
+                isDecimal: false,
+                hint: 'Pulse',
+                initialValue: data.getValue('pulse')?.toString(),
+                onChanged: (v) {
+                  if (v == null || v.isEmpty) {
+                    onFieldChanged('pulse', null);
+                  } else {
+                    onFieldChanged('pulse', int.tryParse(v) ?? double.tryParse(v) ?? v);
+                  }
+                },
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1705,6 +1841,17 @@ class _SectionCard extends StatelessWidget {
     }
   }
 
+  /// True when a spinner's options are a boolean Yes/No pair — these render as
+  /// pill buttons rather than a dropdown. Matches on id or display name so a
+  /// localised label (titleCulture) does not defeat the check.
+  static bool _isYesNoOptions(List<FieldOption> options) {
+    if (options.isEmpty || options.length > 2) return false;
+    const yesNo = {'yes', 'no'};
+    return options.every((o) =>
+        yesNo.contains(o.id.toLowerCase()) ||
+        yesNo.contains(o.name.toLowerCase()));
+  }
+
   Widget _buildField(
     BuildContext context,
     FieldDef def,
@@ -1781,6 +1928,37 @@ class _SectionCard extends StatelessWidget {
         );
 
       case WidgetHint.spinner:
+        // Yes/No (boolean) spinners render as pill buttons, not a dropdown —
+        // a dropdown for a two-way choice is heavier than the tap target the
+        // SK expects. Genuine multi-option spinners (e.g. deliveryFacilityType)
+        // keep the dropdown.
+        if (_isYesNoOptions(def.options)) {
+          final storedId = currentValue as String?;
+          final displayName = def.options
+              .cast<FieldOption?>()
+              .firstWhere(
+                (o) => o!.id == storedId || o.name == storedId,
+                orElse: () => null,
+              )
+              ?.name;
+          return RadioFormField(
+            key: Key('unified_form_${def.id}_input'),
+            options: def.options.map((o) => o.name).toList(),
+            currentValue: displayName,
+            onChanged: (name) {
+              if (name == null) {
+                onFieldChanged(def.id, null);
+                return;
+              }
+              final id = def.options
+                      .cast<FieldOption?>()
+                      .firstWhere((o) => o!.name == name, orElse: () => null)
+                      ?.id ??
+                  name;
+              onFieldChanged(def.id, id);
+            },
+          );
+        }
         return _SpinnerField(
           key: Key('unified_form_${def.id}_input'),
           options: def.options,
@@ -2654,29 +2832,56 @@ class _SpinnerField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final displayName = options
+    final theme = Theme.of(context);
+    // Resolve stored id → matching option (id or name match).
+    final matched = options
         .cast<FieldOption?>()
         .firstWhere(
           (o) => o!.id == currentValue || o.name == currentValue,
           orElse: () => null,
-        )
-        ?.name;
-    return RadioFormField(
-      options: options.map((o) => o.name).toList(),
-      currentValue: displayName,
-      onChanged: (name) {
-        if (name == null) {
-          // Toggle-deselect.
-          onChanged(null);
-          return;
-        }
-        final id = options
-                .cast<FieldOption?>()
-                .firstWhere((o) => o!.name == name, orElse: () => null)
-                ?.id ??
-            name;
-        onChanged(id);
-      },
+        );
+    final safeValue = matched?.id;
+
+    return DropdownButtonFormField<String>(
+      isExpanded: true,
+      initialValue: safeValue,
+      hint: Text(
+        '— Select —',
+        style: theme.textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
+      ),
+      decoration: InputDecoration(
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: AppColors.border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: AppColors.border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: AppColors.navy, width: 1.5),
+        ),
+        filled: true,
+        fillColor: AppColors.cardSurface,
+      ),
+      items: options
+          .map(
+            (o) => DropdownMenuItem<String>(
+              value: o.id,
+              child: Text(
+                o.name,
+                style: theme.textTheme.bodyMedium,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          )
+          .toList(),
+      onChanged: (id) => onChanged(id),
     );
   }
 }

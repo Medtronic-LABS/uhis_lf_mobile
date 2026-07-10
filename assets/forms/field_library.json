@@ -10100,5 +10100,47 @@
         "workflowName": "Confirm Diagnosis"
       }
     ]
+  },
+  "urineProtein": {
+    "id": "urineProtein",
+    "label": "Urine Protein",
+    "widgetHint": "SingleSelectionView",
+    "fieldName": "Urine Protein",
+    "family": "maternalHealthAssessment",
+    "orderId": 9,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "titleCulture": "প্রস্রাবে প্রোটিন আছে কি না?",
+    "errorMessage": "Please select urine protein status",
+    "isSummary": false,
+    "clinicalConcept": [
+      {
+        "system": "SNOMED_CT",
+        "code": "167101001",
+        "display": "Urine protein"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "anc",
+        "workflowId": 4,
+        "workflowName": "RMNCH"
+      }
+    ],
+    "optionsList": [
+      {
+        "name": "Absent",
+        "id": "Absent"
+      },
+      {
+        "name": "Trace",
+        "id": "Trace"
+      },
+      {
+        "name": "Present",
+        "id": "Present"
+      }
+    ]
   }
 }
