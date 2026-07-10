@@ -6,12 +6,6 @@ import '../../../core/models/dashboard_tier.dart';
 import '../../../core/models/mission_queue_item.dart';
 import '../../../core/models/programme.dart';
 
-/// Surfaces the band/modifier/tier/score/drivers overlay on patient cards.
-/// Off by default — flip to true locally when investigating dashboard sort
-/// behaviour. Deliberately independent of debug-build mode so it stays
-/// hidden during normal debug-build testing too.
-const bool _showPatientCardDebug = false;
-
 String _titleCase(String s) => s
     .split(' ')
     .map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1).toLowerCase())
@@ -164,36 +158,6 @@ class MissionQueueCard extends StatelessWidget {
                                   item.phoneNumber!,
                                   style: AppTextStyles.worklistPhone.copyWith(
                                     color: tokens.textMuted,
-                                  ),
-                                ),
-                              ),
-
-                            // ── Priority signal debug overlay ───────────
-                            if (_showPatientCardDebug)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 6),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFFF3CD),
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(
-                                        color: const Color(0xFFFFC107),
-                                        width: 0.5),
-                                  ),
-                                  child: Text(
-                                    'band:${item.band.name}  '
-                                    'mod:${item.modifier.name}  '
-                                    'tier:${item.tier.name}  '
-                                    'score:${item.priorityScore}\n'
-                                    'drivers: ${item.drivers.isEmpty ? "—" : item.drivers.join(", ")}',
-                                    style: const TextStyle(
-                                      fontFamily: 'monospace',
-                                      fontSize: 9,
-                                      color: Color(0xFF374151),
-                                      height: 1.5,
-                                    ),
                                   ),
                                 ),
                               ),
