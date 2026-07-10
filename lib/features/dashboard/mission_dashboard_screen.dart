@@ -225,11 +225,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() => _completedIds = completedIds);
     }
 
-    // Load full queue — keep completed patients in the list so their cards
-    // remain visible (non-navigable, greyed out with a ✓ badge per spec §2.6).
-    final queue = await missionRepo.loadQueue(limit: 500);
+    final rawQueue = await missionRepo.loadQueue(limit: 500);
 
-    // Cache unfiltered base queue so filters can be re-applied synchronously
+    // A visit completed today is done — it must not occupy a dashboard slot,
+    // count toward the visits-today total, or seed the need-filter chips.
+    // completedIds comes from EncounterDao (updated the instant a visit is
+    // submitted, offline-safe); this is the only reliable "done today" signal
+    // — MissionInputData.completedTodayPatientIds lags until the next sync.
+    final queue = completedIds.isEmpty
+        ? rawQueue
+        : rawQueue
+            .where((i) =>
+                i.patientId == null || !completedIds.contains(i.patientId))
+            .toList(growable: false);
+
+    // Cache filtered base queue so filters can be re-applied synchronously
     // without a repository round-trip on every chip tap.
     _baseQueue = queue;
 
