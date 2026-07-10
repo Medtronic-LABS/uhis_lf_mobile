@@ -14,11 +14,21 @@ class PregnancySnapshotRow {
     required this.patientId,
     required this.facts,
     this.updatedAt,
+    this.eddDate,
+    this.lmpDate,
   });
 
   final String patientId;
   final PregnancyFacts facts;
   final int? updatedAt;
+
+  /// EDD as epoch milliseconds — from `pregnancyInfos[].estimatedDeliveryDate`.
+  final int? eddDate;
+
+  /// LMP as epoch milliseconds — from `pregnancyInfos[].lmpDate` (or similar).
+  /// Preferred over deriving from EDD; stored at sync time so Form 2 can show
+  /// gestational age without requiring the server to echo it in assessment rows.
+  final int? lmpDate;
 
   Map<String, Object?> toDb() => {
         'patient_id': patientId,
@@ -29,6 +39,8 @@ class PregnancySnapshotRow {
         'had_delivery_complications': facts.hadDeliveryComplications ? 1 : 0,
         'has_pnc_illness': facts.hasPncIllness ? 1 : 0,
         'updated_at': updatedAt,
+        'edd_date': eddDate,
+        'lmp_date': lmpDate,
       };
 
   static PregnancySnapshotRow fromDb(Map<String, Object?> row) =>
@@ -43,6 +55,8 @@ class PregnancySnapshotRow {
           hasPncIllness: row['has_pnc_illness'] == 1,
         ),
         updatedAt: row['updated_at'] as int?,
+        eddDate: row['edd_date'] as int?,
+        lmpDate: row['lmp_date'] as int?,
       );
 }
 
@@ -75,6 +89,17 @@ class PregnancySnapshotDao {
       out[row.patientId] = row.facts;
     }
     return out;
+  }
+
+  Future<PregnancySnapshotRow?> byPatient(String patientId) async {
+    final rows = await _db.db.query(
+      AppDatabase.tablePregnancySnapshot,
+      where: 'patient_id = ?',
+      whereArgs: [patientId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return PregnancySnapshotRow.fromDb(rows.first);
   }
 
   Future<void> clearAll() async {

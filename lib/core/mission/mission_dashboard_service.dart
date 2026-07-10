@@ -865,6 +865,9 @@ class MissionDashboardService {
     final candidates = <MissionQueueItem>[];
 
     for (final entry in input.worklistEntries) {
+      // Only enrolled patients belong on the Mission Dashboard — patients with
+      // no programme have no clinical context or follow-up schedule.
+      if (entry.programmes.isEmpty) continue;
       final age = entry.age ?? input.agesByPatientId[entry.patientId];
       // Use explicit follow-up dueAt when available; fall back to programme-
       // interval inference so patients without a follow-up record still surface
@@ -892,6 +895,10 @@ class MissionDashboardService {
           ? now.difference(inferredDueAt).inDays.clamp(0, 999)
           : null;
       candidates.add(base.copyWith(
+        // sortRankFor encodes the full 1a→1b→1→2a→…→4 sequence so
+        // compareInTier() (priorityScore DESC) produces the correct
+        // band+modifier order within each date tier.
+        priorityScore: sortRankFor(effectiveBand, entry.modifier),
         tier: classified.tier,
         drivers: classified.drivers,
         band: effectiveBand,

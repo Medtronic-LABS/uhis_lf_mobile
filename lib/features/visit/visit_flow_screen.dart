@@ -118,6 +118,17 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   late bool _isPostpartum = widget.isPostpartum;
   late final int? _postpartumWeeks = widget.postpartumWeeks;
 
+  /// Gestational weeks resolved from the pregnancy snapshot when the caller
+  /// did not supply it via the constructor.  The snapshot lookup runs in
+  /// [initState] alongside the postpartum check so that Step 3's
+  /// gestational-age card always has real data to show.
+  int? _resolvedGestationalWeeks;
+
+  /// Returns the best available gestational week count: constructor value
+  /// first, then snapshot-resolved value.
+  int? get _effectiveGestationalWeeks =>
+      widget.gestationalWeeks ?? _resolvedGestationalWeeks;
+
   @override
   void initState() {
     super.initState();
@@ -127,6 +138,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       }
       if (!_isPostpartum && widget.patientId.isNotEmpty) {
         _loadPostpartumFromDb();
+      }
+      if (widget.gestationalWeeks == null && widget.patientId.isNotEmpty) {
+        _loadPregnancySnapshotFromDb();
       }
     });
   }
@@ -158,6 +172,30 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       }
     } catch (e) {
       debugPrint('[VisitFlow] postpartum lookup failed: $e');
+    }
+  }
+
+  Future<void> _loadPregnancySnapshotFromDb() async {
+    try {
+      final dao = context.read<PregnancySnapshotDao>();
+      final snap = await dao.byPatient(widget.patientId);
+      if (!mounted || snap == null) return;
+      DateTime? lmp;
+      if (snap.lmpDate != null) {
+        lmp = DateTime.fromMillisecondsSinceEpoch(snap.lmpDate!);
+      } else if (snap.eddDate != null) {
+        final edd = DateTime.fromMillisecondsSinceEpoch(snap.eddDate!);
+        lmp = edd.subtract(const Duration(days: 280));
+      }
+      final weeks =
+          lmp != null ? DateTime.now().difference(lmp).inDays ~/ 7 : null;
+      if (weeks != null) {
+        setState(() {
+          _resolvedGestationalWeeks = weeks;
+        });
+      }
+    } catch (e) {
+      debugPrint('[VisitFlow] pregnancy snapshot lookup failed: $e');
     }
   }
 
@@ -283,7 +321,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           patientAge: widget.patientAge,
           patientName: widget.patientName,
           patientGender: widget.patientGender,
-          gestationalWeeks: widget.gestationalWeeks,
+          gestationalWeeks: _effectiveGestationalWeeks,
           isPostpartum: _isPostpartum,
           postpartumWeeks: _postpartumWeeks,
           confirmedSymptoms: _confirmedSymptoms,
@@ -309,7 +347,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           patientLabel: widget.patientName ?? widget.patientId,
           patientAge: widget.patientAge,
           patientGender: widget.patientGender,
-          gestationalWeeks: widget.gestationalWeeks,
+          gestationalWeeks: _effectiveGestationalWeeks,
           confirmedSymptoms: _confirmedSymptoms,
           confirmedProgrammes: _confirmedProgrammes,
           primaryProgramme: _primaryProgramme,
@@ -1654,7 +1692,21 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     if (_accepted) return;
     setState(() => _accepted = true);
     if (!mounted) return;
-    context.go(_returnPath);
+    final others = (_householdMembers ?? [])
+        .where((m) => !m.isCurrentPatient)
+        .toList();
+    if (others.isNotEmpty) {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => _WhileYoureHerePage(
+            members: _householdMembers!,
+            returnPath: _returnPath,
+          ),
+        ),
+      );
+    } else {
+      context.go(_returnPath);
+    }
   }
 
   @override
@@ -1929,8 +1981,8 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 
 // ── Supporting widgets ────────────────────────────────────────────────────────
 
-/// Pink/lavender gestational age summary shown at the top of Step 3
-/// for any patient who has a gestational week count recorded.
+/// Pink gestational age summary shown at the top of Step 3 for any patient
+/// who has a gestational week count recorded.
 ///
 /// LMP and EDD are back-calculated from [gestationalWeeks]:
 ///   LMP ≈ today − (weeks × 7) days
@@ -1940,127 +1992,143 @@ class _GestationalAgeCard extends StatelessWidget {
 
   final int gestationalWeeks;
 
+  static const _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+  static const _pinkAccent = Color(0xFF9D174D);
+  static const _navy = Color(0xFF1B2B5E);
+  static const _unitGrey = Color(0xFF6B7280);
+
   @override
   Widget build(BuildContext context) {
     final today = DateTime.now();
     final lmp = today.subtract(Duration(days: gestationalWeeks * 7));
     final edd = lmp.add(const Duration(days: 280));
+    final days = today.difference(lmp).inDays % 7;
 
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    final lmpLabel = '${lmp.day} ${months[lmp.month - 1]} ${lmp.year}';
-    final eddLabel = '${edd.day} ${months[edd.month - 1]} ${edd.year}';
+    final lmpLabel =
+        '${lmp.day} ${_months[lmp.month - 1]} ${lmp.year}';
+    final eddLabel =
+        '${edd.day} ${_months[edd.month - 1]} ${edd.year}';
 
     return Container(
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.ancSurface, AppColors.pncSurface],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.ancBorder.withValues(alpha: 0.6)),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.ancBorder.withValues(alpha: 0.30),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        color: const Color(0xFFFDF2F8),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFF9A8D4)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Pregnant woman avatar ──────────────────────────────────
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.ancBorder, width: 1.5),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.ancBorder.withValues(alpha: 0.40),
-                  blurRadius: 4,
-                  offset: const Offset(0, 1),
-                ),
-              ],
-            ),
-            child: const Center(
-              child: Text('🤰', style: TextStyle(fontSize: 26)),
-            ),
-          ),
-          const SizedBox(width: 14),
-
-          // ── Gestational age details ────────────────────────────────
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Label
-                Text(
-                  'GESTATIONAL AGE',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.1,
-                    color: AppColors.ancText,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                // Large weeks display
-                RichText(
-                  text: TextSpan(
-                    children: [
-                      TextSpan(
-                        text: '$gestationalWeeks ',
-                        style: const TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.navy,
-                          height: 1.0,
-                        ),
-                      ),
-                      const TextSpan(
-                        text: 'wks',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.navy,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                // LMP + EDD row
-                Row(
-                  children: [
-                    Expanded(
-                      child: _DatePill(
-                        icon: '📅',
-                        label: 'LMP',
-                        value: lmpLabel,
-                        valueColor: AppColors.navy,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _DatePill(
-                        icon: '🍼',
-                        label: 'EDD',
-                        value: eddLabel,
-                        valueColor: AppColors.pink,
-                      ),
+          // ── Hero row: circle avatar + label + number ─────────────
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.06),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
                     ),
                   ],
                 ),
-              ],
-            ),
+                alignment: Alignment.center,
+                child: const Text('🤰', style: TextStyle(fontSize: 19)),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'GESTATIONAL AGE',
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: _pinkAccent,
+                      letterSpacing: 0.6,
+                      height: 1,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  RichText(
+                    text: TextSpan(
+                      style: const TextStyle(
+                        fontFamily: 'Nunito',
+                        color: _navy,
+                        height: 1,
+                      ),
+                      children: [
+                        TextSpan(
+                          text: '$gestationalWeeks ',
+                          style: const TextStyle(
+                            fontSize: 21,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const TextSpan(
+                          text: 'wks',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: _unitGrey,
+                          ),
+                        ),
+                        if (days > 0) ...[
+                          TextSpan(
+                            text: ' $days ',
+                            style: const TextStyle(
+                              fontSize: 21,
+                              fontWeight: FontWeight.w900,
+                              color: _navy,
+                            ),
+                          ),
+                          const TextSpan(
+                            text: 'days',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: _unitGrey,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // ── LMP + EDD row ────────────────────────────────────────
+          Row(
+            children: [
+              Expanded(
+                child: _DatePill(
+                  icon: '📅',
+                  label: 'LMP',
+                  value: lmpLabel,
+                  valueColor: _navy,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _DatePill(
+                  icon: '🍼',
+                  label: 'EDD',
+                  value: eddLabel,
+                  valueColor: const Color(0xFFDB2777),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -2081,45 +2149,45 @@ class _DatePill extends StatelessWidget {
   final String value;
   final Color valueColor;
 
+  static const _pinkAccent = Color(0xFF9D174D);
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.70),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: AppColors.ancBorder.withValues(alpha: 0.50),
-        ),
+        color: Colors.white.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(9),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(icon, style: const TextStyle(fontSize: 12)),
-          const SizedBox(width: 4),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(icon, style: const TextStyle(fontSize: 12)),
+              const SizedBox(width: 4),
+              Text(
+                label.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: _pinkAccent,
+                  letterSpacing: 0.6,
+                ),
+              ),
+            ],
+          ),
           Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textMuted,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: valueColor,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: valueColor,
+              ),
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.end,
             ),
           ),
         ],
@@ -2354,8 +2422,6 @@ class _AiCounsellingCard extends StatefulWidget {
 }
 
 class _AiCounsellingCardState extends State<_AiCounsellingCard> {
-  bool _expanded = true;
-
   static const _pinkBg = Color(0xFFFDF2F8);
   static const _pinkBorder = Color(0xFFF9A8D4);
   static const _pinkAccent = Color(0xFF9D174D);
@@ -2445,87 +2511,57 @@ class _AiCounsellingCardState extends State<_AiCounsellingCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Header (always visible, tappable) ──────────────────────
-          InkWell(
-            onTap: () => setState(() => _expanded = !_expanded),
-            borderRadius: BorderRadius.circular(12),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-              child: Row(
-                children: [
-                  Container(
-                    width: 26,
-                    height: 26,
-                    decoration: BoxDecoration(
+          // ── Header ─────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    color: _pinkAccent,
+                    borderRadius: BorderRadius.circular(7),
+                  ),
+                  child: const Icon(Icons.star, size: 13, color: Colors.white),
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'AI COUNSELLING GUIDE',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
                       color: _pinkAccent,
-                      borderRadius: BorderRadius.circular(7),
-                    ),
-                    child: const Icon(Icons.star, size: 13, color: Colors.white),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text(
-                          'AI COUNSELLING GUIDE',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w900,
-                            color: _pinkAccent,
-                            letterSpacing: 0.6,
-                          ),
-                        ),
-                        if (!_expanded)
-                          Text(
-                            '${widget.items.length} points · Tap to expand',
-                            style: const TextStyle(
-                              fontSize: 10.5,
-                              color: _pinkAccent,
-                              fontWeight: FontWeight.w400,
-                            ),
-                          ),
-                      ],
+                      letterSpacing: 0.6,
                     ),
                   ),
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: _pinkAccent.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: _pinkBorder),
-                    ),
-                    child: Text(
-                      _sourceLabel(),
-                      style: const TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                        color: _pinkAccent,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
+                ),
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: _pinkAccent.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: _pinkBorder),
                   ),
-                  const SizedBox(width: 4),
-                  AnimatedRotation(
-                    turns: _expanded ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: const Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      size: 20,
+                  child: Text(
+                    _sourceLabel(),
+                    style: const TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
                       color: _pinkAccent,
+                      letterSpacing: 0.5,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
 
-          // ── Expanded body ───────────────────────────────────────────
-          if (_expanded) ...[
-            const Divider(height: 1, color: _pinkBorder),
-            Padding(
+          // ── Body (always visible) ───────────────────────────────────
+          const Divider(height: 1, color: _pinkBorder),
+          Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
               child: Column(
                 children: widget.items
@@ -2569,7 +2605,6 @@ class _AiCounsellingCardState extends State<_AiCounsellingCard> {
                     .toList(),
               ),
             ),
-          ],
         ],
       ),
     );
@@ -2919,6 +2954,7 @@ class _WhatsAppCard extends StatefulWidget {
 class _WhatsAppCardState extends State<_WhatsAppCard>
     with WidgetsBindingObserver {
   bool _copied = false;
+  bool _expanded = false;
   // True after a launch so we fire onShared on the next app-resume event.
   bool _launchedExternal = false;
 
@@ -3010,120 +3046,144 @@ class _WhatsAppCardState extends State<_WhatsAppCard>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Header row ─────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.xl, 8, 0),
-            child: Row(
-              children: [
-                Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: AppColors.whatsapp,
-                    borderRadius: BorderRadius.circular(AppRadius.waIcon),
+          // ── Header row (tappable to expand/collapse) ────────────────
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(AppRadius.card),
+              bottom: _expanded ? Radius.zero : Radius.circular(AppRadius.card),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.xl, 8, AppSpacing.xl),
+              child: Row(
+                children: [
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: AppColors.whatsapp,
+                      borderRadius: BorderRadius.circular(AppRadius.waIcon),
+                    ),
+                    child: const Icon(
+                      Icons.chat_rounded,
+                      size: 15,
+                      color: Colors.white,
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.chat_rounded,
-                    size: 15,
-                    color: Colors.white,
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      NabaStrings.sectionWhatsApp,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                        color: AppColors.waHeader,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text(
-                    NabaStrings.sectionWhatsApp,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 13,
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
                       color: AppColors.waHeader,
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                // Copy button
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 180),
-                  child: _copied
-                      ? TextButton.icon(
-                          key: const ValueKey('copied'),
-                          onPressed: null,
-                          icon: const Icon(Icons.check_rounded, size: 14),
-                          label: const Text(
-                            NabaStrings.whatsAppCopied,
-                            style: TextStyle(fontSize: 11),
-                          ),
-                          style: TextButton.styleFrom(
-                            foregroundColor: AppColors.statusSuccess,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                        )
-                      : TextButton.icon(
-                          key: const ValueKey('copy'),
-                          onPressed: _copy,
-                          icon: const Icon(Icons.copy_rounded, size: 14),
-                          label: const Text(
-                            NabaStrings.copyWhatsApp,
-                            style: TextStyle(fontSize: 11),
-                          ),
-                          style: TextButton.styleFrom(
-                            foregroundColor: AppColors.waHeader,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                        ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Divider(height: 1, color: AppColors.waBorder),
-          // ── Message body ───────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.xl, AppSpacing.xxl, AppSpacing.xl),
-            child: Text(
-              widget.text,
-              style: const TextStyle(
-                fontSize: 13,
-                height: 1.55,
-                color: AppColors.textStrong,
+                ],
               ),
             ),
           ),
-          const Divider(height: 1, color: AppColors.waBorder),
-          // ── Share actions ──────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, AppSpacing.xl),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _sendSms(context),
-                    icon: const Icon(Icons.sms_rounded, size: 16),
-                    label: const Text(NabaStrings.sendViaSms),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.navy,
-                      side: const BorderSide(color: AppColors.border),
-                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
-                      textStyle: AppTextStyles.chip,
+          // ── Collapsible body ────────────────────────────────────────
+          if (_expanded) ...[
+            const Divider(height: 1, color: AppColors.waBorder),
+            // Message body with copy button
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.xl, AppSpacing.xxl, 0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.text,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        height: 1.55,
+                        color: AppColors.textStrong,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: () => _sendWhatsApp(context),
-                    icon: const Icon(Icons.chat_rounded, size: 16),
-                    label: const Text(NabaStrings.sendViaWhatsApp),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.whatsapp,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
-                      textStyle: AppTextStyles.chip,
-                    ),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 180),
+                    child: _copied
+                        ? TextButton.icon(
+                            key: const ValueKey('copied'),
+                            onPressed: null,
+                            icon: const Icon(Icons.check_rounded, size: 14),
+                            label: const Text(
+                              NabaStrings.whatsAppCopied,
+                              style: TextStyle(fontSize: 11),
+                            ),
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppColors.statusSuccess,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          )
+                        : TextButton.icon(
+                            key: const ValueKey('copy'),
+                            onPressed: _copy,
+                            icon: const Icon(Icons.copy_rounded, size: 14),
+                            label: const Text(
+                              NabaStrings.copyWhatsApp,
+                              style: TextStyle(fontSize: 11),
+                            ),
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppColors.waHeader,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
+            const SizedBox(height: AppSpacing.xl),
+            const Divider(height: 1, color: AppColors.waBorder),
+            // Share actions
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, AppSpacing.xl),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _sendSms(context),
+                      icon: const Icon(Icons.sms_rounded, size: 16),
+                      label: const Text(NabaStrings.sendViaSms),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.navy,
+                        side: const BorderSide(color: AppColors.border),
+                        padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                        textStyle: AppTextStyles.chip,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => _sendWhatsApp(context),
+                      icon: const Icon(Icons.chat_rounded, size: 16),
+                      label: const Text(NabaStrings.sendViaWhatsApp),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.whatsapp,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                        textStyle: AppTextStyles.chip,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -3181,31 +3241,6 @@ class _BottomCtaBar extends StatelessWidget {
                   ),
                 ),
               ),
-              if (primaryProgramme == Programme.anc ||
-                  primaryProgramme == Programme.pnc) ...[
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () => context.push(
-                      '/teleconsult',
-                      extra: {
-                        'patientLabel': patientLabel ?? '',
-                        'patientId': memberId ?? '',
-                      },
-                    ),
-                    icon: const Icon(Icons.video_call_rounded),
-                    label:
-                        const Text(VisitCompleteStrings.bookTeleconsult),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: headerColor,
-                      side: BorderSide(
-                          color: headerColor.withValues(alpha: 0.4)),
-                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
-                    ),
-                  ),
-                ),
-              ],
               if (primaryProgramme == Programme.ncd) ...[
                 const SizedBox(height: 8),
                 SizedBox(
@@ -3283,13 +3318,6 @@ class _BottomCtaBar extends StatelessWidget {
                   ),
                 ),
               ],
-              const SizedBox(height: 4),
-              TextButton(
-                onPressed: () => context.go(returnPath),
-                style: TextButton.styleFrom(
-                    foregroundColor: AppColors.textMuted),
-                child: const Text(VisitCompleteStrings.backToHome),
-              ),
             ],
           ),
         ],
@@ -3746,6 +3774,170 @@ class _MemberAvatar extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// While You're Here page — shown after accepting the AI recommendation when
+// other household members are due for a visit.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _WhileYoureHerePage extends StatelessWidget {
+  const _WhileYoureHerePage({
+    required this.members,
+    required this.returnPath,
+  });
+
+  final List<_HouseholdMember> members;
+  final String returnPath;
+
+  @override
+  Widget build(BuildContext context) {
+    final others = members.where((m) => !m.isCurrentPatient).toList();
+    return Scaffold(
+      backgroundColor: AppColors.canvas,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.close_rounded, color: AppColors.navy),
+          onPressed: () => context.go(returnPath),
+        ),
+        title: const Text(
+          VisitFlowStrings.alsoCoverWhileHere,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+            color: AppColors.navy,
+            letterSpacing: 0.6,
+          ),
+        ),
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Divider(height: 1),
+          Expanded(
+            child: ListView.separated(
+              padding: const EdgeInsets.all(16),
+              itemCount: others.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (context, i) {
+                final m = others[i];
+                return _WhileYouHereMemberCard(
+                  member: m,
+                  onTap: () => context.push('/patients/${m.patientId}'),
+                );
+              },
+            ),
+          ),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () => context.go(returnPath),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.navy,
+                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
+                  ),
+                  child: const Text(VisitCompleteStrings.doneForNow),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WhileYouHereMemberCard extends StatelessWidget {
+  const _WhileYouHereMemberCard({required this.member, required this.onTap});
+
+  final _HouseholdMember member;
+  final VoidCallback onTap;
+
+  static (Color bg, Color border, Color text, String label) _style(Programme p) {
+    switch (p) {
+      case Programme.anc:
+        return (AppColors.ancSurface, AppColors.ancBorder, AppColors.ancText, 'ANC');
+      case Programme.pnc:
+        return (AppColors.pncSurface, AppColors.pncBorder, AppColors.pncText, 'PNC');
+      case Programme.ncd:
+        return (AppColors.ncdSurface, AppColors.ncdBorder, AppColors.ncdText, 'NCD');
+      case Programme.imci:
+        return (AppColors.imciSurface, AppColors.imciBorder, AppColors.imciText, 'Child');
+      case Programme.tb:
+        return (AppColors.tbSurface, AppColors.tbBorder, AppColors.tbText, 'TB');
+      default:
+        return (Colors.grey.shade50, AppColors.border, AppColors.textMuted, 'Visit');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final (bg, border, text, label) = _style(member.primaryProgramme);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.card),
+      child: Container(
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(color: border),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: text.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(_MemberAvatar._icon(member.primaryProgramme),
+                  color: text, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    member.name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      color: AppColors.textStrong,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: text.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: text,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: text),
+          ],
         ),
       ),
     );

@@ -26,6 +26,16 @@ class CoachingRepository extends ChangeNotifier {
   List<CoachingModule> get todaysPriorities =>
       _modules.where((m) => m.priorityToday).toList();
 
+  /// Drops the in-memory module/progress snapshot. Call on logout — this
+  /// repository is a single long-lived instance for the app's whole process
+  /// (see main.dart), so without this the next user to log in on the same
+  /// device would briefly see the previous user's cached training progress
+  /// until [initialize] or [syncFromApi] runs again.
+  void clear() {
+    _modules = [];
+    notifyListeners();
+  }
+
   /// Loads modules from SQLite; falls back to mock data in debug builds.
   Future<void> initialize() async {
     try {

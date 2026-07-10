@@ -47,10 +47,12 @@ abstract final class UnifiedSectionRules {
 
   /// Section IDs whose sections are pinned to the top as the "Vitals" group.
   ///
-  /// Chosen because they capture the physical measurements (weight, BP, BMI,
-  /// pulse, temperature) that are identical across all clinical programmes.
-  /// ANC uses `todaysVitals`; NCD/cataract use `bpLog`.
-  static const _vitalsSectionIds = {'todaysVitals', 'bpLog'};
+  /// `commonVitals` is the unified section that captures Height, Weight, BMI,
+  /// Blood Pressure (systolic/diastolic), Pulse, and Blood Glucose (type +
+  /// value) exactly once regardless of which clinical programmes are active.
+  /// ANC-specific vitals (temperature, edema, fundal height) live in the
+  /// programme-scoped `ancSpecificVitals` section; NCD has no extra vitals.
+  static const _vitalsSectionIds = {'commonVitals'};
 
   /// Semantic field equivalence groups.
   ///
@@ -58,20 +60,22 @@ abstract final class UnifiedSectionRules {
   /// that two programmes that represent the same measurement with different
   /// field IDs do not both render a capture widget.
   ///
-  /// Groups are ordered from most-specific to least-specific.  The first group
-  /// that contains the claimed field wins.
-  ///
-  /// BP: ANC uses {bloodPressure, systolic, diastolic} while NCD uses
-  ///   {bpLogDetails}.  Claiming one set pre-claims the other.
-  /// IFA: ANC uses {ifaTotalConsumed, ifaProvided}; PNC uses
-  ///   {ifaTablets (TextLabel), ifaTabletsConsumed, ifaTabletsProvided}.
-  /// Calcium: ANC uses {calciumTotalConsumed, calciumProvided}; PNC uses
-  ///   {calciumTablets (TextLabel), calciumTabletsConsumed, calciumTabletsProvided}.
-  /// Glucose: PNC uses {bloodSugar (selector), fastingBloodSugar, randomBloodSugar};
-  ///   NCD uses {glucoseType, glucose}.
+  /// BP: `commonVitals` uses {bloodPressure, systolic, diastolic}; cataract's
+  ///   bpLog uses {bpLogDetails}. Claiming the common set pre-claims bpLogDetails
+  ///   so cataract does not show a duplicate BP widget.
+  /// Height / Weight / BMI: commonVitals claims these; any programme-specific
+  ///   section that also lists them gets deduplicated.
+  /// Glucose: commonVitals uses {glucoseType, glucose}; PNC uses
+  ///   {bloodSugar, fastingBloodSugar, randomBloodSugar}. Claiming either set
+  ///   pre-claims the other so glucose is only entered once.
   static const List<Set<String>> _semanticFieldGroups = [
     // ── Blood pressure ──────────────────────────────────────────────────────
     {'bloodPressure', 'systolic', 'diastolic', 'bpLogDetails'},
+    // ── Biometrics (all now captured in commonVitals) ───────────────────────
+    {'height'},
+    {'weight'},
+    {'bmi'},
+    {'pulse'},
     // ── Folic acid supplements ───────────────────────────────────────────────
     {'folicAcidTotalConsumed', 'folicAcidTablets'},
     {'folicAcidProvided'},
@@ -267,6 +271,7 @@ abstract final class UnifiedSectionRules {
 
   /// Returns a human-readable programme name from a formType key.
   static String _programmeLabel(String formType) => switch (formType) {
+        'commonVitals' => 'Vitals',
         'anc' => 'ANC',
         'pncMother' => 'PNC (Mother)',
         'pncChild' => 'PNC (Child)',

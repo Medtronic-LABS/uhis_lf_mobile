@@ -8,7 +8,7 @@ import '../widgets/form_fields/radio_form_field.dart';
 import 'canonical_visit_data.dart';
 import 'form_config.dart';
 import 'form_field_visuals.dart';
-import 'step2_asr_banner.dart';
+import '../../scribe/widgets/ai_scribe_banner.dart';
 import 'triage_symptom_mapper.dart';
 import 'unified_form_notifier.dart';
 import 'unified_section_rules.dart';
@@ -130,37 +130,14 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             setState(() => _priorAncVisits = history);
           }
         });
+        // Load LMP/EDD from patient raw JSON for the gestational-age card.
+        notifier.loadPregnancyData();
       }
     });
   }
 
   /// Builds a snapshot of the current visit's live vitals from the form data,
   /// for the last ("Today") column of the trend card.
-  VisitVitals _todaySnapshot(CanonicalVisitData data) {
-    int? asInt(String id) {
-      final v = data.getValue(id);
-      if (v is int) return v;
-      if (v is num) return v.toInt();
-      if (v is String) return int.tryParse(v);
-      return null;
-    }
-
-    double? asDouble(String id) {
-      final v = data.getValue(id);
-      if (v is double) return v;
-      if (v is num) return v.toDouble();
-      if (v is String) return double.tryParse(v);
-      return null;
-    }
-
-    final urine = data.getValue('urinaryAlbumin');
-    return VisitVitals(
-      systolic: asInt('systolic'),
-      diastolic: asInt('diastolic'),
-      weight: asDouble('weight'),
-      urineProtein: urine is String ? urine : urine?.toString(),
-    );
-  }
 
   @override
   void dispose() {
@@ -234,35 +211,36 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
 
         // Build the list items: programme-name dividers (with inline per-
         // programme symptom chips) + section cards.
-        // The top-level banner is removed — symptoms appear inline under each
-        // programme they are relevant to.
+        // ANC-specific cards are pinned to fixed positions:
+        //   • Gestational age card → first item (below the AI Scribe banner)
+        //   • Vitals trend card    → last item before submit
         final items = <Widget>[];
+        final isAnc = widget.activeFormTypes.contains('anc');
+
+        // ── Gestational age card (ANC) — top of scroll area ────────────────
+        if (isAnc) {
+          items.add(_GestationalAgeCard(
+            lmpDate: notifier.lmpDate,
+            eddDate: notifier.eddDate,
+            gestationalWeeks: notifier.gestationalWeeks,
+          ));
+        }
 
         String? lastFormType;
         for (final annotatedSection in annotated) {
           final ft = annotatedSection.section.formType;
           if (ft != lastFormType) {
-            final label = annotatedSection.group == SectionGroup.vitals
-                ? UnifiedFormStrings.vitalsGroupLabel
-                : UnifiedFormStrings.programmeBadgeLabel(ft) ??
-                    ft.toUpperCase();
-
-            // For programme sections (non-vitals), compute which triage
-            // symptoms are relevant to this formType to show as inline chips.
-            final relevantCodes =
-                annotatedSection.group == SectionGroup.vitals
-                    ? const <String>[]
-                    : TriageSymptomMapper.relevantCodes(
-                        ft,
-                        widget.confirmedSymptoms,
-                      );
-
-            items.add(_ProgrammeDivider(
-              label: label,
-              relevantSymptomCodes: relevantCodes,
-              aiPickedSymptomCodes: widget.aiPickedSymptoms,
-            ));
             lastFormType = ft;
+            if (annotatedSection.group != SectionGroup.vitals) {
+              final label = UnifiedFormStrings.programmeBadgeLabel(ft) ??
+                  ft.toUpperCase();
+              items.add(_ProgrammeDivider(
+                label: label,
+                relevantSymptomCodes: TriageSymptomMapper.relevantCodes(
+                    ft, widget.confirmedSymptoms),
+                aiPickedSymptomCodes: widget.aiPickedSymptoms,
+              ));
+            }
           }
           items.add(_SectionCard(
             section: annotatedSection.section,
@@ -275,15 +253,9 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
           ));
         }
 
-        // ── Rule-based vitals-trend card (ANC only) ──────────────────────────
-        // Recomputed each rebuild so "Today" reflects the live form values;
-        // prior visits are loaded once in initState.
-        if (_priorAncVisits.isNotEmpty) {
-          final trend = VitalsTrendAnalyzer.analyze(
-            priorVisits: _priorAncVisits,
-            today: _todaySnapshot(notifier.data),
-          );
-          if (trend.show) items.add(_VitalsTrendCard(result: trend));
+        // ── Vitals trend card (ANC) — bottom of scroll area ────────────────
+        if (isAnc && _priorAncVisits.isNotEmpty) {
+          items.add(_VitalsTrendCard(priorVisits: _priorAncVisits));
         }
 
         // Submit button lives inside the scroll view so it appears after the
@@ -295,12 +267,20 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
 
         return Column(
           children: [
-            // ── Step 2 AI ambient listening banner ──────────────────────────
+            // ── Step 2 AI Scribe banner — same widget as Step 1 ────────────
             // Horizontally inset to match the ListView's content alignment.
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 AppSpacing.xxxl, AppSpacing.xl, AppSpacing.xxxl, 0),
-              child: Step2AsrBanner(activeFormTypes: widget.activeFormTypes),
+              child: AiScribeBanner(
+                encounterId: notifier.encounterId,
+                patientId: notifier.patientId,
+                isFemale: widget.activeFormTypes.contains('anc') ||
+                    widget.activeFormTypes.contains('pnc'),
+                // VisitFormScreen watches ScribeController state and auto-opens
+                // the SOAP review sheet when reviewReady — no action needed here.
+                onReviewReady: (_) {},
+              ),
             ),
             // ── Assessment form sections + submit button ────────────────────
             Expanded(
@@ -581,21 +561,21 @@ class _TriageChip extends StatelessWidget {
 /// Collapsible amber accordion showing systolic / diastolic / weight / urine
 /// protein across the last few ANC visits, with a 📈 marker on rising metrics.
 ///
-/// Purely presentational: the [result] is computed by [VitalsTrendAnalyzer] and
-/// the card is only inserted by the parent when [VitalsTrendResult.show] is true
-/// (i.e. blood pressure is climbing across visits).  Matches the v13 mockup's
-/// `#ancTrendCard` styling.
+/// Computes [VitalsTrendResult] internally on every build by watching
+/// [UnifiedFormNotifier] directly — this guarantees the "Today" column
+/// updates on every field keystroke without depending on a prop-chain through
+/// the parent Consumer.  [priorVisits] is stable (loaded once in initState).
 class _VitalsTrendCard extends StatefulWidget {
-  const _VitalsTrendCard({required this.result});
+  const _VitalsTrendCard({required this.priorVisits});
 
-  final VitalsTrendResult result;
+  final List<VisitVitals> priorVisits;
 
   @override
   State<_VitalsTrendCard> createState() => _VitalsTrendCardState();
 }
 
 class _VitalsTrendCardState extends State<_VitalsTrendCard> {
-  bool _expanded = false;
+  bool _expanded = true;
 
   static const _rising = '📈';
   static const _flat = '·';
@@ -603,7 +583,42 @@ class _VitalsTrendCardState extends State<_VitalsTrendCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final result = widget.result;
+    // Watch notifier directly — rebuilds on every updateField() call so
+    // "Today" column reflects the latest typed value in real-time.
+    final notifier = context.watch<UnifiedFormNotifier>();
+    final data = notifier.data;
+    final today = VisitVitals(
+      systolic: () {
+        final v = data.getValue('systolic');
+        if (v is int) return v;
+        if (v is num) return v.toInt();
+        if (v is String) return int.tryParse(v);
+        return null;
+      }(),
+      diastolic: () {
+        final v = data.getValue('diastolic');
+        if (v is int) return v;
+        if (v is num) return v.toInt();
+        if (v is String) return int.tryParse(v);
+        return null;
+      }(),
+      weight: () {
+        final v = data.getValue('weight');
+        if (v is double) return v;
+        if (v is num) return v.toDouble();
+        if (v is String) return double.tryParse(v);
+        return null;
+      }(),
+      urineProtein: () {
+        final v = data.getValue('urinaryAlbumin');
+        if (v == null) return null;
+        return v is String ? v : v.toString();
+      }(),
+    );
+    final result = VitalsTrendAnalyzer.analyze(
+      priorVisits: widget.priorVisits,
+      today: today,
+    );
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.xxxl),
@@ -669,7 +684,9 @@ class _VitalsTrendCardState extends State<_VitalsTrendCard> {
                     _buildTable(theme, result),
                     const SizedBox(height: 9),
                     Text(
-                      UnifiedFormStrings.trendFooter,
+                      result.show
+                          ? UnifiedFormStrings.trendFooter
+                          : UnifiedFormStrings.trendFooterStable,
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: AppColors.statusWarningText,
                         fontWeight: FontWeight.w600,
@@ -764,6 +781,10 @@ class _VitalsTrendCardState extends State<_VitalsTrendCard> {
     );
 
     final lastIndex = metric.values.length - 1;
+    // For the weight row, deltas are computed from the earliest recorded reading.
+    final weightBaseline = metric.metric == VitalMetric.weight
+        ? metric.values.whereType<num>().firstOrNull
+        : null;
     return TableRow(
       children: [
         Padding(
@@ -774,7 +795,8 @@ class _VitalsTrendCardState extends State<_VitalsTrendCard> {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 5),
             child: Text(
-              _formatValue(metric.metric, metric.values[i]),
+              _formatValue(metric.metric, metric.values[i],
+                  weightBaseline: weightBaseline),
               textAlign: TextAlign.center,
               style: i == lastIndex ? todayStyle : priorStyle,
             ),
@@ -797,20 +819,24 @@ class _VitalsTrendCardState extends State<_VitalsTrendCard> {
       case VitalMetric.diastolic:
         return UnifiedFormStrings.trendDiastolic;
       case VitalMetric.weight:
-        return UnifiedFormStrings.trendWeight;
+        return UnifiedFormStrings.trendWeightGain;
       case VitalMetric.urineProtein:
         return UnifiedFormStrings.trendUrineProtein;
     }
   }
 
-  String _formatValue(VitalMetric metric, num? value) {
+  String _formatValue(VitalMetric metric, num? value, {num? weightBaseline}) {
     if (value == null) return UnifiedFormStrings.trendMissingValue;
     switch (metric) {
       case VitalMetric.systolic:
       case VitalMetric.diastolic:
         return value.toInt().toString();
       case VitalMetric.weight:
-        return value.toStringAsFixed(1);
+        if (weightBaseline == null) return value.toStringAsFixed(1);
+        final delta = value.toDouble() - weightBaseline.toDouble();
+        return delta >= 0
+            ? '+${delta.toStringAsFixed(1)}'
+            : delta.toStringAsFixed(1);
       case VitalMetric.urineProtein:
         switch (value.toInt()) {
           case 0:
@@ -823,6 +849,167 @@ class _VitalsTrendCardState extends State<_VitalsTrendCard> {
             return UnifiedFormStrings.trendMissingValue;
         }
     }
+  }
+}
+
+// ── Gestational age card ──────────────────────────────────────────────────────
+
+/// Navy-gradient card shown at the top of the ANC section displaying the
+/// patient's gestational age, LMP, and EDD loaded from patient rawJson.
+class _GestationalAgeCard extends StatelessWidget {
+  const _GestationalAgeCard({
+    required this.lmpDate,
+    required this.eddDate,
+    required this.gestationalWeeks,
+  });
+
+  final DateTime? lmpDate;
+  final DateTime? eddDate;
+  final int? gestationalWeeks;
+
+  static const _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  static String _fmt(DateTime d) =>
+      '${d.day} ${_months[d.month - 1]} ${d.year}';
+
+  @override
+  Widget build(BuildContext context) {
+    final lmpStr = lmpDate != null ? _fmt(lmpDate!) : null;
+    final eddStr = eddDate != null ? _fmt(eddDate!) : null;
+
+    final String heroText;
+    if (lmpDate != null) {
+      final total = DateTime.now().difference(lmpDate!).inDays;
+      final weeks = total ~/ 7;
+      final days = total % 7;
+      heroText = days > 0
+          ? '$weeks ${ComposerStrings.gestationalAgeWeeks} $days ${ComposerStrings.gestationalAgeDays}'
+          : '$weeks ${ComposerStrings.gestationalAgeWeeks}';
+    } else if (gestationalWeeks != null) {
+      heroText = '$gestationalWeeks ${ComposerStrings.gestationalAgeWeeks}';
+    } else {
+      heroText = '— ${ComposerStrings.gestationalAgeWeeks}';
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xl),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF1B2B5E), Color(0xFF2D3F7C)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text('🤰', style: TextStyle(fontSize: 15)),
+                const SizedBox(width: 7),
+                Text(
+                  ComposerStrings.gestationalAgeLabel.toUpperCase(),
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.9,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              heroText,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                height: 1.1,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _DateSubBox(
+                    emoji: '📅',
+                    label: ComposerStrings.pregnancyOverviewLmp,
+                    value: lmpStr,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _DateSubBox(
+                    emoji: '🍼',
+                    label: ComposerStrings.pregnancyOverviewEdd,
+                    value: eddStr,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DateSubBox extends StatelessWidget {
+  const _DateSubBox({
+    required this.emoji,
+    required this.label,
+    required this.value,
+  });
+
+  final String emoji;
+  final String label;
+  final String? value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(emoji, style: const TextStyle(fontSize: 12)),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white60,
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.4,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          Text(
+            value ?? '—',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -1440,6 +1627,10 @@ class _SectionCard extends StatelessWidget {
       // label header — wrapping it in a _FieldShell would double the label.
       case WidgetHint.dialogCheckbox:
         return control;
+      // bloodGlucoseEntry is self-contained: it wraps its own _FieldShell and
+      // manages both glucoseType + glucose inline, so skip the outer shell.
+      case WidgetHint.bloodGlucoseEntry:
+        return control;
       default:
         final glyph = FormFieldVisuals.forField(def.id);
         final unit = def.unitMeasurement;
@@ -1484,6 +1675,18 @@ class _SectionCard extends StatelessWidget {
           case 'hemoglobin':
             vitalStatus =
                 _VitalStatusEval.hemoglobin(_VitalStatusEval.asDouble(currentValue));
+
+          case 'fastingBloodSugar':
+            vitalStatus = _VitalStatusEval.bloodGlucose(
+              _VitalStatusEval.asDouble(currentValue),
+              null,
+            );
+
+          case 'randomBloodSugar':
+            vitalStatus = _VitalStatusEval.bloodGlucose(
+              null,
+              _VitalStatusEval.asDouble(currentValue),
+            );
         }
 
         return _FieldShell(
@@ -1583,6 +1786,21 @@ class _SectionCard extends StatelessWidget {
           options: def.options,
           currentValue: currentValue as String?,
           onChanged: (v) => onFieldChanged(def.id, v),
+        );
+
+      case WidgetHint.bloodGlucoseEntry:
+        // Renders FBS/RBS type toggle + numeric value input in one card.
+        // glucoseType (def.id) stores the selected type; 'glucose' stores the
+        // numeric value.  Both are written to CanonicalVisitData individually.
+        return _BloodGlucoseEntryField(
+          key: Key('unified_form_${def.id}_bge'),
+          options: def.options,
+          glucoseType: currentValue as String?,
+          glucoseValue: data.getValue('glucose'),
+          isMandatory: def.isMandatory || ref.isMandatory,
+          hasError: validationErrors.contains(ref.id),
+          onTypeChanged: (type) => onFieldChanged(def.id, type),
+          onValueChanged: (val) => onFieldChanged('glucose', val),
         );
 
       case WidgetHint.numeric:
@@ -2160,6 +2378,177 @@ class _EmojiTile extends StatelessWidget {
 }
 
 // ── Inline micro-widgets (no hardcoded strings, tokens only) ─────────────────
+
+/// Combined blood-glucose card: FBS / RBS type toggle + numeric value input.
+///
+/// Replaces the separate `glucoseType` (Spinner) + `glucose` (EditText) pair
+/// with a single self-contained card.  Both fields are still written to
+/// [CanonicalVisitData] under their original IDs so the payload mapper is
+/// unaffected.
+class _BloodGlucoseEntryField extends StatefulWidget {
+  const _BloodGlucoseEntryField({
+    super.key,
+    required this.options,
+    required this.onTypeChanged,
+    required this.onValueChanged,
+    this.glucoseType,
+    this.glucoseValue,
+    this.isMandatory = false,
+    this.hasError = false,
+  });
+
+  /// Options from the `glucoseType` field definition (FBS, RBS).
+  final List<FieldOption> options;
+
+  /// Current selected type id ('fbs' | 'rbs' | null).
+  final String? glucoseType;
+
+  /// Current glucose value (double | null).
+  final dynamic glucoseValue;
+
+  final void Function(String? type) onTypeChanged;
+  final void Function(dynamic value) onValueChanged;
+  final bool isMandatory;
+  final bool hasError;
+
+  @override
+  State<_BloodGlucoseEntryField> createState() =>
+      _BloodGlucoseEntryFieldState();
+}
+
+class _BloodGlucoseEntryFieldState extends State<_BloodGlucoseEntryField> {
+  late final TextEditingController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(
+      text: widget.glucoseValue?.toString() ?? '',
+    );
+  }
+
+  @override
+  void didUpdateWidget(_BloodGlucoseEntryField old) {
+    super.didUpdateWidget(old);
+    if (old.glucoseValue != widget.glucoseValue) {
+      final newText = widget.glucoseValue?.toString() ?? '';
+      if (_ctrl.text != newText) {
+        final ctrlNum = double.tryParse(_ctrl.text);
+        final newNum = double.tryParse(newText);
+        final sameValue =
+            ctrlNum != null && newNum != null && ctrlNum == newNum;
+        if (!sameValue) {
+          _ctrl.text = newText;
+          _ctrl.selection =
+              TextSelection.collapsed(offset: newText.length);
+        }
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final currentType = widget.glucoseType;
+    final glucoseNum = _VitalStatusEval.asDouble(widget.glucoseValue);
+
+    // Route value to fasting vs random threshold depending on selected type.
+    final fastingVal = currentType == 'fbs' ? glucoseNum : null;
+    final randomVal = currentType == 'rbs' ? glucoseNum : null;
+    final status = _VitalStatusEval.bloodGlucose(fastingVal, randomVal);
+
+    return _FieldShell(
+      label: UnifiedFormStrings.bloodGlucoseEntryLabel,
+      subLabel: UnifiedFormStrings.bloodGlucoseEntrySubLabel,
+      emoji: '🩸',
+      emojiBg: const Color(0xFFFEE2E2),
+      isMandatory: widget.isMandatory,
+      hasError: widget.hasError,
+      statusBadge: status != null
+          ? _VitalBadge(label: status.label, color: status.color)
+          : null,
+      inlineWarning: status?.warning,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // ── Type toggle row ─────────────────────────────────────────────
+          Row(
+            children: List.generate(widget.options.length, (i) {
+              final opt = widget.options[i];
+              final isSelected = currentType == opt.id;
+              return Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    right: i < widget.options.length - 1 ? AppSpacing.xs : 0,
+                  ),
+                  child: GestureDetector(
+                    onTap: () {
+                      // Tap again to deselect.
+                      widget.onTypeChanged(isSelected ? null : opt.id);
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? AppColors.navy
+                            : AppColors.cardSurface,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isSelected
+                              ? AppColors.navy
+                              : AppColors.border,
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        opt.name,
+                        style: AppTextStyles.chip.copyWith(
+                          color: isSelected
+                              ? Colors.white
+                              : AppColors.textMuted,
+                          fontSize: 13,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          // ── Value input ─────────────────────────────────────────────────
+          TextFormField(
+            controller: _ctrl,
+            keyboardType: TextInputType.number,
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+            ],
+            style: Theme.of(context).textTheme.bodyMedium,
+            decoration: _filledInputDecoration(
+              hintText: UnifiedFormStrings.bloodGlucoseEntryHint,
+              suffixText: UnifiedFormStrings.bloodGlucoseEntryUnit,
+            ),
+            onChanged: (v) {
+              if (v.isEmpty) {
+                widget.onValueChanged(null);
+              } else {
+                widget.onValueChanged(double.tryParse(v) ?? v);
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _NumericField extends StatefulWidget {
   const _NumericField({

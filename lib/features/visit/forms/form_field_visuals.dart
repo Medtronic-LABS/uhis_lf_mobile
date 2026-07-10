@@ -56,6 +56,7 @@ abstract final class FormFieldVisuals {
     'randomBloodSugar': FieldGlyph('🩸', _red),
     'ancBloodGlucose': FieldGlyph('🩸', _red),
     'glucose': FieldGlyph('🩸', _red),
+    'glucoseType': FieldGlyph('🩸', _red),
   };
 
   /// Returns the glyph for [fieldId], or `null` when the field has no dedicated

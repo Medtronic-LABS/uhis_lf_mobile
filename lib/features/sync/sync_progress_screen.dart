@@ -131,14 +131,20 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
       if (!mounted) return;
       setState(() => _preparingMessage = SyncStrings.preparingDashboard);
       
-      // Pre-load mission queue and referral summary
+      // Pre-load mission queue and referral summary. DashboardScreen lives
+      // inside a StatefulShellRoute.indexedStack, so its State (and the
+      // `changes` listener it attached the first time it was built) survives
+      // every subsequent logout/login in the same app session — its
+      // `initState()` never runs again. `refresh()` (not a plain `loadQueue`
+      // pre-warm) is what actually notifies that listener, so the dashboard
+      // re-renders with this session's data instead of whatever it last
+      // showed before this login.
       final missionRepo = context.read<MissionDashboardRepository>();
       final encounterDao = context.read<EncounterDao>();
-      
+
       // Load in parallel
       await Future.wait([
-        missionRepo.loadQueue(limit: 200),
-        missionRepo.loadReferralSummary(),
+        missionRepo.refresh(),
         encounterDao.completedTodayPatientIds(),
       ]);
       
@@ -181,12 +187,13 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
     return Scaffold(
       body: SafeArea(
         child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
               children: [
                 // Logo
                 Image.asset(
@@ -327,8 +334,9 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildProgressRing(ColorScheme scheme) {
     return SizedBox(

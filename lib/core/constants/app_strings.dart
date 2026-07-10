@@ -1301,7 +1301,7 @@ abstract final class ScribeStrings {
 abstract final class ScribeBannerStrings {
   ScribeBannerStrings._();
 
-  static const String idle = 'AI Scribe';
+  static const String idle = '🎙 AI Scribe — tap and let him/her speak';
   static const String idleSub = 'Tap a mode to start';
   static const String recording = 'Recording…';
   static const String uploading = 'Uploading…';
@@ -3173,6 +3173,7 @@ abstract final class VisitCompleteStrings {
   static const String sendCounsellingMessage = 'Send Counselling Message';
   static const String createReferral = 'Create Referral';
   static const String backToHome = 'Back to Home';
+  static const String doneForNow = 'Done for Now';
   static const String ncdCallDoctor = '📱 Call a doctor now';
   static const String ncdBookHospital = '🏥 Book hospital visit & refer';
 
@@ -3277,7 +3278,7 @@ abstract final class NabaStrings {
   static const String smsNotAvailable =
       'SMS is not available on this device.';
 
-  static const String acceptProposal = 'Accept & continue';
+  static const String acceptProposal = 'Save & Go Home';
   static const String proposalNote =
       'This is an AI proposal. Review and accept to proceed.';
 
@@ -3476,15 +3477,16 @@ abstract final class UnifiedFormStrings {
 
   /// Column sub-label describing how long ago a prior visit was.
   static String trendWeeksAgo(int days) {
-    if (days < 7) return days <= 1 ? '1 d ago' : '$days d ago';
+    if (days < 7) return days <= 1 ? '1d' : '${days}d';
     final weeks = (days / 7).round();
-    return '$weeks wk ago';
+    return '${weeks}wks';
   }
 
   /// Metric row labels.
   static const String trendSystolic = 'Systolic';
   static const String trendDiastolic = 'Diastolic';
   static const String trendWeight = 'Weight';
+  static const String trendWeightGain = 'Weight gain';
   static const String trendUrineProtein = 'Urine protein';
 
   /// Urine-protein grade labels used in the trend table.
@@ -3495,10 +3497,14 @@ abstract final class UnifiedFormStrings {
   /// Placeholder for a metric not captured a given visit.
   static const String trendMissingValue = '—';
 
-  /// Explanatory footer under the trend table.
+  /// Explanatory footer under the trend table — shown when BP is rising.
   static const String trendFooter =
       'Each reading is below its alert line — but they are climbing together '
       'across visits. No single rule fires.';
+
+  /// Footer when readings are stable (no rising BP trend detected).
+  static const String trendFooterStable =
+      'Readings are stable across visits. No rising trend detected.';
 
   // ── BMI classification labels (WHO thresholds) ──────────────────────────────
   static const String vsBmiUnderweight = 'Underweight';
@@ -3547,6 +3553,12 @@ abstract final class UnifiedFormStrings {
   static const String vsGlucoseWarningHigh =
       'High blood sugar — refer urgently for diabetes evaluation.';
 
+  // ── Blood glucose combined entry card ───────────────────────────────────────
+  static const String bloodGlucoseEntryLabel    = 'Blood Glucose';
+  static const String bloodGlucoseEntrySubLabel = 'রক্তের শর্করা';
+  static const String bloodGlucoseEntryHint     = 'Enter value (mmol/L)';
+  static const String bloodGlucoseEntryUnit     = 'mmol/L';
+
   // ── Blood glucose pair-card chrome ──────────────────────────────────────────
   static const String glucosePairLabel    = 'Blood Sugar';
   static const String glucosePairSubLabel = 'রক্তের শর্করা · mmol/L';
@@ -3564,6 +3576,8 @@ abstract final class UnifiedFormStrings {
   /// Returns `null` for the synthetic `vitals` formType (no badge needed).
   static String? programmeBadgeLabel(String formType) {
     switch (formType) {
+      case 'commonVitals':
+        return 'Vitals';
       case 'anc':
         return 'ANC';
       case 'ncd':

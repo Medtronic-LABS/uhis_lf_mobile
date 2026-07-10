@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_sqlcipher/sqflite.dart' as sqlcipher;
 
+import '../debug/console_log.dart';
 import 'key_store.dart';
 
 /// Local SQLite store for the offline cache (households, members, patients)
@@ -20,7 +21,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 20;
+  static const int schemaVersion = 23;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -386,7 +387,9 @@ class AppDatabase {
         is_near_term_anc INTEGER NOT NULL DEFAULT 0,
         had_delivery_complications INTEGER NOT NULL DEFAULT 0,
         has_pnc_illness INTEGER NOT NULL DEFAULT 0,
-        updated_at INTEGER
+        updated_at INTEGER,
+        edd_date INTEGER,
+        lmp_date INTEGER
       )''');
     await db.execute('''
       CREATE TABLE $tableTreatmentPresence (
@@ -791,7 +794,9 @@ class AppDatabase {
           is_near_term_anc INTEGER NOT NULL DEFAULT 0,
           had_delivery_complications INTEGER NOT NULL DEFAULT 0,
           has_pnc_illness INTEGER NOT NULL DEFAULT 0,
-          updated_at INTEGER
+          updated_at INTEGER,
+          edd_date INTEGER,
+          lmp_date INTEGER
         )''');
       await addTbl8('''
         CREATE TABLE IF NOT EXISTS $tableTreatmentPresence (
@@ -1043,6 +1048,42 @@ class AppDatabase {
         print('[DB v20] villageId backfill failed (non-fatal): $e');
       }
     }
+    if (from < 21) {
+      // v21 — Store EDD (epoch ms) on the pregnancy snapshot so Form 2 can
+      // derive gestational age without requiring the server to include LMP in
+      // individual assessment history rows.
+      try {
+        await db.execute(
+          'ALTER TABLE $tablePregnancySnapshot ADD COLUMN edd_date INTEGER',
+        );
+      } catch (_) {/* column already present — safe to ignore */}
+    }
+    if (from < 22) {
+      // v22 — Store LMP (epoch ms) directly from pregnancyInfos[].lmpDate.
+      // Preferred over deriving from EDD; avoids rounding errors and handles
+      // cases where server omits EDD but includes LMP.
+      try {
+        await db.execute(
+          'ALTER TABLE $tablePregnancySnapshot ADD COLUMN lmp_date INTEGER',
+        );
+      } catch (_) {/* column already present — safe to ignore */}
+    }
+    if (from < 23) {
+      // v23 — Remediation: devices that reached schemaVersion=22 before the
+      // v21/v22 ALTER TABLE migrations were included in the build still lack
+      // edd_date and/or lmp_date. Re-apply both; the try/catch makes this
+      // idempotent if they already exist.
+      try {
+        await db.execute(
+          'ALTER TABLE $tablePregnancySnapshot ADD COLUMN edd_date INTEGER',
+        );
+      } catch (_) {/* already present */}
+      try {
+        await db.execute(
+          'ALTER TABLE $tablePregnancySnapshot ADD COLUMN lmp_date INTEGER',
+        );
+      } catch (_) {/* already present */}
+    }
   }
 
   // Single source of truth for "every table" — used by wipeAllData() so a
@@ -1065,11 +1106,20 @@ class AppDatabase {
   /// [Database] handle). Used on logout and after a successful online login,
   /// before the subsequent full sync repopulates local data.
   Future<void> wipeAllData() async {
+    ConsoleLog.banner(
+        '🧹 [AppDatabase] wipeAllData() — truncating ${_allTables.length} tables...');
     await db.transaction((tx) async {
       for (final table in _allTables) {
+        final before = Sqflite.firstIntValue(
+                await tx.rawQuery('SELECT COUNT(*) FROM $table')) ??
+            0;
         await tx.delete(table);
+        ConsoleLog.step(
+            '  → truncated $table ($before row${before == 1 ? '' : 's'} removed)');
       }
     });
+    ConsoleLog.success(
+        '✅ [AppDatabase] wipeAllData() complete — all ${_allTables.length} tables empty.');
   }
 
   Future<void> close() => db.close();

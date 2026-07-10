@@ -496,21 +496,25 @@
     ]
   },
   {
-    "formType": "anc",
-    "workflowName": "RMNCH",
-    "clinicalWorkflowId": 4,
+    "formType": "commonVitals",
     "sections": [
       {
-        "sectionId": "pregnancyOverview",
-        "title": "Pregnancy Overview",
+        "sectionId": "commonVitals",
+        "title": "Vitals",
         "fieldRefs": [
-          "pregnancyProfile"
-        ]
-      },
-      {
-        "sectionId": "todaysVitals",
-        "title": "Today's Vitals",
-        "fieldRefs": [
+          {
+            "id": "height",
+            "fieldName": "Height (cm)",
+            "inputType": 8192,
+            "isMandatory": false
+          },
+          {
+            "id": "weight",
+            "fieldName": "Weight (kg)",
+            "inputType": 8192,
+            "isMandatory": false
+          },
+          "bmi",
           {
             "id": "bloodPressure",
             "fieldName": "Blood Pressure",
@@ -529,18 +533,54 @@
             "isMandatory": false
           },
           {
-            "id": "weight",
-            "fieldName": "Weight (kg)",
+            "id": "pulse",
+            "fieldName": "Pulse (bpm)",
+            "inputType": 3,
             "isMandatory": false
           },
           {
-            "id": "urinaryAlbumin",
-            "fieldName": "Urine Protein",
+            "id": "glucoseType",
+            "fieldName": "Blood Glucose Type",
+            "isMandatory": false
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "formType": "anc",
+    "workflowName": "RMNCH",
+    "clinicalWorkflowId": 4,
+    "sections": [
+      {
+        "sectionId": "pregnancyOverview",
+        "title": "Pregnancy Overview",
+        "fieldRefs": [
+          "pregnancyProfile"
+        ]
+      },
+      {
+        "sectionId": "ancSpecificVitals",
+        "title": "ANC Vitals",
+        "fieldRefs": [
+          {
+            "id": "temperature",
+            "fieldName": "Temperature (°C)",
+            "isMandatory": false
+          },
+          {
+            "id": "edema",
+            "fieldName": "Edema",
             "isMandatory": false
           },
           {
             "id": "fundalHeight",
             "fieldName": "Fundal Height (cm)",
+            "isMandatory": false
+          },
+          {
+            "id": "urinaryAlbumin",
+            "fieldName": "Urine Protein",
             "isMandatory": false
           },
           "fetalMovement"
@@ -932,50 +972,42 @@
       },
       {
         "sectionId": "bpLog",
-        "title": "Blood Pressure & Vitals",
+        "title": "Blood Pressure History",
         "fieldRefs": [
           {
-            "fieldName": "Height",
-            "inputType": 8192.0,
+            "fieldName": "Have you been diagnosed with High Blood Pressure or Hypertension before?",
             "isMandatory": false,
-            "id": "height"
+            "id": "isBeforeHtnDiagnosis"
           },
           {
-            "fieldName": "Weight (in kg)",
-            "inputType": 8192.0,
+            "fieldName": "Are you taking BP medication regularly?",
             "isMandatory": false,
-            "id": "weight"
-          },
-          "bmi",
-          {
-            "fieldName": "Blood Pressure",
-            "isMandatory": false,
-            "id": "bpLogDetails"
+            "id": "medicationFrequencyBp"
           },
           {
             "fieldName": "Are you a regular smoker or have you been a regular smoker in the past 12 months?",
             "isMandatory": false,
             "id": "isRegularSmoker"
-          }
+          },
+          "cvdRisk"
         ]
       },
       {
         "sectionId": "glucoseLog",
-        "title": "Blood Glucose",
+        "title": "Diabetes History",
         "fieldRefs": [
           {
-            "fieldName": "Name of Investigation",
+            "fieldName": "Have you been diagnosed with High Blood Sugar or Diabetes before?",
             "isMandatory": false,
-            "id": "glucoseType"
+            "id": "isBeforeDiabetesDiagnosis"
           },
           {
-            "fieldName": "Blood Glucose",
-            "inputType": 8192.0,
+            "fieldName": "Are you taking Diabetes medication regularly?",
             "isMandatory": false,
-            "id": "glucose"
+            "id": "medicationFrequencyBg"
           },
           {
-            "fieldName": "HbA1c",
+            "fieldName": "HbA1c (%)",
             "inputType": 8192.0,
             "isMandatory": false,
             "id": "hba1c"

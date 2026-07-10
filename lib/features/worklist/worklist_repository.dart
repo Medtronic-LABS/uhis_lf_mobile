@@ -9,6 +9,7 @@ import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
 import '../../core/db/sync_meta_dao.dart';
+import '../../core/models/dashboard_tier.dart';
 import '../../core/models/patient.dart';
 import '../../core/models/programme.dart';
 import '../../core/models/risk.dart';
@@ -96,20 +97,25 @@ class WorklistRepository {
     );
   }
 
-  /// Apply spec §2.8 + §2.8.4 sort order:
-  ///   1. Band ascending (band1 first)
-  ///   2. Pregnant > non-pregnant within band
-  ///   3. Modifier within (a > b > none)
-  ///   4. Village match (when SK has selected a village)
-  ///   5. Earlier scheduled `nextDueAt` first
+  /// Apply sort order — date urgency first, then clinical severity within each group:
+  ///   1. Date tier: Overdue → Today → This week → Upcoming
+  ///   2. Band: 1 → 2 → 3 → 4
+  ///   3. Pregnant > non-pregnant within band
+  ///   4. Modifier: a → b → none
+  ///   5. Village match (when SK has selected a village)
   ///   6. Display name (stable tiebreaker)
-  ///
-  /// CCE alert and open-referral tie-breaks (§2.8.4 #1–2) are deferred until
-  /// the CCE pipeline lands (TODO).
   static void _applySpecSort(
     List<WorklistEntry> entries, {
     String? selectedVillageId,
   }) {
+    final now = DateTime.now();
+
+    int tierRank(WorklistEntry e) {
+      final due = e.nextDueAt;
+      if (due == null) return DashboardTier.upcoming.rank;
+      return DashboardTier.fromDaysToDue(due.difference(now).inDays).rank;
+    }
+
     int bandRank(Band b) => switch (b) {
           Band.band1 => 1,
           Band.band2 => 2,
@@ -122,6 +128,8 @@ class WorklistRepository {
           Modifier.none => 2,
         };
     entries.sort((a, b) {
+      final byTier = tierRank(a).compareTo(tierRank(b));
+      if (byTier != 0) return byTier;
       final byBand = bandRank(a.band).compareTo(bandRank(b.band));
       if (byBand != 0) return byBand;
       final byPreg = (a.isPregnant ? 0 : 1).compareTo(b.isPregnant ? 0 : 1);
@@ -133,10 +141,6 @@ class WorklistRepository {
             .compareTo(b.villageId == selectedVillageId ? 0 : 1);
         if (byVillage != 0) return byVillage;
       }
-      final aDue = a.nextDueAt?.millisecondsSinceEpoch ?? 1 << 62;
-      final bDue = b.nextDueAt?.millisecondsSinceEpoch ?? 1 << 62;
-      final byDue = aDue.compareTo(bDue);
-      if (byDue != 0) return byDue;
       return a.displayName.compareTo(b.displayName);
     });
   }
