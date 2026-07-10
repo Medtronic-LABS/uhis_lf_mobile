@@ -36,7 +36,7 @@ class AnnotatedFormSection {
 ///
 /// ## Conditional visibility rules
 ///
-/// - `birthPreparedness`: `anc` active AND gestational age ≥ 28 weeks.
+  /// - `birthPreparedness`: `anc` active (no GA threshold).
 ///   [gestationalWeeks] (from PatientContext at launch) takes precedence over
 ///   the in-form `gestationalAge` field the SK may not have filled yet.
 /// - `pregnancyOutcome`: always shown when `pncMother` active.
@@ -47,12 +47,11 @@ abstract final class UnifiedSectionRules {
 
   /// Section IDs whose sections are pinned to the top as the "Vitals" group.
   ///
-  /// `commonVitals` is the unified section that captures Height, Weight, BMI,
-  /// Blood Pressure (systolic/diastolic), Pulse, and Blood Glucose (type +
-  /// value) exactly once regardless of which clinical programmes are active.
-  /// ANC-specific fields (urinaryAlbumin, fundalHeight, fetalMovement,
-  /// temperature, edema) live in the programme-scoped `ancSpecificVitals`
-  /// section; NCD has no extra vitals beyond commonVitals.
+  /// `commonVitals` captures Height, Weight, BMI, Blood Pressure exactly once.
+  /// ANC-specific clinical exam fields (urineProtein, fundalHeight,
+  /// fetalMovement) live in `ancSpecificVitals`; NCD has no extra vitals.
+  /// Lab investigations (urinaryAlbumin, urinarySugar, hemoglobin,
+  /// blood glucose) live in `labInvestigations`.
   static const _vitalsSectionIds = {'commonVitals'};
 
   /// Semantic field equivalence groups.
@@ -88,17 +87,12 @@ abstract final class UnifiedSectionRules {
     // ── Calcium supplements ─────────────────────────────────────────────────
     {'calciumTotalConsumed', 'calciumTabletsConsumed', 'calciumTablets'},
     {'calciumProvided', 'calciumTabletsProvided'},
-    // ── Blood glucose — NCD combined widget ────────────────────────────────
-    // glucoseType renders as BloodGlucoseEntry (toggle + numeric value).
-    // glucose / bloodSugar / ancBloodGlucose are aliases for the same
-    // combined concept; claiming any one pre-claims the rest.
+    // ── Blood glucose — combined BloodGlucoseEntry widget ─────────────────
+    // glucoseType renders as BloodGlucoseEntry (toggle FBS/RBS + numeric).
+    // Used in both ANC labInvestigations and NCD glucoseLog.
+    // glucose / bloodSugar / ancBloodGlucose are aliases — claiming glucoseType
+    // pre-claims every alias so no duplicate widget can appear.
     {'glucoseType', 'glucose', 'bloodSugar', 'ancBloodGlucose'},
-    // ── ANC / PNC discrete blood-sugar tests (distinct, not deduplicated) ──
-    // fastingBloodSugar and randomBloodSugar are separate lab results and
-    // must both render; they each get their own singleton group so they are
-    // deduplicated only if the exact same field appears in two active forms.
-    {'fastingBloodSugar'},
-    {'randomBloodSugar'},
   ];
 
   /// Returns a human-readable description of which semantic groups had members
@@ -303,17 +297,9 @@ abstract final class UnifiedSectionRules {
   }) {
     final id = section.sectionId;
 
-    // birthPreparedness: ANC active + GA >= 28 weeks.
+    // birthPreparedness: shown whenever ANC is active.
     if (id == 'birthPreparedness') {
-      if (!activeFormTypes.contains('anc')) return false;
-      final weeks = gestationalWeeks ??
-          () {
-            final v = currentData.getValue('gestationalAge');
-            return v is num
-                ? v.toInt()
-                : int.tryParse(v?.toString() ?? '') ?? 0;
-          }();
-      return weeks >= 28;
+      return activeFormTypes.contains('anc');
     }
 
     // pregnancyOutcome: always shown when pncMother is active.

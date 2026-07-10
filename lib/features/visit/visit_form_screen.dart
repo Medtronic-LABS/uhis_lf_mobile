@@ -296,16 +296,19 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     VisitSession session,
     bool embedded,
   ) {
-    debugPrint(
-        '[VisitForm] Sectioned mode — programmes: ${widget.activatedPathways?.join(', ')}');
-
-    final formTypes = _toFormTypes(widget.activatedPathways ?? const []);
+    final rawPathways = widget.activatedPathways ?? const [];
+    final formTypes = _toFormTypes(rawPathways);
     final enrolledFormTypes = _toFormTypes(
       widget.enrolledProgrammes
           .where((p) => p != Programme.unknown)
           .map((p) => p.name)
           .toList(),
     );
+    debugPrint('[VisitForm] ── form-type resolution ──────────────────────');
+    debugPrint('[VisitForm]   activated pathways : ${rawPathways.join(', ')}');
+    debugPrint('[VisitForm]   activeFormTypes    : ${formTypes.join(', ')}');
+    debugPrint('[VisitForm]   enrolledFormTypes  : ${enrolledFormTypes.join(', ')}');
+    debugPrint('[VisitForm] ────────────────────────────────────────────────');
     final draftDao = ctx.read<AssessmentDraftDao>();
     final assessmentRepo = ctx.read<AssessmentRepository>();
 
@@ -347,10 +350,15 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
   /// - `imci` → `iccm` (no manifest yet; harmlessly ignored by form engine)
   /// - others → passed through unchanged
   static List<String> _toFormTypes(List<String> programmeNames) {
-    // commonVitals is always injected first — it holds the shared measurements
-    // (height, weight, BMI, BP, pulse, blood glucose) captured exactly once
-    // regardless of how many programmes are active.
-    final out = <String>['commonVitals'];
+    // For ANC-only and NCD-only visits, omit commonVitals from activeFormTypes
+    // — vitals fields are embedded directly in programme sections so the
+    // clinical workflow order is preserved (ANC: Pregnancy → Physical → Lab →
+    // Danger Signs; NCD: Symptoms → BP → Glucose → Biometrics).
+    // For any multi-programme visit, commonVitals leads as usual so shared
+    // measurements (height, weight, BP, pulse) are captured exactly once.
+    final omitCommonVitals = programmeNames.length == 1 &&
+        (programmeNames.contains('anc') || programmeNames.contains('ncd'));
+    final out = <String>[if (!omitCommonVitals) 'commonVitals'];
     for (final p in programmeNames) {
       switch (p) {
         case 'pnc':

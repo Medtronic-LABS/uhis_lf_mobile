@@ -563,20 +563,14 @@
             "isMandatory": false
           },
           {
-            "id": "pulse",
-            "fieldName": "Pulse (bpm)",
-            "inputType": 3,
-            "isMandatory": false
-          },
-          {
             "id": "weight",
             "fieldName": "Weight (kg)",
             "inputType": 8192,
             "isMandatory": false
           },
           {
-            "id": "urinaryAlbumin",
-            "fieldName": "Urine Protein (Albumin)",
+            "id": "urineProtein",
+            "fieldName": "Urine Protein",
             "isMandatory": false
           },
           {
@@ -591,6 +585,11 @@
         "sectionId": "labInvestigations",
         "title": "Laboratory Investigations",
         "fieldRefs": [
+          {
+            "id": "urinaryAlbumin",
+            "fieldName": "Urinary Albumin",
+            "isMandatory": false
+          },
           {
             "id": "urinarySugar",
             "fieldName": "Urinary Sugar",
@@ -607,13 +606,8 @@
             "isMandatory": false
           },
           {
-            "id": "fastingBloodSugar",
-            "fieldName": "Fasting Blood Sugar (mmol/L)",
-            "isMandatory": false
-          },
-          {
-            "id": "randomBloodSugar",
-            "fieldName": "Random Blood Sugar (mmol/L)",
+            "id": "glucoseType",
+            "fieldName": "Blood Glucose",
             "isMandatory": false
           }
         ]
