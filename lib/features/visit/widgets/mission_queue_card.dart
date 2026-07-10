@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
@@ -6,6 +5,12 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/models/dashboard_tier.dart';
 import '../../../core/models/mission_queue_item.dart';
 import '../../../core/models/programme.dart';
+
+/// Surfaces the band/modifier/tier/score/drivers overlay on patient cards.
+/// Off by default — flip to true locally when investigating dashboard sort
+/// behaviour. Deliberately independent of debug-build mode so it stays
+/// hidden during normal debug-build testing too.
+const bool _showPatientCardDebug = false;
 
 String _titleCase(String s) => s
     .split(' ')
@@ -163,9 +168,8 @@ class MissionQueueCard extends StatelessWidget {
                                 ),
                               ),
 
-                            // ── TEMP DEBUG: priority signal ─────────────
-                            // TODO: remove before merge
-                            if (kDebugMode)
+                            // ── Priority signal debug overlay ───────────
+                            if (_showPatientCardDebug)
                               Padding(
                                 padding: const EdgeInsets.only(top: 6),
                                 child: Container(
