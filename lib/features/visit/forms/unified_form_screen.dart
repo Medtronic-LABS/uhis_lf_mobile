@@ -1841,6 +1841,17 @@ class _SectionCard extends StatelessWidget {
     }
   }
 
+  /// True when a spinner's options are a boolean Yes/No pair — these render as
+  /// pill buttons rather than a dropdown. Matches on id or display name so a
+  /// localised label (titleCulture) does not defeat the check.
+  static bool _isYesNoOptions(List<FieldOption> options) {
+    if (options.isEmpty || options.length > 2) return false;
+    const yesNo = {'yes', 'no'};
+    return options.every((o) =>
+        yesNo.contains(o.id.toLowerCase()) ||
+        yesNo.contains(o.name.toLowerCase()));
+  }
+
   Widget _buildField(
     BuildContext context,
     FieldDef def,
@@ -1917,6 +1928,37 @@ class _SectionCard extends StatelessWidget {
         );
 
       case WidgetHint.spinner:
+        // Yes/No (boolean) spinners render as pill buttons, not a dropdown —
+        // a dropdown for a two-way choice is heavier than the tap target the
+        // SK expects. Genuine multi-option spinners (e.g. deliveryFacilityType)
+        // keep the dropdown.
+        if (_isYesNoOptions(def.options)) {
+          final storedId = currentValue as String?;
+          final displayName = def.options
+              .cast<FieldOption?>()
+              .firstWhere(
+                (o) => o!.id == storedId || o.name == storedId,
+                orElse: () => null,
+              )
+              ?.name;
+          return RadioFormField(
+            key: Key('unified_form_${def.id}_input'),
+            options: def.options.map((o) => o.name).toList(),
+            currentValue: displayName,
+            onChanged: (name) {
+              if (name == null) {
+                onFieldChanged(def.id, null);
+                return;
+              }
+              final id = def.options
+                      .cast<FieldOption?>()
+                      .firstWhere((o) => o!.name == name, orElse: () => null)
+                      ?.id ??
+                  name;
+              onFieldChanged(def.id, id);
+            },
+          );
+        }
         return _SpinnerField(
           key: Key('unified_form_${def.id}_input'),
           options: def.options,
@@ -2790,29 +2832,56 @@ class _SpinnerField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final displayName = options
+    final theme = Theme.of(context);
+    // Resolve stored id → matching option (id or name match).
+    final matched = options
         .cast<FieldOption?>()
         .firstWhere(
           (o) => o!.id == currentValue || o.name == currentValue,
           orElse: () => null,
-        )
-        ?.name;
-    return RadioFormField(
-      options: options.map((o) => o.name).toList(),
-      currentValue: displayName,
-      onChanged: (name) {
-        if (name == null) {
-          // Toggle-deselect.
-          onChanged(null);
-          return;
-        }
-        final id = options
-                .cast<FieldOption?>()
-                .firstWhere((o) => o!.name == name, orElse: () => null)
-                ?.id ??
-            name;
-        onChanged(id);
-      },
+        );
+    final safeValue = matched?.id;
+
+    return DropdownButtonFormField<String>(
+      isExpanded: true,
+      initialValue: safeValue,
+      hint: Text(
+        '— Select —',
+        style: theme.textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
+      ),
+      decoration: InputDecoration(
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: AppColors.border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: AppColors.border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: AppColors.navy, width: 1.5),
+        ),
+        filled: true,
+        fillColor: AppColors.cardSurface,
+      ),
+      items: options
+          .map(
+            (o) => DropdownMenuItem<String>(
+              value: o.id,
+              child: Text(
+                o.name,
+                style: theme.textTheme.bodyMedium,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          )
+          .toList(),
+      onChanged: (id) => onChanged(id),
     );
   }
 }
