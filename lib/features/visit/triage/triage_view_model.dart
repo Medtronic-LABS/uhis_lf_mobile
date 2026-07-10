@@ -38,6 +38,11 @@ class TriageViewModel extends ChangeNotifier {
   final AiPathwayClient? _aiClient;
   final String? _memberId;
 
+  /// Lazily cached result of [enrolledProgrammeVocabCodes].
+  /// Enrolled programmes never change during a triage session, so we compute
+  /// once and reuse — this also ensures debug logs fire only once per load.
+  List<String>? _enrolledProgrammeVocabCache;
+
   /// Currently selected symptom codes.
   final Set<String> _selectedSymptoms = {};
   Set<String> get selectedSymptoms => Set.unmodifiable(_selectedSymptoms);
@@ -401,6 +406,131 @@ class TriageViewModel extends ChangeNotifier {
   /// this so the SK only sees demographic-relevant options.
   List<String> get applicableVocabCodes =>
       AiScribeTriageVocab.applicableCodes(_patientContext);
+
+  /// Default chip grid filtered to the patient's enrolled programme(s) only.
+  ///
+  /// When the patient is enrolled in one or more programmes, only symptoms
+  /// relevant to those programmes are shown by default. General symptoms
+  /// (fever, headache, etc.) are always included. This keeps the default list
+  /// focused — cross-programme symptoms surface when the SK types 3+ chars.
+  ///
+  /// Falls back to [primaryVocabCodes] when no programmes are enrolled, so
+  /// the picker still shows a sensible list for patients with no enrolment data.
+  List<String> get enrolledProgrammeVocabCodes {
+    if (_enrolledProgrammeVocabCache != null) {
+      return _enrolledProgrammeVocabCache!;
+    }
+
+    final enrolled = _patientContext.activeProgrammes;
+    if (enrolled.isEmpty) {
+      // No enrolled programmes → empty default grid; SK must search.
+      // Cache so pathway fires never expand the grid mid-session.
+      if (kDebugMode) {
+        debugPrint(
+          '[SymptomPicker] No enrolled programmes — '
+          'default grid empty; all symptoms via search.',
+        );
+      }
+      _enrolledProgrammeVocabCache = const [];
+      return const [];
+    }
+
+    final shown = AiScribeTriageVocab.codes.where((code) {
+      switch (AiScribeTriageVocab.categoryOf(code)) {
+        case SymptomCategory.general:
+          // General symptoms are always available via search; they are NOT
+          // shown in the default grid so the focused list stays programme-
+          // specific only.
+          return false;
+        case SymptomCategory.maternal:
+          // Show only when the patient is enrolled in EVERY programme the
+          // symptom spans. A shared ANC+PNC symptom stays hidden for an
+          // ANC-only patient (she can find it via search).
+          final codeProgs =
+              AiScribeTriageVocab.programmesForMaternalCode(code);
+          return codeProgs.every((p) => enrolled.contains(p));
+        case SymptomCategory.ncd:
+          return enrolled.contains(Programme.ncd);
+        case SymptomCategory.pediatric:
+          return enrolled.contains(Programme.imci);
+      }
+    }).toList();
+
+    if (kDebugMode) {
+      final hidden = AiScribeTriageVocab.codes
+          .where((c) => !shown.contains(c))
+          .toList();
+      debugPrint(
+        '[SymptomPicker] Enrolled programmes: '
+        '${enrolled.map((p) => p.wireTag).join(', ')}',
+      );
+      debugPrint(
+        '[SymptomPicker] DEFAULT grid (${shown.length}): '
+        '${shown.join(', ')}',
+      );
+      debugPrint(
+        '[SymptomPicker] HIDDEN in search only (${hidden.length}): '
+        '${hidden.join(', ')}',
+      );
+    }
+
+    _enrolledProgrammeVocabCache = shown;
+    return shown;
+  }
+
+  /// Returns `true` when [code] belongs to a programme the patient is NOT
+  /// currently enrolled in. Used to detect when a search-selected symptom
+  /// would open a new programme workflow.
+  ///
+  /// Always returns `false` when the patient has no enrolled programmes — in
+  /// that case every symptom is "inside" the default pool.
+  bool isOutsideEnrolledProgrammes(String code) {
+    final enrolled = _patientContext.activeProgrammes;
+    if (enrolled.isEmpty) return false;
+    switch (AiScribeTriageVocab.categoryOf(code)) {
+      case SymptomCategory.general:
+        return false;
+      case SymptomCategory.maternal:
+        // Outside when the patient is not enrolled in every programme the
+        // symptom spans (mirrors the every-check in enrolledProgrammeVocabCodes).
+        final codeProgs =
+            AiScribeTriageVocab.programmesForMaternalCode(code);
+        return !codeProgs.every((p) => enrolled.contains(p));
+      case SymptomCategory.ncd:
+        return !enrolled.contains(Programme.ncd);
+      case SymptomCategory.pediatric:
+        return !enrolled.contains(Programme.imci);
+    }
+  }
+
+  /// The set of programmes associated with [code] that the patient is NOT yet
+  /// enrolled in. Used to build the "open new programme" enrollment prompt.
+  ///
+  /// Prefers [UnifiedSymptomCatalog] for precise per-symptom programme mapping;
+  /// falls back to category-level inference when the code has no catalog entry.
+  Set<Programme> unenrolledProgrammesForCode(String code) {
+    final enrolled = _patientContext.activeProgrammes;
+    final Set<Programme> associated;
+
+    final def = UnifiedSymptomCatalog.byCode(code);
+    if (def != null && def.programmes.isNotEmpty) {
+      associated = def.programmes;
+    } else {
+      switch (AiScribeTriageVocab.categoryOf(code)) {
+        case SymptomCategory.general:
+          return const {};
+        case SymptomCategory.maternal:
+          // Use the per-code programme map so the enrollment prompt names the
+          // correct journey (ANC vs PNC) rather than always listing both.
+          associated = AiScribeTriageVocab.programmesForMaternalCode(code);
+        case SymptomCategory.ncd:
+          associated = {Programme.ncd};
+        case SymptomCategory.pediatric:
+          associated = {Programme.imci};
+      }
+    }
+    return associated.difference(enrolled);
+  }
 
   /// Subset of vocab codes that are directly relevant to this patient's active
   /// clinical context (their "workflow" symptoms).

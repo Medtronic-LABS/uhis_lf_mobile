@@ -10,6 +10,7 @@
 /// drift between client + service is the main failure mode.
 library;
 
+import '../../../core/models/programme.dart';
 import 'patient_context_builder.dart';
 
 /// Category a vocab code belongs to. Drives demographic pre-screening so the
@@ -117,6 +118,38 @@ abstract final class AiScribeTriageVocab {
     'weakness': SymptomCategory.general,
     'weight_loss': SymptomCategory.general,
   };
+
+  /// Precise programme-level mapping for maternal-category vocab codes.
+  ///
+  /// Maternal codes are further split by care journey:
+  ///   - ANC  — ante-natal danger signs (pre-eclampsia, fetal, labour)
+  ///   - PNC  — post-natal / breast / perineal signs
+  ///   - Both — bleeding / discharge that spans both journeys
+  ///
+  /// A code absent from this map is treated as applicable to **both** ANC and
+  /// PNC so future additions are always visible rather than silently hidden.
+  static const Map<String, Set<Programme>> _maternalCodeProgrammes = {
+    // ── ANC-specific ──────────────────────────────────────────────────────
+    'swelling_face_hands': {Programme.anc},
+    'edema': {Programme.anc},
+    'leaking_fluid_vagina': {Programme.anc},
+    'painful_uterine_contractions': {Programme.anc},
+    'reduced_fetal_movement': {Programme.anc},
+    // ── PNC-specific ──────────────────────────────────────────────────────
+    'breast_pain': {Programme.pnc},
+    'breast_swelling': {Programme.pnc},
+    'perineal_wound_discharge': {Programme.pnc},
+    'foul_smelling_vaginal_discharge': {Programme.pnc},
+    // ── Both journeys ─────────────────────────────────────────────────────
+    'heavy_bleeding': {Programme.anc, Programme.pnc},
+    'vaginal_bleeding': {Programme.anc, Programme.pnc},
+  };
+
+  /// Returns the specific programmes a maternal-category [code] is relevant
+  /// to. Codes not in [_maternalCodeProgrammes] return both ANC and PNC so
+  /// they are never accidentally hidden.
+  static Set<Programme> programmesForMaternalCode(String code) =>
+      _maternalCodeProgrammes[code] ?? {Programme.anc, Programme.pnc};
 
   /// Lookup the category for a vocab code. Unknown codes default to
   /// [SymptomCategory.general] so a future addition doesn't silently disappear.
