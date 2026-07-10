@@ -545,7 +545,13 @@ class MissionDashboardService {
 
     final priority = _bandToPriority(entry.band);
     final aiInsight = _buildAiInsight(drivers);
-    final reason = entry.reasons.isNotEmpty ? entry.reasons.first : 'Scheduled visit';
+    // 'no-programme' is the risk engine's fallback tag meaning "no clinical
+    // signals fired" — it is not a meaningful card label. Skip it and show
+    // 'Scheduled visit' instead so the badge is always actionable.
+    final meaningfulReasons =
+        entry.reasons.where((r) => r != 'no-programme').toList();
+    final reason =
+        meaningfulReasons.isNotEmpty ? meaningfulReasons.first : 'Scheduled visit';
 
     return MissionQueueItem(
       id: entry.patientId,

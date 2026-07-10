@@ -1152,7 +1152,7 @@ abstract final class MissionDashboardStrings {
   static String statusPillForTier(DashboardTier tier) {
     switch (tier) {
       case DashboardTier.critical:
-        return statusPillNow;
+        return statusPillToday;
       case DashboardTier.overdue:
         return statusPillOverdue;
       case DashboardTier.dueToday:
