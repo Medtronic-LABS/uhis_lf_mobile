@@ -531,12 +531,6 @@
             "fieldName": "Diastolic",
             "inputType": 3,
             "isMandatory": false
-          },
-          {
-            "id": "pulse",
-            "fieldName": "Pulse (bpm)",
-            "inputType": 3,
-            "isMandatory": false
           }
         ]
       }
@@ -565,6 +559,12 @@
           {
             "id": "diastolic",
             "fieldName": "Diastolic",
+            "inputType": 3,
+            "isMandatory": false
+          },
+          {
+            "id": "pulse",
+            "fieldName": "Pulse (bpm)",
             "inputType": 3,
             "isMandatory": false
           },
@@ -995,6 +995,12 @@
             "isMandatory": false
           },
           {
+            "id": "pulse",
+            "fieldName": "Pulse (bpm)",
+            "inputType": 3,
+            "isMandatory": false
+          },
+          {
             "fieldName": "Are you a regular smoker or have you been a regular smoker in the past 12 months?",
             "isMandatory": false,
             "id": "isRegularSmoker"
@@ -1019,12 +1025,6 @@
             "id": "glucoseType",
             "fieldName": "Type of Investigation",
             "isMandatory": false
-          },
-          {
-            "fieldName": "HbA1c (%)",
-            "inputType": 8192.0,
-            "isMandatory": false,
-            "id": "hba1c"
           }
         ]
       },
