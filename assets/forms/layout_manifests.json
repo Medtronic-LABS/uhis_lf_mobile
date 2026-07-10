@@ -531,17 +531,6 @@
             "fieldName": "Diastolic",
             "inputType": 3,
             "isMandatory": false
-          },
-          {
-            "id": "pulse",
-            "fieldName": "Pulse (bpm)",
-            "inputType": 3,
-            "isMandatory": false
-          },
-          {
-            "id": "glucoseType",
-            "fieldName": "Blood Glucose Type",
-            "isMandatory": false
           }
         ]
       }
@@ -553,24 +542,35 @@
     "clinicalWorkflowId": 4,
     "sections": [
       {
-        "sectionId": "pregnancyOverview",
-        "title": "Pregnancy Overview",
-        "fieldRefs": [
-          "pregnancyProfile"
-        ]
-      },
-      {
         "sectionId": "ancSpecificVitals",
-        "title": "ANC Vitals",
+        "title": "Clinical Examination",
         "fieldRefs": [
           {
-            "id": "temperature",
-            "fieldName": "Temperature (°C)",
+            "id": "bloodPressure",
+            "fieldName": "Blood Pressure",
             "isMandatory": false
           },
           {
-            "id": "edema",
-            "fieldName": "Edema",
+            "id": "systolic",
+            "fieldName": "Systolic",
+            "inputType": 3,
+            "isMandatory": false
+          },
+          {
+            "id": "diastolic",
+            "fieldName": "Diastolic",
+            "inputType": 3,
+            "isMandatory": false
+          },
+          {
+            "id": "weight",
+            "fieldName": "Weight (kg)",
+            "inputType": 8192,
+            "isMandatory": false
+          },
+          {
+            "id": "urineProtein",
+            "fieldName": "Urine Protein",
             "isMandatory": false
           },
           {
@@ -578,24 +578,38 @@
             "fieldName": "Fundal Height (cm)",
             "isMandatory": false
           },
-          {
-            "id": "urinaryAlbumin",
-            "fieldName": "Urine Protein",
-            "isMandatory": false
-          },
           "fetalMovement"
         ]
       },
       {
-        "sectionId": "bloodTests",
-        "title": "Blood Tests",
+        "sectionId": "labInvestigations",
+        "title": "Laboratory Investigations",
         "fieldRefs": [
+          {
+            "id": "urinaryAlbumin",
+            "fieldName": "Urinary Albumin",
+            "isMandatory": false
+          },
+          {
+            "id": "urinarySugar",
+            "fieldName": "Urinary Sugar",
+            "isMandatory": false
+          },
+          {
+            "id": "urinaryBilirubin",
+            "fieldName": "Urinary Bilirubin",
+            "isMandatory": false
+          },
           {
             "id": "hemoglobin",
             "fieldName": "Hemoglobin (g/dL)",
             "isMandatory": false
           },
-          "ancBloodGlucose"
+          {
+            "id": "glucoseType",
+            "fieldName": "Blood Glucose",
+            "isMandatory": false
+          }
         ]
       },
       {
@@ -944,35 +958,8 @@
     "clinicalWorkflowId": 21,
     "sections": [
       {
-        "sectionId": "symptomsLog",
-        "title": "Symptoms",
-        "fieldRefs": [
-          {
-            "fieldName": "Has the Patient had any symptoms since the last follow up?",
-            "isMandatory": false,
-            "id": "hasSymptoms"
-          },
-          {
-            "fieldName": "Select Symptoms",
-            "isMandatory": false,
-            "id": "ncdSymptoms"
-          },
-          {
-            "fieldName": "Any new or worsening symptoms",
-            "inputType": 96.0,
-            "isMandatory": false,
-            "id": "newWorseningSymptoms"
-          },
-          {
-            "fieldName": "Are you taking medication regularly?",
-            "isMandatory": false,
-            "id": "compliance"
-          }
-        ]
-      },
-      {
         "sectionId": "bpLog",
-        "title": "Blood Pressure History",
+        "title": "Blood Pressure",
         "fieldRefs": [
           {
             "fieldName": "Have you been diagnosed with High Blood Pressure or Hypertension before?",
@@ -985,16 +972,38 @@
             "id": "medicationFrequencyBp"
           },
           {
+            "id": "bloodPressure",
+            "fieldName": "Blood Pressure",
+            "isMandatory": false
+          },
+          {
+            "id": "systolic",
+            "fieldName": "Systolic",
+            "inputType": 3,
+            "isMandatory": false
+          },
+          {
+            "id": "diastolic",
+            "fieldName": "Diastolic",
+            "inputType": 3,
+            "isMandatory": false
+          },
+          {
+            "id": "pulse",
+            "fieldName": "Pulse (bpm)",
+            "inputType": 3,
+            "isMandatory": false
+          },
+          {
             "fieldName": "Are you a regular smoker or have you been a regular smoker in the past 12 months?",
             "isMandatory": false,
             "id": "isRegularSmoker"
-          },
-          "cvdRisk"
+          }
         ]
       },
       {
         "sectionId": "glucoseLog",
-        "title": "Diabetes History",
+        "title": "Diabetes",
         "fieldRefs": [
           {
             "fieldName": "Have you been diagnosed with High Blood Sugar or Diabetes before?",
@@ -1007,10 +1016,21 @@
             "id": "medicationFrequencyBg"
           },
           {
-            "fieldName": "HbA1c (%)",
-            "inputType": 8192.0,
-            "isMandatory": false,
-            "id": "hba1c"
+            "id": "glucoseType",
+            "fieldName": "Type of Investigation",
+            "isMandatory": false
+          }
+        ]
+      },
+      {
+        "sectionId": "ncdBiometrics",
+        "title": "Biometrics",
+        "fieldRefs": [
+          {
+            "id": "weight",
+            "fieldName": "Weight (kg)",
+            "inputType": 8192,
+            "isMandatory": false
           }
         ]
       }

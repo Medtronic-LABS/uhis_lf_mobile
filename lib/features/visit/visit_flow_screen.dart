@@ -119,10 +119,16 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   late final int? _postpartumWeeks = widget.postpartumWeeks;
 
   /// Gestational weeks resolved from the pregnancy snapshot when the caller
-  /// did not supply it via the constructor.  The snapshot lookup runs in
-  /// [initState] alongside the postpartum check so that Step 3's
-  /// gestational-age card always has real data to show.
+  /// did not supply it via the constructor.  The snapshot lookup always runs
+  /// in [initState] so that Step 3's gestational-age card always has data.
   int? _resolvedGestationalWeeks;
+
+  /// Raw LMP epoch-ms from the snapshot — used by [_GestationalAgeCard] so it
+  /// can display the actual recorded date rather than a back-calculated one.
+  int? _resolvedLmpMs;
+
+  /// Raw EDD epoch-ms from the snapshot.
+  int? _resolvedEddMs;
 
   /// Returns the best available gestational week count: constructor value
   /// first, then snapshot-resolved value.
@@ -139,7 +145,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       if (!_isPostpartum && widget.patientId.isNotEmpty) {
         _loadPostpartumFromDb();
       }
-      if (widget.gestationalWeeks == null && widget.patientId.isNotEmpty) {
+      // Always load snapshot regardless of whether gestationalWeeks was
+      // passed via navigation — ensures the card shows on all entry paths.
+      if (widget.patientId.isNotEmpty) {
         _loadPregnancySnapshotFromDb();
       }
     });
@@ -180,20 +188,30 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       final dao = context.read<PregnancySnapshotDao>();
       final snap = await dao.byPatient(widget.patientId);
       if (!mounted || snap == null) return;
+
       DateTime? lmp;
+      DateTime? edd;
       if (snap.lmpDate != null) {
         lmp = DateTime.fromMillisecondsSinceEpoch(snap.lmpDate!);
-      } else if (snap.eddDate != null) {
-        final edd = DateTime.fromMillisecondsSinceEpoch(snap.eddDate!);
-        lmp = edd.subtract(const Duration(days: 280));
       }
+      if (snap.eddDate != null) {
+        edd = DateTime.fromMillisecondsSinceEpoch(snap.eddDate!);
+        // Derive LMP from EDD if not directly stored.
+        lmp ??= edd.subtract(const Duration(days: 280));
+      } else if (lmp != null) {
+        edd = lmp.add(const Duration(days: 280));
+      }
+
       final weeks =
           lmp != null ? DateTime.now().difference(lmp).inDays ~/ 7 : null;
-      if (weeks != null) {
-        setState(() {
+
+      setState(() {
+        if (weeks != null && weeks > 0) {
           _resolvedGestationalWeeks = weeks;
-        });
-      }
+        }
+        _resolvedLmpMs = lmp?.millisecondsSinceEpoch;
+        _resolvedEddMs = edd?.millisecondsSinceEpoch;
+      });
     } catch (e) {
       debugPrint('[VisitFlow] pregnancy snapshot lookup failed: $e');
     }
@@ -348,6 +366,8 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           patientAge: widget.patientAge,
           patientGender: widget.patientGender,
           gestationalWeeks: _effectiveGestationalWeeks,
+          lmpMs: _resolvedLmpMs,
+          eddMs: _resolvedEddMs,
           confirmedSymptoms: _confirmedSymptoms,
           confirmedProgrammes: _confirmedProgrammes,
           primaryProgramme: _primaryProgramme,
@@ -1056,6 +1076,8 @@ class _Step3AiReco extends StatefulWidget {
     this.patientAge,
     this.patientGender,
     this.gestationalWeeks,
+    this.lmpMs,
+    this.eddMs,
     this.memberId,
     this.householdId,
   });
@@ -1066,6 +1088,10 @@ class _Step3AiReco extends StatefulWidget {
   final int? patientAge;
   final String? patientGender;
   final int? gestationalWeeks;
+  /// LMP epoch-ms from the snapshot — overrides back-calculation in the card.
+  final int? lmpMs;
+  /// EDD epoch-ms from the snapshot — overrides back-calculation in the card.
+  final int? eddMs;
   final Set<String> confirmedSymptoms;
   final Set<Programme> confirmedProgrammes;
   final Programme primaryProgramme;
@@ -1201,7 +1227,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         sex: widget.patientGender,
         activeProgrammes: programmes,
         gestationalWeeks: widget.gestationalWeeks,
-        isPregnant: widget.gestationalWeeks != null,
+        isPregnant: widget.gestationalWeeks != null || widget.lmpMs != null,
         manuallySelectedSymptoms: widget.confirmedSymptoms.toList(),
         currentVitals: _loadedVitals,
         labResults: _loadedLabs,
@@ -1906,8 +1932,12 @@ class _Step3AiRecoState extends State<_Step3AiReco>
           ],
 
           // ── Gestational age card (ANC / PNC patients only) ─────────
-          if (widget.gestationalWeeks != null) ...[
-            _GestationalAgeCard(gestationalWeeks: widget.gestationalWeeks!),
+          if (widget.gestationalWeeks != null || widget.lmpMs != null) ...[
+            _GestationalAgeCard(
+              gestationalWeeks: widget.gestationalWeeks,
+              lmpMs: widget.lmpMs,
+              eddMs: widget.eddMs,
+            ),
             const SizedBox(height: 12),
           ],
 
@@ -1981,16 +2011,23 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 
 // ── Supporting widgets ────────────────────────────────────────────────────────
 
-/// Pink gestational age summary shown at the top of Step 3 for any patient
-/// who has a gestational week count recorded.
+/// Pink gestational age summary shown at the top of Step 3 whenever any
+/// pregnancy data is available (gestationalWeeks, LMP, or EDD).
 ///
-/// LMP and EDD are back-calculated from [gestationalWeeks]:
-///   LMP ≈ today − (weeks × 7) days
-///   EDD ≈ LMP + 280 days
+/// Dates are taken directly from [lmpMs]/[eddMs] when provided (snapshot
+/// values), and back-calculated from [gestationalWeeks] only as a fallback.
 class _GestationalAgeCard extends StatelessWidget {
-  const _GestationalAgeCard({required this.gestationalWeeks});
+  const _GestationalAgeCard({
+    this.gestationalWeeks,
+    this.lmpMs,
+    this.eddMs,
+  });
 
-  final int gestationalWeeks;
+  final int? gestationalWeeks;
+  /// LMP epoch-ms from the snapshot — used in preference to back-calculation.
+  final int? lmpMs;
+  /// EDD epoch-ms from the snapshot — used in preference to back-calculation.
+  final int? eddMs;
 
   static const _months = [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -2003,8 +2040,27 @@ class _GestationalAgeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final today = DateTime.now();
-    final lmp = today.subtract(Duration(days: gestationalWeeks * 7));
-    final edd = lmp.add(const Duration(days: 280));
+
+    // Prefer snapshot dates; fall back to back-calculating from weeks.
+    late final DateTime lmp;
+    late final DateTime edd;
+    if (lmpMs != null) {
+      lmp = DateTime.fromMillisecondsSinceEpoch(lmpMs!);
+      edd = eddMs != null
+          ? DateTime.fromMillisecondsSinceEpoch(eddMs!)
+          : lmp.add(const Duration(days: 280));
+    } else if (eddMs != null) {
+      edd = DateTime.fromMillisecondsSinceEpoch(eddMs!);
+      lmp = edd.subtract(const Duration(days: 280));
+    } else {
+      // Back-calculate from gestationalWeeks (last resort).
+      final weeks = gestationalWeeks ?? 0;
+      lmp = today.subtract(Duration(days: weeks * 7));
+      edd = lmp.add(const Duration(days: 280));
+    }
+
+    final effectiveWeeks = gestationalWeeks ??
+        today.difference(lmp).inDays ~/ 7;
     final days = today.difference(lmp).inDays % 7;
 
     final lmpLabel =
@@ -2068,7 +2124,7 @@ class _GestationalAgeCard extends StatelessWidget {
                       ),
                       children: [
                         TextSpan(
-                          text: '$gestationalWeeks ',
+                          text: '$effectiveWeeks ',
                           style: const TextStyle(
                             fontSize: 21,
                             fontWeight: FontWeight.w900,
