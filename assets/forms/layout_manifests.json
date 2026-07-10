@@ -554,14 +554,21 @@
     "sections": [
       {
         "sectionId": "pregnancyOverview",
-        "title": "Pregnancy Overview",
+        "title": "Pregnancy Summary",
         "fieldRefs": [
           "pregnancyProfile"
         ]
       },
       {
-        "sectionId": "ancSpecificVitals",
-        "title": "ANC Vitals",
+        "sectionId": "ancDangerSignsSection",
+        "title": "Symptoms",
+        "fieldRefs": [
+          "ancDangerSigns"
+        ]
+      },
+      {
+        "sectionId": "ancPhysicalExam",
+        "title": "Physical Examination",
         "fieldRefs": [
           {
             "id": "temperature",
@@ -572,41 +579,53 @@
             "id": "edema",
             "fieldName": "Edema",
             "isMandatory": false
-          },
+          }
+        ]
+      },
+      {
+        "sectionId": "obstetricExam",
+        "title": "Obstetric Examination",
+        "fieldRefs": [
           {
             "id": "fundalHeight",
             "fieldName": "Fundal Height (cm)",
-            "isMandatory": false
-          },
-          {
-            "id": "urinaryAlbumin",
-            "fieldName": "Urine Protein",
             "isMandatory": false
           },
           "fetalMovement"
         ]
       },
       {
-        "sectionId": "bloodTests",
-        "title": "Blood Tests",
+        "sectionId": "labInvestigations",
+        "title": "Laboratory Investigations",
         "fieldRefs": [
           {
             "id": "hemoglobin",
             "fieldName": "Hemoglobin (g/dL)",
             "isMandatory": false
           },
-          "ancBloodGlucose"
+          "ancBloodGlucose",
+          {
+            "id": "urinaryAlbumin",
+            "fieldName": "Urine Protein (Albumin)",
+            "isMandatory": false
+          }
         ]
       },
       {
-        "sectionId": "vaccinationAndSupplements",
-        "title": "Vaccination & Supplements",
+        "sectionId": "vaccination",
+        "title": "Vaccination",
         "fieldRefs": [
           {
             "id": "ttTdCompleted",
             "fieldName": "TT/TD completed",
             "isMandatory": false
-          },
+          }
+        ]
+      },
+      {
+        "sectionId": "supplementsAndMedication",
+        "title": "Supplements & Medication",
+        "fieldRefs": [
           {
             "id": "folicAcidTotalConsumed",
             "fieldName": "Folic Acid consumed last month",
@@ -643,13 +662,6 @@
             "inputType": 3,
             "isMandatory": false
           }
-        ]
-      },
-      {
-        "sectionId": "ancDangerSignsSection",
-        "title": "Danger Signs",
-        "fieldRefs": [
-          "ancDangerSigns"
         ]
       },
       {

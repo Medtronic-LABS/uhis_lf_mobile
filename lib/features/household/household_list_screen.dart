@@ -5,8 +5,11 @@ import 'package:provider/provider.dart';
 import '../../app/theme.dart';
 import '../../core/auth/user_hierarchy_service.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/db/app_database.dart';
 import '../../core/db/household_dao.dart';
 import '../../core/db/member_dao.dart';
+import '../../core/db/patient_programmes_dao.dart';
+import '../../core/models/programme.dart';
 import '../../core/models/dashboard_tier.dart';
 import '../../core/models/mission_queue_item.dart';
 import '../../core/widgets/location_filter_sheet.dart';
@@ -231,6 +234,17 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
       // Use members directly grouped by household (bypass household table)
       // to ensure all members are shown even when household records are stale.
       if (membersByHousehold.isNotEmpty) {
+        // Batch-load programmes for all members in one SQL round-trip.
+        final allEntities = membersByHousehold.values.expand((e) => e).toList();
+        final allPatientIds = allEntities
+            .map((e) => e.patientId)
+            .whereType<String>()
+            .toSet()
+            .toList();
+        final programmesDao = PatientProgrammesDao(context.read<AppDatabase>());
+        final programmesByPatient =
+            await programmesDao.programmesForMany(allPatientIds);
+
         final items = <_HouseholdItem>[];
         for (final entry in membersByHousehold.entries) {
           final hhId = entry.key;
@@ -238,7 +252,12 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
           if (members.isEmpty) continue;
           // Create household item from member data
           final firstMember = members.first;
-          final memberList = members.map(_HouseholdMember.fromEntity).toList();
+          final memberList = members.map((e) {
+            final progs = e.patientId != null
+                ? (programmesByPatient[e.patientId!] ?? const <Programme>{})
+                : const <Programme>{};
+            return _HouseholdMember.fromEntity(e, programmes: progs);
+          }).toList();
           
           // Find household head to derive household name
           final head = memberList.firstWhere(
@@ -1159,38 +1178,22 @@ class _PatientCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            member.name ?? HouseholdListStrings.unnamedMember,
-                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (isPregnant) ...[
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: AppColors.tagTealSurface,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.pregnant_woman_rounded, size: 11, color: AppColors.tagTealText),
-                                const SizedBox(width: 3),
-                                Text(
-                                  'ANC',
-                                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.tagTealText),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ],
+                    Text(
+                      member.name ?? HouseholdListStrings.unnamedMember,
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                      overflow: TextOverflow.ellipsis,
                     ),
+                    if (member.programmes.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: member.programmes
+                            .where((p) => p != Programme.unknown)
+                            .map((p) => _ProgrammeTag(programme: p))
+                            .toList(),
+                      ),
+                    ],
                     if (metaLine.isNotEmpty) ...[
                       const SizedBox(height: 3),
                       Text(
@@ -1218,6 +1221,62 @@ class _PatientCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ProgrammeTag extends StatelessWidget {
+  const _ProgrammeTag({required this.programme});
+
+  final Programme programme;
+
+  static (Color surface, Color text, IconData icon, String label) _style(Programme p) {
+    switch (p) {
+      case Programme.anc:
+        return (AppColors.ancSurface, AppColors.ancText, Icons.pregnant_woman_rounded, 'ANC');
+      case Programme.pnc:
+        return (AppColors.pncSurface, AppColors.pncText, Icons.child_friendly_rounded, 'PNC');
+      case Programme.ncd:
+        return (AppColors.ncdSurface, AppColors.ncdText, Icons.monitor_heart_outlined, 'NCD');
+      case Programme.imci:
+        return (AppColors.imciSurface, AppColors.imciText, Icons.child_care_rounded, 'Child');
+      case Programme.tb:
+        return (AppColors.tbSurface, AppColors.tbText, Icons.sick_outlined, 'TB');
+      case Programme.epi:
+        return (const Color(0xFFEFF6FF), const Color(0xFF1D4ED8), Icons.vaccines_rounded, 'EPI');
+      case Programme.nutrition:
+        return (const Color(0xFFF0FDF4), const Color(0xFF15803D), Icons.restaurant_rounded, 'Nutrition');
+      case Programme.familyPlanning:
+        return (const Color(0xFFFFF7ED), const Color(0xFF92400E), Icons.family_restroom_rounded, 'FP');
+      case Programme.cataract:
+        return (const Color(0xFFF5F3FF), const Color(0xFF5B21B6), Icons.visibility_outlined, 'Cataract');
+      case Programme.eyeCare:
+        return (const Color(0xFFF5F3FF), const Color(0xFF5B21B6), Icons.remove_red_eye_outlined, 'Eye Care');
+      default:
+        return (AppColors.canvas, AppColors.textMuted, Icons.local_hospital_rounded, p.wireTag);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final (surface, text, icon, label) = _style(programme);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: surface,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 10, color: text),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: text),
+          ),
+        ],
       ),
     );
   }
@@ -1384,6 +1443,7 @@ class _HouseholdMember {
     this.isPregnant,
     this.householdId,
     this.villageId,
+    this.programmes = const {},
   });
 
   final String? id;
@@ -1397,6 +1457,7 @@ class _HouseholdMember {
   final bool? isPregnant;
   final String? householdId;
   final String? villageId;
+  final Set<Programme> programmes;
 
   static _HouseholdMember fromJson(Map json) {
     String? str(String k) {
@@ -1431,7 +1492,8 @@ class _HouseholdMember {
   }
 
   /// Creates from local SQLite HouseholdMemberEntity.
-  static _HouseholdMember fromEntity(HouseholdMemberEntity e) {
+  static _HouseholdMember fromEntity(HouseholdMemberEntity e,
+      {Set<Programme> programmes = const {}}) {
     return _HouseholdMember(
       id: e.id,
       patientId: e.patientId,
@@ -1444,6 +1506,7 @@ class _HouseholdMember {
       isPregnant: e.isPregnant,
       householdId: e.householdId,
       villageId: e.villageId,
+      programmes: programmes,
     );
   }
 }
@@ -1464,6 +1527,7 @@ class _MemberInfo {
     this.householdNo,
     this.villageId,
     this.householdMemberCount,
+    this.programmes = const {},
   });
 
   final String? id;
@@ -1480,6 +1544,7 @@ class _MemberInfo {
   final String? householdNo;
   final String? villageId;
   final int? householdMemberCount;
+  final Set<Programme> programmes;
 
   /// Calculate age from date of birth if not directly provided.
   static int? _calculateAge(String? dateOfBirth) {
@@ -1514,6 +1579,7 @@ class _MemberInfo {
       householdNo: household.householdNo,
       villageId: member.villageId,
       householdMemberCount: household.memberCount,
+      programmes: member.programmes,
     );
   }
 }

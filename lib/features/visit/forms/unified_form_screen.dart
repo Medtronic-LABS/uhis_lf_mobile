@@ -875,66 +875,143 @@ class _GestationalAgeCard extends StatelessWidget {
   static String _fmt(DateTime d) =>
       '${d.day} ${_months[d.month - 1]} ${d.year}';
 
+  static const _pinkAccent = Color(0xFF9D174D);
+  static const _navy = Color(0xFF1B2B5E);
+  static const _unitGrey = Color(0xFF6B7280);
+
   @override
   Widget build(BuildContext context) {
     final lmpStr = lmpDate != null ? _fmt(lmpDate!) : null;
     final eddStr = eddDate != null ? _fmt(eddDate!) : null;
 
-    final String heroText;
+    int? weeks;
+    int? days;
     if (lmpDate != null) {
       final total = DateTime.now().difference(lmpDate!).inDays;
-      final weeks = total ~/ 7;
-      final days = total % 7;
-      heroText = days > 0
-          ? '$weeks ${ComposerStrings.gestationalAgeWeeks} $days ${ComposerStrings.gestationalAgeDays}'
-          : '$weeks ${ComposerStrings.gestationalAgeWeeks}';
+      weeks = total ~/ 7;
+      days = total % 7;
     } else if (gestationalWeeks != null) {
-      heroText = '$gestationalWeeks ${ComposerStrings.gestationalAgeWeeks}';
-    } else {
-      heroText = '— ${ComposerStrings.gestationalAgeWeeks}';
+      weeks = gestationalWeeks;
+      days = 0;
     }
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.xl),
       child: Container(
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF1B2B5E), Color(0xFF2D3F7C)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          color: const Color(0xFFFDF2F8),
           borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFF9A8D4)),
         ),
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Hero row: circle avatar + label + number
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const Text('🤰', style: TextStyle(fontSize: 15)),
-                const SizedBox(width: 7),
-                Text(
-                  ComposerStrings.gestationalAgeLabel.toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.9,
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.06),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
                   ),
+                  alignment: Alignment.center,
+                  child: const Text('🤰', style: TextStyle(fontSize: 19)),
+                ),
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      ComposerStrings.gestationalAgeLabel.toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: _pinkAccent,
+                        letterSpacing: 0.6,
+                        height: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    RichText(
+                      text: TextSpan(
+                        style: const TextStyle(
+                          fontFamily: 'Nunito',
+                          color: _navy,
+                          height: 1,
+                        ),
+                        children: weeks != null
+                            ? [
+                                TextSpan(
+                                  text: '$weeks ',
+                                  style: const TextStyle(
+                                    fontSize: 21,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: ComposerStrings.gestationalAgeWeeks,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: _unitGrey,
+                                  ),
+                                ),
+                                if (days != null && days > 0) ...[
+                                  TextSpan(
+                                    text: ' $days ',
+                                    style: const TextStyle(
+                                      fontSize: 21,
+                                      fontWeight: FontWeight.w900,
+                                      color: _navy,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: ComposerStrings.gestationalAgeDays,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: _unitGrey,
+                                    ),
+                                  ),
+                                ],
+                              ]
+                            : [
+                                TextSpan(
+                                  text: '— ',
+                                  style: const TextStyle(
+                                    fontSize: 21,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: ComposerStrings.gestationalAgeWeeks,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: _unitGrey,
+                                  ),
+                                ),
+                              ],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-            const SizedBox(height: 6),
-            Text(
-              heroText,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                height: 1.1,
-              ),
-            ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
+            // LMP + EDD row
             Row(
               children: [
                 Expanded(
@@ -942,14 +1019,16 @@ class _GestationalAgeCard extends StatelessWidget {
                     emoji: '📅',
                     label: ComposerStrings.pregnancyOverviewLmp,
                     value: lmpStr,
+                    valueColor: _navy,
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 Expanded(
                   child: _DateSubBox(
                     emoji: '🍼',
                     label: ComposerStrings.pregnancyOverviewEdd,
                     value: eddStr,
+                    valueColor: const Color(0xFFDB2777),
                   ),
                 ),
               ],
@@ -966,45 +1045,49 @@ class _DateSubBox extends StatelessWidget {
     required this.emoji,
     required this.label,
     required this.value,
+    required this.valueColor,
   });
 
   final String emoji;
   final String label;
   final String? value;
+  final Color valueColor;
+
+  static const _pinkAccent = Color(0xFF9D174D);
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
+        color: Colors.white.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(9),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(emoji, style: const TextStyle(fontSize: 12)),
               const SizedBox(width: 4),
               Text(
                 label,
                 style: const TextStyle(
-                  color: Colors.white60,
-                  fontSize: 9.5,
+                  fontSize: 10,
                   fontWeight: FontWeight.w700,
-                  letterSpacing: 0.4,
+                  color: _pinkAccent,
+                  letterSpacing: 0.6,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 3),
           Text(
             value ?? '—',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12.5,
-              fontWeight: FontWeight.w700,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: valueColor,
             ),
           ),
         ],
