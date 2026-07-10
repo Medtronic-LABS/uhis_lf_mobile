@@ -947,6 +947,15 @@ abstract final class MissionDashboardStrings {
   static String priorityRank(int rank) => 'Priority #$rank';
   static String daysOverdue(int days) => '$days Days Overdue';
   static const String aiInsight = 'AI Insight';
+
+  // ── Programme-smart reason badge (v13 design) ───────────────────────────
+  static const String enrolled = 'Enrolled';
+  static const String ancVisitLabel = 'ANC Visit';
+  static const String pncVisitLabel = 'PNC Visit';
+  static const String childImmunisation = 'Child immunisation';
+  static const String ncdCheckup = 'NCD checkup';
+  static const String tbCheck = 'TB check';
+  static const String newVisit = 'New visit';
   static const String aiPrioritisedBecause = 'AI Prioritised because:';
   static const String reason = 'Reason';
 

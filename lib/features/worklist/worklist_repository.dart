@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../../core/db/assessment_dao.dart';
 import '../../core/db/follow_up_dao.dart';
 import '../../core/db/immunisation_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
@@ -27,13 +28,15 @@ class WorklistRepository {
     required SyncMetaDao syncMeta,
     required RiskScoringService risk,
     required LocalAssessmentDao localAssessments,
+    required AssessmentDao assessments,
   })  : _patients = patients,
         _programmes = programmes,
         _followUps = followUps,
         _immunisations = immunisations,
         _syncMeta = syncMeta,
         _risk = risk,
-        _localAssessments = localAssessments;
+        _localAssessments = localAssessments,
+        _assessments = assessments;
 
   final PatientDao _patients;
   final PatientProgrammesDao _programmes;
@@ -42,6 +45,12 @@ class WorklistRepository {
   final SyncMetaDao _syncMeta;
   final RiskScoringService _risk;
   final LocalAssessmentDao _localAssessments;
+  final AssessmentDao _assessments;
+
+  /// Programme.wireTag-family kinds counted as completed ANC / PNC visits
+  /// for the visit-count-aware dashboard label (spec v13).
+  static const _ancKinds = ['ANC', 'PREGNANCY', 'PREGNANT', 'EMTCT'];
+  static const _pncKinds = ['PNC', 'POSTNATAL'];
 
   final _changes = ValueNotifier<int>(0);
 
@@ -63,16 +72,28 @@ class WorklistRepository {
         .whereType<String>()
         .toList(growable: false);
     final progMap = await _programmes.programmesForMany(ids);
+    final ancCounts = await _assessments.visitCountsByPatients(ids, _ancKinds);
+    final pncCounts = await _assessments.visitCountsByPatients(ids, _pncKinds);
     final out = <WorklistEntry>[];
     for (final r in rows) {
       final p = Patient.fromDb(r);
-      out.add(_toEntry(p, progMap[p.id] ?? const <Programme>{}));
+      out.add(_toEntry(
+        p,
+        progMap[p.id] ?? const <Programme>{},
+        ancVisitCount: ancCounts[p.id] ?? 0,
+        pncVisitCount: pncCounts[p.id] ?? 0,
+      ));
     }
     _applySpecSort(out, selectedVillageId: selectedVillageId);
     return out;
   }
 
-  WorklistEntry _toEntry(Patient p, Set<Programme> programmes) {
+  WorklistEntry _toEntry(
+    Patient p,
+    Set<Programme> programmes, {
+    int ancVisitCount = 0,
+    int pncVisitCount = 0,
+  }) {
     final age = p.age ?? _ageFromDob(p.dob);
     return WorklistEntry(
       patientId: p.id,
@@ -95,6 +116,8 @@ class WorklistRepository {
       lastVisitAt: p.lastVisitAt == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(p.lastVisitAt!),
+      ancVisitCount: ancVisitCount,
+      pncVisitCount: pncVisitCount,
     );
   }
 

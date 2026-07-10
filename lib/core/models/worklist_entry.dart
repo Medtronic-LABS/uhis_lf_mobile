@@ -28,6 +28,8 @@ class WorklistEntry {
     this.rationale,
     this.nextDueAt,
     this.lastVisitAt,
+    this.ancVisitCount = 0,
+    this.pncVisitCount = 0,
   });
 
   final String patientId;
@@ -50,6 +52,11 @@ class WorklistEntry {
 
   final DateTime? nextDueAt;
   final DateTime? lastVisitAt;
+
+  /// Completed ANC/PNC visits from server-synced assessments table — drives
+  /// the visit-count-aware dashboard card label (e.g. "ANC Visit 3 due").
+  final int ancVisitCount;
+  final int pncVisitCount;
 
   bool get isUrgent => band == Band.band1;
 

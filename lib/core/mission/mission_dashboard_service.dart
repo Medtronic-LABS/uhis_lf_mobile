@@ -13,6 +13,7 @@
 library;
 
 import '../api/cql_api_service.dart';
+import '../constants/app_strings.dart';
 import '../models/dashboard_tier.dart';
 import '../models/mission_brief.dart';
 import '../models/mission_queue_item.dart';
@@ -545,13 +546,7 @@ class MissionDashboardService {
 
     final priority = _bandToPriority(entry.band);
     final aiInsight = _buildAiInsight(drivers);
-    // 'no-programme' is the risk engine's fallback tag meaning "no clinical
-    // signals fired" — it is not a meaningful card label. Skip it and show
-    // 'Scheduled visit' instead so the badge is always actionable.
-    final meaningfulReasons =
-        entry.reasons.where((r) => r != 'no-programme').toList();
-    final reason =
-        meaningfulReasons.isNotEmpty ? meaningfulReasons.first : 'Scheduled visit';
+    final reason = _programmeReason(entry);
 
     return MissionQueueItem(
       id: entry.patientId,
@@ -685,6 +680,28 @@ class MissionDashboardService {
         Band.band3 => MissionPriority.medium,
         Band.band4 => MissionPriority.low,
       };
+
+  /// Programme-smart, visit-count-aware dashboard card label (v13 design).
+  /// Replaces the raw risk-driver reason text with an actionable badge label.
+  static String _programmeReason(WorklistEntry entry) {
+    final p = entry.programmes;
+    if (p.contains(Programme.anc)) {
+      return entry.ancVisitCount > 0
+          ? '${MissionDashboardStrings.ancVisitLabel} ${entry.ancVisitCount + 1} due'
+          : MissionDashboardStrings.enrolled;
+    }
+    if (p.contains(Programme.pnc)) {
+      return entry.pncVisitCount > 0
+          ? '${MissionDashboardStrings.pncVisitLabel} ${entry.pncVisitCount + 1} Due'
+          : MissionDashboardStrings.enrolled;
+    }
+    if (p.contains(Programme.imci) || p.contains(Programme.epi)) {
+      return MissionDashboardStrings.childImmunisation;
+    }
+    if (p.contains(Programme.ncd)) return MissionDashboardStrings.ncdCheckup;
+    if (p.contains(Programme.tb)) return MissionDashboardStrings.tbCheck;
+    return MissionDashboardStrings.newVisit;
+  }
 
   String _buildAiInsight(List<String> drivers) {
     if (drivers.isEmpty) return 'Scheduled for regular check-up.';

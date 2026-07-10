@@ -5,6 +5,7 @@ import '../../../app/theme.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/models/dashboard_tier.dart';
 import '../../../core/models/mission_queue_item.dart';
+import '../../../core/models/programme.dart';
 
 String _titleCase(String s) => s
     .split(' ')
@@ -243,8 +244,7 @@ class MissionReasonBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
-    final (bg, fg) = _badgeColors(item.priority, tokens);
+    final (bg, fg) = _badgeColors(item.primaryProgramme);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
@@ -265,16 +265,22 @@ class MissionReasonBadge extends StatelessWidget {
     );
   }
 
-  (Color, Color) _badgeColors(MissionPriority p, LeapfrogColors tokens) {
-    switch (p) {
-      case MissionPriority.critical:
-        return (tokens.statusCritical.withValues(alpha: 0.15), tokens.statusCritical);
-      case MissionPriority.high:
-        return (tokens.statusWarning.withValues(alpha: 0.15), tokens.statusWarning);
-      case MissionPriority.medium:
-        return (tokens.brandNavy.withValues(alpha: 0.12), tokens.brandNavy);
-      case MissionPriority.low:
-        return (tokens.cardSurfaceMuted, tokens.textMuted);
+  /// v13 design palette — badge colour is keyed by programme, not priority,
+  /// so the label always matches the reason text it's painted around.
+  (Color, Color) _badgeColors(Programme programme) {
+    switch (programme) {
+      case Programme.anc:
+        return (const Color(0xFFFDF2F8), const Color(0xFF9D174D));
+      case Programme.pnc:
+        return (const Color(0xFFEEF0FF), const Color(0xFF4C1D95));
+      case Programme.imci:
+      case Programme.epi:
+      case Programme.ncd:
+        return (const Color(0xFFFFFBEB), const Color(0xFF92400E));
+      case Programme.tb:
+        return (const Color(0xFFF0FDF4), const Color(0xFF065F46));
+      default:
+        return (const Color(0xFFEEF0FF), const Color(0xFF1B2B5E));
     }
   }
 }
