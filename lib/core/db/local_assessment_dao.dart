@@ -522,10 +522,22 @@ class LocalAssessmentDao {
 
   /// Returns the most recent extracted vitals per patient.
   /// Queries the most recent NCD or ANC assessment per patient and parses the
-  /// assessmentDetails JSON. Returns an empty map if no assessments exist.
+  /// assessmentDetails JSON. Merges the form-level eclampsia flag with the
+  /// 3-visit trend rule (PRD §2.8.1 Band 2). Returns an empty map if no
+  /// assessments exist.
   Future<Map<String, ClinicalVitals>> latestClinicalVitalsForMany(
       List<String> patientIds) async {
     if (patientIds.isEmpty) return const {};
+
+    // Detect the pre-eclampsia pattern: BP + weight + urine rising across
+    // 3 visits (PRD §2.8.1 Band 2). Run before the single-vitals query so
+    // the flag is ready when we build ClinicalVitals below.
+    final trendSnapshots = await _ancTrendSnapshotsForMany(patientIds);
+    final eclampsiaTrendPids = <String>{
+      for (final entry in trendSnapshots.entries)
+        if (_hasEclampsiaTrend(entry.value)) entry.key,
+    };
+
     final placeholders = List.filled(patientIds.length, '?').join(',');
     // Get the most recent NCD or ANC assessment per patient
     final rows = await _db.db.rawQuery(
@@ -655,11 +667,12 @@ class LocalAssessmentDao {
         }
       }
 
-      // Eclampsia
+      // Eclampsia — form-level flag OR 3-visit trend detected above.
       final eclampsiaRaw = flat['eclampsia'];
       final hasEclampsia = eclampsiaRaw == true ||
           eclampsiaRaw == 'yes' ||
-          eclampsiaRaw == '1';
+          eclampsiaRaw == '1' ||
+          eclampsiaTrendPids.contains(pid);
 
       // Parity — in ANC nested under medicalHistoryPhysicalExamination (unwrapped above)
       final parity = parseInt('parity');
@@ -682,6 +695,20 @@ class LocalAssessmentDao {
 
       final hasStrokeSign = readBoolFlag('oneSidedWeakness');
 
+      // Gestational age (ANC) — stored as 'gestationalWeeks' in the ANC form.
+      final gestationalAgeWeeks = parseInt('gestationalWeeks');
+
+      // Abnormal urine (ANC) — urineProtein / urinaryAlbumin / urinarySugar are
+      // inside pointOfCareInvestigations, already unwrapped into flat above.
+      final hasAbnormalUrine = flat['urineProtein'] == 'Present' ||
+          flat['urinaryAlbumin'] != null ||
+          flat['urinarySugar'] == 'Present';
+
+      // NCD Band 1: shortness of breath (chestTightnessOrSob from htnScreening)
+      // together with an elevated BP reading.
+      final hasSob = readBoolFlag('chestTightnessOrSob');
+      final hasSobWithHighBp = hasSob && sys != null && sys >= 140;
+
       result[pid] = ClinicalVitals(
         systolicBp: sys,
         diastolicBp: dia,
@@ -690,6 +717,9 @@ class LocalAssessmentDao {
         hasDangerSign: hasDanger,
         hasEclampsia: hasEclampsia,
         hasStrokeSign: hasStrokeSign,
+        hasAbnormalUrine: hasAbnormalUrine,
+        hasSobWithHighBp: hasSobWithHighBp,
+        gestationalAgeWeeks: gestationalAgeWeeks,
         parity: parity,
         hasDiabetes: hasDiabetes,
         assessmentType: type,
@@ -697,6 +727,133 @@ class LocalAssessmentDao {
     }
     return result;
   }
+
+  /// Fetches the last 3 ANC assessments per patient and parses them into
+  /// [_AncTrendSnapshot] records (oldest-first within each list).
+  /// Used by [latestClinicalVitalsForMany] to detect the pre-eclampsia
+  /// trend pattern (PRD §2.8.1 Band 2 rule).
+  Future<Map<String, List<_AncTrendSnapshot>>> _ancTrendSnapshotsForMany(
+      List<String> patientIds) async {
+    if (patientIds.isEmpty) return const {};
+    final placeholders = List.filled(patientIds.length, '?').join(',');
+    // Fetch newest-first so we can stop after 3 per patient cheaply in Dart.
+    final rows = await _db.db.rawQuery(
+      '''
+      SELECT patient_id, assessment_details, created_at
+      FROM $tableName
+      WHERE assessment_type IN ('ANC', 'anc')
+        AND patient_id IN ($placeholders)
+        AND patient_id IS NOT NULL
+      ORDER BY patient_id ASC, created_at DESC
+      ''',
+      patientIds,
+    );
+
+    final byPid = <String, List<_AncTrendSnapshot>>{};
+    for (final row in rows) {
+      final pid = row['patient_id'] as String?;
+      if (pid == null) continue;
+      final list = byPid.putIfAbsent(pid, () => []);
+      if (list.length >= 3) continue; // already collected 3 newest
+
+      final detailsJson = row['assessment_details'] as String?;
+      if (detailsJson == null) continue;
+      Map<String, dynamic> map;
+      try {
+        map = jsonDecode(detailsJson) as Map<String, dynamic>;
+      } catch (_) {
+        continue;
+      }
+
+      // Mirror the ANC flattening done in latestClinicalVitalsForMany.
+      final flat = <String, dynamic>{...map};
+      for (final sub in const [
+        'medicalHistoryPhysicalExamination',
+        'pointOfCareInvestigations',
+        'dangerSignsRiskIdentification',
+      ]) {
+        if (map[sub] is Map) {
+          flat.addAll((map[sub] as Map).cast<String, dynamic>());
+        }
+      }
+
+      int? parseInt(String key) {
+        final v = flat[key];
+        if (v is int) return v;
+        if (v is num) return v.toInt();
+        if (v is String) return int.tryParse(v);
+        return null;
+      }
+
+      double? parseDouble(String key) {
+        final v = flat[key];
+        if (v is double) return v;
+        if (v is num) return v.toDouble();
+        if (v is String) return double.tryParse(v);
+        return null;
+      }
+
+      list.add(_AncTrendSnapshot(
+        systolicBp: parseInt('systolic') ?? parseInt('bloodPressureSystolic'),
+        weightKg: parseDouble('weight') ?? parseDouble('bodyWeight'),
+        urineProteinPositive: flat['urineProtein'] == 'Present' ||
+            flat['urinaryAlbumin'] != null ||
+            flat['urinarySugar'] == 'Present',
+      ));
+    }
+
+    // Rows arrived newest-first; reverse each list so index 0 is the oldest.
+    return byPid.map((pid, list) => MapEntry(pid, list.reversed.toList()));
+  }
+
+  /// Returns `true` when the last 3 ANC visits show the pre-eclampsia trend
+  /// pattern (PRD §2.8.1 Band 2): systolic BP non-decreasing with an overall
+  /// rise, weight non-decreasing with an overall rise (where readings exist),
+  /// and urine protein positive at the most recent visit.
+  ///
+  /// Conservative: a missing systolic at any of the three visits returns
+  /// `false` — incomplete data never falsely promotes to Band 2.
+  static bool _hasEclampsiaTrend(List<_AncTrendSnapshot> snapshots) {
+    if (snapshots.length < 3) return false;
+    final s1 = snapshots[0]; // oldest
+    final s2 = snapshots[1];
+    final s3 = snapshots[2]; // newest
+
+    // All three systolic readings must be present.
+    final sys1 = s1.systolicBp;
+    final sys2 = s2.systolicBp;
+    final sys3 = s3.systolicBp;
+    if (sys1 == null || sys2 == null || sys3 == null) return false;
+
+    // Non-decreasing at each step AND overall strictly increasing.
+    if (sys1 > sys2 || sys2 > sys3 || sys1 >= sys3) return false;
+
+    // Weight: where readings exist, must be non-decreasing with overall rise.
+    final w1 = s1.weightKg;
+    final w3 = s3.weightKg;
+    if (w1 != null && w3 != null) {
+      if (w1 >= w3) return false;
+      final w2 = s2.weightKg;
+      if (w2 != null && (w1 > w2 || w2 > w3)) return false;
+    }
+
+    // Latest visit must show urine protein.
+    return s3.urineProteinPositive;
+  }
+}
+
+/// Minimal vitals snapshot for the eclampsia trend computation.
+/// File-private — only [LocalAssessmentDao._ancTrendSnapshotsForMany] uses it.
+class _AncTrendSnapshot {
+  const _AncTrendSnapshot({
+    required this.systolicBp,
+    required this.weightKg,
+    required this.urineProteinPositive,
+  });
+
+  final int? systolicBp;
+  final double? weightKg;
+  final bool urineProteinPositive;
 }
 
 // ── Assessment draft DAO (Phase 2) ────────────────────────────────────────────

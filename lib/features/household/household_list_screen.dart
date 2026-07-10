@@ -757,7 +757,6 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
             _selectedNeeds = updated;
           });
         },
-        onClearNeeds: () => setState(() => _selectedNeeds = const {}),
       ),
     );
   }

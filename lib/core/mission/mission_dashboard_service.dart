@@ -13,6 +13,7 @@
 library;
 
 import '../api/cql_api_service.dart';
+import '../constants/app_strings.dart';
 import '../models/dashboard_tier.dart';
 import '../models/mission_brief.dart';
 import '../models/mission_queue_item.dart';
@@ -53,6 +54,7 @@ class MissionInputData {
     this.neonatePatientIds = const {},
     this.youngInfantPatientIds = const {},
     this.referralArrivalPendingPatientIds = const {},
+    this.slaBreachedReferralPatientIds = const {},
     this.villageNamesById = const {},
   });
 
@@ -173,6 +175,12 @@ class MissionInputData {
   /// TB-default risk window).
   final Set<String> referralArrivalPendingPatientIds;
 
+  /// Patient IDs whose active referral has a breached SLA (CD-2, PRD §2.8).
+  /// These patients are promoted to Band 1 in [_classify] regardless of their
+  /// clinical band from [RiskScoringService]. Populated by the repository from
+  /// [referralAssessments] where [PriorityAssessment.level] == critical.
+  final Set<String> slaBreachedReferralPatientIds;
+
   /// Village / sub-village id → display name, pre-resolved from
   /// [UserHierarchyService]. Used so queue items show a human-readable
   /// location instead of the raw numeric ID.
@@ -205,26 +213,10 @@ class HouseholdMemberData {
 class MissionDashboardService {
   const MissionDashboardService();
 
-  // ── Weights for queue ranking ─────────────────────────────────────────────
-  static const int _wSlaBreached = 100;
-  static const int _wCriticalRisk = 80;
-  static const int _wChildUnder5 = 30;
-  static const int _wPregnancy = 25;
-  static const int _wOverduePerDay = 5;
-  static const int _wOverdueCap = 50;
-  static const int _wHighRisk = 40;
-  static const int _wMediumRisk = 20;
-  static const int _wReferral = 15;
-  static const int _wFollowUp = 10;
-
   // ── Workload estimation ───────────────────────────────────────────────────
   /// Average minutes per visit for workload estimation.
   static const int _avgVisitMinutes = 25;
 
-  // ── Priority thresholds ───────────────────────────────────────────────────
-  static const int _criticalThreshold = 80;
-  static const int _highThreshold = 50;
-  static const int _mediumThreshold = 25;
 
   /// Compute the AI daily brief from input data.
   MissionBrief computeBrief(MissionInputData data) {
@@ -515,14 +507,11 @@ class MissionDashboardService {
     DateTime now,
     MissionInputData data,
   ) {
-    int score = 0;
     final drivers = <String>[];
 
-    // Spec §2.8 band contribution. Band 1 = Severe → critical-risk driver.
-    // Surface specific danger-sign / stroke / eclampsia drivers when the
-    // reasons list carries them so the card border rule (§2.6) can paint
-    // red ONLY for clinical danger signs / CCE alerts — not for band1 cards
-    // that landed on labs alone.
+    // Surface specific danger-sign / stroke / eclampsia drivers so the card
+    // border rule (§2.6) can paint red ONLY for clinical danger signs / CCE
+    // alerts — not for any Band 1 card (e.g. one driven by labs alone).
     final reasonText = entry.reasons.join(' ').toLowerCase();
     if (reasonText.contains('danger-sign')) drivers.add('danger-sign');
     if (reasonText.contains('stroke-sign')) drivers.add('stroke-sign');
@@ -530,57 +519,47 @@ class MissionDashboardService {
 
     switch (entry.band) {
       case Band.band1:
-        score += _wCriticalRisk;
         drivers.add('band1-severe');
         break;
       case Band.band2:
-        score += _wHighRisk;
         drivers.add('band2-moderate');
         break;
       case Band.band3:
-        score += _wMediumRisk;
         drivers.add('band3-mild');
         break;
       case Band.band4:
         break;
     }
 
-    // Age contribution
     if (entry.age != null && entry.age! < 5) {
-      score += _wChildUnder5;
       drivers.add('child-under-5');
     }
-
-    // Programme contribution
     if (entry.programmes.contains(Programme.anc)) {
-      score += _wPregnancy;
       drivers.add('pregnancy');
     }
-
-    // Overdue contribution
     if (entry.nextDueAt != null) {
       final overdueDays = now.difference(entry.nextDueAt!).inDays;
       if (overdueDays > 0) {
-        final overdueScore = (overdueDays * _wOverduePerDay).clamp(0, _wOverdueCap);
-        score += overdueScore;
         drivers.add('overdue:$overdueDays');
       }
     }
 
-    final priority = _scoreToPriority(score);
+    final priority = _bandToPriority(entry.band);
     final aiInsight = _buildAiInsight(drivers);
-    final reason = entry.reasons.isNotEmpty ? entry.reasons.first : 'Scheduled visit';
+    final reason = _programmeReason(entry);
 
     return MissionQueueItem(
       id: entry.patientId,
       type: MissionItemType.patientVisit,
       priority: priority,
-      priorityScore: score,
+      priorityScore: 0,
       patientName: entry.displayName,
       patientId: entry.patientId,
       householdId: entry.householdNo,
       householdNumber: data.householdNumbersById[entry.householdNo],
       age: entry.age,
+      gender: entry.gender,
+      nid: entry.nid,
       phoneNumber: entry.phoneNumber,
       village: entry.householdName ?? entry.villageName ?? entry.villageId,
       programmes: entry.programmes,
@@ -605,26 +584,19 @@ class MissionDashboardService {
     DateTime now,
     MissionInputData data,
   ) {
-    int score = assessment?.score ?? 0;
     final drivers = List<String>.from(assessment?.drivers ?? []);
 
-    // Add referral base weight
-    score += _wReferral;
     if (!drivers.contains('referral')) {
       drivers.add('referral');
     }
-
-    // SLA breach adds critical weight
-    if (assessment?.level == SlaPriority.critical) {
-      if (!drivers.contains('sla-breached')) {
-        score += _wSlaBreached;
-        drivers.add('sla-breached');
-      }
+    if (assessment?.level == SlaPriority.critical &&
+        !drivers.contains('sla-breached')) {
+      drivers.add('sla-breached');
     }
 
     final priority = assessment != null
         ? MissionPriority.fromSlaPriority(assessment.level)
-        : _scoreToPriority(score);
+        : MissionPriority.low;
 
     final aiInsight = _buildAiInsight(drivers);
     // createdAt is epoch ms, convert to DateTime for calculation
@@ -636,7 +608,7 @@ class MissionDashboardService {
       id: referral.id,
       type: MissionItemType.referral,
       priority: priority,
-      priorityScore: score,
+      priorityScore: 0,
       patientName: referral.patientId.length > 8
           ? 'Patient ${referral.patientId.substring(0, 8)}'
           : 'Patient ${referral.patientId}', // Handle short IDs
@@ -669,26 +641,19 @@ class MissionDashboardService {
     DateTime now,
     MissionInputData data,
   ) {
-    int score = _wFollowUp;
     final drivers = <String>['follow-up'];
-
-    // Overdue contribution
     final daysUntil = followUp.daysUntilDue(now);
     if (daysUntil < 0) {
-      final overdueScore = (-daysUntil * _wOverduePerDay).clamp(0, _wOverdueCap);
-      score += overdueScore;
       drivers.add('overdue:${-daysUntil}');
     }
 
-    final priority = _scoreToPriority(score);
     final aiInsight = _buildAiInsight(drivers);
-
     final hhId = data.patientHouseholdsById[followUp.patientId];
     return MissionQueueItem(
       id: followUp.id,
       type: MissionItemType.followUp,
-      priority: priority,
-      priorityScore: score,
+      priority: MissionPriority.low,
+      priorityScore: 0,
       patientName: followUp.patientName,
       patientId: followUp.patientId,
       householdId: hhId,
@@ -707,11 +672,35 @@ class MissionDashboardService {
     );
   }
 
-  MissionPriority _scoreToPriority(int score) {
-    if (score >= _criticalThreshold) return MissionPriority.critical;
-    if (score >= _highThreshold) return MissionPriority.high;
-    if (score >= _mediumThreshold) return MissionPriority.medium;
-    return MissionPriority.low;
+  /// Maps clinical band to the MissionPriority badge shown on the card.
+  /// Band drives sort order; priority is the UI representation.
+  static MissionPriority _bandToPriority(Band band) => switch (band) {
+        Band.band1 => MissionPriority.critical,
+        Band.band2 => MissionPriority.high,
+        Band.band3 => MissionPriority.medium,
+        Band.band4 => MissionPriority.low,
+      };
+
+  /// Programme-smart, visit-count-aware dashboard card label (v13 design).
+  /// Replaces the raw risk-driver reason text with an actionable badge label.
+  static String _programmeReason(WorklistEntry entry) {
+    final p = entry.programmes;
+    if (p.contains(Programme.anc)) {
+      return entry.ancVisitCount > 0
+          ? '${MissionDashboardStrings.ancVisitLabel} ${entry.ancVisitCount + 1} due'
+          : MissionDashboardStrings.enrolled;
+    }
+    if (p.contains(Programme.pnc)) {
+      return entry.pncVisitCount > 0
+          ? '${MissionDashboardStrings.pncVisitLabel} ${entry.pncVisitCount + 1} Due'
+          : MissionDashboardStrings.enrolled;
+    }
+    if (p.contains(Programme.imci) || p.contains(Programme.epi)) {
+      return MissionDashboardStrings.childImmunisation;
+    }
+    if (p.contains(Programme.ncd)) return MissionDashboardStrings.ncdCheckup;
+    if (p.contains(Programme.tb)) return MissionDashboardStrings.tbCheck;
+    return MissionDashboardStrings.newVisit;
   }
 
   String _buildAiInsight(List<String> drivers) {
@@ -771,108 +760,9 @@ class MissionDashboardService {
     return '$displayHour:$displayMinute $period';
   }
 
-  // ─── 5-tier classifier ─────────────────────────────────────────────────────
-  // Spec: leapfrog-setup/designs/dashboard-prioritization-impl.md
-  //
-  // Composite-score weights drive intra-tier ordering only — strong drivers
-  // promote a candidate to its tier *before* the score is consulted.
-  static const int _csOverduePerDay = 3;
-  static const int _csOverdueCap = 30;
-  static const int _csAttemptsPerTry = 5;
-  static const int _csAttemptsCap = 5;
-  static const int _csUnderOneYear = 25;
-  static const int _csUnderFive = 12;
-  static const int _csElderly = 6;
-  static const int _csPregnant = 10;
-  static const int _csPregnancySnapshot = 4;
-  static const int _csOnTreatment = 8;
-  static const int _csEverReferred = 5;
-  static const int _csHouseholdHead = 3;
-  static const int _csDisability = 6;
-  static const int _csStaleRecord = 5;
-  static const int _csStaleThresholdDays = 30;
-  static const int _csUpcomingPenaltyCap = 14;
+  // ─── Classifier + inference ────────────────────────────────────────────────
   static const int _ltfuAttemptThreshold = 2;
-  static const int _elderlyAgeThreshold = 60;
   static const int _childUnder5AgeThreshold = 5;
-
-  /// Composite intra-tier score. Higher is more urgent. Spec formula:
-  ///   + min(daysOverdue, 30)             × 3
-  ///   + min(unsuccessfulAttempts, 5)     × 5
-  ///   + (age < 1 ? 25 : 0)
-  ///   + (age < 5 ? 12 : 0)
-  ///   + (age ≥ 60 ? 6 : 0)
-  ///   + (isPregnant ? 10 : 0)
-  ///   + (pregnancySnapshot present ? 4 : 0)
-  ///   + (onTreatment ? 8 : 0)
-  ///   + (everReferred ? 5 : 0)
-  ///   + (householdHead ? 3 : 0)
-  ///   + (disability ? 6 : 0)
-  ///   + (lastUpdated stale > 30d ? 5 : 0)
-  ///   − (daysUntilDue > 0 ? min(daysUntilDue, 14) : 0)
-  int _compositeScore({
-    required String patientId,
-    required int? age,
-    required DateTime? dueAt,
-    required MissionInputData input,
-    required DateTime now,
-  }) {
-    int score = 0;
-
-    if (dueAt != null) {
-      final today = _atStartOfDay(now);
-      final due = _atStartOfDay(dueAt);
-      final daysOverdue = today.difference(due).inDays;
-      if (daysOverdue > 0) {
-        final clamped =
-            daysOverdue > _csOverdueCap ? _csOverdueCap : daysOverdue;
-        score += clamped * _csOverduePerDay;
-      } else if (daysOverdue < 0) {
-        final daysUntilDue = -daysOverdue;
-        final clamped = daysUntilDue > _csUpcomingPenaltyCap
-            ? _csUpcomingPenaltyCap
-            : daysUntilDue;
-        score -= clamped;
-      }
-    }
-
-    final attempts = input.unsuccessfulAttemptsByPatientId[patientId] ?? 0;
-    if (attempts > 0) {
-      final clamped =
-          attempts > _csAttemptsCap ? _csAttemptsCap : attempts;
-      score += clamped * _csAttemptsPerTry;
-    }
-
-    if (age != null) {
-      if (age < 1) score += _csUnderOneYear;
-      if (age < _childUnder5AgeThreshold) score += _csUnderFive;
-      if (age >= _elderlyAgeThreshold) score += _csElderly;
-    }
-
-    if (input.pregnantPatientIds.contains(patientId)) score += _csPregnant;
-    if (input.pregnancyByPatientId.containsKey(patientId)) {
-      score += _csPregnancySnapshot;
-    }
-    if (input.patientsOnTreatment.contains(patientId)) score += _csOnTreatment;
-    if (input.patientsEverReferred.contains(patientId)) {
-      score += _csEverReferred;
-    }
-    if (input.householdHeadPatientIds.contains(patientId)) {
-      score += _csHouseholdHead;
-    }
-    if (input.disabilityByPatientId[patientId] == true) {
-      score += _csDisability;
-    }
-
-    final lastUpdated = input.lastUpdatedByPatientId[patientId];
-    if (lastUpdated != null) {
-      final ageDays =
-          DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(lastUpdated)).inDays;
-      if (ageDays > _csStaleThresholdDays) score += _csStaleRecord;
-    }
-
-    return score;
-  }
 
   /// Returns an inferred next-due date for a patient whose follow-up records
   /// have no `dueAt` — derived from `lastVisitAt` + the programme's standard
@@ -922,6 +812,10 @@ class MissionDashboardService {
     if (input.redFlagPatientIds.contains(patientId) ||
         band == Band.band1) {
       drivers.add('red-flag');
+    }
+    // CD-2: referral SLA breach → Band 1 regardless of clinical band.
+    if (input.slaBreachedReferralPatientIds.contains(patientId)) {
+      drivers.add('referral-sla-breach');
     }
     if (preg != null &&
         preg.highRiskPregnantWoman &&
@@ -995,6 +889,9 @@ class MissionDashboardService {
     final candidates = <MissionQueueItem>[];
 
     for (final entry in input.worklistEntries) {
+      // Only enrolled patients belong on the Mission Dashboard — patients with
+      // no programme have no clinical context or follow-up schedule.
+      if (entry.programmes.isEmpty) continue;
       final age = entry.age ?? input.agesByPatientId[entry.patientId];
       // Use explicit follow-up dueAt when available; fall back to programme-
       // interval inference so patients without a follow-up record still surface
@@ -1009,13 +906,10 @@ class MissionDashboardService {
         now: now,
       );
       if (classified == null) continue;
-      final score = _compositeScore(
-        patientId: entry.patientId,
-        age: age,
-        dueAt: effectiveDueAt,
-        input: input,
-        now: now,
-      );
+      final effectiveBand = classified.drivers.contains('referral-sla-breach')
+          ? Band.band1
+          : entry.band;
+      final isPregnant = input.pregnantPatientIds.contains(entry.patientId);
       final base = _worklistToQueueItem(entry, now, input);
       // When nextDueAt was null but we inferred a due date, patch it into
       // the queue item so the card shows the correct "due" / "overdue" label.
@@ -1025,9 +919,15 @@ class MissionDashboardService {
           ? now.difference(inferredDueAt).inDays.clamp(0, 999)
           : null;
       candidates.add(base.copyWith(
-        priorityScore: score,
+        // sortRankFor encodes the full 1a→1b→1→2a→…→4 sequence so
+        // compareInTier() (priorityScore DESC) produces the correct
+        // band+modifier order within each date tier.
+        priorityScore: sortRankFor(effectiveBand, entry.modifier),
         tier: classified.tier,
         drivers: classified.drivers,
+        band: effectiveBand,
+        modifier: entry.modifier,
+        isPregnant: isPregnant,
         dueAt: inferredDueAt,
         daysOverdue: inferredDaysOverdue,
       ));
@@ -1044,23 +944,19 @@ class MissionDashboardService {
         now: now,
       );
       if (classified == null) continue;
-      final score = _compositeScore(
-        patientId: followUp.patientId,
-        age: age,
-        dueAt: followUp.dueAt,
-        input: input,
-        now: now,
-      );
+      final isPregnant =
+          input.pregnantPatientIds.contains(followUp.patientId);
       final base = _followUpToQueueItem(followUp, now, input);
       candidates.add(base.copyWith(
-        priorityScore: score,
         tier: classified.tier,
         drivers: classified.drivers,
+        band: Band.band4, // follow-ups without worklist band default to Band 4
+        isPregnant: isPregnant,
       ));
     }
 
     // Dedupe by patientId — same patient can appear via worklist + follow-up.
-    // Keep the most-urgent tier; within same tier keep the higher composite.
+    // Keep the most-urgent band; within the same band keep the better modifier.
     final byPid = <String, MissionQueueItem>{};
     final nonPatient = <MissionQueueItem>[];
     for (final c in candidates) {
@@ -1072,17 +968,20 @@ class MissionDashboardService {
       final prev = byPid[pid];
       if (prev == null) {
         byPid[pid] = c;
-      } else if (c.tier.rank < prev.tier.rank ||
-          (c.tier == prev.tier && c.priorityScore > prev.priorityScore)) {
+      } else if (c.band.index < prev.band.index ||
+          (c.band == prev.band &&
+              MissionQueueItem.compareInBand(c, prev) < 0)) {
         byPid[pid] = c;
       }
     }
 
+    // Primary sort: band ASC (Band 1 first).
+    // Secondary sort: PRD §2.8 within-band order via compareInBand.
     final result = <MissionQueueItem>[...byPid.values, ...nonPatient];
     result.sort((a, b) {
-      final tierCmp = a.tier.rank.compareTo(b.tier.rank);
-      if (tierCmp != 0) return tierCmp;
-      return MissionQueueItem.compareInTier(a, b);
+      final bandCmp = a.band.index.compareTo(b.band.index);
+      if (bandCmp != 0) return bandCmp;
+      return MissionQueueItem.compareInBand(a, b);
     });
     return result;
   }

@@ -21,7 +21,7 @@ import '../../core/models/mission_queue_item.dart';
 import '../../core/models/programme.dart';
 import '../../core/widgets/patient_filter_panel.dart';
 import '../referral/referral_repository.dart';
-import '../search/global_search_bar.dart';
+import 'widgets/dashboard_search_field.dart';
 import '../visit/visit_controller.dart';
 import '../visit/widgets/widgets.dart';
 import 'dashboard_repository.dart';
@@ -70,12 +70,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Completed patient IDs for today — cards remain visible but non-navigable.
   Set<String> _completedIds = const {};
 
-  // Inline village chip + need filter
+  // Inline village chip + need filter + inline search
   List<String> _inlineVillages = const [];
   String? _selectedVillageChipName;
   Set<NeedFilter> _selectedNeeds = const {};
   Set<NeedFilter> _availableNeeds = const {};
   Set<Programme> _selectedProgrammes = const {};
+  String _searchQuery = '';
+
+  // Full unfiltered queue — filter/search applied synchronously from this cache.
+  List<MissionQueueItem> _baseQueue = const [];
 
   @override
   void initState() {
@@ -208,13 +212,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
   
-  /// Load the mission queue excluding patients who have been visited today,
-  /// then apply any active location filter.
+  /// Load the mission queue, cache it, then apply active filters and return.
   Future<List<MissionQueueItem>> _loadFilteredQueue(
     MissionDashboardRepository missionRepo,
     EncounterDao encounterDao,
   ) async {
-    // Load completed patient IDs first
     final completedIds = await encounterDao.completedTodayPatientIds();
 
     // Persist completed IDs so card rendering can mark them done.
@@ -223,13 +225,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() => _completedIds = completedIds);
     }
 
-    // Load full queue — keep completed patients in the list so their cards
-    // remain visible (non-navigable, greyed out with a ✓ badge per spec §2.6).
-    final queue = await missionRepo.loadQueue(limit: 500);
-    final withoutCompleted = queue;
+    final rawQueue = await missionRepo.loadQueue(limit: 500);
 
-    // Extract distinct village labels for inline chips (from un-completed queue)
-    final allVillageLabels = withoutCompleted
+    // A visit completed today is done — it must not occupy a dashboard slot,
+    // count toward the visits-today total, or seed the need-filter chips.
+    // completedIds comes from EncounterDao (updated the instant a visit is
+    // submitted, offline-safe); this is the only reliable "done today" signal
+    // — MissionInputData.completedTodayPatientIds lags until the next sync.
+    final queue = completedIds.isEmpty
+        ? rawQueue
+        : rawQueue
+            .where((i) =>
+                i.patientId == null || !completedIds.contains(i.patientId))
+            .toList(growable: false);
+
+    // Cache filtered base queue so filters can be re-applied synchronously
+    // without a repository round-trip on every chip tap.
+    _baseQueue = queue;
+
+    // Extract distinct village labels for inline chips
+    final allVillageLabels = queue
         .map((i) => i.village?.trim())
         .whereType<String>()
         .where((v) => v.isNotEmpty)
@@ -237,7 +252,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .toList()
       ..sort();
 
-    final availableNeeds = computeAvailableNeeds(withoutCompleted);
+    final availableNeeds = computeAvailableNeeds(queue);
     if (mounted) {
       // ignore: use_build_context_synchronously
       setState(() {
@@ -246,26 +261,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
       });
     }
 
-    // Apply inline village chip filter
-    var result = withoutCompleted;
+    return _buildFilteredList(queue);
+  }
+
+  /// Apply all active filters (village, need category, search query) to [queue]
+  /// and return the matching subset. Pure — reads current filter state fields.
+  List<MissionQueueItem> _buildFilteredList(List<MissionQueueItem> queue) {
+    var result = queue;
+
     final chipVillage = _selectedVillageChipName;
     if (chipVillage != null) {
       result = result.where((i) => i.village?.trim() == chipVillage).toList();
     }
 
-    // Apply programme filter (OR logic — item shown if it has any selected programme)
-    if (_selectedProgrammes.isNotEmpty) {
-      result = result
-          .where((i) => i.programmes.any(_selectedProgrammes.contains))
-          .toList();
-    }
-
-    // Apply need filter (OR logic — item matches if it satisfies any selected need)
     if (_selectedNeeds.isNotEmpty) {
       result = result.where(_needMatches).toList();
     }
 
+    final q = _searchQuery.trim().toLowerCase();
+    if (q.isNotEmpty) {
+      result = result.where((i) =>
+        i.patientName.toLowerCase().contains(q) ||
+        (i.phoneNumber?.contains(q) ?? false) ||
+        (i.nid?.toLowerCase().contains(q) ?? false)
+      ).toList();
+    }
+
     return result;
+  }
+
+  /// Re-apply current filters to the cached base queue synchronously.
+  /// Use for chip toggles and search — avoids a repository round-trip when
+  /// only the filter state changed.
+  void _applyFilters() {
+    if (!mounted) return;
+    if (_baseQueue.isEmpty) {
+      // Base queue not yet loaded — reload from repo, which populates _baseQueue
+      // and then applies active filters at the end of _loadFilteredQueue().
+      _loadMissionData();
+      return;
+    }
+    setState(() {
+      _refreshVersion++;
+      _queueFuture = Future.value(_buildFilteredList(_baseQueue));
+    });
   }
 
   Future<void> _refresh() async {
@@ -482,6 +521,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               settingsMenu: _SettingsMenu(onOfferBiometric: _offerBiometric),
               notificationCount: _notificationCount,
               onNotificationTap: () => showNotificationDrawer(context),
+              onSearchChanged: (q) {
+                setState(() => _searchQuery = q);
+                _applyFilters();
+              },
             ),
             // Referral alert strip — sits between header/search and village tabs
             // so it reads as a system-level alert before the worklist.
@@ -503,7 +546,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       selectedVillageValue: _selectedVillageChipName,
                       onVillageSelected: (name) {
                         setState(() => _selectedVillageChipName = name);
-                        _loadMissionData();
+                        _applyFilters();
                       },
                       availableNeeds: _availableNeeds,
                       selectedNeeds: _selectedNeeds,
@@ -517,14 +560,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           }
                           _selectedNeeds = updated;
                         });
-                        _loadMissionData();
-                      },
-                      onClearNeeds: () {
-                        setState(() {
-                          _selectedNeeds = const {};
-                          _selectedProgrammes = const {};
-                        });
-                        _loadMissionData();
+                        _applyFilters();
                       },
                     ),
                     const SizedBox(height: 6),
@@ -539,7 +575,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         if (queue.isEmpty) {
                           final hasFilters = _selectedNeeds.isNotEmpty ||
                               _selectedProgrammes.isNotEmpty ||
-                              _selectedVillageChipName != null;
+                              _selectedVillageChipName != null ||
+                              _searchQuery.isNotEmpty;
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
@@ -555,8 +592,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       _selectedNeeds = const {};
                                       _selectedProgrammes = const {};
                                       _selectedVillageChipName = null;
+                                      _searchQuery = '';
                                     });
-                                    _loadMissionData();
+                                    _applyFilters();
                                   },
                                 )
                               else
@@ -593,6 +631,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         // Pass 1 — guarantee [minPerTier] per non-empty tier,
                         // walking tiers in rank order.
                         for (final t in DashboardTier.values) {
+                          if (t == DashboardTier.upcoming) continue;
                           final list = byTier[t] ?? const <MissionQueueItem>[];
                           for (var i = 0;
                               i < list.length && i < minPerTier;
@@ -608,6 +647,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         // [maxPerTier] per tier so urgency variety stays
                         // visible.
                         for (final t in DashboardTier.values) {
+                          if (t == DashboardTier.upcoming) continue;
                           final list = byTier[t] ?? const <MissionQueueItem>[];
                           while (visible.length < visibleLimit &&
                               (perTierUsed[t] ?? 0) < maxPerTier &&
@@ -951,6 +991,7 @@ class _DashboardHeader extends StatelessWidget {
     required this.settingsMenu,
     required this.notificationCount,
     required this.onNotificationTap,
+    required this.onSearchChanged,
   });
 
   final String greeting;
@@ -959,6 +1000,7 @@ class _DashboardHeader extends StatelessWidget {
   final Widget settingsMenu;
   final int notificationCount;
   final VoidCallback onNotificationTap;
+  final ValueChanged<String> onSearchChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1014,7 +1056,7 @@ class _DashboardHeader extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AppSpacing.xxl), // .header-row margin-bottom:14px
-          const GlobalSearchBar(),
+          DashboardSearchField(onChanged: onSearchChanged),
         ],
       ),
     );

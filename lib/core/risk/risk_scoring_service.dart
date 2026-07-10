@@ -93,6 +93,9 @@ class RiskScoringService {
       if (v.parity != null && v.parity == 0) {
         markA('anc-primigravida');
       }
+      if (v.hasDiabetes) {
+        markA('anc-comorbidity-dm');
+      }
     }
 
     // ── NCD clinical rules (§2.8.2) ─────────────────────────────────────────
@@ -106,6 +109,9 @@ class RiskScoringService {
       // Band 1 — Severe
       if (v != null && v.hasStrokeSign) {
         considerBand(Band.band1, 'ncd-stroke-sign');
+      }
+      if (v != null && v.hasSobWithHighBp) {
+        considerBand(Band.band1, 'ncd-sob-high-bp');
       }
       if ((sys != null && sys >= 180) || (dia != null && dia >= 110)) {
         considerBand(Band.band1, 'ncd-htn-crisis:${sys ?? 0}/${dia ?? 0}');

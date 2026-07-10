@@ -190,7 +190,6 @@ class PatientFilterPanel extends StatelessWidget {
     required this.availableNeeds,
     required this.selectedNeeds,
     required this.onNeedToggled,
-    required this.onClearNeeds,
   });
 
   final List<VillageOption> villages;
@@ -199,7 +198,6 @@ class PatientFilterPanel extends StatelessWidget {
   final Set<NeedFilter> availableNeeds;
   final Set<NeedFilter> selectedNeeds;
   final void Function(NeedFilter need) onNeedToggled;
-  final VoidCallback onClearNeeds;
 
   @override
   Widget build(BuildContext context) {
@@ -238,54 +236,38 @@ class PatientFilterPanel extends StatelessWidget {
           const SizedBox(height: 8),
         ],
 
-        // ── Row 2: clear filters (only when active) ───────────────────────
-        if (selectedNeeds.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: Semantics(
-                label: 'Clear all filters',
-                button: true,
-                child: GestureDetector(
-                  onTap: onClearNeeds,
-                  child: Text(
-                    MissionDashboardStrings.clearNeedFilters,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: Theme.of(context).colorScheme.onSurface,
-                    ),
+        // ── Row 2: category bubbles ──────────────────────────────────────────
+        SizedBox(
+          height: 88,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.zero,
+            children: [
+              ...(() {
+                final active =
+                    NeedFilter.values.where((n) => availableNeeds.contains(n)).toList();
+                final disabled =
+                    NeedFilter.values.where((n) => !availableNeeds.contains(n)).toList();
+                return [...active, ...disabled];
+              })()
+                  .map((need) {
+                final dis = !availableNeeds.contains(need);
+                return Padding(
+                  padding: const EdgeInsets.only(right: 11),
+                  child: NeedCategoryBubble(
+                    label: need.label,
+                    emoji: need.emoji,
+                    activeColor: need.activeColor,
+                    activeSurface: need.activeSurface,
+                    isActive: selectedNeeds.contains(need),
+                    isDisabled: dis,
+                    onTap: () => onNeedToggled(need),
                   ),
-                ),
-              ),
-            ),
+                );
+              }),
+            ],
           ),
-
-        // ── Row 3: category bubbles ──────────────────────────────────────────
-        if (availableNeeds.isNotEmpty)
-          SizedBox(
-            height: 88,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: EdgeInsets.zero,
-              children: [
-                ...NeedFilter.values
-                    .where((n) => availableNeeds.contains(n))
-                    .map((need) => Padding(
-                          padding: const EdgeInsets.only(right: 11),
-                          child: NeedCategoryBubble(
-                            label: need.label,
-                            emoji: need.emoji,
-                            activeColor: need.activeColor,
-                            activeSurface: need.activeSurface,
-                            isActive: selectedNeeds.contains(need),
-                            onTap: () => onNeedToggled(need),
-                          ),
-                        )),
-              ],
-            ),
-          ),
+        ),
       ],
     );
   }
@@ -349,6 +331,7 @@ class NeedCategoryBubble extends StatelessWidget {
     required this.activeSurface,
     required this.isActive,
     required this.onTap,
+    this.isDisabled = false,
   });
 
   final String label;
@@ -356,67 +339,75 @@ class NeedCategoryBubble extends StatelessWidget {
   final Color activeColor;   // border accent (--bcolor)
   final Color activeSurface; // surface tint  (--bbg)
   final bool isActive;
+  final bool isDisabled;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      label: isActive ? '$label filter, selected' : 'Filter by $label',
+      label: isDisabled
+          ? '$label filter, unavailable'
+          : isActive
+              ? '$label filter, selected'
+              : 'Filter by $label',
       button: true,
-      child: GestureDetector(
-        onTap: onTap,
-        child: SizedBox(
-          width: 58,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AnimatedContainer(
-                duration: AppAnimations.control,
-                curve: AppAnimations.standard,
-                alignment: Alignment.center,
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isActive ? activeSurface : AppColors.cardSurface,
-                  border: Border.all(
-                    color: isActive ? activeColor : AppColors.border,
-                    width: 2,
+      child: Opacity(
+        opacity: isDisabled ? 0.45 : 1.0,
+        child: GestureDetector(
+          onTap: isDisabled ? null : onTap,
+          child: SizedBox(
+            width: 58,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedContainer(
+                  duration: AppAnimations.control,
+                  curve: AppAnimations.standard,
+                  alignment: Alignment.center,
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isActive ? activeSurface : AppColors.cardSurface,
+                    border: Border.all(
+                      color: isActive ? activeColor : AppColors.border,
+                      width: 2,
+                    ),
+                    boxShadow: isActive
+                        ? const [
+                            BoxShadow(
+                              color: Color(0x14000000),
+                              blurRadius: 6,
+                              offset: Offset(0, 2),
+                            )
+                          ]
+                        : null,
                   ),
-                  boxShadow: isActive
-                      ? const [
-                          BoxShadow(
-                            color: Color(0x14000000), // rgba(0,0,0,0.08)
-                            blurRadius: 6,
-                            offset: Offset(0, 2),
-                          )
-                        ]
-                      : null,
+                  // Literal emoji glyph — matches the mockup's .cat-bubble-icon
+                  // exactly. No color applied: emoji are full-color glyphs and
+                  // ignore TextStyle.color, same as the mockup itself never
+                  // recolors this element on .active.
+                  child: Text(
+                    emoji,
+                    style: const TextStyle(fontSize: 19),
+                  ),
                 ),
-                // Literal emoji glyph — matches the mockup's .cat-bubble-icon
-                // exactly. No color applied: emoji are full-color glyphs and
-                // ignore TextStyle.color, same as the mockup itself never
-                // recolors this element on .active.
-                child: Text(
-                  emoji,
-                  style: const TextStyle(fontSize: 19),
+                const SizedBox(height: 5),
+                AnimatedDefaultTextStyle(
+                  duration: AppAnimations.control,
+                  curve: AppAnimations.standard,
+                  style: AppTextStyles.categoryBubbleLabel.copyWith(
+                    color: isActive ? AppColors.textPrimary : AppColors.textMuted,
+                  ),
+                  child: Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 5),
-              AnimatedDefaultTextStyle(
-                duration: AppAnimations.control,
-                curve: AppAnimations.standard,
-                style: AppTextStyles.categoryBubbleLabel.copyWith(
-                  color: isActive ? AppColors.textPrimary : AppColors.textMuted,
-                ),
-                child: Text(
-                  label,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

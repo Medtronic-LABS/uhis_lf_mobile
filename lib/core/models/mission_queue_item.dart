@@ -10,6 +10,7 @@ library;
 import 'dashboard_tier.dart';
 import 'programme.dart';
 import 'referral.dart';
+import 'risk.dart';
 import 'sla.dart';
 
 /// Type of mission item determining available actions.
@@ -101,6 +102,8 @@ class MissionQueueItem {
     this.householdId,
     this.householdNumber,
     this.age,
+    this.gender,
+    this.nid,
     this.village,
     this.programmes = const <Programme>{},
     required this.reason,
@@ -116,6 +119,9 @@ class MissionQueueItem {
     this.dueAt,
     this.tier = DashboardTier.upcoming,
     this.drivers = const <String>[],
+    this.modifier = Modifier.none,
+    this.isPregnant = false,
+    this.band = Band.band4,
   });
 
   /// Unique identifier (patient ID, referral ID, or composite key).
@@ -152,6 +158,15 @@ class MissionQueueItem {
 
   /// Patient age.
   final int? age;
+
+  /// Patient gender as stored in the sync payload ("Male", "Female", "Other",
+  /// or a single letter). Card formats it to a single uppercase letter via
+  /// [genderInitial].
+  final String? gender;
+
+  /// National ID / NID — used for inline dashboard search only, never shown
+  /// on the card itself.
+  final String? nid;
 
   /// Village name.
   final String? village;
@@ -207,11 +222,36 @@ class MissionQueueItem {
   /// `MissionDashboardStrings.driverLabel` for display.
   final List<String> drivers;
 
+  /// Intra-band modifier from PRD §2.8 — drives sort within a band.
+  /// `a` = additional risk (comorbidity / primigravida / near-term / age ≥ 60).
+  /// `b` = overdue (longer past scheduled visit → higher within band, below `a`).
+  /// Never shown to the SK; only used in [compareInBand].
+  final Modifier modifier;
+
+  /// Whether this patient is currently pregnant (ANC enrolled + snapshot).
+  /// Pregnant patients always rank above non-pregnant patients within the
+  /// same band (PRD §2.8 requirement). Not shown in the card directly.
+  final bool isPregnant;
+
+  /// Clinical risk band from PRD §2.8 — primary sort key on the Mission
+  /// Dashboard. Stamped by [MissionDashboardService.computeTieredQueue] from
+  /// [WorklistEntry.band]. Defaults to [Band.band4] so existing call sites
+  /// compile unchanged before the tiered queue is wired up.
+  final Band band;
+
   /// Returns a copy with the supplied fields overridden. Null arguments leave
   /// the original value in place — to clear a nullable field, pass the
   /// existing value through the call site or build a fresh ctor. Used by
   /// `MissionDashboardService.computeTieredQueue` to swap [tier], [drivers],
   /// and [priorityScore] onto an already-built candidate.
+  /// Single uppercase initial for display ("M", "F", "O").
+  /// Returns null when gender is absent.
+  String? get genderInitial {
+    final g = gender?.trim();
+    if (g == null || g.isEmpty) return null;
+    return g[0].toUpperCase();
+  }
+
   MissionQueueItem copyWith({
     MissionItemType? type,
     MissionPriority? priority,
@@ -222,6 +262,8 @@ class MissionQueueItem {
     String? householdId,
     String? householdNumber,
     int? age,
+    String? gender,
+    String? nid,
     String? village,
     Set<Programme>? programmes,
     String? reason,
@@ -237,6 +279,9 @@ class MissionQueueItem {
     DateTime? dueAt,
     DashboardTier? tier,
     List<String>? drivers,
+    Modifier? modifier,
+    bool? isPregnant,
+    Band? band,
   }) {
     return MissionQueueItem(
       id: id,
@@ -249,6 +294,8 @@ class MissionQueueItem {
       householdId: householdId ?? this.householdId,
       householdNumber: householdNumber ?? this.householdNumber,
       age: age ?? this.age,
+      gender: gender ?? this.gender,
+      nid: nid ?? this.nid,
       village: village ?? this.village,
       programmes: programmes ?? this.programmes,
       reason: reason ?? this.reason,
@@ -264,6 +311,9 @@ class MissionQueueItem {
       dueAt: dueAt ?? this.dueAt,
       tier: tier ?? this.tier,
       drivers: drivers ?? this.drivers,
+      modifier: modifier ?? this.modifier,
+      isPregnant: isPregnant ?? this.isPregnant,
+      band: band ?? this.band,
     );
   }
 
@@ -272,6 +322,28 @@ class MissionQueueItem {
   /// [compareInTier] for deterministic intra-tier order.
   static int compareByTierRank(MissionQueueItem a, MissionQueueItem b) =>
       a.tier.rank.compareTo(b.tier.rank);
+
+  /// Intra-band comparator implementing PRD §2.8 sort order within a band:
+  ///   modifier a → modifier b → no modifier
+  ///   then ANC programme > NCD (CD-1: ANC priority when modifier ties)
+  ///   then pregnant > non-pregnant
+  ///   then patient name ASC (stable tiebreaker)
+  static int compareInBand(MissionQueueItem a, MissionQueueItem b) {
+    // 1. Modifier: a(0) < b(1) < none(2) — best modifier wins (CD-1)
+    final modCmp = a.modifier.sortRank.compareTo(b.modifier.sortRank);
+    if (modCmp != 0) return modCmp;
+    // 2. ANC programme ranks above NCD when modifier is tied (CD-1)
+    final ancCmp = _ancRank(b).compareTo(_ancRank(a));
+    if (ancCmp != 0) return ancCmp;
+    // 3. Pregnant before non-pregnant (PRD §2.8 requirement)
+    final pregCmp = (b.isPregnant ? 0 : 1).compareTo(a.isPregnant ? 0 : 1);
+    if (pregCmp != 0) return pregCmp;
+    // 4. Stable alphabetical tiebreaker
+    return a.patientName.compareTo(b.patientName);
+  }
+
+  static int _ancRank(MissionQueueItem item) =>
+      item.programmes.contains(Programme.anc) ? 1 : 0;
 
   /// Intra-tier comparator: composite [priorityScore] DESC, then
   /// [patientName] ASC as deterministic tiebreaker. Use after grouping by

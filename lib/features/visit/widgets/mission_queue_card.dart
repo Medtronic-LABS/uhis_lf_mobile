@@ -1,14 +1,24 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/models/dashboard_tier.dart';
 import '../../../core/models/mission_queue_item.dart';
+import '../../../core/models/programme.dart';
 
 String _titleCase(String s) => s
     .split(' ')
     .map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1).toLowerCase())
     .join(' ');
+
+/// Formats age and gender initial into "22/F", "22", or "F" depending on
+/// which values are available.
+String _ageGender(int? age, String? genderInitial) {
+  if (age != null && genderInitial != null) return '$age/$genderInitial';
+  if (age != null) return '$age';
+  return genderInitial!;
+}
 
 /// Shared patient card widget for mission queue items.
 /// Used by both Dashboard (home) and Tasks screens.
@@ -33,9 +43,10 @@ class MissionQueueCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    final urgency = Theme.of(context).extension<UrgencyTheme>()!;
     final (dotLabel, dotColor) = isCompleted
         ? ('Done', tokens.statusSuccess)
-        : _statusDotStyle(item.tier, tokens);
+        : _statusDotStyle(item.tier, tokens, urgency);
 
     return Opacity(
       opacity: isCompleted ? 0.6 : 1.0,
@@ -103,10 +114,15 @@ class MissionQueueCard extends StatelessWidget {
                                     decoration: isCompleted ? TextDecoration.lineThrough : null,
                                   ),
                                 ),
-                                if (item.age != null)
+                                if (item.age != null || item.genderInitial != null)
                                   Text(
-                                    '${item.age}y',
-                                    style: AppTextStyles.worklistPatientMeta,
+                                    _ageGender(item.age, item.genderInitial),
+                                    style: const TextStyle(
+                                      fontFamily: 'NunitoSans',
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: Color(0xFF111827),
+                                    ),
                                   ),
                                 if (isCompleted)
                                   _VisitedBadge(tokens: tokens)
@@ -146,6 +162,37 @@ class MissionQueueCard extends StatelessWidget {
                                   ),
                                 ),
                               ),
+
+                            // ── TEMP DEBUG: priority signal ─────────────
+                            // TODO: remove before merge
+                            if (kDebugMode)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFFF3CD),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                        color: const Color(0xFFFFC107),
+                                        width: 0.5),
+                                  ),
+                                  child: Text(
+                                    'band:${item.band.name}  '
+                                    'mod:${item.modifier.name}  '
+                                    'tier:${item.tier.name}  '
+                                    'score:${item.priorityScore}\n'
+                                    'drivers: ${item.drivers.isEmpty ? "—" : item.drivers.join(", ")}',
+                                    style: const TextStyle(
+                                      fontFamily: 'monospace',
+                                      fontSize: 9,
+                                      color: Color(0xFF374151),
+                                      height: 1.5,
+                                    ),
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -165,18 +212,23 @@ class MissionQueueCard extends StatelessWidget {
   }
 
   /// Status dot style: (label, dotColor) keyed by tier.
-  (String, Color) _statusDotStyle(DashboardTier tier, LeapfrogColors tokens) {
+  (String, Color) _statusDotStyle(
+    DashboardTier tier,
+    LeapfrogColors tokens,
+    UrgencyTheme urgency,
+  ) {
+    final label = MissionDashboardStrings.statusPillForTier(tier);
     switch (tier) {
       case DashboardTier.critical:
-        return (MissionDashboardStrings.statusPillForTier(tier), tokens.statusSuccess);
-      case DashboardTier.dueToday:
-        return (MissionDashboardStrings.statusPillForTier(tier), tokens.statusSuccess);
+        return (label, urgency.visitNow);       // red   — "Now"
       case DashboardTier.overdue:
-        return (MissionDashboardStrings.statusPillForTier(tier), tokens.statusCritical);
+        return (label, urgency.today);           // amber — "Overdue"
+      case DashboardTier.dueToday:
+        return (label, tokens.statusSuccess);    // green — "Today"
       case DashboardTier.thisWeek:
-        return (MissionDashboardStrings.statusPillForTier(tier), tokens.statusWarning);
+        return (label, urgency.thisWeek);        // teal  — "This week"
       case DashboardTier.upcoming:
-        return (MissionDashboardStrings.statusPillForTier(tier), tokens.textMuted);
+        return (label, urgency.routine);         // grey  — "Routine"
     }
   }
 }
@@ -192,8 +244,7 @@ class MissionReasonBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
-    final (bg, fg) = _badgeColors(item.priority, tokens);
+    final (bg, fg) = _badgeColors(item.primaryProgramme);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
@@ -214,16 +265,22 @@ class MissionReasonBadge extends StatelessWidget {
     );
   }
 
-  (Color, Color) _badgeColors(MissionPriority p, LeapfrogColors tokens) {
-    switch (p) {
-      case MissionPriority.critical:
-        return (tokens.statusCritical.withValues(alpha: 0.15), tokens.statusCritical);
-      case MissionPriority.high:
-        return (tokens.statusWarning.withValues(alpha: 0.15), tokens.statusWarning);
-      case MissionPriority.medium:
-        return (tokens.brandNavy.withValues(alpha: 0.12), tokens.brandNavy);
-      case MissionPriority.low:
-        return (tokens.cardSurfaceMuted, tokens.textMuted);
+  /// v13 design palette — badge colour is keyed by programme, not priority,
+  /// so the label always matches the reason text it's painted around.
+  (Color, Color) _badgeColors(Programme programme) {
+    switch (programme) {
+      case Programme.anc:
+        return (const Color(0xFFFDF2F8), const Color(0xFF9D174D));
+      case Programme.pnc:
+        return (const Color(0xFFEEF0FF), const Color(0xFF4C1D95));
+      case Programme.imci:
+      case Programme.epi:
+      case Programme.ncd:
+        return (const Color(0xFFFFFBEB), const Color(0xFF92400E));
+      case Programme.tb:
+        return (const Color(0xFFF0FDF4), const Color(0xFF065F46));
+      default:
+        return (const Color(0xFFEEF0FF), const Color(0xFF1B2B5E));
     }
   }
 }
