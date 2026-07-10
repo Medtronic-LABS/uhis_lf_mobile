@@ -1165,13 +1165,16 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
     if (widget.vm.isSelected(code)) {
       widget.vm.removeSymptom(code);
     } else {
-      widget.vm.addSymptom(code);
-      // After selecting a symptom while the user is mid-search, clear the
-      // search so they can see the remaining unselected primary chips.
-      if (_query.isNotEmpty) {
-        _searchCtrl.clear();
-        FocusScope.of(context).unfocus();
-      }
+      _addSymptomAndClearSearch(code);
+    }
+  }
+
+  /// Adds [code] to the selected set and clears the search field if active.
+  void _addSymptomAndClearSearch(String code) {
+    widget.vm.addSymptom(code);
+    if (_query.isNotEmpty) {
+      _searchCtrl.clear();
+      FocusScope.of(context).unfocus();
     }
   }
 
@@ -1183,14 +1186,24 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
         final vm = widget.vm;
         final selected = vm.selectedSymptoms;
         final isSearching = _query.isNotEmpty;
-        // Secondary (cross-programme) symptoms only surface once the user has
-        // typed enough to be intentionally looking for them.
+
+        // Default grid: enrolled-programme symptoms only (or all primary codes
+        // when the patient has no enrolled programmes).
+        final defaultCodes = vm.enrolledProgrammeVocabCodes;
+
+        // Once the SK types 3+ chars, open up the full applicable vocab so
+        // cross-programme symptoms become discoverable via search.
         final searchPool = _query.length >= _secondaryThreshold
             ? vm.applicableVocabCodes
-            : vm.primaryVocabCodes;
-        final primaryCodes = vm.primaryVocabCodes;
+            : defaultCodes;
+
+        // Whether the enrolled-programme filter is active for this patient.
+        final hasEnrolledFilter =
+            vm.patientContext.activeProgrammes.isNotEmpty;
 
         // Determine which codes to show in the grid.
+        // Always include already-selected codes so symptoms picked via search
+        // remain visible after the search clears.
         final List<String> gridCodes;
         if (isSearching) {
           gridCodes = searchPool
@@ -1201,7 +1214,12 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
               )
               .toList();
         } else {
-          gridCodes = primaryCodes;
+          // Merge default codes with any selected codes that fall outside the
+          // default list (e.g. symptoms found via search from other programmes).
+          final extraSelected = selected
+              .where((c) => !defaultCodes.contains(c))
+              .toList();
+          gridCodes = [...defaultCodes, ...extraSelected];
         }
 
         return Container(
@@ -1269,7 +1287,11 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Text(
-                    SymptomPickerStrings.searchNoResults,
+                    // Distinguish intentional empty default (no search yet)
+                    // from a genuine no-results search response.
+                    isSearching
+                        ? SymptomPickerStrings.searchNoResults
+                        : SymptomPickerStrings.searchOnlyEmptyHint,
                     style: const TextStyle(
                       fontSize: 13,
                       color: AppColors.textMuted,
@@ -1293,7 +1315,29 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                       .toList(),
                 ),
 
-              // ── Footer: "type more" hint ────────────────────────────────
+              // ── Footer hint ──────────────────────────────────────────────
+              if (hasEnrolledFilter && !isSearching) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.search_rounded,
+                      size: 13,
+                      color: AppColors.textMuted,
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        SymptomPickerStrings.searchOtherProgramsHint,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 10),
             ],
           ),
@@ -1382,4 +1426,5 @@ class _PickerChip extends StatelessWidget {
     );
   }
 }
+
 

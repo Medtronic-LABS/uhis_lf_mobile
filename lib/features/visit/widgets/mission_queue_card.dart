@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
@@ -163,36 +162,39 @@ class MissionQueueCard extends StatelessWidget {
                                 ),
                               ),
 
-                            // ── TEMP DEBUG: priority signal ─────────────
-                            // TODO: remove before merge
-                            if (kDebugMode)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 6),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFFF3CD),
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(
-                                        color: const Color(0xFFFFC107),
-                                        width: 0.5),
-                                  ),
-                                  child: Text(
-                                    'band:${item.band.name}  '
-                                    'mod:${item.modifier.name}  '
-                                    'tier:${item.tier.name}  '
-                                    'score:${item.priorityScore}\n'
-                                    'drivers: ${item.drivers.isEmpty ? "—" : item.drivers.join(", ")}',
-                                    style: const TextStyle(
-                                      fontFamily: 'monospace',
-                                      fontSize: 9,
-                                      color: Color(0xFF374151),
-                                      height: 1.5,
-                                    ),
-                                  ),
-                                ),
-                              ),
+                            // Priority signal debug overlay (band/modifier/tier/score/
+                            // drivers). Commented out — not deleted — so it can be
+                            // restored quickly when investigating dashboard sort
+                            // behaviour. To re-enable, uncomment and gate on a local
+                            // `const bool _showPatientCardDebug = true;`.
+                            //
+                            // Padding(
+                            //   padding: const EdgeInsets.only(top: 6),
+                            //   child: Container(
+                            //     padding: const EdgeInsets.symmetric(
+                            //         horizontal: 6, vertical: 4),
+                            //     decoration: BoxDecoration(
+                            //       color: const Color(0xFFFFF3CD),
+                            //       borderRadius: BorderRadius.circular(4),
+                            //       border: Border.all(
+                            //           color: const Color(0xFFFFC107),
+                            //           width: 0.5),
+                            //     ),
+                            //     child: Text(
+                            //       'band:${item.band.name}  '
+                            //       'mod:${item.modifier.name}  '
+                            //       'tier:${item.tier.name}  '
+                            //       'score:${item.priorityScore}\n'
+                            //       'drivers: ${item.drivers.isEmpty ? "—" : item.drivers.join(", ")}',
+                            //       style: const TextStyle(
+                            //         fontFamily: 'monospace',
+                            //         fontSize: 9,
+                            //         color: Color(0xFF374151),
+                            //         height: 1.5,
+                            //       ),
+                            //     ),
+                            //   ),
+                            // ),
                           ],
                         ),
                       ),
