@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../household/enrollment/enrollment_entry_sheet.dart';
 
 /// Inline search field for the Mission Dashboard header.
 ///
@@ -36,7 +37,7 @@ class _DashboardSearchFieldState extends State<DashboardSearchField> {
         onChanged: widget.onChanged,
         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
         decoration: InputDecoration(
-          hintText: SearchStrings.dashboardSearchHint,
+          hintText: SearchStrings.barHint,
           hintStyle: const TextStyle(
             color: AppColors.textDisabled,
             fontSize: 14,
@@ -50,7 +51,19 @@ class _DashboardSearchFieldState extends State<DashboardSearchField> {
           suffixIcon: ValueListenableBuilder<TextEditingValue>(
             valueListenable: _ctrl,
             builder: (context, value, child) {
-              if (value.text.isEmpty) return const SizedBox.shrink();
+              if (value.text.isEmpty) {
+                return IconButton(
+                  icon: const Icon(
+                    Icons.qr_code_2_rounded,
+                    color: AppColors.pink,
+                    size: 20,
+                  ),
+                  tooltip: SearchStrings.scanNidTooltip,
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  onPressed: () => showEnrollmentEntrySheet(context),
+                );
+              }
               return IconButton(
                 icon: const Icon(Icons.close_rounded, size: 16, color: AppColors.textDisabled),
                 visualDensity: VisualDensity.compact,

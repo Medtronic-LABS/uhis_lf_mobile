@@ -283,7 +283,6 @@ abstract final class SearchStrings {
   static String householdNo(Object no) => 'No $no';
   static String memberCount(Object count) => '$count members';
   static const String scanNidTooltip = 'Scan NID card to find patient';
-  static const String dashboardSearchHint = 'Search patients (name, mobile, ID)';
 }
 
 /// App-specific fallback PIN: setup (create + confirm), unlock, and management.

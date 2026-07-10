@@ -285,6 +285,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// only the filter state changed.
   void _applyFilters() {
     if (!mounted) return;
+    if (_baseQueue.isEmpty) {
+      // Base queue not yet loaded — reload from repo, which populates _baseQueue
+      // and then applies active filters at the end of _loadFilteredQueue().
+      _loadMissionData();
+      return;
+    }
     setState(() {
       _refreshVersion++;
       _queueFuture = Future.value(_buildFilteredList(_baseQueue));
@@ -615,6 +621,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         // Pass 1 — guarantee [minPerTier] per non-empty tier,
                         // walking tiers in rank order.
                         for (final t in DashboardTier.values) {
+                          if (t == DashboardTier.upcoming) continue;
                           final list = byTier[t] ?? const <MissionQueueItem>[];
                           for (var i = 0;
                               i < list.length && i < minPerTier;
@@ -630,6 +637,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         // [maxPerTier] per tier so urgency variety stays
                         // visible.
                         for (final t in DashboardTier.values) {
+                          if (t == DashboardTier.upcoming) continue;
                           final list = byTier[t] ?? const <MissionQueueItem>[];
                           while (visible.length < visibleLimit &&
                               (perTierUsed[t] ?? 0) < maxPerTier &&
