@@ -998,8 +998,7 @@
             "fieldName": "Are you a regular smoker or have you been a regular smoker in the past 12 months?",
             "isMandatory": false,
             "id": "isRegularSmoker"
-          },
-          "cvdRisk"
+          }
         ]
       },
       {
@@ -1030,49 +1029,15 @@
         ]
       },
       {
-        "sectionId": "symptomsLog",
-        "title": "Symptoms",
-        "fieldRefs": [
-          {
-            "fieldName": "Has the Patient had any symptoms since the last follow up?",
-            "isMandatory": false,
-            "id": "hasSymptoms"
-          },
-          {
-            "fieldName": "Select Symptoms",
-            "isMandatory": false,
-            "id": "ncdSymptoms"
-          },
-          {
-            "fieldName": "Any new or worsening symptoms",
-            "inputType": 96.0,
-            "isMandatory": false,
-            "id": "newWorseningSymptoms"
-          },
-          {
-            "fieldName": "Are you taking medication regularly?",
-            "isMandatory": false,
-            "id": "compliance"
-          }
-        ]
-      },
-      {
         "sectionId": "ncdBiometrics",
         "title": "Biometrics",
         "fieldRefs": [
-          {
-            "id": "height",
-            "fieldName": "Height (cm)",
-            "inputType": 8192,
-            "isMandatory": false
-          },
           {
             "id": "weight",
             "fieldName": "Weight (kg)",
             "inputType": 8192,
             "isMandatory": false
-          },
-          "bmi"
+          }
         ]
       }
     ]
