@@ -560,16 +560,56 @@
         ]
       },
       {
-        "sectionId": "ancDangerSignsSection",
-        "title": "Symptoms",
+        "sectionId": "ancSpecificVitals",
+        "title": "Clinical Examination",
         "fieldRefs": [
-          "ancDangerSigns"
-        ]
-      },
-      {
-        "sectionId": "ancPhysicalExam",
-        "title": "Physical Examination",
-        "fieldRefs": [
+          {
+            "id": "bloodPressure",
+            "fieldName": "Blood Pressure",
+            "isMandatory": false
+          },
+          {
+            "id": "systolic",
+            "fieldName": "Systolic",
+            "inputType": 3,
+            "isMandatory": false
+          },
+          {
+            "id": "diastolic",
+            "fieldName": "Diastolic",
+            "inputType": 3,
+            "isMandatory": false
+          },
+          {
+            "id": "weight",
+            "fieldName": "Weight (kg)",
+            "inputType": 8192,
+            "isMandatory": false
+          },
+          {
+            "id": "height",
+            "fieldName": "Height (cm)",
+            "inputType": 8192,
+            "isMandatory": false
+          },
+          "bmi",
+          {
+            "id": "pulse",
+            "fieldName": "Pulse (bpm)",
+            "inputType": 3,
+            "isMandatory": false
+          },
+          {
+            "id": "urinaryAlbumin",
+            "fieldName": "Urine Protein (Albumin)",
+            "isMandatory": false
+          },
+          {
+            "id": "fundalHeight",
+            "fieldName": "Fundal Height (cm)",
+            "isMandatory": false
+          },
+          "fetalMovement",
           {
             "id": "temperature",
             "fieldName": "Temperature (°C)",
@@ -583,49 +623,36 @@
         ]
       },
       {
-        "sectionId": "obstetricExam",
-        "title": "Obstetric Examination",
-        "fieldRefs": [
-          {
-            "id": "fundalHeight",
-            "fieldName": "Fundal Height (cm)",
-            "isMandatory": false
-          },
-          "fetalMovement"
-        ]
-      },
-      {
         "sectionId": "labInvestigations",
         "title": "Laboratory Investigations",
         "fieldRefs": [
+          {
+            "id": "urinarySugar",
+            "fieldName": "Urinary Sugar",
+            "isMandatory": false
+          },
+          {
+            "id": "urinaryBilirubin",
+            "fieldName": "Urinary Bilirubin",
+            "isMandatory": false
+          },
           {
             "id": "hemoglobin",
             "fieldName": "Hemoglobin (g/dL)",
             "isMandatory": false
           },
-          "ancBloodGlucose",
-          {
-            "id": "urinaryAlbumin",
-            "fieldName": "Urine Protein (Albumin)",
-            "isMandatory": false
-          }
+          "ancBloodGlucose"
         ]
       },
       {
-        "sectionId": "vaccination",
-        "title": "Vaccination",
+        "sectionId": "vaccinationAndSupplements",
+        "title": "Vaccination & Supplements",
         "fieldRefs": [
           {
             "id": "ttTdCompleted",
             "fieldName": "TT/TD completed",
             "isMandatory": false
-          }
-        ]
-      },
-      {
-        "sectionId": "supplementsAndMedication",
-        "title": "Supplements & Medication",
-        "fieldRefs": [
+          },
           {
             "id": "folicAcidTotalConsumed",
             "fieldName": "Folic Acid consumed last month",
@@ -662,6 +689,13 @@
             "inputType": 3,
             "isMandatory": false
           }
+        ]
+      },
+      {
+        "sectionId": "ancDangerSignsSection",
+        "title": "Danger Signs",
+        "fieldRefs": [
+          "ancDangerSigns"
         ]
       },
       {
@@ -984,7 +1018,7 @@
       },
       {
         "sectionId": "bpLog",
-        "title": "Blood Pressure History",
+        "title": "Blood Pressure",
         "fieldRefs": [
           {
             "fieldName": "Have you been diagnosed with High Blood Pressure or Hypertension before?",
@@ -997,6 +1031,23 @@
             "id": "medicationFrequencyBp"
           },
           {
+            "id": "bloodPressure",
+            "fieldName": "Blood Pressure",
+            "isMandatory": false
+          },
+          {
+            "id": "systolic",
+            "fieldName": "Systolic",
+            "inputType": 3,
+            "isMandatory": false
+          },
+          {
+            "id": "diastolic",
+            "fieldName": "Diastolic",
+            "inputType": 3,
+            "isMandatory": false
+          },
+          {
             "fieldName": "Are you a regular smoker or have you been a regular smoker in the past 12 months?",
             "isMandatory": false,
             "id": "isRegularSmoker"
@@ -1006,7 +1057,7 @@
       },
       {
         "sectionId": "glucoseLog",
-        "title": "Diabetes History",
+        "title": "Diabetes",
         "fieldRefs": [
           {
             "fieldName": "Have you been diagnosed with High Blood Sugar or Diabetes before?",
@@ -1019,11 +1070,41 @@
             "id": "medicationFrequencyBg"
           },
           {
+            "id": "glucoseType",
+            "fieldName": "Type of Investigation",
+            "isMandatory": false
+          },
+          {
+            "id": "glucose",
+            "fieldName": "Blood Glucose",
+            "inputType": 8192,
+            "isMandatory": false
+          },
+          {
             "fieldName": "HbA1c (%)",
             "inputType": 8192.0,
             "isMandatory": false,
             "id": "hba1c"
           }
+        ]
+      },
+      {
+        "sectionId": "ncdBiometrics",
+        "title": "Biometrics",
+        "fieldRefs": [
+          {
+            "id": "height",
+            "fieldName": "Height (cm)",
+            "inputType": 8192,
+            "isMandatory": false
+          },
+          {
+            "id": "weight",
+            "fieldName": "Weight (kg)",
+            "inputType": 8192,
+            "isMandatory": false
+          },
+          "bmi"
         ]
       }
     ]

@@ -50,8 +50,9 @@ abstract final class UnifiedSectionRules {
   /// `commonVitals` is the unified section that captures Height, Weight, BMI,
   /// Blood Pressure (systolic/diastolic), Pulse, and Blood Glucose (type +
   /// value) exactly once regardless of which clinical programmes are active.
-  /// ANC-specific vitals (temperature, edema, fundal height) live in the
-  /// programme-scoped `ancSpecificVitals` section; NCD has no extra vitals.
+  /// ANC-specific fields (urinaryAlbumin, fundalHeight, fetalMovement,
+  /// temperature, edema) live in the programme-scoped `ancSpecificVitals`
+  /// section; NCD has no extra vitals beyond commonVitals.
   static const _vitalsSectionIds = {'commonVitals'};
 
   /// Semantic field equivalence groups.
