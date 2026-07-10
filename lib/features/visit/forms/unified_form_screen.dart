@@ -198,13 +198,21 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             }
             final merged = UnifiedSectionRules.mergedGroupDescriptions(allIds);
             // ignore: avoid_print
-            print('[Form] opening combined form — programmes: '
-                '${widget.activeFormTypes.join(', ')}');
+            print('[Form] ── section order (${widget.activeFormTypes.join('+')} · '
+                '${annotated.length} sections · $totalFields fields) ──────────');
             if (merged.isNotEmpty) {
               // ignore: avoid_print
-              print('[Form]   common fields captured once (merged): '
-                  '${merged.join(', ')}');
+              print('[Form]   merged (captured once): ${merged.join(', ')}');
             }
+            for (var i = 0; i < annotated.length; i++) {
+              final a = annotated[i];
+              final fieldIds = a.section.fieldRefs.map((r) => r.id).join(' · ');
+              // ignore: avoid_print
+              print('[Form]   ${i + 1}. [${a.section.sectionId}] '
+                  '${a.section.title} → $fieldIds');
+            }
+            // ignore: avoid_print
+            print('[Form] ────────────────────────────────────────────────────');
           }
           UnifiedSectionRules.debugLogSections(annotated, totalFields);
         }
@@ -1187,6 +1195,8 @@ class _SectionCard extends StatelessWidget {
     final hasBpPair = sectionIds.contains('systolic') &&
         sectionIds.contains('diastolic');
 
+    final hasBpPulseTriple = hasBpPair && sectionIds.contains('pulse');
+
     // Blood-glucose pair: fasting + random shown side-by-side.
     final hasGlucosePair = sectionIds.contains('fastingBloodSugar') &&
         sectionIds.contains('randomBloodSugar');
@@ -1211,6 +1221,8 @@ class _SectionCard extends StatelessWidget {
     final consumedIds = <String>{
       // When a combined BP card is rendered, skip the standalone fields.
       if (hasBpPair) ...const {'bloodPressure', 'diastolic'},
+      // When pulse is in the same section, absorb it into the BP card.
+      if (hasBpPulseTriple) 'pulse',
       // Combined glucose pair — skip the random field (fasting card drives).
       if (hasGlucosePair) 'randomBloodSugar',
       // Combined height+weight pair — skip weight (height card drives).
@@ -1233,13 +1245,21 @@ class _SectionCard extends StatelessWidget {
 
       Widget child;
       if (ref.id == 'systolic' && hasBpPair) {
-        // Emit the combined BP pair card once.
+        // Emit the combined BP card once (with optional pulse).
         if (!bpPairEmitted) {
           bpPairEmitted = true;
           final diaRef = section.fieldRefs.firstWhere((r) => r.id == 'diastolic');
           final diaDef = config.fields['diastolic'];
           if (diaDef != null) {
-            child = _bpPairCard(context, def, ref, diaDef, diaRef);
+            final pulseRef = hasBpPulseTriple
+                ? section.fieldRefs.cast<FieldRef?>().firstWhere(
+                    (r) => r?.id == 'pulse', orElse: () => null)
+                : null;
+            final pulseDef = pulseRef != null ? config.fields['pulse'] : null;
+            child = _bpPairCard(
+              context, def, ref, diaDef, diaRef,
+              pulseDef: pulseDef, pulseRef: pulseRef,
+            );
           } else {
             child = _fieldRow(context, def, ref);
           }
@@ -1317,28 +1337,39 @@ class _SectionCard extends StatelessWidget {
     );
   }
 
-  /// Renders a combined Blood Pressure card with systolic and diastolic inputs
-  /// side-by-side in one [_FieldShell], matching the v13 reference design.
+  /// Renders a combined Blood Pressure card with systolic / diastolic inputs
+  /// side-by-side in one [_FieldShell].  When [pulseDef] / [pulseRef] are
+  /// supplied the pulse input is appended in the same row after diastolic.
   Widget _bpPairCard(
     BuildContext context,
     FieldDef sysDef,
     FieldRef sysRef,
     FieldDef diaDef,
-    FieldRef diaRef,
-  ) {
+    FieldRef diaRef, {
+    FieldDef? pulseDef,
+    FieldRef? pulseRef,
+  }) {
     final hasError = validationErrors.contains(sysRef.id) ||
-        validationErrors.contains(diaRef.id);
+        validationErrors.contains(diaRef.id) ||
+        (pulseRef != null && validationErrors.contains(pulseRef.id));
     final isMandatory = sysDef.isMandatory ||
         sysRef.isMandatory ||
         diaDef.isMandatory ||
-        diaRef.isMandatory;
+        diaRef.isMandatory ||
+        (pulseDef?.isMandatory ?? false) ||
+        (pulseRef?.isMandatory ?? false);
     final bpStatus = _VitalStatusEval.bloodPressure(
       _VitalStatusEval.asInt(data.getValue('systolic')),
       _VitalStatusEval.asInt(data.getValue('diastolic')),
     );
+
+    final subLabel = pulseDef != null
+        ? '${UnifiedFormStrings.bpCardSubLabel} · ${UnifiedFormStrings.bpUnit}  ·  pulse bpm'
+        : '${UnifiedFormStrings.bpCardSubLabel} · ${UnifiedFormStrings.bpUnit}';
+
     return _FieldShell(
       label: UnifiedFormStrings.bpCardLabel,
-      subLabel: '${UnifiedFormStrings.bpCardSubLabel} · ${UnifiedFormStrings.bpUnit}',
+      subLabel: subLabel,
       emoji: '🩺',
       emojiBg: const Color(0xFFEEF0FF),
       isMandatory: isMandatory,
@@ -1351,7 +1382,7 @@ class _SectionCard extends StatelessWidget {
         children: [
           Expanded(
             child: _NumericField(
-              key: Key('unified_form_systolic_input'),
+              key: const Key('unified_form_systolic_input'),
               isDecimal: false,
               hint: UnifiedFormStrings.bpSystolicLabel,
               initialValue: data.getValue('systolic')?.toString(),
@@ -1365,7 +1396,7 @@ class _SectionCard extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.only(bottom: 10, left: 8, right: 8),
+            padding: const EdgeInsets.only(bottom: 10, left: 6, right: 6),
             child: Text(
               '/',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -1376,7 +1407,7 @@ class _SectionCard extends StatelessWidget {
           ),
           Expanded(
             child: _NumericField(
-              key: Key('unified_form_diastolic_input'),
+              key: const Key('unified_form_diastolic_input'),
               isDecimal: false,
               hint: UnifiedFormStrings.bpDiastolicLabel,
               initialValue: data.getValue('diastolic')?.toString(),
@@ -1389,6 +1420,33 @@ class _SectionCard extends StatelessWidget {
               },
             ),
           ),
+          if (pulseDef != null) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10, left: 6, right: 6),
+              child: Text(
+                '·',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: AppColors.textMuted,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ),
+            Expanded(
+              child: _NumericField(
+                key: const Key('unified_form_pulse_input'),
+                isDecimal: false,
+                hint: 'Pulse',
+                initialValue: data.getValue('pulse')?.toString(),
+                onChanged: (v) {
+                  if (v == null || v.isEmpty) {
+                    onFieldChanged('pulse', null);
+                  } else {
+                    onFieldChanged('pulse', int.tryParse(v) ?? double.tryParse(v) ?? v);
+                  }
+                },
+              ),
+            ),
+          ],
         ],
       ),
     );
