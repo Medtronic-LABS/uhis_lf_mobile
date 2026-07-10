@@ -13,7 +13,7 @@ WorklistEntry _entry({
   DateTime? nextDueAt,
   Band band = Band.band4,
   Modifier modifier = Modifier.none,
-  Set<Programme> programmes = const <Programme>{},
+  Set<Programme> programmes = const <Programme>{Programme.ncd},
 }) =>
     WorklistEntry(
       patientId: patientId,

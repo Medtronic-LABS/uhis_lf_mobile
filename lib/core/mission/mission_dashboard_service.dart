@@ -995,6 +995,9 @@ class MissionDashboardService {
     final candidates = <MissionQueueItem>[];
 
     for (final entry in input.worklistEntries) {
+      // Only enrolled patients belong on the Mission Dashboard — patients with
+      // no programme have no clinical context or follow-up schedule.
+      if (entry.programmes.isEmpty) continue;
       final age = entry.age ?? input.agesByPatientId[entry.patientId];
       // Use explicit follow-up dueAt when available; fall back to programme-
       // interval inference so patients without a follow-up record still surface
@@ -1009,13 +1012,6 @@ class MissionDashboardService {
         now: now,
       );
       if (classified == null) continue;
-      final score = _compositeScore(
-        patientId: entry.patientId,
-        age: age,
-        dueAt: effectiveDueAt,
-        input: input,
-        now: now,
-      );
       final base = _worklistToQueueItem(entry, now, input);
       // When nextDueAt was null but we inferred a due date, patch it into
       // the queue item so the card shows the correct "due" / "overdue" label.
@@ -1025,7 +1021,10 @@ class MissionDashboardService {
           ? now.difference(inferredDueAt).inDays.clamp(0, 999)
           : null;
       candidates.add(base.copyWith(
-        priorityScore: score,
+        // sortRankFor encodes the full 1a→1b→1→2a→…→4 sequence so
+        // compareInTier() (priorityScore DESC) produces the correct
+        // band+modifier order within each date tier.
+        priorityScore: sortRankFor(entry.band, entry.modifier),
         tier: classified.tier,
         drivers: classified.drivers,
         dueAt: inferredDueAt,
