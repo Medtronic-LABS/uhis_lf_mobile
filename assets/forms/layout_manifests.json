@@ -537,11 +537,6 @@
             "fieldName": "Pulse (bpm)",
             "inputType": 3,
             "isMandatory": false
-          },
-          {
-            "id": "glucoseType",
-            "fieldName": "Blood Glucose Type",
-            "isMandatory": false
           }
         ]
       }
@@ -990,33 +985,6 @@
     "clinicalWorkflowId": 21,
     "sections": [
       {
-        "sectionId": "symptomsLog",
-        "title": "Symptoms",
-        "fieldRefs": [
-          {
-            "fieldName": "Has the Patient had any symptoms since the last follow up?",
-            "isMandatory": false,
-            "id": "hasSymptoms"
-          },
-          {
-            "fieldName": "Select Symptoms",
-            "isMandatory": false,
-            "id": "ncdSymptoms"
-          },
-          {
-            "fieldName": "Any new or worsening symptoms",
-            "inputType": 96.0,
-            "isMandatory": false,
-            "id": "newWorseningSymptoms"
-          },
-          {
-            "fieldName": "Are you taking medication regularly?",
-            "isMandatory": false,
-            "id": "compliance"
-          }
-        ]
-      },
-      {
         "sectionId": "bpLog",
         "title": "Blood Pressure",
         "fieldRefs": [
@@ -1075,16 +1043,37 @@
             "isMandatory": false
           },
           {
-            "id": "glucose",
-            "fieldName": "Blood Glucose",
-            "inputType": 8192,
-            "isMandatory": false
-          },
-          {
             "fieldName": "HbA1c (%)",
             "inputType": 8192.0,
             "isMandatory": false,
             "id": "hba1c"
+          }
+        ]
+      },
+      {
+        "sectionId": "symptomsLog",
+        "title": "Symptoms",
+        "fieldRefs": [
+          {
+            "fieldName": "Has the Patient had any symptoms since the last follow up?",
+            "isMandatory": false,
+            "id": "hasSymptoms"
+          },
+          {
+            "fieldName": "Select Symptoms",
+            "isMandatory": false,
+            "id": "ncdSymptoms"
+          },
+          {
+            "fieldName": "Any new or worsening symptoms",
+            "inputType": 96.0,
+            "isMandatory": false,
+            "id": "newWorseningSymptoms"
+          },
+          {
+            "fieldName": "Are you taking medication regularly?",
+            "isMandatory": false,
+            "id": "compliance"
           }
         ]
       },

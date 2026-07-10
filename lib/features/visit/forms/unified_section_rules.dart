@@ -66,9 +66,11 @@ abstract final class UnifiedSectionRules {
   ///   so cataract does not show a duplicate BP widget.
   /// Height / Weight / BMI: commonVitals claims these; any programme-specific
   ///   section that also lists them gets deduplicated.
-  /// Glucose: commonVitals uses {glucoseType, glucose}; PNC uses
-  ///   {bloodSugar, fastingBloodSugar, randomBloodSugar}. Claiming either set
-  ///   pre-claims the other so glucose is only entered once.
+  /// Glucose: NCD glucoseLog uses {glucoseType} rendered as BloodGlucoseEntry
+  ///   which internally handles the glucose value too.  All aliases (bloodSugar,
+  ///   fastingBloodSugar, randomBloodSugar, ancBloodGlucose, glucose) are merged
+  ///   into one group so claiming glucoseType pre-claims every alias — preventing
+  ///   the bare `glucose` field from double-rendering alongside BloodGlucoseEntry.
   static const List<Set<String>> _semanticFieldGroups = [
     // ── Blood pressure ──────────────────────────────────────────────────────
     {'bloodPressure', 'systolic', 'diastolic', 'bpLogDetails'},
@@ -86,9 +88,17 @@ abstract final class UnifiedSectionRules {
     // ── Calcium supplements ─────────────────────────────────────────────────
     {'calciumTotalConsumed', 'calciumTabletsConsumed', 'calciumTablets'},
     {'calciumProvided', 'calciumTabletsProvided'},
-    // ── Blood glucose ────────────────────────────────────────────────────────
-    {'glucoseType', 'bloodSugar'},
-    {'glucose', 'fastingBloodSugar', 'randomBloodSugar', 'ancBloodGlucose'},
+    // ── Blood glucose (unified) ──────────────────────────────────────────────
+    // glucoseType renders as BloodGlucoseEntry (FBS/RBS toggle + value input);
+    // all value-field aliases are in the same group so none double-render.
+    {
+      'glucoseType',
+      'glucose',
+      'bloodSugar',
+      'fastingBloodSugar',
+      'randomBloodSugar',
+      'ancBloodGlucose',
+    },
   ];
 
   /// Returns a human-readable description of which semantic groups had members
@@ -101,8 +111,14 @@ abstract final class UnifiedSectionRules {
       {'ifaProvided', 'ifaTabletsProvided'}: 'IFA provided',
       {'calciumTotalConsumed', 'calciumTabletsConsumed', 'calciumTablets'}: 'Calcium consumed',
       {'calciumProvided', 'calciumTabletsProvided'}: 'Calcium provided',
-      {'glucoseType', 'bloodSugar'}: 'Glucose type',
-      {'glucose', 'fastingBloodSugar', 'randomBloodSugar', 'ancBloodGlucose'}: 'Glucose value',
+      {
+        'glucoseType',
+        'glucose',
+        'bloodSugar',
+        'fastingBloodSugar',
+        'randomBloodSugar',
+        'ancBloodGlucose',
+      }: 'Blood glucose (type + value)',
     };
     final merged = <String>[];
     for (final entry in groupLabels.entries) {
