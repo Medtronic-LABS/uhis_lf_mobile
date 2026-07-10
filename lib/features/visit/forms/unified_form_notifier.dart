@@ -307,29 +307,51 @@ class UnifiedFormNotifier extends ChangeNotifier {
     final rejected = <String>[];
     var appliedAny = false;
 
+    debugPrint(
+        '<==================== ASR FORM FILL: ${fields.length} field(s) '
+        'incoming ====================>');
+
     for (final field in fields) {
-      if (_isSkOwned(field.fieldId)) continue;
+      if (_isSkOwned(field.fieldId)) {
+        debugPrint('<----- asr SKIPPED  [${field.fieldId}] SK-owned '
+            '(${_fieldSources[field.fieldId]?.name}) — value "${field.value}" '
+            'NOT applied ----->');
+        continue;
+      }
 
       final def = fieldDefs[field.fieldId];
       if (def == null) {
+        debugPrint('<----- asr REJECTED [${field.fieldId}] unknown field — '
+            'value "${field.value}" ----->');
         rejected.add('${field.fieldId}: unknown field');
         continue;
       }
 
       final validated = _validateAgainstDef(field.value, def);
       if (validated == null) {
+        debugPrint('<----- asr REJECTED [${field.fieldId}] "${field.value}" '
+            'failed ${def.widgetHint.name} validation '
+            '(allowed: ${def.options.map((o) => o.id).join('/')}) ----->');
         rejected.add('${def.label}: "${field.value}" not a valid value');
         continue;
       }
 
+      final previous = _data.getValue(field.fieldId);
       _data = _data.setValue(field.fieldId, validated);
       _fieldSources[field.fieldId] = FieldSource.aiPending;
       _fieldSourceSegments[field.fieldId] = field.sourceSegment;
       appliedAny = true;
+      debugPrint('<----- asr APPLIED  [${field.fieldId}] = $validated '
+          '${previous == null ? '' : '(was: $previous) '}'
+          'src="${field.sourceSegment ?? '-'}" ----->');
       if (field.fieldId == 'height' || field.fieldId == 'weight') {
         _recomputeBmi();
       }
     }
+
+    debugPrint('<==================== ASR FORM FILL done: '
+        '${fields.length - rejected.length} applied, '
+        '${rejected.length} rejected ====================>');
 
     if (appliedAny) {
       notifyListeners();

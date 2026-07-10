@@ -157,8 +157,12 @@ class _Step2AsrBannerState extends State<Step2AsrBanner> {
     }
   }
 
-  Future<void> _start() =>
-      _ctrl.start(assessmentType: _assessmentType);
+  Future<void> _start() {
+    debugPrint('<<========== ASR SESSION START — assessmentType='
+        '$_assessmentType forms=${widget.activeFormTypes.join('+')} '
+        '==========>>');
+    return _ctrl.start(assessmentType: _assessmentType);
+  }
 
   @override
   Widget build(BuildContext context) {
