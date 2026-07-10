@@ -7,7 +7,10 @@ import '../../../core/theme/app_theme.dart';
 import '../../realtime_asr/realtime_asr_controller.dart';
 import '../../scribe/form_field_schema_builder.dart';
 import '../../scribe/models/ai_extracted_field.dart';
+import '../../scribe/scribe_controller.dart';
 import '../../scribe/scribe_permission_service.dart';
+import '../../scribe/scribe_session.dart';
+import 'form_config.dart';
 import 'unified_form_notifier.dart';
 
 /// Ambient-listening banner for the Step 2 assessment form.
@@ -38,6 +41,16 @@ class Step2AsrBanner extends StatefulWidget {
 class _Step2AsrBannerState extends State<Step2AsrBanner> {
   late final RealtimeAsrController _ctrl;
   FormPrefillResult? _lastApplied;
+
+  /// Validation rejections from the last applied extraction, shown alongside
+  /// the server's own unmapped findings so nothing is dropped silently.
+  List<String> _rejectedFields = const [];
+
+  /// Server assessmentType for this visit's programme mix, or null when
+  /// auto-fill is not yet supported (e.g. PNC — see
+  /// [FormFieldSchemaBuilder.assessmentTypeFor]).
+  String? get _assessmentType =>
+      FormFieldSchemaBuilder.assessmentTypeFor(widget.activeFormTypes);
 
   @override
   void initState() {
@@ -90,17 +103,17 @@ class _Step2AsrBannerState extends State<Step2AsrBanner> {
   void _applyToForm(FormPrefillResult fill) {
     if (!mounted) return;
     final notifier = context.read<UnifiedFormNotifier>();
-    final fieldMap = <String, dynamic>{};
-    for (final f in fill.fields) {
-      // Only apply fields the AI is reasonably confident about.
-      if (f.confidence >= 0.65 && f.value != null) {
-        fieldMap[f.fieldId] = f.value;
-      }
-    }
-    if (fieldMap.isNotEmpty) {
-      debugPrint('[Step2ASR] applying ${fieldMap.length} field(s): ${fieldMap.keys.join(', ')}');
-      notifier.applyScribePrefill(fieldMap);
-    }
+    // applyAiPrefill is the safety gate: validates each value against the
+    // canonical field_library schema, never overwrites SK-typed values, and
+    // marks applied fields aiPending so the form shows the AI badge.
+    final rejected = notifier.applyAiPrefill(
+      fill.fields.where((f) => f.value != null).toList(),
+      fieldDefs: FormConfig.instance.fields,
+    );
+    _rejectedFields = rejected;
+    debugPrint('[Step2ASR] applied ${fill.fields.length - rejected.length}'
+        '/${fill.fields.length} field(s)'
+        '${rejected.isEmpty ? '' : ' — rejected: ${rejected.join(' | ')}'}');
     if (fill.unmappedFindings.isNotEmpty) {
       debugPrint('[Step2ASR] unmapped: ${fill.unmappedFindings.join(' | ')}');
     }
@@ -144,12 +157,24 @@ class _Step2AsrBannerState extends State<Step2AsrBanner> {
     }
   }
 
+  Future<void> _start() =>
+      _ctrl.start(assessmentType: _assessmentType);
+
   @override
   Widget build(BuildContext context) {
+    final assessmentType = _assessmentType;
+    // Auto-fill not yet supported for this programme mix (e.g. PNC) —
+    // render nothing rather than a banner that fills the wrong subset.
+    if (assessmentType == null) return const SizedBox.shrink();
+
     final state = _ctrl.state;
     final isActive = _ctrl.isActive;
     final fill = _ctrl.formFill;
     final hasFill = fill != null;
+    // Mutual mic exclusion: the batch SOAP recorder (AiScribeBanner) and this
+    // live session cannot both own the microphone.
+    final scribeBusy = context.watch<ScribeController>().session.state ==
+        ScribeState.recording;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
@@ -170,13 +195,18 @@ class _Step2AsrBannerState extends State<Step2AsrBanner> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          _Header(state: state, isActive: isActive, ctrl: _ctrl),
+          _Header(
+            state: state,
+            isActive: isActive,
+            ctrl: _ctrl,
+            onStart: scribeBusy ? null : _start,
+          ),
           if (isActive) ...[
             const SizedBox(height: 10),
             _LivePanel(ctrl: _ctrl, fill: fill),
           ] else if (hasFill) ...[
             const SizedBox(height: 8),
-            _ResultSummary(fill: fill),
+            _ResultSummary(fill: fill, rejectedFields: _rejectedFields),
           ],
         ],
       ),
@@ -191,11 +221,16 @@ class _Header extends StatelessWidget {
     required this.state,
     required this.isActive,
     required this.ctrl,
+    required this.onStart,
   });
 
   final RealtimeAsrState state;
   final bool isActive;
   final RealtimeAsrController ctrl;
+
+  /// Start callback — null while the batch scribe owns the mic (disables the
+  /// toggle rather than letting two sessions fight over the recorder).
+  final Future<void> Function()? onStart;
 
   @override
   Widget build(BuildContext context) {
@@ -244,7 +279,7 @@ class _Header extends StatelessWidget {
           ),
         ),
         // Start / Stop button
-        _ToggleButton(state: state, ctrl: ctrl),
+        _ToggleButton(state: state, ctrl: ctrl, onStart: onStart),
       ],
     );
   }
@@ -268,10 +303,15 @@ class _Header extends StatelessWidget {
 // ── Start / Stop toggle ───────────────────────────────────────────────────────
 
 class _ToggleButton extends StatelessWidget {
-  const _ToggleButton({required this.state, required this.ctrl});
+  const _ToggleButton({
+    required this.state,
+    required this.ctrl,
+    required this.onStart,
+  });
 
   final RealtimeAsrState state;
   final RealtimeAsrController ctrl;
+  final Future<void> Function()? onStart;
 
   @override
   Widget build(BuildContext context) {
@@ -291,7 +331,7 @@ class _ToggleButton extends StatelessWidget {
           ? null
           : isListening
               ? ctrl.stop
-              : ctrl.start,
+              : onStart,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
@@ -433,13 +473,18 @@ class _LivePanel extends StatelessWidget {
 // ── Result summary (shown when idle after a session) ─────────────────────────
 
 class _ResultSummary extends StatelessWidget {
-  const _ResultSummary({required this.fill});
+  const _ResultSummary({required this.fill, required this.rejectedFields});
 
   final FormPrefillResult fill;
 
+  /// Client-side validation rejections, shown with the server's own
+  /// unmapped findings.
+  final List<String> rejectedFields;
+
   @override
   Widget build(BuildContext context) {
-    final applied = fill.fields.where((f) => f.confidence >= 0.65).toList();
+    final applied = fill.fields.where((f) => f.value != null).toList();
+    final unmapped = [...fill.unmappedFindings, ...rejectedFields];
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -477,10 +522,10 @@ class _ResultSummary extends StatelessWidget {
                   .toList(),
             ),
           ],
-          if (fill.unmappedFindings.isNotEmpty) ...[
+          if (unmapped.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(
-              '${Step2AsrStrings.unmappedLabel} ${fill.unmappedFindings.join(', ')}',
+              '${Step2AsrStrings.unmappedLabel} ${unmapped.join(', ')}',
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.6),
                 fontSize: 10,
@@ -513,18 +558,17 @@ class _FieldChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final confidenceColor = field.confidenceLevel == AIConfidenceLevel.high
-        ? AppColors.statusSuccess
-        : field.confidenceLevel == AIConfidenceLevel.medium
-            ? AppColors.slaOverdueText
-            : AppColors.statusCritical;
-
+    // Uniform styling — the server does not produce a real per-field
+    // confidence signal, so the chip shows binary "AI-filled" provenance
+    // rather than a fabricated confidence colour.
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: confidenceColor.withValues(alpha: 0.6)),
+        border: Border.all(
+          color: AppColors.statusSuccess.withValues(alpha: 0.6),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -532,8 +576,8 @@ class _FieldChip extends StatelessWidget {
           Container(
             width: 6,
             height: 6,
-            decoration: BoxDecoration(
-              color: confidenceColor,
+            decoration: const BoxDecoration(
+              color: AppColors.statusSuccess,
               shape: BoxShape.circle,
             ),
           ),

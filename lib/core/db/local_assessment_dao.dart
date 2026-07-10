@@ -873,6 +873,7 @@ class AssessmentDraftRow {
     this.skippedPathways,
     required this.fieldValues,
     required this.sectionStatus,
+    this.fieldSources,
     this.createdAt,
     this.updatedAt,
   });
@@ -898,6 +899,11 @@ class AssessmentDraftRow {
   /// JSON map of sectionId → status (`'done'` or `'pending'`).
   final String sectionStatus;
 
+  /// JSON `{"sources": {fieldId: FieldSource.name}, "segments": {fieldId: quote}}`
+  /// tracking which draft values were AI-filled (nullable — absent on rows
+  /// written before the AI-provenance migration).
+  final String? fieldSources;
+
   /// Unix epoch ms — set on first insert.
   final int? createdAt;
 
@@ -912,6 +918,7 @@ class AssessmentDraftRow {
         'skipped_pathways': skippedPathways,
         'field_values': fieldValues,
         'section_status': sectionStatus,
+        'field_sources': fieldSources,
         'created_at': createdAt,
         'updated_at': updatedAt,
       };
@@ -925,6 +932,7 @@ class AssessmentDraftRow {
         skippedPathways: row['skipped_pathways'] as String?,
         fieldValues: row['field_values'] as String,
         sectionStatus: row['section_status'] as String,
+        fieldSources: row['field_sources'] as String?,
         createdAt: row['created_at'] as int?,
         updatedAt: row['updated_at'] as int?,
       );
@@ -937,6 +945,7 @@ class AssessmentDraftRow {
     String? skippedPathways,
     String? fieldValues,
     String? sectionStatus,
+    String? fieldSources,
     int? createdAt,
     int? updatedAt,
   }) =>
@@ -948,6 +957,7 @@ class AssessmentDraftRow {
         skippedPathways: skippedPathways ?? this.skippedPathways,
         fieldValues: fieldValues ?? this.fieldValues,
         sectionStatus: sectionStatus ?? this.sectionStatus,
+        fieldSources: fieldSources ?? this.fieldSources,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );
@@ -1036,6 +1046,7 @@ class AssessmentDraftDao {
         skipped_pathways TEXT,
         field_values TEXT NOT NULL,
         section_status TEXT NOT NULL,
+        field_sources TEXT,
         created_at INTEGER,
         updated_at INTEGER
       )

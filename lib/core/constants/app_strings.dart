@@ -220,6 +220,7 @@ abstract final class Step2AsrStrings {
   static const String tapToEdit =
       'Review highlighted fields in the form below.';
   static const String unmappedLabel = 'Not matched:';
+  static const String aiFilledBadge = 'AI · verify';
 
   static String filledCount(int n) => '$n $fieldsFilled';
 }
