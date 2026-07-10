@@ -548,13 +548,6 @@
     "clinicalWorkflowId": 4,
     "sections": [
       {
-        "sectionId": "pregnancyOverview",
-        "title": "Pregnancy Summary",
-        "fieldRefs": [
-          "pregnancyProfile"
-        ]
-      },
-      {
         "sectionId": "ancSpecificVitals",
         "title": "Clinical Examination",
         "fieldRefs": [
@@ -582,19 +575,6 @@
             "isMandatory": false
           },
           {
-            "id": "height",
-            "fieldName": "Height (cm)",
-            "inputType": 8192,
-            "isMandatory": false
-          },
-          "bmi",
-          {
-            "id": "pulse",
-            "fieldName": "Pulse (bpm)",
-            "inputType": 3,
-            "isMandatory": false
-          },
-          {
             "id": "urinaryAlbumin",
             "fieldName": "Urine Protein (Albumin)",
             "isMandatory": false
@@ -604,17 +584,7 @@
             "fieldName": "Fundal Height (cm)",
             "isMandatory": false
           },
-          "fetalMovement",
-          {
-            "id": "temperature",
-            "fieldName": "Temperature (°C)",
-            "isMandatory": false
-          },
-          {
-            "id": "edema",
-            "fieldName": "Edema",
-            "isMandatory": false
-          }
+          "fetalMovement"
         ]
       },
       {
@@ -636,7 +606,16 @@
             "fieldName": "Hemoglobin (g/dL)",
             "isMandatory": false
           },
-          "ancBloodGlucose"
+          {
+            "id": "fastingBloodSugar",
+            "fieldName": "Fasting Blood Sugar (mmol/L)",
+            "isMandatory": false
+          },
+          {
+            "id": "randomBloodSugar",
+            "fieldName": "Random Blood Sugar (mmol/L)",
+            "isMandatory": false
+          }
         ]
       },
       {

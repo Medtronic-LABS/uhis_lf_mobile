@@ -88,17 +88,17 @@ abstract final class UnifiedSectionRules {
     // ── Calcium supplements ─────────────────────────────────────────────────
     {'calciumTotalConsumed', 'calciumTabletsConsumed', 'calciumTablets'},
     {'calciumProvided', 'calciumTabletsProvided'},
-    // ── Blood glucose (unified) ──────────────────────────────────────────────
-    // glucoseType renders as BloodGlucoseEntry (FBS/RBS toggle + value input);
-    // all value-field aliases are in the same group so none double-render.
-    {
-      'glucoseType',
-      'glucose',
-      'bloodSugar',
-      'fastingBloodSugar',
-      'randomBloodSugar',
-      'ancBloodGlucose',
-    },
+    // ── Blood glucose — NCD combined widget ────────────────────────────────
+    // glucoseType renders as BloodGlucoseEntry (toggle + numeric value).
+    // glucose / bloodSugar / ancBloodGlucose are aliases for the same
+    // combined concept; claiming any one pre-claims the rest.
+    {'glucoseType', 'glucose', 'bloodSugar', 'ancBloodGlucose'},
+    // ── ANC / PNC discrete blood-sugar tests (distinct, not deduplicated) ──
+    // fastingBloodSugar and randomBloodSugar are separate lab results and
+    // must both render; they each get their own singleton group so they are
+    // deduplicated only if the exact same field appears in two active forms.
+    {'fastingBloodSugar'},
+    {'randomBloodSugar'},
   ];
 
   /// Returns a human-readable description of which semantic groups had members
@@ -111,14 +111,7 @@ abstract final class UnifiedSectionRules {
       {'ifaProvided', 'ifaTabletsProvided'}: 'IFA provided',
       {'calciumTotalConsumed', 'calciumTabletsConsumed', 'calciumTablets'}: 'Calcium consumed',
       {'calciumProvided', 'calciumTabletsProvided'}: 'Calcium provided',
-      {
-        'glucoseType',
-        'glucose',
-        'bloodSugar',
-        'fastingBloodSugar',
-        'randomBloodSugar',
-        'ancBloodGlucose',
-      }: 'Blood glucose (type + value)',
+      {'glucoseType', 'glucose', 'bloodSugar', 'ancBloodGlucose'}: 'Blood glucose (NCD combined)',
     };
     final merged = <String>[];
     for (final entry in groupLabels.entries) {
