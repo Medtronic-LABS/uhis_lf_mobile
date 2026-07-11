@@ -398,6 +398,7 @@ class AppDatabase {
       )''');
 
     // v9 — Assessment draft table for offline-first sectioned assessment flow.
+    // v24 added field_sources (AI-fill provenance).
     await db.execute('''
       CREATE TABLE $tableAssessmentDraft (
         encounter_id TEXT PRIMARY KEY,
@@ -407,6 +408,7 @@ class AppDatabase {
         skipped_pathways TEXT,
         field_values TEXT NOT NULL,
         section_status TEXT NOT NULL,
+        field_sources TEXT,
         created_at INTEGER,
         updated_at INTEGER
       )''');

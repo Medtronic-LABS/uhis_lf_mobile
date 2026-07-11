@@ -29,10 +29,16 @@ class Step2AsrBanner extends StatefulWidget {
   const Step2AsrBanner({
     super.key,
     required this.activeFormTypes,
+    required this.fieldDefs,
   });
 
   /// Programme name strings driving the current form (e.g. `['ncd', 'anc']`).
   final List<String> activeFormTypes;
+
+  /// Canonical field definitions from the loaded [FormConfig] — passed in
+  /// explicitly (the screen loads its own config instance; the
+  /// [FormConfig.instance] singleton is not populated on this path).
+  final Map<String, FieldDef> fieldDefs;
 
   @override
   State<Step2AsrBanner> createState() => _Step2AsrBannerState();
@@ -95,7 +101,13 @@ class _Step2AsrBannerState extends State<Step2AsrBanner> {
     // Apply each new extraction result exactly once.
     if (fill != null && !identical(fill, _lastApplied)) {
       _lastApplied = fill;
-      _applyToForm(fill);
+      try {
+        _applyToForm(fill);
+      } catch (e, st) {
+        // Surface loudly — a silent failure here means extracted values
+        // never reach the form while the banner keeps looking healthy.
+        debugPrint('<----- asr APPLY FAILED: $e ----->\n$st');
+      }
     }
     setState(() {});
   }
@@ -108,7 +120,7 @@ class _Step2AsrBannerState extends State<Step2AsrBanner> {
     // marks applied fields aiPending so the form shows the AI badge.
     final rejected = notifier.applyAiPrefill(
       fill.fields.where((f) => f.value != null).toList(),
-      fieldDefs: FormConfig.instance.fields,
+      fieldDefs: widget.fieldDefs,
     );
     _rejectedFields = rejected;
     debugPrint('[Step2ASR] applied ${fill.fields.length - rejected.length}'

@@ -299,6 +299,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
                 AppSpacing.xxxl, AppSpacing.md, AppSpacing.xxxl, 0),
               child: Step2AsrBanner(
                 activeFormTypes: widget.activeFormTypes,
+                fieldDefs: _config!.fields,
               ),
             ),
             // ── Assessment form sections + submit button ────────────────────
