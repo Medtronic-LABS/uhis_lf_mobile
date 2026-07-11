@@ -8,9 +8,9 @@ import '../widgets/form_fields/radio_form_field.dart';
 import 'canonical_visit_data.dart';
 import 'form_config.dart';
 import 'form_field_visuals.dart';
+import '../../scribe/form_field_schema_builder.dart';
 import '../../scribe/models/ai_extracted_field.dart';
 import '../../scribe/widgets/ai_scribe_banner.dart';
-import 'step2_asr_banner.dart';
 import 'triage_symptom_mapper.dart';
 import 'unified_form_notifier.dart';
 import 'unified_section_rules.dart';
@@ -277,8 +277,10 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
 
         return Column(
           children: [
-            // ── Step 2 AI Scribe banner — same widget as Step 1 ────────────
-            // Horizontally inset to match the ListView's content alignment.
+            // ── Step 2 AI Scribe banner — the SAME widget as Step 1, in
+            // live-first mode. When the programme mix supports auto-fill
+            // (NCD/ANC), extractions come back as form_fill and are written
+            // straight into the form through the validated prefill gate.
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 AppSpacing.xxxl, AppSpacing.xl, AppSpacing.xxxl, 0),
@@ -287,19 +289,22 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
                 patientId: notifier.patientId,
                 isFemale: widget.activeFormTypes.contains('anc') ||
                     widget.activeFormTypes.contains('pnc'),
+                tapStartsLiveAsr: true,
+                assessmentType: FormFieldSchemaBuilder.assessmentTypeFor(
+                    widget.activeFormTypes),
+                onFormFill: (fill) {
+                  final rejected = notifier.applyAiPrefill(
+                    fill.fields.where((f) => f.value != null).toList(),
+                    fieldDefs: _config!.fields,
+                  );
+                  if (rejected.isNotEmpty) {
+                    debugPrint(
+                        '[Step2ASR] rejected: ${rejected.join(' | ')}');
+                  }
+                },
                 // VisitFormScreen watches ScribeController state and auto-opens
                 // the SOAP review sheet when reviewReady — no action needed here.
                 onReviewReady: (_) {},
-              ),
-            ),
-            // ── Realtime ASR ambient form-fill (NCD / ANC visits) ───────────
-            // Renders nothing when the programme mix isn't supported yet.
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.xxxl, AppSpacing.md, AppSpacing.xxxl, 0),
-              child: Step2AsrBanner(
-                activeFormTypes: widget.activeFormTypes,
-                fieldDefs: _config!.fields,
               ),
             ),
             // ── Assessment form sections + submit button ────────────────────

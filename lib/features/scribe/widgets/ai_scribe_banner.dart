@@ -6,6 +6,7 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../realtime_asr/models/realtime_clinical_fields.dart';
 import '../../realtime_asr/realtime_asr_controller.dart';
+import '../models/ai_extracted_field.dart';
 import '../scribe_controller.dart';
 import '../scribe_mic_waveform.dart';
 import '../scribe_permission_service.dart';
@@ -39,6 +40,8 @@ class AiScribeBanner extends StatefulWidget {
     required this.onReviewReady,
     this.onLiveFields,
     this.tapStartsLiveAsr = false,
+    this.assessmentType,
+    this.onFormFill,
   });
 
   final String encounterId;
@@ -59,6 +62,16 @@ class AiScribeBanner extends StatefulWidget {
   /// instead of a batch recording.
   final bool tapStartsLiveAsr;
 
+  /// Server assessment type for Step 2 form auto-fill (`ncd`/`anc`) — when
+  /// set, live extractions come back as validated [FormPrefillResult]s and
+  /// are delivered via [onFormFill] instead of [onLiveFields].
+  /// Null (Step 1) keeps the generic symptom-extraction behaviour.
+  final String? assessmentType;
+
+  /// Called each time live ASR delivers a form-fill extraction (only fires
+  /// when [assessmentType] is set).
+  final void Function(FormPrefillResult fill)? onFormFill;
+
   @override
   State<AiScribeBanner> createState() => _AiScribeBannerState();
 }
@@ -77,6 +90,7 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
 
   late final RealtimeAsrController _liveCtrl;
   RealtimeClinicalFields? _lastAppliedLiveFields;
+  FormPrefillResult? _lastAppliedFormFill;
 
   @override
   void initState() {
@@ -116,6 +130,18 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
       _lastAppliedLiveFields = fields;
       widget.onLiveFields?.call(fields, _liveCtrl.fullTranscript);
     }
+    // Step 2 form-fill replies — apply each new extraction exactly once.
+    final fill = _liveCtrl.formFill;
+    if (fill != null && !identical(fill, _lastAppliedFormFill)) {
+      _lastAppliedFormFill = fill;
+      try {
+        widget.onFormFill?.call(fill);
+      } catch (e, st) {
+        // Surface loudly — a silent failure here means extracted values
+        // never reach the form while the banner keeps looking healthy.
+        debugPrint('<----- asr APPLY FAILED: $e ----->\n$st');
+      }
+    }
     setState(() {});
   }
 
@@ -126,7 +152,11 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
         _resultConsumed = false;
       });
     }
-    _liveCtrl.start();
+    if (widget.assessmentType != null) {
+      debugPrint('<<========== ASR SESSION START — assessmentType='
+          '${widget.assessmentType} ==========>>');
+    }
+    _liveCtrl.start(assessmentType: widget.assessmentType);
   }
 
   void _onScribeChanged() {
