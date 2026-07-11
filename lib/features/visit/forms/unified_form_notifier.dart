@@ -369,12 +369,63 @@ class UnifiedFormNotifier extends ChangeNotifier {
     debugPrint('<==================== ASR FORM FILL done: '
         '${fields.length - rejected.length} applied, '
         '${rejected.length} rejected ====================>');
+    _logAsrCoverage(fieldDefs);
 
     if (appliedAny) {
       notifyListeners();
       _saveDraft();
     }
     return rejected;
+  }
+
+  /// Widget kinds that carry a voice-fillable value — mirrors the server
+  /// generator's skip rules (layout labels, computed BMI, date pickers and
+  /// composite widgets are never ASR targets).
+  static const Set<WidgetHint> _extractableHints = {
+    WidgetHint.radioGroup,
+    WidgetHint.dialogCheckbox,
+    WidgetHint.spinner,
+    WidgetHint.bloodGlucoseEntry,
+    WidgetHint.numeric,
+    WidgetHint.bpField,
+  };
+
+  /// Per-programme ASR coverage snapshot after each extraction:
+  ///   <---- asr COVERAGE [anc]: 8/24 AI-filled · 2 manual · 14 empty ---->
+  ///   <---- asr MISSING  [anc]: hemoglobin, fundalHeight, … ---->
+  void _logAsrCoverage(Map<String, FieldDef> fieldDefs) {
+    for (final programme in _activeFormTypes) {
+      final targets = fieldDefs.values
+          .where((d) =>
+              d.programmeIds.contains(programme) &&
+              _extractableHints.contains(d.widgetHint) &&
+              d.id != 'bmi')
+          .toList();
+      if (targets.isEmpty) continue;
+
+      final aiFilled = <String>[];
+      final manual = <String>[];
+      final empty = <String>[];
+      for (final d in targets) {
+        final hasValue = _data.getValue(d.id) != null;
+        final source = _fieldSources[d.id];
+        if (hasValue &&
+            (source == FieldSource.aiPending ||
+                source == FieldSource.aiModified)) {
+          aiFilled.add(d.id);
+        } else if (hasValue) {
+          manual.add(d.id);
+        } else {
+          empty.add(d.id);
+        }
+      }
+      debugPrint('<---- asr COVERAGE [$programme]: '
+          '${aiFilled.length}/${targets.length} AI-filled · '
+          '${manual.length} manual · ${empty.length} empty ---->');
+      if (empty.isNotEmpty) {
+        debugPrint('<---- asr MISSING  [$programme]: ${empty.join(', ')} ---->');
+      }
+    }
   }
 
   /// True when the SK typed or edited this field — AI must never overwrite.
