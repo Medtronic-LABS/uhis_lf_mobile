@@ -347,6 +347,23 @@ class UnifiedFormNotifier extends ChangeNotifier {
       if (field.fieldId == 'height' || field.fieldId == 'weight') {
         _recomputeBmi();
       }
+      // The BP card renders from the flat systolic/diastolic/pulse keys,
+      // not the bpLogDetails array (which the payload mapper consumes) —
+      // mirror the latest reading so the fill is visible on-screen.
+      if (field.fieldId == 'bpLogDetails' &&
+          validated is List &&
+          validated.isNotEmpty) {
+        final last = validated.last as Map<String, dynamic>;
+        for (final key in const ['systolic', 'diastolic', 'pulse']) {
+          final v = last[key];
+          if (v == null || _isSkOwned(key)) continue;
+          _data = _data.setValue(key, v);
+          _fieldSources[key] = FieldSource.aiPending;
+          _fieldSourceSegments[key] = field.sourceSegment;
+          debugPrint('<----- asr APPLIED  [$key] = $v '
+              '(mirrored from bpLogDetails) ----->');
+        }
+      }
     }
 
     debugPrint('<==================== ASR FORM FILL done: '
