@@ -1501,6 +1501,27 @@ class _PatientProfileCard extends StatefulWidget {
 
 class _PatientProfileCardState extends State<_PatientProfileCard> {
   bool _expanded = false;
+  List<HouseholdMemberEntity>? _householdMembers;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadHouseholdMembers());
+  }
+
+  Future<void> _loadHouseholdMembers() async {
+    final hid = widget.data.householdId;
+    if (hid == null || hid.isEmpty || !mounted) return;
+    try {
+      final all = await context.read<MemberDao>().getByHouseholdId(hid);
+      if (!mounted) return;
+      final currentPid = widget.data.patientId;
+      setState(() {
+        _householdMembers =
+            all.where((m) => m.isActive && m.patientId != currentPid).toList();
+      });
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1645,11 +1666,7 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
       ],
     );
 
-    final recentLabel = d.recentVisits.isNotEmpty
-        ? _recentVisitLabel(d.recentVisits.first)
-        : d.assessments.isNotEmpty
-            ? _recentAssessmentLabel(d.assessments.first)
-            : null;
+    final vitals = _parseVitals();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1694,8 +1711,16 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
             ),
           ),
         ),
-        if (d.programmes.isNotEmpty) ...[
-          const SizedBox(height: 10),
+        const SizedBox(height: 10),
+        if (d.programmes.isEmpty)
+          _NoServicesCard(
+            patientId: d.patientId ?? '',
+            patientName: d.name,
+            patientAge: d.age,
+            patientGender: d.gender,
+            villageName: d.villageName,
+          )
+        else
           Card(
             child: Padding(
               padding: const EdgeInsets.all(14),
@@ -1713,6 +1738,29 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
                             .textTheme
                             .titleSmall
                             ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: () {
+                          context.push(
+                            '/patients/${d.patientId ?? ''}/enroll',
+                            extra: <String, dynamic>{
+                              'patientName': d.name,
+                              'patientAge': d.age,
+                              'patientGender': d.gender,
+                              'villageName': d.villageName,
+                              'existingProgrammes': d.programmes,
+                            },
+                          );
+                        },
+                        child: const Text(
+                          '+ Edit',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1B2B5E),
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -1743,59 +1791,600 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
               ),
             ),
           ),
-        ],
-        if (recentLabel != null) ...[
+        // ── Clinical Risk ────────────────────────────────────────────────
+        if (d.riskBand != null) ...[
           const SizedBox(height: 10),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                children: [
-                  Icon(Icons.history_rounded,
-                      size: 16, color: scheme.primary),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Recent Status',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          recentLabel,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(color: scheme.onSurfaceVariant),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          _buildRiskCard(scheme),
+        ],
+
+        // ── Scheduling / Next Due ─────────────────────────────────────────
+        if (d.localPatient?.patient.nextDueAt != null ||
+            d.localPatient?.patient.lastVisitAt != null) ...[
+          const SizedBox(height: 10),
+          _buildNextDueCard(scheme),
+        ],
+
+        // ── Visit History ─────────────────────────────────────────────────
+        if (d.assessments.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          _buildVisitHistoryCard(context, scheme),
+        ],
+
+        // ── Last Vitals ───────────────────────────────────────────────────
+        if (vitals != null) ...[
+          const SizedBox(height: 10),
+          _buildVitalsCard(context, scheme, vitals),
+        ],
+
+        // ── Household Members ─────────────────────────────────────────────
+        if (_householdMembers != null && _householdMembers!.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          _buildHouseholdCard(context, scheme),
         ],
       ],
     );
   }
 
-  static String _recentVisitLabel(PatientVisit v) {
-    final svc = v.serviceProvided ?? v.encounterType ?? 'Visit';
-    final date = DateFormat('MMM d, yyyy').format(v.visitDate);
-    final status = v.status != null ? ' · ${v.status}' : '';
-    return '$svc — $date$status';
+  // ── Risk Band ──────────────────────────────────────────────────────────────
+
+  Widget _buildRiskCard(ColorScheme scheme) {
+    final band = widget.data.riskBand;
+    if (band == null) return const SizedBox.shrink();
+    final modifier = widget.data.riskModifier;
+    final reasons = widget.data.riskReasons;
+
+    Color bgColor;
+    Color textColor;
+    String bandLabel;
+    switch (band) {
+      case Band.band1:
+        bgColor = AppColors.statusCriticalSurface;
+        textColor = AppColors.statusCriticalText;
+        bandLabel = 'Band 1 · Severe';
+      case Band.band2:
+        bgColor = AppColors.statusWarningSurface;
+        textColor = AppColors.statusWarningText;
+        bandLabel = 'Band 2 · Moderate';
+      case Band.band3:
+        bgColor = const Color(0xFFEFF6FF);
+        textColor = AppColors.navy;
+        bandLabel = 'Band 3 · Mild';
+      case Band.band4:
+        bgColor = const Color(0xFFF3F4F6);
+        textColor = AppColors.textMuted;
+        bandLabel = 'Band 4 · Routine';
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.monitor_heart_outlined, size: 16, color: scheme.primary),
+                const SizedBox(width: 6),
+                Text('Clinical Risk',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w700)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: bgColor,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(bandLabel,
+                      style: TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w700, color: textColor)),
+                ),
+                if (modifier != null && modifier != Modifier.none) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: scheme.secondaryContainer,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      modifier == Modifier.a ? '+a  Additional risk' : '+b  Overdue',
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: scheme.onSecondaryContainer),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            if (reasons.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              ...reasons.map((r) => Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('• ',
+                            style: TextStyle(color: textColor, fontSize: 12)),
+                        Expanded(
+                          child: Text(r,
+                              style: TextStyle(
+                                  fontSize: 12, color: scheme.onSurfaceVariant)),
+                        ),
+                      ],
+                    ),
+                  )),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
-  static String _recentAssessmentLabel(MemberAssessment a) {
-    final date = DateFormat('MMM d, yyyy').format(a.date);
-    final status = a.status != null ? ' · ${a.status}' : '';
-    return '${a.type} — $date$status';
+  // ── Next Due / Overdue ─────────────────────────────────────────────────────
+
+  Widget _buildNextDueCard(ColorScheme scheme) {
+    final lastMs = widget.data.localPatient?.patient.lastVisitAt;
+    final nextMs = widget.data.localPatient?.patient.nextDueAt;
+    if (lastMs == null && nextMs == null) return const SizedBox.shrink();
+
+    final now = DateTime.now();
+    final lastDate = lastMs != null ? DateTime.fromMillisecondsSinceEpoch(lastMs) : null;
+    final nextDate = nextMs != null ? DateTime.fromMillisecondsSinceEpoch(nextMs) : null;
+
+    final isOverdue = nextDate != null && nextDate.isBefore(now);
+    final overdueDays = isOverdue ? now.difference(nextDate).inDays : 0;
+    final dueSoonDays = (!isOverdue && nextDate != null)
+        ? nextDate.difference(now).inDays
+        : null;
+
+    Color headerColor = scheme.primary;
+    if (isOverdue) headerColor = AppColors.statusCritical;
+    else if (dueSoonDays != null && dueSoonDays <= 7) headerColor = AppColors.statusWarning;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.event_outlined, size: 16, color: headerColor),
+                const SizedBox(width: 6),
+                Text('Scheduling',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w700)),
+                const Spacer(),
+                if (isOverdue)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.statusCriticalSurface,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'Overdue $overdueDays day${overdueDays == 1 ? '' : 's'}',
+                      style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.statusCriticalText),
+                    ),
+                  )
+                else if (dueSoonDays != null && dueSoonDays <= 7)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.statusWarningSurface,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'Due in $dueSoonDays day${dueSoonDays == 1 ? '' : 's'}',
+                      style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.statusWarningText),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (lastDate != null)
+              _scheduleRow('Last visit', DateFormat('dd MMM yyyy').format(lastDate), scheme),
+            if (nextDate != null)
+              _scheduleRow(
+                'Next due',
+                DateFormat('dd MMM yyyy').format(nextDate),
+                scheme,
+                valueColor: isOverdue ? AppColors.statusCritical : null,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _scheduleRow(String label, String value, ColorScheme scheme,
+      {Color? valueColor}) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 90,
+            child: Text(label,
+                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+          ),
+          Text(value,
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: valueColor ?? scheme.onSurface)),
+        ],
+      ),
+    );
+  }
+
+  // ── Visit History ──────────────────────────────────────────────────────────
+
+  Widget _buildVisitHistoryCard(BuildContext context, ColorScheme scheme) {
+    final assessments = widget.data.assessments;
+    if (assessments.isEmpty) return const SizedBox.shrink();
+    final preview = assessments.take(3).toList();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.history_rounded, size: 16, color: scheme.primary),
+                const SizedBox(width: 6),
+                Text('Visit History',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w700)),
+                const Spacer(),
+                if (assessments.length > 3)
+                  GestureDetector(
+                    onTap: () => _showAllVisits(context, assessments),
+                    child: Text('See all (${assessments.length})',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: scheme.primary)),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ...preview.map((a) => _visitRow(context, a, scheme)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _visitRow(BuildContext context, MemberAssessment a, ColorScheme scheme) {
+    final date = DateFormat('dd MMM yyyy').format(a.date);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: scheme.primary.withValues(alpha: 0.6),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(a.type,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          ),
+          Text(date,
+              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+          if (a.status != null) ...[
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(a.status!,
+                  style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant)),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _showAllVisits(BuildContext context, List<MemberAssessment> all) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (_) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        maxChildSize: 0.92,
+        builder: (_, ctrl) => Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+              child: Row(
+                children: [
+                  const Text('All Visits',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView.separated(
+                controller: ctrl,
+                padding: const EdgeInsets.all(16),
+                itemCount: all.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (ctx, i) {
+                  final a = all[i];
+                  final date = DateFormat('dd MMM yyyy').format(a.date);
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(a.type,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w700, fontSize: 13)),
+                              const SizedBox(height: 2),
+                              Text(date,
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: Theme.of(ctx)
+                                          .colorScheme
+                                          .onSurfaceVariant)),
+                            ],
+                          ),
+                        ),
+                        if (a.status != null)
+                          Text(a.status!,
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Last Vitals ────────────────────────────────────────────────────────────
+
+  _VitalsSnapshot? _parseVitals() {
+    for (final a in widget.data.assessments) {
+      final j = a.rawJson;
+      if (j.isEmpty) continue;
+      final bpLog = j['bpLog'] as Map<String, dynamic>?;
+      final glucoseLog = j['glucoseLog'] as Map<String, dynamic>?;
+      final phys = j['medicalHistoryPhysicalExamination'] as Map<String, dynamic>?;
+      final poc = j['pointOfCareInvestigations'] as Map<String, dynamic>?;
+
+      final bpSys = (bpLog?['avgSystolic'] as num?)?.toInt() ??
+          (phys?['bloodPressureSystolic'] as num?)?.toInt();
+      final bpDia = (bpLog?['avgDiastolic'] as num?)?.toInt() ??
+          (phys?['bloodPressureDiastolic'] as num?)?.toInt();
+      final weight = (bpLog?['weight'] as num?)?.toDouble() ??
+          (phys?['weight'] as num?)?.toDouble();
+
+      double? glucose;
+      String? glucoseType;
+      String? glucoseUnit;
+      double? hb;
+
+      if (glucoseLog != null) {
+        glucose = (glucoseLog['glucoseValue'] as num?)?.toDouble();
+        glucoseType = glucoseLog['glucoseType'] as String?;
+        glucoseUnit = glucoseLog['glucoseUnit'] as String? ?? 'mmol/L';
+      }
+      if (poc != null) {
+        hb = (poc['hemoglobin'] as num?)?.toDouble();
+        glucose ??= (poc['bloodSugarFasting'] as num?)?.toDouble();
+        if (glucose != null) {
+          glucoseType ??= 'fasting';
+          glucoseUnit ??= 'mg/dL';
+        }
+      }
+
+      if (bpSys != null || glucose != null || weight != null || hb != null) {
+        return _VitalsSnapshot(
+          bpSys: bpSys, bpDia: bpDia,
+          glucose: glucose, glucoseType: glucoseType, glucoseUnit: glucoseUnit,
+          weight: weight, hb: hb, recordedAt: a.date,
+        );
+      }
+    }
+    return null;
+  }
+
+  Widget _buildVitalsCard(BuildContext context, ColorScheme scheme, _VitalsSnapshot v) {
+    final date = DateFormat('dd MMM yyyy').format(v.recordedAt);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.favorite_outline_rounded, size: 16, color: scheme.primary),
+                const SizedBox(width: 6),
+                Text('Last Vitals',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w700)),
+                const Spacer(),
+                Text('Recorded $date',
+                    style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (v.bpSys != null && v.bpDia != null)
+              _vitalRow(
+                'Blood Pressure',
+                '${v.bpSys}/${v.bpDia} mmHg',
+                v.bpSys! >= 140 ? AppColors.statusCritical : null,
+                scheme,
+              ),
+            if (v.glucose != null)
+              _vitalRow(
+                v.glucoseType == 'fasting' ? 'Glucose (fasting)' : 'Glucose (random)',
+                '${v.glucose!.toStringAsFixed(1)} ${v.glucoseUnit ?? ''}',
+                null,
+                scheme,
+              ),
+            if (v.weight != null)
+              _vitalRow('Weight', '${v.weight!.toStringAsFixed(1)} kg', null, scheme),
+            if (v.hb != null)
+              _vitalRow(
+                'Haemoglobin',
+                '${v.hb!.toStringAsFixed(1)} g/dL',
+                v.hb! < 10 ? AppColors.statusCritical : v.hb! < 11 ? AppColors.statusWarning : null,
+                scheme,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _vitalRow(String label, String value, Color? flagColor, ColorScheme scheme) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 150,
+            child: Text(label,
+                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+          ),
+          Text(value,
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: flagColor ?? scheme.onSurface)),
+          if (flagColor != null) ...[
+            const SizedBox(width: 4),
+            Icon(Icons.arrow_upward_rounded, size: 13, color: flagColor),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ── Household Members ──────────────────────────────────────────────────────
+
+  Widget _buildHouseholdCard(BuildContext context, ColorScheme scheme) {
+    final members = _householdMembers;
+    if (members == null || members.isEmpty) return const SizedBox.shrink();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.people_outline_rounded, size: 16, color: scheme.primary),
+                const SizedBox(width: 6),
+                Text('Household Members',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w700)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: members.map((m) {
+                final name = m.name ?? 'Member';
+                final initials = name.trim().split(RegExp(r'\s+'))
+                    .take(2).map((p) => p.isEmpty ? '' : p[0].toUpperCase()).join();
+                final navId = (m.patientId != null && m.patientId!.isNotEmpty)
+                    ? m.patientId!
+                    : m.id.toString();
+                return GestureDetector(
+                  onTap: () => context.push('/patients/$navId'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: scheme.primaryContainer.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: scheme.primary.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircleAvatar(
+                          radius: 10,
+                          backgroundColor: scheme.primary.withValues(alpha: 0.15),
+                          child: Text(initials,
+                              style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                  color: scheme.primary)),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(name.split(' ').first,
+                            style: const TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w600)),
+                        if (m.isPregnant) ...[
+                          const SizedBox(width: 4),
+                          const Icon(Icons.pregnant_woman, size: 12),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   static String? _formatDob(String? dob) {
@@ -1807,6 +2396,23 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
       return dob;
     }
   }
+}
+
+class _VitalsSnapshot {
+  const _VitalsSnapshot({
+    this.bpSys, this.bpDia,
+    this.glucose, this.glucoseType, this.glucoseUnit,
+    this.weight, this.hb,
+    required this.recordedAt,
+  });
+  final int? bpSys;
+  final int? bpDia;
+  final double? glucose;
+  final String? glucoseType;
+  final String? glucoseUnit;
+  final double? weight;
+  final double? hb;
+  final DateTime recordedAt;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1978,34 +2584,6 @@ class _PatientDetailHeader extends StatelessWidget {
     if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
     return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
         .toUpperCase();
-  }
-
-  static IconData _genderIcon(String g) {
-    final u = g.toUpperCase();
-    if (u.startsWith('F')) return Icons.female;
-    if (u.startsWith('M')) return Icons.male;
-    return Icons.person_outline;
-  }
-
-  static String _genderShort(String g) {
-    final u = g.toUpperCase();
-    if (u.startsWith('F')) return 'F';
-    if (u.startsWith('M')) return 'M';
-    return g;
-  }
-
-  static int? _ageFromDob(String? dob) {
-    if (dob == null || dob.isEmpty) return null;
-    try {
-      final birth = DateTime.parse(dob);
-      final now = DateTime.now();
-      int age = now.year - birth.year;
-      if (now.month < birth.month ||
-          (now.month == birth.month && now.day < birth.day)) age--;
-      return age;
-    } catch (_) {
-      return null;
-    }
   }
 
   /// Smart age label: months for under-2, years otherwise.
@@ -2581,6 +3159,111 @@ class _HouseholdMemberChip extends StatelessWidget {
           ],
         ),
       ),
+      ),
+    );
+  }
+}
+
+/// Banner shown when a patient has no programmes enrolled yet.
+class _NoServicesCard extends StatelessWidget {
+  const _NoServicesCard({
+    required this.patientId,
+    required this.patientName,
+    this.patientAge,
+    this.patientGender,
+    this.villageName,
+  });
+
+  final String patientId;
+  final String? patientName;
+  final int? patientAge;
+  final String? patientGender;
+  final String? villageName;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFDF2F8),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.medical_services_outlined,
+                    size: 18,
+                    color: Color(0xFF9D174D),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        EnrollStrings.noServicesTitle,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF111827),
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        EnrollStrings.noServicesSubtitle,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF6B7280),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () {
+                  context.push(
+                    '/patients/$patientId/enroll',
+                    extra: <String, dynamic>{
+                      'patientName': patientName ?? 'Patient',
+                      if (patientAge != null) 'patientAge': patientAge,
+                      if (patientGender != null)
+                        'patientGender': patientGender,
+                      if (villageName != null) 'villageName': villageName,
+                      'existingProgrammes': const <Programme>{},
+                    },
+                  );
+                },
+                icon: const Icon(Icons.add, size: 18, color: Colors.white),
+                label: const Text(
+                  EnrollStrings.addServicesCta,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFEC4899),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
