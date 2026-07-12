@@ -8,7 +8,7 @@ import '../../core/models/programme.dart';
 import '../../core/theme/app_theme.dart';
 import '../patient/enroll/pregnancy_registration_sheet.dart';
 import 'symptom_catalog.dart';
-import 'triage/visit_step_header.dart';
+import 'visit_flow_header.dart';
 import 'visit_controller.dart';
 
 /// Which service the SK is selecting for this visit.
@@ -205,15 +205,22 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
     final name = widget.patientName ?? 'Patient';
 
     return Scaffold(
-      backgroundColor: AppColors.canvas,
-      appBar: VisitStepHeader(
-        step: VisitStep.symptomPicker,
-        patientLabel: name,
-        onBack: () => Navigator.of(context).maybePop(),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
+      body: Column(
         children: [
+          VisitFlowHeader(
+            step: 0,
+            patientId: widget.patientId,
+            patientName: name,
+            ageDisplay: widget.patientAge != null ? '${widget.patientAge}y' : null,
+            householdId: widget.householdId,
+            patientGender: widget.patientGender,
+            onBack: () => Navigator.of(context).maybePop(),
+          ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+              children: [
           _SymptomSection(
             isFemale: _isFemale,
             filteredSymptoms: _filteredSymptoms,
@@ -235,6 +242,9 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
             pwSelected: _pwSelected,
             selectedSvc: _selectedSvc,
             onSvcTap: _onSvcTap,
+          ),
+        ],
+      ),
           ),
         ],
       ),
