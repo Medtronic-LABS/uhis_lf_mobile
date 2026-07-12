@@ -12,7 +12,7 @@ import '../../core/db/patient_programmes_dao.dart';
 import '../../core/models/programme.dart';
 import '../../core/models/dashboard_tier.dart';
 import '../../core/models/mission_queue_item.dart';
-import '../../core/widgets/location_filter_sheet.dart';
+import '../../core/sync/offline_sync_service.dart';
 import '../../core/widgets/patient_filter_panel.dart';
 import '../dashboard/dashboard_repository.dart';
 import '../dashboard/mission_dashboard_repository.dart';
@@ -82,6 +82,8 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
   // Inline village chip row (populated from local DB after data loads)
   List<({String id, String name})> _inlineVillages = const [];
   String? _selectedInlineVillageId;
+
+  bool _refreshing = false;
 
   // Need / programme filter state (derived from queue items)
   Set<NeedFilter> _selectedNeeds = const {};
@@ -163,40 +165,26 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
     });
   }
 
-  /// Opens the location/SS filter bottom sheet backed by the API hierarchy.
-  Future<void> _openFilterSheet() async {
-    final hierarchySvc = context.read<UserHierarchyService>();
-    // One prefetch covers villages, subVillages, and ssWorkers — single HTTP call.
-    await hierarchySvc.prefetch();
-    if (!mounted) return;
-    final villages = hierarchySvc.villages ?? const [];
-    final allSubVillages = hierarchySvc.subVillages ?? const [];
-    final ssWorkers = hierarchySvc.ssWorkers ?? const [];
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => LocationFilterSheet(
-        villages: villages
-            .map((v) => (id: v.id, name: v.name))
-            .toList(),
-        allSubVillages: allSubVillages,
-        ssWorkers: ssWorkers,
-        selectedVillageId: _selectedVillageId,
-        selectedSubVillageId: _selectedSubVillageId,
-        selectedShebikaId: _selectedShebikaId,
-        onApply: (v, sv, ss) {
-          setState(() {
-            _selectedVillageId = v;
-            _selectedSubVillageId = sv;
-            _selectedShebikaId = ss;
-          });
-          _loadData();
-        },
-      ),
-    );
+  Future<void> _refreshFromServer() async {
+    if (_refreshing) return;
+    setState(() => _refreshing = true);
+    try {
+      final syncSvc = context.read<OfflineSyncService>();
+      final report = await syncSvc.warmSync();
+      if (!mounted) return;
+      final msg = report.errors.isNotEmpty
+          ? 'Refresh failed: ${report.errors.first}'
+          : 'Updated: ${report.patients} patients · '
+              '${report.assessments} assessments · '
+              '${report.followUps} follow-ups';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), duration: const Duration(seconds: 3)),
+      );
+      _loadData();
+      _loadPatientTiers();
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
   }
 
   /// Fetches households from LOCAL SQLite first (instant), falls back to API.
@@ -304,37 +292,24 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> with SingleTi
         automaticallyImplyLeading: false,
         title: const Text('Patients'),
         actions: [
-          // Filter icon shows a badge dot when any location filter is active.
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.filter_list),
-                tooltip: HouseholdListStrings.filterTitle,
-                onPressed: _openFilterSheet,
-              ),
-              if (_selectedVillageId != null ||
-                  _selectedSubVillageId != null ||
-                  _selectedShebikaId != null)
-                Positioned(
-                  top: 10,
-                  right: 10,
-                  child: Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
+          if (_refreshing)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
                 ),
-            ],
-          ),
-          IconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh),
-            onPressed: () => setState(_loadData),
-          ),
+              ),
+            )
+          else
+            IconButton(
+              tooltip: 'Refresh',
+              icon: const Icon(Icons.refresh),
+              onPressed: _refreshFromServer,
+            ),
         ],
       ),
       body: Column(

@@ -47,8 +47,20 @@ class ImmunisationRepository {
 
     if (response.statusCode != 200) return const [];
 
-    final list = (response.data as List?)?.cast<Map<String, dynamic>>() ?? [];
+    // Backend wraps the list: {"entityList":[...], "status":true, ...}
+    // Fall back to bare List if the server ever changes to unwrapped form.
+    final raw = response.data;
+    final rawList = raw is List
+        ? raw
+        : (raw is Map && raw['entityList'] is List
+            ? raw['entityList'] as List
+            : null);
+    if (rawList == null || rawList.isEmpty) return const [];
+    final list = rawList.whereType<Map<String, dynamic>>().toList();
     final dtos = list.map(VaccinationDetailDto.fromJson).toList();
+    debugPrint(
+      '[ImmunisationRepository] fetchSchedule: ${dtos.length} vaccines from backend',
+    );
 
     // Seed local DB from backend response
     final rows = dtos.map((dto) {
