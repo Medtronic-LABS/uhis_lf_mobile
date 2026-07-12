@@ -1501,27 +1501,6 @@ class _PatientProfileCard extends StatefulWidget {
 
 class _PatientProfileCardState extends State<_PatientProfileCard> {
   bool _expanded = false;
-  List<HouseholdMemberEntity>? _householdMembers;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadHouseholdMembers());
-  }
-
-  Future<void> _loadHouseholdMembers() async {
-    final hid = widget.data.householdId;
-    if (hid == null || hid.isEmpty || !mounted) return;
-    try {
-      final all = await context.read<MemberDao>().getByHouseholdId(hid);
-      if (!mounted) return;
-      final currentPid = widget.data.patientId;
-      setState(() {
-        _householdMembers =
-            all.where((m) => m.isActive && m.patientId != currentPid).toList();
-      });
-    } catch (_) {}
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1804,22 +1783,10 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
           _buildNextDueCard(scheme),
         ],
 
-        // ── Visit History ─────────────────────────────────────────────────
-        if (d.assessments.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          _buildVisitHistoryCard(context, scheme),
-        ],
-
         // ── Last Vitals ───────────────────────────────────────────────────
         if (vitals != null) ...[
           const SizedBox(height: 10),
           _buildVitalsCard(context, scheme, vitals),
-        ],
-
-        // ── Household Members ─────────────────────────────────────────────
-        if (_householdMembers != null && _householdMembers!.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          _buildHouseholdCard(context, scheme),
         ],
       ],
     );
@@ -2034,159 +2001,8 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
     );
   }
 
-  // ── Visit History ──────────────────────────────────────────────────────────
-
-  Widget _buildVisitHistoryCard(BuildContext context, ColorScheme scheme) {
-    final assessments = widget.data.assessments;
-    if (assessments.isEmpty) return const SizedBox.shrink();
-    final preview = assessments.take(3).toList();
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.history_rounded, size: 16, color: scheme.primary),
-                const SizedBox(width: 6),
-                Text('Visit History',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w700)),
-                const Spacer(),
-                if (assessments.length > 3)
-                  GestureDetector(
-                    onTap: () => _showAllVisits(context, assessments),
-                    child: Text('See all (${assessments.length})',
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: scheme.primary)),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            ...preview.map((a) => _visitRow(context, a, scheme)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _visitRow(BuildContext context, MemberAssessment a, ColorScheme scheme) {
-    final date = DateFormat('dd MMM yyyy').format(a.date);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: scheme.primary.withValues(alpha: 0.6),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(a.type,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-          ),
-          Text(date,
-              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
-          if (a.status != null) ...[
-            const SizedBox(width: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: scheme.surfaceContainer,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(a.status!,
-                  style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant)),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  void _showAllVisits(BuildContext context, List<MemberAssessment> all) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (_) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.6,
-        maxChildSize: 0.92,
-        builder: (_, ctrl) => Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
-              child: Row(
-                children: [
-                  const Text('All Visits',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: ListView.separated(
-                controller: ctrl,
-                padding: const EdgeInsets.all(16),
-                itemCount: all.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
-                itemBuilder: (ctx, i) {
-                  final a = all[i];
-                  final date = DateFormat('dd MMM yyyy').format(a.date);
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(a.type,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w700, fontSize: 13)),
-                              const SizedBox(height: 2),
-                              Text(date,
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      color: Theme.of(ctx)
-                                          .colorScheme
-                                          .onSurfaceVariant)),
-                            ],
-                          ),
-                        ),
-                        if (a.status != null)
-                          Text(a.status!,
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  // ── Last Vitals (start of next section — visit history removed: redundant
+  // with the existing "Recent visits" section lower on the screen) ───────────
 
   // ── Last Vitals ────────────────────────────────────────────────────────────
 
@@ -2308,81 +2124,6 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
             Icon(Icons.arrow_upward_rounded, size: 13, color: flagColor),
           ],
         ],
-      ),
-    );
-  }
-
-  // ── Household Members ──────────────────────────────────────────────────────
-
-  Widget _buildHouseholdCard(BuildContext context, ColorScheme scheme) {
-    final members = _householdMembers;
-    if (members == null || members.isEmpty) return const SizedBox.shrink();
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.people_outline_rounded, size: 16, color: scheme.primary),
-                const SizedBox(width: 6),
-                Text('Household Members',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w700)),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: members.map((m) {
-                final name = m.name ?? 'Member';
-                final initials = name.trim().split(RegExp(r'\s+'))
-                    .take(2).map((p) => p.isEmpty ? '' : p[0].toUpperCase()).join();
-                final navId = (m.patientId != null && m.patientId!.isNotEmpty)
-                    ? m.patientId!
-                    : m.id.toString();
-                return GestureDetector(
-                  onTap: () => context.push('/patients/$navId'),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: scheme.primaryContainer.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: scheme.primary.withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircleAvatar(
-                          radius: 10,
-                          backgroundColor: scheme.primary.withValues(alpha: 0.15),
-                          child: Text(initials,
-                              style: TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w700,
-                                  color: scheme.primary)),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(name.split(' ').first,
-                            style: const TextStyle(
-                                fontSize: 12, fontWeight: FontWeight.w600)),
-                        if (m.isPregnant) ...[
-                          const SizedBox(width: 4),
-                          const Icon(Icons.pregnant_woman, size: 12),
-                        ],
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ],
-        ),
       ),
     );
   }
