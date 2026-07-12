@@ -3051,6 +3051,12 @@ abstract final class SymptomPickerStrings {
   static const String searchMoreHint = 'Type 3+ letters to find more symptoms';
   static const String searchNoResults = 'No symptoms found';
 
+  /// Header for the shared (cross-programme) symptom section in the grid.
+  static const String sectionGeneral = 'General';
+
+  /// Header for selected symptoms that fall outside the default sections.
+  static const String sectionFromSearch = 'Added from search';
+
   /// Shown below the default chip grid when enrolled-programme filtering is
   /// active, to let the SK know general + other-programme symptoms are via search.
   static const String searchOtherProgramsHint =

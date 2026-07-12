@@ -19,6 +19,16 @@ import 'unified_symptom_catalog.dart';
 /// rule-activated pathway. The invariant is:
 ///   allPathways = rule pathways ∪ ai suggestions (deduped by programme,
 ///   with rule winning on dedup).
+/// One visually separated group of symptom chips in the Step-1 default grid.
+///
+/// [programme] is null for the shared General section.
+class SymptomSection {
+  const SymptomSection({required this.programme, required this.codes});
+
+  final Programme? programme;
+  final List<String> codes;
+}
+
 class TriageViewModel extends ChangeNotifier {
   TriageViewModel({
     required PatientContext patientContext,
@@ -407,15 +417,10 @@ class TriageViewModel extends ChangeNotifier {
   List<String> get applicableVocabCodes =>
       AiScribeTriageVocab.applicableCodes(_patientContext);
 
-  /// Default chip grid filtered to the patient's enrolled programme(s) only.
+  /// Default chip grid: the flattened union of [groupedVocabSections].
   ///
-  /// When the patient is enrolled in one or more programmes, only symptoms
-  /// relevant to those programmes are shown by default. General symptoms
-  /// (fever, headache, etc.) are always included. This keeps the default list
-  /// focused — cross-programme symptoms surface when the SK types 3+ chars.
-  ///
-  /// Falls back to [primaryVocabCodes] when no programmes are enrolled, so
-  /// the picker still shows a sensible list for patients with no enrolment data.
+  /// Kept as a flat list for selection/merge logic; the picker renders the
+  /// grouped sections directly for per-programme visual separation.
   List<String> get enrolledProgrammeVocabCodes {
     if (_enrolledProgrammeVocabCache != null) {
       return _enrolledProgrammeVocabCache!;
@@ -435,26 +440,8 @@ class TriageViewModel extends ChangeNotifier {
       return const [];
     }
 
-    final shown = AiScribeTriageVocab.codes.where((code) {
-      switch (AiScribeTriageVocab.categoryOf(code)) {
-        case SymptomCategory.general:
-          // General symptoms are always available via search; they are NOT
-          // shown in the default grid so the focused list stays programme-
-          // specific only.
-          return false;
-        case SymptomCategory.maternal:
-          // Show only when the patient is enrolled in EVERY programme the
-          // symptom spans. A shared ANC+PNC symptom stays hidden for an
-          // ANC-only patient (she can find it via search).
-          final codeProgs =
-              AiScribeTriageVocab.programmesForMaternalCode(code);
-          return codeProgs.every((p) => enrolled.contains(p));
-        case SymptomCategory.ncd:
-          return enrolled.contains(Programme.ncd);
-        case SymptomCategory.pediatric:
-          return enrolled.contains(Programme.imci);
-      }
-    }).toList();
+    final shown =
+        groupedVocabSections.expand((s) => s.codes).toList(growable: false);
 
     if (kDebugMode) {
       final hidden = AiScribeTriageVocab.codes
@@ -476,6 +463,68 @@ class TriageViewModel extends ChangeNotifier {
 
     _enrolledProgrammeVocabCache = shown;
     return shown;
+  }
+
+  /// Default grid grouped into one section per enrolled programme plus a
+  /// trailing General section, in stable clinical order (ANC, PNC, Child,
+  /// NCD, General).
+  ///
+  /// Rules per code (vocab declaration order preserved within a section):
+  ///   - Every code must pass the demographic sanity gate
+  ///     ([AiScribeTriageVocab.isDemographicallyPlausible]) — maternal codes
+  ///     never show for males, and age gates apply whenever age is actually
+  ///     known (an infant never sees ANC/NCD symptoms; missing-age records
+  ///     are not treated as newborns).
+  ///   - Maternal codes show only when the patient is enrolled in EVERY
+  ///     programme the code spans (unchanged), and land in the first enrolled
+  ///     section of that span (ANC before PNC).
+  ///   - General symptoms (fever, headache…) get their own section so the SK
+  ///     sees the full clinically relevant list, visually separated.
+  ///
+  /// Selection, search pools, and pathway activation are untouched.
+  List<SymptomSection> get groupedVocabSections {
+    final ctx = _patientContext;
+    final enrolled = ctx.activeProgrammes;
+    if (enrolled.isEmpty) return const [];
+
+    const sectionOrder = [
+      Programme.anc,
+      Programme.pnc,
+      Programme.imci,
+      Programme.ncd,
+    ];
+    final byProgramme = <Programme, List<String>>{
+      for (final p in sectionOrder)
+        if (enrolled.contains(p)) p: <String>[],
+    };
+    final general = <String>[];
+
+    for (final code in AiScribeTriageVocab.codes) {
+      if (!AiScribeTriageVocab.isDemographicallyPlausible(code, ctx)) {
+        continue;
+      }
+      switch (AiScribeTriageVocab.categoryOf(code)) {
+        case SymptomCategory.general:
+          general.add(code);
+        case SymptomCategory.maternal:
+          final codeProgs =
+              AiScribeTriageVocab.programmesForMaternalCode(code);
+          if (!codeProgs.every(enrolled.contains)) break;
+          final home = sectionOrder.firstWhere(codeProgs.contains);
+          byProgramme[home]?.add(code);
+        case SymptomCategory.ncd:
+          byProgramme[Programme.ncd]?.add(code);
+        case SymptomCategory.pediatric:
+          byProgramme[Programme.imci]?.add(code);
+      }
+    }
+
+    return [
+      for (final entry in byProgramme.entries)
+        if (entry.value.isNotEmpty)
+          SymptomSection(programme: entry.key, codes: entry.value),
+      if (general.isNotEmpty) SymptomSection(programme: null, codes: general),
+    ];
   }
 
   /// Returns `true` when [code] belongs to a programme the patient is NOT

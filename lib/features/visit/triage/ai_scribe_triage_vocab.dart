@@ -184,6 +184,28 @@ abstract final class AiScribeTriageVocab {
   static List<String> applicableCodes(PatientContext ctx) =>
       codes.where((c) => isApplicable(c, ctx)).toList(growable: false);
 
+  /// Like [isApplicable] but tolerant of missing age data.
+  ///
+  /// Age gates apply only when [PatientContext.ageKnown] is true — a patient
+  /// whose record lacks DOB/age (ageMonths defaults to 0) must not be treated
+  /// as a newborn and lose their enrolled-programme symptoms. The sex gate for
+  /// maternal codes always applies: those symptoms are never valid for males.
+  static bool isDemographicallyPlausible(String code, PatientContext ctx) {
+    switch (categoryOf(code)) {
+      case SymptomCategory.general:
+        return true;
+      case SymptomCategory.maternal:
+        if (ctx.sex == Sex.male) return false;
+        if (!ctx.ageKnown) return true;
+        return ctx.ageMonths >= maternalMinAgeMonths &&
+            ctx.ageMonths <= maternalMaxAgeMonths;
+      case SymptomCategory.ncd:
+        return !ctx.ageKnown || ctx.ageMonths >= _ncdMinAgeMonths;
+      case SymptomCategory.pediatric:
+        return !ctx.ageKnown || ctx.ageMonths < _pediatricMaxAgeMonths;
+    }
+  }
+
   /// Human-readable label for a code — used when the AI surfaces a code that
   /// isn't present in TriageStrings. Underscores → spaces, capitalised words.
   static String labelFor(String code) {

@@ -19,6 +19,7 @@ class PatientContext {
     required this.ageMonths,
     required this.sex,
     required this.isPregnant,
+    this.ageKnown = true,
     this.gestationalWeeks,
     this.pregnancyFacts,
     this.deliveryDateMillis,
@@ -38,6 +39,12 @@ class PatientContext {
 
   /// Age in months. 0 for < 1 month old.
   final int ageMonths;
+
+  /// Whether [ageMonths] comes from real data (DOB or recorded age).
+  ///
+  /// False when the local record has neither, in which case [ageMonths]
+  /// defaults to 0 — age-based gates must NOT treat that as "newborn".
+  final bool ageKnown;
 
   /// Sex for demographic gating.
   final Sex sex;
@@ -185,6 +192,8 @@ class PatientContextBuilder {
 
     // Calculate age in months
     final ageMonths = _calculateAgeMonths(patient.dob, patient.age);
+    final ageKnown =
+        (patient.dob != null && patient.dob!.isNotEmpty) || patient.age != null;
 
     // Determine sex
     final sex = _parseSex(patient.gender);
@@ -218,6 +227,7 @@ class PatientContextBuilder {
     return PatientContext(
       patientId: patientId,
       ageMonths: ageMonths,
+      ageKnown: ageKnown,
       sex: sex,
       isPregnant: isPregnant,
       gestationalWeeks: gestationalWeeks,

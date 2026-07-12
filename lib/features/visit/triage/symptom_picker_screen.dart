@@ -1201,26 +1201,41 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
         final hasEnrolledFilter =
             vm.patientContext.activeProgrammes.isNotEmpty;
 
-        // Determine which codes to show in the grid.
-        // Always include already-selected codes so symptoms picked via search
-        // remain visible after the search clears.
-        final List<String> gridCodes;
+        // Determine which sections to show in the grid.
+        // Searching → one flat headerless section of matches. Otherwise →
+        // per-programme sections plus any selected codes that fall outside
+        // the default list (e.g. found via search from other programmes).
+        final List<(String?, List<String>)> gridSections;
         if (isSearching) {
-          gridCodes = searchPool
-              .where(
-                (c) => TriageStrings.symptomLabel(c)
-                    .toLowerCase()
-                    .contains(_query),
-              )
-              .toList();
+          gridSections = [
+            (
+              null,
+              searchPool
+                  .where(
+                    (c) => TriageStrings.symptomLabel(c)
+                        .toLowerCase()
+                        .contains(_query),
+                  )
+                  .toList(),
+            ),
+          ];
         } else {
-          // Merge default codes with any selected codes that fall outside the
-          // default list (e.g. symptoms found via search from other programmes).
           final extraSelected = selected
               .where((c) => !defaultCodes.contains(c))
               .toList();
-          gridCodes = [...defaultCodes, ...extraSelected];
+          gridSections = [
+            for (final s in vm.groupedVocabSections)
+              (
+                s.programme?.displayName ??
+                    SymptomPickerStrings.sectionGeneral,
+                s.codes,
+              ),
+            if (extraSelected.isNotEmpty)
+              (SymptomPickerStrings.sectionFromSearch, extraSelected),
+          ];
         }
+        final gridIsEmpty =
+            gridSections.every((s) => s.$2.isEmpty);
 
         return Container(
           decoration: BoxDecoration(
@@ -1282,8 +1297,8 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
 
               const SizedBox(height: 14),
 
-              // ── Chip grid ─────────────────────────────────────────────────
-              if (gridCodes.isEmpty)
+              // ── Chip grid (one Wrap per programme section) ────────────────
+              if (gridIsEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Text(
@@ -1299,21 +1314,40 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                   ),
                 )
               else
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: gridCodes
-                      .map(
-                        (code) => _PickerChip(
-                          key: ValueKey('triage_chip_$code'),
-                          code: code,
-                          isSelected: selected.contains(code),
-                          isAi: vm.isScribePreTick(code),
-                          onTap: () => _toggleSymptom(code),
+                for (final (header, codes) in gridSections)
+                  if (codes.isNotEmpty) ...[
+                    if (header != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4, bottom: 8),
+                        child: Text(
+                          header,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.4,
+                            color: AppColors.textMuted,
+                          ),
                         ),
-                      )
-                      .toList(),
-                ),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: codes
+                            .map(
+                              (code) => _PickerChip(
+                                key: ValueKey('triage_chip_$code'),
+                                code: code,
+                                isSelected: selected.contains(code),
+                                isAi: vm.isScribePreTick(code),
+                                onTap: () => _toggleSymptom(code),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                  ],
 
               // ── Footer hint ──────────────────────────────────────────────
               if (hasEnrolledFilter && !isSearching) ...[
