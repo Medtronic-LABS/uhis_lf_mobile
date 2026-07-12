@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../constants/app_strings.dart';
 import '../theme/app_theme.dart';
+import 'header_icon_button.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Primitives
@@ -234,7 +236,6 @@ class SkeletonPatientDetail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>();
-    final headerColor = tokens?.aiPurpleDark ?? AppColors.aiPurpleDark;
     final canvas = tokens?.canvas ?? AppColors.canvas;
     return Container(
       color: canvas,
@@ -242,87 +243,71 @@ class SkeletonPatientDetail extends StatelessWidget {
         builder: (context, v) => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // ── Purple header (matches _PatientDetailHeader) ─────────────
+            // ── Navy header (matches _PatientDetailHeader) ───────────────
             Container(
-              color: headerColor,
-              padding: const EdgeInsets.fromLTRB(8, 8, 8, 14),
-              child: Column(
+              color: AppColors.navy,
+              padding: EdgeInsets.fromLTRB(
+                8,
+                MediaQuery.of(context).padding.top + 8,
+                8,
+                14,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Row(
-                    children: [
-                      const IconButton(
-                        icon: Icon(Icons.arrow_back, color: Colors.white),
-                        onPressed: null,
-                        tooltip: 'Back',
-                      ),
-                      const Expanded(
-                        child: Text(
-                          'Back to worklist',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      const IconButton(
-                        icon: Icon(Icons.cloud_download_outlined,
-                            color: Colors.white),
-                        onPressed: null,
-                        tooltip: 'Refresh',
-                      ),
-                    ],
+                  HeaderIconButton(
+                    icon: Icons.arrow_back,
+                    tooltip: PatientContextStrings.backToWorklist,
+                    onTap: null,
                   ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Row(
+                  const SizedBox(width: 10),
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: Colors.white.withValues(alpha: 0.18),
+                    child: Text(
+                      name == null ? '?' : _initials(name!),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        CircleAvatar(
-                          radius: 24,
-                          backgroundColor:
-                              Colors.white.withValues(alpha: 0.18),
-                          child: Text(
-                            name == null ? '?' : _initials(name!),
+                        if (name != null)
+                          Text(
+                            name!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               color: Colors.white,
+                              fontSize: 18,
                               fontWeight: FontWeight.w800,
-                              fontSize: 16,
                             ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (name != null)
-                                Text(
-                                  name!,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                )
-                              else
-                                _PaleBar(
-                                    shimmerValue: v,
-                                    width: 160,
-                                    height: 20,
-                                    delay: 0.05),
-                              const SizedBox(height: 6),
-                              _PaleBar(
-                                  shimmerValue: v,
-                                  width: 110,
-                                  height: 12,
-                                  delay: 0.10),
-                            ],
-                          ),
-                        ),
+                          )
+                        else
+                          _PaleBar(
+                              shimmerValue: v,
+                              width: 160,
+                              height: 20,
+                              delay: 0.05),
+                        const SizedBox(height: 6),
+                        _PaleBar(
+                            shimmerValue: v,
+                            width: 110,
+                            height: 12,
+                            delay: 0.10),
                       ],
                     ),
+                  ),
+                  HeaderIconButton(
+                    icon: Icons.cloud_download_outlined,
+                    tooltip: PatientContextStrings.refresh,
+                    onTap: null,
                   ),
                 ],
               ),
@@ -331,7 +316,12 @@ class SkeletonPatientDetail extends StatelessWidget {
             Expanded(
               child: ListView(
                 physics: const NeverScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(14, 14, 14, 110),
+                padding: const EdgeInsets.fromLTRB(
+                  14,
+                  14,
+                  14,
+                  AppSpacing.stickyBarClearance,
+                ),
                 children: [
                   // 1) Gemini summary banner (light card + text lines).
                   _SkeletonCard(

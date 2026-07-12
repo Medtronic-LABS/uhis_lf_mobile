@@ -56,9 +56,9 @@ class _BottomNavShellState extends State<BottomNavShell>
     ScaffoldMessenger.of(context)
       ..removeCurrentSnackBar()
       ..showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(BottomNavStrings.pressBackAgainToExit),
-          duration: Duration(seconds: 2),
+          duration: const Duration(seconds: 2),
         ),
       );
     return true;
@@ -135,7 +135,7 @@ class AssistantPlaceholderScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(BottomNavStrings.assistantTitle),
+        title: Text(BottomNavStrings.assistantTitle),
         centerTitle: true,
       ),
       body: Center(

@@ -13,6 +13,7 @@ import '../../core/db/patient_programmes_dao.dart';
 import '../../core/mission/programme_reason.dart';
 import '../../core/models/programme.dart';
 import '../../core/models/mission_queue_item.dart';
+import '../../core/widgets/header_icon_button.dart';
 import '../../core/widgets/mockup_svg_icons.dart';
 import '../../core/widgets/patient_filter_panel.dart'
     show VillageFilterTab, titleCaseWords;
@@ -340,22 +341,6 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
         .toList();
   }
 
-  // Patients-screen-local header type — same reduced size as the Home
-  // dashboard's own AppTextStyles.headerTitle/headerSub (20/13, both
-  // lowered together this round), but lighter weight (w700 vs dashboard's
-  // w800) per the earlier decision to keep this screen's header lighter.
-  static const _headerTitleStyle = TextStyle(
-    fontFamily: 'Nunito',
-    fontSize: 20,
-    fontWeight: FontWeight.w700,
-    color: Colors.white,
-  );
-  static const _headerSubStyle = TextStyle(
-    fontFamily: 'NunitoSans',
-    fontSize: 13,
-    fontWeight: FontWeight.w400,
-    color: AppColors.onDarkLow,
-  );
 
   /// Navy header: back button, 🏠-prefixed title, combined live "N
   /// households · M patients" count, and the search bar — matching the v13
@@ -380,7 +365,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
             children: [
               // Bottom-nav tab root, so "back" means Home — mirrors the
               // mockup's own back button (`onclick="go('s2')"` → Home).
-              _HeaderIconButton(
+              HeaderIconButton(
                 icon: Icons.arrow_back,
                 tooltip: BottomNavStrings.home,
                 onTap: () => context.go('/home'),
@@ -390,9 +375,9 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       HouseholdListStrings.headerTitle,
-                      style: _headerTitleStyle,
+                      style: AppTextStyles.householdHeaderTitle,
                     ),
                     const SizedBox(height: 1),
                     Text(
@@ -400,7 +385,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
                         householdCount,
                         patientCount,
                       ),
-                      style: _headerSubStyle,
+                      style: AppTextStyles.householdHeaderSub,
                     ),
                   ],
                 ),
@@ -642,7 +627,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
 
   /// Shared member-row widget: a `MissionQueueCard` (embedded/flush, no own
   /// card chrome) when the member has an active mission-queue entry, else a
-  /// plain `_PatientCard`.
+  /// plain `PatientBadgeRow`.
   Widget _buildMemberRow(BuildContext context, _MemberInfo member) {
     final pid = member.patientId ?? member.id;
     final queueItem = pid != null ? _queueItems[pid] : null;
@@ -665,8 +650,16 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
         },
       );
     }
-    return _PatientCard(
-      member: member,
+    return PatientBadgeRow(
+      name: member.name,
+      age: member.age,
+      gender: member.gender,
+      phoneNumber: member.phoneNumber,
+      programmes: member.programmes,
+      ancVisitCount: member.ancVisitCount,
+      pncVisitCount: member.pncVisitCount,
+      householdNo: member.householdNo,
+      householdName: member.householdName,
       onTap: () => _navigateToMemberDetail(context, member),
     );
   }
@@ -704,49 +697,6 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
       orElse: () => item.members.first,
     );
   }
-}
-
-/// Small circular icon button on the navy header — the mockup's own
-/// back-button treatment (28×28, white 15%-alpha circle).
-class _HeaderIconButton extends StatelessWidget {
-  const _HeaderIconButton({
-    required this.icon,
-    required this.tooltip,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onTap,
-        customBorder: const CircleBorder(),
-        child: Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.15),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, size: 15, color: Colors.white),
-        ),
-      ),
-    );
-  }
-}
-
-/// Initials for an avatar (e.g. "Rafiqul Islam" -> "RI"). Shared by
-/// [_OtherMemberRow] (and, until it was needed, [_PatientCard]).
-String _memberInitials(String? name) {
-  if (name == null || name.isEmpty) return '';
-  final parts = name.trim().split(RegExp(r'\s+'));
-  if (parts.length == 1) return parts[0][0].toUpperCase();
-  return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
 }
 
 /// The relation worth showing next to a primary member row — null for a
@@ -1010,7 +960,7 @@ class _OtherMemberRow extends StatelessWidget {
               ),
               alignment: Alignment.center,
               child: Text(
-                _memberInitials(member.name),
+                memberInitials(member.name),
                 style: const TextStyle(
                   fontFamily: 'Nunito',
                   fontSize: 11,
@@ -1051,9 +1001,9 @@ class _OtherMemberRow extends StatelessWidget {
                 color: AppColors.catHomeSurface,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Text(
+              child: Text(
                 HouseholdListStrings.enrolledTag,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 9,
                   fontWeight: FontWeight.w700,
                   color: AppColors.statusSuccessAction,
@@ -1079,119 +1029,6 @@ class _OtherMemberRow extends StatelessWidget {
     } catch (_) {
       return null;
     }
-  }
-}
-
-/// Flush member row for a primary member with no mission-queue entry —
-/// matches the v13 mockup's member-row shape exactly (name+age/gender+badge,
-/// address line, phone line — no avatar, no card chrome of its own, since
-/// it's always embedded inside a [_HouseholdCard]). Reuses the same
-/// `AppTextStyles.worklist*` tokens `MissionQueueCard` uses so the two
-/// widgets never visually drift from each other.
-class _PatientCard extends StatelessWidget {
-  const _PatientCard({required this.member, this.onTap});
-
-  final _MemberInfo member;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    // Same shared logic the dashboard's real MissionQueueCard badge uses —
-    // visit-count-aware, not an approximation of it.
-    final badgeLabel = programmeReason(
-      programmes: member.programmes,
-      ancVisitCount: member.ancVisitCount,
-      pncVisitCount: member.pncVisitCount,
-    );
-    final (badgeBg, badgeFg) = programmeBadgeColors(
-      primaryProgrammeOf(member.programmes),
-    );
-
-    final address = [
-      member.householdNo != null ? 'House #${member.householdNo}' : null,
-      member.householdName,
-    ].whereType<String>().join(', ');
-
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 6,
-                    runSpacing: 3,
-                    children: [
-                      Text(
-                        member.name ?? HouseholdListStrings.unnamedMember,
-                        style: AppTextStyles.worklistPatientName,
-                      ),
-                      if (member.age != null || member.gender != null)
-                        Text(
-                          [
-                            if (member.age != null) '${member.age}',
-                            if (member.gender != null)
-                              member.gender!.substring(0, 1).toUpperCase(),
-                          ].join('/'),
-                          style: AppTextStyles.worklistPatientMeta,
-                        ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: badgeBg,
-                          borderRadius: BorderRadius.circular(5),
-                        ),
-                        child: Text(
-                          badgeLabel,
-                          style: TextStyle(
-                            fontFamily: 'NunitoSans',
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: badgeFg,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (address.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        address,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.worklistAddress.copyWith(
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                    ),
-                  if (member.phoneNumber != null &&
-                      member.phoneNumber!.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        member.phoneNumber!,
-                        style: AppTextStyles.worklistPhone.copyWith(
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 
