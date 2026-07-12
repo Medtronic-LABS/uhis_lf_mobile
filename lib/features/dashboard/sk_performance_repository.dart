@@ -25,34 +25,51 @@ class SkPerformanceStats {
     required this.visitsThisWeek,
     required this.visitsThisMonth,
     required this.referralsThisWeek,
+    required this.referralsThisMonth,
     required this.referralsCompleted,
     required this.totalHouseholds,
     required this.visitsByProgramme,
+    required this.visitsByProgrammeMonth,
     required this.recentActivity,
     required this.weekStartDate,
     required this.monthStartDate,
     required this.dailyVisitCounts,
+    required this.weeklyVisitCounts,
     required this.avgVisitsPerDay,
+    required this.avgVisitsPerDayMonth,
     required this.missedOverdue,
     required this.slaCompliance,
     required this.highRiskResponseDays,
     required this.performanceScore,
+    required this.performanceScoreMonth,
   });
 
   final int visitsToday;
   final int visitsThisWeek;
   final int visitsThisMonth;
   final int referralsThisWeek;
+  final int referralsThisMonth;
   final int referralsCompleted;
   final int totalHouseholds;
+
+  /// Programme breakdown for THIS WEEK.
   final Map<String, int> visitsByProgramme;
+
+  /// Programme breakdown for THIS MONTH.
+  final Map<String, int> visitsByProgrammeMonth;
+
   final List<RecentVisitActivity> recentActivity;
   final DateTime weekStartDate;
   final DateTime monthStartDate;
 
   /// Count per weekday Mon(0)→Sun(6) for the current week's bar chart.
   final List<int> dailyVisitCounts;
+
+  /// Count per week W1–W4 within the current month's bar chart.
+  final List<int> weeklyVisitCounts;
+
   final double avgVisitsPerDay;
+  final double avgVisitsPerDayMonth;
   final int missedOverdue;
 
   /// 0.0–1.0 (mocked at 1.0 until SLA data is available).
@@ -61,24 +78,33 @@ class SkPerformanceStats {
   /// Days (mocked at 1.2 until CCE data is available).
   final double highRiskResponseDays;
 
-  /// 0–100 composite score.
+  /// 0–100 composite score for THIS WEEK.
   final int performanceScore;
 
-  static const int visitsTarget = 40;
+  /// 0–100 composite score for THIS MONTH.
+  final int performanceScoreMonth;
 
-  String get performanceRating {
-    if (performanceScore >= 90) return 'Excellent';
-    if (performanceScore >= 75) return 'Good';
-    if (performanceScore >= 60) return 'Fair';
+  static const int visitsTarget = 40;
+  static const int visitsTargetMonth = 160;
+
+  String ratingFor(int score) {
+    if (score >= 90) return 'Excellent';
+    if (score >= 75) return 'Good';
+    if (score >= 60) return 'Fair';
     return 'Needs Improvement';
   }
 
-  String get performanceEmoji {
-    if (performanceScore >= 90) return '⭐';
-    if (performanceScore >= 75) return '👍';
-    if (performanceScore >= 60) return '👌';
+  String emojiFor(int score) {
+    if (score >= 90) return '⭐';
+    if (score >= 75) return '👍';
+    if (score >= 60) return '👌';
     return '💪';
   }
+
+  String get performanceRating => ratingFor(performanceScore);
+  String get performanceEmoji => emojiFor(performanceScore);
+  String get performanceRatingMonth => ratingFor(performanceScoreMonth);
+  String get performanceEmojiMonth => emojiFor(performanceScoreMonth);
 }
 
 class SkPerformanceRepository {
@@ -111,6 +137,17 @@ class SkPerformanceRepository {
       final end =
           day.add(const Duration(days: 1)).millisecondsSinceEpoch;
       return (start, end);
+    });
+
+    // Weekly boundaries for month (W1–W4)
+    final daysInMonth =
+        DateTime(now.year, now.month + 1, 0).day;
+    final weeklyMs = List.generate(4, (i) {
+      final start = monthStart.add(Duration(days: i * 7));
+      final end = (i == 3)
+          ? DateTime(now.year, now.month + 1, 1)
+          : monthStart.add(Duration(days: (i + 1) * 7));
+      return (start.millisecondsSinceEpoch, end.millisecondsSinceEpoch);
     });
 
     final results = await Future.wait([
@@ -155,6 +192,15 @@ class SkPerformanceRepository {
           LIMIT 8
           ''',
           []),
+      // 7: referrals this month
+      db.rawQuery(
+          'SELECT COUNT(*) as c FROM $table WHERE is_referred = 1 AND created_at >= ?',
+          [monthMs]),
+      // 8: visits by programme this month
+      db.rawQuery(
+          'SELECT assessment_type, COUNT(*) as c FROM $table '
+          'WHERE created_at >= ? GROUP BY assessment_type',
+          [monthMs]),
     ]);
 
     // Daily counts Mon–Sun
@@ -165,6 +211,16 @@ class SkPerformanceRepository {
           'WHERE created_at >= ? AND created_at < ?',
           [start, end]);
       dailyCounts.add((rows.first['c'] as int?) ?? 0);
+    }
+
+    // Weekly counts W1–W4 within month
+    final weeklyCounts = <int>[];
+    for (final (start, end) in weeklyMs) {
+      final rows = await db.rawQuery(
+          'SELECT COUNT(*) as c FROM $table '
+          'WHERE created_at >= ? AND created_at < ?',
+          [start, end]);
+      weeklyCounts.add((rows.first['c'] as int?) ?? 0);
     }
 
     // Missed / overdue — patients with a past-due follow-up date
@@ -180,19 +236,19 @@ class SkPerformanceRepository {
     }
 
     final weekVisits = count(results[1]);
+    final monthVisits = count(results[2]);
     final weekReferrals = count(results[3]);
+    final monthReferrals = count(results[7]);
 
-    final byProgramme = <String, int>{
-      'ANC': 0,
-      'NCD': 0,
-      'IMCI': 0,
-      'PNC': 0,
-      'HOUSEHOLD': 0,
-    };
-    for (final row in results[5]) {
-      final type =
-          (row['assessment_type'] as String?)?.toUpperCase() ?? '?';
-      byProgramme[type] = (row['c'] as int?) ?? 0;
+    Map<String, int> buildByProgramme(List<Map<String, Object?>> rows) {
+      final map = <String, int>{
+        'ANC': 0, 'NCD': 0, 'IMCI': 0, 'PNC': 0, 'HOUSEHOLD': 0,
+      };
+      for (final row in rows) {
+        final type = (row['assessment_type'] as String?)?.toUpperCase() ?? '?';
+        map[type] = (row['c'] as int?) ?? 0;
+      }
+      return map;
     }
 
     final recent = results[6].map((row) {
@@ -216,26 +272,33 @@ class SkPerformanceRepository {
       );
     }).toList();
 
-    final score =
+    final weekScore =
         (50 + (weekVisits * 1.2 + weekReferrals * 2)).clamp(0, 100).toInt();
+    final monthScore =
+        (50 + (monthVisits * 0.3 + monthReferrals * 0.5)).clamp(0, 100).toInt();
 
     return SkPerformanceStats(
       visitsToday: count(results[0]),
       visitsThisWeek: weekVisits,
-      visitsThisMonth: count(results[2]),
+      visitsThisMonth: monthVisits,
       referralsThisWeek: weekReferrals,
+      referralsThisMonth: monthReferrals,
       referralsCompleted: weekReferrals,
       totalHouseholds: count(results[4]),
-      visitsByProgramme: byProgramme,
+      visitsByProgramme: buildByProgramme(results[5]),
+      visitsByProgrammeMonth: buildByProgramme(results[8]),
       recentActivity: recent,
       weekStartDate: weekStart,
       monthStartDate: monthStart,
       dailyVisitCounts: dailyCounts,
+      weeklyVisitCounts: weeklyCounts,
       avgVisitsPerDay: weekVisits / 7.0,
+      avgVisitsPerDayMonth: monthVisits / daysInMonth,
       missedOverdue: missed,
       slaCompliance: 1.0,
       highRiskResponseDays: 1.2,
-      performanceScore: score,
+      performanceScore: weekScore,
+      performanceScoreMonth: monthScore,
     );
   }
 }

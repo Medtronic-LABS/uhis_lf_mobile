@@ -4251,6 +4251,7 @@ abstract final class PerformanceStrings {
   static const String sectionServiceBreakdown = 'SERVICE-WISE BREAKDOWN';
   static const String insightBoldPhrase = 'more visits';
   static const List<String> weekdayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  static const List<String> weekLabels = ['W1', 'W2', 'W3', 'W4'];
   static const String serviceAnc = 'ANC';
   static const String serviceNcd = 'NCD';
   static const String serviceChild = 'Child / Immunisation';
@@ -4259,6 +4260,9 @@ abstract final class PerformanceStrings {
 
   static String insightWeek(int pct) =>
       'You completed $pct% more visits than the Manikganj Sadar area average this week.';
+
+  static String insightMonth(int pct) =>
+      'You completed $pct% more visits than the Manikganj Sadar area average this month.';
 }
 
 /// Household enrollment flow strings.

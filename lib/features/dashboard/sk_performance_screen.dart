@@ -80,15 +80,15 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen> {
                 onToggle: (v) => setState(() => _showMonth = v),
               ),
               const SizedBox(height: 14),
-              _HeroCard(stats: stats),
+              _HeroCard(stats: stats, showMonth: _showMonth),
               const SizedBox(height: 14),
-              _VisitTrendCard(stats: stats),
+              _VisitTrendCard(stats: stats, showMonth: _showMonth),
               const SizedBox(height: 14),
-              _StatsGrid(stats: stats),
+              _StatsGrid(stats: stats, showMonth: _showMonth),
               const SizedBox(height: 14),
-              _ServiceBreakdownCard(stats: stats),
+              _ServiceBreakdownCard(stats: stats, showMonth: _showMonth),
               const SizedBox(height: 14),
-              _InsightStrip(stats: stats),
+              _InsightStrip(stats: stats, showMonth: _showMonth),
             ],
           );
         },
@@ -172,15 +172,17 @@ class _ToggleTab extends StatelessWidget {
 // ── Hero card ─────────────────────────────────────────────────────────────────
 
 class _HeroCard extends StatelessWidget {
-  const _HeroCard({required this.stats});
+  const _HeroCard({required this.stats, required this.showMonth});
 
   final SkPerformanceStats stats;
+  final bool showMonth;
 
   @override
   Widget build(BuildContext context) {
-    final score = stats.performanceScore;
-    final slaText =
-        '${(stats.slaCompliance * 100).round()}%';
+    final score = showMonth ? stats.performanceScoreMonth : stats.performanceScore;
+    final rating = showMonth ? stats.performanceRatingMonth : stats.performanceRating;
+    final emoji  = showMonth ? stats.performanceEmojiMonth : stats.performanceEmoji;
+    final slaText = '${(stats.slaCompliance * 100).round()}%';
     final hrText = '${stats.highRiskResponseDays}d';
 
     return Container(
@@ -259,7 +261,7 @@ class _HeroCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${stats.performanceRating} ${stats.performanceEmoji}',
+                      '$rating $emoji',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 22,
@@ -362,15 +364,21 @@ class _MetricCell extends StatelessWidget {
 // ── Visit trend card ──────────────────────────────────────────────────────────
 
 class _VisitTrendCard extends StatelessWidget {
-  const _VisitTrendCard({required this.stats});
+  const _VisitTrendCard({required this.stats, required this.showMonth});
 
   final SkPerformanceStats stats;
+  final bool showMonth;
 
   @override
   Widget build(BuildContext context) {
-    final counts = stats.dailyVisitCounts;
+    final counts = showMonth
+        ? stats.weeklyVisitCounts
+        : stats.dailyVisitCounts;
+    final labels = showMonth
+        ? PerformanceStrings.weekLabels
+        : PerformanceStrings.weekdayLabels;
     final maxCount =
-        counts.reduce((a, b) => a > b ? a : b).toDouble();
+        counts.isEmpty ? 1 : counts.reduce((a, b) => a > b ? a : b);
     const maxBarH = 56.0;
 
     return _WhiteCard(
@@ -404,14 +412,13 @@ class _VisitTrendCard extends StatelessWidget {
             height: maxBarH + 32,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
-              children: List.generate(7, (i) {
-                final c = counts.length > i ? counts[i] : 0;
+              children: List.generate(counts.length, (i) {
+                final c = counts[i];
                 final barH =
                     maxCount > 0 ? (c / maxCount) * maxBarH : 2.0;
                 return Expanded(
                   child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 3),
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
@@ -428,17 +435,15 @@ class _VisitTrendCard extends StatelessWidget {
                         Container(
                           height: barH.clamp(2.0, maxBarH),
                           decoration: BoxDecoration(
-                            color: AppColors.aiPurple
-                                .withAlpha(180),
-                            borderRadius:
-                                const BorderRadius.vertical(
+                            color: AppColors.aiPurple.withAlpha(180),
+                            borderRadius: const BorderRadius.vertical(
                               top: Radius.circular(4),
                             ),
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          PerformanceStrings.weekdayLabels[i],
+                          labels.length > i ? labels[i] : '',
                           style: const TextStyle(
                             fontSize: 10,
                             color: AppColors.textMuted,
@@ -460,28 +465,37 @@ class _VisitTrendCard extends StatelessWidget {
 // ── Stats grid ────────────────────────────────────────────────────────────────
 
 class _StatsGrid extends StatelessWidget {
-  const _StatsGrid({required this.stats});
+  const _StatsGrid({required this.stats, required this.showMonth});
 
   final SkPerformanceStats stats;
+  final bool showMonth;
 
   @override
   Widget build(BuildContext context) {
-    final completionPct = stats.referralsThisWeek > 0
-        ? ((stats.referralsCompleted / stats.referralsThisWeek) * 100)
-            .round()
+    final visits = showMonth ? stats.visitsThisMonth : stats.visitsThisWeek;
+    final target = showMonth
+        ? SkPerformanceStats.visitsTargetMonth
+        : SkPerformanceStats.visitsTarget;
+    final referrals =
+        showMonth ? stats.referralsThisMonth : stats.referralsThisWeek;
+    final avgVisits = showMonth
+        ? stats.avgVisitsPerDayMonth
+        : stats.avgVisitsPerDay;
+    final completionPct = referrals > 0
+        ? ((stats.referralsCompleted / referrals) * 100).round()
         : 0;
 
     final tiles = [
       _StatTileData(
         icon: Icons.check_rounded,
         color: AppColors.navy,
-        value: '${stats.visitsThisWeek} / ${SkPerformanceStats.visitsTarget}',
+        value: '$visits / $target',
         label: PerformanceStrings.statVisitsCompleted,
       ),
       _StatTileData(
         icon: Icons.assignment_outlined,
         color: const Color(0xFFF59E0B),
-        value: '${stats.referralsThisWeek}',
+        value: '$referrals',
         label: PerformanceStrings.statReferralsMade,
       ),
       _StatTileData(
@@ -500,7 +514,7 @@ class _StatsGrid extends StatelessWidget {
       _StatTileData(
         icon: Icons.bolt_rounded,
         color: const Color(0xFFF59E0B),
-        value: stats.avgVisitsPerDay.toStringAsFixed(1),
+        value: avgVisits.toStringAsFixed(1),
         label: PerformanceStrings.statAvgVisitsDay,
       ),
       _StatTileData(
@@ -614,13 +628,14 @@ class _StatTile extends StatelessWidget {
 // ── Service breakdown card ────────────────────────────────────────────────────
 
 class _ServiceBreakdownCard extends StatelessWidget {
-  const _ServiceBreakdownCard({required this.stats});
+  const _ServiceBreakdownCard({required this.stats, required this.showMonth});
 
   final SkPerformanceStats stats;
+  final bool showMonth;
 
   @override
   Widget build(BuildContext context) {
-    final byProg = stats.visitsByProgramme;
+    final byProg = showMonth ? stats.visitsByProgrammeMonth : stats.visitsByProgramme;
     final rows = [
       (PerformanceStrings.serviceAnc, byProg['ANC'] ?? 0, AppColors.ancHeader),
       (PerformanceStrings.serviceNcd, byProg['NCD'] ?? 0, const Color(0xFFF59E0B)),
@@ -718,14 +733,17 @@ class _ServiceRow extends StatelessWidget {
 // ── Insight strip ─────────────────────────────────────────────────────────────
 
 class _InsightStrip extends StatelessWidget {
-  const _InsightStrip({required this.stats});
+  const _InsightStrip({required this.stats, required this.showMonth});
 
   final SkPerformanceStats stats;
+  final bool showMonth;
 
   @override
   Widget build(BuildContext context) {
     const pct = 12;
-    final full = PerformanceStrings.insightWeek(pct);
+    final full = showMonth
+        ? PerformanceStrings.insightMonth(pct)
+        : PerformanceStrings.insightWeek(pct);
     final boldPhrase = '$pct% ${PerformanceStrings.insightBoldPhrase}';
     final idx = full.indexOf(boldPhrase);
 
