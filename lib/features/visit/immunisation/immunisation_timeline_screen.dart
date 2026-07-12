@@ -5,8 +5,18 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/db/immunisation_dao.dart';
 import '../../../core/db/patient_dao.dart';
+import '../../../core/models/patient.dart';
 import '../../../core/theme/app_theme.dart';
 import 'epi_schedule_engine.dart';
+
+// ── Color tokens ─────────────────────────────────────────────────────────────
+const _kGreen = Color(0xFF16A34A);
+const _kRed = Color(0xFFDC2626);
+const _kAmber = Color(0xFFF59E0B);
+const _kGrey = Color(0xFF9CA3AF);
+const _kRedSurface = Color(0xFFFEF2F2);
+const _kRedBorder = Color(0xFFFCA5A5);
+const _kAmberSurface = Color(0xFFFFFBEB);
 
 class ImmunisationTimelineScreen extends StatefulWidget {
   const ImmunisationTimelineScreen({
@@ -18,8 +28,6 @@ class ImmunisationTimelineScreen extends StatefulWidget {
 
   final String patientId;
   final String? patientName;
-
-  /// DOB as ISO-8601 string — nullable for defensive handling.
   final String? dob;
 
   @override
@@ -30,6 +38,7 @@ class ImmunisationTimelineScreen extends StatefulWidget {
 class _ImmunisationTimelineScreenState
     extends State<ImmunisationTimelineScreen> {
   List<VaccineMilestone>? _milestones;
+  Patient? _patient;
   bool _loading = true;
   String? _error;
 
@@ -41,19 +50,18 @@ class _ImmunisationTimelineScreenState
 
   Future<void> _load() async {
     final immunisationDao = context.read<ImmunisationDao>();
+    final patientDao = context.read<PatientDao>();
+
+    final patient = await patientDao.byId(widget.patientId);
 
     DateTime? dob;
-    if (widget.dob != null && widget.dob!.isNotEmpty) {
-      dob = DateTime.tryParse(widget.dob!);
-    }
-    if (dob == null) {
-      // Try loading from patient DAO
-      final patientDao = context.read<PatientDao>();
-      final patient = await patientDao.byId(widget.patientId);
-      if (patient?.dob != null) dob = DateTime.tryParse(patient!.dob!);
+    final dobStr = widget.dob ?? patient?.dob;
+    if (dobStr != null && dobStr.isNotEmpty) {
+      dob = DateTime.tryParse(dobStr);
     }
     if (dob == null) {
       setState(() {
+        _patient = patient;
         _error = EpiStrings.noDobError;
         _loading = false;
       });
@@ -61,15 +69,13 @@ class _ImmunisationTimelineScreenState
     }
 
     try {
-      final rowMap =
-          await immunisationDao.forMany([widget.patientId]);
+      final rowMap = await immunisationDao.forMany([widget.patientId]);
       final rows = rowMap[widget.patientId] ?? [];
-      final milestones = await EpiScheduleEngine.build(
-        dob: dob,
-        rows: rows,
-      );
+      final milestones =
+          await EpiScheduleEngine.build(dob: dob, rows: rows);
       if (mounted) {
         setState(() {
+          _patient = patient;
           _milestones = milestones;
           _loading = false;
         });
@@ -77,6 +83,7 @@ class _ImmunisationTimelineScreenState
     } on Object catch (e) {
       if (mounted) {
         setState(() {
+          _patient = patient;
           _error = e.toString();
           _loading = false;
         });
@@ -84,63 +91,143 @@ class _ImmunisationTimelineScreenState
     }
   }
 
-  int get _overdueCount =>
+  String _ageLabel(Patient? p) {
+    if (p == null) return '';
+    final dob = (p.dob != null && p.dob!.isNotEmpty)
+        ? DateTime.tryParse(p.dob!)
+        : null;
+    if (dob != null) {
+      final months = (DateTime.now().difference(dob).inDays / 30.44).floor();
+      if (months < 1) {
+        final days = DateTime.now().difference(dob).inDays;
+        return '$days ${days == 1 ? 'day' : 'days'}';
+      }
+      if (months < 24) return '$months ${months == 1 ? 'month' : 'months'}';
+      final years = months ~/ 12;
+      return '$years ${years == 1 ? 'year' : 'years'}';
+    }
+    if (p.age != null) return '${p.age} years';
+    return '';
+  }
+
+  String _subtitle(Patient? p) {
+    final parts = <String>[];
+    final age = _ageLabel(p);
+    if (age.isNotEmpty) parts.add(age);
+    if (p?.gender != null) {
+      final g = p!.gender!.toUpperCase();
+      if (g == 'M' || g == 'MALE') parts.add('Male');
+      if (g == 'F' || g == 'FEMALE') parts.add('Female');
+    }
+    if (p?.villageName != null && p!.villageName!.isNotEmpty) {
+      parts.add(p.villageName!);
+    }
+    return parts.join(' · ');
+  }
+
+  List<VaccineMilestone> get _overdueMilestones =>
+      (_milestones ?? []).where((m) => m.hasDueNow).toList();
+
+  String _overdueBannerDetail() {
+    final due = _overdueMilestones;
+    if (due.isEmpty) return '';
+    final label = due.map((m) => m.label).join(', ');
+    final vaccines = due.expand((m) => m.vaccines
+        .where((v) => v.status == VaccineStatus.dueNow)
+        .map((v) => v.display)).toList();
+    final vaccineText = vaccines.take(4).join(', ') +
+        (vaccines.length > 4 ? '…' : '');
+    return '$label doses ($vaccineText) are due now.';
+  }
+
+  int get _totalOverdueCount =>
       (_milestones ?? [])
           .expand((m) => m.vaccines)
-          .where((v) => v.isOverdue || v.status == VaccineStatus.dueNow)
+          .where((v) => v.status == VaccineStatus.dueNow)
           .length;
 
   @override
   Widget build(BuildContext context) {
+    final name = widget.patientName ?? _patient?.name ?? EpiStrings.screenTitle;
+
     return Scaffold(
       backgroundColor: AppColors.canvas,
       appBar: AppBar(
         backgroundColor: AppColors.navy,
         foregroundColor: Colors.white,
-        title: Text(widget.patientName ?? EpiStrings.screenTitle),
+        elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => context.pop(),
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              name,
+              style: const TextStyle(
+                  fontWeight: FontWeight.w800, fontSize: 16),
+            ),
+            Text(
+              _subtitle(_patient),
+              style: const TextStyle(
+                  fontSize: 12, color: Colors.white70),
+            ),
+          ],
         ),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? Center(
-                  child: Text(
-                    _error!,
-                    style: const TextStyle(color: AppColors.textMuted),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(_error!,
+                        style: const TextStyle(color: AppColors.textMuted)),
                   ),
                 )
-              : _buildTimeline(),
+              : _buildContent(name),
     );
   }
 
-  Widget _buildTimeline() {
+  Widget _buildContent(String patientName) {
     final milestones = _milestones!;
-    final overdue = _overdueCount;
+    final overdueCount = _totalOverdueCount;
 
-    return CustomScrollView(
-      slivers: [
-        if (overdue > 0)
-          SliverToBoxAdapter(
-            child: _OverdueBanner(count: overdue),
-          ),
-        SliverList(
-          delegate: SliverChildBuilderDelegate(
-            (context, index) => _MilestoneCard(
-              milestone: milestones[index],
-              onUpdateStatus: (vaccine) => _showUpdateSheet(vaccine),
-            ),
-            childCount: milestones.length,
+    return Column(
+      children: [
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            children: [
+              // Overdue banner
+              if (overdueCount > 0)
+                _OverdueBanner(
+                  count: overdueCount,
+                  detail: _overdueBannerDetail(),
+                ),
+
+              // Timeline
+              _Timeline(
+                milestones: milestones,
+                patientName: patientName,
+                ageLabel: _ageLabel(_patient),
+                onUpdateStatus: (milestone) =>
+                    _showUpdateSheet(milestone, patientName),
+              ),
+            ],
           ),
         ),
-        const SliverToBoxAdapter(child: SizedBox(height: 32)),
+
+        // Bottom Submit bar
+        _SubmitBar(onSubmit: () => context.pop()),
       ],
     );
   }
 
-  Future<void> _showUpdateSheet(VaccineEntry vaccine) async {
+  Future<void> _showUpdateSheet(
+      VaccineMilestone milestone, String patientName) async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -149,10 +236,12 @@ class _ImmunisationTimelineScreenState
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => _UpdateStatusSheet(
-        vaccine: vaccine,
+        milestone: milestone,
         patientId: widget.patientId,
-        onRecorded: (_) {
-          // Reload after recording
+        patientName: patientName,
+        ageLabel: _ageLabel(_patient),
+        locationLabel: _patient?.villageName ?? '',
+        onRecorded: () {
           setState(() => _loading = true);
           _load();
         },
@@ -164,31 +253,140 @@ class _ImmunisationTimelineScreenState
 // ── Overdue banner ────────────────────────────────────────────────────────────
 
 class _OverdueBanner extends StatelessWidget {
-  const _OverdueBanner({required this.count});
+  const _OverdueBanner({required this.count, required this.detail});
   final int count;
+  final String detail;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFFEF2F2),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFFCA5A5)),
+        color: _kRedSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _kRedBorder),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.warning_amber_rounded,
-              color: Color(0xFFDC2626), size: 18),
-          const SizedBox(width: 8),
+          Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded,
+                  color: _kRed, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  EpiStrings.overdueBanner(count),
+                  style: const TextStyle(
+                    color: _kRed,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (detail.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.only(left: 26),
+              child: Text(
+                detail,
+                style: const TextStyle(
+                  color: _kRed,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ── Vertical timeline ─────────────────────────────────────────────────────────
+
+class _Timeline extends StatelessWidget {
+  const _Timeline({
+    required this.milestones,
+    required this.patientName,
+    required this.ageLabel,
+    required this.onUpdateStatus,
+  });
+
+  final List<VaccineMilestone> milestones;
+  final String patientName;
+  final String ageLabel;
+  final void Function(VaccineMilestone) onUpdateStatus;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        children: [
+          for (int i = 0; i < milestones.length; i++)
+            _MilestoneRow(
+              milestone: milestones[i],
+              isLast: i == milestones.length - 1,
+              patientName: patientName,
+              ageLabel: ageLabel,
+              onUpdateStatus: () => onUpdateStatus(milestones[i]),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MilestoneRow extends StatelessWidget {
+  const _MilestoneRow({
+    required this.milestone,
+    required this.isLast,
+    required this.patientName,
+    required this.ageLabel,
+    required this.onUpdateStatus,
+  });
+
+  final VaccineMilestone milestone;
+  final bool isLast;
+  final String patientName;
+  final String ageLabel;
+  final VoidCallback onUpdateStatus;
+
+  @override
+  Widget build(BuildContext context) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Left: connector line + dot
+          Column(
+            children: [
+              _StatusDot(milestone: milestone),
+              if (!isLast)
+                Expanded(
+                  child: Container(
+                    width: 2,
+                    color: milestone.allCompleted
+                        ? _kGreen.withValues(alpha: 0.3)
+                        : const Color(0xFFE5E7EB),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: 12),
+          // Right: milestone card
           Expanded(
-            child: Text(
-              EpiStrings.overdueBanner(count),
-              style: const TextStyle(
-                color: Color(0xFFDC2626),
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: _MilestoneCard(
+                milestone: milestone,
+                patientName: patientName,
+                ageLabel: ageLabel,
+                onUpdateStatus: onUpdateStatus,
               ),
             ),
           ),
@@ -198,221 +396,243 @@ class _OverdueBanner extends StatelessWidget {
   }
 }
 
-// ── Milestone card ────────────────────────────────────────────────────────────
-
-class _MilestoneCard extends StatelessWidget {
-  const _MilestoneCard({
-    required this.milestone,
-    required this.onUpdateStatus,
-  });
-
-  final VaccineMilestone milestone;
-  final void Function(VaccineEntry) onUpdateStatus;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Milestone header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
-            child: Row(
-              children: [
-                _MilestoneStatusIcon(milestone: milestone),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    milestone.label,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 15,
-                      color: AppColors.navy,
-                    ),
-                  ),
-                ),
-                Text(
-                  _formatDate(milestone.scheduledDate),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textMuted,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1, indent: 14, endIndent: 14),
-          // Vaccine rows
-          ...milestone.vaccines.map(
-            (v) => _VaccineRow(
-              vaccine: v,
-              onUpdateStatus: () => onUpdateStatus(v),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatDate(DateTime d) =>
-      '${d.day} ${_monthShort(d.month)} ${d.year}';
-
-  String _monthShort(int m) => const [
-        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-      ][m - 1];
-}
-
-class _MilestoneStatusIcon extends StatelessWidget {
-  const _MilestoneStatusIcon({required this.milestone});
+class _StatusDot extends StatelessWidget {
+  const _StatusDot({required this.milestone});
   final VaccineMilestone milestone;
 
   @override
   Widget build(BuildContext context) {
     if (milestone.allCompleted) {
-      return const CircleAvatar(
-        radius: 12,
-        backgroundColor: Color(0xFF16A34A),
-        child: Icon(Icons.check_rounded, size: 14, color: Colors.white),
+      return Container(
+        width: 28,
+        height: 28,
+        decoration: const BoxDecoration(
+          color: _kGreen,
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(Icons.check_rounded, size: 16, color: Colors.white),
       );
     }
-    final hasOverdue = milestone.overdueCount > 0 || milestone.dueNowCount > 0;
-    if (hasOverdue) {
-      return const CircleAvatar(
-        radius: 12,
-        backgroundColor: Color(0xFFDC2626),
-        child: Icon(Icons.priority_high_rounded, size: 14, color: Colors.white),
+    if (milestone.hasDueNow) {
+      return Container(
+        width: 28,
+        height: 28,
+        decoration: const BoxDecoration(color: _kRed, shape: BoxShape.circle),
+        child: const Icon(Icons.priority_high_rounded,
+            size: 16, color: Colors.white),
       );
     }
-    return CircleAvatar(
-      radius: 12,
-      backgroundColor: const Color(0xFFF59E0B).withValues(alpha: 0.15),
-      child: const Icon(Icons.schedule_rounded,
-          size: 14, color: Color(0xFFF59E0B)),
+    if (milestone.hasUpcoming) {
+      return Container(
+        width: 28,
+        height: 28,
+        decoration: BoxDecoration(
+          color: _kAmber.withValues(alpha: 0.15),
+          shape: BoxShape.circle,
+          border: Border.all(color: _kAmber, width: 2),
+        ),
+        child: const Icon(Icons.schedule_rounded, size: 14, color: _kAmber),
+      );
+    }
+    return Container(
+      width: 28,
+      height: 28,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        border: Border.all(color: _kGrey, width: 2),
+      ),
+      child: const Icon(Icons.lock_outline_rounded, size: 12, color: _kGrey),
     );
   }
 }
 
-class _VaccineRow extends StatelessWidget {
-  const _VaccineRow({
-    required this.vaccine,
+class _MilestoneCard extends StatelessWidget {
+  const _MilestoneCard({
+    required this.milestone,
+    required this.patientName,
+    required this.ageLabel,
     required this.onUpdateStatus,
   });
 
-  final VaccineEntry vaccine;
+  final VaccineMilestone milestone;
+  final String patientName;
+  final String ageLabel;
   final VoidCallback onUpdateStatus;
+
+  Color get _borderColor {
+    if (milestone.allCompleted) return _kGreen.withValues(alpha: 0.3);
+    if (milestone.hasDueNow) return _kRedBorder;
+    if (milestone.hasUpcoming) return _kAmber.withValues(alpha: 0.3);
+    return const Color(0xFFE5E7EB);
+  }
+
+  Color get _bgColor {
+    if (milestone.hasDueNow) return _kRedSurface;
+    if (milestone.hasUpcoming) return _kAmberSurface;
+    return Colors.white;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final (color, icon, label) = _statusStyle(vaccine.status);
+    final monthsUntil = milestone.scheduledDate
+        .difference(DateTime.now())
+        .inDays ~/
+        30;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      child: Row(
+    return Container(
+      decoration: BoxDecoration(
+        color: _bgColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _borderColor),
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  vaccine.display,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: vaccine.status == VaccineStatus.locked
-                        ? AppColors.textMuted
-                        : AppColors.navy,
+          // Header row: label + status badge / update button
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  milestone.label,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    color: AppColors.navy,
                   ),
                 ),
-                if (vaccine.givenDate != null)
-                  Text(
-                    '${EpiStrings.givenOn} ${_formatDate(vaccine.givenDate!)}',
-                    style: const TextStyle(
-                        fontSize: 11, color: AppColors.textMuted),
+              ),
+              if (milestone.allCompleted)
+                _StatusBadge(
+                    label: EpiStrings.statusCompleted,
+                    color: _kGreen,
+                    icon: Icons.check_rounded),
+              if (milestone.hasDueNow)
+                _UpdateCtaButton(onTap: onUpdateStatus),
+              if (milestone.hasUpcoming && !milestone.hasDueNow)
+                _StatusBadge(
+                    label: EpiStrings.statusUpcoming,
+                    color: _kAmber,
+                    icon: Icons.schedule_rounded),
+              if (!milestone.allCompleted &&
+                  !milestone.hasDueNow &&
+                  !milestone.hasUpcoming)
+                _StatusBadge(
+                    label: EpiStrings.statusNotYetDue,
+                    color: _kGrey,
+                    icon: Icons.lock_outline_rounded),
+            ],
+          ),
+
+          const SizedBox(height: 8),
+
+          // Vaccine list
+          ...milestone.vaccines.map(
+            (v) => Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3, right: 6),
+                    child: Icon(
+                      v.status == VaccineStatus.completed
+                          ? Icons.check_circle_outline_rounded
+                          : Icons.circle_outlined,
+                      size: 13,
+                      color: v.status == VaccineStatus.completed
+                          ? _kGreen
+                          : AppColors.textMuted,
+                    ),
                   ),
-              ],
+                  Expanded(
+                    child: Text(
+                      v.display,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: v.status == VaccineStatus.locked ||
+                                v.status == VaccineStatus.notYetDue
+                            ? AppColors.textMuted
+                            : AppColors.navy,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(width: 8),
-          if (vaccine.status == VaccineStatus.dueNow)
-            _UpdateCta(onTap: onUpdateStatus),
-          if (vaccine.status != VaccineStatus.dueNow)
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: color,
-                ),
-              ),
+
+          // Status footnote
+          const SizedBox(height: 8),
+          if (milestone.hasDueNow)
+            Text(
+              ageLabel.isNotEmpty
+                  ? 'Due now · $patientName is $ageLabel'
+                  : 'Due now',
+              style: const TextStyle(
+                  fontSize: 12,
+                  color: _kRed,
+                  fontWeight: FontWeight.w600),
+            ),
+          if (milestone.hasUpcoming && !milestone.hasDueNow && monthsUntil > 0)
+            Text(
+              'Due in ~$monthsUntil ${monthsUntil == 1 ? 'month' : 'months'}',
+              style: const TextStyle(fontSize: 12, color: _kAmber),
+            ),
+          if (!milestone.allCompleted &&
+              !milestone.hasDueNow &&
+              !milestone.hasUpcoming &&
+              monthsUntil > 0)
+            Text(
+              'Due in ~$monthsUntil ${monthsUntil == 1 ? 'month' : 'months'}',
+              style: const TextStyle(fontSize: 12, color: _kGrey),
             ),
         ],
       ),
     );
   }
-
-  (Color, IconData, String) _statusStyle(VaccineStatus s) {
-    switch (s) {
-      case VaccineStatus.completed:
-        return (
-          const Color(0xFF16A34A),
-          Icons.check_circle_rounded,
-          EpiStrings.statusCompleted,
-        );
-      case VaccineStatus.dueNow:
-        return (
-          const Color(0xFFDC2626),
-          Icons.error_outline_rounded,
-          EpiStrings.statusDueNow,
-        );
-      case VaccineStatus.upcoming:
-        return (
-          const Color(0xFFF59E0B),
-          Icons.schedule_rounded,
-          EpiStrings.statusUpcoming,
-        );
-      case VaccineStatus.notYetDue:
-        return (
-          AppColors.textMuted,
-          Icons.radio_button_unchecked_rounded,
-          EpiStrings.statusNotYetDue,
-        );
-      case VaccineStatus.locked:
-        return (
-          AppColors.textMuted,
-          Icons.lock_outline_rounded,
-          EpiStrings.statusLocked,
-        );
-    }
-  }
-
-  String _formatDate(DateTime d) =>
-      '${d.day} ${_monthShort(d.month)} ${d.year}';
-
-  String _monthShort(int m) => const [
-        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-      ][m - 1];
 }
 
-class _UpdateCta extends StatelessWidget {
-  const _UpdateCta({required this.onTap});
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({
+    required this.label,
+    required this.color,
+    required this.icon,
+  });
+  final String label;
+  final Color color;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _UpdateCtaButton extends StatelessWidget {
+  const _UpdateCtaButton({required this.onTap});
   final VoidCallback onTap;
 
   @override
@@ -420,10 +640,10 @@ class _UpdateCta extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          color: AppColors.pink,
-          borderRadius: BorderRadius.circular(10),
+          color: AppColors.navy,
+          borderRadius: BorderRadius.circular(20),
         ),
         child: const Text(
           EpiStrings.updateStatusCta,
@@ -438,18 +658,58 @@ class _UpdateCta extends StatelessWidget {
   }
 }
 
+// ── Submit bar ────────────────────────────────────────────────────────────────
+
+class _SubmitBar extends StatelessWidget {
+  const _SubmitBar({required this.onSubmit});
+  final VoidCallback onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
+      ),
+      padding: EdgeInsets.fromLTRB(
+          16, 12, 16, 12 + MediaQuery.of(context).padding.bottom),
+      child: SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          onPressed: onSubmit,
+          icon: const Text('💉', style: TextStyle(fontSize: 16)),
+          label: const Text(
+            EpiStrings.submitCta,
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+          ),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.navy,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ── Update status bottom sheet ────────────────────────────────────────────────
 
 class _UpdateStatusSheet extends StatefulWidget {
   const _UpdateStatusSheet({
-    required this.vaccine,
+    required this.milestone,
     required this.patientId,
+    required this.patientName,
+    required this.ageLabel,
+    required this.locationLabel,
     required this.onRecorded,
   });
 
-  final VaccineEntry vaccine;
+  final VaccineMilestone milestone;
   final String patientId;
-  final void Function(DateTime givenDate) onRecorded;
+  final String patientName;
+  final String ageLabel;
+  final String locationLabel;
+  final VoidCallback onRecorded;
 
   @override
   State<_UpdateStatusSheet> createState() => _UpdateStatusSheetState();
@@ -457,221 +717,355 @@ class _UpdateStatusSheet extends StatefulWidget {
 
 class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
   DateTime _givenDate = DateTime.now();
-  bool _isMissed = false;
+  final TextEditingController _notesCtrl = TextEditingController();
   bool _saving = false;
-  final TextEditingController _reasonCtrl = TextEditingController();
 
   @override
   void dispose() {
-    _reasonCtrl.dispose();
+    _notesCtrl.dispose();
     super.dispose();
+  }
+
+  String _sheetSubtitle() {
+    final parts = <String>[widget.patientName];
+    if (widget.ageLabel.isNotEmpty) parts.add(widget.ageLabel);
+    if (widget.locationLabel.isNotEmpty) parts.add(widget.locationLabel);
+    return parts.join(' · ');
   }
 
   Future<void> _save() async {
     setState(() => _saving = true);
     final immunisationDao = context.read<ImmunisationDao>();
     try {
-      final givenAtMs =
-          _isMissed ? null : _givenDate.millisecondsSinceEpoch;
-      final id = '${widget.patientId}_${widget.vaccine.code}';
-      await immunisationDao.upsertMany([
-        ImmunisationRow(
-          id: id,
+      final givenMs = _givenDate.millisecondsSinceEpoch;
+      final rows = widget.milestone.vaccines.map((v) {
+        return ImmunisationRow(
+          id: '${widget.patientId}_${v.code}',
           patientId: widget.patientId,
-          vaccineCode: widget.vaccine.code,
-          dueAt: widget.vaccine.scheduledDate.millisecondsSinceEpoch,
-          givenAt: givenAtMs,
-          rawJson: _buildRaw(),
-        ),
-      ]);
+          vaccineCode: v.code,
+          dueAt: widget.milestone.scheduledDate.millisecondsSinceEpoch,
+          givenAt: givenMs,
+          rawJson: '{"vaccineName":"${v.display}"'
+              ',"milestone":"${widget.milestone.label}"'
+              ',"notes":"${_notesCtrl.text.replaceAll('"', '\\"')}"'
+              '}',
+        );
+      }).toList();
+      await immunisationDao.upsertMany(rows);
       if (mounted) {
         Navigator.of(context).pop();
-        widget.onRecorded(_givenDate);
+        widget.onRecorded();
       }
     } on Object {
       if (mounted) setState(() => _saving = false);
     }
   }
 
-  String _buildRaw() {
-    return '{'
-        '"vaccineName":"${widget.vaccine.display}",'
-        '"category":"${widget.vaccine.category}",'
-        '"missed":$_isMissed'
-        '${_isMissed && _reasonCtrl.text.isNotEmpty ? ',"missedReason":"${_reasonCtrl.text}"' : ''}'
-        '}';
-  }
-
   @override
   Widget build(BuildContext context) {
     final bottomPad = MediaQuery.of(context).viewInsets.bottom;
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomPad),
+      padding: EdgeInsets.fromLTRB(0, 0, 0, bottomPad),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Drag handle
+          Center(
+            child: Container(
+              margin: const EdgeInsets.only(top: 10, bottom: 4),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFFD1D5DB),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+
           // Header
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  widget.vaccine.display,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
-                    color: AppColors.navy,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 12, 4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${widget.milestone.label} Vaccines',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 20,
+                          color: AppColors.navy,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _sheetSubtitle(),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.close_rounded),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Vaccinated / Missed toggle
-          Row(
-            children: [
-              _ToggleChip(
-                label: EpiStrings.vaccinated,
-                selected: !_isMissed,
-                onTap: () => setState(() => _isMissed = false),
-                activeColor: const Color(0xFF16A34A),
-              ),
-              const SizedBox(width: 10),
-              _ToggleChip(
-                label: EpiStrings.missed,
-                selected: _isMissed,
-                onTap: () => setState(() => _isMissed = true),
-                activeColor: const Color(0xFFDC2626),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          if (!_isMissed) ...[
-            Text(
-              EpiStrings.dateGiven,
-              style: const TextStyle(
-                  fontWeight: FontWeight.w600, color: AppColors.navy),
-            ),
-            const SizedBox(height: 6),
-            GestureDetector(
-              onTap: _pickDate,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 12),
-                decoration: BoxDecoration(
-                  border: Border.all(color: const Color(0xFFD1D5DB)),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.calendar_today_outlined,
-                        size: 16, color: AppColors.textMuted),
-                    const SizedBox(width: 8),
-                    Text(
-                      _formatDate(_givenDate),
-                      style: const TextStyle(fontSize: 14),
+                IconButton(
+                  icon: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF3F4F6),
+                      shape: BoxShape.circle,
                     ),
-                  ],
+                    child: const Icon(Icons.close_rounded,
+                        size: 18, color: AppColors.textMuted),
+                  ),
+                  onPressed: () => Navigator.of(context).pop(),
                 ),
-              ),
+              ],
             ),
-          ] else ...[
-            Text(
-              EpiStrings.missedReasonLabel,
-              style: const TextStyle(
-                  fontWeight: FontWeight.w600, color: AppColors.navy),
-            ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _reasonCtrl,
-              decoration: InputDecoration(
-                hintText: EpiStrings.missedReasonHint,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              maxLines: 2,
-            ),
-          ],
+          ),
 
-          const SizedBox(height: 20),
-          FilledButton(
-            onPressed: _saving ? null : _save,
-            style: FilledButton.styleFrom(backgroundColor: AppColors.navy),
-            child: _saving
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
-                  )
-                : Text(EpiStrings.saveStatus),
+          // Status strip
+          Container(
+            margin: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+            decoration: BoxDecoration(
+              color: _kRedSurface,
+              borderRadius: BorderRadius.circular(8),
+              border: const Border(
+                left: BorderSide(color: _kRed, width: 3),
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded,
+                    size: 16, color: _kRed),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.ageLabel.isNotEmpty
+                        ? 'Status: Due now · ${widget.patientName} is ${widget.ageLabel}'
+                        : 'Status: Due now',
+                    style: const TextStyle(
+                      color: _kRed,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Vaccines section
+                  _SectionLabel(EpiStrings.vaccinesDueLabel),
+                  ...widget.milestone.vaccineCards.map(
+                    (group) => _VaccineCard(vaccines: group),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Date administered
+                  _SectionLabel(EpiStrings.dateAdministered),
+                  _DateField(
+                    date: _givenDate,
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _givenDate,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime.now(),
+                      );
+                      if (picked != null) {
+                        setState(() => _givenDate = picked);
+                      }
+                    },
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Notes
+                  _SectionLabel(EpiStrings.notesOptional),
+                  TextField(
+                    controller: _notesCtrl,
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      hintText: EpiStrings.notesHint,
+                      hintStyle: const TextStyle(
+                          color: AppColors.textMuted, fontSize: 13),
+                      contentPadding: const EdgeInsets.all(12),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // Mark as completed
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _saving ? null : _save,
+                      icon: _saving
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Icon(Icons.check_rounded, size: 18),
+                      label: Text(EpiStrings.markCompleted),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _kGreen,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Cancel
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.textMuted,
+                        side: const BorderSide(color: Color(0xFFD1D5DB)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: Text(EpiStrings.cancel),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
     );
   }
-
-  Future<void> _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _givenDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-    );
-    if (picked != null) setState(() => _givenDate = picked);
-  }
-
-  String _formatDate(DateTime d) =>
-      '${d.day} ${_monthShort(d.month)} ${d.year}';
-
-  String _monthShort(int m) => const [
-        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-      ][m - 1];
 }
 
-class _ToggleChip extends StatelessWidget {
-  const _ToggleChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-    required this.activeColor,
-  });
-
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.label);
   final String label;
-  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        label.toUpperCase(),
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.8,
+          color: AppColors.textMuted,
+        ),
+      ),
+    );
+  }
+}
+
+/// Card for one card-group of vaccines (e.g. OPV-3 + PCV-3 together).
+class _VaccineCard extends StatelessWidget {
+  const _VaccineCard({required this.vaccines});
+  final List<VaccineEntry> vaccines;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = vaccines.map((v) => v.display).join(' · ');
+    final descriptions = vaccines.map((v) => v.description).join(' · ');
+    final routes = vaccines.map((v) => v.route).join(' · ');
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 14,
+              color: AppColors.navy,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            descriptions,
+            style: const TextStyle(
+                fontSize: 12, color: AppColors.textMuted),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            routes,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textMuted,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DateField extends StatelessWidget {
+  const _DateField({required this.date, required this.onTap});
+  final DateTime date;
   final VoidCallback onTap;
-  final Color activeColor;
+
+  String _format(DateTime d) {
+    final day = d.day.toString().padLeft(2, '0');
+    final month = d.month.toString().padLeft(2, '0');
+    return '$day / $month / ${d.year}';
+  }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 120),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         decoration: BoxDecoration(
-          color: selected ? activeColor : Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: selected ? activeColor : const Color(0xFFD1D5DB),
-            width: selected ? 1.5 : 1,
-          ),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFD1D5DB)),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? Colors.white : AppColors.textMuted,
-            fontWeight: FontWeight.w600,
-            fontSize: 13,
-          ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                _format(date),
+                style: const TextStyle(fontSize: 15, color: AppColors.navy),
+              ),
+            ),
+            const Icon(Icons.calendar_today_outlined,
+                size: 18, color: AppColors.textMuted),
+          ],
         ),
       ),
     );

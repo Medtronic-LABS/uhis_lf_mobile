@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Read(//Users/adityanbhatt/Documents/**)",
-      "Bash(grep -E \"\\\\.\\(java|kt\\)$\")"
+      "Bash(grep -E \"\\\\.\\(java|kt\\)$\")",
+      "Bash(git -C .claude/worktrees/dashboard-leapfrog status)",
+      "Bash(git -C .claude/worktrees/dashboard-leapfrog diff --stat HEAD)"
     ]
   }
 }

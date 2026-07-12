@@ -6,19 +6,10 @@ import '../../../core/db/immunisation_dao.dart';
 
 /// Vaccine status within a milestone group.
 enum VaccineStatus {
-  /// Dose confirmed given (has given_at date).
   completed,
-
-  /// Scheduled date reached, dose not yet given — action needed today.
   dueNow,
-
-  /// Scheduled date within the next 4 weeks — upcoming.
   upcoming,
-
-  /// Scheduled date more than 4 weeks out — not yet due.
   notYetDue,
-
-  /// Prior milestone group not fully completed — this group locked.
   locked,
 }
 
@@ -28,6 +19,9 @@ class VaccineEntry {
     required this.code,
     required this.display,
     required this.category,
+    required this.description,
+    required this.route,
+    required this.cardGroup,
     required this.scheduledDate,
     this.givenDate,
     required this.status,
@@ -36,13 +30,16 @@ class VaccineEntry {
   final String code;
   final String display;
   final String category;
+  final String description;
+  final String route;
+  final int cardGroup;
   final DateTime scheduledDate;
   final DateTime? givenDate;
   final VaccineStatus status;
 
   bool get isOverdue =>
-      status == VaccineStatus.dueNow &&
-      DateTime.now().difference(scheduledDate).inDays > 0;
+      (status == VaccineStatus.dueNow) &&
+      DateTime.now().isAfter(scheduledDate);
 }
 
 /// A milestone group (e.g. "6 Weeks") with its vaccines.
@@ -60,22 +57,32 @@ class VaccineMilestone {
   bool get allCompleted =>
       vaccines.every((v) => v.status == VaccineStatus.completed);
 
+  bool get hasDueNow =>
+      vaccines.any((v) => v.status == VaccineStatus.dueNow);
+
+  bool get hasUpcoming =>
+      vaccines.any((v) => v.status == VaccineStatus.upcoming);
+
   int get overdueCount =>
       vaccines.where((v) => v.isOverdue).length;
 
   int get dueNowCount =>
       vaccines.where((v) => v.status == VaccineStatus.dueNow).length;
+
+  /// Vaccines grouped by [VaccineEntry.cardGroup] for the update sheet.
+  List<List<VaccineEntry>> get vaccineCards {
+    final groups = <int, List<VaccineEntry>>{};
+    for (final v in vaccines) {
+      (groups[v.cardGroup] ??= []).add(v);
+    }
+    return groups.values.toList();
+  }
 }
 
-/// Pure-Dart engine that merges the static EPI schedule with synced DB rows
-/// and computes status for each vaccine.
+/// Pure-Dart engine — merges EPI schedule asset with synced DB rows.
 class EpiScheduleEngine {
   const EpiScheduleEngine._();
 
-  /// Load the schedule asset and compute the full timeline for [dob].
-  ///
-  /// [rows] are the synced immunisation rows from [ImmunisationDao.forMany].
-  /// Passes today as a parameter so callers can inject for tests.
   static Future<List<VaccineMilestone>> build({
     required DateTime dob,
     required List<ImmunisationRow> rows,
@@ -90,9 +97,10 @@ class EpiScheduleEngine {
       }
     }
 
-    final scheduleJson = await rootBundle.loadString(
-        'assets/forms/epi_schedule.json');
-    final schedule = (jsonDecode(scheduleJson) as List).cast<Map<String, dynamic>>();
+    final scheduleJson = await rootBundle
+        .loadString('assets/forms/epi_schedule.json');
+    final schedule =
+        (jsonDecode(scheduleJson) as List).cast<Map<String, dynamic>>();
 
     final milestones = <VaccineMilestone>[];
     bool priorGroupComplete = true;
@@ -126,6 +134,9 @@ class EpiScheduleEngine {
           code: code,
           display: v['display'] as String,
           category: v['category'] as String,
+          description: v['description'] as String? ?? '',
+          route: v['route'] as String? ?? '',
+          cardGroup: (v['cardGroup'] as num?)?.toInt() ?? 1,
           scheduledDate: scheduledDate,
           givenDate: givenDate,
           status: status,
@@ -144,10 +155,6 @@ class EpiScheduleEngine {
     return milestones;
   }
 
-  /// Compute overdue vaccine codes from a cached set of DB rows.
-  ///
-  /// Used to populate [PatientContext.overdueImmunizations] without
-  /// loading the full schedule asset (sync-hot path).
   static Future<List<String>> overdueCodesFor({
     required DateTime dob,
     required List<ImmunisationRow> rows,

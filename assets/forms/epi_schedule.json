@@ -5,9 +5,30 @@
     "offsetValue": 0,
     "doseClosureWeeks": 4,
     "vaccines": [
-      { "code": "BCG", "display": "BCG", "category": "birth" },
-      { "code": "OPV0", "display": "OPV-0 (Birth Dose)", "category": "birth" },
-      { "code": "HepB0", "display": "Hepatitis B (Birth Dose)", "category": "birth" }
+      {
+        "code": "BCG",
+        "display": "BCG",
+        "category": "birth",
+        "description": "Bacille Calmette-Guérin (Tuberculosis)",
+        "route": "ID · Left upper arm",
+        "cardGroup": 1
+      },
+      {
+        "code": "OPV0",
+        "display": "OPV-0",
+        "category": "opv",
+        "description": "Polio (Oral, Birth Dose)",
+        "route": "Oral (2 drops)",
+        "cardGroup": 2
+      },
+      {
+        "code": "HepB0",
+        "display": "Hepatitis B",
+        "category": "birth",
+        "description": "Hepatitis B (Birth Dose)",
+        "route": "IM · Right thigh",
+        "cardGroup": 2
+      }
     ]
   },
   {
@@ -16,10 +37,38 @@
     "offsetValue": 6,
     "doseClosureWeeks": 4,
     "vaccines": [
-      { "code": "PENTA1", "display": "Penta-1 (DTP-HepB-Hib)", "category": "penta" },
-      { "code": "OPV1", "display": "OPV-1", "category": "opv" },
-      { "code": "PCV1", "display": "PCV-1", "category": "pcv" },
-      { "code": "ROTA1", "display": "Rota-1", "category": "rota" }
+      {
+        "code": "PENTA1",
+        "display": "Pentavalent-1",
+        "category": "penta",
+        "description": "Diphtheria, Pertussis, Tetanus, Hepatitis B, Hib",
+        "route": "IM · Left/Right Thigh",
+        "cardGroup": 1
+      },
+      {
+        "code": "OPV1",
+        "display": "OPV-1",
+        "category": "opv",
+        "description": "Polio (Oral)",
+        "route": "Oral (2 drops)",
+        "cardGroup": 2
+      },
+      {
+        "code": "PCV1",
+        "display": "PCV-1",
+        "category": "pcv",
+        "description": "Pneumococcal (Pneumonia)",
+        "route": "IM · Left/Right Thigh",
+        "cardGroup": 2
+      },
+      {
+        "code": "ROTA1",
+        "display": "Rota-1",
+        "category": "rota",
+        "description": "Rotavirus (Diarrhoea)",
+        "route": "Oral (1.5 ml)",
+        "cardGroup": 3
+      }
     ]
   },
   {
@@ -28,10 +77,38 @@
     "offsetValue": 10,
     "doseClosureWeeks": 4,
     "vaccines": [
-      { "code": "PENTA2", "display": "Penta-2 (DTP-HepB-Hib)", "category": "penta" },
-      { "code": "OPV2", "display": "OPV-2", "category": "opv" },
-      { "code": "PCV2", "display": "PCV-2", "category": "pcv" },
-      { "code": "ROTA2", "display": "Rota-2", "category": "rota" }
+      {
+        "code": "PENTA2",
+        "display": "Pentavalent-2",
+        "category": "penta",
+        "description": "Diphtheria, Pertussis, Tetanus, Hepatitis B, Hib",
+        "route": "IM · Left/Right Thigh",
+        "cardGroup": 1
+      },
+      {
+        "code": "OPV2",
+        "display": "OPV-2",
+        "category": "opv",
+        "description": "Polio (Oral)",
+        "route": "Oral (2 drops)",
+        "cardGroup": 2
+      },
+      {
+        "code": "PCV2",
+        "display": "PCV-2",
+        "category": "pcv",
+        "description": "Pneumococcal (Pneumonia)",
+        "route": "IM · Left/Right Thigh",
+        "cardGroup": 2
+      },
+      {
+        "code": "ROTA2",
+        "display": "Rota-2",
+        "category": "rota",
+        "description": "Rotavirus (Diarrhoea)",
+        "route": "Oral (1.5 ml)",
+        "cardGroup": 3
+      }
     ]
   },
   {
@@ -40,10 +117,38 @@
     "offsetValue": 14,
     "doseClosureWeeks": 4,
     "vaccines": [
-      { "code": "PENTA3", "display": "Penta-3 (DTP-HepB-Hib)", "category": "penta" },
-      { "code": "OPV3", "display": "OPV-3", "category": "opv" },
-      { "code": "PCV3", "display": "PCV-3", "category": "pcv" },
-      { "code": "FIPV1", "display": "fIPV-1", "category": "ipv" }
+      {
+        "code": "PENTA3",
+        "display": "Pentavalent-3",
+        "category": "penta",
+        "description": "Diphtheria, Pertussis, Tetanus, Hepatitis B, Hib",
+        "route": "IM · Left/Right Thigh",
+        "cardGroup": 1
+      },
+      {
+        "code": "OPV3",
+        "display": "OPV-3",
+        "category": "opv",
+        "description": "Polio (Oral)",
+        "route": "Oral (2 drops)",
+        "cardGroup": 2
+      },
+      {
+        "code": "PCV3",
+        "display": "PCV-3",
+        "category": "pcv",
+        "description": "Pneumococcal (Pneumonia)",
+        "route": "IM · Left/Right Thigh",
+        "cardGroup": 2
+      },
+      {
+        "code": "FIPV1",
+        "display": "fIPV — Dose 1",
+        "category": "ipv",
+        "description": "Fractional Inactivated Polio Vaccine",
+        "route": "ID · Right Deltoid",
+        "cardGroup": 3
+      }
     ]
   },
   {
@@ -52,10 +157,38 @@
     "offsetValue": 9,
     "doseClosureWeeks": 4,
     "vaccines": [
-      { "code": "MR1", "display": "MR-1 (Measles-Rubella)", "category": "mr" },
-      { "code": "TCV", "display": "TCV (Typhoid)", "category": "tcv" },
-      { "code": "FIPV2", "display": "fIPV-2", "category": "ipv" },
-      { "code": "VITA1", "display": "Vitamin A (1st dose)", "category": "vita" }
+      {
+        "code": "MR1",
+        "display": "MR Vaccine — Dose 1",
+        "category": "mr",
+        "description": "Measles-Rubella",
+        "route": "SC · Left upper arm",
+        "cardGroup": 1
+      },
+      {
+        "code": "TCV",
+        "display": "TCV",
+        "category": "tcv",
+        "description": "Typhoid Conjugate Vaccine",
+        "route": "IM · Left/Right Thigh",
+        "cardGroup": 2
+      },
+      {
+        "code": "FIPV2",
+        "display": "fIPV — Dose 2",
+        "category": "ipv",
+        "description": "Fractional Inactivated Polio Vaccine",
+        "route": "ID · Right Deltoid",
+        "cardGroup": 2
+      },
+      {
+        "code": "VITA1",
+        "display": "Vitamin A",
+        "category": "vita",
+        "description": "Vitamin A Supplementation (1st dose)",
+        "route": "Oral (100,000 IU)",
+        "cardGroup": 3
+      }
     ]
   },
   {
@@ -64,7 +197,14 @@
     "offsetValue": 15,
     "doseClosureWeeks": 4,
     "vaccines": [
-      { "code": "MR2", "display": "MR-2 (Measles-Rubella Booster)", "category": "mr" }
+      {
+        "code": "MR2",
+        "display": "MR Vaccine — Dose 2",
+        "category": "mr",
+        "description": "Measles-Rubella Booster",
+        "route": "SC · Left upper arm",
+        "cardGroup": 1
+      }
     ]
   }
 ]

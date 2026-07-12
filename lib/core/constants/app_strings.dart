@@ -4222,12 +4222,13 @@ abstract final class EpiStrings {
   static const String statusNotYetDue = 'Not yet due';
   static const String statusLocked = 'Locked';
 
-  static const String updateStatusCta = 'Update status →';
-  static const String vaccinated = 'Vaccinated';
-  static const String missed = 'Missed';
-  static const String dateGiven = 'Date given';
-  static const String missedReasonLabel = 'Reason for missing';
-  static const String missedReasonHint = 'e.g. child was unwell, caregiver absent…';
-  static const String saveStatus = 'Save';
+  static const String updateStatusCta = 'Update Status →';
+  static const String vaccinesDueLabel = 'Vaccines due at this milestone';
+  static const String dateAdministered = 'Date Administered';
+  static const String notesOptional = 'Notes (Optional)';
+  static const String notesHint = 'e.g. Child was well, no adverse reaction…';
+  static const String markCompleted = 'Mark as Completed';
+  static const String cancel = 'Cancel';
+  static const String submitCta = 'Submit';
   static const String givenOn = 'Given';
 }

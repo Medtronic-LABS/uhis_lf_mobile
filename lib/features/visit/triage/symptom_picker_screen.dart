@@ -569,14 +569,15 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                           const SizedBox(height: 4),
                           SizedBox(
                             width: double.infinity,
-                            child: OutlinedButton.icon(
+                            child: FilledButton(
                               onPressed: () => _openVaccinationTimeline(),
-                              icon: const Icon(
-                                  Icons.vaccines_outlined, size: 18),
-                              label: const Text(EpiStrings.vaccinationCta),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: AppColors.navy,
-                                side: const BorderSide(color: AppColors.navy),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: AppColors.pink,
+                                foregroundColor: AppColors.textOnNavy,
+                              ),
+                              child: const Text(
+                                '💉  ${EpiStrings.vaccinationCta}  →',
+                                style: TextStyle(fontWeight: FontWeight.w700),
                               ),
                             ),
                           ),
