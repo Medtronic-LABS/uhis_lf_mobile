@@ -495,7 +495,8 @@ class TriageViewModel extends ChangeNotifier {
     ];
     final byProgramme = <Programme, List<String>>{
       for (final p in sectionOrder)
-        if (enrolled.contains(p)) p: <String>[],
+        if (enrolled.contains(p) || (p == Programme.imci && ctx.isUnder5))
+          p: <String>[],
     };
     final general = <String>[];
 
