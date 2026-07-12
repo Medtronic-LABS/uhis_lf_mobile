@@ -1,10 +1,12 @@
 import 'dart:convert';
 
+import '../../../core/db/immunisation_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/db/patient_programmes_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
 import '../../../core/mission/mission_pregnancy_facts.dart';
 import '../../../core/models/programme.dart';
+import '../immunisation/epi_schedule_engine.dart';
 
 /// Sex of the patient for pathway gating.
 enum Sex { male, female, unknown }
@@ -167,13 +169,16 @@ class PatientContextBuilder {
     required PatientDao patientDao,
     required PatientProgrammesDao programmesDao,
     required PregnancySnapshotDao pregnancyDao,
+    ImmunisationDao? immunisationDao,
   })  : _patientDao = patientDao,
         _programmesDao = programmesDao,
-        _pregnancyDao = pregnancyDao;
+        _pregnancyDao = pregnancyDao,
+        _immunisationDao = immunisationDao;
 
   final PatientDao _patientDao;
   final PatientProgrammesDao _programmesDao;
   final PregnancySnapshotDao _pregnancyDao;
+  final ImmunisationDao? _immunisationDao;
 
   /// Build patient context from local cache.
   ///
@@ -212,9 +217,27 @@ class PatientContextBuilder {
     // Extract delivery date for PNC
     final deliveryDateMillis = _extractDeliveryDate(patient.rawJson);
 
-    // Get overdue immunizations (Phase 4 sync-payload gap — return empty for now)
-    // TODO: Wire up ImmunisationDao once EPI sync is implemented
-    final overdueImmunizations = <String>[];
+    // Overdue immunizations — computed from EPI schedule engine when DOB is
+    // available and an ImmunisationDao is provided.
+    List<String> overdueImmunizations = const [];
+    if (_immunisationDao != null) {
+      final dob = patient.dob != null && patient.dob!.isNotEmpty
+          ? DateTime.tryParse(patient.dob!)
+          : null;
+      if (dob != null) {
+        try {
+          final rowMap = await _immunisationDao.forMany([patientId]);
+          final rows = rowMap[patientId] ?? [];
+          overdueImmunizations = await EpiScheduleEngine.overdueCodesFor(
+            dob: dob,
+            rows: rows,
+          );
+        } on Object {
+          // Non-fatal — degrade gracefully; timeline still works offline
+          overdueImmunizations = const [];
+        }
+      }
+    }
 
     // Build open flags from follow-up data
     final openFlags = await _buildOpenFlags(patientId);

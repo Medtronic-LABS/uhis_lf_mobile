@@ -27,6 +27,7 @@ import '../features/teleconsult/teleconsult_screen.dart';
 import '../features/training/training_screen.dart';
 import '../features/assistant/assistant_screen.dart';
 import '../features/visit/briefing/visit_briefing_screen.dart';
+import '../features/visit/immunisation/immunisation_timeline_screen.dart';
 import '../features/visit/visit_flow_screen.dart';
 import '../core/api/api_client.dart';
 import '../core/auth/auth_repository.dart';
@@ -224,6 +225,25 @@ GoRouter buildRouter(AuthState auth) {
                         patientId: state.pathParameters['id']!,
                         memberData: memberData,
                         origin: origin,
+                      );
+                    },
+                  ),
+                  // EPI immunisation timeline
+                  GoRoute(
+                    path: ':id/immunisation',
+                    name: 'immunisation-timeline',
+                    pageBuilder: (context, state) {
+                      final extra = state.extra is Map<String, dynamic>
+                          ? state.extra as Map<String, dynamic>
+                          : <String, dynamic>{};
+                      return MaterialPage(
+                        key: ValueKey(
+                            'immunisation-${state.pathParameters['id']}'),
+                        child: ImmunisationTimelineScreen(
+                          patientId: state.pathParameters['id']!,
+                          patientName: extra['patientName'] as String?,
+                          dob: extra['dob'] as String?,
+                        ),
                       );
                     },
                   ),

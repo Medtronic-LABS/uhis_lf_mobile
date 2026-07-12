@@ -4,9 +4,10 @@ import 'package:provider/provider.dart';
 
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_strings.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../core/db/encounter_dao.dart';
+import '../../../core/db/immunisation_dao.dart';
 import '../../../core/db/patient_dao.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/db/patient_programmes_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
 import '../../patient/followup_repository.dart';
@@ -136,10 +137,13 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       }
 
       debugPrint('[SymptomPicker] Building PatientContext for $patientId...');
+      final immunisationDao =
+          context.read<ImmunisationDao>();
       final builder = PatientContextBuilder(
         patientDao: patientDao,
         programmesDao: programmesDao,
         pregnancyDao: pregnancyDao,
+        immunisationDao: immunisationDao,
       );
 
       final ctx = await builder.build(patientId);
@@ -287,6 +291,23 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   void dispose() {
     _viewModel?.dispose();
     super.dispose();
+  }
+
+  void _openVaccinationTimeline() {
+    final ctx = _patientContext;
+    if (ctx == null) return;
+    // Fetch DOB from patient DAO to pass to timeline screen
+    final patientDao = context.read<PatientDao>();
+    patientDao.byId(widget.patientId).then((patient) {
+      if (!mounted) return;
+      context.push(
+        '/patients/${widget.patientId}/immunisation',
+        extra: <String, dynamic>{
+          'patientName': widget.patientName,
+          if (patient?.dob != null) 'dob': patient!.dob,
+        },
+      );
+    });
   }
 
   void _onContinue() {
@@ -542,6 +563,25 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                                   TriageStrings.noSymptomsRoutineVisit),
                             ),
                           ),
+
+                        // ── Vaccination CTA (under-5 only) ─────────────────
+                        if (_patientContext!.isUnder5) ...[
+                          const SizedBox(height: 4),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: () => _openVaccinationTimeline(),
+                              icon: const Icon(
+                                  Icons.vaccines_outlined, size: 18),
+                              label: const Text(EpiStrings.vaccinationCta),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.navy,
+                                side: const BorderSide(color: AppColors.navy),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
 
                         // ── Start Checkup button ───────────────────────────
                         SizedBox(

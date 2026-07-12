@@ -4201,3 +4201,33 @@ abstract final class LinkMemberStrings {
   static const String successMessage = 'Member linked successfully';
   static const String errorPrefix = 'Could not link member';
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EPI / Immunisation timeline
+// ─────────────────────────────────────────────────────────────────────────────
+abstract final class EpiStrings {
+  EpiStrings._();
+
+  static const String screenTitle = 'Vaccination';
+  static const String vaccinationCta = 'Vaccination';
+  static const String noDobError =
+      'Date of birth not available — cannot compute schedule.';
+
+  static String overdueBanner(int count) =>
+      '$count ${count == 1 ? 'vaccine' : 'vaccines'} overdue · Action needed today.';
+
+  static const String statusCompleted = 'Given';
+  static const String statusDueNow = 'Due now';
+  static const String statusUpcoming = 'Upcoming';
+  static const String statusNotYetDue = 'Not yet due';
+  static const String statusLocked = 'Locked';
+
+  static const String updateStatusCta = 'Update status →';
+  static const String vaccinated = 'Vaccinated';
+  static const String missed = 'Missed';
+  static const String dateGiven = 'Date given';
+  static const String missedReasonLabel = 'Reason for missing';
+  static const String missedReasonHint = 'e.g. child was unwell, caregiver absent…';
+  static const String saveStatus = 'Save';
+  static const String givenOn = 'Given';
+}

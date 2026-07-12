@@ -462,6 +462,8 @@ class _UhisNextAppState extends State<UhisNextApp>
         // SK → SS → sub-village hierarchy (session cache, invalidated on logout)
         ChangeNotifierProvider<UserHierarchyService>.value(
             value: _userHierarchy),
+        // EPI immunisation DAO — exposed for ImmunisationTimelineScreen + PatientContextBuilder
+        Provider<ImmunisationDao>.value(value: _immDao),
         // Micro-coaching: module library + progress (offline-first, syncs from spice-coaching)
         ChangeNotifierProvider<CoachingRepository>.value(value: _coachingRepo),
       ],

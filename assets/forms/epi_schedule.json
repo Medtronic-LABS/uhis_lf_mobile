@@ -1,0 +1,70 @@
+[
+  {
+    "milestone": "At Birth",
+    "offsetType": "day",
+    "offsetValue": 0,
+    "doseClosureWeeks": 4,
+    "vaccines": [
+      { "code": "BCG", "display": "BCG", "category": "birth" },
+      { "code": "OPV0", "display": "OPV-0 (Birth Dose)", "category": "birth" },
+      { "code": "HepB0", "display": "Hepatitis B (Birth Dose)", "category": "birth" }
+    ]
+  },
+  {
+    "milestone": "6 Weeks",
+    "offsetType": "week",
+    "offsetValue": 6,
+    "doseClosureWeeks": 4,
+    "vaccines": [
+      { "code": "PENTA1", "display": "Penta-1 (DTP-HepB-Hib)", "category": "penta" },
+      { "code": "OPV1", "display": "OPV-1", "category": "opv" },
+      { "code": "PCV1", "display": "PCV-1", "category": "pcv" },
+      { "code": "ROTA1", "display": "Rota-1", "category": "rota" }
+    ]
+  },
+  {
+    "milestone": "10 Weeks",
+    "offsetType": "week",
+    "offsetValue": 10,
+    "doseClosureWeeks": 4,
+    "vaccines": [
+      { "code": "PENTA2", "display": "Penta-2 (DTP-HepB-Hib)", "category": "penta" },
+      { "code": "OPV2", "display": "OPV-2", "category": "opv" },
+      { "code": "PCV2", "display": "PCV-2", "category": "pcv" },
+      { "code": "ROTA2", "display": "Rota-2", "category": "rota" }
+    ]
+  },
+  {
+    "milestone": "14 Weeks",
+    "offsetType": "week",
+    "offsetValue": 14,
+    "doseClosureWeeks": 4,
+    "vaccines": [
+      { "code": "PENTA3", "display": "Penta-3 (DTP-HepB-Hib)", "category": "penta" },
+      { "code": "OPV3", "display": "OPV-3", "category": "opv" },
+      { "code": "PCV3", "display": "PCV-3", "category": "pcv" },
+      { "code": "FIPV1", "display": "fIPV-1", "category": "ipv" }
+    ]
+  },
+  {
+    "milestone": "9 Months",
+    "offsetType": "month",
+    "offsetValue": 9,
+    "doseClosureWeeks": 4,
+    "vaccines": [
+      { "code": "MR1", "display": "MR-1 (Measles-Rubella)", "category": "mr" },
+      { "code": "TCV", "display": "TCV (Typhoid)", "category": "tcv" },
+      { "code": "FIPV2", "display": "fIPV-2", "category": "ipv" },
+      { "code": "VITA1", "display": "Vitamin A (1st dose)", "category": "vita" }
+    ]
+  },
+  {
+    "milestone": "15 Months",
+    "offsetType": "month",
+    "offsetValue": 15,
+    "doseClosureWeeks": 4,
+    "vaccines": [
+      { "code": "MR2", "display": "MR-2 (Measles-Rubella Booster)", "category": "mr" }
+    ]
+  }
+]
