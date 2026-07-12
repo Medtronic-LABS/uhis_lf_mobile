@@ -554,12 +554,19 @@ class MemberDao {
   }
 
   /// Returns distinct (villageId, villageName) pairs for filter UI.
+  ///
+  /// Grouped by village_id (not `DISTINCT village_id, village_name`) so a
+  /// village_id that was synced with more than one village_name spelling
+  /// still yields exactly one row. Two rows sharing a `value` would make the
+  /// filter-tab UI mark both tabs active for a single selection, since tab
+  /// selection is compared by that value alone.
   Future<List<({String id, String name})>> getDistinctVillages() async {
     final rows = await _db.db.rawQuery('''
-      SELECT DISTINCT village_id, village_name
+      SELECT village_id, MIN(NULLIF(TRIM(village_name), '')) AS village_name
       FROM ${AppDatabase.tableMembers}
       WHERE village_id IS NOT NULL AND village_id != ''
-      ORDER BY COALESCE(village_name, village_id) ASC
+      GROUP BY village_id
+      ORDER BY COALESCE(MIN(NULLIF(TRIM(village_name), '')), village_id) ASC
     ''');
     return rows.map((r) {
       final id = r['village_id'].toString();
@@ -569,6 +576,12 @@ class MemberDao {
   }
 
   /// Returns distinct (subVillageId, subVillageName) pairs for filter UI.
+  ///
+  /// Grouped by sub_village_id (not `DISTINCT sub_village_id,
+  /// sub_village_name`) for the same reason as [getDistinctVillages]: a
+  /// sub_village_id synced with more than one name spelling must still
+  /// yield exactly one row, or filter-tab selection (compared by value)
+  /// would mark two tabs active for a single tap.
   Future<List<({String id, String name})>> getDistinctSubVillages({
     String? villageId,
   }) async {
@@ -577,10 +590,11 @@ class MemberDao {
         : 'sub_village_id IS NOT NULL AND sub_village_id != \'\'';
     final rows = await _db.db.rawQuery(
       '''
-      SELECT DISTINCT sub_village_id, sub_village_name
+      SELECT sub_village_id, MIN(NULLIF(TRIM(sub_village_name), '')) AS sub_village_name
       FROM ${AppDatabase.tableMembers}
       WHERE $where
-      ORDER BY COALESCE(sub_village_name, sub_village_id) ASC
+      GROUP BY sub_village_id
+      ORDER BY COALESCE(MIN(NULLIF(TRIM(sub_village_name), '')), sub_village_id) ASC
       ''',
       villageId != null ? [villageId] : null,
     );

@@ -30,6 +30,7 @@ class MissionQueueCard extends StatelessWidget {
     this.onAction,
     this.showActionButton = true,
     this.compact = false,
+    this.embedded = false,
   });
 
   final MissionQueueItem item;
@@ -38,6 +39,13 @@ class MissionQueueCard extends StatelessWidget {
   final VoidCallback? onAction;
   final bool showActionButton;
   final bool compact;
+
+  /// When true, renders as a flush row with no card chrome of its own (no
+  /// background/shadow/rounded corners/left border) — for embedding inside
+  /// another surface that already provides the card boundary (e.g. a
+  /// household card's primary-member slot), matching the v13 mockup's
+  /// member row, which has no shadow/border of its own either.
+  final bool embedded;
 
   @override
   Widget build(BuildContext context) {
@@ -57,14 +65,17 @@ class MissionQueueCard extends StatelessWidget {
           label: 'View patient ${item.patientName}',
           button: true,
           child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppRadius.button),
-              color: tokens.cardSurface,
-              boxShadow: AppShadows.card,
-            ),
+            decoration: embedded
+                ? const BoxDecoration()
+                : BoxDecoration(
+                    borderRadius: BorderRadius.circular(AppRadius.button),
+                    color: tokens.cardSurface,
+                    boxShadow: AppShadows.card,
+                  ),
             child: Material(
               color: Colors.transparent,
-              borderRadius: BorderRadius.circular(AppRadius.button),
+              borderRadius:
+                  embedded ? BorderRadius.zero : BorderRadius.circular(AppRadius.button),
               child: InkWell(
                 key: const Key('visit_queue_card_tap'),
                 onTap: isCompleted
@@ -78,20 +89,25 @@ class MissionQueueCard extends StatelessWidget {
                           ),
                         )
                     : onTap,
-                borderRadius: BorderRadius.circular(AppRadius.button),
+                borderRadius:
+                    embedded ? BorderRadius.zero : BorderRadius.circular(AppRadius.button),
                 child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: const BorderRadius.all(
-                      Radius.circular(AppRadius.button),
-                    ),
-                    // Left border is always neutral — the mockup never
-                    // color-codes it by status; status is conveyed only by
-                    // the right-side status pill (_StatusDot below).
-                    border: const Border(
-                      left: BorderSide(color: AppColors.border, width: 4),
-                    ),
-                  ),
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                  decoration: embedded
+                      ? const BoxDecoration()
+                      : BoxDecoration(
+                          borderRadius: const BorderRadius.all(
+                            Radius.circular(AppRadius.button),
+                          ),
+                          // Left border is always neutral — the mockup never
+                          // color-codes it by status; status is conveyed only by
+                          // the right-side status pill (_StatusDot below).
+                          border: const Border(
+                            left: BorderSide(color: AppColors.border, width: 4),
+                          ),
+                        ),
+                  padding: embedded
+                      ? const EdgeInsets.symmetric(vertical: 12)
+                      : const EdgeInsets.fromLTRB(14, 12, 14, 12),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
@@ -246,7 +262,7 @@ class MissionReasonBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (bg, fg) = _badgeColors(item.primaryProgramme);
+    final (bg, fg) = programmeBadgeColors(item.primaryProgramme);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
@@ -266,24 +282,26 @@ class MissionReasonBadge extends StatelessWidget {
       ),
     );
   }
+}
 
-  /// v13 design palette — badge colour is keyed by programme, not priority,
-  /// so the label always matches the reason text it's painted around.
-  (Color, Color) _badgeColors(Programme programme) {
-    switch (programme) {
-      case Programme.anc:
-        return (const Color(0xFFFDF2F8), const Color(0xFF9D174D));
-      case Programme.pnc:
-        return (const Color(0xFFEEF0FF), const Color(0xFF4C1D95));
-      case Programme.imci:
-      case Programme.epi:
-      case Programme.ncd:
-        return (const Color(0xFFFFFBEB), const Color(0xFF92400E));
-      case Programme.tb:
-        return (const Color(0xFFF0FDF4), const Color(0xFF065F46));
-      default:
-        return (const Color(0xFFEEF0FF), const Color(0xFF1B2B5E));
-    }
+/// v13 design palette — badge colour is keyed by programme, not priority, so
+/// the label always matches the reason text it's painted around. Public and
+/// top-level so `HouseholdListScreen` (a non-queue member has no
+/// `MissionQueueItem` to key off) can render an identical badge.
+(Color, Color) programmeBadgeColors(Programme programme) {
+  switch (programme) {
+    case Programme.anc:
+      return (const Color(0xFFFDF2F8), const Color(0xFF9D174D));
+    case Programme.pnc:
+      return (const Color(0xFFEEF0FF), const Color(0xFF4C1D95));
+    case Programme.imci:
+    case Programme.epi:
+    case Programme.ncd:
+      return (const Color(0xFFFFFBEB), const Color(0xFF92400E));
+    case Programme.tb:
+      return (const Color(0xFFF0FDF4), const Color(0xFF065F46));
+    default:
+      return (const Color(0xFFEEF0FF), const Color(0xFF1B2B5E));
   }
 }
 

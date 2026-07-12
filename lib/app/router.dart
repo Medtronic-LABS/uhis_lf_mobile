@@ -8,7 +8,6 @@ import 'package:go_router/go_router.dart';
 import '../core/auth/auth_state.dart';
 import '../core/models/programme.dart';
 import '../core/constants/app_strings.dart';
-import '../core/models/dashboard_tier.dart';
 import '../core/theme/app_theme.dart';
 import '../features/dashboard/mission_dashboard_screen.dart';
 import '../features/household/household_detail_screen.dart';
@@ -159,30 +158,15 @@ GoRouter buildRouter(AuthState auth) {
             routes: [
               GoRoute(
                 path: '/patients',
-                builder: (_, state) {
-                  // Parse tier query parameter for deep-link filtering
-                  final tierParam = state.uri.queryParameters['tier'];
-                  DashboardTier? initialTier;
-                  if (tierParam != null && tierParam.isNotEmpty) {
-                    initialTier = DashboardTier.values
-                        .cast<DashboardTier?>()
-                        .firstWhere(
-                          (t) => t?.name == tierParam,
-                          orElse: () => null,
-                        );
-                  }
-                  return HouseholdListScreen(
-                    mode: HouseholdListMode.members,
-                    initialTier: initialTier,
-                  );
-                },
+                builder: (_, _) => const HouseholdListScreen(),
                 routes: [
-                  // Households view (same tab, different mode)
+                  // Kept as a working route (not deleted) so any existing
+                  // deep link to /patients/households still resolves —
+                  // renders the identical screen as /patients now that the
+                  // members/households mode distinction has been removed.
                   GoRoute(
                     path: 'households',
-                    builder: (_, _) => const HouseholdListScreen(
-                      mode: HouseholdListMode.households,
-                    ),
+                    builder: (_, _) => const HouseholdListScreen(),
                   ),
                   GoRoute(
                     path: 'household/:id',
