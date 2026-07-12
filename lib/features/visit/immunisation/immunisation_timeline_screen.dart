@@ -62,6 +62,7 @@ class _ImmunisationTimelineScreenState
 
   Future<void> _load() async {
     final immunisationDao = context.read<ImmunisationDao>();
+    final immunisationRepo = context.read<ImmunisationRepository>();
     final patientDao = context.read<PatientDao>();
 
     final patient = await patientDao.byId(widget.patientId);
@@ -81,10 +82,36 @@ class _ImmunisationTimelineScreenState
     }
 
     try {
+      // Try backend first — matches Android SPICE app behaviour.
+      // On success the response is the authoritative schedule + statuses.
+      final dtos = await immunisationRepo
+          .fetchSchedule(
+            patientId: widget.patientId,
+            patientReference: widget.patientId,
+            birthDate: dobStr!.substring(0, 10),
+          )
+          .timeout(const Duration(seconds: 5));
+
+      if (dtos.isNotEmpty) {
+        final milestones = _dtosToMilestones(dtos);
+        if (mounted) {
+          setState(() {
+            _patient = patient;
+            _milestones = milestones;
+            _loading = false;
+          });
+        }
+        return;
+      }
+    } on Object {
+      // Offline or timeout — fall through to local DB.
+    }
+
+    // Offline fallback: static EPI schedule + locally recorded given dates.
+    try {
       final rowMap = await immunisationDao.forMany([widget.patientId]);
       final rows = rowMap[widget.patientId] ?? [];
-      final milestones =
-          await EpiScheduleEngine.build(dob: dob, rows: rows);
+      final milestones = await EpiScheduleEngine.build(dob: dob, rows: rows);
       if (mounted) {
         setState(() {
           _patient = patient;
@@ -100,6 +127,92 @@ class _ImmunisationTimelineScreenState
           _loading = false;
         });
       }
+    }
+  }
+
+  /// Converts backend [VaccinationDetailDto] list → [VaccineMilestone] list.
+  /// Mirrors how the Android SPICE ImmunisationViewModel builds its timeline.
+  List<VaccineMilestone> _dtosToMilestones(List<VaccinationDetailDto> dtos) {
+    final now = DateTime.now();
+
+    // Group by (type, value) — same milestone bucket.
+    final groups = <String, List<VaccinationDetailDto>>{};
+    for (final dto in dtos) {
+      (groups['${dto.type}_${dto.value}'] ??= []).add(dto);
+    }
+
+    // Sort groups by scheduled date ascending.
+    final sortedKeys = groups.keys.toList()
+      ..sort((a, b) {
+        final aDate = DateTime.tryParse(groups[a]!.first.scheduledDate);
+        final bDate = DateTime.tryParse(groups[b]!.first.scheduledDate);
+        if (aDate == null || bDate == null) return 0;
+        return aDate.compareTo(bDate);
+      });
+
+    final milestones = <VaccineMilestone>[];
+    bool priorGroupComplete = true;
+
+    for (final key in sortedKeys) {
+      final groupDtos = groups[key]!;
+      final first = groupDtos.first;
+      final scheduledDate = DateTime.tryParse(first.scheduledDate) ?? now;
+
+      final vaccines = groupDtos.asMap().entries.map((e) {
+        final dto = e.value;
+        final VaccineStatus status;
+        if (dto.status == 'Vaccinated') {
+          status = VaccineStatus.completed;
+        } else if (!priorGroupComplete) {
+          status = VaccineStatus.locked;
+        } else {
+          final days = scheduledDate.difference(now).inDays;
+          if (days <= 0) {
+            status = VaccineStatus.dueNow;
+          } else if (days <= 28) {
+            status = VaccineStatus.upcoming;
+          } else {
+            status = VaccineStatus.notYetDue;
+          }
+        }
+        return VaccineEntry(
+          code: dto.vaccineName,
+          display: dto.vaccineName,
+          category: dto.category,
+          description: '',
+          route: '',
+          cardGroup: dto.vaccineOrder,
+          scheduledDate: scheduledDate,
+          givenDate: dto.vaccinatedDate != null
+              ? DateTime.tryParse(dto.vaccinatedDate!)
+              : null,
+          status: status,
+        );
+      }).toList();
+
+      final milestone = VaccineMilestone(
+        label: _milestoneLabel(first.type, first.value),
+        scheduledDate: scheduledDate,
+        vaccines: vaccines,
+        offsetType: first.type.toLowerCase(),
+        offsetValue: first.value,
+      );
+      milestones.add(milestone);
+      priorGroupComplete = milestone.allCompleted;
+    }
+
+    return milestones;
+  }
+
+  static String _milestoneLabel(String type, int value) {
+    if (value == 0) return 'At Birth';
+    switch (type.toUpperCase()) {
+      case 'WEEK':
+        return '$value ${value == 1 ? 'Week' : 'Weeks'}';
+      case 'MONTH':
+        return '$value ${value == 1 ? 'Month' : 'Months'}';
+      default:
+        return '$value ${value == 1 ? 'Day' : 'Days'}';
     }
   }
 
