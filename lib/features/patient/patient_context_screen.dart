@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/theme.dart';
 import '../../core/constants/app_strings.dart';
@@ -1541,6 +1542,41 @@ class _PatientProfileCard extends StatefulWidget {
 class _PatientProfileCardState extends State<_PatientProfileCard> {
   bool _expanded = false;
 
+  Future<void> _callPhone(String phone) async {
+    final uri = Uri(scheme: 'tel', path: phone.trim());
+    try {
+      if (!await launchUrl(uri) && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(PatientProfileStrings.dialFailed)),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(PatientProfileStrings.dialFailed)),
+        );
+      }
+    }
+  }
+
+  Future<void> _openMaps(String place) async {
+    final uri = Uri.parse(
+        'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(place.trim())}');
+    try {
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(PatientProfileStrings.mapsOpenFailed)),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(PatientProfileStrings.mapsOpenFailed)),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final d = widget.data;
@@ -1637,10 +1673,12 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
               icon: Icons.cake_outlined),
         if (d.phoneNumber != null)
           buildRow(PatientProfileStrings.labelPhone, d.phoneNumber,
-              icon: Icons.phone_outlined),
+              icon: Icons.phone_outlined,
+              onTap: () => _callPhone(d.phoneNumber!)),
         if (d.villageName != null)
           buildRow(PatientProfileStrings.labelVillage, d.villageName,
-              icon: Icons.location_on_outlined),
+              icon: Icons.location_on_outlined,
+              onTap: () => _openMaps(d.villageName!)),
       ],
     );
 
@@ -1663,13 +1701,15 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
         ]),
         buildSection(PatientProfileStrings.sectionLocation, [
           buildRow(PatientProfileStrings.labelVillage, d.villageName,
-              icon: Icons.location_on_outlined),
+              icon: Icons.location_on_outlined,
+              onTap: d.villageName != null ? () => _openMaps(d.villageName!) : null),
           buildRow(PatientProfileStrings.labelGps, formatGps(),
               icon: Icons.gps_fixed),
         ]),
         buildSection(PatientProfileStrings.sectionContact, [
           buildRow(PatientProfileStrings.labelPhone, d.phoneNumber,
-              icon: Icons.phone_outlined),
+              icon: Icons.phone_outlined,
+              onTap: d.phoneNumber != null ? () => _callPhone(d.phoneNumber!) : null),
         ]),
         buildSection(PatientProfileStrings.sectionCareTeam, [
           buildRow(PatientProfileStrings.labelSk, d.shasthyaShebikaId,
@@ -2243,9 +2283,11 @@ class _PatientDetailHeader extends StatelessWidget {
       if (data.nationalId != null)
         _HeaderChip(Icons.badge_outlined, data.nationalId!),
       if (data.phoneNumber != null)
-        _HeaderChip(Icons.phone_outlined, data.phoneNumber!),
+        _HeaderChip(Icons.phone_outlined, data.phoneNumber!,
+            onTap: () => _launchPhone(context, data.phoneNumber!)),
       if (data.villageName != null)
-        _HeaderChip(Icons.location_on_outlined, data.villageName!),
+        _HeaderChip(Icons.location_on_outlined, data.villageName!,
+            onTap: () => _launchMaps(context, data.villageName!)),
       if (data.isPregnant)
         _HeaderChip(Icons.pregnant_woman, PatientContextStrings.pregnantChip),
     ];
@@ -2355,29 +2397,7 @@ class _PatientDetailHeader extends StatelessWidget {
                 runSpacing: 4,
                 children: chips
                     .map(
-                      (c) => Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(c.icon, size: 12, color: Colors.white70),
-                            const SizedBox(width: 4),
-                            Text(
-                              c.label,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      (c) => _buildHeaderChip(context, c),
                     )
                     .toList(),
               ),
@@ -2385,6 +2405,72 @@ class _PatientDetailHeader extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Widget _buildHeaderChip(BuildContext context, _HeaderChip c) {
+    final chip = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: c.onTap != null ? 0.22 : 0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: c.onTap != null
+            ? Border.all(color: Colors.white.withValues(alpha: 0.35), width: 0.8)
+            : null,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(c.icon, size: 12, color: Colors.white70),
+          const SizedBox(width: 4),
+          Text(
+            c.label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+    if (c.onTap == null) return chip;
+    return GestureDetector(onTap: c.onTap, child: chip);
+  }
+
+  static Future<void> _launchPhone(BuildContext context, String phone) async {
+    final uri = Uri(scheme: 'tel', path: phone.trim());
+    try {
+      if (!await launchUrl(uri) && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(PatientProfileStrings.dialFailed)),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(PatientProfileStrings.dialFailed)),
+        );
+      }
+    }
+  }
+
+  static Future<void> _launchMaps(BuildContext context, String place) async {
+    final uri = Uri.parse(
+        'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(place.trim())}');
+    try {
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
+          context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(PatientProfileStrings.mapsOpenFailed)),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(PatientProfileStrings.mapsOpenFailed)),
+        );
+      }
+    }
   }
 
   static String _initials(String n) {
@@ -2417,9 +2503,10 @@ class _PatientDetailHeader extends StatelessWidget {
 }
 
 class _HeaderChip {
-  const _HeaderChip(this.icon, this.label);
+  const _HeaderChip(this.icon, this.label, {this.onTap});
   final IconData icon;
   final String label;
+  final VoidCallback? onTap;
 }
 
 /// Gemini-powered 2-3 sentence patient summary shown at the top of the
