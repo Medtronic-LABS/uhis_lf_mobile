@@ -1818,10 +1818,9 @@ class _PatientDetailHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final name = data.name ?? PatientContextStrings.fallbackTitle;
 
-    final resolvedAge = data.age ?? _ageFromDob(data.dateOfBirth);
+    final ageLabel = _ageLabelFromDob(data.dateOfBirth, data.age);
     final prefixParts = <String>[
-      if (resolvedAge != null)
-        resolvedAge == 0 ? '< 1 yr' : 'Age $resolvedAge',
+      if (ageLabel != null) ageLabel,
       if (data.gender != null && data.gender!.isNotEmpty)
         data.gender!.toUpperCase().startsWith('F') ? 'Female' : 'Male',
     ];
@@ -1989,6 +1988,26 @@ class _PatientDetailHeader extends StatelessWidget {
     } catch (_) {
       return null;
     }
+  }
+
+  /// Smart age label: months for under-2, years otherwise.
+  /// Mirrors the logic in [_VisitFlowState._ageDisplay].
+  static String? _ageLabelFromDob(String? dob, int? ageYears) {
+    if (dob != null && dob.isNotEmpty) {
+      try {
+        final birth = DateTime.parse(dob);
+        final now = DateTime.now();
+        final months = (now.year - birth.year) * 12 +
+            (now.month - birth.month) -
+            (now.day < birth.day ? 1 : 0);
+        if (months < 24) return '$months month${months == 1 ? '' : 's'}';
+        final years = months ~/ 12;
+        return 'Age $years';
+      } catch (_) {}
+    }
+    if (ageYears == null) return null;
+    if (ageYears == 0) return '< 1 yr';
+    return 'Age $ageYears';
   }
 }
 
