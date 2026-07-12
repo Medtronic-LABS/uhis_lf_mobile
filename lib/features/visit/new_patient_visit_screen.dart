@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
+import '../../core/db/member_dao.dart';
+import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
 import '../../core/models/programme.dart';
 import '../../core/theme/app_theme.dart';
@@ -165,6 +167,38 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
       if (!mounted) return;
 
       if (encounterId != null) {
+        // Resolve memberId + villageId from local DB so the offline-sync
+        // payload matches Android: encounter.memberId = numeric referenceId,
+        // assessment.villageId = patient's sub-village scope.
+        String? resolvedMemberId;
+        String? resolvedVillageId;
+        int? resolvedLocalId;
+        if (mounted) {
+          final patientDao = context.read<PatientDao>();
+          final memberDao = context.read<MemberDao>();
+          final patient = await patientDao.byId(widget.patientId);
+          resolvedVillageId = patient?.villageId;
+
+          // Mirror PatientContextScreen._resolveEncounterMemberId():
+          // prefer numeric referenceId from member entity.
+          final entity = await memberDao.getById(widget.patientId) ??
+              await memberDao.getByPatientId(widget.patientId);
+          if (entity != null) {
+            if (entity.referenceId?.isNotEmpty == true) {
+              resolvedMemberId = entity.referenceId;
+              resolvedLocalId = int.tryParse(entity.referenceId!);
+            } else if (int.tryParse(entity.id) != null) {
+              resolvedMemberId = entity.id;
+              resolvedLocalId = int.tryParse(entity.id);
+            }
+          }
+          // Fallback: patientId itself when member not yet in local DB
+          // (e.g. freshly enrolled via household enrollment).
+          resolvedMemberId ??= widget.patientId;
+        }
+
+        if (!mounted) return;
+
         final origin = widget.origin;
         final originParam = origin != null ? '?origin=$origin' : '';
         // Symptom selection already done on this screen — start flow at step 1
@@ -174,8 +208,10 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
           extra: <String, dynamic>{
             'patientId': widget.patientId,
             'patientName': widget.patientName,
-            'memberId': null,
+            'memberId': resolvedMemberId,
             'householdId': widget.householdId,
+            'villageId': resolvedVillageId,
+            'householdMemberLocalId': ?resolvedLocalId,
             'patientAge': widget.patientAge,
             'patientGender': widget.patientGender,
             'initialStep': 1,
