@@ -4920,6 +4920,10 @@ abstract final class FollowUpCallStrings {
   static const String reasonHint = 'e.g. no answer, will retry tomorrow';
   static const String save = 'Save call';
   static const String saved = 'Call logged — will sync on next cycle';
+  static const String schedule = 'Schedule';
+  static const String scheduled =
+      'Follow-up scheduled — will sync on next cycle';
+  static const String scheduleFailed = 'Could not schedule the follow-up';
   static const String selectOutcome = 'Select the call outcome';
   static const String closedNote =
       'Wrong number or exhausted attempts will close this follow-up.';
