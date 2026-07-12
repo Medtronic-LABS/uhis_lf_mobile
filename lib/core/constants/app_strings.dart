@@ -4278,3 +4278,96 @@ abstract final class ChildAssessmentStrings {
     'Community Clinic',
   ];
 }
+
+abstract final class EnrollStrings {
+  EnrollStrings._();
+
+  static const String screenTitle = 'Add Services';
+  static String selectFor(String name) => 'Select services for $name';
+  static const String subtitle =
+      'Add the health programmes this person needs. Tap a programme to select it.';
+  static const String sectionPregnancy = 'PREGNANCY CARE';
+  static const String sectionChronic = 'CHRONIC CONDITIONS';
+  static const String sectionChild = 'CHILD HEALTH';
+  static const String pregnantWomanLabel = 'Pregnant Woman';
+  static const String pregnantWomanBengali = 'গর্ভবতী মা';
+  static const String ancLabel = 'ANC Visit';
+  static const String ancBengali = 'মাতৃস্বাস্থ্য সেবা';
+  static const String pncLabel = 'PNC Visit';
+  static const String pncBengali = 'প্রসবোত্তর সেবা';
+  static const String ncdLabel = 'NCD Check';
+  static const String ncdBengali = 'অসংক্রামক রোগ';
+  static const String tbLabel = 'TB Check';
+  static const String tbBengali = 'যক্ষ্মা';
+  static const String imciLabel = 'Child Visit';
+  static const String imciBengali = 'শিশু স্বাস্থ্য সেবা';
+  static const String epiLabel = 'Vaccination';
+  static const String epiBengali = 'টিকা';
+  static const String lockedToastAnc =
+      '⚠ Select "Pregnant Woman" first to unlock ANC';
+  static const String lockedToastPnc =
+      '⚠ Select "Pregnant Woman" first to unlock PNC';
+  static const String noProgrammes =
+      'No eligible programmes for this patient based on age and gender.';
+  static String confirmCta(int n) =>
+      n == 0 ? 'Select Programmes' : 'Confirm Enrollment ($n selected)';
+  static const String savedToast = 'Programmes saved ✓';
+  static const String addServicesCta = '+ Add Services';
+  static const String noServicesTitle = 'No services enrolled';
+  static const String noServicesSubtitle =
+      'Tap below to add health programmes for this patient.';
+}
+
+abstract final class PregnancyRegStrings {
+  PregnancyRegStrings._();
+
+  static const String sheetTitle = 'Register Pregnancy';
+  static String forPatient(String name) => 'For $name';
+  static const String sectionDates = 'PREGNANCY DATES';
+  static const String lmpLabel = 'Last Menstrual Period (LMP)';
+  static const String lmpRequired = '* Required';
+  static const String lmpHint = 'Tap to select date';
+  static const String eddLabel = 'Est. Due Date (EDD)';
+  static const String gaLabel = 'Gestational Age';
+  static const String tooEarlyWarning =
+      '⚠ LMP is less than 6 weeks ago. Only basic details saved — full risk screening at next visit.';
+  static const String sectionHistory = 'OBSTETRIC HISTORY';
+  static const String gravidaLabel = 'Gravida (total pregnancies)';
+  static const String parityLabel = 'Parity (live births)';
+  static const String firstPregnancy = 'First pregnancy';
+  static const String sectionRisk = 'RISK SCREENING';
+  static String ageRiskNormal(int age) => 'Age $age · Normal age for pregnancy';
+  static String ageRiskLow(int age) => '⚠ Age $age · Under 18 — high risk';
+  static String ageRiskHigh(int age) => '⚠ Age $age · Over 35 — high risk';
+  static const String conditionsLabel = 'Any existing conditions?';
+  static const String conditionHtn = 'Hypertension / High BP';
+  static const String conditionDiabetes = 'Diabetes';
+  static const String conditionCsection = 'Previous C-section';
+  static const String conditionComplicated = 'Previous complicated delivery';
+  static const String registerCta = '🤰  Register Pregnancy';
+  static const String skipCta = 'Skip for now';
+  static const String savedToast = 'Pregnancy registered ✓';
+  static const String lmpRequiredError = 'Please select the LMP date';
+  static const String lmpFutureError = 'LMP cannot be in the future';
+  static const String multiparaWarning = '⚠ Gravida > 4 — multipara risk';
+}
+
+abstract final class NewPatientVisitStrings {
+  NewPatientVisitStrings._();
+
+  static const String backTooltip = 'Back';
+  static const String step1Label = '1. How are you?';
+  static const String step3Label = '3. Summary';
+  static const String howFeelFemale = 'How is she feeling today? 🎙';
+  static const String howFeelMale = 'How is he feeling today? 🎙';
+  static const String scribeTitle = 'AI Scribe';
+  static const String scribeSubtitle = 'Tap and let her speak';
+  static const String scribeStart = '🎙 Start';
+  static const String searchHint = 'Search symptoms...';
+  static const String noSymptomsFound = 'No symptoms found';
+  static const String eligibleServicesHeader = '✦ Eligible services';
+  static const String eligibleServicesTag = 'Age & gender based';
+  static const String pwHint = "⚠ Select 'PW' first to unlock ANC";
+  static const String startVisitCta = 'Start Visit →';
+  static const String selectServiceCta = 'Select a service to continue';
+}

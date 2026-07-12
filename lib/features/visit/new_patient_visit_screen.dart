@@ -1,0 +1,827 @@
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+
+import '../../core/constants/app_strings.dart';
+import '../../core/db/patient_programmes_dao.dart';
+import '../../core/models/programme.dart';
+import '../../core/theme/app_theme.dart';
+import '../patient/enroll/pregnancy_registration_sheet.dart';
+import 'symptom_catalog.dart';
+import 'triage/visit_step_header.dart';
+import 'visit_controller.dart';
+
+/// Which service the SK is selecting for this visit.
+enum _Svc { pw, anc, pnc, fp, general, ncd }
+
+/// First-time visit screen — symptom picker + eligible service grid.
+/// Shown when a patient has no prior encounter (no programme enrolled yet).
+/// Matches the Priya Rani Das wireframe from apon_sushashthya_v13.html.
+class NewPatientVisitScreen extends StatefulWidget {
+  const NewPatientVisitScreen({
+    super.key,
+    required this.patientId,
+    this.patientName,
+    this.patientAge,
+    this.patientGender,
+    this.householdId,
+    this.villageName,
+    this.origin,
+  });
+
+  final String patientId;
+  final String? patientName;
+  final int? patientAge;
+  final String? patientGender;
+  final String? householdId;
+  final String? villageName;
+  final String? origin;
+
+  @override
+  State<NewPatientVisitScreen> createState() => _NewPatientVisitScreenState();
+}
+
+class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
+  bool _pwSelected = false;
+  _Svc? _selectedSvc;
+  final Set<String> _selectedSymptoms = {};
+  String _searchQuery = '';
+  bool _starting = false;
+
+  // ── gender / age helpers ──────────────────────────────────────────────────
+
+  bool get _isFemale {
+    final g = (widget.patientGender ?? '').toUpperCase().trim();
+    return g.startsWith('F') || g == 'W' || g == 'WOMAN';
+  }
+
+  int? get _ageOrNull => widget.patientAge;
+  int get _age => widget.patientAge ?? 0;
+
+  bool get _showPregnancySection =>
+      _isFemale && (_ageOrNull == null || (_age >= 10 && _age <= 49));
+
+  bool get _showNcd => _ageOrNull == null || _age >= 18;
+
+  bool get _showImci => _ageOrNull != null && _age < 5;
+
+  // ── symptom list ──────────────────────────────────────────────────────────
+
+  List<SymptomDef> get _symptomList {
+    if (_selectedSvc == _Svc.ncd) return SymptomCatalog.ncdSymptoms;
+    if (_selectedSvc == _Svc.anc || _selectedSvc == _Svc.pnc) {
+      return SymptomCatalog.ancSymptoms;
+    }
+    if (_showPregnancySection) return SymptomCatalog.ancSymptoms;
+    if (_showImci) return SymptomCatalog.imciSymptoms;
+    if (_showNcd) return SymptomCatalog.ncdSymptoms;
+    return SymptomCatalog.ncdSymptoms;
+  }
+
+  List<SymptomDef> get _filteredSymptoms {
+    if (_searchQuery.isEmpty) return _symptomList;
+    final q = _searchQuery.toLowerCase();
+    return _symptomList.where((s) => s.label.toLowerCase().contains(q)).toList();
+  }
+
+  // ── service helpers ───────────────────────────────────────────────────────
+
+  Programme _toProgram(_Svc svc) {
+    switch (svc) {
+      case _Svc.anc:
+        return Programme.anc;
+      case _Svc.pnc:
+        return Programme.pnc;
+      case _Svc.fp:
+        return Programme.familyPlanning;
+      case _Svc.ncd:
+        return Programme.ncd;
+      case _Svc.general:
+      case _Svc.pw:
+        return Programme.unknown;
+    }
+  }
+
+  bool _isLocked(_Svc svc) =>
+      (svc == _Svc.anc || svc == _Svc.pnc) && !_pwSelected;
+
+  void _onSvcTap(_Svc svc) {
+    if (svc == _Svc.pw) {
+      setState(() {
+        _pwSelected = !_pwSelected;
+        if (!_pwSelected &&
+            (_selectedSvc == _Svc.anc || _selectedSvc == _Svc.pnc)) {
+          _selectedSvc = null;
+        }
+      });
+      return;
+    }
+    if (_isLocked(svc)) {
+      final msg = svc == _Svc.anc
+          ? EnrollStrings.lockedToastAnc
+          : EnrollStrings.lockedToastPnc;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      return;
+    }
+    setState(() => _selectedSvc = _selectedSvc == svc ? null : svc);
+  }
+
+  // ── start visit ───────────────────────────────────────────────────────────
+
+  Future<void> _startVisit() async {
+    if (_starting || _selectedSvc == null || _selectedSvc == _Svc.pw) return;
+    setState(() => _starting = true);
+
+    try {
+      final programme = _toProgram(_selectedSvc!);
+
+      if (_selectedSvc == _Svc.anc && mounted) {
+        await PregnancyRegistrationSheet.show(
+          context,
+          patientId: widget.patientId,
+          patientName: widget.patientName ?? 'Patient',
+          patientAge: widget.patientAge,
+        );
+        if (!mounted) return;
+      }
+
+      if (programme != Programme.unknown && mounted) {
+        final dao = context.read<PatientProgrammesDao>();
+        await dao.replaceFor(widget.patientId, {programme});
+      }
+
+      if (!mounted) return;
+
+      final controller = context.read<VisitController>();
+      final encounterId = await controller.startVisit(
+        patientId: widget.patientId,
+        programme: programme,
+        patientName: widget.patientName,
+        patientAge: widget.patientAge,
+        patientGender: widget.patientGender,
+        householdId: widget.householdId,
+      );
+
+      if (!mounted) return;
+
+      if (encounterId != null) {
+        final origin = widget.origin;
+        final originParam = origin != null ? '?origin=$origin' : '';
+        // Symptom selection already done on this screen — start flow at step 1
+        // (programme recommendation + clinical form), skip the symptom picker.
+        context.go(
+          '/patients/visit/$encounterId/flow$originParam',
+          extra: <String, dynamic>{
+            'patientId': widget.patientId,
+            'patientName': widget.patientName,
+            'memberId': null,
+            'householdId': widget.householdId,
+            'patientAge': widget.patientAge,
+            'patientGender': widget.patientGender,
+            'initialStep': 1,
+            if (programme != Programme.unknown)
+              'seedProgrammes': [programme.name],
+          },
+        );
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(controller.error ?? VisitLandingStrings.startFailed),
+            ),
+          );
+          setState(() => _starting = false);
+        }
+      }
+    } catch (_) {
+      if (mounted) setState(() => _starting = false);
+    }
+  }
+
+  // ── build ─────────────────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    final name = widget.patientName ?? 'Patient';
+
+    return Scaffold(
+      backgroundColor: AppColors.canvas,
+      appBar: VisitStepHeader(
+        step: VisitStep.symptomPicker,
+        patientLabel: name,
+        onBack: () => Navigator.of(context).maybePop(),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+        children: [
+          _SymptomSection(
+            isFemale: _isFemale,
+            filteredSymptoms: _filteredSymptoms,
+            selectedSymptoms: _selectedSymptoms,
+            onSearchChanged: (v) => setState(() => _searchQuery = v),
+            onSymptomToggle: (code) => setState(() {
+              if (_selectedSymptoms.contains(code)) {
+                _selectedSymptoms.remove(code);
+              } else {
+                _selectedSymptoms.add(code);
+              }
+            }),
+          ),
+          const SizedBox(height: 20),
+          _ServicesSection(
+            showPregnancySection: _showPregnancySection,
+            showNcd: _showNcd,
+            showImci: _showImci,
+            pwSelected: _pwSelected,
+            selectedSvc: _selectedSvc,
+            onSvcTap: _onSvcTap,
+          ),
+        ],
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: _Cta(
+            selectedSvc: _selectedSvc,
+            starting: _starting,
+            onTap: _startVisit,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Symptom section ───────────────────────────────────────────────────────────
+
+class _SymptomSection extends StatelessWidget {
+  const _SymptomSection({
+    required this.isFemale,
+    required this.filteredSymptoms,
+    required this.selectedSymptoms,
+    required this.onSearchChanged,
+    required this.onSymptomToggle,
+  });
+
+  final bool isFemale;
+  final List<SymptomDef> filteredSymptoms;
+  final Set<String> selectedSymptoms;
+  final ValueChanged<String> onSearchChanged;
+  final ValueChanged<String> onSymptomToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final heading = isFemale
+        ? NewPatientVisitStrings.howFeelFemale
+        : NewPatientVisitStrings.howFeelMale;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          heading,
+          style: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w800,
+            color: AppColors.navy,
+          ),
+        ),
+        const SizedBox(height: 10),
+        // AI Scribe banner — indigo gradient matching AiScribeBanner visual
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF4F46E5), Color(0xFF7C3AED)],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.mic, color: Colors.white, size: 18),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      NewPatientVisitStrings.scribeTitle,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                      ),
+                    ),
+                    Text(
+                      NewPatientVisitStrings.scribeSubtitle,
+                      style: TextStyle(color: Colors.white70, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Text(
+                  NewPatientVisitStrings.scribeStart,
+                  style: TextStyle(
+                    color: Color(0xFF4F46E5),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Symptom picker card — matches _UnifiedSymptomPicker style
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.textOnNavy,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.border),
+          ),
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                onChanged: onSearchChanged,
+                decoration: InputDecoration(
+                  hintText: NewPatientVisitStrings.searchHint,
+                  hintStyle: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textMuted,
+                  ),
+                  prefixIcon: const Icon(
+                    Icons.search_rounded,
+                    size: 18,
+                    color: AppColors.textMuted,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: AppColors.border),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: AppColors.border),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: AppColors.navy),
+                  ),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  filled: true,
+                  fillColor: AppColors.canvas,
+                ),
+                maxLines: 1,
+              ),
+              const SizedBox(height: 14),
+              if (filteredSymptoms.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    NewPatientVisitStrings.noSymptomsFound,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                )
+              else
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: filteredSymptoms.map((s) {
+                    final isSelected = selectedSymptoms.contains(s.code);
+                    return _SymptomChip(
+                      symptom: s,
+                      isSelected: isSelected,
+                      onTap: () => onSymptomToggle(s.code),
+                    );
+                  }).toList(),
+                ),
+              const SizedBox(height: 4),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Symptom chip matching the _PickerChip visual style from SymptomPickerScreen.
+///
+/// Unselected: white bg + grey border + navy text.
+/// Selected:   navy bg + white check icon + white text.
+/// Danger sign selected: red bg + white text (clinical safety signal).
+class _SymptomChip extends StatelessWidget {
+  const _SymptomChip({
+    required this.symptom,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final SymptomDef symptom;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDanger = symptom.isDangerSign;
+
+    final Color bg;
+    final Color borderColor;
+    final Color textColor;
+
+    if (isSelected) {
+      if (isDanger) {
+        bg = const Color(0xFFDC2626);
+        borderColor = const Color(0xFFDC2626);
+        textColor = Colors.white;
+      } else {
+        bg = AppColors.navy;
+        borderColor = AppColors.navy;
+        textColor = Colors.white;
+      }
+    } else {
+      bg = Colors.white;
+      borderColor = const Color(0xFFD1D5DB);
+      textColor = AppColors.navy;
+    }
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: borderColor, width: isSelected ? 1.5 : 1),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isSelected) ...[
+              Icon(
+                isDanger ? Icons.warning_amber_rounded : Icons.check_rounded,
+                size: 13,
+                color: textColor,
+              ),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              symptom.label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: textColor,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Services section ──────────────────────────────────────────────────────────
+
+class _ServicesSection extends StatelessWidget {
+  const _ServicesSection({
+    required this.showPregnancySection,
+    required this.showNcd,
+    required this.showImci,
+    required this.pwSelected,
+    required this.selectedSvc,
+    required this.onSvcTap,
+  });
+
+  final bool showPregnancySection;
+  final bool showNcd;
+  final bool showImci;
+  final bool pwSelected;
+  final _Svc? selectedSvc;
+  final ValueChanged<_Svc> onSvcTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Text(
+              NewPatientVisitStrings.eligibleServicesHeader,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: AppColors.navy,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEDE9FE),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Text(
+                NewPatientVisitStrings.eligibleServicesTag,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF7C3AED),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _ServiceGrid(
+          showPregnancySection: showPregnancySection,
+          showNcd: showNcd,
+          showImci: showImci,
+          pwSelected: pwSelected,
+          selectedSvc: selectedSvc,
+          onSvcTap: onSvcTap,
+        ),
+        if (!pwSelected && showPregnancySection) ...[
+          const SizedBox(height: 8),
+          const Center(
+            child: Text(
+              NewPatientVisitStrings.pwHint,
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.textMuted,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+// ── Service grid ──────────────────────────────────────────────────────────────
+
+class _ServiceGrid extends StatelessWidget {
+  const _ServiceGrid({
+    required this.showPregnancySection,
+    required this.showNcd,
+    required this.showImci,
+    required this.pwSelected,
+    required this.selectedSvc,
+    required this.onSvcTap,
+  });
+
+  final bool showPregnancySection;
+  final bool showNcd;
+  final bool showImci;
+  final bool pwSelected;
+  final _Svc? selectedSvc;
+  final ValueChanged<_Svc> onSvcTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final specs = <_SvcSpec>[];
+
+    if (showPregnancySection) {
+      specs.add(const _SvcSpec(_Svc.pw, '🤰', 'PW', isPrereq: true));
+      specs.add(_SvcSpec(_Svc.anc, '🏥', 'ANC', locked: !pwSelected));
+      specs.add(const _SvcSpec(_Svc.fp, '🌸', 'FP'));
+      specs.add(_SvcSpec(_Svc.pnc, '👶', 'PNC', locked: !pwSelected));
+      specs.add(const _SvcSpec(_Svc.general, '🩺', 'General'));
+      if (showNcd) specs.add(const _SvcSpec(_Svc.ncd, '💊', 'NCD'));
+    } else if (showImci) {
+      specs.add(const _SvcSpec(_Svc.general, '🩺', 'General'));
+      if (showNcd) specs.add(const _SvcSpec(_Svc.ncd, '💊', 'NCD'));
+    } else {
+      specs.add(const _SvcSpec(_Svc.general, '🩺', 'General'));
+      if (showNcd) specs.add(const _SvcSpec(_Svc.ncd, '💊', 'NCD'));
+    }
+
+    // Pad to multiple of 3
+    while (specs.length % 3 != 0) {
+      specs.add(const _SvcSpec(null, '', ''));
+    }
+
+    final rows = <Widget>[];
+    for (var i = 0; i < specs.length; i += 3) {
+      rows.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Row(
+            children: [
+              for (var j = 0; j < 3; j++) ...[
+                if (j > 0) const SizedBox(width: 10),
+                Expanded(
+                  child: specs[i + j].svc == null
+                      ? const SizedBox.shrink()
+                      : _SvcTile(
+                          spec: specs[i + j],
+                          selected: specs[i + j].isPrereq
+                              ? pwSelected
+                              : selectedSvc == specs[i + j].svc,
+                          onTap: () => onSvcTap(specs[i + j].svc!),
+                        ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(children: rows);
+  }
+}
+
+class _SvcSpec {
+  const _SvcSpec(
+    this.svc,
+    this.emoji,
+    this.label, {
+    this.isPrereq = false,
+    this.locked = false,
+  });
+
+  final _Svc? svc;
+  final String emoji;
+  final String label;
+  final bool isPrereq;
+  final bool locked;
+}
+
+class _SvcTile extends StatelessWidget {
+  const _SvcTile({
+    required this.spec,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _SvcSpec spec;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final locked = spec.locked;
+
+    final Color borderColor;
+    final Color bgColor;
+    final Color textColor;
+
+    if (locked) {
+      borderColor = AppColors.border;
+      bgColor = AppColors.canvas;
+      textColor = AppColors.textMuted;
+    } else if (selected) {
+      borderColor = AppColors.navy;
+      bgColor = const Color(0xFFEBEEF5);
+      textColor = AppColors.navy;
+    } else {
+      borderColor = AppColors.border;
+      bgColor = Colors.white;
+      textColor = const Color(0xFF374151);
+    }
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: borderColor,
+            width: selected ? 1.5 : 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 4,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(spec.emoji, style: const TextStyle(fontSize: 22)),
+                const SizedBox(height: 4),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    spec.label,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: textColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (!locked)
+              Positioned(
+                top: 0,
+                right: 6,
+                child: Container(
+                  width: 14,
+                  height: 14,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: selected ? AppColors.navy : Colors.transparent,
+                    border: Border.all(
+                      color: selected ? AppColors.navy : const Color(0xFFD1D5DB),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: selected
+                      ? const Icon(Icons.check, size: 9, color: Colors.white)
+                      : null,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── CTA button ────────────────────────────────────────────────────────────────
+
+class _Cta extends StatelessWidget {
+  const _Cta({
+    required this.selectedSvc,
+    required this.starting,
+    required this.onTap,
+  });
+
+  final _Svc? selectedSvc;
+  final bool starting;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final canStart =
+        selectedSvc != null && selectedSvc != _Svc.pw && !starting;
+
+    return FilledButton(
+      onPressed: canStart ? onTap : null,
+      style: FilledButton.styleFrom(
+        backgroundColor:
+            canStart ? AppColors.pink : const Color(0xFFD1D5DB),
+        minimumSize: const Size.fromHeight(54),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+      child: starting
+          ? const SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
+          : Text(
+              canStart
+                  ? NewPatientVisitStrings.startVisitCta
+                  : NewPatientVisitStrings.selectServiceCta,
+              style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 15,
+                color: Colors.white,
+              ),
+            ),
+    );
+  }
+}

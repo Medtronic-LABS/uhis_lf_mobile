@@ -61,6 +61,8 @@ class VisitFlowScreen extends StatefulWidget {
     this.isPostpartum = false,
     this.postpartumWeeks,
     this.origin,
+    this.initialStep = 0,
+    this.seedProgrammes = const <Programme>{},
     this.debugInitialStep,
   });
 
@@ -77,6 +79,15 @@ class VisitFlowScreen extends StatefulWidget {
   final bool isPostpartum;
   final int? postpartumWeeks;
   final String? origin;
+
+  /// Step to start the flow at. Use 1 when the caller already captured
+  /// symptom selection (e.g. [NewPatientVisitScreen]) so the SK goes straight
+  /// to programme recommendation + clinical form.
+  final int initialStep;
+
+  /// Programmes pre-confirmed by the caller — seeded into [_confirmedProgrammes]
+  /// so [_Step2ProgrammesThenForm] can pre-select without step 0.
+  final Set<Programme> seedProgrammes;
 
   /// Test-only hook: starts the wrapper at the given step so widget tests
   /// can exercise the progress header / Step 3 body without building Steps
@@ -106,7 +117,8 @@ class _VisitFlowState extends State<VisitFlowScreen> {
 
   /// Current step index — 0..2.
   late int _step =
-      widget.debugInitialStep?.clamp(0, _totalSteps - 1) ?? 0;
+      widget.debugInitialStep?.clamp(0, _totalSteps - 1) ??
+      widget.initialStep.clamp(0, _totalSteps - 1);
 
   /// Patient name resolved from constructor or, as a fallback, looked up
   /// from the local DB via [PatientDao]. The constructor value wins —
@@ -242,7 +254,8 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   String? _otherSymptoms;
 
   /// Programmes the SK confirmed in Step 2 — drives Step 3 form composition.
-  Set<Programme> _confirmedProgrammes = const <Programme>{};
+  late Set<Programme> _confirmedProgrammes =
+      widget.seedProgrammes.isNotEmpty ? {...widget.seedProgrammes} : const <Programme>{};
 
   /// Set when Step 3 completes — handed to Step 4 for the recommendation card.
   Programme _primaryProgramme = Programme.unknown;

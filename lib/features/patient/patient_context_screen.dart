@@ -2991,14 +2991,13 @@ class _NoServicesCard extends StatelessWidget {
               child: FilledButton.icon(
                 onPressed: () {
                   context.push(
-                    '/patients/$patientId/enroll',
+                    '/patients/$patientId/new-visit',
                     extra: <String, dynamic>{
                       'patientName': patientName ?? 'Patient',
                       if (patientAge != null) 'patientAge': patientAge,
                       if (patientGender != null)
                         'patientGender': patientGender,
                       if (villageName != null) 'villageName': villageName,
-                      'existingProgrammes': const <Programme>{},
                     },
                   );
                 },
