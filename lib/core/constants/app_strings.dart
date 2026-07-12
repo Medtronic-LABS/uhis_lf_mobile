@@ -4787,3 +4787,23 @@ abstract final class ChildAssessmentStrings {
     'Community Clinic',
   ];
 }
+
+/// Follow-up call logging — the device-side close/update flow.
+abstract final class FollowUpCallStrings {
+  FollowUpCallStrings._();
+
+  static const String logCall = 'Log call';
+  static const String sheetTitle = 'Log follow-up call';
+  static const String outcomePrompt = 'How did the call go?';
+  static const String outcomeSuccessful = 'Reached — successful';
+  static const String outcomeUnsuccessful = 'Could not reach';
+  static const String outcomeWrongNumber = 'Wrong number';
+  static const String reasonLabel = 'Note (optional)';
+  static const String reasonHint = 'e.g. no answer, will retry tomorrow';
+  static const String save = 'Save call';
+  static const String saved = 'Call logged — will sync on next cycle';
+  static const String selectOutcome = 'Select the call outcome';
+  static const String closedNote =
+      'Wrong number or exhausted attempts will close this follow-up.';
+  static const String failed = 'Could not log the call';
+}
