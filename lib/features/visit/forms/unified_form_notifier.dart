@@ -364,6 +364,18 @@ class UnifiedFormNotifier extends ChangeNotifier {
               '(mirrored from bpLogDetails) ----->');
         }
       }
+      // Inverse of the BP case: the ANC screen renders deliveryFacilityType
+      // but the payload mapper reads facilityIdentifiedForDelivery (identical
+      // option ids) — mirror so the submitted payload carries the value too.
+      if (field.fieldId == 'deliveryFacilityType' &&
+          !_isSkOwned('facilityIdentifiedForDelivery')) {
+        _data = _data.setValue('facilityIdentifiedForDelivery', validated);
+        _fieldSources['facilityIdentifiedForDelivery'] = FieldSource.aiPending;
+        _fieldSourceSegments['facilityIdentifiedForDelivery'] =
+            field.sourceSegment;
+        debugPrint('<----- asr APPLIED  [facilityIdentifiedForDelivery] = '
+            '$validated (mirrored from deliveryFacilityType) ----->');
+      }
     }
 
     debugPrint('<==================== ASR FORM FILL done: '
