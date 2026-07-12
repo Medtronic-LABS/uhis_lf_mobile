@@ -32,7 +32,7 @@ import 'mission_dashboard_repository.dart';
 import '../household/enrollment/enrollment_entry_sheet.dart';
 import '../cce/cce_alerts_drawer.dart';
 import '../cce/cce_repository.dart';
-import '../training/training_screen.dart';
+import 'sk_performance_screen.dart';
 
 /// AI Mission Dashboard — the operational command center for the SK.
 ///
@@ -537,7 +537,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               locationLine: _locationLine(),
               onPerformance: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) => const TrainingScreen(),
+                  builder: (_) => const SkPerformanceScreen(),
                 ),
               ),
               settingsMenu: _SettingsMenu(onOfferBiometric: _offerBiometric),

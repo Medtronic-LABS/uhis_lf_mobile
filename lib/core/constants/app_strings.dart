@@ -4233,6 +4233,32 @@ abstract final class PerformanceStrings {
 
   static String periodLabelMonth(DateTime date) =>
       DateFormat('MMMM yyyy').format(date);
+
+  // ── Wireframe v2 additions ──────────────────────────────────────────────────
+  static const String appBarSubtitle = 'Jahnara Begum · SK ID 4521 · Manikganj Sadar';
+  static const String heroScoreLabel = 'PERFORMANCE SCORE';
+  static const String heroDesc = 'Blends visit completion, referral follow-through & SLA compliance';
+  static const String slaLabel = 'SLA COMPLIANCE';
+  static const String highRiskLabel = 'HIGH-RISK RESPONSE';
+  static const String visitTrendLabel = 'VISIT TREND';
+  static const String trendSteady = '↑ steady';
+  static const String statVisitsCompleted = 'Visits Completed';
+  static const String statReferralsMade = 'Referrals Made';
+  static const String statReferralsCompleted = 'Referrals Completed';
+  static const String statHouseholdsCovered = 'Households Covered';
+  static const String statAvgVisitsDay = 'Avg Visits / Day';
+  static const String statMissedOverdue = 'Missed / Overdue';
+  static const String sectionServiceBreakdown = 'SERVICE-WISE BREAKDOWN';
+  static const String insightBoldPhrase = 'more visits';
+  static const List<String> weekdayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  static const String serviceAnc = 'ANC';
+  static const String serviceNcd = 'NCD';
+  static const String serviceChild = 'Child / Immunisation';
+  static const String servicePnc = 'PNC';
+  static const String serviceHousehold = 'Household enrolment';
+
+  static String insightWeek(int pct) =>
+      'You completed $pct% more visits than the Manikganj Sadar area average this week.';
 }
 
 /// Household enrollment flow strings.
