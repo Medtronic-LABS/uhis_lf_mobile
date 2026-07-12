@@ -3064,37 +3064,6 @@ class _WhatsAppCardState extends State<_WhatsAppCard>
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  AnimatedRotation(
-                    turns: _expanded ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: const Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      color: AppColors.waHeader,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          // ── Collapsible body ────────────────────────────────────────
-          if (_expanded) ...[
-            const Divider(height: 1, color: AppColors.waBorder),
-            // Message body with copy button
-            Padding(
-              padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.xl, AppSpacing.xxl, 0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Text(
-                      widget.text,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        height: 1.55,
-                        color: AppColors.textStrong,
-                      ),
-                    ),
-                  ),
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 180),
                     child: _copied
@@ -3125,7 +3094,31 @@ class _WhatsAppCardState extends State<_WhatsAppCard>
                             ),
                           ),
                   ),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: AppColors.waHeader,
+                    ),
+                  ),
                 ],
+              ),
+            ),
+          ),
+          // ── Collapsible body ────────────────────────────────────────
+          if (_expanded) ...[
+            const Divider(height: 1, color: AppColors.waBorder),
+            // Message body — full width now copy button is in the header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.xl, AppSpacing.xxl, 0),
+              child: Text(
+                widget.text,
+                style: const TextStyle(
+                  fontSize: 13,
+                  height: 1.55,
+                  color: AppColors.textStrong,
+                ),
               ),
             ),
             const SizedBox(height: AppSpacing.xl),
