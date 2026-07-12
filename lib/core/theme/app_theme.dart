@@ -519,12 +519,12 @@ abstract final class AppTextStyles {
   // ─── Header ────────────────────────────────────────────────
   // .header-title: Nunito 20px w800 white
   static const TextStyle headerTitle = TextStyle(
-    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 23, fontWeight: FontWeight.w800,
+    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 20, fontWeight: FontWeight.w800,
     color: Colors.white,
   );
   // .header-sub: NunitoSans 12px rgba(255,255,255,0.6)
   static const TextStyle headerSub = TextStyle(
-    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 14, fontWeight: FontWeight.w400,
+    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 13, fontWeight: FontWeight.w400,
     color: AppColors.onDarkLow,
   );
 

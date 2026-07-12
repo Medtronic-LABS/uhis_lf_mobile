@@ -576,6 +576,12 @@ class MemberDao {
   }
 
   /// Returns distinct (subVillageId, subVillageName) pairs for filter UI.
+  ///
+  /// Grouped by sub_village_id (not `DISTINCT sub_village_id,
+  /// sub_village_name`) for the same reason as [getDistinctVillages]: a
+  /// sub_village_id synced with more than one name spelling must still
+  /// yield exactly one row, or filter-tab selection (compared by value)
+  /// would mark two tabs active for a single tap.
   Future<List<({String id, String name})>> getDistinctSubVillages({
     String? villageId,
   }) async {
@@ -584,10 +590,11 @@ class MemberDao {
         : 'sub_village_id IS NOT NULL AND sub_village_id != \'\'';
     final rows = await _db.db.rawQuery(
       '''
-      SELECT DISTINCT sub_village_id, sub_village_name
+      SELECT sub_village_id, MIN(NULLIF(TRIM(sub_village_name), '')) AS sub_village_name
       FROM ${AppDatabase.tableMembers}
       WHERE $where
-      ORDER BY COALESCE(sub_village_name, sub_village_id) ASC
+      GROUP BY sub_village_id
+      ORDER BY COALESCE(MIN(NULLIF(TRIM(sub_village_name), '')), sub_village_id) ASC
       ''',
       villageId != null ? [villageId] : null,
     );

@@ -7,6 +7,7 @@
 /// Spec: AI Mission Dashboard (Screen 2) — Mission Queue section.
 library;
 
+import '../mission/programme_reason.dart' show primaryProgrammeOf;
 import 'dashboard_tier.dart';
 import 'programme.dart';
 import 'referral.dart';
@@ -396,14 +397,7 @@ class MissionQueueItem {
   /// Returns the most representative programme for routing the visit flow.
   /// Falls back to [Programme.unknown] when no programme is tagged so callers
   /// always get a non-null value (matches `VisitLandingScreen` convention).
-  Programme get primaryProgramme {
-    if (programmes.contains(Programme.imci)) return Programme.imci;
-    if (programmes.contains(Programme.anc)) return Programme.anc;
-    if (programmes.contains(Programme.pnc)) return Programme.pnc;
-    if (programmes.contains(Programme.ncd)) return Programme.ncd;
-    if (programmes.contains(Programme.tb)) return Programme.tb;
-    return programmes.isNotEmpty ? programmes.first : Programme.unknown;
-  }
+  Programme get primaryProgramme => primaryProgrammeOf(programmes);
 
   /// Programme emoji for display.
   String get programmeEmoji {

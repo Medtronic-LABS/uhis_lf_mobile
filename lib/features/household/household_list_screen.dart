@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/theme.dart';
-import '../../core/auth/user_hierarchy_service.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/app_database.dart';
+import '../../core/db/assessment_dao.dart';
 import '../../core/db/household_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
+import '../../core/mission/programme_reason.dart';
 import '../../core/models/programme.dart';
 import '../../core/models/mission_queue_item.dart';
-import '../../core/widgets/location_filter_sheet.dart';
 import '../../core/widgets/mockup_svg_icons.dart';
-import '../../core/widgets/patient_filter_panel.dart' show VillageFilterTab;
+import '../../core/widgets/patient_filter_panel.dart'
+    show VillageFilterTab, titleCaseWords;
 import '../dashboard/dashboard_repository.dart';
 import '../dashboard/mission_dashboard_repository.dart';
 import '../visit/widgets/mission_queue_card.dart';
@@ -42,12 +44,6 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
   // patientId -> queue item, so a household's flagged member (if any) can be
   // rendered with its real urgency badge/status via MissionQueueCard.
   Map<String, MissionQueueItem> _queueItems = {};
-
-  // Location / SS filter state (null = show all) — kept: real capability
-  // beyond the mockup, not part of the structural-parity cut.
-  String? _selectedVillageId;
-  String? _selectedSubVillageId;
-  String? _selectedShebikaId;
 
   // Inline village-tab row (populated from local DB after data loads).
   List<({String id, String name})> _inlineVillages = const [];
@@ -98,90 +94,37 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
     final memberDao = context.read<MemberDao>();
     final repo = context.read<DashboardRepository>();
 
-    // Load distinct villages for the village-tab row.
-    memberDao.getDistinctVillages().then((villages) {
-      if (mounted && villages.length > 1) {
+    // Load distinct sub-villages for the village-tab row — matches the Home
+    // dashboard's own village-chip granularity (the worklist's
+    // Patient.villageName/villageId are actually sub-village data under a
+    // misleading name, so "village" means sub-village on both screens now,
+    // by product decision). Shown whenever there's at least one — the
+    // mockup's row always shows "All villages" plus whatever exists, even
+    // just one.
+    memberDao.getDistinctSubVillages().then((villages) {
+      if (mounted && villages.isNotEmpty) {
         setState(() => _inlineVillages = villages);
       }
     });
 
     setState(() {
-      _future = _fetchHouseholds(
-        householdDao,
-        memberDao,
-        repo,
-        villageId: _selectedVillageId,
-        subVillageId: _selectedSubVillageId,
-        shebikaId: _selectedShebikaId,
-      );
+      _future = _fetchHouseholds(householdDao, memberDao, repo);
     });
-  }
-
-  /// Opens the location/SS filter bottom sheet backed by the API hierarchy.
-  Future<void> _openFilterSheet() async {
-    final hierarchySvc = context.read<UserHierarchyService>();
-    // One prefetch covers villages, subVillages, and ssWorkers — single HTTP call.
-    await hierarchySvc.prefetch();
-    if (!mounted) return;
-    final villages = hierarchySvc.villages ?? const [];
-    final allSubVillages = hierarchySvc.subVillages ?? const [];
-    final ssWorkers = hierarchySvc.ssWorkers ?? const [];
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => LocationFilterSheet(
-        villages: villages.map((v) => (id: v.id, name: v.name)).toList(),
-        allSubVillages: allSubVillages,
-        ssWorkers: ssWorkers,
-        selectedVillageId: _selectedVillageId,
-        selectedSubVillageId: _selectedSubVillageId,
-        selectedShebikaId: _selectedShebikaId,
-        onApply: (v, sv, ss) {
-          setState(() {
-            _selectedVillageId = v;
-            _selectedSubVillageId = sv;
-            _selectedShebikaId = ss;
-          });
-          _loadData();
-        },
-      ),
-    );
   }
 
   /// Fetches households from LOCAL SQLite first (instant), falls back to API.
   Future<List<_HouseholdItem>> _fetchHouseholds(
     HouseholdDao householdDao,
     MemberDao memberDao,
-    DashboardRepository repo, {
-    String? villageId,
-    String? subVillageId,
-    String? shebikaId,
-  }) async {
-    // Resolve SS → sub-village IDs before the first await so we don't use
-    // BuildContext across an async gap.
-    List<String>? ssSubVillageIds;
-    if (shebikaId != null) {
-      final hierarchySvc = context.read<UserHierarchyService>();
-      final ssWorkers = hierarchySvc.ssWorkers ?? const [];
-      final ss = ssWorkers.where((s) => s.id == shebikaId).firstOrNull;
-      if (ss != null && ss.subVillages.isNotEmpty) {
-        ssSubVillageIds = ss.subVillages.map((sv) => sv.id).toList();
-      }
-    }
-
+    DashboardRepository repo,
+  ) async {
     try {
       final localHouseholds = await householdDao.getAll(limit: 1000);
 
-      // Get members grouped by household, with optional location/SS filter.
-      final membersByHousehold = await memberDao.getAllGroupedByHousehold(
-        villageId: villageId,
-        subVillageId: subVillageId,
-        shasthyaShebikaId: shebikaId,
-        subVillageIds: ssSubVillageIds,
-      );
+      // Get members grouped by household — search + village tabs are the
+      // only filtering on this screen (the location/sub-village/SS-worker
+      // sheet was removed; it's not in the mockup).
+      final membersByHousehold = await memberDao.getAllGroupedByHousehold();
 
       // Use members directly grouped by household (bypass household table)
       // to ensure all members are shown even when household records are stale.
@@ -193,9 +136,23 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
             .whereType<String>()
             .toSet()
             .toList();
-        final programmesDao = PatientProgrammesDao(context.read<AppDatabase>());
-        final programmesByPatient =
-            await programmesDao.programmesForMany(allPatientIds);
+        final appDb = context.read<AppDatabase>();
+        final programmesDao = PatientProgrammesDao(appDb);
+        final programmesByPatient = await programmesDao.programmesForMany(
+          allPatientIds,
+        );
+        // Visit counts so a non-queue member's badge is visit-count-aware
+        // ("ANC Visit 3 due"), identical to the dashboard's real badge —
+        // same DAO/kind-lists WorklistRepository uses (programme_reason.dart).
+        final assessmentDao = AssessmentDao(appDb);
+        final ancCounts = await assessmentDao.visitCountsByPatients(
+          allPatientIds,
+          ancVisitKinds,
+        );
+        final pncCounts = await assessmentDao.visitCountsByPatients(
+          allPatientIds,
+          pncVisitKinds,
+        );
 
         final items = <_HouseholdItem>[];
         for (final entry in membersByHousehold.entries) {
@@ -208,7 +165,16 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
             final progs = e.patientId != null
                 ? (programmesByPatient[e.patientId!] ?? const <Programme>{})
                 : const <Programme>{};
-            return _HouseholdMember.fromEntity(e, programmes: progs);
+            return _HouseholdMember.fromEntity(
+              e,
+              programmes: progs,
+              ancVisitCount: e.patientId != null
+                  ? (ancCounts[e.patientId!] ?? 0)
+                  : 0,
+              pncVisitCount: e.patientId != null
+                  ? (pncCounts[e.patientId!] ?? 0)
+                  : 0,
+            );
           }).toList();
 
           // Find household head to derive household name
@@ -221,14 +187,16 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
               ? "${head.name}'s Household"
               : (hhId.isNotEmpty ? 'Household #$hhId' : null);
 
-          items.add(_HouseholdItem(
-            id: hhId,
-            householdNo: hhId,
-            name: householdName,
-            village: firstMember.villageId,
-            memberCount: members.length,
-            members: memberList,
-          ));
+          items.add(
+            _HouseholdItem(
+              id: hhId,
+              householdNo: hhId,
+              name: householdName,
+              village: firstMember.subVillageId,
+              memberCount: members.length,
+              members: memberList,
+            ),
+          );
         }
         return items;
       }
@@ -251,87 +219,109 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.canvas,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            FutureBuilder<List<_HouseholdItem>>(
-              future: _future,
-              builder: (context, snapshot) {
-                final items = snapshot.data ?? const <_HouseholdItem>[];
-                final filtered = _filterByVillage(items);
-                final totalMembers =
-                    filtered.fold<int>(0, (sum, h) => sum + (h.memberCount ?? 0));
-                return _buildHeader(context, filtered.length, totalMembers);
-              },
-            ),
-            _buildVillageTabRow(),
-            Expanded(
-              child: _future == null
-                  ? const SizedBox.shrink()
-                  : FutureBuilder<List<_HouseholdItem>>(
-                      future: _future,
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.waiting) {
-                          return const Center(
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          );
-                        }
-                        if (snapshot.hasError) {
-                          // ignore: avoid_print
-                          print('[HouseholdList] Error: ${snapshot.error}');
-                          return Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.error_outline, size: 48),
-                                const SizedBox(height: 16),
-                                Text(HouseholdListStrings.loadError),
-                                const SizedBox(height: 8),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 32),
-                                  child: Text(
-                                    '${snapshot.error}',
-                                    style: Theme.of(context).textTheme.bodySmall,
-                                    textAlign: TextAlign.center,
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+      ),
+      child: Scaffold(
+        backgroundColor: AppColors.canvas,
+        body: SafeArea(
+          top: false,
+          bottom: false,
+          child: Column(
+            children: [
+              FutureBuilder<List<_HouseholdItem>>(
+                future: _future,
+                builder: (context, snapshot) {
+                  final items = snapshot.data ?? const <_HouseholdItem>[];
+                  final filtered = _filterByVillage(items);
+                  final totalMembers = filtered.fold<int>(
+                    0,
+                    (sum, h) => sum + (h.memberCount ?? 0),
+                  );
+                  return _buildHeader(context, filtered.length, totalMembers);
+                },
+              ),
+              // 12px gap — matches the Home dashboard's own spacing between
+              // its header and PatientFilterPanel/village-tab row.
+              const SizedBox(height: AppSpacing.xl),
+              _buildVillageTabRow(),
+              Expanded(
+                child: _future == null
+                    ? const SizedBox.shrink()
+                    : FutureBuilder<List<_HouseholdItem>>(
+                        future: _future,
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return const Center(
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            );
+                          }
+                          if (snapshot.hasError) {
+                            // ignore: avoid_print
+                            print('[HouseholdList] Error: ${snapshot.error}');
+                            return Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.error_outline, size: 48),
+                                  const SizedBox(height: 16),
+                                  Text(HouseholdListStrings.loadError),
+                                  const SizedBox(height: 8),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 32,
+                                    ),
+                                    child: Text(
+                                      '${snapshot.error}',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodySmall,
+                                      textAlign: TextAlign.center,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 16),
-                                FilledButton.tonal(
-                                  onPressed: () => setState(_loadData),
-                                  child: const Text(CommonStrings.retry),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-                        final items = snapshot.data ?? [];
-                        if (items.isEmpty) {
-                          return Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.people_outline,
-                                  size: 64,
-                                  color: Theme.of(context).colorScheme.outline,
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  HouseholdListStrings.noMembers,
-                                  style: Theme.of(context).textTheme.bodyLarge,
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-                        return _buildHouseholdsList(context, items);
-                      },
-                    ),
-            ),
-          ],
+                                  const SizedBox(height: 16),
+                                  FilledButton.tonal(
+                                    onPressed: () => setState(_loadData),
+                                    child: const Text(CommonStrings.retry),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+                          final items = snapshot.data ?? [];
+                          if (items.isEmpty) {
+                            return Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.people_outline,
+                                    size: 64,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.outline,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    HouseholdListStrings.noMembers,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodyLarge,
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+                          return _buildHouseholdsList(context, items);
+                        },
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -342,66 +332,78 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
   List<_HouseholdItem> _filterByVillage(List<_HouseholdItem> items) {
     if (_selectedInlineVillageId == null) return items;
     return items
-        .where((h) => h.members.any((m) => m.villageId == _selectedInlineVillageId))
+        .where(
+          (h) => h.members.any(
+            (m) => m.subVillageId == _selectedInlineVillageId,
+          ),
+        )
         .toList();
   }
 
-  /// Navy header: 🏠-prefixed title, combined live "N households · M
-  /// patients" count, and the search bar — matching the v13 mockup's
-  /// `#householdsScreen` header exactly (background, padding, type).
-  Widget _buildHeader(BuildContext context, int householdCount, int patientCount) {
+  // Patients-screen-local header type — same reduced size as the Home
+  // dashboard's own AppTextStyles.headerTitle/headerSub (20/13, both
+  // lowered together this round), but lighter weight (w700 vs dashboard's
+  // w800) per the earlier decision to keep this screen's header lighter.
+  static const _headerTitleStyle = TextStyle(
+    fontFamily: 'Nunito',
+    fontSize: 20,
+    fontWeight: FontWeight.w700,
+    color: Colors.white,
+  );
+  static const _headerSubStyle = TextStyle(
+    fontFamily: 'NunitoSans',
+    fontSize: 13,
+    fontWeight: FontWeight.w400,
+    color: AppColors.onDarkLow,
+  );
+
+  /// Navy header: back button, 🏠-prefixed title, combined live "N
+  /// households · M patients" count, and the search bar — matching the v13
+  /// mockup's `#householdsScreen` header (background, back button, type).
+  Widget _buildHeader(
+    BuildContext context,
+    int householdCount,
+    int patientCount,
+  ) {
     return Container(
       color: AppColors.navy,
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        MediaQuery.of(context).padding.top + 10,
+        20,
+        14,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
+              // Bottom-nav tab root, so "back" means Home — mirrors the
+              // mockup's own back button (`onclick="go('s2')"` → Home).
+              _HeaderIconButton(
+                icon: Icons.arrow_back,
+                tooltip: BottomNavStrings.home,
+                onTap: () => context.go('/home'),
+              ),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
                       HouseholdListStrings.headerTitle,
-                      style: TextStyle(
-                        fontFamily: 'Nunito',
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                      ),
+                      style: _headerTitleStyle,
                     ),
                     const SizedBox(height: 1),
                     Text(
-                      HouseholdListStrings.headerSummary(householdCount, patientCount),
-                      style: TextStyle(
-                        fontFamily: 'NunitoSans',
-                        fontSize: 12,
-                        color: Colors.white.withValues(alpha: 0.6),
+                      HouseholdListStrings.headerSummary(
+                        householdCount,
+                        patientCount,
                       ),
+                      style: _headerSubStyle,
                     ),
                   ],
                 ),
-              ),
-              // Filter/refresh affordances aren't in the mockup for this
-              // screen (its only header controls are back + search) — the
-              // location/SS filter sheet is real, kept capability, so it
-              // needs an entry point; styled like the mockup's own header
-              // icon-button treatment (28×28, white 15%-alpha circle) for
-              // visual consistency rather than inventing a new style.
-              _HeaderIconButton(
-                icon: Icons.filter_list,
-                tooltip: HouseholdListStrings.filterTitle,
-                onTap: _openFilterSheet,
-                showDot: _selectedVillageId != null ||
-                    _selectedSubVillageId != null ||
-                    _selectedShebikaId != null,
-              ),
-              const SizedBox(width: 8),
-              _HeaderIconButton(
-                icon: Icons.refresh,
-                tooltip: HouseholdListStrings.refreshTooltip,
-                onTap: () => setState(_loadData),
               ),
             ],
           ),
@@ -419,17 +421,34 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
                 Expanded(
                   child: TextField(
                     controller: _searchController,
-                    onChanged: (v) => setState(() => _searchQuery = v.trim().toLowerCase()),
-                    style: const TextStyle(fontFamily: 'NunitoSans', fontSize: 13),
+                    onChanged: (v) =>
+                        setState(() => _searchQuery = v.trim().toLowerCase()),
+                    style: const TextStyle(
+                      fontFamily: 'NunitoSans',
+                      fontSize: 14,
+                    ),
                     decoration: InputDecoration(
                       isDense: true,
+                      filled: false,
                       hintText: HouseholdListStrings.searchHint,
+                      // fontSize matches the Home dashboard's own search bar
+                      // hint (DashboardSearchField, fontSize: 14).
                       hintStyle: TextStyle(
                         fontFamily: 'NunitoSans',
-                        fontSize: 13,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
                         color: AppColors.textMuted,
                       ),
+                      // The global inputDecorationTheme sets explicit
+                      // enabledBorder/focusedBorder (app_theme.dart:2014-2021)
+                      // which win over a bare `border:` override — every
+                      // state must be suppressed individually to get the
+                      // mockup's flat, borderless white pill.
                       border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      disabledBorder: InputBorder.none,
+                      errorBorder: InputBorder.none,
                       contentPadding: const EdgeInsets.symmetric(vertical: 11),
                     ),
                   ),
@@ -440,7 +459,11 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
                       _searchController.clear();
                       setState(() => _searchQuery = '');
                     },
-                    child: const Icon(Icons.clear, size: 18, color: Color(0xFF9CA3AF)),
+                    child: const Icon(
+                      Icons.clear,
+                      size: 18,
+                      color: Color(0xFF9CA3AF),
+                    ),
                   ),
               ],
             ),
@@ -452,46 +475,71 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
 
   /// Village-tab row — matches the mockup's `.village-tab` row exactly
   /// (already-correct `VillageFilterTab` widget, no need-filter bubbles).
+  /// Uses `VillageFilterTab`'s default styling (no `fontWeight` override) so
+  /// this screen's village tabs render identically to the Home dashboard's.
   Widget _buildVillageTabRow() {
     if (_inlineVillages.isEmpty) return const SizedBox.shrink();
     return Container(
+      // Explicit width — as a plain (non-Expanded) child of the outer
+      // Column, this Container otherwise shrink-wraps to the tab row's
+      // own short content width, and the Column's default center
+      // cross-axis-alignment then centers that narrow box instead of
+      // stretching it, unlike the header/list which force full width via
+      // Expanded/Row-with-Expanded.
+      width: double.infinity,
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: AppColors.border, width: 1.5)),
       ),
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            VillageFilterTab(
-              label: MissionDashboardStrings.allVillages,
-              isActive: _selectedInlineVillageId == null,
-              onTap: () => setState(() => _selectedInlineVillageId = null),
-            ),
-            for (final v in _inlineVillages)
+      // 16px matches the Home dashboard's own body-content inset
+      // (mission_dashboard_screen.dart's PatientFilterPanel/list padding)
+      // — and matches the household list's padding below, so the tabs and
+      // the cards line up with each other, not just with the header.
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
               VillageFilterTab(
-                label: v.name,
-                isActive: _selectedInlineVillageId == v.id,
-                onTap: () => setState(() => _selectedInlineVillageId = v.id),
+                label: MissionDashboardStrings.allVillages,
+                isActive: _selectedInlineVillageId == null,
+                onTap: () => setState(() => _selectedInlineVillageId = null),
               ),
-          ],
+              for (final v in _inlineVillages)
+                VillageFilterTab(
+                  label: titleCaseWords(v.name),
+                  isActive: _selectedInlineVillageId == v.id,
+                  onTap: () => setState(() => _selectedInlineVillageId = v.id),
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildHouseholdsList(BuildContext context, List<_HouseholdItem> items) {
+  Widget _buildHouseholdsList(
+    BuildContext context,
+    List<_HouseholdItem> items,
+  ) {
     final villageFiltered = _filterByVillage(items);
     final filteredItems = _searchQuery.isEmpty
         ? villageFiltered
-        : villageFiltered.where((h) => _matchesSearch(h, _searchQuery)).toList();
+        : villageFiltered
+              .where((h) => _matchesSearch(h, _searchQuery))
+              .toList();
 
     if (filteredItems.isEmpty) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.search_off, size: 64, color: Theme.of(context).colorScheme.outline),
+            Icon(
+              Icons.search_off,
+              size: 64,
+              color: Theme.of(context).colorScheme.outline,
+            ),
             const SizedBox(height: 16),
             Text(
               HouseholdListStrings.noMembers,
@@ -504,7 +552,9 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
 
     return ListView.separated(
       controller: _scrollController,
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 16),
+      // 16px matches the village-tab row above it and the Home dashboard's
+      // own body-content inset.
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
       itemCount: filteredItems.length,
       separatorBuilder: (context, idx) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
@@ -515,18 +565,24 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
         return _HouseholdCard(
           item: item,
           villageDisplayName: _villageDisplayName(item.village),
-          primaryMemberRow: _buildMemberRow(context, _MemberInfo.fromMember(primary, item)),
+          primaryMemberRow: _buildMemberRow(
+            context,
+            _MemberInfo.fromMember(primary, item),
+          ),
+          primaryRelation: _displayRelation(primary.relation),
           otherMembers: others,
           isExpanded: _expandedHouseholdIds.contains(id),
           onToggleExpanded: id.isEmpty
               ? null
               : () => setState(() {
-                    if (!_expandedHouseholdIds.remove(id)) {
-                      _expandedHouseholdIds.add(id);
-                    }
-                  }),
-          onMemberTap: (other) =>
-              _navigateToMemberDetail(context, _MemberInfo.fromMember(other, item)),
+                  if (!_expandedHouseholdIds.remove(id)) {
+                    _expandedHouseholdIds.add(id);
+                  }
+                }),
+          onMemberTap: (other) => _navigateToMemberDetail(
+            context,
+            _MemberInfo.fromMember(other, item),
+          ),
           onTap: () => _navigateToDetail(context, item),
         );
       },
@@ -561,7 +617,9 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
         : member.id;
     // Guard: id must be a non-empty, non-keyword string before navigating.
     if (id == null || id.isEmpty || id == 'household' || id == 'households') {
-      debugPrint('[HouseholdList] Skipping nav — member has no usable ID: ${member.name}');
+      debugPrint(
+        '[HouseholdList] Skipping nav — member has no usable ID: ${member.name}',
+      );
       return;
     }
     // Push directly to /patients/:id — the /patient/:id redirect drops extra.
@@ -595,8 +653,14 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
         embedded: true,
         onTap: () {
           final navId = queueItem.patientId;
-          if (navId != null && navId.isNotEmpty && navId != 'household' && navId != 'households') {
-            context.go('/patients/$navId', extra: {'name': queueItem.patientName});
+          if (navId != null &&
+              navId.isNotEmpty &&
+              navId != 'household' &&
+              navId != 'households') {
+            context.go(
+              '/patients/$navId',
+              extra: {'name': queueItem.patientName},
+            );
           }
         },
       );
@@ -611,12 +675,19 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
   /// id from the members-grouping path, or already a name from the entity/
   /// JSON fallback paths) to a display name via the same village list the
   /// filter tabs use. Falls back to the stored value when no match is found.
+  static final _bareIdPattern = RegExp(r'^\d+$');
+
   String? _villageDisplayName(String? villageIdOrName) {
     if (villageIdOrName == null || villageIdOrName.isEmpty) return null;
     for (final v in _inlineVillages) {
-      if (v.id == villageIdOrName) return v.name;
+      if (v.id == villageIdOrName) return titleCaseWords(v.name);
     }
-    return villageIdOrName;
+    // No match in the resolved village-tab list — if this is a raw database
+    // id rather than an actual place name, don't surface it at all (a bare
+    // "26" reads as broken, not helpful); a real name we just couldn't
+    // cross-reference is still shown as-is.
+    if (_bareIdPattern.hasMatch(villageIdOrName)) return null;
+    return titleCaseWords(villageIdOrName);
   }
 
   /// Picks the one member to surface inline on a household card: the member
@@ -635,22 +706,18 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
   }
 }
 
-/// Small circular icon button on the navy header — same treatment as the
-/// mockup's own header back-button (28×28, white 15%-alpha circle) so the
-/// app-only filter/refresh affordances read as part of the same header
-/// family rather than a bolted-on Material default.
+/// Small circular icon button on the navy header — the mockup's own
+/// back-button treatment (28×28, white 15%-alpha circle).
 class _HeaderIconButton extends StatelessWidget {
   const _HeaderIconButton({
     required this.icon,
     required this.tooltip,
     required this.onTap,
-    this.showDot = false,
   });
 
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
-  final bool showDot;
 
   @override
   Widget build(BuildContext context) {
@@ -659,32 +726,14 @@ class _HeaderIconButton extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         customBorder: const CircleBorder(),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, size: 15, color: Colors.white),
-            ),
-            if (showDot)
-              Positioned(
-                top: 0,
-                right: 0,
-                child: Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: AppColors.pinkWorklist,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ),
-          ],
+        child: Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.15),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, size: 15, color: Colors.white),
         ),
       ),
     );
@@ -700,6 +749,16 @@ String _memberInitials(String? name) {
   return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
 }
 
+/// The relation worth showing next to a primary member row — null for a
+/// blank relation or for the household head/self (redundant: they're already
+/// the household's own name at the top of the card).
+String? _displayRelation(String? relation) {
+  if (relation == null || relation.isEmpty) return null;
+  final lower = relation.toLowerCase();
+  if (lower == 'head' || lower == 'self') return null;
+  return relation;
+}
+
 /// Card for a household — used in the Households tab.
 ///
 /// Self-sufficient, matching the v13 mockup exactly: the household header
@@ -712,6 +771,7 @@ class _HouseholdCard extends StatelessWidget {
     required this.item,
     required this.villageDisplayName,
     required this.primaryMemberRow,
+    this.primaryRelation,
     required this.otherMembers,
     required this.isExpanded,
     required this.onToggleExpanded,
@@ -722,6 +782,10 @@ class _HouseholdCard extends StatelessWidget {
   final _HouseholdItem item;
   final String? villageDisplayName;
   final Widget primaryMemberRow;
+
+  /// The primary member's relation to the household head (e.g. "Husband"),
+  /// or null when not shown (blank, or the member IS the head/self).
+  final String? primaryRelation;
   final List<_HouseholdMember> otherMembers;
   final bool isExpanded;
   final VoidCallback? onToggleExpanded;
@@ -735,11 +799,19 @@ class _HouseholdCard extends StatelessWidget {
     // "'s Household" suffix on `item.name` is this screen's own construction
     // for when no bare head name is available.
     final headName = item.members.isNotEmpty
-        ? (item.members.firstWhere((m) => m.isHouseholdHead == true, orElse: () => item.members.first).name)
+        ? (item.members
+              .firstWhere(
+                (m) => m.isHouseholdHead == true,
+                orElse: () => item.members.first,
+              )
+              .name)
         : null;
-    final title = headName ??
+    final title =
+        headName ??
         item.name ??
-        (item.householdNo != null ? 'Household #${item.householdNo}' : HouseholdListStrings.unnamedHousehold);
+        (item.householdNo != null
+            ? 'Household #${item.householdNo}'
+            : HouseholdListStrings.unnamedHousehold);
 
     return Container(
       decoration: BoxDecoration(
@@ -756,8 +828,19 @@ class _HouseholdCard extends StatelessWidget {
             child: InkWell(
               onTap: onTap,
               child: Container(
-                color: AppColors.cardSurfaceMuted,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: const BoxDecoration(
+                  color: AppColors.cardSurfaceMuted,
+                  border: Border(
+                    bottom: BorderSide(
+                      color: AppColors.progressTrack,
+                      width: 1,
+                    ),
+                  ),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 child: Row(
                   children: [
                     const Text('🏠', style: TextStyle(fontSize: 14)),
@@ -776,11 +859,15 @@ class _HouseholdCard extends StatelessWidget {
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
-                          if (villageDisplayName != null && villageDisplayName!.isNotEmpty) ...[
+                          if (villageDisplayName != null &&
+                              villageDisplayName!.isNotEmpty) ...[
                             const SizedBox(height: 1),
                             Text(
                               villageDisplayName!,
-                              style: const TextStyle(fontSize: 9.5, color: AppColors.textMuted),
+                              style: const TextStyle(
+                                fontSize: 9.5,
+                                color: AppColors.textMuted,
+                              ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ],
@@ -789,7 +876,10 @@ class _HouseholdCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: AppColors.aiSurfaceStart,
                         borderRadius: BorderRadius.circular(10),
@@ -808,6 +898,18 @@ class _HouseholdCard extends StatelessWidget {
               ),
             ),
           ),
+          if (primaryRelation != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+              child: Text(
+                primaryRelation!,
+                style: const TextStyle(
+                  fontSize: 10.5,
+                  color: AppColors.textMuted,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14),
             child: primaryMemberRow,
@@ -821,7 +923,9 @@ class _HouseholdCard extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      HouseholdListStrings.otherMembersToggle(otherMembers.length),
+                      HouseholdListStrings.otherMembersToggle(
+                        otherMembers.length,
+                      ),
                       style: const TextStyle(
                         fontSize: 10.5,
                         fontWeight: FontWeight.w700,
@@ -847,11 +951,16 @@ class _HouseholdCard extends StatelessWidget {
                   children: [
                     const Divider(height: 1, color: AppColors.progressTrack),
                     for (final other in otherMembers)
-                      _OtherMemberRow(member: other, onTap: () => onMemberTap(other)),
+                      _OtherMemberRow(
+                        member: other,
+                        onTap: () => onMemberTap(other),
+                      ),
                   ],
                 ),
               ),
-              crossFadeState: isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+              crossFadeState: isExpanded
+                  ? CrossFadeState.showSecond
+                  : CrossFadeState.showFirst,
               duration: const Duration(milliseconds: 200),
               sizeCurve: Curves.easeOut,
             ),
@@ -881,7 +990,8 @@ class _OtherMemberRow extends StatelessWidget {
       if (member.gender != null) member.gender,
     ].whereType<String>().join('/');
     final subtitle = [
-      if (member.relation != null && member.relation!.isNotEmpty) member.relation,
+      if (member.relation != null && member.relation!.isNotEmpty)
+        member.relation,
       if (ageGender.isNotEmpty) ageGender,
     ].whereType<String>().join(' · ');
 
@@ -894,7 +1004,10 @@ class _OtherMemberRow extends StatelessWidget {
             Container(
               width: 32,
               height: 32,
-              decoration: const BoxDecoration(color: AppColors.progressTrack, shape: BoxShape.circle),
+              decoration: const BoxDecoration(
+                color: AppColors.progressTrack,
+                shape: BoxShape.circle,
+              ),
               alignment: Alignment.center,
               child: Text(
                 _memberInitials(member.name),
@@ -913,13 +1026,20 @@ class _OtherMemberRow extends StatelessWidget {
                 children: [
                   Text(
                     member.name ?? HouseholdListStrings.unnamedMember,
-                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
                   if (subtitle.isNotEmpty)
                     Text(
                       subtitle,
-                      style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+                      style: const TextStyle(
+                        fontSize: 10.5,
+                        color: AppColors.textMuted,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                 ],
@@ -933,7 +1053,11 @@ class _OtherMemberRow extends StatelessWidget {
               ),
               child: const Text(
                 HouseholdListStrings.enrolledTag,
-                style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: AppColors.statusSuccessAction),
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.statusSuccessAction,
+                ),
               ),
             ),
           ],
@@ -948,7 +1072,9 @@ class _OtherMemberRow extends StatelessWidget {
       final d = DateTime.parse(dob);
       final now = DateTime.now();
       var age = now.year - d.year;
-      if (now.month < d.month || (now.month == d.month && now.day < d.day)) age--;
+      if (now.month < d.month || (now.month == d.month && now.day < d.day)) {
+        age--;
+      }
       return age;
     } catch (_) {
       return null;
@@ -968,31 +1094,18 @@ class _PatientCard extends StatelessWidget {
   final _MemberInfo member;
   final VoidCallback? onTap;
 
-  /// Mirrors `MissionReasonBadge._badgeColors` (mission_queue_card.dart) so
-  /// the fallback badge for a non-queue member matches the real queue-driven
-  /// badge's palette. Duplicated here (not shared) because that method is
-  /// private to a `MissionQueueItem`-shaped widget; unify if this recurs.
-  static (String label, Color bg, Color fg) _badgeFor(Set<Programme> programmes) {
-    if (programmes.contains(Programme.anc) || programmes.contains(Programme.pnc)) {
-      return (MissionDashboardStrings.enrolled, const Color(0xFFFDF2F8), const Color(0xFF9D174D));
-    }
-    if (programmes.contains(Programme.imci) ||
-        programmes.contains(Programme.epi) ||
-        programmes.contains(Programme.ncd)) {
-      final label = programmes.contains(Programme.ncd)
-          ? MissionDashboardStrings.ncdCheckup
-          : MissionDashboardStrings.childImmunisation;
-      return (label, const Color(0xFFFFFBEB), const Color(0xFF92400E));
-    }
-    if (programmes.contains(Programme.tb)) {
-      return (MissionDashboardStrings.tbCheck, const Color(0xFFF0FDF4), const Color(0xFF065F46));
-    }
-    return (MissionDashboardStrings.newVisit, AppColors.aiSurfaceStart, AppColors.navy);
-  }
-
   @override
   Widget build(BuildContext context) {
-    final (badgeLabel, badgeBg, badgeFg) = _badgeFor(member.programmes);
+    // Same shared logic the dashboard's real MissionQueueCard badge uses —
+    // visit-count-aware, not an approximation of it.
+    final badgeLabel = programmeReason(
+      programmes: member.programmes,
+      ancVisitCount: member.ancVisitCount,
+      pncVisitCount: member.pncVisitCount,
+    );
+    final (badgeBg, badgeFg) = programmeBadgeColors(
+      primaryProgrammeOf(member.programmes),
+    );
 
     final address = [
       member.householdNo != null ? 'House #${member.householdNo}' : null,
@@ -1023,16 +1136,28 @@ class _PatientCard extends StatelessWidget {
                         Text(
                           [
                             if (member.age != null) '${member.age}',
-                            if (member.gender != null) member.gender!.substring(0, 1).toUpperCase(),
+                            if (member.gender != null)
+                              member.gender!.substring(0, 1).toUpperCase(),
                           ].join('/'),
                           style: AppTextStyles.worklistPatientMeta,
                         ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                        decoration: BoxDecoration(color: badgeBg, borderRadius: BorderRadius.circular(5)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: badgeBg,
+                          borderRadius: BorderRadius.circular(5),
+                        ),
                         child: Text(
                           badgeLabel,
-                          style: TextStyle(fontFamily: 'NunitoSans', fontSize: 10, fontWeight: FontWeight.w700, color: badgeFg),
+                          style: TextStyle(
+                            fontFamily: 'NunitoSans',
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: badgeFg,
+                          ),
                         ),
                       ),
                     ],
@@ -1044,15 +1169,20 @@ class _PatientCard extends StatelessWidget {
                         address,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.worklistAddress.copyWith(color: AppColors.textMuted),
+                        style: AppTextStyles.worklistAddress.copyWith(
+                          color: AppColors.textMuted,
+                        ),
                       ),
                     ),
-                  if (member.phoneNumber != null && member.phoneNumber!.isNotEmpty)
+                  if (member.phoneNumber != null &&
+                      member.phoneNumber!.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
                       child: Text(
                         member.phoneNumber!,
-                        style: AppTextStyles.worklistPhone.copyWith(color: AppColors.textMuted),
+                        style: AppTextStyles.worklistPhone.copyWith(
+                          color: AppColors.textMuted,
+                        ),
                       ),
                     ),
                 ],
@@ -1101,7 +1231,8 @@ class _HouseholdItem {
           final dob = DateTime.parse(m.dateOfBirth!);
           final now = DateTime.now();
           age = now.year - dob.year;
-          if (now.month < dob.month || (now.month == dob.month && now.day < dob.day)) {
+          if (now.month < dob.month ||
+              (now.month == dob.month && now.day < dob.day)) {
             age = age - 1;
           }
         } catch (_) {}
@@ -1128,7 +1259,9 @@ class _HouseholdItem {
       householdNo: householdNo,
       village: village,
       subVillage: subVillage,
-      memberCount: memberDataList.isNotEmpty ? memberDataList.length : memberCount,
+      memberCount: memberDataList.isNotEmpty
+          ? memberDataList.length
+          : memberCount,
       latitude: latitude,
       longitude: longitude,
       members: memberDataList,
@@ -1156,10 +1289,16 @@ class _HouseholdItem {
     double? lat, lng;
     final latVal = json['latitude'];
     final lngVal = json['longitude'];
-    if (latVal is double) { lat = latVal; }
-    else if (latVal is num) { lat = latVal.toDouble(); }
-    if (lngVal is double) { lng = lngVal; }
-    else if (lngVal is num) { lng = lngVal.toDouble(); }
+    if (latVal is double) {
+      lat = latVal;
+    } else if (latVal is num) {
+      lat = latVal.toDouble();
+    }
+    if (lngVal is double) {
+      lng = lngVal;
+    } else if (lngVal is num) {
+      lng = lngVal.toDouble();
+    }
 
     final memberList = <_HouseholdMember>[];
     if (json['householdMembers'] is List) {
@@ -1181,7 +1320,9 @@ class _HouseholdItem {
       latitude: lat,
       longitude: lng,
       members: memberList,
-      rawJson: json is Map<String, dynamic> ? json : Map<String, dynamic>.from(json),
+      rawJson: json is Map<String, dynamic>
+          ? json
+          : Map<String, dynamic>.from(json),
     );
   }
 
@@ -1207,7 +1348,9 @@ class _HouseholdItem {
         'householdNo': hh.householdNo,
         'village': hh.village,
         'villageId': hh.villageId,
-        'noOfPeople': memberList.isNotEmpty ? memberList.length : hh.memberCount,
+        'noOfPeople': memberList.isNotEmpty
+            ? memberList.length
+            : hh.memberCount,
       },
     );
   }
@@ -1226,7 +1369,11 @@ class _HouseholdMember {
     this.isPregnant,
     this.householdId,
     this.villageId,
+    this.subVillageId,
+    this.subVillageName,
     this.programmes = const {},
+    this.ancVisitCount = 0,
+    this.pncVisitCount = 0,
   });
 
   final String? id;
@@ -1239,8 +1386,20 @@ class _HouseholdMember {
   final bool? isHouseholdHead;
   final bool? isPregnant;
   final String? householdId;
+  /// Parent village id — real village level, but shown nowhere on this
+  /// screen: the Patients screen's village-tab filter now matches the
+  /// Home dashboard's granularity (sub-village), per product decision, since
+  /// `Patient.villageName`/`villageId` (dashboard's worklist) are already
+  /// sub-village data under a misleading name.
   final String? villageId;
+  final String? subVillageId;
+  final String? subVillageName;
   final Set<Programme> programmes;
+
+  /// Completed ANC/PNC visit counts — drives the visit-count-aware badge
+  /// label ("ANC Visit 3 due"), identical to the dashboard's real badge.
+  final int ancVisitCount;
+  final int pncVisitCount;
 
   static _HouseholdMember fromJson(Map json) {
     String? str(String k) {
@@ -1253,7 +1412,8 @@ class _HouseholdMember {
     // Parse householdHeadRelationship (API field name) or relation
     final relation = str('householdHeadRelationship') ?? str('relation');
     final relationLower = relation?.toLowerCase();
-    final isHead = relationLower == 'head' ||
+    final isHead =
+        relationLower == 'head' ||
         relationLower == 'self' ||
         relationLower == 'household head' ||
         relationLower == 'householdhead' ||
@@ -1271,12 +1431,18 @@ class _HouseholdMember {
       isPregnant: json['isPregnant'] == true,
       householdId: str('householdId'),
       villageId: str('villageId'),
+      subVillageId: str('subVillageId'),
+      subVillageName: str('subVillage') ?? str('subVillageName'),
     );
   }
 
   /// Creates from local SQLite HouseholdMemberEntity.
-  static _HouseholdMember fromEntity(HouseholdMemberEntity e,
-      {Set<Programme> programmes = const {}}) {
+  static _HouseholdMember fromEntity(
+    HouseholdMemberEntity e, {
+    Set<Programme> programmes = const {},
+    int ancVisitCount = 0,
+    int pncVisitCount = 0,
+  }) {
     return _HouseholdMember(
       id: e.id,
       patientId: e.patientId,
@@ -1289,7 +1455,11 @@ class _HouseholdMember {
       isPregnant: e.isPregnant,
       householdId: e.householdId,
       villageId: e.villageId,
+      subVillageId: e.subVillageId,
+      subVillageName: e.subVillageName,
       programmes: programmes,
+      ancVisitCount: ancVisitCount,
+      pncVisitCount: pncVisitCount,
     );
   }
 }
@@ -1311,6 +1481,8 @@ class _MemberInfo {
     this.villageId,
     this.householdMemberCount,
     this.programmes = const {},
+    this.ancVisitCount = 0,
+    this.pncVisitCount = 0,
   });
 
   final String? id;
@@ -1328,6 +1500,8 @@ class _MemberInfo {
   final String? villageId;
   final int? householdMemberCount;
   final Set<Programme> programmes;
+  final int ancVisitCount;
+  final int pncVisitCount;
 
   /// Calculate age from date of birth if not directly provided.
   static int? _calculateAge(String? dateOfBirth) {
@@ -1336,7 +1510,8 @@ class _MemberInfo {
       final dob = DateTime.parse(dateOfBirth);
       final now = DateTime.now();
       var age = now.year - dob.year;
-      if (now.month < dob.month || (now.month == dob.month && now.day < dob.day)) {
+      if (now.month < dob.month ||
+          (now.month == dob.month && now.day < dob.day)) {
         age--;
       }
       return age;
@@ -1346,7 +1521,10 @@ class _MemberInfo {
   }
 
   /// Create from _HouseholdMember and household context.
-  factory _MemberInfo.fromMember(_HouseholdMember member, _HouseholdItem household) {
+  factory _MemberInfo.fromMember(
+    _HouseholdMember member,
+    _HouseholdItem household,
+  ) {
     return _MemberInfo(
       id: member.id,
       patientId: member.patientId,
@@ -1363,10 +1541,8 @@ class _MemberInfo {
       villageId: member.villageId,
       householdMemberCount: household.memberCount,
       programmes: member.programmes,
+      ancVisitCount: member.ancVisitCount,
+      pncVisitCount: member.pncVisitCount,
     );
   }
 }
-
-// _LocationFilterSheet and _FilterDropdown have been extracted to
-// lib/core/widgets/location_filter_sheet.dart as LocationFilterSheet
-// and LocationFilterDropdown (public, shared with mission_dashboard_screen).

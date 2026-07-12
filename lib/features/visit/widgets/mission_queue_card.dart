@@ -262,7 +262,7 @@ class MissionReasonBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (bg, fg) = _badgeColors(item.primaryProgramme);
+    final (bg, fg) = programmeBadgeColors(item.primaryProgramme);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
@@ -282,24 +282,26 @@ class MissionReasonBadge extends StatelessWidget {
       ),
     );
   }
+}
 
-  /// v13 design palette — badge colour is keyed by programme, not priority,
-  /// so the label always matches the reason text it's painted around.
-  (Color, Color) _badgeColors(Programme programme) {
-    switch (programme) {
-      case Programme.anc:
-        return (const Color(0xFFFDF2F8), const Color(0xFF9D174D));
-      case Programme.pnc:
-        return (const Color(0xFFEEF0FF), const Color(0xFF4C1D95));
-      case Programme.imci:
-      case Programme.epi:
-      case Programme.ncd:
-        return (const Color(0xFFFFFBEB), const Color(0xFF92400E));
-      case Programme.tb:
-        return (const Color(0xFFF0FDF4), const Color(0xFF065F46));
-      default:
-        return (const Color(0xFFEEF0FF), const Color(0xFF1B2B5E));
-    }
+/// v13 design palette — badge colour is keyed by programme, not priority, so
+/// the label always matches the reason text it's painted around. Public and
+/// top-level so `HouseholdListScreen` (a non-queue member has no
+/// `MissionQueueItem` to key off) can render an identical badge.
+(Color, Color) programmeBadgeColors(Programme programme) {
+  switch (programme) {
+    case Programme.anc:
+      return (const Color(0xFFFDF2F8), const Color(0xFF9D174D));
+    case Programme.pnc:
+      return (const Color(0xFFEEF0FF), const Color(0xFF4C1D95));
+    case Programme.imci:
+    case Programme.epi:
+    case Programme.ncd:
+      return (const Color(0xFFFFFBEB), const Color(0xFF92400E));
+    case Programme.tb:
+      return (const Color(0xFFF0FDF4), const Color(0xFF065F46));
+    default:
+      return (const Color(0xFFEEF0FF), const Color(0xFF1B2B5E));
   }
 }
 

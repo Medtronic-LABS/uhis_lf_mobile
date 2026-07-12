@@ -414,26 +414,12 @@ abstract final class HouseholdListStrings {
   static String headerSummary(int households, int patients) =>
       '${householdsCount(households)} · ${_patientsCount(patients)}';
   static String _patientsCount(int n) => '$n patient${n == 1 ? '' : 's'}';
-  static const String refreshTooltip = 'Refresh';
   static const String searchHint = 'Search by name, house no. or village…';
 
   // Household-card inline other-members panel
   static String otherMembersToggle(int n) =>
       '+$n other household member${n == 1 ? '' : 's'}';
   static const String enrolledTag = 'Enrolled';
-
-  // Location / SS filter strings
-  static const String filterTitle = 'Filter';
-  static const String filterVillage = 'Village';
-  static const String filterSubVillage = 'Sub-village';
-  static const String filterSS = 'Shasthya Shebika (SS)';
-  static const String filterAllVillages = 'All Villages';
-  static const String filterAllSubVillages = 'All Sub-villages';
-  static const String filterAllSS = 'All SS';
-  static const String filterClearAll = 'Clear All';
-  static const String filterApply = 'Apply';
-  static String activeFilterCount(int n) =>
-      '$n filter${n == 1 ? '' : 's'} active';
 }
 
 /// Household detail screen strings.
