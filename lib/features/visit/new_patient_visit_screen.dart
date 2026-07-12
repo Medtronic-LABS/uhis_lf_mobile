@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/api/scribe_api_service.dart';
+import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
@@ -9,9 +11,13 @@ import '../../core/db/patient_programmes_dao.dart';
 import '../../core/models/programme.dart';
 import '../../core/theme/app_theme.dart';
 import '../patient/enroll/pregnancy_registration_sheet.dart';
+import '../realtime_asr/chief_complaint_matcher.dart';
+import '../scribe/scribe_controller.dart';
+import '../scribe/scribe_permission_service.dart';
+import '../scribe/widgets/ai_scribe_banner.dart';
 import 'symptom_catalog.dart';
-import 'visit_flow_header.dart';
 import 'visit_controller.dart';
+import 'visit_flow_header.dart';
 
 /// Which service the SK is selecting for this visit.
 enum _Svc { pw, anc, pnc, fp, general, ncd }
@@ -240,9 +246,14 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
   Widget build(BuildContext context) {
     final name = widget.patientName ?? 'Patient';
 
-    return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
-      body: Column(
+    return ChangeNotifierProvider<ScribeController>(
+      create: (ctx) => ScribeController(
+        api: ctx.read<ScribeApiService>(),
+        permissionService: ScribePermissionService(),
+      ),
+      child: Scaffold(
+        backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
+        body: Column(
         children: [
           VisitFlowHeader(
             step: 0,
@@ -258,6 +269,7 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
               children: [
           _SymptomSection(
+            patientId: widget.patientId,
             isFemale: _isFemale,
             filteredSymptoms: _filteredSymptoms,
             selectedSymptoms: _selectedSymptoms,
@@ -294,6 +306,7 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
           ),
         ),
       ),
+    ),
     );
   }
 }
@@ -302,6 +315,7 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
 
 class _SymptomSection extends StatelessWidget {
   const _SymptomSection({
+    required this.patientId,
     required this.isFemale,
     required this.filteredSymptoms,
     required this.selectedSymptoms,
@@ -309,11 +323,20 @@ class _SymptomSection extends StatelessWidget {
     required this.onSymptomToggle,
   });
 
+  final String patientId;
   final bool isFemale;
   final List<SymptomDef> filteredSymptoms;
   final Set<String> selectedSymptoms;
   final ValueChanged<String> onSearchChanged;
   final ValueChanged<String> onSymptomToggle;
+
+  void _applyScribeSymptoms(Set<String> codes) {
+    for (final code in codes) {
+      if (!selectedSymptoms.contains(code)) {
+        onSymptomToggle(code);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -333,65 +356,28 @@ class _SymptomSection extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 10),
-        // AI Scribe banner — indigo gradient matching AiScribeBanner visual
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF4F46E5), Color(0xFF7C3AED)],
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-            ),
-            borderRadius: BorderRadius.circular(12),
+        // Live AI Scribe banner — same widget as Step 1 (SymptomPickerScreen).
+        // patientId doubles as encounterId (live ASR doesn't use it for upload).
+        if (AppConfig.scribeEnabled)
+          AiScribeBanner(
+            encounterId: patientId,
+            patientId: patientId,
+            isFemale: isFemale,
+            tapStartsLiveAsr: true,
+            onReviewReady: (ctrl) {
+              final result = ctrl.session.triageExtractionResult;
+              if (result != null) {
+                _applyScribeSymptoms(result.symptomCodes.map((f) => f.fieldId).toSet());
+              }
+              ctrl.resetSession();
+            },
+            onLiveFields: (fields, _) {
+              if (fields.chiefComplaints.isEmpty) return;
+              final codes = ChiefComplaintMatcher.match(fields.chiefComplaints);
+              if (codes.isEmpty) return;
+              _applyScribeSymptoms(codes.toSet());
+            },
           ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.mic, color: Colors.white, size: 18),
-              ),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      NewPatientVisitStrings.scribeTitle,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13,
-                      ),
-                    ),
-                    Text(
-                      NewPatientVisitStrings.scribeSubtitle,
-                      style: TextStyle(color: Colors.white70, fontSize: 11),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Text(
-                  NewPatientVisitStrings.scribeStart,
-                  style: TextStyle(
-                    color: Color(0xFF4F46E5),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
         const SizedBox(height: 12),
         // Symptom picker card — matches _UnifiedSymptomPicker style
         Container(

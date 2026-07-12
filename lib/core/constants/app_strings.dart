@@ -4312,7 +4312,7 @@ abstract final class EnrollStrings {
   static String confirmCta(int n) =>
       n == 0 ? 'Select Programmes' : 'Confirm Enrollment ($n selected)';
   static const String savedToast = 'Programmes saved ✓';
-  static const String addServicesCta = '+ Add Services';
+  static const String addServicesCta = 'Add Services';
   static const String noServicesTitle = 'No services enrolled';
   static const String noServicesSubtitle =
       'Tap below to add health programmes for this patient.';
