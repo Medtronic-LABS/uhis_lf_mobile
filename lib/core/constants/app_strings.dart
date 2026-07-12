@@ -913,6 +913,24 @@ abstract final class PatientProfileStrings {
   static const String mapsOpenFailed = 'Could not open maps';
 }
 
+abstract final class ContactSheetStrings {
+  ContactSheetStrings._();
+
+  static const String noContactAvailable =
+      'No contact number available for this household';
+  static const String whatsAppFailed = 'Could not open WhatsApp';
+  static const String smsFailed = 'Could not open SMS';
+  static const String householdHead = 'Household head';
+  static const String familyMember = 'Family member';
+  static const String unknownPatient = 'Patient';
+
+  /// Shown when contacting a household member on behalf of the patient.
+  static String fallbackBanner(
+          String patientName, String recipientName, String relationship) =>
+      '$patientName has no registered number. '
+      'Contacting $recipientName ($relationship) on their behalf.';
+}
+
 /// Copy for the Referral SLA dashboard, cards, banners, and notifications.
 /// Spec: `leapfrog-setup/designs/referral-sla-engine.md` §11.
 abstract final class ReferralStrings {

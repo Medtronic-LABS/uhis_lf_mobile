@@ -24,6 +24,7 @@ import 'patient_repository.dart';
 import 'recent_vitals_section.dart';
 import 'vitals_repository.dart';
 import '../visit/briefing/visit_briefing_repository.dart';
+import 'contact_sheet.dart';
 import 'followup_repository.dart';
 import '../../core/widgets/skeleton.dart';
 
@@ -661,15 +662,6 @@ class _PatientContextScreenState
                       AppSpacing.stickyBarClearance,
                     ),
                     children: [
-                      _GeminiSummaryBanner(
-                        patientId: data.patientId ?? widget.patientId,
-                        patientName: data.name,
-                        ageYears: data.age,
-                        gender: data.gender,
-                        programmes: data.programmes,
-                        fallbackReasons: data.riskReasons,
-                      ),
-                      const SizedBox(height: 10),
                       _PatientProfileCard(data: data),
                       const SizedBox(height: 10),
                       _AssessmentsSection(assessments: data.assessments),
@@ -1542,21 +1534,9 @@ class _PatientProfileCard extends StatefulWidget {
 class _PatientProfileCardState extends State<_PatientProfileCard> {
   bool _expanded = false;
 
-  Future<void> _callPhone(String phone) async {
-    final uri = Uri(scheme: 'tel', path: phone.trim());
-    try {
-      if (!await launchUrl(uri) && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(PatientProfileStrings.dialFailed)),
-        );
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(PatientProfileStrings.dialFailed)),
-        );
-      }
-    }
+  Future<void> _openContact() async {
+    if (!mounted) return;
+    await showContactSheet(context, widget.data);
   }
 
   Future<void> _openMaps(String place) async {
@@ -1674,7 +1654,7 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
         if (d.phoneNumber != null)
           buildRow(PatientProfileStrings.labelPhone, d.phoneNumber,
               icon: Icons.phone_outlined,
-              onTap: () => _callPhone(d.phoneNumber!)),
+              onTap: _openContact),
         if (d.villageName != null)
           buildRow(PatientProfileStrings.labelVillage, d.villageName,
               icon: Icons.location_on_outlined,
@@ -1709,7 +1689,7 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
         buildSection(PatientProfileStrings.sectionContact, [
           buildRow(PatientProfileStrings.labelPhone, d.phoneNumber,
               icon: Icons.phone_outlined,
-              onTap: d.phoneNumber != null ? () => _callPhone(d.phoneNumber!) : null),
+              onTap: _openContact),
         ]),
         buildSection(PatientProfileStrings.sectionCareTeam, [
           buildRow(PatientProfileStrings.labelSk, d.shasthyaShebikaId,
@@ -2282,9 +2262,9 @@ class _PatientDetailHeader extends StatelessWidget {
     final chips = <_HeaderChip>[
       if (data.nationalId != null)
         _HeaderChip(Icons.badge_outlined, data.nationalId!),
-      if (data.phoneNumber != null)
-        _HeaderChip(Icons.phone_outlined, data.phoneNumber!,
-            onTap: () => _launchPhone(context, data.phoneNumber!)),
+      if (data.phoneNumber != null || data.householdId != null)
+        _HeaderChip(Icons.phone_outlined, data.phoneNumber ?? ContactSheetStrings.noContactAvailable,
+            onTap: () => showContactSheet(context, data)),
       if (data.villageName != null)
         _HeaderChip(Icons.location_on_outlined, data.villageName!,
             onTap: () => _launchMaps(context, data.villageName!)),
@@ -2435,23 +2415,6 @@ class _PatientDetailHeader extends StatelessWidget {
     );
     if (c.onTap == null) return chip;
     return GestureDetector(onTap: c.onTap, child: chip);
-  }
-
-  static Future<void> _launchPhone(BuildContext context, String phone) async {
-    final uri = Uri(scheme: 'tel', path: phone.trim());
-    try {
-      if (!await launchUrl(uri) && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(PatientProfileStrings.dialFailed)),
-        );
-      }
-    } catch (_) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(PatientProfileStrings.dialFailed)),
-        );
-      }
-    }
   }
 
   static Future<void> _launchMaps(BuildContext context, String place) async {
