@@ -147,6 +147,18 @@ class FollowUpCallService {
     final ids = <String>[];
 
     for (final row in pending) {
+      // Server requires a numeric follow-up id ("Call register id"). Skip rows
+      // that arrived with id:null and have no backendId yet — they cannot be
+      // updated until a subsequent pull returns a real server id.
+      int? serverId = row.backendId;
+      if (serverId == null) {
+        try {
+          final decoded = jsonDecode(row.rawJson) as Map;
+          serverId = (decoded['id'] as num?)?.toInt();
+        } catch (_) {}
+      }
+      if (serverId == null) continue;
+
       final calls = await _dao.callsFor(row.id, onlyUnsynced: true);
 
       Map<String, dynamic> base;
@@ -157,10 +169,7 @@ class FollowUpCallService {
         base = <String, dynamic>{};
       }
 
-      // Overlay device state onto the server payload. `id` stays the server's
-      // Long (null → create, non-null → update); numeric `updatedAt` is what
-      // the backend sorts on.
-      base['id'] = base['id'] ?? row.backendId;
+      base['id'] = serverId;
       base['patientId'] = base['patientId'] ?? row.patientId;
       base['type'] = base['type'] ?? row.type;
       base['referredSiteId'] = base['referredSiteId'] ?? row.referredSiteId;

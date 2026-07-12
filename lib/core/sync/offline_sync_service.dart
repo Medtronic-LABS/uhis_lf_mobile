@@ -909,6 +909,7 @@ class OfflineSyncService extends ChangeNotifier {
         _truthy(raw['lostToFollowUp']) ||
         (kind != null && kind.toLowerCase().contains('lost')) ||
         wireType == 'LOST_TO_FOLLOW_UP';
+    final backendId = (raw['id'] as num?)?.toInt();
     return FollowUpRow(
       id: id,
       patientId: patientId,
@@ -920,6 +921,7 @@ class OfflineSyncService extends ChangeNotifier {
       type: wireType,
       referredSiteId: referredSiteId,
       isLost: isLost,
+      backendId: backendId,
       rawJson: JsonRead.encode(raw),
     );
   }
