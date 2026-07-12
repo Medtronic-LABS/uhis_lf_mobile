@@ -2708,12 +2708,9 @@ class _SameHouseholdStrip extends StatelessWidget {
       builder: (context, snap) {
         if (!snap.hasData) return const SizedBox.shrink();
         final members = snap.data!;
-        // Filter out current patient and empty names
+        // Show all household members including the current patient
         final others = members
-            .where((m) =>
-                m.id != currentPatientId &&
-                m.name != null &&
-                m.name!.isNotEmpty)
+            .where((m) => m.name != null && m.name!.isNotEmpty)
             .toList();
         if (others.isEmpty) return const SizedBox.shrink();
 
@@ -2766,7 +2763,7 @@ class _SameHouseholdStrip extends StatelessWidget {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        '${others.length + 1}', // +1 for current patient
+                        '${others.length}',
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w700,
@@ -2804,6 +2801,9 @@ class _SameHouseholdStrip extends StatelessWidget {
                       child: _HouseholdMemberChip(
                         name: name,
                         age: age,
+                        gender: m.gender,
+                        isCurrent: m.id == currentPatientId ||
+                            m.patientId == currentPatientId,
                         onTap: () {
                           context.push('/patient/$navId');
                         },
@@ -2842,18 +2842,34 @@ class _HouseholdMemberChip extends StatelessWidget {
     required this.name,
     required this.age,
     required this.onTap,
+    this.gender,
+    this.isCurrent = false,
   });
 
   final String name;
   final int? age;
+  final String? gender;
+  final bool isCurrent;
   final VoidCallback onTap;
+
+  String get _label {
+    final buf = StringBuffer(name);
+    if (age != null) buf.write(' · ${age}y');
+    if (gender != null && gender!.isNotEmpty) {
+      final g = gender![0].toUpperCase();
+      if (g == 'M' || g == 'F') buf.write(' · $g');
+    }
+    return buf.toString();
+  }
 
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
-    final ageText = age != null ? ' · ${age}y' : '';
+    final bgColor = isCurrent
+        ? tokens.brandNavy.withValues(alpha: 0.18)
+        : tokens.brandNavy.withValues(alpha: 0.08);
     return Semantics(
-      label: 'View patient $name${age != null ? ', age $age' : ''}',
+      label: 'View patient $_label',
       button: true,
       child: GestureDetector(
       key: const Key('patient_member_chip_tap'),
@@ -2861,10 +2877,10 @@ class _HouseholdMemberChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: tokens.brandNavy.withValues(alpha: 0.08),
+          color: bgColor,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: tokens.brandNavy.withValues(alpha: 0.3),
+            color: tokens.brandNavy.withValues(alpha: isCurrent ? 0.6 : 0.3),
           ),
         ),
         child: Row(
@@ -2884,7 +2900,7 @@ class _HouseholdMemberChip extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             Text(
-              '$name$ageText',
+              _label,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
