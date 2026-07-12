@@ -25,8 +25,10 @@ class SkPerformanceStats {
     required this.visitsThisWeek,
     required this.visitsThisMonth,
     required this.referralsThisWeek,
+    required this.referralsThisMonth,
     required this.totalHouseholds,
     required this.visitsByProgramme,
+    required this.visitsByProgrammeMonth,
     required this.recentActivity,
     required this.weekStartDate,
     required this.monthStartDate,
@@ -36,13 +38,21 @@ class SkPerformanceStats {
   final int visitsThisWeek;
   final int visitsThisMonth;
   final int referralsThisWeek;
+  final int referralsThisMonth;
   final int totalHouseholds;
+
+  /// Programme breakdown for THIS WEEK.
   final Map<String, int> visitsByProgramme;
+
+  /// Programme breakdown for THIS MONTH.
+  final Map<String, int> visitsByProgrammeMonth;
+
   final List<RecentVisitActivity> recentActivity;
   final DateTime weekStartDate;
   final DateTime monthStartDate;
 
   static const int weeklyTarget = 15;
+  static const int monthlyTarget = 60;
 }
 
 class SkPerformanceRepository {
@@ -67,20 +77,28 @@ class SkPerformanceRepository {
         (rows.first['c'] as int?) ?? 0;
 
     final results = await Future.wait([
+      // 0: today visits
       db.rawQuery(
           'SELECT COUNT(*) as c FROM $table WHERE created_at >= ?', [todayMs]),
+      // 1: week visits
       db.rawQuery(
           'SELECT COUNT(*) as c FROM $table WHERE created_at >= ?', [weekMs]),
+      // 2: month visits
       db.rawQuery(
           'SELECT COUNT(*) as c FROM $table WHERE created_at >= ?', [monthMs]),
+      // 3: referrals this week
       db.rawQuery(
           'SELECT COUNT(*) as c FROM $table WHERE is_referred = 1 AND created_at >= ?',
           [weekMs]),
+      // 4: total households
       db.rawQuery(
           'SELECT COUNT(*) as c FROM ${AppDatabase.tableHouseholds}', []),
+      // 5: visits by programme this week
       db.rawQuery(
-          'SELECT assessment_type, COUNT(*) as c FROM $table WHERE created_at >= ? GROUP BY assessment_type',
+          'SELECT assessment_type, COUNT(*) as c FROM $table '
+          'WHERE created_at >= ? GROUP BY assessment_type',
           [weekMs]),
+      // 6: recent activity
       db.rawQuery(
           '''
           SELECT la.assessment_type, la.is_referred, la.created_at,
@@ -96,12 +114,26 @@ class SkPerformanceRepository {
           LIMIT 8
           ''',
           []),
+      // 7: referrals this month
+      db.rawQuery(
+          'SELECT COUNT(*) as c FROM $table WHERE is_referred = 1 AND created_at >= ?',
+          [monthMs]),
+      // 8: visits by programme this month
+      db.rawQuery(
+          'SELECT assessment_type, COUNT(*) as c FROM $table '
+          'WHERE created_at >= ? GROUP BY assessment_type',
+          [monthMs]),
     ]);
 
-    final byProgramme = <String, int>{};
-    for (final row in results[5]) {
-      final type = (row['assessment_type'] as String?)?.toUpperCase() ?? '?';
-      byProgramme[type] = (row['c'] as int?) ?? 0;
+    Map<String, int> buildByProgramme(List<Map<String, Object?>> rows) {
+      final map = <String, int>{
+        'ANC': 0, 'NCD': 0, 'IMCI': 0, 'PNC': 0, 'HOUSEHOLD': 0,
+      };
+      for (final row in rows) {
+        final type = (row['assessment_type'] as String?)?.toUpperCase() ?? '?';
+        map[type] = (row['c'] as int?) ?? 0;
+      }
+      return map;
     }
 
     final recent = results[6].map((row) {
@@ -130,8 +162,10 @@ class SkPerformanceRepository {
       visitsThisWeek: count(results[1]),
       visitsThisMonth: count(results[2]),
       referralsThisWeek: count(results[3]),
+      referralsThisMonth: count(results[7]),
       totalHouseholds: count(results[4]),
-      visitsByProgramme: byProgramme,
+      visitsByProgramme: buildByProgramme(results[5]),
+      visitsByProgrammeMonth: buildByProgramme(results[8]),
       recentActivity: recent,
       weekStartDate: weekStart,
       monthStartDate: monthStart,

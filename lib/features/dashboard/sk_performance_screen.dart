@@ -79,7 +79,7 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen> {
               const SizedBox(height: 14),
               _StatGrid(stats: stats, showMonth: _showMonth),
               const SizedBox(height: 20),
-              _ProgrammeStrip(stats: stats),
+              _ProgrammeStrip(stats: stats, showMonth: _showMonth),
               const SizedBox(height: 20),
               _RecentActivity(items: stats.recentActivity),
             ],
@@ -181,8 +181,10 @@ class _HeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final progress =
-        (visitCount / SkPerformanceStats.weeklyTarget).clamp(0.0, 1.0);
+    final target = showMonth
+        ? SkPerformanceStats.monthlyTarget
+        : SkPerformanceStats.weeklyTarget;
+    final progress = (visitCount / target).clamp(0.0, 1.0);
     final periodLabel = showMonth
         ? PerformanceStrings.periodLabelMonth(stats.monthStartDate)
         : PerformanceStrings.periodLabelWeek(
@@ -253,7 +255,7 @@ class _HeroCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '$visitCount / ${SkPerformanceStats.weeklyTarget}',
+                  '$visitCount / $target',
                   style: const TextStyle(
                     color: AppColors.textOnNavy,
                     fontSize: 12,
@@ -311,7 +313,9 @@ class _StatGrid extends StatelessWidget {
           accentColor: AppColors.navy,
         ),
         _StatCard(
-          value: '${stats.referralsThisWeek}',
+          value: showMonth
+              ? '${stats.referralsThisMonth}'
+              : '${stats.referralsThisWeek}',
           label: PerformanceStrings.statReferrals,
           subline: PerformanceStrings.statReferralsSub,
           accentColor: AppColors.statusWarning,
@@ -396,12 +400,16 @@ class _StatCard extends StatelessWidget {
 // ── Programme strip ────────────────────────────────────────────────────────────
 
 class _ProgrammeStrip extends StatelessWidget {
-  const _ProgrammeStrip({required this.stats});
+  const _ProgrammeStrip({required this.stats, required this.showMonth});
 
   final SkPerformanceStats stats;
+  final bool showMonth;
 
   @override
   Widget build(BuildContext context) {
+    final byProg = showMonth
+        ? stats.visitsByProgrammeMonth
+        : stats.visitsByProgramme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -420,7 +428,7 @@ class _ProgrammeStrip extends StatelessWidget {
             Expanded(
               child: _ProgCard(
                 label: 'IMCI',
-                count: stats.visitsByProgramme['IMCI'] ?? 0,
+                count: byProg['IMCI'] ?? 0,
                 color: AppColors.imciHeader,
               ),
             ),
@@ -428,7 +436,7 @@ class _ProgrammeStrip extends StatelessWidget {
             Expanded(
               child: _ProgCard(
                 label: 'ANC',
-                count: stats.visitsByProgramme['ANC'] ?? 0,
+                count: byProg['ANC'] ?? 0,
                 color: AppColors.ancHeader,
               ),
             ),
@@ -436,7 +444,7 @@ class _ProgrammeStrip extends StatelessWidget {
             Expanded(
               child: _ProgCard(
                 label: 'NCD',
-                count: stats.visitsByProgramme['NCD'] ?? 0,
+                count: byProg['NCD'] ?? 0,
                 color: AppColors.ncdHeader,
               ),
             ),
