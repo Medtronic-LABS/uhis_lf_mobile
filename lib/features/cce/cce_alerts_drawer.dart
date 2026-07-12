@@ -1,0 +1,261 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../../app/theme.dart';
+import '../../core/constants/app_strings.dart';
+import '../../core/db/patient_dao.dart';
+import '../referral/referral_repository.dart';
+import 'cce_alert.dart';
+import 'cce_repository.dart';
+import 'widgets/cce_alert_card.dart';
+import 'widgets/cce_journey_strip.dart';
+import 'widgets/cce_update_status_sheet.dart';
+
+/// The Care Coordination Alerts drawer — a full-height sheet listing open
+/// referrals as action-first SLA alerts, sorted worst-first.
+///
+/// Self-contained: it builds its own [CceRepository] from the already-provided
+/// [ReferralRepository] + [PatientDao], so wiring it in is a single call from
+/// the Tasks screen with no provider-tree changes.
+class CceAlertsDrawer extends StatefulWidget {
+  const CceAlertsDrawer({super.key, required this.repository});
+
+  final CceRepository repository;
+
+  /// Open the drawer. Constructs the CCE repository from context, so callers
+  /// only need a [BuildContext] under the app's provider scope.
+  static Future<void> show(BuildContext context) {
+    final repository = CceRepository(
+      referrals: context.read<ReferralRepository>(),
+      patients: context.read<PatientDao>(),
+    );
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => CceAlertsDrawer(repository: repository),
+    );
+  }
+
+  @override
+  State<CceAlertsDrawer> createState() => _CceAlertsDrawerState();
+}
+
+class _CceAlertsDrawerState extends State<CceAlertsDrawer> {
+  late Future<List<CceAlert>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
+  void _reload() {
+    _future = widget.repository.loadAlerts();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final height = MediaQuery.of(context).size.height * 0.92;
+    return Container(
+      height: height,
+      decoration: const BoxDecoration(
+        color: AppColors.cardSurfaceMuted,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: FutureBuilder<List<CceAlert>>(
+        future: _future,
+        builder: (context, snap) {
+          final alerts = snap.data ?? const <CceAlert>[];
+          final count = widget.repository.actionsNeededCount(alerts);
+          return Column(
+            children: [
+              _header(count),
+              if (snap.connectionState == ConnectionState.waiting)
+                const Expanded(
+                    child: Center(child: CircularProgressIndicator()))
+              else if (alerts.isEmpty)
+                const Expanded(child: _EmptyState())
+              else
+                Expanded(child: _list(alerts)),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _header(int count) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
+      decoration: const BoxDecoration(
+        color: AppColors.navy,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  CceStrings.drawerTitle,
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${CceStrings.poweredBy} · ${CceStrings.actionsNeeded(count)}',
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.white.withValues(alpha: 0.75)),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            style: TextButton.styleFrom(
+              backgroundColor: Colors.white.withValues(alpha: 0.15),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            ),
+            child: const Text(CceStrings.done,
+                style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _list(List<CceAlert> alerts) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+      children: [
+        _explainer(),
+        const SizedBox(height: 14),
+        ...alerts.map(_card),
+      ],
+    );
+  }
+
+  Widget _explainer() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.tagBlueSurface.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.star_rounded, size: 18, color: AppColors.navy),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              CceStrings.explainer,
+              style: TextStyle(
+                  fontSize: 12,
+                  height: 1.4,
+                  color: AppColors.navy.withValues(alpha: 0.9)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _card(CceAlert alert) {
+    return CceAlertCard(
+      alert: alert,
+      journey: CceJourneyStrip(steps: alert.journey),
+      onUpdateStatus: () => _onUpdateStatus(alert),
+      onCall: () => _onCall(alert),
+      onLocate: () => _onLocate(alert),
+    );
+  }
+
+  Future<void> _onUpdateStatus(CceAlert alert) async {
+    final saved = await CceUpdateStatusSheet.show(
+      context,
+      alert: alert,
+      repository: widget.repository,
+    );
+    if (!mounted) return;
+    if (saved) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(CceStrings.updateSaved)),
+      );
+      setState(_reload);
+    }
+  }
+
+  Future<void> _onCall(CceAlert alert) async {
+    final phone = alert.patientPhone;
+    if (phone == null || phone.trim().isEmpty) {
+      _snack(CceStrings.noPhone);
+      return;
+    }
+    final uri = Uri(scheme: 'tel', path: phone.trim());
+    try {
+      final ok = await launchUrl(uri);
+      if (!ok && mounted) _snack(CceStrings.dialFailed);
+    } catch (_) {
+      if (mounted) _snack(CceStrings.dialFailed);
+    }
+  }
+
+  Future<void> _onLocate(CceAlert alert) async {
+    final place = alert.villageName;
+    if (place == null || place.trim().isEmpty) {
+      _snack(CceStrings.noLocation);
+      return;
+    }
+    final uri = Uri.parse(
+        'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(place.trim())}');
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && mounted) _snack(CceStrings.noLocation);
+    } catch (_) {
+      if (mounted) _snack(CceStrings.noLocation);
+    }
+  }
+
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.check_circle_outline_rounded,
+              size: 56, color: AppColors.statusSuccess),
+          const SizedBox(height: 16),
+          const Text(
+            CceStrings.emptyTitle,
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            CceStrings.emptyBody,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+                fontSize: 13, color: AppColors.textMuted, height: 1.4),
+          ),
+        ],
+      ),
+    );
+  }
+}
