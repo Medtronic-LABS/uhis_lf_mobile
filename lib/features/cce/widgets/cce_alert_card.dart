@@ -32,14 +32,14 @@ class CceAlertCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final accent = _accent(alert.severity);
     return Container(
-      margin: const EdgeInsets.only(bottom: 14),
+      margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: AppColors.cardSurface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: accent, width: 1.4),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
