@@ -1,5 +1,8 @@
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+
 import '../../../core/api/api_client.dart';
 import '../../../core/api/endpoints.dart';
 import '../../../core/db/immunisation_dao.dart';
@@ -80,10 +83,18 @@ class ImmunisationRepository {
     required List<VaccinationDetailDto> vaccines,
     String? encounterId,
     String? missedReason,
+    String? villageId,
+    // Numeric backend patient ID — separate from the FHIR route ID.
+    // Use patient.patientId when available; falls back to patientId parse.
+    String? numericPatientId,
   }) async {
+    final resolvedNumericId =
+        int.tryParse(numericPatientId ?? '') ?? int.tryParse(patientId) ?? 0;
+
     final encounter = MedicalReviewEncounterDto(
       patientReference: patientReference,
-      patientId: int.tryParse(patientId) ?? 0,
+      patientId: resolvedNumericId,
+      villageId: villageId,
     );
 
     final body = ImmunisationCreateRequestDto(
@@ -92,10 +103,24 @@ class ImmunisationRepository {
       missedReason: missedReason,
     ).toJson();
 
+    debugPrint(
+      '[ImmunisationRepository] submitVaccinations request: '
+      'patientId=$resolvedNumericId patientReference=$patientReference '
+      'vaccines=${vaccines.length}',
+    );
+
     try {
-      await _api.dio.post(Endpoints.immunisationCreate, data: body);
-    } on Object {
-      // Best-effort: local DB is already updated; log silently.
+      final resp = await _api.dio.post(Endpoints.immunisationCreate, data: body);
+      debugPrint(
+        '[ImmunisationRepository] submitVaccinations: HTTP ${resp.statusCode}',
+      );
+    } on DioException catch (e) {
+      debugPrint(
+        '[ImmunisationRepository] submitVaccinations network error: '
+        '${e.message} status=${e.response?.statusCode} body=${e.response?.data}',
+      );
+    } on Object catch (e) {
+      debugPrint('[ImmunisationRepository] submitVaccinations error: $e');
     }
   }
 

@@ -378,6 +378,7 @@ class _ImmunisationTimelineScreenState
       builder: (ctx) => _UpdateStatusSheet(
         milestone: milestone,
         patientId: widget.patientId,
+        patient: _patient,
         patientName: patientName,
         ageLabel: _ageLabel(_patient),
         locationLabel: _patient?.villageName ?? '',
@@ -880,11 +881,16 @@ class _UpdateStatusSheet extends StatefulWidget {
     required this.ageLabel,
     required this.locationLabel,
     required this.onRecorded,
+    this.patient,
     this.encounterId,
   });
 
   final VaccineMilestone milestone;
   final String patientId;
+
+  /// Full patient record — provides the numeric backend [Patient.patientId]
+  /// and [Patient.villageId] for the immunisation create request.
+  final Patient? patient;
   final String patientName;
   final String ageLabel;
   final String locationLabel;
@@ -960,11 +966,18 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
           );
         }).toList();
 
+        // Use the backend's numeric patient ID when available.
+        // widget.patientId may be a FHIR UUID — patient.patientId holds the
+        // backend integer ID that /immunisation/create actually validates.
+        final numericId =
+            widget.patient?.patientId ?? widget.patientId;
         await immunisationRepo.submitVaccinations(
           patientId: widget.patientId,
-          patientReference: widget.patientId,
+          numericPatientId: numericId,
+          patientReference: numericId,
           vaccines: dtos,
           encounterId: widget.encounterId,
+          villageId: widget.patient?.villageId,
           missedReason: _notesCtrl.text.isNotEmpty ? _notesCtrl.text : null,
         );
       }
