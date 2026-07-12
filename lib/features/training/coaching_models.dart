@@ -10,6 +10,43 @@ library;
 
 enum CoachingDomain { anc, ncd, imci, tb, epi, nutrition }
 
+/// A single SK row in the leaderboard card.
+class LeaderboardEntry {
+  const LeaderboardEntry({
+    required this.rank,
+    required this.initials,
+    required this.name,
+    required this.wardLabel,
+    required this.videoCount,
+    required this.points,
+    this.rankChange,
+    this.isCurrentUser = false,
+  });
+
+  final int rank;
+  final String initials;
+  final String name;
+  final String wardLabel;
+  final int videoCount;
+  final int points;
+  /// Positive = moved up, negative = moved down, null = unchanged.
+  final int? rankChange;
+  final bool isCurrentUser;
+}
+
+/// Aggregate progress stats for the monthly progress card.
+class MonthlyStats {
+  const MonthlyStats({
+    required this.videosWatched,
+    required this.pointsEarned,
+    required this.dayStreak,
+  });
+
+  final int videosWatched;
+  final int pointsEarned;
+  final int dayStreak;
+}
+
 enum ContentBlockType { paragraph, heading, bulletList, orderedList }
 
 class ContentBlock {
@@ -64,6 +101,11 @@ class CoachingModule {
     this.passed = false,
     this.quizScore = 0.0,
     this.priorityToday = false,
+    this.isLocked = false,
+    this.isPlaying = false,
+    this.progressFraction = 0.0,
+    this.pointsEarned = 0,
+    this.triggerReason,
   });
 
   final String id;
@@ -76,12 +118,83 @@ class CoachingModule {
   final bool passed;
   final double quizScore;
   final bool priorityToday;
+
+  /// True if this module is locked — SK must complete earlier modules first.
+  final bool isLocked;
+
+  /// True if the SK is currently mid-video on this module.
+  final bool isPlaying;
+
+  /// Watch progress 0.0–1.0 for the thumbnail progress bar.
+  final double progressFraction;
+
+  /// Points earned on completion (shown in the Done pill badge).
+  final int pointsEarned;
+
+  /// Why this module appears today (e.g. "today's visit" → pill: "Triggered by today's visit").
+  final String? triggerReason;
+
+  bool get isCompleted => passed;
 }
 
 // ─── Static mock data ─────────────────────────────────────────────────────────
 
 abstract final class MockCoachingData {
   MockCoachingData._();
+
+  static const List<LeaderboardEntry> leaderboard = [
+    LeaderboardEntry(
+      rank: 1,
+      initials: 'RF',
+      name: 'Rahela Fatema',
+      wardLabel: 'Ward 3',
+      videoCount: 18,
+      points: 940,
+      rankChange: 2,
+    ),
+    LeaderboardEntry(
+      rank: 2,
+      initials: 'NK',
+      name: 'Nasrin Khatun',
+      wardLabel: 'Ward 6',
+      videoCount: 16,
+      points: 880,
+      rankChange: -1,
+    ),
+    LeaderboardEntry(
+      rank: 3,
+      initials: 'SB',
+      name: 'Sathi Begum',
+      wardLabel: 'Ward 4',
+      videoCount: 14,
+      points: 760,
+      rankChange: 1,
+      isCurrentUser: true,
+    ),
+    LeaderboardEntry(
+      rank: 4,
+      initials: 'MA',
+      name: 'Mina Akter',
+      wardLabel: 'Ward 4',
+      videoCount: 12,
+      points: 640,
+    ),
+    LeaderboardEntry(
+      rank: 5,
+      initials: 'PB',
+      name: 'Parul Bibi',
+      wardLabel: 'Ward 2',
+      videoCount: 10,
+      points: 530,
+      rankChange: -2,
+    ),
+  ];
+
+  static const MonthlyStats monthlyStats = MonthlyStats(
+    videosWatched: 14,
+    pointsEarned: 760,
+    dayStreak: 6,
+  );
 
   static const List<CoachingModule> modules = [
     CoachingModule(
@@ -91,6 +204,9 @@ abstract final class MockCoachingData {
       titleBn: 'এএনসি বিপদ চিহ্ন',
       estimatedMinutes: 8,
       priorityToday: true,
+      isPlaying: true,
+      progressFraction: 0.45,
+      triggerReason: "today's visit",
       passed: false,
       cards: [
         LessonCard(
@@ -230,7 +346,9 @@ abstract final class MockCoachingData {
       titleBn: 'এনসিডি রক্তচাপ পর্যবেক্ষণ',
       estimatedMinutes: 6,
       priorityToday: true,
-      passed: false,
+      passed: true,
+      pointsEarned: 50,
+      progressFraction: 1.0,
       cards: [
         LessonCard(
           titleEn: 'Understanding Hypertension',
@@ -326,8 +444,9 @@ abstract final class MockCoachingData {
       titleEn: 'IMCI: Fever in Under-5s',
       titleBn: 'আইএমসিআই: ৫ বছরের কম শিশুর জ্বর',
       estimatedMinutes: 7,
-      passed: true,
-      quizScore: 0.85,
+      passed: false,
+      isLocked: true,
+      quizScore: 0.0,
       cards: [
         LessonCard(
           titleEn: 'Assessing Fever in Children',

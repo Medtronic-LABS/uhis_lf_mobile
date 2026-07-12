@@ -3881,12 +3881,43 @@ abstract final class TrainingStrings {
   TrainingStrings._();
 
   static const String title = 'Training Hub';
-  static const String subtitle =
-      'Clinical training modules for frontline health workers';
+  static const String subtitle = 'Short videos · Learn at your own pace';
   static const String comingSoon = 'Coming soon';
   static const String certificatesTitle = 'Certificates';
   static const String certificatesSubtitle =
       'Complete modules to earn programme certificates';
+
+  // Leaderboard
+  static const String leaderboardTitle = '🏆 Top SKs this month';
+  static const String leaderboardYou = '(You)';
+  static const String leaderboardMotivationPrefix = '⚡ ';
+  static const String leaderboardMotivationSuffix =
+      ' pts away from 1st place · Watch 3 more videos to catch up!';
+
+  // Section labels
+  static const String sectionTodaysLessons = "TODAY'S LESSONS — BASED ON YOUR VISITS";
+  static const String sectionMonthlyProgress = 'Your progress this month';
+
+  // Video states
+  static const String badgeNowPlaying = 'NOW PLAYING';
+  static const String badgeCompleted = '✓ COMPLETED';
+  static const String badgeLocked = '🔒 LOCKED';
+
+  // Pill badges
+  static String pillTriggered(String reason) => 'New · Triggered by $reason';
+  static String pillDonePoints(int pts) => 'Done · +$pts pts';
+  static const String pillNew = 'New';
+  static String pillUnlockAfter(int n) => 'Complete $n more to unlock';
+  static const String pillLocked = 'Locked';
+
+  // Monthly stats
+  static const String statVideos = 'Videos watched';
+  static const String statPoints = 'Points earned';
+  static const String statStreak = 'Day streak 🔥';
+
+  // Locked snackbar
+  static const String lockedSnackbar =
+      'Complete earlier lessons to unlock this one';
 }
 
 /// Micro-coaching pilot strings — three-loop system:
