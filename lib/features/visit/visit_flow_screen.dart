@@ -39,6 +39,7 @@ import 'naba/naba_repository.dart';
 import 'pathway/pathway_engine.dart';
 import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
+import 'immunisation/immunisation_timeline_screen.dart';
 import 'programme_selection/programme_selection_screen.dart';
 import 'triage/symptom_picker_screen.dart';
 import 'visit_form_screen.dart';
@@ -112,6 +113,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   /// the lookup only fires when the caller did not supply a name.
   late String? _patientName = widget.patientName;
   late int? _patientAge = widget.patientAge;
+  String? _patientDob;
 
   /// Postpartum status — seeded from constructor; DB lookup fills in the
   /// weeks value from [PregnancySnapshotDao] when not supplied by caller.
@@ -139,7 +141,10 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_patientName == null && widget.patientId.isNotEmpty) {
+      // Always load — even when patientName is supplied we still need DOB + age
+      // for the smart age label (months for infants). ??-guards inside prevent
+      // overwriting values already provided by the caller.
+      if (widget.patientId.isNotEmpty) {
         _loadPatientNameFromDb();
       }
       if (!_isPostpartum && widget.patientId.isNotEmpty) {
@@ -161,6 +166,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       setState(() {
         _patientName = _patientName ?? p.name;
         _patientAge = _patientAge ?? p.age;
+        _patientDob = _patientDob ?? p.dob;
       });
     } catch (e) {
       debugPrint('[VisitFlow] patient lookup failed: $e');
@@ -242,6 +248,42 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   Programme _primaryProgramme = Programme.unknown;
   bool _referralRecommended = false;
 
+  /// Smart age label: months for under-2, years otherwise.
+  /// Falls back to DOB when age-in-years is null (common for infants).
+  String? get _ageDisplay {
+    final dob = _patientDob;
+    if (dob != null && dob.isNotEmpty) {
+      try {
+        final birth = DateTime.parse(dob);
+        final now = DateTime.now();
+        final months = (now.year - birth.year) * 12 +
+            (now.month - birth.month) -
+            (now.day < birth.day ? 1 : 0);
+        if (months < 24) {
+          return '$months month${months == 1 ? '' : 's'}';
+        }
+        final years = months ~/ 12;
+        return '$years yr${years == 1 ? '' : 's'}';
+      } catch (_) {}
+    }
+    final age = _patientAge;
+    if (age == null) return null;
+    if (age < 2) return '< 2 yrs';
+    return '$age yrs';
+  }
+
+  /// True when the patient is under-5 or confirmed programmes contain EPI/IMCI.
+  /// Age-based detection handles the no-symptoms case (no pathways activated
+  /// → _confirmedProgrammes empty) so the vaccination path still fires for
+  /// children who have no complaints on this visit.
+  bool get _isChildVisit =>
+      _confirmedProgrammes.any(
+        (p) => p == Programme.epi || p == Programme.imci,
+      ) ||
+      // patientAge is in years; under-5 always routes to vaccination step
+      // even when no symptoms were selected (no pathways → empty _confirmedProgrammes).
+      (_patientAge != null && _patientAge! < 5);
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -261,8 +303,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
             children: [
               _VisitFlowHeader(
                 step: _step,
+                patientId: widget.patientId,
                 patientName: _patientName,
-                patientAge: _patientAge,
+                ageDisplay: _ageDisplay,
                 householdId: widget.householdId,
                 patientGender: widget.patientGender,
                 primaryProgramme: _pathways.isNotEmpty
@@ -325,6 +368,23 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           },
         );
       case 1:
+        // For child visits (EPI / IMCI) Step 2 is the immunisation timeline,
+        // not the standard checkup form. The 3-step progress header is unchanged.
+        if (_isChildVisit) {
+          return _Step2Vaccination(
+            key: ValueKey('flow-step2-vacc-${widget.visitId}'),
+            patientId: widget.patientId,
+            patientName: widget.patientName,
+            encounterId: widget.visitId,
+            onAdvance: () {
+              setState(() {
+                _primaryProgramme = Programme.epi;
+                _referralRecommended = false;
+                _step = 2;
+              });
+            },
+          );
+        }
         // Step 2 is composite: AI programme recommendation → form. The
         // internal phase switch lives inside the host so the SK still sees a
         // 3-step progress header.
@@ -524,8 +584,9 @@ class _VisitFlowHeader extends StatelessWidget {
   const _VisitFlowHeader({
     required this.step,
     required this.onBack,
+    this.patientId,
     this.patientName,
-    this.patientAge,
+    this.ageDisplay,
     this.householdId,
     this.patientGender,
     this.primaryProgramme = Programme.unknown,
@@ -533,8 +594,9 @@ class _VisitFlowHeader extends StatelessWidget {
 
   final int step; // 0..2
   final VoidCallback onBack;
+  final String? patientId;
   final String? patientName;
-  final int? patientAge;
+  final String? ageDisplay; // pre-formatted: "1 month", "14 months", "5 yrs"
   final String? householdId;
   final String? patientGender;
   final Programme primaryProgramme;
@@ -563,121 +625,115 @@ class _VisitFlowHeader extends StatelessWidget {
       '3. ${VisitFlowStrings.step3Title}',
     ];
 
+    // Compact subtitle: "age · gender · house" — plain text, no chips.
+    final subtitleParts = <String>[
+      if (ageDisplay != null) ageDisplay!,
+      if (patientGender != null && patientGender!.isNotEmpty)
+        patientGender!.toUpperCase().startsWith('F') ? 'Female' : 'Male',
+      if (householdId != null && householdId!.isNotEmpty)
+        'House #$householdId',
+    ];
+    final subtitle = subtitleParts.join(' · ');
+
     return Material(
       color: _headerColor,
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(AppSpacing.xs, AppSpacing.xs, AppSpacing.xl, AppSpacing.xl),
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Row 1: ← Back to visits
-              InkWell(
-                onTap: onBack,
-                borderRadius: BorderRadius.circular(AppRadius.rxIcon),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.arrow_back_rounded,
-                          color: Colors.white, size: 20),
-                      const SizedBox(width: 6),
-                      Text(
-                        VisitFlowStrings.backToVisits,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.9),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-
-              // Row 2 + 3: avatar + name / age · house
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
+              // Compact row: [← button] [avatar] [name + subtitle]
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // Circular back button — inline, no separate row
+                  GestureDetector(
+                    onTap: onBack,
+                    child: Container(
+                      width: 30,
+                      height: 30,
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(AppRadius.pill),
+                        color: Colors.white.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
                       ),
                       alignment: Alignment.center,
-                      child: Text(
-                        _initials,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                        ),
+                      child: const Icon(
+                        Icons.arrow_back_rounded,
+                        color: Colors.white,
+                        size: 16,
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
+                  ),
+                  const SizedBox(width: 10),
+                  // Avatar circle with initials
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      _initials,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  // Name + subtitle
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: patientId != null
+                              ? () => context.push('/patients/$patientId')
+                              : null,
+                          child: Text(
                             patientName ?? '—',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: Colors.white,
-                              fontSize: 17,
+                              fontSize: 16,
                               fontWeight: FontWeight.w800,
+                              decoration: patientId != null
+                                  ? TextDecoration.underline
+                                  : TextDecoration.none,
+                              decorationColor: Colors.white,
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          Wrap(
-                            spacing: 10,
-                            runSpacing: 2,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              if (patientAge != null)
-                                _DemoChip(
-                                  icon: Icons.cake_outlined,
-                                  label: 'Age $patientAge',
-                                ),
-                              if (patientGender != null && patientGender!.isNotEmpty)
-                                _DemoChip(
-                                  icon: patientGender!.toUpperCase().startsWith('F')
-                                      ? Icons.female_rounded
-                                      : Icons.male_rounded,
-                                  label: patientGender!.toUpperCase().startsWith('F')
-                                      ? 'Female'
-                                      : 'Male',
-                                ),
-                              if (householdId != null && householdId!.isNotEmpty)
-                                _DemoChip(
-                                  icon: Icons.home_outlined,
-                                  label: 'House #$householdId',
-                                ),
-                            ],
+                        ),
+                        if (subtitle.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.75),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ],
-                      ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
 
-              // Row 4: 3-step line indicators with labels below.
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-                child: Column(
+              // 3-step line indicators with labels below.
+              Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
@@ -727,7 +783,6 @@ class _VisitFlowHeader extends StatelessWidget {
                     ),
                   ],
                 ),
-              ),
             ],
           ),
         ),
@@ -881,6 +936,74 @@ class _Step2VitalsForm extends StatelessWidget {
       confirmedSymptoms: confirmedSymptoms,
       aiPickedSymptoms: aiPickedSymptoms,
       onAdvance: onAdvance,
+    );
+  }
+}
+
+/// Step 2 — vaccination step for child visits (EPI / IMCI).
+///
+/// Embeds [ImmunisationTimelineScreen] within the 3-step flow. When the SK
+/// taps "Done → Continue Visit", [onAdvance] fires and the host advances to
+/// Step 3 (AI recommendation + household followup). Standalone access to the
+/// immunisation timeline (from the patient record) is unaffected.
+class _Step2Vaccination extends StatefulWidget {
+  const _Step2Vaccination({
+    super.key,
+    required this.patientId,
+    required this.onAdvance,
+    this.patientName,
+    this.encounterId,
+  });
+
+  final String patientId;
+  final String? patientName;
+  final VoidCallback onAdvance;
+
+  /// The visit encounter ID — forwarded to [ImmunisationTimelineScreen] so
+  /// vaccine updates can be pushed to the backend via [ImmunisationRepository].
+  final String? encounterId;
+
+  @override
+  State<_Step2Vaccination> createState() => _Step2VaccinationState();
+}
+
+class _Step2VaccinationState extends State<_Step2Vaccination> {
+  String? _dob;
+  bool _dobLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadDob());
+  }
+
+  Future<void> _loadDob() async {
+    try {
+      final dao = context.read<PatientDao>();
+      final patient = await dao.byId(widget.patientId);
+      if (!mounted) return;
+      setState(() {
+        _dob = patient?.dob;
+        _dobLoaded = true;
+      });
+    } catch (e) {
+      debugPrint('[Step2Vaccination] DOB lookup failed: $e');
+      if (!mounted) return;
+      setState(() => _dobLoaded = true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_dobLoaded) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return ImmunisationTimelineScreen(
+      patientId: widget.patientId,
+      patientName: widget.patientName,
+      dob: _dob,
+      onVisitComplete: widget.onAdvance,
+      encounterId: widget.encounterId,
     );
   }
 }

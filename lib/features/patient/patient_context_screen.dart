@@ -1545,9 +1545,10 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
   Widget build(BuildContext context) {
     final d = widget.data;
 
-    Widget buildRow(String label, String? value, {IconData? icon}) {
+    Widget buildRow(String label, String? value,
+        {IconData? icon, VoidCallback? onTap}) {
       if (value == null || value.isEmpty) return const SizedBox.shrink();
-      return Padding(
+      final row = Padding(
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1579,9 +1580,15 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
                 ),
               ),
             ),
+            if (onTap != null)
+              const Icon(Icons.chevron_right, size: 16, color: AppColors.textMuted),
           ],
         ),
       );
+      if (onTap != null) {
+        return GestureDetector(onTap: onTap, child: row);
+      }
+      return row;
     }
 
     Widget buildSection(String title, List<Widget> rows) {
@@ -1622,9 +1629,10 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
       children: [
         if (d.nationalId != null)
           buildRow(PatientProfileStrings.labelNid, d.nationalId,
-              icon: Icons.badge_outlined),
+              icon: Icons.badge_outlined,
+              onTap: () => setState(() => _expanded = true)),
         if (d.dateOfBirth != null)
-          buildRow(PatientProfileStrings.labelDob, d.dateOfBirth,
+          buildRow(PatientProfileStrings.labelDob, _formatDob(d.dateOfBirth),
               icon: Icons.cake_outlined),
         if (d.phoneNumber != null)
           buildRow(PatientProfileStrings.labelPhone, d.phoneNumber,
@@ -1643,7 +1651,7 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
               icon: Icons.badge_outlined),
           buildRow(PatientProfileStrings.labelGender, d.gender,
               icon: Icons.person_outline),
-          buildRow(PatientProfileStrings.labelDob, d.dateOfBirth,
+          buildRow(PatientProfileStrings.labelDob, _formatDob(d.dateOfBirth),
               icon: Icons.cake_outlined),
           buildRow(PatientProfileStrings.labelIdType, d.idType),
           buildRow(PatientProfileStrings.labelMaritalStatus, d.maritalStatus),
@@ -1676,50 +1684,172 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
       ],
     );
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.cardSurface,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: AppShadows.householdCard,
-      ),
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    final recentLabel = d.recentVisits.isNotEmpty
+        ? _recentVisitLabel(d.recentVisits.first)
+        : d.assessments.isNotEmpty
+            ? _recentAssessmentLabel(d.assessments.first)
+            : null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.cardSurface,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: AppShadows.householdCard,
+          ),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.person_pin_outlined, color: AppColors.navy, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    PatientProfileStrings.profileTitle,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 32),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: () => setState(() => _expanded = !_expanded),
+                    child: Text(
+                      _expanded
+                          ? PatientProfileStrings.hide
+                          : PatientProfileStrings.showMore,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              _expanded ? full : collapsed,
+            ],
+          ),
+        ),
+        if (d.programmes.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.cardSurface,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: AppShadows.householdCard,
+            ),
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.person_pin_outlined, color: AppColors.navy, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  PatientProfileStrings.profileTitle,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
+                Row(
+                  children: [
+                    const Icon(Icons.medical_services_outlined,
+                        size: 16, color: AppColors.navy),
+                    const SizedBox(width: 6),
+                    Text(
+                      PatientProfileStrings.servicesProvidedTitle,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
                 ),
-                const Spacer(),
-                TextButton(
-                  style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(0, 32),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  onPressed: () => setState(() => _expanded = !_expanded),
-                  child: Text(
-                    _expanded
-                        ? PatientProfileStrings.hide
-                        : PatientProfileStrings.showMore,
-                    style: const TextStyle(fontSize: 12),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: d.programmes.map((p) {
+                    final label = p.wireTag.toUpperCase();
+                    return Chip(
+                      label: Text(
+                        label,
+                        style: const TextStyle(
+                            fontSize: 11, fontWeight: FontWeight.w700),
+                      ),
+                      backgroundColor: AppColors.navy.withValues(alpha: 0.1),
+                      labelStyle: const TextStyle(color: AppColors.navy),
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+        ],
+        if (recentLabel != null) ...[
+          const SizedBox(height: 10),
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.cardSurface,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: AppShadows.householdCard,
+            ),
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                const Icon(Icons.history_rounded, size: 16, color: AppColors.navy),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        PatientProfileStrings.recentStatusTitle,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        recentLabel,
+                        style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-          const SizedBox(height: 4),
-          _expanded ? full : collapsed,
+          ),
         ],
-      ),
+      ],
     );
+  }
+
+  static String _recentVisitLabel(PatientVisit v) {
+    final svc = v.serviceProvided ?? v.encounterType ?? 'Visit';
+    final date = DateFormat('MMM d, yyyy').format(v.visitDate);
+    final status = v.status != null ? ' · ${v.status}' : '';
+    return '$svc — $date$status';
+  }
+
+  static String _recentAssessmentLabel(MemberAssessment a) {
+    final date = DateFormat('MMM d, yyyy').format(a.date);
+    final status = a.status != null ? ' · ${a.status}' : '';
+    return '${a.type} — $date$status';
+  }
+
+  static String? _formatDob(String? dob) {
+    if (dob == null || dob.isEmpty) return null;
+    try {
+      final d = DateTime.parse(dob);
+      return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+    } catch (_) {
+      return dob;
+    }
   }
 }
 
@@ -1748,8 +1878,10 @@ class _PatientDetailHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     final name = data.name ?? PatientContextStrings.fallbackTitle;
+
+    final ageLabel = _ageLabelFromDob(data.dateOfBirth, data.age);
     final subtitleParts = <String>[];
-    if (data.age != null) subtitleParts.add(PatientContextStrings.ageLabel(data.age!));
+    if (ageLabel != null) subtitleParts.add(ageLabel);
     if (data.gender != null) subtitleParts.add(data.gender!);
     if (data.householdId != null) {
       subtitleParts.add(
@@ -1913,6 +2045,54 @@ class _PatientDetailHeader extends StatelessWidget {
     if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
     return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
         .toUpperCase();
+  }
+
+  static IconData _genderIcon(String g) {
+    final u = g.toUpperCase();
+    if (u.startsWith('F')) return Icons.female;
+    if (u.startsWith('M')) return Icons.male;
+    return Icons.person_outline;
+  }
+
+  static String _genderShort(String g) {
+    final u = g.toUpperCase();
+    if (u.startsWith('F')) return 'F';
+    if (u.startsWith('M')) return 'M';
+    return g;
+  }
+
+  static int? _ageFromDob(String? dob) {
+    if (dob == null || dob.isEmpty) return null;
+    try {
+      final birth = DateTime.parse(dob);
+      final now = DateTime.now();
+      int age = now.year - birth.year;
+      if (now.month < birth.month ||
+          (now.month == birth.month && now.day < birth.day)) age--;
+      return age;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Smart age label: months for under-2, years otherwise.
+  /// Mirrors the logic in [_VisitFlowState._ageDisplay].
+  static String? _ageLabelFromDob(String? dob, int? ageYears) {
+    if (dob != null && dob.isNotEmpty) {
+      try {
+        final birth = DateTime.parse(dob);
+        final now = DateTime.now();
+        final months = (now.year - birth.year) * 12 +
+            (now.month - birth.month) -
+            (now.day < birth.day ? 1 : 0);
+        if (months < 24) return '$months month${months == 1 ? '' : 's'}';
+        final years = months ~/ 12;
+        return 'Age $years';
+      } catch (_) {}
+    }
+    if (ageYears == null) return null;
+    if (ageYears == 0) return '< 1 yr';
+    return 'Age $ageYears';
   }
 }
 

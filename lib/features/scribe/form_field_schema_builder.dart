@@ -70,6 +70,23 @@ class FormFieldSchema {
 abstract final class FormFieldSchemaBuilder {
   FormFieldSchemaBuilder._();
 
+  /// Server `assessmentType` for a Step 2 realtime ASR session, or null when
+  /// auto-fill is not yet supported for this visit's programme mix.
+  ///
+  /// v1 scope is NCD and ANC only. PNC intentionally returns null: the PNC
+  /// screen renders mother + child + outcome forms together and a
+  /// mother-only extraction would silently drop every newborn utterance —
+  /// worse than no fill. ANC outranks NCD in combined visits (maternal
+  /// danger signs are the higher-stakes capture).
+  static String? assessmentTypeFor(List<String> activeFormTypes) {
+    final programmes =
+        activeFormTypes.map(Programme.fromString).toSet();
+    if (programmes.contains(Programme.pnc)) return null;
+    if (programmes.contains(Programme.anc)) return 'anc';
+    if (programmes.contains(Programme.ncd)) return 'ncd';
+    return null;
+  }
+
   /// Build the combined schema for a list of programme name strings.
   ///
   /// Deduplicates fields that appear in multiple programmes (e.g. `systolic`

@@ -8,6 +8,8 @@ import '../widgets/form_fields/radio_form_field.dart';
 import 'canonical_visit_data.dart';
 import 'form_config.dart';
 import 'form_field_visuals.dart';
+import '../../scribe/form_field_schema_builder.dart';
+import '../../scribe/models/ai_extracted_field.dart';
 import '../../scribe/widgets/ai_scribe_banner.dart';
 import 'triage_symptom_mapper.dart';
 import 'unified_form_notifier.dart';
@@ -275,8 +277,10 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
 
         return Column(
           children: [
-            // ── Step 2 AI Scribe banner — same widget as Step 1 ────────────
-            // Horizontally inset to match the ListView's content alignment.
+            // ── Step 2 AI Scribe banner — the SAME widget as Step 1, in
+            // live-first mode. When the programme mix supports auto-fill
+            // (NCD/ANC), extractions come back as form_fill and are written
+            // straight into the form through the validated prefill gate.
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 AppSpacing.xxxl, AppSpacing.xl, AppSpacing.xxxl, 0),
@@ -285,6 +289,19 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
                 patientId: notifier.patientId,
                 isFemale: widget.activeFormTypes.contains('anc') ||
                     widget.activeFormTypes.contains('pnc'),
+                tapStartsLiveAsr: true,
+                assessmentType: FormFieldSchemaBuilder.assessmentTypeFor(
+                    widget.activeFormTypes),
+                onFormFill: (fill) {
+                  final rejected = notifier.applyAiPrefill(
+                    fill.fields.where((f) => f.value != null).toList(),
+                    fieldDefs: _config!.fields,
+                  );
+                  if (rejected.isNotEmpty) {
+                    debugPrint(
+                        '[Step2ASR] rejected: ${rejected.join(' | ')}');
+                  }
+                },
                 // VisitFormScreen watches ScribeController state and auto-opens
                 // the SOAP review sheet when reviewReady — no action needed here.
                 onReviewReady: (_) {},
@@ -1099,6 +1116,56 @@ class _DateSubBox extends StatelessWidget {
   }
 }
 
+// ── AI-filled badge wrap ──────────────────────────────────────────────────────
+
+/// Overlays a small "AI — verify" pill on a form field whose current value
+/// was filled by the realtime ASR scribe and not yet reviewed by the SK.
+/// The badge disappears as soon as the SK edits the field (source flips to
+/// [FieldSource.aiModified] in [UnifiedFormNotifier.updateField]).
+class _AiFilledBadgeWrap extends StatelessWidget {
+  const _AiFilledBadgeWrap({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        child,
+        Positioned(
+          top: -6,
+          right: 8,
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppColors.aiPurple,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.auto_awesome,
+                    size: 10, color: Colors.white),
+                const SizedBox(width: 3),
+                Text(
+                  Step2AsrStrings.aiFilledBadge,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 // ── Section card ──────────────────────────────────────────────────────────────
 
 class _SectionCard extends StatelessWidget {
@@ -1231,6 +1298,14 @@ class _SectionCard extends StatelessWidget {
     bool glucosePairEmitted = false;
     bool heightWeightPairEmitted = false;
 
+    // AI-provenance marking: fields filled by the realtime ASR scribe and
+    // not yet reviewed render with a small "AI — verify" badge so the SK can
+    // distinguish auto-filled values from typed ones. watch() keeps badges
+    // live as extractions land / the SK edits.
+    final notifier = context.watch<UnifiedFormNotifier>();
+    bool aiPending(String fieldId) =>
+        notifier.fieldSource(fieldId) == FieldSource.aiPending;
+
     final fieldWidgets = <Widget>[];
     for (final ref in section.fieldRefs) {
       if (consumedIds.contains(ref.id)) continue;
@@ -1238,11 +1313,16 @@ class _SectionCard extends StatelessWidget {
       final def = config.fields[ref.id];
       if (def == null) continue;
 
+      // IDs whose AI-pending state lights this widget's badge (composite
+      // cards cover their absorbed counterpart fields too).
+      var badgeIds = <String>{ref.id};
+
       Widget child;
       if (ref.id == 'systolic' && hasBpPair) {
         // Emit the combined BP card once (with optional pulse).
         if (!bpPairEmitted) {
           bpPairEmitted = true;
+          badgeIds = {'systolic', 'diastolic', 'pulse', 'bpLogDetails'};
           final diaRef = section.fieldRefs.firstWhere((r) => r.id == 'diastolic');
           final diaDef = config.fields['diastolic'];
           if (diaDef != null) {
@@ -1265,6 +1345,7 @@ class _SectionCard extends StatelessWidget {
         // Emit the combined glucose pair card once (fasting drives, random follows).
         if (!glucosePairEmitted) {
           glucosePairEmitted = true;
+          badgeIds = {'fastingBloodSugar', 'randomBloodSugar'};
           final randomRef = section.fieldRefs.firstWhere((r) => r.id == 'randomBloodSugar');
           final randomDef = config.fields['randomBloodSugar'];
           if (randomDef != null) {
@@ -1279,6 +1360,7 @@ class _SectionCard extends StatelessWidget {
         // Emit the combined height + weight pair card once.
         if (!heightWeightPairEmitted) {
           heightWeightPairEmitted = true;
+          badgeIds = {'height', 'weight'};
           final weightRef = section.fieldRefs.firstWhere((r) => r.id == 'weight');
           final weightDef = config.fields['weight'];
           if (weightDef != null) {
@@ -1306,6 +1388,10 @@ class _SectionCard extends StatelessWidget {
         }
       } else {
         child = _fieldRow(context, def, ref);
+      }
+
+      if (badgeIds.any(aiPending)) {
+        child = _AiFilledBadgeWrap(child: child);
       }
 
       fieldWidgets.add(Padding(

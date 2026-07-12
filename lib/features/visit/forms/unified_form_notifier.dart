@@ -5,8 +5,10 @@ import 'package:flutter/foundation.dart';
 import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
+import '../../scribe/models/ai_extracted_field.dart';
 import '../assessment_repository.dart';
 import 'canonical_visit_data.dart';
+import 'form_config.dart';
 import 'unified_payload_mapper.dart';
 import 'vitals_trend.dart';
 
@@ -73,10 +75,29 @@ class UnifiedFormNotifier extends ChangeNotifier {
   String? _submitError;
   Set<String> _validationErrors = const {};
 
+  /// Provenance per fieldId — who last set the value (SK vs AI scribe).
+  /// Fields never touched have no entry (treated as manual-owned once typed).
+  final Map<String, FieldSource> _fieldSources = {};
+
+  /// Verbatim transcript quote backing an AI-filled value (null when the
+  /// server didn't supply one). Keyed by fieldId, AI-filled fields only.
+  final Map<String, String?> _fieldSourceSegments = {};
+
   CanonicalVisitData get data => _data;
   bool get submitting => _submitting;
   String? get submitError => _submitError;
   Set<String> get validationErrors => _validationErrors;
+
+  /// Provenance for [fieldId], or null when the field was never set.
+  FieldSource? fieldSource(String fieldId) => _fieldSources[fieldId];
+
+  /// Transcript quote backing an AI-filled [fieldId], when available.
+  String? fieldSourceSegment(String fieldId) => _fieldSourceSegments[fieldId];
+
+  /// All AI-populated fields still pending SK review (drives banner count).
+  int get aiPendingCount => _fieldSources.values
+      .where((s) => s == FieldSource.aiPending)
+      .length;
 
   /// FHIR encounter id for this visit.
   String get encounterId => _encounterId;
@@ -113,9 +134,33 @@ class UnifiedFormNotifier extends ChangeNotifier {
     try {
       final map = jsonDecode(row.fieldValues) as Map<String, dynamic>;
       _data = _data.merge(CanonicalVisitData(map));
+      _restoreFieldSources(row.fieldSources);
       notifyListeners();
     } catch (e) {
       debugPrint('[UnifiedForm] draft parse error: $e');
+    }
+  }
+
+  /// Restores AI-provenance marking persisted with the draft so restored
+  /// AI-filled values are still visibly "AI-filled — verify" rather than
+  /// indistinguishable from SK-typed entries.
+  void _restoreFieldSources(String? raw) {
+    if (raw == null || raw.isEmpty) return;
+    try {
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      final sources = decoded['sources'] as Map<String, dynamic>? ?? const {};
+      final segments = decoded['segments'] as Map<String, dynamic>? ?? const {};
+      for (final entry in sources.entries) {
+        final source = FieldSource.values
+            .where((s) => s.name == entry.value)
+            .firstOrNull;
+        if (source != null) _fieldSources[entry.key] = source;
+      }
+      for (final entry in segments.entries) {
+        _fieldSourceSegments[entry.key] = entry.value as String?;
+      }
+    } catch (e) {
+      debugPrint('[UnifiedForm] field-sources parse error: $e');
     }
   }
 
@@ -195,6 +240,13 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// stored under the `bmi` field so the `_InfoLabelField` stays in sync.
   void updateField(String fieldId, dynamic value) {
     _data = _data.setValue(fieldId, value);
+    // SK edit of an AI-filled value → aiModified (audit trail keeps the AI
+    // origin); any other SK entry → manual. Either way the field is now
+    // SK-owned and later AI extractions must never overwrite it.
+    _fieldSources[fieldId] =
+        _fieldSources[fieldId] == FieldSource.aiPending
+            ? FieldSource.aiModified
+            : FieldSource.manual;
     if (fieldId == 'height' || fieldId == 'weight') {
       _recomputeBmi();
     }
@@ -219,10 +271,269 @@ class UnifiedFormNotifier extends ChangeNotifier {
   }
 
   /// Merge AI Scribe pre-filled fields into canonical data.
+  ///
+  /// Legacy path (batch SOAP prefill). Skips SK-owned fields but performs no
+  /// schema validation — prefer [applyAiPrefill] for realtime ASR fills.
   void applyScribePrefill(Map<String, dynamic> fields) {
-    _data = _data.merge(CanonicalVisitData(fields));
+    final accepted = <String, dynamic>{};
+    for (final entry in fields.entries) {
+      if (_isSkOwned(entry.key)) continue;
+      accepted[entry.key] = entry.value;
+      _fieldSources[entry.key] = FieldSource.aiPending;
+    }
+    if (accepted.isEmpty) return;
+    _data = _data.merge(CanonicalVisitData(accepted));
     notifyListeners();
     _saveDraft();
+  }
+
+  /// Apply realtime-ASR extracted fields with validation + provenance.
+  ///
+  /// The safety gate between the AI service and the form:
+  /// - **SK always wins** — fields whose source is `manual` or `aiModified`
+  ///   are never overwritten (AI-over-AI refresh of `aiPending` is allowed:
+  ///   a later extraction legitimately corrects an earlier one).
+  /// - **Schema validation** — each value is checked against the canonical
+  ///   [FieldDef] from `field_library.json` ([fieldDefs]); enum values must
+  ///   match an `optionsList` id (display names are mapped to ids), numerics
+  ///   must parse. Anything invalid is skipped and reported back.
+  ///
+  /// Returns human-readable descriptions of rejected fields so the banner
+  /// can surface them as unmapped findings instead of dropping silently.
+  List<String> applyAiPrefill(
+    List<AIExtractedField> fields, {
+    required Map<String, FieldDef> fieldDefs,
+  }) {
+    final rejected = <String>[];
+    var appliedAny = false;
+
+    debugPrint(
+        '<==================== ASR FORM FILL: ${fields.length} field(s) '
+        'incoming ====================>');
+
+    for (final field in fields) {
+      if (_isSkOwned(field.fieldId)) {
+        debugPrint('<----- asr SKIPPED  [${field.fieldId}] SK-owned '
+            '(${_fieldSources[field.fieldId]?.name}) — value "${field.value}" '
+            'NOT applied ----->');
+        continue;
+      }
+
+      final def = fieldDefs[field.fieldId];
+      if (def == null) {
+        debugPrint('<----- asr REJECTED [${field.fieldId}] unknown field — '
+            'value "${field.value}" ----->');
+        rejected.add('${field.fieldId}: unknown field');
+        continue;
+      }
+
+      final validated = _validateAgainstDef(field.value, def);
+      if (validated == null) {
+        debugPrint('<----- asr REJECTED [${field.fieldId}] "${field.value}" '
+            'failed ${def.widgetHint.name} validation '
+            '(allowed: ${def.options.map((o) => o.id).join('/')}) ----->');
+        rejected.add('${def.label}: "${field.value}" not a valid value');
+        continue;
+      }
+
+      final previous = _data.getValue(field.fieldId);
+      _data = _data.setValue(field.fieldId, validated);
+      _fieldSources[field.fieldId] = FieldSource.aiPending;
+      _fieldSourceSegments[field.fieldId] = field.sourceSegment;
+      appliedAny = true;
+      debugPrint('<----- asr APPLIED  [${field.fieldId}] = $validated '
+          '${previous == null ? '' : '(was: $previous) '}'
+          'src="${field.sourceSegment ?? '-'}" ----->');
+      if (field.fieldId == 'height' || field.fieldId == 'weight') {
+        _recomputeBmi();
+      }
+      // The BP card renders from the flat systolic/diastolic/pulse keys,
+      // not the bpLogDetails array (which the payload mapper consumes) —
+      // mirror the latest reading so the fill is visible on-screen.
+      if (field.fieldId == 'bpLogDetails' &&
+          validated is List &&
+          validated.isNotEmpty) {
+        final last = validated.last as Map<String, dynamic>;
+        for (final key in const ['systolic', 'diastolic', 'pulse']) {
+          final v = last[key];
+          if (v == null || _isSkOwned(key)) continue;
+          _data = _data.setValue(key, v);
+          _fieldSources[key] = FieldSource.aiPending;
+          _fieldSourceSegments[key] = field.sourceSegment;
+          debugPrint('<----- asr APPLIED  [$key] = $v '
+              '(mirrored from bpLogDetails) ----->');
+        }
+      }
+      // Inverse of the BP case: the ANC screen renders deliveryFacilityType
+      // but the payload mapper reads facilityIdentifiedForDelivery (identical
+      // option ids) — mirror so the submitted payload carries the value too.
+      if (field.fieldId == 'deliveryFacilityType' &&
+          !_isSkOwned('facilityIdentifiedForDelivery')) {
+        _data = _data.setValue('facilityIdentifiedForDelivery', validated);
+        _fieldSources['facilityIdentifiedForDelivery'] = FieldSource.aiPending;
+        _fieldSourceSegments['facilityIdentifiedForDelivery'] =
+            field.sourceSegment;
+        debugPrint('<----- asr APPLIED  [facilityIdentifiedForDelivery] = '
+            '$validated (mirrored from deliveryFacilityType) ----->');
+      }
+    }
+
+    debugPrint('<==================== ASR FORM FILL done: '
+        '${fields.length - rejected.length} applied, '
+        '${rejected.length} rejected ====================>');
+    _logAsrCoverage(fieldDefs);
+
+    if (appliedAny) {
+      notifyListeners();
+      _saveDraft();
+    }
+    return rejected;
+  }
+
+  /// Widget kinds that carry a voice-fillable value — mirrors the server
+  /// generator's skip rules (layout labels, computed BMI, date pickers and
+  /// composite widgets are never ASR targets).
+  static const Set<WidgetHint> _extractableHints = {
+    WidgetHint.radioGroup,
+    WidgetHint.dialogCheckbox,
+    WidgetHint.spinner,
+    WidgetHint.bloodGlucoseEntry,
+    WidgetHint.numeric,
+    WidgetHint.bpField,
+  };
+
+  /// Per-programme ASR coverage snapshot after each extraction:
+  ///   <---- asr COVERAGE [anc]: 8/24 AI-filled · 2 manual · 14 empty ---->
+  ///   <---- asr MISSING  [anc]: hemoglobin, fundalHeight, … ---->
+  void _logAsrCoverage(Map<String, FieldDef> fieldDefs) {
+    for (final programme in _activeFormTypes) {
+      final targets = fieldDefs.values
+          .where((d) =>
+              d.programmeIds.contains(programme) &&
+              _extractableHints.contains(d.widgetHint) &&
+              d.id != 'bmi')
+          .toList();
+      if (targets.isEmpty) continue;
+
+      final aiFilled = <String>[];
+      final manual = <String>[];
+      final empty = <String>[];
+      for (final d in targets) {
+        final hasValue = _data.getValue(d.id) != null;
+        final source = _fieldSources[d.id];
+        if (hasValue &&
+            (source == FieldSource.aiPending ||
+                source == FieldSource.aiModified)) {
+          aiFilled.add(d.id);
+        } else if (hasValue) {
+          manual.add(d.id);
+        } else {
+          empty.add(d.id);
+        }
+      }
+      debugPrint('<---- asr COVERAGE [$programme]: '
+          '${aiFilled.length}/${targets.length} AI-filled · '
+          '${manual.length} manual · ${empty.length} empty ---->');
+      if (empty.isNotEmpty) {
+        debugPrint('<---- asr MISSING  [$programme]: ${empty.join(', ')} ---->');
+      }
+    }
+  }
+
+  /// True when the SK typed or edited this field — AI must never overwrite.
+  bool _isSkOwned(String fieldId) {
+    final source = _fieldSources[fieldId];
+    return source == FieldSource.manual || source == FieldSource.aiModified;
+  }
+
+  /// Validates and canonicalises [value] against [def].
+  ///
+  /// Returns the value to store, or null when invalid. Enum-backed widgets
+  /// accept either the option id or its display name (mapped to the id —
+  /// the server extracts display names for non-mnemonic ids like the PNC
+  /// danger-sign codes "1".."8").
+  dynamic _validateAgainstDef(dynamic value, FieldDef def) {
+    if (value == null) return null;
+
+    // Any option-backed field is enum-matched regardless of widget kind —
+    // e.g. glucoseType renders as BloodGlucoseEntry but carries fbs/rbs
+    // options that the widget matches by id.
+    if (def.options.isNotEmpty && def.widgetHint != WidgetHint.bpField) {
+      if (def.widgetHint == WidgetHint.dialogCheckbox || value is List) {
+        final list = value is List ? value : [value];
+        final matched = <String>[];
+        for (final item in list) {
+          final m = _matchOption(item, def.options);
+          if (m == null) return null; // one bad entry invalidates the set
+          matched.add(m);
+        }
+        return matched.isEmpty ? null : matched;
+      }
+      return _matchOption(value, def.options);
+    }
+
+    switch (def.widgetHint) {
+      case WidgetHint.radioGroup:
+      case WidgetHint.spinner:
+        return _matchOption(value, def.options);
+      case WidgetHint.dialogCheckbox:
+        final list = value is List ? value : [value];
+        final matched = <String>[];
+        for (final item in list) {
+          final m = _matchOption(item, def.options);
+          if (m == null) return null; // one bad entry invalidates the set
+          matched.add(m);
+        }
+        return matched.isEmpty ? null : matched;
+      case WidgetHint.bpField:
+        // Expect [{systolic, diastolic, pulse?}, ...] with numeric entries.
+        if (value is! List || value.isEmpty) return null;
+        final readings = <Map<String, dynamic>>[];
+        for (final item in value) {
+          if (item is! Map) return null;
+          final systolic = _asNum(item['systolic']);
+          final diastolic = _asNum(item['diastolic']);
+          if (systolic == null && diastolic == null) return null;
+          readings.add(<String, dynamic>{
+            if (systolic != null) 'systolic': systolic,
+            if (diastolic != null) 'diastolic': diastolic,
+            if (_asNum(item['pulse']) != null) 'pulse': _asNum(item['pulse']),
+          });
+        }
+        return readings;
+      case WidgetHint.numeric:
+      case WidgetHint.bloodGlucose:
+      case WidgetHint.bloodGlucoseEntry:
+        // Numeric when parseable; EditText also carries free text (notes).
+        if (value is num) return value;
+        if (value is String) return _asNum(value) ?? value;
+        return null;
+      default:
+        // Layout-only or unsupported widgets never receive AI fills.
+        return null;
+    }
+  }
+
+  /// Matches [value] against option ids first, then display names → id.
+  static String? _matchOption(dynamic value, List<FieldOption> options) {
+    if (options.isEmpty) return value?.toString();
+    final raw = value.toString();
+    for (final o in options) {
+      if (o.id == raw) return o.id;
+    }
+    final lower = raw.toLowerCase().trim();
+    for (final o in options) {
+      if (o.id.toLowerCase() == lower || o.name.toLowerCase() == lower) {
+        return o.id;
+      }
+    }
+    return null;
+  }
+
+  static num? _asNum(dynamic v) {
+    if (v is num) return v;
+    if (v is String) return num.tryParse(v.trim());
+    return null;
   }
 
   /// Decompose canonical data into per-programme payloads and save as
@@ -284,6 +595,10 @@ class UnifiedFormNotifier extends ChangeNotifier {
       activatedProgrammes: jsonEncode(_activeFormTypes),
       fieldValues: jsonEncode(_data.values),
       sectionStatus: '{}',
+      fieldSources: jsonEncode({
+        'sources': _fieldSources.map((k, v) => MapEntry(k, v.name)),
+        'segments': _fieldSourceSegments,
+      }),
     );
     _draftDao.saveDraft(row).catchError((e) {
       debugPrint('[UnifiedForm] autosave error: $e');

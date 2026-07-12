@@ -13,20 +13,30 @@ import '../../core/db/patient_programmes_dao.dart';
 import '../../core/mission/programme_reason.dart';
 import '../../core/models/programme.dart';
 import '../../core/models/mission_queue_item.dart';
+import '../../core/sync/offline_sync_service.dart';
 import '../../core/widgets/header_icon_button.dart';
 import '../../core/widgets/mockup_svg_icons.dart';
-import '../../core/widgets/patient_filter_panel.dart'
-    show VillageFilterTab, titleCaseWords;
+import '../../core/widgets/patient_filter_panel.dart';
 import '../dashboard/dashboard_repository.dart';
 import '../dashboard/mission_dashboard_repository.dart';
 import '../visit/widgets/mission_queue_card.dart';
 import 'household_detail_screen.dart';
 
-/// The Patients tab — a single household-card list matching the v13 mockup's
-/// `#householdsScreen` exactly: no separate flat-member view, no My-Patients/
-/// My-Households toggle, no tier/need filters (none of those exist in the
-/// mockup). Village filtering, search, and the location/SS filter sheet are
-/// kept as real app capability beyond the mockup.
+/// Filter for the Members tab: show all members or only assigned patients.
+enum MemberFilter {
+  /// Show only patients assigned to the logged-in SK (via patients table).
+  myPatients,
+
+  /// Show all members in the village.
+  allMembers,
+}
+
+/// The Patients tab — a household-card list matching the v13 mockup's
+/// `#householdsScreen` (navy header, village tabs, search) as the default
+/// Households view, plus a Members tab (flat per-patient list with a My
+/// Patients / All Members toggle) and a need/programme filter row — real app
+/// capability beyond the mockup, alongside the location/SS filter sheet
+/// (which stays removed; not in the mockup and not reintroduced here).
 class HouseholdListScreen extends StatefulWidget {
   const HouseholdListScreen({super.key});
 
@@ -34,9 +44,11 @@ class HouseholdListScreen extends StatefulWidget {
   State<HouseholdListScreen> createState() => _HouseholdListScreenState();
 }
 
-class _HouseholdListScreenState extends State<HouseholdListScreen> {
+class _HouseholdListScreenState extends State<HouseholdListScreen>
+    with SingleTickerProviderStateMixin {
   Future<List<_HouseholdItem>>? _future;
   final ScrollController _scrollController = ScrollController();
+  late final TabController _tabController;
 
   // Search
   final TextEditingController _searchController = TextEditingController();
@@ -50,12 +62,23 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
   List<({String id, String name})> _inlineVillages = const [];
   String? _selectedInlineVillageId;
 
-  // Household IDs whose "other members" panel is expanded.
+  // Household IDs whose "other members" panel is expanded (Households tab).
   final Set<String> _expandedHouseholdIds = {};
+
+  // Members tab: My Patients / All Members toggle.
+  MemberFilter _filter = MemberFilter.allMembers;
+  Set<String> _myPatientIds = {};
+
+  bool _refreshing = false;
+
+  // Need / programme filter state (derived from queue items).
+  Set<NeedFilter> _selectedNeeds = const {};
+  Set<NeedFilter> _availableNeeds = const {};
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     // Defer loading until after first frame when context is available.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -66,7 +89,8 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
   }
 
   /// Loads the mission queue so a household's flagged member (if any) can
-  /// render with its real urgency badge/status.
+  /// render with its real urgency badge/status, and derives which need
+  /// filters are relevant from the same queue.
   Future<void> _loadQueueItems() async {
     if (!mounted) return;
     try {
@@ -79,13 +103,17 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
           queueMap[item.patientId!] = item;
         }
       }
-      setState(() => _queueItems = queueMap);
+      setState(() {
+        _queueItems = queueMap;
+        _availableNeeds = computeAvailableNeeds(queue);
+      });
     } catch (_) {}
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _tabController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -109,8 +137,35 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
     });
 
     setState(() {
-      _future = _fetchHouseholds(householdDao, memberDao, repo);
+      _future = _fetchHouseholds(householdDao, memberDao, repo).then((households) async {
+        final patientIds = await memberDao.getMyPatientIds();
+        if (mounted) {
+          setState(() => _myPatientIds = patientIds);
+        }
+        return households;
+      });
     });
+  }
+
+  Future<void> _refreshFromServer() async {
+    if (_refreshing) return;
+    setState(() => _refreshing = true);
+    try {
+      final syncSvc = context.read<OfflineSyncService>();
+      final report = await syncSvc.warmSync();
+      if (!mounted) return;
+      final msg = report.errors.isNotEmpty
+          ? HouseholdListStrings.refreshFailed(report.errors.first)
+          : HouseholdListStrings.refreshSummary(
+              report.patients, report.assessments, report.followUps);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), duration: const Duration(seconds: 3)),
+      );
+      _loadData();
+      _loadQueueItems();
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
   }
 
   /// Fetches households from LOCAL SQLite first (instant), falls back to API.
@@ -249,6 +304,14 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
               // its header and PatientFilterPanel/village-tab row.
               const SizedBox(height: AppSpacing.xl),
               _buildVillageTabRow(),
+              AnimatedBuilder(
+                animation: _tabController,
+                builder: (context, _) => _buildNeedFilterRow(),
+              ),
+              AnimatedBuilder(
+                animation: _tabController,
+                builder: (context, _) => _buildTabStrip(),
+              ),
               Expanded(
                 child: _future == null
                     ? const SizedBox.shrink()
@@ -317,7 +380,13 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
                               ),
                             );
                           }
-                          return _buildHouseholdsList(context, items);
+                          return TabBarView(
+                            controller: _tabController,
+                            children: [
+                              _buildHouseholdsList(context, items),
+                              _buildMembersList(context, items),
+                            ],
+                          );
                         },
                       ),
               ),
@@ -341,10 +410,81 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
         .toList();
   }
 
+  /// Households tab / Members tab strip.
+  Widget _buildTabStrip() {
+    final selectedIdx = _tabController.index;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: _TabPill(
+              label: HouseholdListStrings.tabHouseholds,
+              icon: Icons.home_outlined,
+              isSelected: selectedIdx == 0,
+              onTap: () => _tabController.animateTo(0),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _TabPill(
+              label: HouseholdListStrings.tabMembers,
+              icon: Icons.people_outline,
+              isSelected: selectedIdx == 1,
+              onTap: () => _tabController.animateTo(1),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Need/programme filter bubbles — shared visual language with the Home
+  /// dashboard's own need-filter row (NeedCategoryBubble). Only meaningful
+  /// on the Members tab, where it actually filters the list.
+  Widget _buildNeedFilterRow() {
+    if (_tabController.index != 1 || _availableNeeds.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: SizedBox(
+        height: 88,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          padding: EdgeInsets.zero,
+          children: [
+            for (final need
+                in NeedFilter.values.where(_availableNeeds.contains))
+              Padding(
+                padding: const EdgeInsets.only(right: 11),
+                child: NeedCategoryBubble(
+                  label: need.label,
+                  emoji: need.emoji,
+                  activeColor: need.activeColor,
+                  activeSurface: need.activeSurface,
+                  isActive: _selectedNeeds.contains(need),
+                  onTap: () => setState(() {
+                    final updated = Set<NeedFilter>.from(_selectedNeeds);
+                    if (updated.contains(need)) {
+                      updated.remove(need);
+                    } else {
+                      updated.add(need);
+                    }
+                    _selectedNeeds = updated;
+                  }),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 
   /// Navy header: back button, 🏠-prefixed title, combined live "N
-  /// households · M patients" count, and the search bar — matching the v13
-  /// mockup's `#householdsScreen` header (background, back button, type).
+  /// households · M patients" count, a manual refresh button, and the search
+  /// bar — matching the v13 mockup's `#householdsScreen` header (background,
+  /// back button, type).
   Widget _buildHeader(
     BuildContext context,
     int householdCount,
@@ -389,6 +529,21 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
                     ),
                   ],
                 ),
+              ),
+              HeaderIconButton(
+                icon: Icons.cloud_download_outlined,
+                tooltip: PatientContextStrings.refresh,
+                onTap: _refreshing ? null : _refreshFromServer,
+                child: _refreshing
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : null,
               ),
             ],
           ),
@@ -574,6 +729,156 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
     );
   }
 
+  /// Whether a member matches the currently-selected need filters (or
+  /// trivially matches when no need filter is active).
+  bool _needMatchesMember(_MemberInfo m) {
+    if (_selectedNeeds.isEmpty) return true;
+    final pid = m.patientId ?? m.id;
+    if (pid == null) return false;
+    final qItem = _queueItems[pid];
+    if (qItem == null) return false;
+    return _selectedNeeds.any((need) => need.matches(qItem));
+  }
+
+  /// Flat, village-sorted list of every household member — the Members tab.
+  /// Shares village/search/need-filter state with the Households tab; adds
+  /// its own My Patients / All Members toggle.
+  Widget _buildMembersList(BuildContext context, List<_HouseholdItem> items) {
+    final allMembers = <_MemberInfo>[];
+    for (final household in items) {
+      for (final member in household.members) {
+        allMembers.add(_MemberInfo.fromMember(member, household));
+      }
+    }
+
+    var filtered = _selectedInlineVillageId == null
+        ? allMembers
+        : allMembers
+            .where((m) => m.subVillageId == _selectedInlineVillageId)
+            .toList();
+
+    if (_selectedNeeds.isNotEmpty) {
+      filtered = filtered.where(_needMatchesMember).toList();
+    }
+
+    // Counts derived AFTER location/need filters so the toggle labels always
+    // match the list length the user sees.
+    final allMembersCount = filtered.length;
+    final myPatientsCount = filtered
+        .where((m) =>
+            _myPatientIds.contains(m.id) || _myPatientIds.contains(m.patientId))
+        .length;
+
+    var members = _filter == MemberFilter.myPatients
+        ? filtered
+            .where((m) =>
+                _myPatientIds.contains(m.id) ||
+                _myPatientIds.contains(m.patientId))
+            .toList()
+        : filtered;
+
+    if (_searchQuery.isNotEmpty) {
+      members = members.where((m) {
+        final name = (m.name ?? '').toLowerCase();
+        final hno = (m.householdNo ?? '').toLowerCase();
+        return name.contains(_searchQuery) || hno.contains(_searchQuery);
+      }).toList();
+    }
+
+    // Village-wise sort: group members by village name so the SK visits one
+    // locality before moving to the next.
+    members.sort((a, b) {
+      final va = _villageDisplayName(a.subVillageId) ?? '';
+      final vb = _villageDisplayName(b.subVillageId) ?? '';
+      final cmp = va.compareTo(vb);
+      if (cmp != 0) return cmp;
+      return (a.name ?? '').compareTo(b.name ?? '');
+    });
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+          child: _buildFilterToggle(
+            allCount: allMembersCount,
+            myCount: myPatientsCount,
+          ),
+        ),
+        Expanded(
+          child: members.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.people_outline,
+                        size: 64,
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        _searchQuery.isNotEmpty
+                            ? HouseholdListStrings.searchResultsEmpty(_searchQuery)
+                            : _filter == MemberFilter.myPatients
+                                ? HouseholdListStrings.noPatientsAssigned
+                                : HouseholdListStrings.noMembers,
+                        style: Theme.of(context).textTheme.bodyLarge,
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
+                  itemCount: members.length,
+                  separatorBuilder: (context, idx) => const SizedBox(height: 10),
+                  itemBuilder: (context, index) {
+                    final member = members[index];
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: AppShadows.householdCard,
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      child: _buildMemberRow(context, member),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  /// My Patients / All Members segmented toggle for the Members tab.
+  Widget _buildFilterToggle({required int allCount, required int myCount}) {
+    return Container(
+      height: 34,
+      decoration: BoxDecoration(
+        color: AppColors.cardSurfaceMuted,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _SegmentButton(
+              label: HouseholdListStrings.myPatientsCount(myCount),
+              isSelected: _filter == MemberFilter.myPatients,
+              onTap: () => setState(() => _filter = MemberFilter.myPatients),
+            ),
+          ),
+          Expanded(
+            child: _SegmentButton(
+              label: HouseholdListStrings.allMembersCount(allCount),
+              isSelected: _filter == MemberFilter.allMembers,
+              onTap: () => setState(() => _filter = MemberFilter.allMembers),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Matches the mockup's search predicate: name, house/household number,
   /// or village name.
   bool _matchesSearch(_HouseholdItem h, String query) {
@@ -695,6 +1000,111 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
     return item.members.firstWhere(
       (m) => m.isHouseholdHead == true,
       orElse: () => item.members.first,
+    );
+  }
+}
+
+/// Households / Members tab pill — matches the navy/textOnNavy visual
+/// language already used by the header and cards on this screen.
+class _TabPill extends StatelessWidget {
+  const _TabPill({
+    required this.label,
+    required this.icon,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.navy : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: isSelected ? AppColors.textOnNavy : AppColors.textMuted,
+            ),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: isSelected ? AppColors.textOnNavy : AppColors.textMuted,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// My Patients / All Members segmented button — used inside the Members
+/// tab's filter toggle.
+class _SegmentButton extends StatelessWidget {
+  const _SegmentButton({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: label,
+      button: true,
+      selected: isSelected,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          height: double.infinity,
+          margin: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
+                    ),
+                  ]
+                : null,
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: isSelected ? AppColors.navy : AppColors.textMuted,
+              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1316,6 +1726,7 @@ class _MemberInfo {
     this.householdName,
     this.householdNo,
     this.villageId,
+    this.subVillageId,
     this.householdMemberCount,
     this.programmes = const {},
     this.ancVisitCount = 0,
@@ -1335,6 +1746,11 @@ class _MemberInfo {
   final String? householdName;
   final String? householdNo;
   final String? villageId;
+
+  /// Sub-village id — matches [_HouseholdListScreenState._selectedInlineVillageId],
+  /// which is populated from sub-village data (see [_HouseholdMember.villageId]'s
+  /// doc comment for why "village" means sub-village on this screen).
+  final String? subVillageId;
   final int? householdMemberCount;
   final Set<Programme> programmes;
   final int ancVisitCount;
@@ -1376,6 +1792,7 @@ class _MemberInfo {
       householdName: household.name,
       householdNo: household.householdNo,
       villageId: member.villageId,
+      subVillageId: member.subVillageId,
       householdMemberCount: household.memberCount,
       programmes: member.programmes,
       ancVisitCount: member.ancVisitCount,

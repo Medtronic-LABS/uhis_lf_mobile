@@ -33,6 +33,7 @@ class RealtimeAsrService {
   Future<RealtimeAsrConnectionInfo> connectionInfo({
     required String language,
     String model = 'saarika:v2.5',
+    String? assessmentType,
   }) async {
     final endpoint = Endpoints.scribeRealtimeTranscribe;
     final path = AppConfig.aiServiceBaseUrl.isNotEmpty &&
@@ -54,6 +55,10 @@ class RealtimeAsrService {
       queryParameters: {
         'language': language,
         'model': model,
+        // Routes extract requests to the assessment-specific prompt on the
+        // server so replies come back as "form_fill" (Step 2 auto-fill).
+        // Omitted → generic clinical scribe extraction ("symptoms").
+        if (assessmentType != null) 'assessmentType': assessmentType,
         // Fallback for WS clients that can't set headers (kept for parity
         // with the server's authenticate_websocket, not used on native).
         if (api.tenantId != null) 'tenantId': api.tenantId!,

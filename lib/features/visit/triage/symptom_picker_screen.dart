@@ -4,9 +4,10 @@ import 'package:provider/provider.dart';
 
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_strings.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../core/db/encounter_dao.dart';
+import '../../../core/db/immunisation_dao.dart';
 import '../../../core/db/patient_dao.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/db/patient_programmes_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
 import '../../patient/followup_repository.dart';
@@ -17,6 +18,7 @@ import '../../scribe/widgets/ai_scribe_banner.dart';
 import '../briefing/briefing_models.dart';
 import '../briefing/visit_briefing_repository.dart';
 import '../pathway/pathway_engine.dart';
+import 'child_assessment_section.dart';
 import 'patient_context_builder.dart';
 import 'visit_step_header.dart';
 import 'triage_view_model.dart';
@@ -87,6 +89,8 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   bool _briefingLoading = true;
   int? _ancVisitCount;
 
+  ChildAssessmentData? _childAssessmentData;
+
   @override
   void initState() {
     super.initState();
@@ -136,10 +140,13 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       }
 
       debugPrint('[SymptomPicker] Building PatientContext for $patientId...');
+      final immunisationDao =
+          context.read<ImmunisationDao>();
       final builder = PatientContextBuilder(
         patientDao: patientDao,
         programmesDao: programmesDao,
         pregnancyDao: pregnancyDao,
+        immunisationDao: immunisationDao,
       );
 
       final ctx = await builder.build(patientId);
@@ -289,6 +296,39 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     super.dispose();
   }
 
+  void _openVaccinationTimeline() {
+    final ctx = _patientContext;
+    if (ctx == null) return;
+    // Fetch DOB from patient DAO to pass to timeline screen
+    final patientDao = context.read<PatientDao>();
+    patientDao.byId(widget.patientId).then((patient) {
+      if (!mounted) return;
+      context.push(
+        '/patients/${widget.patientId}/immunisation',
+        extra: <String, dynamic>{
+          'patientName': widget.patientName,
+          if (patient?.dob != null) 'dob': patient!.dob,
+        },
+      );
+    });
+  }
+
+  /// Handles the Vaccination CTA tap for under-5 patients.
+  ///
+  /// In embedded mode (inside VisitFlowScreen): advances the visit flow to the
+  /// vaccination step by calling [_onContinue], which fires [onAdvance].
+  /// In standalone mode: pushes the immunisation timeline route directly.
+  void _onVaccination() {
+    final vm = _viewModel;
+    if (vm == null) return;
+    if (widget.onAdvance != null) {
+      // Children bypass the no-symptoms guard — vaccination is always valid.
+      _doAdvance(vm);
+    } else {
+      _openVaccinationTimeline();
+    }
+  }
+
   void _onContinue() {
     final vm = _viewModel;
     if (vm == null || _patientContext == null) return;
@@ -297,6 +337,28 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       '[SymptomPicker] Continue tapped — ${vm.activatedPathways.length} pathways: ${vm.activatedPathways.map((p) => p.programme.name).join(', ')}',
     );
 
+    // Guard: no symptoms recorded → prompt the SK to double-check.
+    // "Continue anyway" in the SnackBar calls _doAdvance directly.
+    if (vm.selectedSymptoms.isEmpty && vm.activatedPathways.isEmpty) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: const Text(SymptomPickerStrings.noSymptomsGuard),
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: SymptomPickerStrings.noSymptomsGuardCta,
+              onPressed: () => _doAdvance(vm),
+            ),
+          ),
+        );
+      return;
+    }
+
+    _doAdvance(vm);
+  }
+
+  void _doAdvance(TriageViewModel vm) {
     // In-flow host (VisitFlowScreen) intercepts via callback. The host also
     // needs the SK-confirmed symptom set to build the Step-2 AI programme
     // recommendation request payload — surface it via the optional
@@ -507,7 +569,19 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                   ),
                 ),
 
-                // Status bar + Start Checkup CTA
+                // Child Assessment questions — under-5 only, shown when at
+                // least one symptom has been selected (mirrors HTML s23).
+                if (_patientContext!.isUnder5 &&
+                    vm.selectedSymptoms.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: ChildAssessmentSection(
+                      data: _childAssessmentData ?? ChildAssessmentData(),
+                      onChanged: (updated) =>
+                          setState(() => _childAssessmentData = updated),
+                    ),
+                  ),
+
+                // Status bar + CTA row
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
                   sliver: SliverToBoxAdapter(
@@ -543,19 +617,45 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                             ),
                           ),
 
-                        // ── Start Checkup button ───────────────────────────
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton(
-                            onPressed: _onContinue,
-                            style: FilledButton.styleFrom(
-                              backgroundColor: AppColors.pink,
-                              foregroundColor: AppColors.textOnNavy,
+                        // ── Vaccination CTA (under-5 only) ─────────────────
+                        // For children the vaccination button is the primary
+                        // CTA; in embedded mode it also advances the visit flow
+                        // to the vaccination step. The "Start Checkup" button
+                        // is hidden for under-5 patients.
+                        if (_patientContext!.isUnder5) ...[
+                          const SizedBox(height: 4),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton(
+                              onPressed: _onVaccination,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: AppColors.pink,
+                                foregroundColor: AppColors.textOnNavy,
+                              ),
+                              child: const Text(
+                                ChildAssessmentStrings.vaccinationCta,
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
                             ),
-                            child: const Text(
-                                SymptomPickerStrings.ctaStartCheckup),
                           ),
-                        ),
+                        ],
+
+                        // ── Start Checkup button (adults only) ────────────
+                        if (!(_patientContext!.isUnder5)) ...[
+                          const SizedBox(height: 4),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton(
+                              onPressed: _onContinue,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: AppColors.pink,
+                                foregroundColor: AppColors.textOnNavy,
+                              ),
+                              child: const Text(
+                                  SymptomPickerStrings.ctaStartCheckup),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -1201,26 +1301,35 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
         final hasEnrolledFilter =
             vm.patientContext.activeProgrammes.isNotEmpty;
 
-        // Determine which codes to show in the grid.
-        // Always include already-selected codes so symptoms picked via search
-        // remain visible after the search clears.
-        final List<String> gridCodes;
+        // Determine which sections to show in the grid.
+        // Searching → one flat headerless section of matches. Otherwise →
+        // per-programme sections plus any selected codes that fall outside
+        // the default list (e.g. found via search from other programmes).
+        final List<(String?, List<String>)> gridSections;
         if (isSearching) {
-          gridCodes = searchPool
-              .where(
-                (c) => TriageStrings.symptomLabel(c)
-                    .toLowerCase()
-                    .contains(_query),
-              )
-              .toList();
+          gridSections = [
+            (
+              null,
+              searchPool
+                  .where(
+                    (c) => TriageStrings.symptomLabel(c)
+                        .toLowerCase()
+                        .contains(_query),
+                  )
+                  .toList(),
+            ),
+          ];
         } else {
-          // Merge default codes with any selected codes that fall outside the
-          // default list (e.g. symptoms found via search from other programmes).
           final extraSelected = selected
               .where((c) => !defaultCodes.contains(c))
               .toList();
-          gridCodes = [...defaultCodes, ...extraSelected];
+          gridSections = [
+            for (final s in vm.groupedVocabSections) (null, s.codes),
+            if (extraSelected.isNotEmpty) (null, extraSelected),
+          ];
         }
+        final gridIsEmpty =
+            gridSections.every((s) => s.$2.isEmpty);
 
         return Container(
           decoration: BoxDecoration(
@@ -1282,13 +1391,11 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
 
               const SizedBox(height: 14),
 
-              // ── Chip grid ─────────────────────────────────────────────────
-              if (gridCodes.isEmpty)
+              // ── Chip grid (single flat Wrap — no per-section gaps) ───────
+              if (gridIsEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Text(
-                    // Distinguish intentional empty default (no search yet)
-                    // from a genuine no-results search response.
                     isSearching
                         ? SymptomPickerStrings.searchNoResults
                         : SymptomPickerStrings.searchOnlyEmptyHint,
@@ -1302,7 +1409,8 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
-                  children: gridCodes
+                  children: gridSections
+                      .expand((s) => s.$2)
                       .map(
                         (code) => _PickerChip(
                           key: ValueKey('triage_chip_$code'),

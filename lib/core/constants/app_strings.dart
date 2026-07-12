@@ -299,6 +299,7 @@ abstract final class Step2AsrStrings {
   static const String tapToEdit =
       'Review highlighted fields in the form below.';
   static const String unmappedLabel = 'Not matched:';
+  static const String aiFilledBadge = 'AI · verify';
 
   static String filledCount(int n) => '$n $fieldsFilled';
 }
@@ -508,6 +509,31 @@ abstract final class HouseholdListStrings {
       : '+$n other household member${n == 1 ? '' : 's'}';
   static String get enrolledTag =>
       AppLocale.isBangla ? 'নথিভুক্ত' : 'Enrolled';
+
+  // Households / Members tab strip
+  static String get tabHouseholds =>
+      AppLocale.isBangla ? 'পরিবার' : 'Households';
+  static String get tabMembers => AppLocale.isBangla ? 'সদস্য' : 'Members';
+  static String myPatientsCount(int n) =>
+      AppLocale.isBangla ? 'আমার রোগী ($n)' : 'My Patients ($n)';
+  static String allMembersCount(int n) =>
+      AppLocale.isBangla ? 'সব সদস্য ($n)' : 'All Members ($n)';
+  static String get noPatientsAssigned => AppLocale.isBangla
+      ? 'আপনার কোনো রোগী নির্ধারিত নেই'
+      : 'No patients assigned to you';
+  static String searchResultsEmpty(String query) => AppLocale.isBangla
+      ? '"$query" এর জন্য কোনো ফলাফল নেই'
+      : 'No results for "$query"';
+
+  // Manual server refresh
+  static String refreshSummary(int patients, int assessments, int followUps) =>
+      AppLocale.isBangla
+          ? 'হালনাগাদ: $patients জন রোগী · $assessments টি মূল্যায়ন · $followUps টি ফলো-আপ'
+          : 'Updated: $patients patients · $assessments assessments · '
+              '$followUps follow-ups';
+  static String refreshFailed(String error) => AppLocale.isBangla
+      ? 'রিফ্রেশ ব্যর্থ হয়েছে: $error'
+      : 'Refresh failed: $error';
 }
 
 /// Household detail screen strings.
@@ -692,6 +718,11 @@ abstract final class PatientContextStrings {
   static String get urgentBadge => AppLocale.isBangla ? 'জরুরি' : 'URGENT';
   static String ageLabel(int age) =>
       AppLocale.isBangla ? 'বয়স $age' : 'Age $age';
+  static String ageMonthsLabel(int months) => AppLocale.isBangla
+      ? '$months মাস'
+      : '$months month${months == 1 ? '' : 's'}';
+  static String get ageUnderOneYear =>
+      AppLocale.isBangla ? '< ১ বছর' : '< 1 yr';
   static String householdFallback(String householdId) =>
       AppLocale.isBangla ? 'পরিবার $householdId' : 'HH $householdId';
   static String get pregnantChip =>
@@ -833,6 +864,10 @@ abstract final class PatientProfileStrings {
       AppLocale.isBangla ? 'সম্পূর্ণ প্রোফাইল দেখুন' : 'Show full profile';
   static String get hide =>
       AppLocale.isBangla ? 'প্রোফাইল লুকান' : 'Hide profile';
+  static String get servicesProvidedTitle =>
+      AppLocale.isBangla ? 'প্রদত্ত সেবা' : 'Services Provided';
+  static String get recentStatusTitle =>
+      AppLocale.isBangla ? 'সাম্প্রতিক অবস্থা' : 'Recent Status';
 
   static String get sectionIdentity =>
       AppLocale.isBangla ? 'পরিচয়' : 'Identity';
@@ -3497,6 +3532,11 @@ abstract final class SymptomPickerStrings {
   static const String ctaStartCheckup = 'Start Checkup →';
   static const String ctaRoutine = 'Start Checkup →';
 
+  // ── No-symptom guard ────────────────────────────────────────────────────
+  static const String noSymptomsGuard =
+      'No symptoms selected — please check symptoms before proceeding.';
+  static const String noSymptomsGuardCta = 'Continue anyway';
+
   // ── Status bar above CTA ────────────────────────────────────────────────
   static String symptomsSelectedStatus(int n) =>
       '$n ${n == 1 ? 'symptom' : 'symptoms'} selected';
@@ -3524,6 +3564,12 @@ abstract final class SymptomPickerStrings {
   static const String searchSymptomsHint = 'Search symptoms…';
   static const String searchMoreHint = 'Type 3+ letters to find more symptoms';
   static const String searchNoResults = 'No symptoms found';
+
+  /// Header for the shared (cross-programme) symptom section in the grid.
+  static const String sectionGeneral = 'General';
+
+  /// Header for selected symptoms that fall outside the default sections.
+  static const String sectionFromSearch = 'Added from search';
 
   /// Shown below the default chip grid when enrolled-programme filtering is
   /// active, to let the SK know general + other-programme symptoms are via search.
@@ -4668,4 +4714,76 @@ abstract final class LinkMemberStrings {
   static const String submitting = 'Submitting…';
   static const String successMessage = 'Member linked successfully';
   static const String errorPrefix = 'Could not link member';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EPI / Immunisation timeline
+// ─────────────────────────────────────────────────────────────────────────────
+abstract final class EpiStrings {
+  EpiStrings._();
+
+  static const String screenTitle = 'Vaccination';
+  static const String vaccinationCta = 'Vaccination';
+  static const String noDobError =
+      'Date of birth not available — cannot compute schedule.';
+
+  static String overdueBanner(int count) =>
+      '$count ${count == 1 ? 'vaccine' : 'vaccines'} overdue · Action needed today.';
+
+  static const String statusCompleted = 'Given';
+  static const String statusDueNow = 'Due now';
+  static const String statusUpcoming = 'Upcoming';
+  static const String statusNotYetDue = 'Not yet due';
+  static const String statusLocked = 'Locked';
+
+  static const String updateStatusCta = 'Update Status →';
+  static const String vaccinesDueLabel = 'Vaccines due at this milestone';
+  static const String dateAdministered = 'Date Administered';
+  static const String notesOptional = 'Notes (Optional)';
+  static const String notesHint = 'e.g. Child was well, no adverse reaction…';
+  static const String markCompleted = 'Mark as Completed';
+  static const String cancel = 'Cancel';
+  static const String submitCta = 'Submit';
+  static const String givenOn = 'Given';
+  static const String doneVisitCta = 'Done → Continue Visit';
+}
+
+abstract final class ChildAssessmentStrings {
+  ChildAssessmentStrings._();
+
+  static const String sectionTitle = 'Child Assessment';
+  static const String q6Label = 'Does the child have any congenital defect?';
+  static const String q7Label = 'Weight';
+  static const String q7Unit = 'kg';
+  static const String q7Hint = 'e.g. 6.5';
+  static const String q8Label = 'Is the child breastfeeding?';
+  static const String q9Label =
+      'In the past 24 hours, was the child given additional food?';
+  static const String q10Label = 'Has the child received vaccines?';
+  static const String q11Label = 'Has the child taken deworming medicine?';
+  static const String q12Label = 'Any Illness/Complications?';
+  static const String q13Label = 'If any complication, specify';
+  static const String q13SelectAll = 'Select all that apply';
+  static const String q14Label = 'Has referral been made?';
+  static const String q15Label = 'Referral place';
+  static const String yesOption = 'Yes';
+  static const String noOption = 'No';
+  static const String vaccinationCta = '💉  Vaccination  →';
+
+  static const List<String> complicationOptions = [
+    'Diarrhea',
+    'Pneumonia',
+    'Cannot stand or walk',
+    'Cannot maintain body balance',
+    'Cannot speak two meaningful words',
+  ];
+
+  static const List<String> referralPlaces = [
+    'Medical College Hospital',
+    'Government Hospital',
+    'Upazila Health Complex',
+    'Private Hospital/Clinic',
+    'Health & Family Welfare Center',
+    'Community Clinic',
+  ];
 }

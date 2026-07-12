@@ -402,6 +402,120 @@ void main() {
     });
   });
 
+  group('TriageViewModel Grouped Sections + Demographic Gates', () {
+    SymptomSection? sectionFor(TriageViewModel vm, Programme? p) {
+      for (final s in vm.groupedVocabSections) {
+        if (s.programme == p) return s;
+      }
+      return null;
+    }
+
+    test('0-yo male baby enrolled in ANC+NCD → no maternal, no NCD symptoms',
+        () {
+      final ctx = PatientContext(
+        patientId: 'gate-1',
+        ageMonths: 0,
+        sex: Sex.male,
+        isPregnant: false,
+        activeProgrammes: {Programme.anc, Programme.ncd},
+      );
+      final vm = TriageViewModel(patientContext: ctx);
+
+      expect(sectionFor(vm, Programme.anc), isNull);
+      expect(sectionFor(vm, Programme.ncd), isNull);
+      expect(vm.enrolledProgrammeVocabCodes, isNot(contains('heavy_bleeding')));
+      expect(vm.enrolledProgrammeVocabCodes, isNot(contains('chest_pain')));
+    });
+
+    test('female child (4y) enrolled in ANC → maternal hidden by age gate',
+        () {
+      final ctx = PatientContext(
+        patientId: 'gate-2',
+        ageMonths: 48,
+        sex: Sex.female,
+        isPregnant: false,
+        activeProgrammes: {Programme.anc},
+      );
+      final vm = TriageViewModel(patientContext: ctx);
+
+      expect(sectionFor(vm, Programme.anc), isNull);
+      expect(vm.enrolledProgrammeVocabCodes,
+          isNot(contains('reduced_fetal_movement')));
+    });
+
+    test('age unknown + enrolled NCD → NCD symptoms still shown', () {
+      final ctx = PatientContext(
+        patientId: 'gate-3',
+        ageMonths: 0,
+        ageKnown: false,
+        sex: Sex.male,
+        isPregnant: false,
+        activeProgrammes: {Programme.ncd},
+      );
+      final vm = TriageViewModel(patientContext: ctx);
+
+      final ncd = sectionFor(vm, Programme.ncd);
+      expect(ncd, isNotNull);
+      expect(ncd!.codes, contains('chest_pain'));
+    });
+
+    test('adult female ANC enrolled → separate ANC and General sections', () {
+      final ctx = PatientContext(
+        patientId: 'gate-4',
+        ageMonths: 300, // 25y
+        sex: Sex.female,
+        isPregnant: true,
+        activeProgrammes: {Programme.anc},
+      );
+      final vm = TriageViewModel(patientContext: ctx);
+
+      final anc = sectionFor(vm, Programme.anc);
+      final general = sectionFor(vm, null);
+      expect(anc, isNotNull);
+      expect(anc!.codes, contains('reduced_fetal_movement'));
+      // PNC-only codes stay out of an ANC-only patient's default grid.
+      expect(anc.codes, isNot(contains('breast_pain')));
+      // ANC+PNC shared codes need enrollment in both (unchanged rule).
+      expect(anc.codes, isNot(contains('heavy_bleeding')));
+      expect(general, isNotNull);
+      expect(general!.codes, contains('fever'));
+      // No section shares codes with another (deduped assignment).
+      final all = vm.groupedVocabSections.expand((s) => s.codes).toList();
+      expect(all.toSet().length, all.length);
+    });
+
+    test('ANC+NCD enrolled adult female → both sections, NCD codes separate',
+        () {
+      final ctx = PatientContext(
+        patientId: 'gate-5',
+        ageMonths: 420, // 35y
+        sex: Sex.female,
+        isPregnant: true,
+        activeProgrammes: {Programme.anc, Programme.ncd},
+      );
+      final vm = TriageViewModel(patientContext: ctx);
+
+      expect(sectionFor(vm, Programme.anc)!.codes,
+          contains('swelling_face_hands'));
+      expect(sectionFor(vm, Programme.ncd)!.codes, contains('foot_wound'));
+      expect(sectionFor(vm, null)!.codes, contains('headache'));
+    });
+
+    test('no enrolled programmes → no sections (search-only, unchanged)', () {
+      final ctx = PatientContext(
+        patientId: 'gate-6',
+        ageMonths: 300,
+        sex: Sex.female,
+        isPregnant: false,
+        activeProgrammes: {},
+      );
+      final vm = TriageViewModel(patientContext: ctx);
+
+      expect(vm.groupedVocabSections, isEmpty);
+      expect(vm.enrolledProgrammeVocabCodes, isEmpty);
+    });
+  });
+
   group('TriageViewModel Notifier', () {
     test('toggleSymptom notifies listeners', () {
       final ctx = PatientContext(

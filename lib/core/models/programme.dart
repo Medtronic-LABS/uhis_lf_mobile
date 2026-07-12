@@ -59,6 +59,12 @@ enum Programme {
         return Programme.anc;
       case 'PNC':
       case 'POSTNATAL':
+      // Expanded form-type names used by the unified Step 2 form
+      // (visit_form_screen._toFormTypes expands pnc → pncMother + pncChild).
+      case 'PNCMOTHER':
+      case 'PNC_MOTHER':
+      case 'PNCCHILD':
+      case 'PNC_CHILD':
         return Programme.pnc;
       case 'NCD':
       case 'HYPERTENSION':

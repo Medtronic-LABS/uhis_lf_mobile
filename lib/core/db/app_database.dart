@@ -21,7 +21,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 23;
+  static const int schemaVersion = 24;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -398,6 +398,7 @@ class AppDatabase {
       )''');
 
     // v9 — Assessment draft table for offline-first sectioned assessment flow.
+    // v24 added field_sources (AI-fill provenance).
     await db.execute('''
       CREATE TABLE $tableAssessmentDraft (
         encounter_id TEXT PRIMARY KEY,
@@ -407,6 +408,7 @@ class AppDatabase {
         skipped_pathways TEXT,
         field_values TEXT NOT NULL,
         section_status TEXT NOT NULL,
+        field_sources TEXT,
         created_at INTEGER,
         updated_at INTEGER
       )''');
@@ -1081,6 +1083,17 @@ class AppDatabase {
       try {
         await db.execute(
           'ALTER TABLE $tablePregnancySnapshot ADD COLUMN lmp_date INTEGER',
+        );
+      } catch (_) {/* already present */}
+    }
+
+    if (from < 24) {
+      // v24 — AI provenance on visit drafts: which draft values were filled
+      // by the realtime ASR scribe (sources + verbatim transcript segments),
+      // so restored drafts keep the "AI-filled — verify" marking.
+      try {
+        await db.execute(
+          'ALTER TABLE $tableAssessmentDraft ADD COLUMN field_sources TEXT',
         );
       } catch (_) {/* already present */}
     }

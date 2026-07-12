@@ -30,6 +30,7 @@ import 'core/db/encounter_dao.dart';
 import 'core/db/follow_up_dao.dart';
 import 'core/db/household_dao.dart';
 import 'core/db/immunisation_dao.dart';
+import 'features/visit/immunisation/immunisation_repository.dart';
 import 'core/db/local_assessment_dao.dart';
 import 'core/db/local_dashboard_repository.dart';
 import 'core/db/member_dao.dart';
@@ -159,6 +160,8 @@ class _UhisNextAppState extends State<UhisNextApp>
       PatientProgrammesDao(widget.appDb);
   late final FollowUpDao _followUpDao = FollowUpDao(widget.appDb);
   late final ImmunisationDao _immDao = ImmunisationDao(widget.appDb);
+  late final ImmunisationRepository _immRepo =
+      ImmunisationRepository(widget.api, _immDao);
   late final AssessmentDao _assessmentDao = AssessmentDao(widget.appDb);
   late final LocalAssessmentDao _localAssessmentDao =
       LocalAssessmentDao(widget.appDb);
@@ -464,6 +467,9 @@ class _UhisNextAppState extends State<UhisNextApp>
         // SK → SS → sub-village hierarchy (session cache, invalidated on logout)
         ChangeNotifierProvider<UserHierarchyService>.value(
             value: _userHierarchy),
+        // EPI immunisation DAO + repository — exposed for ImmunisationTimelineScreen + PatientContextBuilder
+        Provider<ImmunisationDao>.value(value: _immDao),
+        Provider<ImmunisationRepository>.value(value: _immRepo),
         // Micro-coaching: module library + progress (offline-first, syncs from spice-coaching)
         ChangeNotifierProvider<CoachingRepository>.value(value: _coachingRepo),
       ],

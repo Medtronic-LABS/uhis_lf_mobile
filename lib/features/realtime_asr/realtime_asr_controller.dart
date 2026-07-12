@@ -114,7 +114,10 @@ class RealtimeAsrController extends ChangeNotifier {
     _formSchema = schema;
   }
 
-  Future<void> start({String language = 'bn-IN'}) async {
+  /// [assessmentType] routes server-side extraction to the programme-specific
+  /// prompt (ncd/anc/…) so replies arrive as `"form_fill"` — pass null for
+  /// generic symptom extraction (Step 1 behaviour).
+  Future<void> start({String language = 'bn-IN', String? assessmentType}) async {
     if (isActive) return;
 
     if (!realtimeAsrSupported) {
@@ -148,7 +151,10 @@ class RealtimeAsrController extends ChangeNotifier {
     }
 
     try {
-      final info = await _service.connectionInfo(language: language);
+      final info = await _service.connectionInfo(
+        language: language,
+        assessmentType: assessmentType,
+      );
       debugPrint('[RealtimeASR] connecting to ${info.uri} headers=${info.headers.keys}');
       _channel = connectRealtimeChannel(info.uri, info.headers);
       _wsSub = _channel!.stream.listen(

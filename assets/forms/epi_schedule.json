@@ -1,0 +1,210 @@
+[
+  {
+    "milestone": "At Birth",
+    "offsetType": "day",
+    "offsetValue": 0,
+    "doseClosureWeeks": 4,
+    "vaccines": [
+      {
+        "code": "BCG",
+        "display": "BCG",
+        "category": "birth",
+        "description": "Bacille Calmette-Guérin (Tuberculosis)",
+        "route": "ID · Left upper arm",
+        "cardGroup": 1
+      },
+      {
+        "code": "OPV0",
+        "display": "OPV-0",
+        "category": "opv",
+        "description": "Polio (Oral, Birth Dose)",
+        "route": "Oral (2 drops)",
+        "cardGroup": 2
+      },
+      {
+        "code": "HepB0",
+        "display": "Hepatitis B",
+        "category": "birth",
+        "description": "Hepatitis B (Birth Dose)",
+        "route": "IM · Right thigh",
+        "cardGroup": 2
+      }
+    ]
+  },
+  {
+    "milestone": "6 Weeks",
+    "offsetType": "week",
+    "offsetValue": 6,
+    "doseClosureWeeks": 4,
+    "vaccines": [
+      {
+        "code": "PENTA1",
+        "display": "Pentavalent-1",
+        "category": "penta",
+        "description": "Diphtheria, Pertussis, Tetanus, Hepatitis B, Hib",
+        "route": "IM · Left/Right Thigh",
+        "cardGroup": 1
+      },
+      {
+        "code": "OPV1",
+        "display": "OPV-1",
+        "category": "opv",
+        "description": "Polio (Oral)",
+        "route": "Oral (2 drops)",
+        "cardGroup": 2
+      },
+      {
+        "code": "PCV1",
+        "display": "PCV-1",
+        "category": "pcv",
+        "description": "Pneumococcal (Pneumonia)",
+        "route": "IM · Left/Right Thigh",
+        "cardGroup": 2
+      },
+      {
+        "code": "ROTA1",
+        "display": "Rota-1",
+        "category": "rota",
+        "description": "Rotavirus (Diarrhoea)",
+        "route": "Oral (1.5 ml)",
+        "cardGroup": 3
+      }
+    ]
+  },
+  {
+    "milestone": "10 Weeks",
+    "offsetType": "week",
+    "offsetValue": 10,
+    "doseClosureWeeks": 4,
+    "vaccines": [
+      {
+        "code": "PENTA2",
+        "display": "Pentavalent-2",
+        "category": "penta",
+        "description": "Diphtheria, Pertussis, Tetanus, Hepatitis B, Hib",
+        "route": "IM · Left/Right Thigh",
+        "cardGroup": 1
+      },
+      {
+        "code": "OPV2",
+        "display": "OPV-2",
+        "category": "opv",
+        "description": "Polio (Oral)",
+        "route": "Oral (2 drops)",
+        "cardGroup": 2
+      },
+      {
+        "code": "PCV2",
+        "display": "PCV-2",
+        "category": "pcv",
+        "description": "Pneumococcal (Pneumonia)",
+        "route": "IM · Left/Right Thigh",
+        "cardGroup": 2
+      },
+      {
+        "code": "ROTA2",
+        "display": "Rota-2",
+        "category": "rota",
+        "description": "Rotavirus (Diarrhoea)",
+        "route": "Oral (1.5 ml)",
+        "cardGroup": 3
+      }
+    ]
+  },
+  {
+    "milestone": "14 Weeks",
+    "offsetType": "week",
+    "offsetValue": 14,
+    "doseClosureWeeks": 4,
+    "vaccines": [
+      {
+        "code": "PENTA3",
+        "display": "Pentavalent-3",
+        "category": "penta",
+        "description": "Diphtheria, Pertussis, Tetanus, Hepatitis B, Hib",
+        "route": "IM · Left/Right Thigh",
+        "cardGroup": 1
+      },
+      {
+        "code": "OPV3",
+        "display": "OPV-3",
+        "category": "opv",
+        "description": "Polio (Oral)",
+        "route": "Oral (2 drops)",
+        "cardGroup": 2
+      },
+      {
+        "code": "PCV3",
+        "display": "PCV-3",
+        "category": "pcv",
+        "description": "Pneumococcal (Pneumonia)",
+        "route": "IM · Left/Right Thigh",
+        "cardGroup": 2
+      },
+      {
+        "code": "FIPV1",
+        "display": "fIPV — Dose 1",
+        "category": "ipv",
+        "description": "Fractional Inactivated Polio Vaccine",
+        "route": "ID · Right Deltoid",
+        "cardGroup": 3
+      }
+    ]
+  },
+  {
+    "milestone": "9 Months",
+    "offsetType": "month",
+    "offsetValue": 9,
+    "doseClosureWeeks": 4,
+    "vaccines": [
+      {
+        "code": "MR1",
+        "display": "MR Vaccine — Dose 1",
+        "category": "mr",
+        "description": "Measles-Rubella",
+        "route": "SC · Left upper arm",
+        "cardGroup": 1
+      },
+      {
+        "code": "TCV",
+        "display": "TCV",
+        "category": "tcv",
+        "description": "Typhoid Conjugate Vaccine",
+        "route": "IM · Left/Right Thigh",
+        "cardGroup": 2
+      },
+      {
+        "code": "FIPV2",
+        "display": "fIPV — Dose 2",
+        "category": "ipv",
+        "description": "Fractional Inactivated Polio Vaccine",
+        "route": "ID · Right Deltoid",
+        "cardGroup": 2
+      },
+      {
+        "code": "VITA1",
+        "display": "Vitamin A",
+        "category": "vita",
+        "description": "Vitamin A Supplementation (1st dose)",
+        "route": "Oral (100,000 IU)",
+        "cardGroup": 3
+      }
+    ]
+  },
+  {
+    "milestone": "15 Months",
+    "offsetType": "month",
+    "offsetValue": 15,
+    "doseClosureWeeks": 4,
+    "vaccines": [
+      {
+        "code": "MR2",
+        "display": "MR Vaccine — Dose 2",
+        "category": "mr",
+        "description": "Measles-Rubella Booster",
+        "route": "SC · Left upper arm",
+        "cardGroup": 1
+      }
+    ]
+  }
+]

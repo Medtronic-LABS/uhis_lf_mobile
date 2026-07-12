@@ -16,6 +16,17 @@ class Endpoints {
   /// Postman: `patient-controller/searchPatient` → `{{spice_url}}/patient/search`.
   static const String patientSearch = '/spice-service/patient/search';
 
+  // ── Spice: immunisation / EPI ─────────────────────────────────────────────
+  /// Fetch immunisation schedule for a patient. Matches Android POST immunisation/list.
+  static const String immunisationList = '/spice-service/immunisation/list';
+
+  /// Push updated vaccine statuses for a visit encounter. Matches Android POST immunisation/create.
+  static const String immunisationCreate = '/spice-service/immunisation/create';
+
+  /// Post immunisation visit summary (vaccinated count, next visit date). Matches Android POST immunisation/summary-create.
+  static const String immunisationSummaryCreate =
+      '/spice-service/immunisation/summary-create';
+
   // ── Offline-service: bulk sync ────────────────────────────────────────────
   /// Bulk pull — households, members, followUps, householdMemberLinks.
   static const String offlineSyncFetch =
