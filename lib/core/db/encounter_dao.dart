@@ -191,8 +191,8 @@ class EncounterDao {
   }) async {
     final rows = await _db.db.query(
       AppDatabase.tableEncounters,
-      where: 'patient_id = ?',
-      whereArgs: [patientId],
+      where: 'patient_id = ? AND status = ?',
+      whereArgs: [patientId, EncounterStatus.completed.name],
       orderBy: 'started_at DESC',
       limit: limit,
     );
