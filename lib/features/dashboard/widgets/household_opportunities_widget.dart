@@ -97,7 +97,7 @@ class HouseholdOpportunitiesWidget extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       visualDensity: VisualDensity.compact,
                     ),
-                    child: const Text('View all', style: TextStyle(fontSize: 12)),
+                    child: Text(MissionDashboardStrings.viewAll, style: const TextStyle(fontSize: 12)),
                   ),
               ],
             ),

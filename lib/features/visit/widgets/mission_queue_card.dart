@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/mission/programme_reason.dart';
 import '../../../core/models/dashboard_tier.dart';
 import '../../../core/models/mission_queue_item.dart';
 import '../../../core/models/programme.dart';
@@ -302,6 +303,150 @@ class MissionReasonBadge extends StatelessWidget {
       return (const Color(0xFFF0FDF4), const Color(0xFF065F46));
     default:
       return (const Color(0xFFEEF0FF), const Color(0xFF1B2B5E));
+  }
+}
+
+/// Flush member row for a patient with no active mission-queue entry —
+/// name+age/gender+programme badge, optional address line, optional phone
+/// line — no avatar, no card chrome of its own (always embedded inside a
+/// caller's own card). Reuses the same `AppTextStyles.worklist*` tokens
+/// `MissionQueueCard` uses so the two widgets never visually drift, and the
+/// same `programmeReason`/`programmeBadgeColors` inputs so a patient's badge
+/// reads identically whether the household list, the household detail
+/// screen, or (via `MissionQueueCard`) the dashboard renders them.
+///
+/// `onTap` is required rather than optional/shared: each caller decides its
+/// own tap behavior (e.g. the household list navigates to Patient Details,
+/// the household detail screen opens an in-place member sheet) — sharing a
+/// default here risks one screen silently adopting another's navigation.
+class PatientBadgeRow extends StatelessWidget {
+  const PatientBadgeRow({
+    super.key,
+    required this.name,
+    required this.onTap,
+    this.age,
+    this.gender,
+    this.phoneNumber,
+    this.programmes = const {},
+    this.ancVisitCount = 0,
+    this.pncVisitCount = 0,
+    this.householdNo,
+    this.householdName,
+  });
+
+  final String? name;
+  final int? age;
+  final String? gender;
+  final String? phoneNumber;
+  final Set<Programme> programmes;
+  final int ancVisitCount;
+  final int pncVisitCount;
+
+  /// Household-context line (e.g. "House #12, Rafiqul Islam's Household") —
+  /// omit both when the caller already shows the member inside a known
+  /// household (e.g. the household detail screen's own roster).
+  final String? householdNo;
+  final String? householdName;
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    // Same shared logic the dashboard's real MissionQueueCard badge uses —
+    // visit-count-aware, not an approximation of it.
+    final badgeLabel = programmeReason(
+      programmes: programmes,
+      ancVisitCount: ancVisitCount,
+      pncVisitCount: pncVisitCount,
+    );
+    final (badgeBg, badgeFg) = programmeBadgeColors(
+      primaryProgrammeOf(programmes),
+    );
+
+    final address = [
+      householdNo != null ? 'House #$householdNo' : null,
+      householdName,
+    ].whereType<String>().join(', ');
+
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 6,
+                    runSpacing: 3,
+                    children: [
+                      Text(
+                        name ?? CommonStrings.unnamed,
+                        style: AppTextStyles.worklistPatientName,
+                      ),
+                      if (age != null || gender != null)
+                        Text(
+                          [
+                            if (age != null) '$age',
+                            if (gender != null)
+                              gender!.substring(0, 1).toUpperCase(),
+                          ].join('/'),
+                          style: AppTextStyles.worklistPatientMeta,
+                        ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: badgeBg,
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: Text(
+                          badgeLabel,
+                          style: TextStyle(
+                            fontFamily: 'NunitoSans',
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: badgeFg,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (address.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        address,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.worklistAddress.copyWith(
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ),
+                  if (phoneNumber != null && phoneNumber!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        phoneNumber!,
+                        style: AppTextStyles.worklistPhone.copyWith(
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

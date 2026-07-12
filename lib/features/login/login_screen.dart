@@ -140,7 +140,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               .withValues(alpha: 0.6),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Text(
+                        child: Text(
                           LoginStrings.fromLockBanner,
                           textAlign: TextAlign.center,
                         ),
@@ -150,7 +150,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         OutlinedButton.icon(
                           onPressed: busy ? null : () => context.go('/lock'),
                           icon: const Icon(Icons.fingerprint),
-                          label: const Text(LoginStrings.useDeviceUnlock),
+                          label: Text(LoginStrings.useDeviceUnlock),
                         ),
                       if (showPin) ...[
                         if (showBio) const SizedBox(height: 8),
@@ -179,9 +179,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       controller: _userCtl,
                       keyboardType: TextInputType.emailAddress,
                       autocorrect: false,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: LoginStrings.usernameLabel,
-                        border: OutlineInputBorder(),
+                        border: const OutlineInputBorder(),
                       ),
                       validator: (v) => (v == null || v.trim().isEmpty)
                           ? CommonStrings.required
@@ -221,7 +221,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               width: 20,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Text(LoginStrings.signIn),
+                          : Text(LoginStrings.signIn),
                     ),
                     // Medtronic Labs branding + logo temporarily hidden.
                     // const SizedBox(height: 48),

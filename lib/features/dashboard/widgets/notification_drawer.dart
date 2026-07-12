@@ -67,13 +67,13 @@ class _NotificationDrawerState extends State<_NotificationDrawer> {
             child: Row(
               children: [
                 Text(
-                  'Notifications',
+                  MissionDashboardStrings.notificationsTitle,
                   style: AppTextStyles.listTitle,
                 ),
                 const Spacer(),
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Close'),
+                  child: Text(MissionDashboardStrings.close),
                 ),
               ],
             ),
@@ -102,7 +102,7 @@ class _NotificationDrawerState extends State<_NotificationDrawer> {
                             size: 48, color: AppColors.textMuted),
                         const SizedBox(height: 12),
                         Text(
-                          'No new notifications',
+                          MissionDashboardStrings.noNewNotifications,
                           style: TextStyle(
                             color: AppColors.textMuted,
                             fontSize: 14,
@@ -122,8 +122,8 @@ class _NotificationDrawerState extends State<_NotificationDrawer> {
                         icon: Icons.warning_rounded,
                         iconColor: AppColors.statusCritical,
                         iconBg: AppColors.statusCritical.withValues(alpha: 0.1),
-                        title: 'CCE escalations',
-                        subtitle: '$criticalCount critical referral${criticalCount == 1 ? '' : 's'} need immediate attention',
+                        title: MissionDashboardStrings.cceEscalations,
+                        subtitle: MissionDashboardStrings.criticalReferralsSubtitle(criticalCount),
                         onTap: () {
                           Navigator.pop(context);
                           Navigator.pushNamed(context, '/referrals');
@@ -135,7 +135,7 @@ class _NotificationDrawerState extends State<_NotificationDrawer> {
                         iconColor: AppColors.statusWarning,
                         iconBg: AppColors.statusWarning.withValues(alpha: 0.1),
                         title: MissionDashboardStrings.referralAlertsLabel,
-                        subtitle: '$activeCount pending referral${activeCount == 1 ? '' : 's'} awaiting follow-up',
+                        subtitle: MissionDashboardStrings.pendingReferralsSubtitle(activeCount),
                         onTap: () {
                           Navigator.pop(context);
                           Navigator.pushNamed(context, '/referrals');

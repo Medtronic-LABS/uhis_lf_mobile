@@ -528,6 +528,18 @@ abstract final class AppTextStyles {
     color: AppColors.onDarkLow,
   );
 
+  // Household list/detail navy headers: same size as headerTitle/headerSub
+  // but one weight lighter (w700 vs w800) — a deliberate, explicit choice for
+  // this feature area, not a duplicate of the dashboard's own header tokens.
+  static const TextStyle householdHeaderTitle = TextStyle(
+    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 20, fontWeight: FontWeight.w700,
+    color: Colors.white,
+  );
+  static const TextStyle householdHeaderSub = TextStyle(
+    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 13, fontWeight: FontWeight.w400,
+    color: AppColors.onDarkLow,
+  );
+
   // ─── Body / content ────────────────────────────────────────
   // default body: NunitoSans 13px w400 --text
   static const TextStyle body = TextStyle(
