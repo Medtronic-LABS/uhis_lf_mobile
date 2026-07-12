@@ -16,7 +16,6 @@ import '../../core/models/patient.dart';
 import '../../core/models/referral.dart';
 import '../../core/models/sla.dart';
 import '../../core/sync/offline_sync_service.dart';
-import '../cce/cce_bell_button.dart';
 import '../dashboard/mission_dashboard_repository.dart';
 import '../visit/visit_controller.dart';
 import '../visit/widgets/widgets.dart';
@@ -513,9 +512,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
               icon: const Icon(Icons.close),
               onPressed: _clearSelection,
               tooltip: 'Cancel selection',
-            )
-          else
-            const CceBellButton(),
+            ),
         ],
         bottom: TabBar(
           controller: _tabController,
