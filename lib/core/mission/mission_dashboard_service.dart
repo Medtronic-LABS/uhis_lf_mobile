@@ -13,7 +13,6 @@
 library;
 
 import '../api/cql_api_service.dart';
-import '../constants/app_strings.dart';
 import '../models/dashboard_tier.dart';
 import '../models/mission_brief.dart';
 import '../models/mission_queue_item.dart';
@@ -23,6 +22,7 @@ import '../models/sla.dart';
 import '../models/worklist_entry.dart';
 import '../models/referral.dart';
 import 'mission_pregnancy_facts.dart';
+import 'programme_reason.dart' as shared;
 
 /// Input data for computing mission brief and queue.
 class MissionInputData {
@@ -682,25 +682,15 @@ class MissionDashboardService {
       };
 
   /// Programme-smart, visit-count-aware dashboard card label (v13 design).
-  /// Replaces the raw risk-driver reason text with an actionable badge label.
+  /// Replaces the raw risk-driver reason text with an actionable badge
+  /// label. Delegates to the shared `programmeReason()` (also used by the
+  /// Patients/household list) so the two surfaces can't drift apart again.
   static String _programmeReason(WorklistEntry entry) {
-    final p = entry.programmes;
-    if (p.contains(Programme.anc)) {
-      return entry.ancVisitCount > 0
-          ? '${MissionDashboardStrings.ancVisitLabel} ${entry.ancVisitCount + 1} due'
-          : MissionDashboardStrings.enrolled;
-    }
-    if (p.contains(Programme.pnc)) {
-      return entry.pncVisitCount > 0
-          ? '${MissionDashboardStrings.pncVisitLabel} ${entry.pncVisitCount + 1} Due'
-          : MissionDashboardStrings.enrolled;
-    }
-    if (p.contains(Programme.imci) || p.contains(Programme.epi)) {
-      return MissionDashboardStrings.childImmunisation;
-    }
-    if (p.contains(Programme.ncd)) return MissionDashboardStrings.ncdCheckup;
-    if (p.contains(Programme.tb)) return MissionDashboardStrings.tbCheck;
-    return MissionDashboardStrings.newVisit;
+    return shared.programmeReason(
+      programmes: entry.programmes,
+      ancVisitCount: entry.ancVisitCount,
+      pncVisitCount: entry.pncVisitCount,
+    );
   }
 
   String _buildAiInsight(List<String> drivers) {

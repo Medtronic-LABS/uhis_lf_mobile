@@ -417,6 +417,12 @@ abstract final class AppShadows {
     BoxShadow(color: Color(0x0D000000), blurRadius: 6, offset: Offset(0, 2)),
   ];
 
+  /// Household card (v13 `renderHouseholds` card): 0 1px 6px rgba(0,0,0,0.06).
+  /// Distinct from [card] — same alpha, tighter blur/offset.
+  static const List<BoxShadow> householdCard = [
+    BoxShadow(color: Color(0x0F000000), blurRadius: 6, offset: Offset(0, 1)),
+  ];
+
   /// Stat box: 0 1px 4px rgba(0,0,0,0.05)
   static const List<BoxShadow> statBox = [
     BoxShadow(color: Color(0x0D000000), blurRadius: 4, offset: Offset(0, 1)),
@@ -513,12 +519,24 @@ abstract final class AppTextStyles {
   // ─── Header ────────────────────────────────────────────────
   // .header-title: Nunito 20px w800 white
   static const TextStyle headerTitle = TextStyle(
-    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 23, fontWeight: FontWeight.w800,
+    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 20, fontWeight: FontWeight.w800,
     color: Colors.white,
   );
   // .header-sub: NunitoSans 12px rgba(255,255,255,0.6)
   static const TextStyle headerSub = TextStyle(
-    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 14, fontWeight: FontWeight.w400,
+    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 13, fontWeight: FontWeight.w400,
+    color: AppColors.onDarkLow,
+  );
+
+  // Household list/detail navy headers: same size as headerTitle/headerSub
+  // but one weight lighter (w700 vs w800) — a deliberate, explicit choice for
+  // this feature area, not a duplicate of the dashboard's own header tokens.
+  static const TextStyle householdHeaderTitle = TextStyle(
+    fontFamily: 'Nunito', fontFamilyFallback: _bn, fontSize: 20, fontWeight: FontWeight.w700,
+    color: Colors.white,
+  );
+  static const TextStyle householdHeaderSub = TextStyle(
+    fontFamily: 'NunitoSans', fontFamilyFallback: _bn, fontSize: 13, fontWeight: FontWeight.w400,
     color: AppColors.onDarkLow,
   );
 

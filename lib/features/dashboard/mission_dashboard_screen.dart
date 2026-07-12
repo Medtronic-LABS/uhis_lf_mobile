@@ -6,11 +6,13 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../app/locale_provider.dart';
 import '../../app/theme.dart';
 import '../../app/theme_provider.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/i18n/app_locale.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/db/household_dao.dart';
 import '../../core/db/member_dao.dart';
@@ -323,7 +325,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final ans = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text(DashboardStrings.useDeviceUnlockTitle),
+        title: Text(DashboardStrings.useDeviceUnlockTitle),
         content: Text(
           supported
               ? DashboardStrings.biometricOfferSupported
@@ -332,11 +334,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text(DashboardStrings.notNow),
+            child: Text(DashboardStrings.notNow),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text(DashboardStrings.enable),
+            child: Text(DashboardStrings.enable),
           ),
         ],
       ),
@@ -344,7 +346,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (ans != true || !mounted) return;
     if (!supported) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(DashboardStrings.setUpScreenLock),
         ),
       );
@@ -355,7 +357,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       await auth.enrolBiometric();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(DashboardStrings.deviceUnlockEnabled)),
+        SnackBar(content: Text(DashboardStrings.deviceUnlockEnabled)),
       );
     } catch (e) {
       if (!mounted) return;
@@ -409,7 +411,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (patientId != null && _completedIds.contains(patientId)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("${item.patientName}'s visit already done today ✓"),
+          content: Text(
+            MissionDashboardStrings.completedVisitToast(item.patientName),
+          ),
           duration: const Duration(seconds: 2),
         ),
       );
@@ -420,7 +424,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         context.push('/referral/${item.referralId}');
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(MissionDashboardStrings.visitMissingPatient),
           ),
         );
@@ -708,14 +712,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 count: overflow,
                                 tier: overflowTier,
                                 onTap: () {
-                                  // Deep-link to /patients with the dominant
-                                  // overflow tier preselected as the filter
-                                  // chip. Router parses `?tier=` into
-                                  // `HouseholdListScreen.initialTier`.
-                                  final route = overflowTier == null
-                                      ? '/patients'
-                                      : '/patients?tier=${overflowTier.name}';
-                                  context.go(route);
+                                  // HouseholdListScreen no longer supports
+                                  // tier filtering (removed for parity with
+                                  // the v13 mockup's single household list),
+                                  // so this always lands on the unfiltered
+                                  // Patients tab now.
+                                  context.go('/patients');
                                 },
                               ),
                           ],
@@ -764,16 +766,16 @@ class _SettingsMenu extends StatelessWidget {
               final confirmBio = await showDialog<bool>(
                 context: ctx,
                 builder: (dlgCtx) => AlertDialog(
-                  title: const Text(DashboardStrings.confirmDisableDeviceUnlock),
-                  content: const Text(DashboardStrings.confirmDisableDeviceUnlockBody),
+                  title: Text(DashboardStrings.confirmDisableDeviceUnlock),
+                  content: Text(DashboardStrings.confirmDisableDeviceUnlockBody),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.of(dlgCtx).pop(false),
-                      child: const Text(DashboardStrings.cancel),
+                      child: Text(DashboardStrings.cancel),
                     ),
                     FilledButton(
                       onPressed: () => Navigator.of(dlgCtx).pop(true),
-                      child: const Text(DashboardStrings.disable),
+                      child: Text(DashboardStrings.disable),
                     ),
                   ],
                 ),
@@ -782,8 +784,7 @@ class _SettingsMenu extends StatelessWidget {
               await auth.disableBiometric();
               if (ctx.mounted) {
                 ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(
-                      content: Text(DashboardStrings.deviceUnlockDisabled)),
+                  SnackBar(content: Text(DashboardStrings.deviceUnlockDisabled)),
                 );
               }
               break;
@@ -799,7 +800,7 @@ class _SettingsMenu extends StatelessWidget {
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.of(dlgCtx).pop(false),
-                      child: const Text(DashboardStrings.cancel),
+                      child: Text(DashboardStrings.cancel),
                     ),
                     FilledButton(
                       onPressed: () => Navigator.of(dlgCtx).pop(true),
@@ -816,24 +817,47 @@ class _SettingsMenu extends StatelessWidget {
                 );
               }
               break;
-            case 'toggle_dark':
+            case 'appearance':
               final theme = ctx.read<ThemeProvider>();
-              await theme.toggleDarkMode();
+              final chosen = await _showOptionPicker<ThemeMode>(
+                context: ctx,
+                title: SettingsStrings.appearance,
+                current: theme.mode,
+                options: [
+                  (ThemeMode.light, SettingsStrings.lightMode),
+                  (ThemeMode.dark, SettingsStrings.darkMode),
+                  (ThemeMode.system, SettingsStrings.systemMode),
+                ],
+              );
+              if (chosen != null) await theme.setMode(chosen);
+              break;
+            case 'language':
+              final locale = ctx.read<LocaleProvider>();
+              final chosen = await _showOptionPicker<AppLanguage>(
+                context: ctx,
+                title: SettingsStrings.language,
+                current: locale.language,
+                options: [
+                  (AppLanguage.english, SettingsStrings.english),
+                  (AppLanguage.bangla, SettingsStrings.bangla),
+                ],
+              );
+              if (chosen != null) await locale.setLanguage(chosen);
               break;
             case 'logout':
               final confirmLogout = await showDialog<bool>(
                 context: ctx,
                 builder: (dlgCtx) => AlertDialog(
-                  title: const Text(DashboardStrings.confirmSignOut),
-                  content: const Text(DashboardStrings.confirmSignOutBody),
+                  title: Text(DashboardStrings.confirmSignOut),
+                  content: Text(DashboardStrings.confirmSignOutBody),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.of(dlgCtx).pop(false),
-                      child: const Text(DashboardStrings.cancel),
+                      child: Text(DashboardStrings.cancel),
                     ),
                     FilledButton(
                       onPressed: () => Navigator.of(dlgCtx).pop(true),
-                      child: const Text(DashboardStrings.signOut),
+                      child: Text(DashboardStrings.signOut),
                     ),
                   ],
                 ),
@@ -846,68 +870,184 @@ class _SettingsMenu extends StatelessWidget {
         },
         itemBuilder: (_) => [
           if (!auth.biometricEnabled)
-            const PopupMenuItem(
+            PopupMenuItem(
               value: 'enable_bio',
-              child: ListTile(
-                leading: Icon(Icons.fingerprint),
-                title: Text(DashboardStrings.enableDeviceUnlock),
+              child: _SettingsRow(
+                emoji: '🔓',
+                chipColor: AppColors.aiSurfaceStart,
+                title: DashboardStrings.enableDeviceUnlock,
               ),
             ),
           if (auth.biometricEnabled)
-            const PopupMenuItem(
+            PopupMenuItem(
               value: 'disable_bio',
-              child: ListTile(
-                leading: Icon(Icons.fingerprint_outlined),
-                title: Text(DashboardStrings.disableDeviceUnlock),
+              child: _SettingsRow(
+                emoji: '🔒',
+                chipColor: AppColors.aiSurfaceStart,
+                title: DashboardStrings.disableDeviceUnlock,
               ),
             ),
           if (!auth.pinEnabled)
-            const PopupMenuItem(
+            PopupMenuItem(
               value: 'set_pin',
-              child: ListTile(
-                leading: Icon(Icons.pin_outlined),
-                title: Text(PinStrings.enablePin),
+              child: _SettingsRow(
+                emoji: '🔢',
+                chipColor: AppColors.ancSurface,
+                title: PinStrings.enablePin,
               ),
             ),
           if (auth.pinEnabled)
-            const PopupMenuItem(
+            PopupMenuItem(
               value: 'remove_pin',
-              child: ListTile(
-                leading: Icon(Icons.pin_outlined),
-                title: Text(PinStrings.disablePin),
+              child: _SettingsRow(
+                emoji: '🔢',
+                chipColor: AppColors.ancSurface,
+                title: PinStrings.disablePin,
               ),
             ),
           PopupMenuItem(
-            value: 'toggle_dark',
+            value: 'appearance',
             child: Consumer<ThemeProvider>(
               builder: (_, theme, _) {
-                final IconData icon;
-                final String label;
-                if (theme.isSystem) {
-                  icon = Icons.dark_mode;
-                  label = SettingsStrings.darkMode;
-                } else if (theme.isLight) {
-                  icon = Icons.settings_brightness;
-                  label = SettingsStrings.systemMode;
+                final String subtitle;
+                if (theme.isDark) {
+                  subtitle = SettingsStrings.darkMode;
+                } else if (theme.isSystem) {
+                  subtitle = SettingsStrings.systemMode;
                 } else {
-                  icon = Icons.light_mode;
-                  label = SettingsStrings.lightMode;
+                  subtitle = SettingsStrings.lightMode;
                 }
-                return ListTile(leading: Icon(icon), title: Text(label));
+                return _SettingsRow(
+                  emoji: '🌓',
+                  chipColor: AppColors.catChildSurface,
+                  title: SettingsStrings.appearance,
+                  subtitle: subtitle,
+                );
               },
             ),
           ),
-          const PopupMenuItem(
+          PopupMenuItem(
+            value: 'language',
+            child: Consumer<LocaleProvider>(
+              builder: (_, locale, _) => _SettingsRow(
+                emoji: '🌐',
+                chipColor: AppColors.catHomeSurface,
+                title: SettingsStrings.language,
+                subtitle: locale.isBangla
+                    ? SettingsStrings.bangla
+                    : SettingsStrings.english,
+              ),
+            ),
+          ),
+          PopupMenuItem(
             value: 'logout',
-            child: ListTile(
-              leading: Icon(Icons.logout),
-              title: Text(DashboardStrings.signOut),
+            child: _SettingsRow(
+              emoji: '🚪',
+              chipColor: AppColors.catHighriskSurface,
+              title: DashboardStrings.signOut,
+              titleColor: AppColors.statusCritical,
+              showChevron: false,
             ),
           ),
         ],
       ),
     );
   }
+}
+
+/// One row in the Settings popup — colored icon chip + title + optional
+/// subtitle + trailing chevron, matching the v13 mockup's `.settings-opt`
+/// row exactly (28×28 rounded-8 chip, 12px/700 title, 9.5px muted subtitle).
+class _SettingsRow extends StatelessWidget {
+  const _SettingsRow({
+    required this.emoji,
+    required this.chipColor,
+    required this.title,
+    this.subtitle,
+    this.titleColor,
+    this.showChevron = true,
+  });
+
+  final String emoji;
+  final Color chipColor;
+  final String title;
+  final String? subtitle;
+  final Color? titleColor;
+  final bool showChevron;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: chipColor,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          alignment: Alignment.center,
+          child: Text(emoji, style: const TextStyle(fontSize: 13)),
+        ),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: titleColor ?? AppColors.textPrimary,
+                ),
+              ),
+              if (subtitle != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 1),
+                  child: Text(
+                    subtitle!,
+                    style: const TextStyle(fontSize: 9.5, color: AppColors.textMuted),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        if (showChevron)
+          const Icon(Icons.chevron_right, size: 16, color: AppColors.textMuted),
+      ],
+    );
+  }
+}
+
+/// Small "pick one of N" dialog shared by the Appearance and Language rows —
+/// a list of options with a check mark next to whichever is current.
+Future<T?> _showOptionPicker<T>({
+  required BuildContext context,
+  required String title,
+  required T current,
+  required List<(T value, String label)> options,
+}) {
+  return showDialog<T>(
+    context: context,
+    builder: (dlgCtx) => SimpleDialog(
+      title: Text(title),
+      children: [
+        for (final (value, label) in options)
+          SimpleDialogOption(
+            onPressed: () => Navigator.of(dlgCtx).pop(value),
+            child: Row(
+              children: [
+                Expanded(child: Text(label)),
+                if (value == current)
+                  const Icon(Icons.check, size: 18, color: AppColors.aiPurpleDark),
+              ],
+            ),
+          ),
+      ],
+    ),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -945,16 +1085,16 @@ class _EnrolNewFab extends StatelessWidget {
             onTap: () => showEnrollmentEntrySheet(context),
             borderRadius: BorderRadius.circular(AppRadius.fabPill),
             splashColor: Colors.white.withValues(alpha: 0.15),
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.person_add_alt_1_rounded, size: 16, color: Colors.white),
-                  SizedBox(width: 8),
+                  const Icon(Icons.person_add_alt_1_rounded, size: 16, color: Colors.white),
+                  const SizedBox(width: 8),
                   Text(
                     MissionDashboardStrings.enrolNewCta,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w800,
                       color: Colors.white,

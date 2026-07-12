@@ -17,6 +17,7 @@ library;
 
 import 'package:intl/intl.dart';
 
+import '../i18n/app_locale.dart';
 import '../models/dashboard_tier.dart';
 
 /// App-wide identity strings.
@@ -41,64 +42,100 @@ abstract final class CommonStrings {
 }
 
 /// Login screen + login-flow feedback.
+///
+/// Pilot slice of the localization seam described at the top of this file —
+/// these getters (not `static const`) check [AppLocale.isBangla] at read
+/// time so `LoginStrings.signIn` etc. render in the current language without
+/// any call site changing.
 abstract final class LoginStrings {
   LoginStrings._();
 
-  static const String usernameLabel = 'Username';
-  static const String passwordLabel = 'Password';
-  static const String signIn = 'Sign in';
-  static const String loginFailed = 'Login failed';
-  static const String useDeviceUnlock = 'Use device unlock';
-  static const String fromLockBanner =
-      'Biometric cancelled — sign in with password.';
+  static String get usernameLabel =>
+      AppLocale.isBangla ? 'ব্যবহারকারীর নাম' : 'Username';
+  static String get passwordLabel =>
+      AppLocale.isBangla ? 'পাসওয়ার্ড' : 'Password';
+  static String get signIn => AppLocale.isBangla ? 'সাইন ইন' : 'Sign in';
+  static String get loginFailed =>
+      AppLocale.isBangla ? 'লগইন ব্যর্থ হয়েছে' : 'Login failed';
+  static String get useDeviceUnlock =>
+      AppLocale.isBangla ? 'ডিভাইস আনলক ব্যবহার করুন' : 'Use device unlock';
+  static String get fromLockBanner => AppLocale.isBangla
+      ? 'বায়োমেট্রিক বাতিল করা হয়েছে — পাসওয়ার্ড দিয়ে সাইন ইন করুন।'
+      : 'Biometric cancelled — sign in with password.';
 }
 
 /// Lock / unlock screen + mid-session lock barrier.
+///
+/// Pilot slice of the localization seam (see [LoginStrings] doc comment).
+/// `aponSushashthya`/`aponSushashthyaBn`/`programName`/`programSubtitle` are
+/// NOT converted — they're the app's bilingual brand lockup, always shown
+/// together regardless of UI language, not alternates of each other.
 abstract final class LockStrings {
   LockStrings._();
 
-  static const String welcomeBack = 'Welcome back';
-  static const String verifyToAccess =
-      'Verify your identity to access your ward dashboard.';
-  static const String biometricCancelled = 'Biometric cancelled';
-  static const String unlockWithBiometrics = 'Unlock with device';
+  static String get welcomeBack =>
+      AppLocale.isBangla ? 'ফিরে আসার জন্য স্বাগতম' : 'Welcome back';
+  static String get verifyToAccess => AppLocale.isBangla
+      ? 'আপনার ওয়ার্ড ড্যাশবোর্ড অ্যাক্সেস করতে আপনার পরিচয় যাচাই করুন।'
+      : 'Verify your identity to access your ward dashboard.';
+  static String get biometricCancelled =>
+      AppLocale.isBangla ? 'বায়োমেট্রিক বাতিল করা হয়েছে' : 'Biometric cancelled';
+  static String get unlockWithBiometrics =>
+      AppLocale.isBangla ? 'ডিভাইস দিয়ে আনলক করুন' : 'Unlock with device';
 
   /// @deprecated Use [unlockWithBiometrics] instead. Kept for migration.
-  static const String unlockWithPhonePasswordOrBiometrics =
+  static String get unlockWithPhonePasswordOrBiometrics =>
       unlockWithBiometrics;
-  static const String profileLoading = 'Profile loading…';
-  static const String offlinePasswordDisabled =
-      'You are offline. Connect to the internet to sign in with password.';
+  static String get profileLoading =>
+      AppLocale.isBangla ? 'প্রোফাইল লোড হচ্ছে…' : 'Profile loading…';
+  static String get offlinePasswordDisabled => AppLocale.isBangla
+      ? 'আপনি অফলাইনে আছেন। পাসওয়ার্ড দিয়ে সাইন ইন করতে ইন্টারনেটে সংযুক্ত হন।'
+      : 'You are offline. Connect to the internet to sign in with password.';
 
   // Connectivity status row (bottom of the lock screen).
-  static const String onlineStatus = 'Online';
-  static const String offlineLoginAvailable = 'Offline login available';
+  static String get onlineStatus => AppLocale.isBangla ? 'অনলাইন' : 'Online';
+  static String get offlineLoginAvailable => AppLocale.isBangla
+      ? 'অফলাইন লগইন উপলব্ধ'
+      : 'Offline login available';
 
   // Profile detail row labels.
-  static const String skIdLabel = 'SK ID';
-  static const String upazilaLabel = 'UPAZILA';
-  static const String nidLabel = 'NID';
-  static const String wardLabel = 'Ward';
-  static const String households = 'households';
+  static String get skIdLabel => AppLocale.isBangla ? 'এসকে আইডি' : 'SK ID';
+  static String get upazilaLabel => AppLocale.isBangla ? 'উপজেলা' : 'UPAZILA';
+  static String get nidLabel => AppLocale.isBangla ? 'এনআইডি' : 'NID';
+  static String get wardLabel => AppLocale.isBangla ? 'ওয়ার্ড' : 'Ward';
+  static String get households => AppLocale.isBangla ? 'পরিবার' : 'households';
 
-  static String welcomeBackNamed(String name) => 'Welcome back, $name';
+  static String welcomeBackNamed(String name) => AppLocale.isBangla
+      ? 'স্বাগতম, $name'
+      : 'Welcome back, $name';
 
-  static const String signInToStartYourDay = 'Sign in to start your day';
+  static String get signInToStartYourDay => AppLocale.isBangla
+      ? 'আপনার দিন শুরু করতে সাইন ইন করুন'
+      : 'Sign in to start your day';
   static const String shasthyaKormi = 'SHASTHYA KORMI';
-  static const String verifyFingerprint = 'Verify fingerprint';
-  static const String tapToPlaceFinger = 'Touch sensor to begin';
-  static const String tapToPlaceFingerSubtitle =
-      'Tap to place your finger and sign in';
+  static String get verifyFingerprint =>
+      AppLocale.isBangla ? 'ফিঙ্গারপ্রিন্ট যাচাই করুন' : 'Verify fingerprint';
+  static String get tapToPlaceFinger =>
+      AppLocale.isBangla ? 'শুরু করতে সেন্সর স্পর্শ করুন' : 'Touch sensor to begin';
+  static String get tapToPlaceFingerSubtitle => AppLocale.isBangla
+      ? 'সাইন ইন করতে আপনার আঙুল রাখুন'
+      : 'Tap to place your finger and sign in';
   static const String aponSushashthya = 'Apon Sushashthya';
   static const String aponSushashthyaBn = 'আপন সুস্বাস্থ্য';
-  static const String splashTagline =
-      'AI-powered community health for every household in Bangladesh';
-  static const String readingFingerprint = 'Reading fingerprint…';
-  static const String fingerprintVerified = 'Verified!';
-  static const String communityHealth = 'Community Health';
+  static String get splashTagline => AppLocale.isBangla
+      ? 'বাংলাদেশের প্রতিটি পরিবারের জন্য এআই-চালিত কমিউনিটি স্বাস্থ্যসেবা'
+      : 'AI-powered community health for every household in Bangladesh';
+  static String get readingFingerprint =>
+      AppLocale.isBangla ? 'ফিঙ্গারপ্রিন্ট পড়া হচ্ছে…' : 'Reading fingerprint…';
+  static String get fingerprintVerified =>
+      AppLocale.isBangla ? 'যাচাই সম্পন্ন!' : 'Verified!';
+  static String get communityHealth =>
+      AppLocale.isBangla ? 'কমিউনিটি স্বাস্থ্য' : 'Community Health';
   static const String programName = 'Apon Sushashthya';
   static const String programSubtitle = 'আপন সুস্বাস্থ্য · Community Health';
-  static String orUsePin(int len) => 'Use $len-digit PIN';
+  static String orUsePin(int len) => AppLocale.isBangla
+      ? '$len-সংখ্যার পিন ব্যবহার করুন'
+      : 'Use $len-digit PIN';
 }
 
 /// Android `BiometricPrompt` copy + biometric unlock messages.
@@ -123,73 +160,115 @@ abstract final class AuthStrings {
 abstract final class DashboardStrings {
   DashboardStrings._();
 
-  // Greeting parts.
-  static const String goodMorning = 'Good Morning';
-  static const String goodAfternoon = 'Good Afternoon';
-  static const String goodEvening = 'Good Evening';
-  static const String communityAtAGlance = 'Serving your community';
+  // Greeting parts. Pilot slice of the localization seam (see
+  // LoginStrings doc comment).
+  static String get goodMorning =>
+      AppLocale.isBangla ? 'শুভ সকাল' : 'Good Morning';
+  static String get goodAfternoon =>
+      AppLocale.isBangla ? 'শুভ অপরাহ্ন' : 'Good Afternoon';
+  static String get goodEvening =>
+      AppLocale.isBangla ? 'শুভ সন্ধ্যা' : 'Good Evening';
+  static String get communityAtAGlance => AppLocale.isBangla
+      ? 'আপনার কমিউনিটির সেবায়'
+      : 'Serving your community';
   static const String refreshTooltip = 'Refresh';
 
   // Stat cards.
-  static const String totalMembers = 'Total\nMembers';
-  static const String totalHouseholds = 'Total\nHouseholds';
-  static const String highRiskPatients = 'High-Risk\nPatients';
-  static const String soonBadge = 'SOON';
-  static const String lookUpMembers =
-      'Use the search bar above to look up members';
-  static const String lookUpHouseholds =
-      'Use the search bar above to look up households';
-  static const String aiTriageComingSoon =
-      'AI triage coming soon — not wired yet';
+  static String get totalMembers =>
+      AppLocale.isBangla ? 'মোট\nসদস্য' : 'Total\nMembers';
+  static String get totalHouseholds =>
+      AppLocale.isBangla ? 'মোট\nপরিবার' : 'Total\nHouseholds';
+  static String get highRiskPatients =>
+      AppLocale.isBangla ? 'উচ্চ-ঝুঁকি\nরোগী' : 'High-Risk\nPatients';
+  static String get soonBadge => AppLocale.isBangla ? 'শীঘ্রই' : 'SOON';
+  static String get lookUpMembers => AppLocale.isBangla
+      ? 'সদস্য খুঁজতে উপরের সার্চ বার ব্যবহার করুন'
+      : 'Use the search bar above to look up members';
+  static String get lookUpHouseholds => AppLocale.isBangla
+      ? 'পরিবার খুঁজতে উপরের সার্চ বার ব্যবহার করুন'
+      : 'Use the search bar above to look up households';
+  static String get aiTriageComingSoon => AppLocale.isBangla
+      ? 'এআই ট্রায়াজ শীঘ্রই আসছে — এখনো যুক্ত করা হয়নি'
+      : 'AI triage coming soon — not wired yet';
 
   // Biometric-offer dialog.
-  static const String useDeviceUnlockTitle = 'Use device unlock?';
-  static const String biometricOfferSupported =
-      'Sign in next time with your fingerprint, face, or device PIN — no password needed.';
-  static const String biometricOfferUnsupported =
-      'Sign in next time with your fingerprint, face, or device PIN. You may need to set up a screen lock in Android Settings first.';
-  static const String notNow = 'Not now';
-  static const String enable = 'Enable';
-  static const String setUpScreenLock =
-      'Set up a screen lock (PIN, pattern, or fingerprint) in Android Settings, then try again.';
-  static const String deviceUnlockEnabled = 'Device unlock enabled';
-  static const String deviceUnlockDisabled = 'Device unlock disabled';
+  static String get useDeviceUnlockTitle =>
+      AppLocale.isBangla ? 'ডিভাইস আনলক ব্যবহার করবেন?' : 'Use device unlock?';
+  static String get biometricOfferSupported => AppLocale.isBangla
+      ? 'পরের বার আপনার ফিঙ্গারপ্রিন্ট, ফেস বা ডিভাইস পিন দিয়ে সাইন ইন করুন — পাসওয়ার্ডের প্রয়োজন নেই।'
+      : 'Sign in next time with your fingerprint, face, or device PIN — no password needed.';
+  static String get biometricOfferUnsupported => AppLocale.isBangla
+      ? 'পরের বার আপনার ফিঙ্গারপ্রিন্ট, ফেস বা ডিভাইস পিন দিয়ে সাইন ইন করুন। এর আগে আপনাকে Android Settings-এ স্ক্রিন লক সেট আপ করতে হতে পারে।'
+      : 'Sign in next time with your fingerprint, face, or device PIN. You may need to set up a screen lock in Android Settings first.';
+  static String get notNow => AppLocale.isBangla ? 'এখন নয়' : 'Not now';
+  static String get enable => AppLocale.isBangla ? 'চালু করুন' : 'Enable';
+  static String get setUpScreenLock => AppLocale.isBangla
+      ? 'Android Settings-এ একটি স্ক্রিন লক (পিন, প্যাটার্ন বা ফিঙ্গারপ্রিন্ট) সেট আপ করুন, তারপর আবার চেষ্টা করুন।'
+      : 'Set up a screen lock (PIN, pattern, or fingerprint) in Android Settings, then try again.';
+  static String get deviceUnlockEnabled =>
+      AppLocale.isBangla ? 'ডিভাইস আনলক চালু হয়েছে' : 'Device unlock enabled';
+  static String get deviceUnlockDisabled =>
+      AppLocale.isBangla ? 'ডিভাইস আনলক বন্ধ হয়েছে' : 'Device unlock disabled';
 
-  // Overflow menu.
-  static const String enableDeviceUnlock = 'Enable device unlock';
-  static const String disableDeviceUnlock = 'Disable device unlock';
-  static const String signOut = 'Sign out';
+  // Overflow menu. Pilot slice of the localization seam.
+  static String get enableDeviceUnlock =>
+      AppLocale.isBangla ? 'ডিভাইস আনলক চালু করুন' : 'Enable device unlock';
+  static String get disableDeviceUnlock =>
+      AppLocale.isBangla ? 'ডিভাইস আনলক বন্ধ করুন' : 'Disable device unlock';
+  static String get signOut => AppLocale.isBangla ? 'সাইন আউট' : 'Sign out';
 
   // Confirmation dialogs.
-  static const String confirmDisableDeviceUnlock = 'Disable device unlock?';
-  static const String confirmDisableDeviceUnlockBody =
-      'You will need to use your password or PIN to sign in next time.';
-  static const String confirmSignOut = 'Sign out?';
-  static const String confirmSignOutBody =
-      'You will need to sign in again with your password.';
-  static const String cancel = 'Cancel';
-  static const String disable = 'Disable';
+  static String get confirmDisableDeviceUnlock => AppLocale.isBangla
+      ? 'ডিভাইস আনলক বন্ধ করবেন?'
+      : 'Disable device unlock?';
+  static String get confirmDisableDeviceUnlockBody => AppLocale.isBangla
+      ? 'পরের বার সাইন ইন করতে আপনাকে পাসওয়ার্ড বা পিন ব্যবহার করতে হবে।'
+      : 'You will need to use your password or PIN to sign in next time.';
+  static String get confirmSignOut =>
+      AppLocale.isBangla ? 'সাইন আউট করবেন?' : 'Sign out?';
+  static String get confirmSignOutBody => AppLocale.isBangla
+      ? 'আপনাকে আবার পাসওয়ার্ড দিয়ে সাইন ইন করতে হবে।'
+      : 'You will need to sign in again with your password.';
+  static String get cancel => AppLocale.isBangla ? 'বাতিল' : 'Cancel';
+  static String get disable => AppLocale.isBangla ? 'বন্ধ করুন' : 'Disable';
 
-  static String couldNotEnable(Object error) => 'Could not enable: $error';
+  static String couldNotEnable(Object error) => AppLocale.isBangla
+      ? 'চালু করা যায়নি: $error'
+      : 'Could not enable: $error';
 
   /// `Good Morning, Asha` style greeting.
   static String greetingNamed(String part, String name) => '$part, $name';
 
   // Last-refreshed relative-time labels.
-  static const String updatedJustNow = 'updated just now';
-  static String updatedSecondsAgo(int s) => 'updated ${s}s ago';
-  static String updatedMinutesAgo(int m) => 'updated ${m}m ago';
-  static String updatedHoursAgo(int h) => 'updated ${h}h ago';
+  static String get updatedJustNow =>
+      AppLocale.isBangla ? 'এইমাত্র আপডেট হয়েছে' : 'updated just now';
+  static String updatedSecondsAgo(int s) => AppLocale.isBangla
+      ? '$s সেকেন্ড আগে আপডেট হয়েছে'
+      : 'updated ${s}s ago';
+  static String updatedMinutesAgo(int m) => AppLocale.isBangla
+      ? '$m মিনিট আগে আপডেট হয়েছে'
+      : 'updated ${m}m ago';
+  static String updatedHoursAgo(int h) => AppLocale.isBangla
+      ? '$h ঘণ্টা আগে আপডেট হয়েছে'
+      : 'updated ${h}h ago';
 }
 
 /// Settings menu strings.
 abstract final class SettingsStrings {
   SettingsStrings._();
 
-  static const String darkMode = 'Dark Mode';
-  static const String lightMode = 'Light Mode';
-  static const String systemMode = 'System Mode';
-  static const String appearance = 'Appearance';
+  static String get darkMode => AppLocale.isBangla ? 'ডার্ক মোড' : 'Dark Mode';
+  static String get lightMode =>
+      AppLocale.isBangla ? 'লাইট মোড' : 'Light Mode';
+  static String get systemMode =>
+      AppLocale.isBangla ? 'সিস্টেম মোড' : 'System Mode';
+  static String get appearance => AppLocale.isBangla ? 'থিম' : 'Appearance';
+
+  // ── Language row ──────────────────────────────────────────────────────
+  static String get language =>
+      AppLocale.isBangla ? 'ভাষা পছন্দ' : 'Language preference';
+  static const String english = 'English';
+  static const String bangla = 'বাংলা (Bangla)';
 }
 
 /// Real-Time ASR screen — live streaming transcription + live clinical
@@ -397,78 +476,103 @@ abstract final class OnboardingStrings {
 abstract final class HouseholdListStrings {
   HouseholdListStrings._();
 
-  static const String allHouseholds = 'All Households';
-  static const String allMembers = 'All Members';
-  static const String loadError = 'Could not load data';
-  static const String noHouseholds = 'No households found';
-  static const String noMembers = 'No members found';
-  static const String noPatientsAssigned = 'No patients assigned to you';
-  static const String unnamedHousehold = '(Unnamed household)';
-  static const String unnamedMember = '(Unnamed)';
+  static String get loadError =>
+      AppLocale.isBangla ? 'ডেটা লোড করা যায়নি' : 'Could not load data';
+  static String get noMembers =>
+      AppLocale.isBangla ? 'কোনো সদস্য পাওয়া যায়নি' : 'No members found';
+  static String get unnamedHousehold =>
+      AppLocale.isBangla ? '(নামহীন পরিবার)' : '(Unnamed household)';
+  static String get unnamedMember =>
+      AppLocale.isBangla ? '(নামহীন)' : '(Unnamed)';
 
-  // Filter toggle labels
-  static const String myPatients = 'My Patients';
-  static const String allMembersFilter = 'All Members';
-  static String myPatientsCount(int n) => 'My Patients ($n)';
-  static String allMembersCount(int n) => 'All Members ($n)';
+  static String householdsCount(int n) =>
+      AppLocale.isBangla ? '$n টি পরিবার' : '$n households';
+  static String membersCount(int n) =>
+      AppLocale.isBangla ? '$n জন সদস্য' : '$n members';
 
-  static String householdsCount(int n) => '$n households';
-  static String membersCount(int n) => '$n members';
-  static String totalMembersCount(int n) => '$n total members';
-  static String acrossHouseholds(int n) => 'across $n households';
+  // Header (v13 mockup: navy header, 🏠 title, combined live count)
+  static String get headerTitle => AppLocale.isBangla
+      ? '🏠 পরিবার ও রোগী'
+      : '🏠 Households & Patients';
+  static String headerSummary(int households, int patients) =>
+      '${householdsCount(households)} · ${_patientsCount(patients)}';
+  static String _patientsCount(int n) => AppLocale.isBangla
+      ? '$n জন রোগী'
+      : '$n patient${n == 1 ? '' : 's'}';
+  static String get searchHint => AppLocale.isBangla
+      ? 'নাম, বাড়ি নং বা গ্রাম দিয়ে খুঁজুন…'
+      : 'Search by name, house no. or village…';
 
-  // Location / SS filter strings
-  static const String filterTitle = 'Filter';
-  static const String filterVillage = 'Village';
-  static const String filterSubVillage = 'Sub-village';
-  static const String filterSS = 'Shasthya Shebika (SS)';
-  static const String filterAllVillages = 'All Villages';
-  static const String filterAllSubVillages = 'All Sub-villages';
-  static const String filterAllSS = 'All SS';
-  static const String filterClearAll = 'Clear All';
-  static const String filterApply = 'Apply';
-  static String activeFilterCount(int n) =>
-      '$n filter${n == 1 ? '' : 's'} active';
+  // Household-card inline other-members panel
+  static String otherMembersToggle(int n) => AppLocale.isBangla
+      ? '+$n জন অন্যান্য পরিবার সদস্য'
+      : '+$n other household member${n == 1 ? '' : 's'}';
+  static String get enrolledTag =>
+      AppLocale.isBangla ? 'নথিভুক্ত' : 'Enrolled';
+
+  // Households / Members tab strip
+  static String get tabHouseholds =>
+      AppLocale.isBangla ? 'পরিবার' : 'Households';
+  static String get tabMembers => AppLocale.isBangla ? 'সদস্য' : 'Members';
+  static String myPatientsCount(int n) =>
+      AppLocale.isBangla ? 'আমার রোগী ($n)' : 'My Patients ($n)';
+  static String allMembersCount(int n) =>
+      AppLocale.isBangla ? 'সব সদস্য ($n)' : 'All Members ($n)';
+  static String get noPatientsAssigned => AppLocale.isBangla
+      ? 'আপনার কোনো রোগী নির্ধারিত নেই'
+      : 'No patients assigned to you';
+  static String searchResultsEmpty(String query) => AppLocale.isBangla
+      ? '"$query" এর জন্য কোনো ফলাফল নেই'
+      : 'No results for "$query"';
+
+  // Manual server refresh
+  static String refreshSummary(int patients, int assessments, int followUps) =>
+      AppLocale.isBangla
+          ? 'হালনাগাদ: $patients জন রোগী · $assessments টি মূল্যায়ন · $followUps টি ফলো-আপ'
+          : 'Updated: $patients patients · $assessments assessments · '
+              '$followUps follow-ups';
+  static String refreshFailed(String error) => AppLocale.isBangla
+      ? 'রিফ্রেশ ব্যর্থ হয়েছে: $error'
+      : 'Refresh failed: $error';
 }
 
 /// Household detail screen strings.
 abstract final class HouseholdDetailStrings {
   HouseholdDetailStrings._();
 
-  static const String unnamedHousehold = '(Unnamed household)';
-  static const String unnamed = '(Unnamed)';
-  static const String members = 'Members';
-  static const String location = 'Location';
-  static const String coordinates = 'Coordinates';
-  static const String householdHead = 'Household Head';
-  static const String householdMembers = 'Household Members';
-  static const String noHeadInfo = 'Head information not available';
-  static const String noMembers = 'No members found';
-  static const String head = 'HEAD';
-  static const String personalInfo = 'Personal Information';
-  static const String age = 'Age';
-  static const String gender = 'Gender';
-  static const String phone = 'Phone';
-  static const String notAvailable = 'N/A';
-  static const String householdInfo = 'Household Information';
-  static const String householdName = 'Household';
-  static const String householdNumber = 'Household No.';
-  static const String totalMembers = 'Total Members';
-  static const String viewHealthDetails = 'View Health Details';
-  static const String pregnant = 'PREGNANT';
-  static const String patientId = 'Patient ID';
-  static const String showLess = 'Show less';
-  static String showMore(int count) => 'Show $count more members';
-  static const String village = 'Village';
-  static const String ssName = 'Shasthya Shebika';
-  static const String lastVisitDate = 'Last Visit';
-  static const String recentService = 'Recent Service';
-  static const String recentServiceDate = 'Service Date';
-  static const String neverVisited = 'Never visited';
-  static const String noSsAssigned = 'Not assigned';
+  static String get unnamedHousehold =>
+      AppLocale.isBangla ? '(নামহীন পরিবার)' : '(Unnamed household)';
+  static String get householdMembers =>
+      AppLocale.isBangla ? 'পরিবারের সদস্য' : 'Household Members';
+  static String get noMembers =>
+      AppLocale.isBangla ? 'কোনো সদস্য পাওয়া যায়নি' : 'No members found';
+  static String get notAvailable => AppLocale.isBangla ? 'নেই' : 'N/A';
+  static String get householdNumber =>
+      AppLocale.isBangla ? 'পরিবার নং' : 'Household No.';
+  static String get village => AppLocale.isBangla ? 'গ্রাম' : 'Village';
+  static String get ssName =>
+      AppLocale.isBangla ? 'স্বাস্থ্য কর্মী' : 'Shasthya Shebika';
+  static String get lastVisitDate =>
+      AppLocale.isBangla ? 'সর্বশেষ ভিজিট' : 'Last Visit';
+  static String get neverVisited =>
+      AppLocale.isBangla ? 'কখনো ভিজিট হয়নি' : 'Never visited';
+  static String get noSsAssigned =>
+      AppLocale.isBangla ? 'নির্ধারিত নেই' : 'Not assigned';
+  static String get back => AppLocale.isBangla ? 'পেছনে' : 'Back';
+  static String get loadingMembers =>
+      AppLocale.isBangla ? 'সদস্য লোড হচ্ছে…' : 'Loading members…';
+  static String get couldNotLoadMembers => AppLocale.isBangla
+      ? 'সদস্য লোড করা যায়নি'
+      : 'Could not load members';
+  static String get loadMembers =>
+      AppLocale.isBangla ? 'সদস্য লোড করুন' : 'Load members';
+  static String get householdIdNotAvailable => AppLocale.isBangla
+      ? 'পরিবার আইডি পাওয়া যায়নি'
+      : 'Household ID not available';
 
-  static String memberDataNotLoaded(int count) =>
-      'This household has $count members.\nDetailed member information will be available once data is synced.';
+  static String memberDataNotLoaded(int count) => AppLocale.isBangla
+      ? 'এই পরিবারে $count জন সদস্য আছে।\nডেটা সিঙ্ক হলে বিস্তারিত সদস্যের তথ্য পাওয়া যাবে।'
+      : 'This household has $count members.\nDetailed member information will be available once data is synced.';
 }
 
 /// AI Worklist (Screen 2): chip filter labels, programme tags, urgent banner,
@@ -548,40 +652,205 @@ abstract final class WorklistStrings {
 abstract final class PatientContextStrings {
   PatientContextStrings._();
 
-  static const String fallbackTitle = 'Patient';
-  static const String loading = 'Loading patient…';
-  static const String notFound = 'Patient not in local cache';
-  static const String idLabel = 'Patient ID';
-  static const String householdLabel = 'Household';
-  static const String villageLabel = 'Village';
-  static const String programmesLabel = 'Programmes';
-  static const String riskLabel = 'Risk';
-  static const String sectionRecentVisits = 'Recent visits';
-  static const String sectionVitals = 'Vitals';
-  static const String sectionAiSuggestions = 'AI suggestions';
-  static const String sectionActions = 'Actions';
-  static const String comingSoon = 'Coming in a future release';
-  static const String refresh = 'Refresh from server';
-  static const String refreshing = 'Refreshing…';
-  static const String refreshDone = 'Patient refreshed';
-  static const String refreshFailed = 'Refresh failed';
+  static String get fallbackTitle => AppLocale.isBangla ? 'রোগী' : 'Patient';
+  static String get loading =>
+      AppLocale.isBangla ? 'রোগীর তথ্য লোড হচ্ছে…' : 'Loading patient…';
+  static String get notFound => AppLocale.isBangla
+      ? 'রোগী স্থানীয় ক্যাশে নেই'
+      : 'Patient not in local cache';
+  static String get idLabel =>
+      AppLocale.isBangla ? 'রোগীর আইডি' : 'Patient ID';
+  static String get householdLabel =>
+      AppLocale.isBangla ? 'পরিবার' : 'Household';
+  static String get villageLabel => AppLocale.isBangla ? 'গ্রাম' : 'Village';
+  static String get programmesLabel =>
+      AppLocale.isBangla ? 'প্রোগ্রাম' : 'Programmes';
+  static String get riskLabel => AppLocale.isBangla ? 'ঝুঁকি' : 'Risk';
+  static String get sectionRecentVisits =>
+      AppLocale.isBangla ? 'সাম্প্রতিক ভিজিট' : 'Recent visits';
+  static String get sectionVitals =>
+      AppLocale.isBangla ? 'ভাইটালস' : 'Vitals';
+  static String get sectionAiSuggestions =>
+      AppLocale.isBangla ? 'এআই পরামর্শ' : 'AI suggestions';
+  static String get sectionActions =>
+      AppLocale.isBangla ? 'কার্যক্রম' : 'Actions';
+  static String get comingSoon => AppLocale.isBangla
+      ? 'ভবিষ্যতের সংস্করণে আসছে'
+      : 'Coming in a future release';
+  static String get refresh =>
+      AppLocale.isBangla ? 'সার্ভার থেকে রিফ্রেশ করুন' : 'Refresh from server';
+  static String get refreshing =>
+      AppLocale.isBangla ? 'রিফ্রেশ হচ্ছে…' : 'Refreshing…';
+  static String get refreshDone =>
+      AppLocale.isBangla ? 'রোগীর তথ্য রিফ্রেশ হয়েছে' : 'Patient refreshed';
+  static String get refreshFailed =>
+      AppLocale.isBangla ? 'রিফ্রেশ ব্যর্থ হয়েছে' : 'Refresh failed';
 
   // ── Action buttons ───────────────────────────────────────────────────────
-  static const String actionsTitle = 'Actions';
-  static const String startVisit = 'Start Visit';
-  static const String callHousehold = 'Call';
-  static const String callComingSoon = 'Call household coming soon';
+  static String get actionsTitle =>
+      AppLocale.isBangla ? 'কার্যক্রম' : 'Actions';
+  static String get startVisit =>
+      AppLocale.isBangla ? 'ভিজিট শুরু করুন' : 'Start Visit';
+  static String get callHousehold =>
+      AppLocale.isBangla ? 'কল করুন' : 'Call';
+  static String get callComingSoon => AppLocale.isBangla
+      ? 'পরিবারকে কল করার সুবিধা শীঘ্রই আসছে'
+      : 'Call household coming soon';
 
   // ── HTML detail composition ──────────────────────────────────────────────
-  static const String backToWorklist = 'Back to worklist';
-  static const String sayHelloFirst = ' Say hello first';
+  static String get backToWorklist =>
+      AppLocale.isBangla ? 'ওয়ার্কলিস্টে ফিরে যান' : 'Back to worklist';
+  static String get sayHelloFirst =>
+      AppLocale.isBangla ? ' প্রথমে সালাম দিন' : ' Say hello first';
+  // Bilingual communication script the SK reads aloud to the patient — shown
+  // regardless of the app's own UI language, not a language toggle target.
   static const String greetingBangla = 'আপনাদের কেমন আছেন? রোগী কেমন আছে?';
   static const String greetingEnglish =
       'How is everyone? How is the patient today?';
-  static String aiSummaryLead(String name) =>
-      '$name has the following risk drivers worth addressing today.';
+  static String aiSummaryLead(String name) => AppLocale.isBangla
+      ? '$name-এর আজ নিম্নলিখিত ঝুঁকির কারণগুলো বিবেচনা করা প্রয়োজন।'
+      : '$name has the following risk drivers worth addressing today.';
 
-  static const String allAssessmentsTitle = 'All assessments';
+  static String get allAssessmentsTitle =>
+      AppLocale.isBangla ? 'সব মূল্যায়ন' : 'All assessments';
+
+  // ── Header ────────────────────────────────────────────────────────────
+  static String get urgentBadge => AppLocale.isBangla ? 'জরুরি' : 'URGENT';
+  static String ageLabel(int age) =>
+      AppLocale.isBangla ? 'বয়স $age' : 'Age $age';
+  static String ageMonthsLabel(int months) => AppLocale.isBangla
+      ? '$months মাস'
+      : '$months month${months == 1 ? '' : 's'}';
+  static String get ageUnderOneYear =>
+      AppLocale.isBangla ? '< ১ বছর' : '< 1 yr';
+  static String householdFallback(String householdId) =>
+      AppLocale.isBangla ? 'পরিবার $householdId' : 'HH $householdId';
+  static String get pregnantChip =>
+      AppLocale.isBangla ? 'গর্ভবতী' : 'Pregnant';
+
+  // ── Assessments section ──────────────────────────────────────────────
+  static String get noAssessmentsYet =>
+      AppLocale.isBangla ? 'এখনো কোনো মূল্যায়ন নেই' : 'No assessments yet';
+  static String assessmentsTotal(int n) =>
+      AppLocale.isBangla ? '$n টি মোট' : '$n total';
+  static String viewAllAssessments(int n) => AppLocale.isBangla
+      ? 'সব $n টি মূল্যায়ন দেখুন'
+      : 'View all $n assessments';
+  static String visitNumberLabel(int n) =>
+      AppLocale.isBangla ? 'ভিজিট $n' : 'Visit $n';
+  static String get latestBadge =>
+      AppLocale.isBangla ? 'সর্বশেষ' : 'Latest';
+  static String visitOnLabel(String date) =>
+      AppLocale.isBangla ? '$date তারিখে ভিজিট' : 'Visit on $date';
+  static String get close => AppLocale.isBangla ? 'বন্ধ করুন' : 'Close';
+  static String get serviceLabel => AppLocale.isBangla ? 'সেবা' : 'Service';
+  static String get visitNumberFieldLabel =>
+      AppLocale.isBangla ? 'ভিজিট নম্বর' : 'Visit Number';
+  static String get encounterIdLabel =>
+      AppLocale.isBangla ? 'এনকাউন্টার আইডি' : 'Encounter ID';
+  static String get memberIdLabel =>
+      AppLocale.isBangla ? 'সদস্য আইডি' : 'Member ID';
+  static String get referralStatusLabel =>
+      AppLocale.isBangla ? 'রেফারেল অবস্থা' : 'Referral Status';
+  static String get referralReasonLabel =>
+      AppLocale.isBangla ? 'রেফারেলের কারণ' : 'Referral Reason';
+  static String get nextFollowUpLabel =>
+      AppLocale.isBangla ? 'পরবর্তী ফলো-আপ' : 'Next Follow-up';
+
+  // ── Clinical field labels ────────────────────────────────────────────
+  static String get yes => AppLocale.isBangla ? 'হ্যাঁ' : 'Yes';
+  static String get no => AppLocale.isBangla ? 'না' : 'No';
+  static String get clinicalFindingsTitle =>
+      AppLocale.isBangla ? 'ক্লিনিক্যাল ফলাফল' : 'Clinical Findings';
+  static String get ncdFindingsTitle =>
+      AppLocale.isBangla ? 'NCD স্ক্রিনিং ফলাফল' : 'NCD Screening Findings';
+  static String get ancFindingsTitle => AppLocale.isBangla
+      ? 'প্রসবপূর্ব সেবার ফলাফল'
+      : 'Antenatal Care Findings';
+  static String get pncFindingsTitle => AppLocale.isBangla
+      ? 'প্রসবোত্তর সেবার ফলাফল'
+      : 'Postnatal Care Findings';
+  static String get childHealthFindingsTitle =>
+      AppLocale.isBangla ? 'শিশু স্বাস্থ্য ফলাফল' : 'Child Health Findings';
+  static String get tbFindingsTitle =>
+      AppLocale.isBangla ? 'TB স্ক্রিনিং ফলাফল' : 'TB Screening Findings';
+  static String get bloodPressureLabel =>
+      AppLocale.isBangla ? 'রক্তচাপ' : 'Blood Pressure';
+  static String glucoseLabel(String? type) {
+    if (AppLocale.isBangla) {
+      return type != null ? 'গ্লুকোজ ($type)' : 'গ্লুকোজ';
+    }
+    return type != null ? 'Glucose ($type)' : 'Glucose';
+  }
+  static String get heightLabel => AppLocale.isBangla ? 'উচ্চতা' : 'Height';
+  static String get weightLabel => AppLocale.isBangla ? 'ওজন' : 'Weight';
+  static const String bmiLabel = 'BMI';
+  static String get haemoglobinLabel =>
+      AppLocale.isBangla ? 'হিমোগ্লোবিন' : 'Haemoglobin';
+  static String get smokingLabel =>
+      AppLocale.isBangla ? 'ধূমপান' : 'Smoking';
+  static String get alcoholLabel =>
+      AppLocale.isBangla ? 'মদ্যপান' : 'Alcohol';
+  static String get ancVisitLabel =>
+      AppLocale.isBangla ? 'ANC ভিজিট' : 'ANC Visit';
+  static String get gestationalAgeLabel =>
+      AppLocale.isBangla ? 'গর্ভকালীন বয়স' : 'Gestational Age';
+  static String get fetusesLabel =>
+      AppLocale.isBangla ? 'ভ্রূণ সংখ্যা' : 'Fetuses';
+  static String get fundalHeightLabel =>
+      AppLocale.isBangla ? 'ফান্ডাল হাইট' : 'Fundal Height';
+  static String get fetalMovementLabel =>
+      AppLocale.isBangla ? 'ভ্রূণের নড়াচড়া' : 'Fetal Movement';
+  static String get pncVisitLabel =>
+      AppLocale.isBangla ? 'PNC ভিজিট' : 'PNC Visit';
+  static String get breastfeedingLabel =>
+      AppLocale.isBangla ? 'বুকের দুধ খাওয়ানো' : 'Breastfeeding';
+  static const String muacLabel = 'MUAC';
+  static String get temperatureLabel =>
+      AppLocale.isBangla ? 'তাপমাত্রা' : 'Temperature';
+  static String get diagnosisLabel =>
+      AppLocale.isBangla ? 'রোগ নির্ণয়' : 'Diagnosis';
+  static String get coughDurationLabel =>
+      AppLocale.isBangla ? 'কাশির স্থায়িত্ব' : 'Cough Duration';
+  static String get diabetesLabel =>
+      AppLocale.isBangla ? 'ডায়াবেটিস' : 'Diabetes';
+  static String get tbContactLabel =>
+      AppLocale.isBangla ? 'TB সংস্পর্শ' : 'TB Contact';
+  static const String gravidaParityLabel = 'G/P';
+  static String get normal => AppLocale.isBangla ? 'স্বাভাবিক' : 'Normal';
+  static String get abnormal =>
+      AppLocale.isBangla ? 'অস্বাভাবিক' : 'Abnormal';
+
+  // ── AI summary ────────────────────────────────────────────────────────
+  static String get aiSummaryBadge =>
+      AppLocale.isBangla ? '✦ এআই সারাংশ' : '✦ AI SUMMARY';
+  static String get aiReadHerRecordBadge => AppLocale.isBangla
+      ? '✦ এআই তার রেকর্ড পড়েছে'
+      : '✦ AI READ HER RECORD';
+  static String riskReasonChip(String reason) => '⚠ $reason';
+
+  // ── Same-household strip ─────────────────────────────────────────────
+  static String get sameHousehold =>
+      AppLocale.isBangla ? 'একই পরিবার' : 'Same household';
+  static String get viewHouseholdDetails => AppLocale.isBangla
+      ? 'পরিবারের বিবরণ দেখুন'
+      : 'View household details';
+  static String get unknownMemberName =>
+      AppLocale.isBangla ? 'অজানা' : 'Unknown';
+  static String viewPatientSemantics(String name, int? age) => AppLocale.isBangla
+      ? 'রোগী $name${age != null ? ', বয়স $age' : ''} দেখুন'
+      : 'View patient $name${age != null ? ', age $age' : ''}';
+
+  static String get statusIndicatorsTitle =>
+      AppLocale.isBangla ? 'অবস্থা নির্দেশক' : 'Status Indicators';
+
+  // ── Assessment list fallbacks ────────────────────────────────────────
+  static String get genericAssessmentLabel =>
+      AppLocale.isBangla ? 'মূল্যায়ন' : 'Assessment';
+  static String viewAssessmentSemantics(String type, String date) =>
+      AppLocale.isBangla
+          ? '$date তারিখে $type মূল্যায়ন দেখুন'
+          : 'View $type assessment on $date';
 }
 
 /// Copy for the patient profile card — collapsible demographic section
@@ -589,33 +858,56 @@ abstract final class PatientContextStrings {
 abstract final class PatientProfileStrings {
   PatientProfileStrings._();
 
-  static const String profileTitle = 'Patient Profile';
-  static const String showMore = 'Show full profile';
-  static const String hide = 'Hide profile';
+  static String get profileTitle =>
+      AppLocale.isBangla ? 'রোগীর প্রোফাইল' : 'Patient Profile';
+  static String get showMore =>
+      AppLocale.isBangla ? 'সম্পূর্ণ প্রোফাইল দেখুন' : 'Show full profile';
+  static String get hide =>
+      AppLocale.isBangla ? 'প্রোফাইল লুকান' : 'Hide profile';
+  static String get servicesProvidedTitle =>
+      AppLocale.isBangla ? 'প্রদত্ত সেবা' : 'Services Provided';
+  static String get recentStatusTitle =>
+      AppLocale.isBangla ? 'সাম্প্রতিক অবস্থা' : 'Recent Status';
 
-  static const String sectionIdentity = 'Identity';
-  static const String sectionLocation = 'Location';
-  static const String sectionContact = 'Contact';
-  static const String sectionCareTeam = 'Care Team';
-  static const String sectionHousehold = 'Household Role';
+  static String get sectionIdentity =>
+      AppLocale.isBangla ? 'পরিচয়' : 'Identity';
+  static String get sectionLocation =>
+      AppLocale.isBangla ? 'অবস্থান' : 'Location';
+  static String get sectionContact =>
+      AppLocale.isBangla ? 'যোগাযোগ' : 'Contact';
+  static String get sectionCareTeam =>
+      AppLocale.isBangla ? 'সেবা দল' : 'Care Team';
+  static String get sectionHousehold =>
+      AppLocale.isBangla ? 'পরিবারে ভূমিকা' : 'Household Role';
 
   static const String labelNid = 'NID / BRN';
-  static const String labelGender = 'Gender';
-  static const String labelDob = 'Date of Birth';
-  static const String labelIdType = 'ID Type';
-  static const String labelMaritalStatus = 'Marital Status';
-  static const String labelDisability = 'Disability';
-  static const String labelVillage = 'Village';
-  static const String labelPhone = 'Phone';
-  static const String labelIsHouseholdHead = 'HH Head';
-  static const String labelRelation = 'Relation to HH Head';
-  static const String labelSk = 'Assigned SK';
-  static const String labelGuardian = 'Guardian';
-  static const String labelMother = 'Mother Ref';
+  static String get labelGender => AppLocale.isBangla ? 'লিঙ্গ' : 'Gender';
+  static String get labelDob =>
+      AppLocale.isBangla ? 'জন্ম তারিখ' : 'Date of Birth';
+  static String get labelIdType =>
+      AppLocale.isBangla ? 'আইডির ধরন' : 'ID Type';
+  static String get labelMaritalStatus =>
+      AppLocale.isBangla ? 'বৈবাহিক অবস্থা' : 'Marital Status';
+  static String get labelDisability =>
+      AppLocale.isBangla ? 'প্রতিবন্ধিতা' : 'Disability';
+  static String get labelVillage => AppLocale.isBangla ? 'গ্রাম' : 'Village';
+  static String get labelPhone => AppLocale.isBangla ? 'ফোন' : 'Phone';
+  static String get labelIsHouseholdHead =>
+      AppLocale.isBangla ? 'পরিবার প্রধান' : 'HH Head';
+  static String get labelRelation => AppLocale.isBangla
+      ? 'পরিবার প্রধানের সাথে সম্পর্ক'
+      : 'Relation to HH Head';
+  static String get labelSk =>
+      AppLocale.isBangla ? 'নিযুক্ত এসকে' : 'Assigned SK';
+  static String get labelGuardian =>
+      AppLocale.isBangla ? 'অভিভাবক' : 'Guardian';
+  static String get labelMother =>
+      AppLocale.isBangla ? 'মায়ের রেফ' : 'Mother Ref';
   static const String labelGps = 'GPS';
-  static const String labelIsPregnant = 'Pregnant';
-  static const String yes = 'Yes';
-  static const String no = 'No';
+  static String get labelIsPregnant =>
+      AppLocale.isBangla ? 'গর্ভবতী' : 'Pregnant';
+  static String get yes => AppLocale.isBangla ? 'হ্যাঁ' : 'Yes';
+  static String get no => AppLocale.isBangla ? 'না' : 'No';
   static const String notAvailable = '—';
 }
 
@@ -875,178 +1167,297 @@ abstract final class MissionDashboardStrings {
   MissionDashboardStrings._();
 
   // ── HTML Dashboard composition ───────────────────────────────────────────
-  static String aiSortedVisits(int n) => 'AI sorted your $n visits overnight';
-  static const String visitsToday = 'Visits today';
+  static String aiSortedVisits(int n) => AppLocale.isBangla
+      ? 'এআই রাতারাতি আপনার $n টি ভিজিট সাজিয়েছে'
+      : 'AI sorted your $n visits overnight';
+  static String get visitsToday =>
+      AppLocale.isBangla ? 'আজকের ভিজিট' : 'Visits today';
 
   /// Stat subline built from the SK's actual worklist. Returns `'No villages'`
   /// when the queue is empty (cold start, before sync), `'1 village'` or
   /// `'N villages'` once data lands. Distance estimate dropped — no source
   /// data yet; bring it back when geo is wired.
   static String visitsTodaySubline(int villageCount) {
+    if (AppLocale.isBangla) {
+      if (villageCount <= 0) return 'কোনো গ্রাম নির্ধারিত নেই';
+      if (villageCount == 1) return '1 গ্রাম';
+      return '$villageCount টি গ্রাম';
+    }
     if (villageCount <= 0) return 'No villages assigned';
     if (villageCount == 1) return '1 village';
     return '$villageCount villages';
   }
 
-  static const String referralAlertsLabel = 'Referral alerts need follow-up';
-  static const String tapToFollowUp = 'Tap to follow up →';
-  static const String referralCceComingSoon = 'CCE integration coming soon';
-  static const String visitStartFailed =
-      'Could not start visit. Try again from the patient screen.';
-  static const String visitMissingPatient =
-      'No patient record — open the case to begin.';
-  static String houseNumber(String no) => 'House #$no';
-  static String moreVisits(int n) =>
-      n == 1 ? '+ 1 more visit today' : '+ $n more visits today';
-  static String todaysVisits(String date) => "Today's visits · $date";
-  static const String filterByLocation = 'Village · SS · Area';
-  static const String upcomingWorkHeader = 'Upcoming work — earliest first';
-  static const String aiSortedBadge = '✦ AI sorted';
-  static const String actionVisitNow = 'Visit now';
-  static const String actionVisitToday = 'Visit today';
-  static const String actionThisWeek = 'This week';
-  static const String actionRoutine = 'Routine';
+  static String get referralAlertsLabel => AppLocale.isBangla
+      ? 'রেফারেল সতর্কতাগুলোর ফলো-আপ প্রয়োজন'
+      : 'Referral alerts need follow-up';
+  static String get tapToFollowUp =>
+      AppLocale.isBangla ? 'ফলো-আপ করতে ট্যাপ করুন →' : 'Tap to follow up →';
+  static String get referralCceComingSoon => AppLocale.isBangla
+      ? 'CCE ইন্টিগ্রেশন শীঘ্রই আসছে'
+      : 'CCE integration coming soon';
+  static String get visitStartFailed => AppLocale.isBangla
+      ? 'ভিজিট শুরু করা যায়নি। রোগীর স্ক্রিন থেকে আবার চেষ্টা করুন।'
+      : 'Could not start visit. Try again from the patient screen.';
+  static String get visitMissingPatient => AppLocale.isBangla
+      ? 'কোনো রোগীর রেকর্ড নেই — শুরু করতে কেস খুলুন।'
+      : 'No patient record — open the case to begin.';
+  static String houseNumber(String no) =>
+      AppLocale.isBangla ? 'বাড়ি #$no' : 'House #$no';
+  static String moreVisits(int n) {
+    if (AppLocale.isBangla) {
+      return n == 1 ? '+ আরও 1টি ভিজিট আজ' : '+ আরও $n টি ভিজিট আজ';
+    }
+    return n == 1 ? '+ 1 more visit today' : '+ $n more visits today';
+  }
+  static String todaysVisits(String date) => AppLocale.isBangla
+      ? 'আজকের ভিজিট · $date'
+      : "Today's visits · $date";
+  static String get filterByLocation =>
+      AppLocale.isBangla ? 'গ্রাম · এসএস · এলাকা' : 'Village · SS · Area';
+  static String get upcomingWorkHeader => AppLocale.isBangla
+      ? 'আসন্ন কাজ — প্রথমে সবচেয়ে জরুরি'
+      : 'Upcoming work — earliest first';
+  static String get aiSortedBadge =>
+      AppLocale.isBangla ? '✦ এআই সাজানো' : '✦ AI sorted';
+  static String get actionVisitNow =>
+      AppLocale.isBangla ? 'এখনই ভিজিট করুন' : 'Visit now';
+  static String get actionVisitToday =>
+      AppLocale.isBangla ? 'আজ ভিজিট করুন' : 'Visit today';
+  static String get actionThisWeek =>
+      AppLocale.isBangla ? 'এই সপ্তাহে' : 'This week';
+  static String get actionRoutine =>
+      AppLocale.isBangla ? 'নিয়মিত' : 'Routine';
 
   // ── AI Daily Brief Card ──────────────────────────────────────────────────
-  static const String aiBriefTitle = "Today's AI Brief";
-  static const String visitsRecommended = 'Visits Recommended';
-  static const String childDangerCases = 'Child Danger Cases';
-  static const String slaBreachedReferrals = 'SLA Breached Referrals';
-  static const String ancFollowUps = 'ANC Follow-ups';
-  static const String highRiskDiabeticPatients = 'High-Risk Diabetic Patients';
-  static const String expectedWorkload = 'Expected Workload';
-  static const String priorityLevel = 'Priority Level';
-  static const String whyQuestion = 'Why?';
-  static const String riskFactorsIdentified = 'Risk Factors Identified';
-  static String workloadHours(double hours) =>
-      '${hours.toStringAsFixed(1)} Hours';
+  static String get aiBriefTitle =>
+      AppLocale.isBangla ? 'আজকের এআই সংক্ষিপ্ত বিবরণ' : "Today's AI Brief";
+  static String get visitsRecommended =>
+      AppLocale.isBangla ? 'প্রস্তাবিত ভিজিট' : 'Visits Recommended';
+  static String get childDangerCases =>
+      AppLocale.isBangla ? 'শিশুদের বিপদ চিহ্নিত কেস' : 'Child Danger Cases';
+  static String get slaBreachedReferrals => AppLocale.isBangla
+      ? 'SLA লঙ্ঘিত রেফারেল'
+      : 'SLA Breached Referrals';
+  static String get ancFollowUps =>
+      AppLocale.isBangla ? 'ANC ফলো-আপ' : 'ANC Follow-ups';
+  static String get highRiskDiabeticPatients => AppLocale.isBangla
+      ? 'উচ্চ-ঝুঁকিপূর্ণ ডায়াবেটিক রোগী'
+      : 'High-Risk Diabetic Patients';
+  static String get expectedWorkload =>
+      AppLocale.isBangla ? 'প্রত্যাশিত কর্মভার' : 'Expected Workload';
+  static String get priorityLevel =>
+      AppLocale.isBangla ? 'অগ্রাধিকার স্তর' : 'Priority Level';
+  static String get whyQuestion => AppLocale.isBangla ? 'কেন?' : 'Why?';
+  static String get riskFactorsIdentified => AppLocale.isBangla
+      ? 'শনাক্তকৃত ঝুঁকির কারণ'
+      : 'Risk Factors Identified';
+  static String workloadHours(double hours) => AppLocale.isBangla
+      ? '${hours.toStringAsFixed(1)} ঘণ্টা'
+      : '${hours.toStringAsFixed(1)} Hours';
 
   // ── Mission Progress Card ────────────────────────────────────────────────
-  static const String todaysProgress = "Today's Progress";
-  static const String visitsCompleted = 'Visits Completed';
-  static const String visitsRemaining = 'Visits Remaining';
-  static const String estimatedTime = 'Estimated Time';
+  static String get todaysProgress =>
+      AppLocale.isBangla ? 'আজকের অগ্রগতি' : "Today's Progress";
+  static String get visitsCompleted =>
+      AppLocale.isBangla ? 'সম্পন্ন ভিজিট' : 'Visits Completed';
+  static String get visitsRemaining =>
+      AppLocale.isBangla ? 'বাকি ভিজিট' : 'Visits Remaining';
+  static String get estimatedTime =>
+      AppLocale.isBangla ? 'আনুমানিক সময়' : 'Estimated Time';
   static String progressFraction(int done, int total) => '$done / $total';
   static String progressPercent(int percent) => '$percent%';
-  static String remainingVisits(int n) => '$n Visits Remaining';
-  static String estimatedDuration(String duration) =>
-      'Estimated Time: $duration';
-  static String completionPrediction(String time) =>
-      'At current pace, all visits can be completed by $time';
+  static String remainingVisits(int n) =>
+      AppLocale.isBangla ? '$n টি ভিজিট বাকি' : '$n Visits Remaining';
+  static String estimatedDuration(String duration) => AppLocale.isBangla
+      ? 'আনুমানিক সময়: $duration'
+      : 'Estimated Time: $duration';
+  static String completionPrediction(String time) => AppLocale.isBangla
+      ? 'বর্তমান গতিতে, $time এর মধ্যে সব ভিজিট সম্পন্ন করা সম্ভব'
+      : 'At current pace, all visits can be completed by $time';
 
   // ── Critical Alert Banner ────────────────────────────────────────────────
-  static const String criticalAlert = '🔴 Critical Alert';
-  static const String emergencyAncAlert = '🔴 Emergency ANC Alert';
-  static const String immediateFollowUpRequired =
-      'Immediate follow-up required.';
-  static String childReferralOverdue(int days) =>
-      '$days Child Referral${days == 1 ? '' : 's'} Overdue';
+  static String get criticalAlert =>
+      AppLocale.isBangla ? '🔴 জরুরি সতর্কতা' : '🔴 Critical Alert';
+  static String get emergencyAncAlert =>
+      AppLocale.isBangla ? '🔴 জরুরি ANC সতর্কতা' : '🔴 Emergency ANC Alert';
+  static String get immediateFollowUpRequired => AppLocale.isBangla
+      ? 'তাৎক্ষণিক ফলো-আপ প্রয়োজন।'
+      : 'Immediate follow-up required.';
+  static String childReferralOverdue(int days) => AppLocale.isBangla
+      ? '$days শিশু রেফারেল বকেয়া'
+      : '$days Child Referral${days == 1 ? '' : 's'} Overdue';
   static String highRiskPregnancyWaiting(String name, String duration) =>
-      '$name: High-risk pregnancy waiting $duration for OB review.';
+      AppLocale.isBangla
+          ? '$name: উচ্চ-ঝুঁকিপূর্ণ গর্ভাবস্থা $duration ধরে OB পর্যালোচনার অপেক্ষায়।'
+          : '$name: High-risk pregnancy waiting $duration for OB review.';
 
   // ── Mission Queue Card ───────────────────────────────────────────────────
-  static String priorityRank(int rank) => 'Priority #$rank';
-  static String daysOverdue(int days) => '$days Days Overdue';
-  static const String aiInsight = 'AI Insight';
+  static String priorityRank(int rank) =>
+      AppLocale.isBangla ? 'অগ্রাধিকার #$rank' : 'Priority #$rank';
+  static String daysOverdue(int days) =>
+      AppLocale.isBangla ? '$days দিন বকেয়া' : '$days Days Overdue';
+  static String get aiInsight =>
+      AppLocale.isBangla ? 'এআই ইনসাইট' : 'AI Insight';
 
   // ── Programme-smart reason badge (v13 design) ───────────────────────────
-  static const String enrolled = 'Enrolled';
-  static const String ancVisitLabel = 'ANC Visit';
-  static const String pncVisitLabel = 'PNC Visit';
-  static const String childImmunisation = 'Child immunisation';
-  static const String ncdCheckup = 'NCD checkup';
-  static const String tbCheck = 'TB check';
-  static const String newVisit = 'New visit';
-  static const String aiPrioritisedBecause = 'AI Prioritised because:';
-  static const String reason = 'Reason';
+  static String get enrolled => AppLocale.isBangla ? 'নথিভুক্ত' : 'Enrolled';
+  static String get ancVisitLabel =>
+      AppLocale.isBangla ? 'ANC ভিজিট' : 'ANC Visit';
+  static String get pncVisitLabel =>
+      AppLocale.isBangla ? 'PNC ভিজিট' : 'PNC Visit';
+  static String get childImmunisation =>
+      AppLocale.isBangla ? 'শিশু টিকাদান' : 'Child immunisation';
+  static String get ncdCheckup =>
+      AppLocale.isBangla ? 'NCD চেকআপ' : 'NCD checkup';
+  static String get tbCheck => AppLocale.isBangla ? 'TB পরীক্ষা' : 'TB check';
+  static String get newVisit =>
+      AppLocale.isBangla ? 'নতুন ভিজিট' : 'New visit';
+  static String get aiPrioritisedBecause => AppLocale.isBangla
+      ? 'এআই অগ্রাধিকার দিয়েছে কারণ:'
+      : 'AI Prioritised because:';
+  static String get reason => AppLocale.isBangla ? 'কারণ' : 'Reason';
 
   // ── AI Insight Reasons (human-readable) ──────────────────────────────────
-  static const String insightPatientNeverArrived =
-      'Patient never arrived at facility.';
-  static const String insightPossibleTransportBarrier =
-      'Possible transport barrier.';
-  static const String insightReferralOverdue = 'Referral overdue.';
-  static const String insightChildUnder5 = 'Child under 5.';
-  static const String insightHighRiskPregnancy = 'High-risk pregnancy.';
-  static const String insightNoFacilityArrival = 'No facility arrival.';
-  static const String insightMissedFollowUp = 'Missed follow-up.';
-  static const String insightSlaBreached = 'SLA breached.';
-  static const String insightEmergencyDiagnosis = 'Emergency diagnosis.';
-  static const String insightDiabetesMissedFollowUp =
-      'Diabetes patient missed follow-up.';
+  static String get insightPatientNeverArrived => AppLocale.isBangla
+      ? 'রোগী কখনও সুবিধায় পৌঁছাননি।'
+      : 'Patient never arrived at facility.';
+  static String get insightPossibleTransportBarrier => AppLocale.isBangla
+      ? 'সম্ভাব্য যাতায়াত সমস্যা।'
+      : 'Possible transport barrier.';
+  static String get insightReferralOverdue =>
+      AppLocale.isBangla ? 'রেফারেল বকেয়া।' : 'Referral overdue.';
+  static String get insightChildUnder5 => AppLocale.isBangla
+      ? '5 বছরের কম বয়সী শিশু।'
+      : 'Child under 5.';
+  static String get insightHighRiskPregnancy => AppLocale.isBangla
+      ? 'উচ্চ-ঝুঁকিপূর্ণ গর্ভাবস্থা।'
+      : 'High-risk pregnancy.';
+  static String get insightNoFacilityArrival =>
+      AppLocale.isBangla ? 'সুবিধায় পৌঁছাননি।' : 'No facility arrival.';
+  static String get insightMissedFollowUp =>
+      AppLocale.isBangla ? 'ফলো-আপ মিস হয়েছে।' : 'Missed follow-up.';
+  static String get insightSlaBreached =>
+      AppLocale.isBangla ? 'SLA লঙ্ঘিত হয়েছে।' : 'SLA breached.';
+  static String get insightEmergencyDiagnosis =>
+      AppLocale.isBangla ? 'জরুরি রোগ নির্ণয়।' : 'Emergency diagnosis.';
+  static String get insightDiabetesMissedFollowUp => AppLocale.isBangla
+      ? 'ডায়াবেটিস রোগীর ফলো-আপ মিস হয়েছে।'
+      : 'Diabetes patient missed follow-up.';
 
   // ── Action Buttons ───────────────────────────────────────────────────────
-  static const String callFamily = 'Call Family';
-  static const String locate = 'Locate';
-  static const String openCase = 'Open Case';
-  static const String callFacility = 'Call Facility';
-  static const String openReferral = 'Open Referral';
-  static const String scheduleVisit = 'Schedule Visit';
-  static const String visitHousehold = 'Visit Household';
-  static const String startRoute = 'Start Route';
-  static const String continueTodaysWork = "Continue Today's Work";
+  static String get callFamily =>
+      AppLocale.isBangla ? 'পরিবারকে কল করুন' : 'Call Family';
+  static String get locate => AppLocale.isBangla ? 'অবস্থান' : 'Locate';
+  static String get openCase =>
+      AppLocale.isBangla ? 'কেস খুলুন' : 'Open Case';
+  static String get callFacility =>
+      AppLocale.isBangla ? 'সুবিধায় কল করুন' : 'Call Facility';
+  static String get openReferral =>
+      AppLocale.isBangla ? 'রেফারেল খুলুন' : 'Open Referral';
+  static String get scheduleVisit =>
+      AppLocale.isBangla ? 'ভিজিট নির্ধারণ করুন' : 'Schedule Visit';
+  static String get visitHousehold =>
+      AppLocale.isBangla ? 'পরিবার ভিজিট করুন' : 'Visit Household';
+  static String get startRoute =>
+      AppLocale.isBangla ? 'রুট শুরু করুন' : 'Start Route';
+  static String get continueTodaysWork => AppLocale.isBangla
+      ? 'আজকের কাজ চালিয়ে যান'
+      : "Continue Today's Work";
 
   // ── Household Enrollment CTA ─────────────────────────────────────────────
-  static const String enrollHouseholdTitle = 'Enrol a new household';
-  static const String enrollHouseholdSubtitle =
-      'Register a family not yet in the programme';
-  static const String enrollHouseholdAction = 'Enrol now';
+  static String get enrollHouseholdTitle => AppLocale.isBangla
+      ? 'নতুন পরিবার নথিভুক্ত করুন'
+      : 'Enrol a new household';
+  static String get enrollHouseholdSubtitle => AppLocale.isBangla
+      ? 'প্রোগ্রামে এখনো নেই এমন পরিবার নিবন্ধন করুন'
+      : 'Register a family not yet in the programme';
+  static String get enrollHouseholdAction =>
+      AppLocale.isBangla ? 'এখনই নথিভুক্ত করুন' : 'Enrol now';
 
   // ── Referral Operations Widget ───────────────────────────────────────────
-  static const String referralStatus = 'Referral Status';
-  static const String active = 'Active';
-  static const String breached = 'Breached';
-  static const String awaitingReview = 'Awaiting Review';
-  static const String completed = 'Completed';
+  static String get referralStatus =>
+      AppLocale.isBangla ? 'রেফারেল অবস্থা' : 'Referral Status';
+  static String get active => AppLocale.isBangla ? 'সক্রিয়' : 'Active';
+  static String get breached => AppLocale.isBangla ? 'লঙ্ঘিত' : 'Breached';
+  static String get awaitingReview =>
+      AppLocale.isBangla ? 'পর্যালোচনার অপেক্ষায়' : 'Awaiting Review';
+  static String get completed => AppLocale.isBangla ? 'সম্পন্ন' : 'Completed';
   static String referralCount(int count, String status) => '$count $status';
 
   // ── Follow-Ups Due Widget ────────────────────────────────────────────────
-  static const String followUpsDue = 'Follow-Ups Due';
-  static const String discharged = 'Discharged';
-  static const String followUpDue = 'Follow-up Due';
-  static const String tomorrow = 'Tomorrow';
-  static const String today = 'Today';
-  static String daysAway(int days) =>
-      days == 0 ? today : (days == 1 ? tomorrow : 'In $days days');
+  static String get followUpsDue =>
+      AppLocale.isBangla ? 'বকেয়া ফলো-আপ' : 'Follow-Ups Due';
+  static String get discharged =>
+      AppLocale.isBangla ? 'ছাড়প্রাপ্ত' : 'Discharged';
+  static String get followUpDue =>
+      AppLocale.isBangla ? 'ফলো-আপ বকেয়া' : 'Follow-up Due';
+  static String get tomorrow => AppLocale.isBangla ? 'আগামীকাল' : 'Tomorrow';
+  static String get today => AppLocale.isBangla ? 'আজ' : 'Today';
+  static String daysAway(int days) {
+    if (days == 0) return today;
+    if (days == 1) return tomorrow;
+    return AppLocale.isBangla ? '$days দিনের মধ্যে' : 'In $days days';
+  }
 
   // ── Household Opportunities Widget ───────────────────────────────────────
-  static const String householdOpportunities = 'Household Opportunities';
-  static const String potentialServices = 'Potential Services';
-  static const String mother = 'Mother';
-  static const String child = 'Child';
-  static const String father = 'Father';
-  static const String ancFollowUpDue = 'ANC Follow-up Due';
-  static const String epiVaccineDue = 'EPI Vaccine Due';
-  static const String bpReviewPending = 'BP Review Pending';
-  static String householdNumber(int number) => 'Household #$number';
-  static String potentialServicesCount(int count) =>
-      'Potential Services: $count';
+  static String get householdOpportunities =>
+      AppLocale.isBangla ? 'পরিবার সুযোগ' : 'Household Opportunities';
+  static String get potentialServices =>
+      AppLocale.isBangla ? 'সম্ভাব্য সেবা' : 'Potential Services';
+  static String get mother => AppLocale.isBangla ? 'মা' : 'Mother';
+  static String get child => AppLocale.isBangla ? 'শিশু' : 'Child';
+  static String get father => AppLocale.isBangla ? 'বাবা' : 'Father';
+  static String get ancFollowUpDue =>
+      AppLocale.isBangla ? 'ANC ফলো-আপ বকেয়া' : 'ANC Follow-up Due';
+  static String get epiVaccineDue =>
+      AppLocale.isBangla ? 'EPI টিকা বকেয়া' : 'EPI Vaccine Due';
+  static String get bpReviewPending =>
+      AppLocale.isBangla ? 'BP পর্যালোচনা মুলতুবি' : 'BP Review Pending';
+  static String householdNumber(int number) =>
+      AppLocale.isBangla ? 'পরিবার #$number' : 'Household #$number';
+  static String potentialServicesCount(int count) => AppLocale.isBangla
+      ? 'সম্ভাব্য সেবা: $count'
+      : 'Potential Services: $count';
 
   // ── Route Optimization Widget ────────────────────────────────────────────
-  static const String optimalRoute = 'Optimal Route';
-  static const String distance = 'Distance';
-  static const String estimatedTravelTime = 'Estimated Time';
+  static String get optimalRoute =>
+      AppLocale.isBangla ? 'সর্বোত্তম রুট' : 'Optimal Route';
+  static String get distance => AppLocale.isBangla ? 'দূরত্ব' : 'Distance';
+  static String get estimatedTravelTime =>
+      AppLocale.isBangla ? 'আনুমানিক সময়' : 'Estimated Time';
   static String distanceKm(double km) => '${km.toStringAsFixed(1)} km';
   static String travelDuration(String duration) => duration;
 
   // ── Learning Recommendations Widget ──────────────────────────────────────
-  static const String todaysLearning = "Today's Learning";
-  static String learningDuration(int minutes) => '$minutes Minutes';
-  static const String triggeredByTodaysCases = 'Triggered by today\'s cases';
+  static String get todaysLearning =>
+      AppLocale.isBangla ? 'আজকের শিক্ষা' : "Today's Learning";
+  static String learningDuration(int minutes) =>
+      AppLocale.isBangla ? '$minutes মিনিট' : '$minutes Minutes';
+  static String get triggeredByTodaysCases => AppLocale.isBangla
+      ? 'আজকের কেস দ্বারা উদ্দীপিত'
+      : 'Triggered by today\'s cases';
 
   // ── Floating AI Assistant ────────────────────────────────────────────────
-  static const String aiAssistant = 'AI Assistant';
-  static const String askAiAssistant = 'Ask AI Assistant';
-  static const String aiAssistantHint =
-      'Ask about patient care, guidelines, or procedures…';
+  static String get aiAssistant =>
+      AppLocale.isBangla ? 'এআই সহকারী' : 'AI Assistant';
+  static String get askAiAssistant => AppLocale.isBangla
+      ? 'এআই সহকারীকে জিজ্ঞাসা করুন'
+      : 'Ask AI Assistant';
+  static String get aiAssistantHint => AppLocale.isBangla
+      ? 'রোগীর যত্ন, নির্দেশিকা বা পদ্ধতি সম্পর্কে জিজ্ঞাসা করুন…'
+      : 'Ask about patient care, guidelines, or procedures…';
 
   // ── Priority Levels ──────────────────────────────────────────────────────
-  static const String priorityCritical = 'Critical';
-  static const String priorityHigh = 'High';
-  static const String priorityMedium = 'Medium';
-  static const String priorityLow = 'Low';
+  static String get priorityCritical =>
+      AppLocale.isBangla ? 'জরুরি' : 'Critical';
+  static String get priorityHigh => AppLocale.isBangla ? 'উচ্চ' : 'High';
+  static String get priorityMedium => AppLocale.isBangla ? 'মাঝারি' : 'Medium';
+  static String get priorityLow => AppLocale.isBangla ? 'নিম্ন' : 'Low';
 
   // ── Programme Badges ─────────────────────────────────────────────────────
+  // Standardized clinical shorthand SKs are trained on — kept in Latin
+  // script regardless of UI language (not translated by design).
   static const String badgeAnc = 'ANC';
   static const String badgeImci = 'IMCI';
   static const String badgeNcd = 'NCD';
@@ -1055,22 +1466,33 @@ abstract final class MissionDashboardStrings {
   static const String badgeReferral = 'Referral';
 
   // ── Empty States ─────────────────────────────────────────────────────────
-  static const String noMissionsToday = 'No missions for today';
-  static const String allCaughtUp = 'All caught up! Great work.';
-  static const String noCriticalAlerts = 'No critical alerts';
-  static const String noFollowUpsDue = 'No follow-ups due';
-  static const String noHouseholdOpportunities =
-      'No household opportunities identified';
+  static String get noMissionsToday =>
+      AppLocale.isBangla ? 'আজকের জন্য কোনো মিশন নেই' : 'No missions for today';
+  static String get allCaughtUp => AppLocale.isBangla
+      ? 'সব সম্পন্ন! দারুণ কাজ।'
+      : 'All caught up! Great work.';
+  static String get noCriticalAlerts =>
+      AppLocale.isBangla ? 'কোনো জরুরি সতর্কতা নেই' : 'No critical alerts';
+  static String get noFollowUpsDue =>
+      AppLocale.isBangla ? 'কোনো ফলো-আপ বকেয়া নেই' : 'No follow-ups due';
+  static String get noHouseholdOpportunities => AppLocale.isBangla
+      ? 'কোনো পরিবার সুযোগ শনাক্ত হয়নি'
+      : 'No household opportunities identified';
 
   // ── 5-Tier Dashboard Model ───────────────────────────────────────────────
   // Single source of UI copy for tier headers, CTAs, and driver rationales.
   // Widgets must call these helpers instead of inlining tier labels.
 
-  static const String tierLabelCritical = 'Critical';
-  static const String tierLabelOverdue = 'Overdue';
-  static const String tierLabelDueToday = 'Due today';
-  static const String tierLabelThisWeek = 'This week';
-  static const String tierLabelUpcoming = 'Upcoming';
+  static String get tierLabelCritical =>
+      AppLocale.isBangla ? 'জরুরি' : 'Critical';
+  static String get tierLabelOverdue =>
+      AppLocale.isBangla ? 'বকেয়া' : 'Overdue';
+  static String get tierLabelDueToday =>
+      AppLocale.isBangla ? 'আজ বকেয়া' : 'Due today';
+  static String get tierLabelThisWeek =>
+      AppLocale.isBangla ? 'এই সপ্তাহে' : 'This week';
+  static String get tierLabelUpcoming =>
+      AppLocale.isBangla ? 'আসন্ন' : 'Upcoming';
 
   /// Localised label for a [DashboardTier]. Used by inline tier headers and
   /// the patient-list filter chip row.
@@ -1095,10 +1517,14 @@ abstract final class MissionDashboardStrings {
       '${tierLabel(tier)} · $count';
 
   // Tier-varied CTA pill labels.
-  static const String ctaVisitNow = 'Visit now';
-  static const String ctaVisitToday = 'Visit today';
-  static const String ctaPlanVisit = 'Plan visit';
-  static const String ctaSchedule = 'Schedule';
+  static String get ctaVisitNow =>
+      AppLocale.isBangla ? 'এখনই ভিজিট করুন' : 'Visit now';
+  static String get ctaVisitToday =>
+      AppLocale.isBangla ? 'আজ ভিজিট করুন' : 'Visit today';
+  static String get ctaPlanVisit =>
+      AppLocale.isBangla ? 'ভিজিট পরিকল্পনা করুন' : 'Plan visit';
+  static String get ctaSchedule =>
+      AppLocale.isBangla ? 'নির্ধারণ করুন' : 'Schedule';
 
   /// CTA pill label for a card in a given tier:
   ///   critical / overdue → `'Visit now'`
@@ -1120,44 +1546,72 @@ abstract final class MissionDashboardStrings {
   }
 
   // ── Inline Village + Need filter ─────────────────────────────────────────
-  static const String whichVillageVisiting = 'WHICH VILLAGE ARE YOU VISITING?';
-  static const String allVillages = 'All villages';
-  static const String filterByNeed = 'FILTER BY NEED';
-  static const String filterByNeedOptional = 'optional';
-  static const String needHighRisk = 'High-risk';
+  static String get whichVillageVisiting => AppLocale.isBangla
+      ? 'আপনি কোন গ্রাম পরিদর্শন করছেন?'
+      : 'WHICH VILLAGE ARE YOU VISITING?';
+  static String get allVillages =>
+      AppLocale.isBangla ? 'সব গ্রাম' : 'All villages';
+  static String get filterByNeed =>
+      AppLocale.isBangla ? 'প্রয়োজন অনুযায়ী ফিল্টার' : 'FILTER BY NEED';
+  static String get filterByNeedOptional =>
+      AppLocale.isBangla ? 'ঐচ্ছিক' : 'optional';
+  static String get needHighRisk =>
+      AppLocale.isBangla ? 'উচ্চ-ঝুঁকি' : 'High-risk';
   static const String needAncMnch = 'ANC / MNCH';
-  static const String needChildImmunisation = 'Child / Immun.';
+  static String get needChildImmunisation =>
+      AppLocale.isBangla ? 'শিশু / টিকা' : 'Child / Immun.';
   static const String needNcd = 'NCD';
-  static const String needEyeCare = 'Eye care';
-  static const String needMissedFollowUp = 'Missed';
-  static const String needPendingReferral = 'Referral';
-  static const String needHomeVisit = 'Home visit';
-  static const String needFacilityReferral = 'Facility';
-  static const String clearNeedFilters = 'Clear';
-  static const String filterByProgramme = 'Programme';
-  static const String noNeedsInQueue = 'No priority needs in today\'s list';
-  static const String noVisitsMatchFilters = 'No visits match these filters';
-  static const String noVisitsMatchFiltersHint =
-      'Try another village or clear the filters';
-  static String completedVisitToast(String name) =>
-      "$name's visit already done today ✓";
+  static String get needEyeCare =>
+      AppLocale.isBangla ? 'চোখের যত্ন' : 'Eye care';
+  static String get needMissedFollowUp =>
+      AppLocale.isBangla ? 'মিস হয়েছে' : 'Missed';
+  static String get needPendingReferral =>
+      AppLocale.isBangla ? 'রেফারেল' : 'Referral';
+  static String get needHomeVisit =>
+      AppLocale.isBangla ? 'বাড়ি পরিদর্শন' : 'Home visit';
+  static String get needFacilityReferral =>
+      AppLocale.isBangla ? 'সুবিধা' : 'Facility';
+  static String get clearNeedFilters =>
+      AppLocale.isBangla ? 'সাফ করুন' : 'Clear';
+  static String get filterByProgramme =>
+      AppLocale.isBangla ? 'প্রোগ্রাম' : 'Programme';
+  static String get noNeedsInQueue => AppLocale.isBangla
+      ? 'আজকের তালিকায় কোনো অগ্রাধিকার প্রয়োজন নেই'
+      : 'No priority needs in today\'s list';
+  static String get noVisitsMatchFilters => AppLocale.isBangla
+      ? 'এই ফিল্টারগুলোর সাথে কোনো ভিজিট মেলে না'
+      : 'No visits match these filters';
+  static String get noVisitsMatchFiltersHint => AppLocale.isBangla
+      ? 'অন্য গ্রাম চেষ্টা করুন অথবা ফিল্টার সাফ করুন'
+      : 'Try another village or clear the filters';
+  static String completedVisitToast(String name) => AppLocale.isBangla
+      ? '$name-এর ভিজিট আজ ইতিমধ্যে সম্পন্ন হয়েছে ✓'
+      : "$name's visit already done today ✓";
 
   // ── AI sorted info card tags ──────────────────────────────────────────────
-  static const String aiSortedTagRisk = '✦Risk scoring';
-  static const String aiSortedTagOverdue = '✦Overdue flags';
-  static const String aiSortedTagCce = '✦CCE alerts';
+  static String get aiSortedTagRisk =>
+      AppLocale.isBangla ? '✦ঝুঁকি স্কোরিং' : '✦Risk scoring';
+  static String get aiSortedTagOverdue =>
+      AppLocale.isBangla ? '✦বকেয়া ফ্ল্যাগ' : '✦Overdue flags';
+  static String get aiSortedTagCce =>
+      AppLocale.isBangla ? '✦CCE সতর্কতা' : '✦CCE alerts';
 
   // ── "+ Enrol new" FAB ────────────────────────────────────────────────────
-  static const String enrolNewCta = 'Enroll new';
-  static const String enrolNewComingSoon =
-      'QR enrolment flow coming soon. Use the Patients tab to view existing patients.';
+  static String get enrolNewCta =>
+      AppLocale.isBangla ? 'নতুন নথিভুক্ত করুন' : 'Enroll new';
+  static String get enrolNewComingSoon => AppLocale.isBangla
+      ? 'QR নথিভুক্তি প্রক্রিয়া শীঘ্রই আসছে। বিদ্যমান রোগী দেখতে Patients ট্যাব ব্যবহার করুন।'
+      : 'QR enrolment flow coming soon. Use the Patients tab to view existing patients.';
 
   // ── Status pills (compact tier label shown in the card right-side pill) ───
-  static const String statusPillNow = 'Now';
-  static const String statusPillOverdue = 'Overdue';
-  static const String statusPillToday = 'Today';
-  static const String statusPillThisWeek = 'This week';
-  static const String statusPillRoutine = 'Routine';
+  static String get statusPillNow => AppLocale.isBangla ? 'এখন' : 'Now';
+  static String get statusPillOverdue =>
+      AppLocale.isBangla ? 'বকেয়া' : 'Overdue';
+  static String get statusPillToday => AppLocale.isBangla ? 'আজ' : 'Today';
+  static String get statusPillThisWeek =>
+      AppLocale.isBangla ? 'এই সপ্তাহে' : 'This week';
+  static String get statusPillRoutine =>
+      AppLocale.isBangla ? 'নিয়মিত' : 'Routine';
 
   static String statusPillForTier(DashboardTier tier) {
     switch (tier) {
@@ -1178,6 +1632,40 @@ abstract final class MissionDashboardStrings {
   /// Unknown tags fall back to a generic phrase so the rationale sheet never
   /// shows a raw tag identifier to the SK.
   static String driverLabel(String tag) {
+    if (AppLocale.isBangla) {
+      switch (tag) {
+        case 'sla-breached':
+          return 'রেফারেল SLA লঙ্ঘিত হয়েছে';
+        case 'red-flag':
+          return 'রেড-ফ্ল্যাগ রোগী';
+        case 'hi-risk-anc-gap':
+          return 'ANC ব্যবধানসহ উচ্চ-ঝুঁকিপূর্ণ গর্ভাবস্থা';
+        case 'neonate':
+          return 'নবজাতক (28 দিনের কম)';
+        case 'young-infant':
+          return 'শিশু (60 দিনের কম)';
+        case 'pnc-window':
+          return 'প্রসবোত্তর (42 দিনের মধ্যে)';
+        case 'anc-near-term':
+          return 'প্রসবের কাছাকাছি গর্ভাবস্থা (EDD 14 দিনের মধ্যে)';
+        case 'delivery-complication':
+          return 'প্রসবকালীন জটিলতা রেকর্ড করা হয়েছে';
+        case 'pnc-illness':
+          return 'প্রসবোত্তর অসুস্থতা রিপোর্ট করা হয়েছে';
+        case 'ltfu-streak':
+          return 'ধারাবাহিক ফলো-আপ হারানো';
+        case 'tb-default-risk':
+          return 'TB চিকিৎসা — ডিফল্ট ঝুঁকি';
+        case 'ncd-drift':
+          return 'NCD চিকিৎসা বকেয়া';
+        case 'referral-arrival-pending':
+          return 'রেফারেল আগমনের অপেক্ষায়';
+        case 'child-disability':
+          return 'প্রতিবন্ধী 5 বছরের কম বয়সী শিশু';
+        default:
+          return 'ক্লিনিক্যাল অগ্রাধিকার সংকেত';
+      }
+    }
     switch (tag) {
       case 'sla-breached':
         return 'Referral SLA breached';
@@ -1211,6 +1699,22 @@ abstract final class MissionDashboardStrings {
         return 'Clinical priority signal';
     }
   }
+
+  // ── Notification drawer ──────────────────────────────────────────────────
+  static String get notificationsTitle =>
+      AppLocale.isBangla ? 'বিজ্ঞপ্তি' : 'Notifications';
+  static String get close => AppLocale.isBangla ? 'বন্ধ করুন' : 'Close';
+  static String get noNewNotifications =>
+      AppLocale.isBangla ? 'কোনো নতুন বিজ্ঞপ্তি নেই' : 'No new notifications';
+  static String get cceEscalations =>
+      AppLocale.isBangla ? 'CCE এসকেলেশন' : 'CCE escalations';
+  static String criticalReferralsSubtitle(int count) => AppLocale.isBangla
+      ? '$count টি জরুরি রেফারেলের তাৎক্ষণিক মনোযোগ প্রয়োজন'
+      : '$count critical referral${count == 1 ? '' : 's'} need immediate attention';
+  static String pendingReferralsSubtitle(int count) => AppLocale.isBangla
+      ? '$count টি অমীমাংসিত রেফারেল ফলো-আপের অপেক্ষায়'
+      : '$count pending referral${count == 1 ? '' : 's'} awaiting follow-up';
+  static String get viewAll => AppLocale.isBangla ? 'সব দেখুন' : 'View all';
 }
 
 /// Visit triage step (HTML composition) — bilingual symptom prompts.
@@ -1339,20 +1843,25 @@ abstract final class ScribeBannerStrings {
 }
 
 /// Bottom-nav tab labels + placeholder copy.
+/// Pilot slice of the localization seam (see [LoginStrings] doc comment).
 abstract final class BottomNavStrings {
   BottomNavStrings._();
 
-  static const String home = 'Home';
-  static const String patients = 'Patients';
-  static const String tasks = 'Tasks';
-  static const String assistant = 'Assistant';
+  static String get home => AppLocale.isBangla ? 'হোম' : 'Home';
+  static String get patients => AppLocale.isBangla ? 'রোগী' : 'Patients';
+  static String get tasks => AppLocale.isBangla ? 'কাজ' : 'Tasks';
+  static String get assistant => AppLocale.isBangla ? 'সহকারী' : 'Assistant';
 
   // Assistant placeholder screen
-  static const String assistantTitle = 'Assistant';
-  static const String assistantPlaceholderHeading = 'AI Assistant';
-  static const String assistantPlaceholderSubheading = 'Coming soon';
+  static String get assistantTitle => assistant;
+  static String get assistantPlaceholderHeading =>
+      AppLocale.isBangla ? 'এআই সহকারী' : 'AI Assistant';
+  static String get assistantPlaceholderSubheading =>
+      AppLocale.isBangla ? 'শীঘ্রই আসছে' : 'Coming soon';
 
-  static const String pressBackAgainToExit = 'Press back again to exit';
+  static String get pressBackAgainToExit => AppLocale.isBangla
+      ? 'প্রস্থান করতে আবার ব্যাক চাপুন'
+      : 'Press back again to exit';
 }
 
 /// Symptom triage picker screen strings.

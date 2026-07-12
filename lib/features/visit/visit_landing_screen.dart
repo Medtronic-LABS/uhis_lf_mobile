@@ -131,7 +131,7 @@ class _VisitLandingScreenState extends State<VisitLandingScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(PatientContextStrings.startVisit),
+        title: Text(PatientContextStrings.startVisit),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),

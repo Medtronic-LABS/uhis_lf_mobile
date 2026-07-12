@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
+import 'app/locale_provider.dart';
 import 'app/router.dart';
 import 'app/theme.dart';
 import 'app/theme_provider.dart';
@@ -360,6 +361,7 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<AppDatabase>.value(value: widget.appDb),
         ChangeNotifierProvider<AuthState>.value(value: widget.authState),
         ChangeNotifierProvider<ThemeProvider>(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider<LocaleProvider>(create: (_) => LocaleProvider()),
         Provider<DashboardRepository>(
             create: (_) => DashboardRepository(
                 widget.api, widget.authRepo, _householdDao, _memberDao)),
@@ -474,6 +476,7 @@ class _UhisNextAppState extends State<UhisNextApp>
       child: Builder(
         builder: (context) {
           final themeProvider = context.watch<ThemeProvider>();
+          final localeProvider = context.watch<LocaleProvider>();
           return Provider<GoRouter>.value(
             value: _router,
             // LockBarrier must be outside MaterialApp.router to avoid rebuild
@@ -482,7 +485,19 @@ class _UhisNextAppState extends State<UhisNextApp>
             child: Directionality(
               textDirection: TextDirection.ltr,
               child: _LockBarrierOverlay(
+                // GoRouter caches its current page's widgets independently of
+                // this ancestor rebuilding — a plain rebuild here does NOT
+                // re-invoke the already-built route's build() method, so a
+                // language change (read via a plain global flag, not an
+                // InheritedWidget like Theme) would silently not appear on
+                // the visible screen. Keying MaterialApp on the language
+                // forces Flutter to tear down and remount the whole routed
+                // subtree on a change, so every widget re-executes build()
+                // and re-reads its *Strings getters. GoRouter's own object
+                // (`_router`, unchanged) keeps its current location, so the
+                // user stays on the same screen — just fully redrawn.
                 child: MaterialApp.router(
+                  key: ValueKey(localeProvider.language),
                   title: AppStrings.appName,
                   theme: buildAppTheme(),
                   darkTheme: buildDarkTheme(),

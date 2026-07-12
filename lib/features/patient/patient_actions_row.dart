@@ -170,13 +170,13 @@ class _PatientActionsRowState extends State<PatientActionsRow> {
               child: OutlinedButton.icon(
                 onPressed: () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
+                    SnackBar(
                       content: Text(PatientContextStrings.callComingSoon),
                     ),
                   );
                 },
                 icon: const Icon(Icons.phone),
-                label: const Text(PatientContextStrings.callHousehold),
+                label: Text(PatientContextStrings.callHousehold),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size.fromHeight(44),
                 ),
