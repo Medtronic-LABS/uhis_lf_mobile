@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/constants/app_strings.dart';
+import 'followup_call_service.dart';
 import 'followup_repository.dart';
+import 'widgets/log_call_sheet.dart';
 
 /// Section showing open follow-ups for a patient.
 class OpenFollowupsSection extends StatefulWidget {
@@ -37,6 +40,43 @@ class _OpenFollowupsSectionState extends State<OpenFollowupsSection> {
     });
   }
 
+  /// The bare id the `follow_ups.patient_id` column stores (repo strips any
+  /// `Patient/…` prefix on read, so we must store the stripped form).
+  String get _barePatientId {
+    final id = widget.memberReference ?? widget.patientId;
+    final slash = id.lastIndexOf('/');
+    return slash < 0 ? id : id.substring(slash + 1);
+  }
+
+  /// Create a follow-up for this patient (backend accepts a null-id follow-up
+  /// as a create; it shows here immediately and pushes on the next sync).
+  Future<void> _schedule() async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: now.add(const Duration(days: 1)),
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 365)),
+    );
+    if (date == null || !mounted) return;
+    try {
+      await context.read<FollowUpCallService>().scheduleLocal(
+            patientId: _barePatientId,
+            dueDate: date,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(FollowUpCallStrings.scheduled)),
+      );
+      _load();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(FollowUpCallStrings.scheduleFailed)),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -44,11 +84,27 @@ class _OpenFollowupsSectionState extends State<OpenFollowupsSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Open Follow-ups',
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
+        Row(
+          children: [
+            Text(
+              'Open Follow-ups',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: _schedule,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const Size(0, 32),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text(FollowUpCallStrings.schedule,
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+            ),
+          ],
         ),
         const SizedBox(height: 8),
         FutureBuilder<List<FollowUp>>(
@@ -105,7 +161,11 @@ class _OpenFollowupsSectionState extends State<OpenFollowupsSection> {
                 children: [
                   for (var i = 0; i < followUps.length; i++) ...[
                     if (i > 0) const Divider(height: 1, indent: 16, endIndent: 16),
-                    _FollowUpTile(fu: followUps[i], typeLabel: _typeLabel(followUps[i].type)),
+                    _FollowUpTile(
+                      fu: followUps[i],
+                      typeLabel: _typeLabel(followUps[i].type),
+                      onLogged: _load,
+                    ),
                   ],
                 ],
               ),
@@ -137,10 +197,32 @@ class _OpenFollowupsSectionState extends State<OpenFollowupsSection> {
 }
 
 class _FollowUpTile extends StatelessWidget {
-  const _FollowUpTile({required this.fu, required this.typeLabel});
+  const _FollowUpTile({
+    required this.fu,
+    required this.typeLabel,
+    required this.onLogged,
+  });
 
   final FollowUp fu;
   final String typeLabel;
+
+  /// Called after a call is logged so the parent can reload (the follow-up may
+  /// now be completed, or its attempt count changed).
+  final VoidCallback onLogged;
+
+  Future<void> _logCall(BuildContext context) async {
+    final saved = await LogCallSheet.show(
+      context,
+      followUpId: fu.id,
+      title: typeLabel,
+    );
+    if (saved && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(FollowUpCallStrings.saved)),
+      );
+      onLogged();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -278,6 +360,18 @@ class _FollowUpTile extends StatelessWidget {
                 ],
               ],
             ),
+          ),
+          const SizedBox(width: 8),
+          TextButton.icon(
+            onPressed: () => _logCall(context),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: const Size(0, 32),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            icon: const Icon(Icons.call, size: 15),
+            label: const Text(FollowUpCallStrings.logCall,
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
           ),
         ],
       ),

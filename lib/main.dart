@@ -50,6 +50,7 @@ import 'core/sync/offline_sync_service.dart';
 import 'features/dashboard/dashboard_repository.dart';
 import 'features/dashboard/mission_dashboard_repository.dart';
 import 'features/lock/lock_barrier.dart';
+import 'features/patient/followup_call_service.dart';
 import 'features/patient/followup_repository.dart';
 import 'features/patient/member_detail_repository.dart';
 import 'features/patient/patient_repository.dart';
@@ -251,11 +252,14 @@ class _UhisNextAppState extends State<UhisNextApp>
   );
 
   // ── Assessment Repository for offline-first assessment capture ──────────
+  late final FollowUpCallService _followUpCallService =
+      FollowUpCallService(_followUpDao);
   late final AssessmentRepository _assessmentRepo = AssessmentRepository(
     dao: _localAssessmentDao,
     api: widget.api,
     auth: widget.authRepo,
     historyDao: _assessmentDao,
+    followUpCalls: _followUpCallService,
   );
   late final AssessmentDraftDao _draftDao = AssessmentDraftDao(widget.appDb);
   late final AiResponseCacheDao _aiCacheDao = AiResponseCacheDao(widget.appDb);
@@ -394,6 +398,7 @@ class _UhisNextAppState extends State<UhisNextApp>
         Provider<HouseholdDao>.value(value: _householdDao),
         Provider<MemberDao>.value(value: _memberDao),
         Provider<FollowUpDao>.value(value: _followUpDao),
+        Provider<FollowUpCallService>.value(value: _followUpCallService),
         Provider<AssessmentDao>.value(value: _assessmentDao),
         Provider<LocalAssessmentDao>.value(value: _localAssessmentDao),
         Provider<LocalDashboardRepository>.value(value: _localDashboard),

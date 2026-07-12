@@ -11,6 +11,7 @@ import '../../core/config/app_config.dart';
 import '../../core/db/assessment_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/models/provance_dto.dart';
+import '../patient/followup_call_service.dart';
 import 'forms/vitals_trend.dart';
 
 /// Repository for offline-first assessment management matching Android pattern.
@@ -28,10 +29,12 @@ class AssessmentRepository extends ChangeNotifier {
     required ApiClient api,
     required AuthRepository auth,
     AssessmentDao? historyDao,
+    FollowUpCallService? followUpCalls,
   })  : _dao = dao,
         _api = api,
         _auth = auth,
-        _historyDao = historyDao;
+        _historyDao = historyDao,
+        _followUpCalls = followUpCalls;
 
   final LocalAssessmentDao _dao;
   final ApiClient _api;
@@ -39,6 +42,9 @@ class AssessmentRepository extends ChangeNotifier {
   // Server-synced visit history (assessments table). May be null when not
   // wired in (e.g., during unit tests where the full DB is not available).
   final AssessmentDao? _historyDao;
+  // Pending follow-up call attempts ride the same offline-sync/create push.
+  // Null in unit tests where the follow-up DB isn't wired.
+  final FollowUpCallService? _followUpCalls;
 
   bool _isSyncing = false;
   bool get isSyncing => _isSyncing;
@@ -215,6 +221,28 @@ class AssessmentRepository extends ChangeNotifier {
       logChunked('[AssessmentSync][$i] details:', jsonEncode(a['assessmentDetails']));
     }
 
+    // Serialize any pending follow-up call attempts so they ride this same
+    // offline-sync/create push (Android bundles follow-ups alongside
+    // assessments). Defensive: a follow-up serialization failure must never
+    // block the assessment push.
+    var followUpPayloads = <Map<String, dynamic>>[];
+    var pushedFollowUpIds = <String>[];
+    if (_followUpCalls != null) {
+      try {
+        final result = await _followUpCalls.serializePendingForPush(
+          provenance: provenance.toJson(),
+        );
+        followUpPayloads = result.wire;
+        pushedFollowUpIds = result.ids;
+        if (followUpPayloads.isNotEmpty) {
+          debugPrint(
+              '[AssessmentSync] attaching ${followUpPayloads.length} pending follow-up(s)');
+        }
+      } catch (e) {
+        debugPrint('[AssessmentSync] follow-up serialize skipped: $e');
+      }
+    }
+
     // Build create request matching Android's OfflineSyncRepository.getRequestObject().
     // communityProfiles and rxBuddies are included (empty arrays) so the server
     // receives the full contract shape Android sends.
@@ -229,7 +257,7 @@ class AssessmentRepository extends ChangeNotifier {
       'households': <Map<String, dynamic>>[],
       'householdMembers': <Map<String, dynamic>>[],
       'assessments': assessmentPayloads,
-      'followUps': <Map<String, dynamic>>[],
+      'followUps': followUpPayloads,
       'householdMemberLinks': <Map<String, dynamic>>[],
       'communityProfiles': <Map<String, dynamic>>[],
       'rxBuddies': <Map<String, dynamic>>[],
@@ -248,6 +276,16 @@ class AssessmentRepository extends ChangeNotifier {
       if (status >= 200 && status < 300) {
         await _dao.updateSyncStatus(ids, AssessmentSyncStatus.success);
         debugPrint('[AssessmentSync] Marked ${ids.length} as success');
+        // Follow-ups accepted in the same envelope → flip to InProgress
+        // (awaiting server confirmation on the next pull) and mark their
+        // calls synced so they are not re-pushed.
+        if (pushedFollowUpIds.isNotEmpty && _followUpCalls != null) {
+          try {
+            await _followUpCalls.markPushed(pushedFollowUpIds);
+          } catch (e) {
+            debugPrint('[AssessmentSync] follow-up markPushed skipped: $e');
+          }
+        }
         return ids.length;
       } else {
         // Server returned an error response — mark as failed (not network error).
