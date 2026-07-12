@@ -18,6 +18,7 @@ import '../../scribe/widgets/ai_scribe_banner.dart';
 import '../briefing/briefing_models.dart';
 import '../briefing/visit_briefing_repository.dart';
 import '../pathway/pathway_engine.dart';
+import 'child_assessment_section.dart';
 import 'patient_context_builder.dart';
 import 'visit_step_header.dart';
 import 'triage_view_model.dart';
@@ -87,6 +88,8 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   VisitBriefingResponse? _briefingData;
   bool _briefingLoading = true;
   int? _ancVisitCount;
+
+  ChildAssessmentData? _childAssessmentData;
 
   @override
   void initState() {
@@ -310,6 +313,19 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     });
   }
 
+  /// Handles the Vaccination CTA tap for under-5 patients.
+  ///
+  /// In embedded mode (inside VisitFlowScreen): advances the visit flow to the
+  /// vaccination step by calling [_onContinue], which fires [onAdvance].
+  /// In standalone mode: pushes the immunisation timeline route directly.
+  void _onVaccination() {
+    if (widget.onAdvance != null) {
+      _onContinue();
+    } else {
+      _openVaccinationTimeline();
+    }
+  }
+
   void _onContinue() {
     final vm = _viewModel;
     if (vm == null || _patientContext == null) return;
@@ -528,7 +544,19 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                   ),
                 ),
 
-                // Status bar + Start Checkup CTA
+                // Child Assessment questions — under-5 only, shown when at
+                // least one symptom has been selected (mirrors HTML s23).
+                if (_patientContext!.isUnder5 &&
+                    vm.selectedSymptoms.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: ChildAssessmentSection(
+                      data: _childAssessmentData ?? ChildAssessmentData(),
+                      onChanged: (updated) =>
+                          setState(() => _childAssessmentData = updated),
+                    ),
+                  ),
+
+                // Status bar + CTA row
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
                   sliver: SliverToBoxAdapter(
@@ -565,38 +593,44 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                           ),
 
                         // ── Vaccination CTA (under-5 only) ─────────────────
+                        // For children the vaccination button is the primary
+                        // CTA; in embedded mode it also advances the visit flow
+                        // to the vaccination step. The "Start Checkup" button
+                        // is hidden for under-5 patients.
                         if (_patientContext!.isUnder5) ...[
                           const SizedBox(height: 4),
                           SizedBox(
                             width: double.infinity,
                             child: FilledButton(
-                              onPressed: () => _openVaccinationTimeline(),
+                              onPressed: _onVaccination,
                               style: FilledButton.styleFrom(
                                 backgroundColor: AppColors.pink,
                                 foregroundColor: AppColors.textOnNavy,
                               ),
                               child: const Text(
-                                '💉  ${EpiStrings.vaccinationCta}  →',
+                                ChildAssessmentStrings.vaccinationCta,
                                 style: TextStyle(fontWeight: FontWeight.w700),
                               ),
                             ),
                           ),
-                          const SizedBox(height: 8),
                         ],
 
-                        // ── Start Checkup button ───────────────────────────
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton(
-                            onPressed: _onContinue,
-                            style: FilledButton.styleFrom(
-                              backgroundColor: AppColors.pink,
-                              foregroundColor: AppColors.textOnNavy,
+                        // ── Start Checkup button (adults only) ────────────
+                        if (!(_patientContext!.isUnder5)) ...[
+                          const SizedBox(height: 4),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton(
+                              onPressed: _onContinue,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: AppColors.pink,
+                                foregroundColor: AppColors.textOnNavy,
+                              ),
+                              child: const Text(
+                                  SymptomPickerStrings.ctaStartCheckup),
                             ),
-                            child: const Text(
-                                SymptomPickerStrings.ctaStartCheckup),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ),

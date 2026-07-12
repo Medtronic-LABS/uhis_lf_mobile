@@ -4231,4 +4231,45 @@ abstract final class EpiStrings {
   static const String cancel = 'Cancel';
   static const String submitCta = 'Submit';
   static const String givenOn = 'Given';
+  static const String doneVisitCta = 'Done → Continue Visit';
+}
+
+abstract final class ChildAssessmentStrings {
+  ChildAssessmentStrings._();
+
+  static const String sectionTitle = 'Child Assessment';
+  static const String q6Label = 'Does the child have any congenital defect?';
+  static const String q7Label = 'Weight';
+  static const String q7Unit = 'kg';
+  static const String q7Hint = 'e.g. 6.5';
+  static const String q8Label = 'Is the child breastfeeding?';
+  static const String q9Label =
+      'In the past 24 hours, was the child given additional food?';
+  static const String q10Label = 'Has the child received vaccines?';
+  static const String q11Label = 'Has the child taken deworming medicine?';
+  static const String q12Label = 'Any Illness/Complications?';
+  static const String q13Label = 'If any complication, specify';
+  static const String q13SelectAll = 'Select all that apply';
+  static const String q14Label = 'Has referral been made?';
+  static const String q15Label = 'Referral place';
+  static const String yesOption = 'Yes';
+  static const String noOption = 'No';
+  static const String vaccinationCta = '💉  Vaccination  →';
+
+  static const List<String> complicationOptions = [
+    'Diarrhea',
+    'Pneumonia',
+    'Cannot stand or walk',
+    'Cannot maintain body balance',
+    'Cannot speak two meaningful words',
+  ];
+
+  static const List<String> referralPlaces = [
+    'Medical College Hospital',
+    'Government Hospital',
+    'Upazila Health Complex',
+    'Private Hospital/Clinic',
+    'Health & Family Welfare Center',
+    'Community Clinic',
+  ];
 }

@@ -39,6 +39,7 @@ import 'naba/naba_repository.dart';
 import 'pathway/pathway_engine.dart';
 import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
+import 'immunisation/immunisation_timeline_screen.dart';
 import 'programme_selection/programme_selection_screen.dart';
 import 'triage/symptom_picker_screen.dart';
 import 'visit_form_screen.dart';
@@ -242,6 +243,14 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   Programme _primaryProgramme = Programme.unknown;
   bool _referralRecommended = false;
 
+  /// True when the confirmed programmes contain EPI or IMCI. Drives the child
+  /// visit branch: Step 2 shows the immunisation timeline instead of the
+  /// standard checkup form, and Step 1 hides the "Start Checkup" CTA.
+  bool get _isChildVisit =>
+      _confirmedProgrammes.any(
+        (p) => p == Programme.epi || p == Programme.imci,
+      );
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -325,6 +334,23 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           },
         );
       case 1:
+        // For child visits (EPI / IMCI) Step 2 is the immunisation timeline,
+        // not the standard checkup form. The 3-step progress header is unchanged.
+        if (_isChildVisit) {
+          return _Step2Vaccination(
+            key: ValueKey('flow-step2-vacc-${widget.visitId}'),
+            patientId: widget.patientId,
+            patientName: widget.patientName,
+            encounterId: widget.visitId,
+            onAdvance: () {
+              setState(() {
+                _primaryProgramme = Programme.epi;
+                _referralRecommended = false;
+                _step = 2;
+              });
+            },
+          );
+        }
         // Step 2 is composite: AI programme recommendation → form. The
         // internal phase switch lives inside the host so the SK still sees a
         // 3-step progress header.
@@ -563,121 +589,106 @@ class _VisitFlowHeader extends StatelessWidget {
       '3. ${VisitFlowStrings.step3Title}',
     ];
 
+    // Compact subtitle: "age · gender · house" — plain text, no chips.
+    final subtitleParts = <String>[
+      if (patientAge != null) 'Age $patientAge',
+      if (patientGender != null && patientGender!.isNotEmpty)
+        patientGender!.toUpperCase().startsWith('F') ? 'Female' : 'Male',
+      if (householdId != null && householdId!.isNotEmpty)
+        'House #$householdId',
+    ];
+    final subtitle = subtitleParts.join(' · ');
+
     return Material(
       color: _headerColor,
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(AppSpacing.xs, AppSpacing.xs, AppSpacing.xl, AppSpacing.xl),
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Row 1: ← Back to visits
-              InkWell(
-                onTap: onBack,
-                borderRadius: BorderRadius.circular(AppRadius.rxIcon),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.arrow_back_rounded,
-                          color: Colors.white, size: 20),
-                      const SizedBox(width: 6),
-                      Text(
-                        VisitFlowStrings.backToVisits,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.9),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-
-              // Row 2 + 3: avatar + name / age · house
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
+              // Compact row: [← button] [avatar] [name + subtitle]
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // Circular back button — inline, no separate row
+                  GestureDetector(
+                    onTap: onBack,
+                    child: Container(
+                      width: 30,
+                      height: 30,
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(AppRadius.pill),
+                        color: Colors.white.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
                       ),
                       alignment: Alignment.center,
-                      child: Text(
-                        _initials,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                        ),
+                      child: const Icon(
+                        Icons.arrow_back_rounded,
+                        color: Colors.white,
+                        size: 16,
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
+                  ),
+                  const SizedBox(width: 10),
+                  // Avatar circle with initials
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      _initials,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  // Name + subtitle
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          patientName ?? '—',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        if (subtitle.isNotEmpty) ...[
+                          const SizedBox(height: 2),
                           Text(
-                            patientName ?? '—',
+                            subtitle,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 17,
-                              fontWeight: FontWeight.w800,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.75),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          Wrap(
-                            spacing: 10,
-                            runSpacing: 2,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              if (patientAge != null)
-                                _DemoChip(
-                                  icon: Icons.cake_outlined,
-                                  label: 'Age $patientAge',
-                                ),
-                              if (patientGender != null && patientGender!.isNotEmpty)
-                                _DemoChip(
-                                  icon: patientGender!.toUpperCase().startsWith('F')
-                                      ? Icons.female_rounded
-                                      : Icons.male_rounded,
-                                  label: patientGender!.toUpperCase().startsWith('F')
-                                      ? 'Female'
-                                      : 'Male',
-                                ),
-                              if (householdId != null && householdId!.isNotEmpty)
-                                _DemoChip(
-                                  icon: Icons.home_outlined,
-                                  label: 'House #$householdId',
-                                ),
-                            ],
-                          ),
                         ],
-                      ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
 
-              // Row 4: 3-step line indicators with labels below.
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-                child: Column(
+              // 3-step line indicators with labels below.
+              Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
@@ -727,7 +738,6 @@ class _VisitFlowHeader extends StatelessWidget {
                     ),
                   ],
                 ),
-              ),
             ],
           ),
         ),
@@ -881,6 +891,74 @@ class _Step2VitalsForm extends StatelessWidget {
       confirmedSymptoms: confirmedSymptoms,
       aiPickedSymptoms: aiPickedSymptoms,
       onAdvance: onAdvance,
+    );
+  }
+}
+
+/// Step 2 — vaccination step for child visits (EPI / IMCI).
+///
+/// Embeds [ImmunisationTimelineScreen] within the 3-step flow. When the SK
+/// taps "Done → Continue Visit", [onAdvance] fires and the host advances to
+/// Step 3 (AI recommendation + household followup). Standalone access to the
+/// immunisation timeline (from the patient record) is unaffected.
+class _Step2Vaccination extends StatefulWidget {
+  const _Step2Vaccination({
+    super.key,
+    required this.patientId,
+    required this.onAdvance,
+    this.patientName,
+    this.encounterId,
+  });
+
+  final String patientId;
+  final String? patientName;
+  final VoidCallback onAdvance;
+
+  /// The visit encounter ID — forwarded to [ImmunisationTimelineScreen] so
+  /// vaccine updates can be pushed to the backend via [ImmunisationRepository].
+  final String? encounterId;
+
+  @override
+  State<_Step2Vaccination> createState() => _Step2VaccinationState();
+}
+
+class _Step2VaccinationState extends State<_Step2Vaccination> {
+  String? _dob;
+  bool _dobLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadDob());
+  }
+
+  Future<void> _loadDob() async {
+    try {
+      final dao = context.read<PatientDao>();
+      final patient = await dao.byId(widget.patientId);
+      if (!mounted) return;
+      setState(() {
+        _dob = patient?.dob;
+        _dobLoaded = true;
+      });
+    } catch (e) {
+      debugPrint('[Step2Vaccination] DOB lookup failed: $e');
+      if (!mounted) return;
+      setState(() => _dobLoaded = true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_dobLoaded) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return ImmunisationTimelineScreen(
+      patientId: widget.patientId,
+      patientName: widget.patientName,
+      dob: _dob,
+      onVisitComplete: widget.onAdvance,
+      encounterId: widget.encounterId,
     );
   }
 }

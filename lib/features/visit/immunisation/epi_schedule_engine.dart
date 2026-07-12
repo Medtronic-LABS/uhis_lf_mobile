@@ -48,11 +48,20 @@ class VaccineMilestone {
     required this.label,
     required this.scheduledDate,
     required this.vaccines,
+    required this.offsetType,
+    required this.offsetValue,
   });
 
   final String label;
   final DateTime scheduledDate;
   final List<VaccineEntry> vaccines;
+
+  /// Offset type from the EPI schedule — 'day' | 'week' | 'month'.
+  /// Matches the Android VaccinationDetail.type field (uppercased on send).
+  final String offsetType;
+
+  /// Offset value (e.g. 6 for "6 Weeks", 9 for "9 Months", 0 for "At Birth").
+  final int offsetValue;
 
   bool get allCompleted =>
       vaccines.every((v) => v.status == VaccineStatus.completed);
@@ -147,6 +156,8 @@ class EpiScheduleEngine {
         label: group['milestone'] as String,
         scheduledDate: scheduledDate,
         vaccines: vaccines,
+        offsetType: group['offsetType'] as String,
+        offsetValue: (group['offsetValue'] as num).toInt(),
       );
       milestones.add(milestone);
       priorGroupComplete = milestone.allCompleted;
