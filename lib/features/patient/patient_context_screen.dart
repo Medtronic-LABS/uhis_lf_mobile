@@ -1507,9 +1507,10 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
     final scheme = Theme.of(context).colorScheme;
     final d = widget.data;
 
-    Widget buildRow(String label, String? value, {IconData? icon}) {
+    Widget buildRow(String label, String? value,
+        {IconData? icon, VoidCallback? onTap}) {
       if (value == null || value.isEmpty) return const SizedBox.shrink();
-      return Padding(
+      final row = Padding(
         padding: const EdgeInsets.symmetric(vertical: 5),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1540,9 +1541,15 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
                 style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
               ),
             ),
+            if (onTap != null)
+              Icon(Icons.chevron_right, size: 16, color: scheme.onSurfaceVariant),
           ],
         ),
       );
+      if (onTap != null) {
+        return GestureDetector(onTap: onTap, child: row);
+      }
+      return row;
     }
 
     Widget buildSection(String title, List<Widget> rows) {
@@ -1583,7 +1590,8 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
       children: [
         if (d.nationalId != null)
           buildRow(PatientProfileStrings.labelNid, d.nationalId,
-              icon: Icons.badge_outlined),
+              icon: Icons.badge_outlined,
+              onTap: () => setState(() => _expanded = true)),
         if (d.dateOfBirth != null)
           buildRow(PatientProfileStrings.labelDob, _formatDob(d.dateOfBirth),
               icon: Icons.cake_outlined),
@@ -1604,7 +1612,7 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
               icon: Icons.badge_outlined),
           buildRow(PatientProfileStrings.labelGender, d.gender,
               icon: Icons.person_outline),
-          buildRow(PatientProfileStrings.labelDob, d.dateOfBirth,
+          buildRow(PatientProfileStrings.labelDob, _formatDob(d.dateOfBirth),
               icon: Icons.cake_outlined),
           buildRow(PatientProfileStrings.labelIdType, d.idType),
           buildRow(PatientProfileStrings.labelMaritalStatus, d.maritalStatus),
