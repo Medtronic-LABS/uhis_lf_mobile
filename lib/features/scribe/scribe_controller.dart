@@ -19,7 +19,7 @@ import 'soap_field_extractor.dart';
 /// Manages the full scribe lifecycle for one visit:
 /// permission → record → upload → poll → review → accept/reject.
 ///
-/// Provide above [VisitAssessmentStep] via [ChangeNotifierProvider].
+/// Provide above the visit form via [ChangeNotifierProvider].
 class ScribeController extends ChangeNotifier {
   ScribeController({
     required ScribeApiService api,
