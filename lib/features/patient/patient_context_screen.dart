@@ -1585,7 +1585,7 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
           buildRow(PatientProfileStrings.labelNid, d.nationalId,
               icon: Icons.badge_outlined),
         if (d.dateOfBirth != null)
-          buildRow(PatientProfileStrings.labelDob, d.dateOfBirth,
+          buildRow(PatientProfileStrings.labelDob, _formatDob(d.dateOfBirth),
               icon: Icons.cake_outlined),
         if (d.phoneNumber != null)
           buildRow(PatientProfileStrings.labelPhone, d.phoneNumber,
@@ -1987,6 +1987,17 @@ class _PatientDetailHeader extends StatelessWidget {
       return age;
     } catch (_) {
       return null;
+    }
+  }
+
+  /// Formats an ISO date string (e.g. "1985-03-15T00:00:00Z") as DD/MM/YYYY.
+  static String? _formatDob(String? dob) {
+    if (dob == null || dob.isEmpty) return null;
+    try {
+      final d = DateTime.parse(dob);
+      return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+    } catch (_) {
+      return dob;
     }
   }
 
