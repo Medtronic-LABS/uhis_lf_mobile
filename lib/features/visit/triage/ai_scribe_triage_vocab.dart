@@ -44,7 +44,7 @@ abstract final class AiScribeTriageVocab {
   /// Paediatric ceiling, in months (under 5 years).
   static const int _pediatricMaxAgeMonths = 60;
 
-  /// The 32 symptom codes the AI Scribe may return. Order is significant —
+  /// Full symptom code list. Order is significant —
   /// the AI service preserves it when reporting confidence per code.
   static const List<String> codes = <String>[
     'fever',
@@ -80,6 +80,19 @@ abstract final class AiScribeTriageVocab {
     'fatigue',
     'weakness',
     'weight_loss',
+    // ── IMCI / pediatric (under-5 only) ──────────────────────────────────
+    'cough',
+    'fast_breathing',
+    'chest_indrawing',
+    'diarrhea',
+    'bloody_diarrhea',
+    'not_eating',
+    'lethargy',
+    'ear_problem',
+    'skin_rash',
+    'eye_discharge',
+    'umbilicus_red',
+    'jaundice',
   ];
 
   /// Category tag per code. Source of truth for demographic pre-screening.
@@ -117,6 +130,19 @@ abstract final class AiScribeTriageVocab {
     'fatigue': SymptomCategory.general,
     'weakness': SymptomCategory.general,
     'weight_loss': SymptomCategory.general,
+    // IMCI / pediatric
+    'cough': SymptomCategory.pediatric,
+    'fast_breathing': SymptomCategory.pediatric,
+    'chest_indrawing': SymptomCategory.pediatric,
+    'diarrhea': SymptomCategory.pediatric,
+    'bloody_diarrhea': SymptomCategory.pediatric,
+    'not_eating': SymptomCategory.pediatric,
+    'lethargy': SymptomCategory.pediatric,
+    'ear_problem': SymptomCategory.pediatric,
+    'skin_rash': SymptomCategory.pediatric,
+    'eye_discharge': SymptomCategory.pediatric,
+    'umbilicus_red': SymptomCategory.pediatric,
+    'jaundice': SymptomCategory.pediatric,
   };
 
   /// Precise programme-level mapping for maternal-category vocab codes.
@@ -195,7 +221,8 @@ abstract final class AiScribeTriageVocab {
       case SymptomCategory.general:
         return true;
       case SymptomCategory.maternal:
-        if (ctx.sex == Sex.male) return false;
+        // Require confirmed female — unknown sex gets no maternal chips.
+        if (ctx.sex != Sex.female) return false;
         if (!ctx.ageKnown) return true;
         return ctx.ageMonths >= maternalMinAgeMonths &&
             ctx.ageMonths <= maternalMaxAgeMonths;

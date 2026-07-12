@@ -427,9 +427,9 @@ class TriageViewModel extends ChangeNotifier {
     }
 
     final enrolled = _patientContext.activeProgrammes;
-    if (enrolled.isEmpty) {
-      // No enrolled programmes → empty default grid; SK must search.
-      // Cache so pathway fires never expand the grid mid-session.
+    // Under-5 patients get IMCI chips even without explicit enrolment;
+    // bail early only when there is truly no programme context at all.
+    if (enrolled.isEmpty && !_patientContext.isUnder5) {
       if (kDebugMode) {
         debugPrint(
           '[SymptomPicker] No enrolled programmes — '
@@ -444,8 +444,11 @@ class TriageViewModel extends ChangeNotifier {
         groupedVocabSections.expand((s) => s.codes).toList(growable: false);
 
     if (kDebugMode) {
-      final hidden = AiScribeTriageVocab.codes
-          .where((c) => !shown.contains(c))
+      final applicable = AiScribeTriageVocab.applicableCodes(_patientContext);
+      final searchOnly =
+          applicable.where((c) => !shown.contains(c)).toList();
+      final excluded = AiScribeTriageVocab.codes
+          .where((c) => !applicable.contains(c))
           .toList();
       debugPrint(
         '[SymptomPicker] Enrolled programmes: '
@@ -456,8 +459,12 @@ class TriageViewModel extends ChangeNotifier {
         '${shown.join(', ')}',
       );
       debugPrint(
-        '[SymptomPicker] HIDDEN in search only (${hidden.length}): '
-        '${hidden.join(', ')}',
+        '[SymptomPicker] Search-only (${searchOnly.length}): '
+        '${searchOnly.join(', ')}',
+      );
+      debugPrint(
+        '[SymptomPicker] Excluded by demographics (${excluded.length}): '
+        '${excluded.join(', ')}',
       );
     }
 
@@ -485,7 +492,8 @@ class TriageViewModel extends ChangeNotifier {
   List<SymptomSection> get groupedVocabSections {
     final ctx = _patientContext;
     final enrolled = ctx.activeProgrammes;
-    if (enrolled.isEmpty) return const [];
+    // Let under-5 patients through so the IMCI bucket below is populated.
+    if (enrolled.isEmpty && !ctx.isUnder5) return const [];
 
     const sectionOrder = [
       Programme.anc,

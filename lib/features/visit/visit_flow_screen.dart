@@ -113,6 +113,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   /// the lookup only fires when the caller did not supply a name.
   late String? _patientName = widget.patientName;
   late int? _patientAge = widget.patientAge;
+  String? _patientDob;
 
   /// Postpartum status — seeded from constructor; DB lookup fills in the
   /// weeks value from [PregnancySnapshotDao] when not supplied by caller.
@@ -140,7 +141,10 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_patientName == null && widget.patientId.isNotEmpty) {
+      // Always load — even when patientName is supplied we still need DOB + age
+      // for the smart age label (months for infants). ??-guards inside prevent
+      // overwriting values already provided by the caller.
+      if (widget.patientId.isNotEmpty) {
         _loadPatientNameFromDb();
       }
       if (!_isPostpartum && widget.patientId.isNotEmpty) {
@@ -162,6 +166,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       setState(() {
         _patientName = _patientName ?? p.name;
         _patientAge = _patientAge ?? p.age;
+        _patientDob = _patientDob ?? p.dob;
       });
     } catch (e) {
       debugPrint('[VisitFlow] patient lookup failed: $e');
@@ -243,13 +248,41 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   Programme _primaryProgramme = Programme.unknown;
   bool _referralRecommended = false;
 
-  /// True when the confirmed programmes contain EPI or IMCI. Drives the child
-  /// visit branch: Step 2 shows the immunisation timeline instead of the
-  /// standard checkup form, and Step 1 hides the "Start Checkup" CTA.
+  /// Smart age label: months for under-2, years otherwise.
+  /// Falls back to DOB when age-in-years is null (common for infants).
+  String? get _ageDisplay {
+    final dob = _patientDob;
+    if (dob != null && dob.isNotEmpty) {
+      try {
+        final birth = DateTime.parse(dob);
+        final now = DateTime.now();
+        final months = (now.year - birth.year) * 12 +
+            (now.month - birth.month) -
+            (now.day < birth.day ? 1 : 0);
+        if (months < 24) {
+          return '$months month${months == 1 ? '' : 's'}';
+        }
+        final years = months ~/ 12;
+        return '$years yr${years == 1 ? '' : 's'}';
+      } catch (_) {}
+    }
+    final age = _patientAge;
+    if (age == null) return null;
+    if (age < 2) return '< 2 yrs';
+    return '$age yrs';
+  }
+
+  /// True when the patient is under-5 or confirmed programmes contain EPI/IMCI.
+  /// Age-based detection handles the no-symptoms case (no pathways activated
+  /// → _confirmedProgrammes empty) so the vaccination path still fires for
+  /// children who have no complaints on this visit.
   bool get _isChildVisit =>
       _confirmedProgrammes.any(
         (p) => p == Programme.epi || p == Programme.imci,
-      );
+      ) ||
+      // patientAge is in years; under-5 always routes to vaccination step
+      // even when no symptoms were selected (no pathways → empty _confirmedProgrammes).
+      (_patientAge != null && _patientAge! < 5);
 
   @override
   Widget build(BuildContext context) {
@@ -270,8 +303,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
             children: [
               _VisitFlowHeader(
                 step: _step,
+                patientId: widget.patientId,
                 patientName: _patientName,
-                patientAge: _patientAge,
+                ageDisplay: _ageDisplay,
                 householdId: widget.householdId,
                 patientGender: widget.patientGender,
                 primaryProgramme: _pathways.isNotEmpty
@@ -550,8 +584,9 @@ class _VisitFlowHeader extends StatelessWidget {
   const _VisitFlowHeader({
     required this.step,
     required this.onBack,
+    this.patientId,
     this.patientName,
-    this.patientAge,
+    this.ageDisplay,
     this.householdId,
     this.patientGender,
     this.primaryProgramme = Programme.unknown,
@@ -559,8 +594,9 @@ class _VisitFlowHeader extends StatelessWidget {
 
   final int step; // 0..2
   final VoidCallback onBack;
+  final String? patientId;
   final String? patientName;
-  final int? patientAge;
+  final String? ageDisplay; // pre-formatted: "1 month", "14 months", "5 yrs"
   final String? householdId;
   final String? patientGender;
   final Programme primaryProgramme;
@@ -591,7 +627,7 @@ class _VisitFlowHeader extends StatelessWidget {
 
     // Compact subtitle: "age · gender · house" — plain text, no chips.
     final subtitleParts = <String>[
-      if (patientAge != null) 'Age $patientAge',
+      if (ageDisplay != null) ageDisplay!,
       if (patientGender != null && patientGender!.isNotEmpty)
         patientGender!.toUpperCase().startsWith('F') ? 'Female' : 'Male',
       if (householdId != null && householdId!.isNotEmpty)
@@ -657,14 +693,23 @@ class _VisitFlowHeader extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          patientName ?? '—',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
+                        GestureDetector(
+                          onTap: patientId != null
+                              ? () => context.push('/patients/$patientId')
+                              : null,
+                          child: Text(
+                            patientName ?? '—',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              decoration: patientId != null
+                                  ? TextDecoration.underline
+                                  : TextDecoration.none,
+                              decorationColor: Colors.white,
+                            ),
                           ),
                         ),
                         if (subtitle.isNotEmpty) ...[

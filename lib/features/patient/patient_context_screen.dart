@@ -1637,46 +1637,157 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
       ],
     );
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    final recentLabel = d.recentVisits.isNotEmpty
+        ? _recentVisitLabel(d.recentVisits.first)
+        : d.assessments.isNotEmpty
+            ? _recentAssessmentLabel(d.assessments.first)
+            : null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.person_pin_outlined, color: scheme.primary, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  PatientProfileStrings.profileTitle,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleSmall
-                      ?.copyWith(fontWeight: FontWeight.w700),
+                Row(
+                  children: [
+                    Icon(Icons.person_pin_outlined, color: scheme.primary, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      PatientProfileStrings.profileTitle,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleSmall
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    const Spacer(),
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 32),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: () => setState(() => _expanded = !_expanded),
+                      child: Text(
+                        _expanded
+                            ? PatientProfileStrings.hide
+                            : PatientProfileStrings.showMore,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ],
                 ),
-                const Spacer(),
-                TextButton(
-                  style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(0, 32),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  onPressed: () => setState(() => _expanded = !_expanded),
-                  child: Text(
-                    _expanded
-                        ? PatientProfileStrings.hide
-                        : PatientProfileStrings.showMore,
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ),
+                const SizedBox(height: 4),
+                _expanded ? full : collapsed,
               ],
             ),
-            const SizedBox(height: 4),
-            _expanded ? full : collapsed,
-          ],
+          ),
         ),
-      ),
+        if (d.programmes.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.medical_services_outlined,
+                          size: 16, color: scheme.primary),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Services Provided',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: d.programmes.map((p) {
+                      final label = p.wireTag.toUpperCase();
+                      return Chip(
+                        label: Text(
+                          label,
+                          style: const TextStyle(
+                              fontSize: 11, fontWeight: FontWeight.w700),
+                        ),
+                        backgroundColor: scheme.primaryContainer,
+                        labelStyle:
+                            TextStyle(color: scheme.onPrimaryContainer),
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 2),
+                        materialTapTargetSize:
+                            MaterialTapTargetSize.shrinkWrap,
+                        visualDensity: VisualDensity.compact,
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+        if (recentLabel != null) ...[
+          const SizedBox(height: 10),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  Icon(Icons.history_rounded,
+                      size: 16, color: scheme.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Recent Status',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          recentLabel,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: scheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ],
     );
+  }
+
+  static String _recentVisitLabel(PatientVisit v) {
+    final svc = v.serviceProvided ?? v.encounterType ?? 'Visit';
+    final date = DateFormat('MMM d, yyyy').format(v.visitDate);
+    final status = v.status != null ? ' · ${v.status}' : '';
+    return '$svc — $date$status';
+  }
+
+  static String _recentAssessmentLabel(MemberAssessment a) {
+    final date = DateFormat('MMM d, yyyy').format(a.date);
+    final status = a.status != null ? ' · ${a.status}' : '';
+    return '${a.type} — $date$status';
   }
 }
 
@@ -1701,17 +1812,22 @@ class _PatientDetailHeader extends StatelessWidget {
   final VoidCallback onBack;
   final VoidCallback? onRefresh;
 
+  static const Color _headerColor = Color(0xFF831843);
+
   @override
   Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     final name = data.name ?? PatientContextStrings.fallbackTitle;
-    final subtitleParts = <String>[];
-    if (data.age != null) subtitleParts.add('Age ${data.age}');
-    if (data.gender != null) subtitleParts.add(data.gender!);
-    if (data.householdId != null) {
-      subtitleParts.add(data.householdName ?? 'HH ${data.householdId}');
-    }
-    final subtitle = subtitleParts.join(' · ');
+
+    final resolvedAge = data.age ?? _ageFromDob(data.dateOfBirth);
+    final prefixParts = <String>[
+      if (resolvedAge != null)
+        resolvedAge == 0 ? '< 1 yr' : 'Age $resolvedAge',
+      if (data.gender != null && data.gender!.isNotEmpty)
+        data.gender!.toUpperCase().startsWith('F') ? 'Female' : 'Male',
+    ];
+    final subtitlePrefix = prefixParts.join(' · ');
+    final householdLabel = data.householdName ??
+        (data.householdId != null ? 'House #${data.householdId}' : null);
 
     final chips = <_HeaderChip>[
       if (data.nationalId != null)
@@ -1725,68 +1841,20 @@ class _PatientDetailHeader extends StatelessWidget {
     ];
 
     return Container(
-      color: tokens.aiPurpleDark,
+      color: _headerColor,
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: onBack,
-                tooltip: PatientContextStrings.backToWorklist,
-              ),
-              Expanded(
-                child: Text(
-                  PatientContextStrings.backToWorklist,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              if (isUrgent)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
-                  margin: const EdgeInsets.only(right: 4),
-                  decoration: BoxDecoration(
-                    color: tokens.statusCritical,
-                    borderRadius: BorderRadius.circular(5),
-                  ),
-                  child: const Text(
-                    'URGENT',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-              IconButton(
-                tooltip: PatientContextStrings.refresh,
-                icon: refreshing
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.cloud_download_outlined,
-                        color: Colors.white),
-                onPressed: onRefresh,
-              ),
-            ],
-          ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.only(right: 4),
             child: Row(
               children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  onPressed: onBack,
+                  tooltip: PatientContextStrings.backToWorklist,
+                ),
                 CircleAvatar(
                   radius: 24,
                   backgroundColor: Colors.white.withValues(alpha: 0.18),
@@ -1814,16 +1882,32 @@ class _PatientDetailHeader extends StatelessWidget {
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                      if (subtitle.isNotEmpty)
-                        Text(
-                          subtitle,
+                      if (subtitlePrefix.isNotEmpty || householdLabel != null)
+                        Text.rich(
+                          TextSpan(
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            children: [
+                              if (subtitlePrefix.isNotEmpty)
+                                TextSpan(text: subtitlePrefix),
+                              if (householdLabel != null) ...[
+                                if (subtitlePrefix.isNotEmpty)
+                                  const TextSpan(text: ' · '),
+                                WidgetSpan(
+                                  alignment: PlaceholderAlignment.middle,
+                                  child: const Icon(Icons.home_outlined,
+                                      size: 12, color: Colors.white70),
+                                ),
+                                const TextSpan(text: ' '),
+                                TextSpan(text: householdLabel),
+                              ],
+                            ],
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
                         ),
                     ],
                   ),
@@ -1877,6 +1961,34 @@ class _PatientDetailHeader extends StatelessWidget {
     if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
     return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
         .toUpperCase();
+  }
+
+  static IconData _genderIcon(String g) {
+    final u = g.toUpperCase();
+    if (u.startsWith('F')) return Icons.female;
+    if (u.startsWith('M')) return Icons.male;
+    return Icons.person_outline;
+  }
+
+  static String _genderShort(String g) {
+    final u = g.toUpperCase();
+    if (u.startsWith('F')) return 'F';
+    if (u.startsWith('M')) return 'M';
+    return g;
+  }
+
+  static int? _ageFromDob(String? dob) {
+    if (dob == null || dob.isEmpty) return null;
+    try {
+      final birth = DateTime.parse(dob);
+      final now = DateTime.now();
+      int age = now.year - birth.year;
+      if (now.month < birth.month ||
+          (now.month == birth.month && now.day < birth.day)) age--;
+      return age;
+    } catch (_) {
+      return null;
+    }
   }
 }
 

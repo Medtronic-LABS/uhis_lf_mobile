@@ -3023,6 +3023,11 @@ abstract final class SymptomPickerStrings {
   static const String ctaStartCheckup = 'Start Checkup →';
   static const String ctaRoutine = 'Start Checkup →';
 
+  // ── No-symptom guard ────────────────────────────────────────────────────
+  static const String noSymptomsGuard =
+      'No symptoms selected — please check symptoms before proceeding.';
+  static const String noSymptomsGuardCta = 'Continue anyway';
+
   // ── Status bar above CTA ────────────────────────────────────────────────
   static String symptomsSelectedStatus(int n) =>
       '$n ${n == 1 ? 'symptom' : 'symptoms'} selected';

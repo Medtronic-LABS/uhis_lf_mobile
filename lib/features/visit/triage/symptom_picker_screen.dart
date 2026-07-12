@@ -319,8 +319,11 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   /// vaccination step by calling [_onContinue], which fires [onAdvance].
   /// In standalone mode: pushes the immunisation timeline route directly.
   void _onVaccination() {
+    final vm = _viewModel;
+    if (vm == null) return;
     if (widget.onAdvance != null) {
-      _onContinue();
+      // Children bypass the no-symptoms guard — vaccination is always valid.
+      _doAdvance(vm);
     } else {
       _openVaccinationTimeline();
     }
@@ -334,6 +337,28 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       '[SymptomPicker] Continue tapped — ${vm.activatedPathways.length} pathways: ${vm.activatedPathways.map((p) => p.programme.name).join(', ')}',
     );
 
+    // Guard: no symptoms recorded → prompt the SK to double-check.
+    // "Continue anyway" in the SnackBar calls _doAdvance directly.
+    if (vm.selectedSymptoms.isEmpty && vm.activatedPathways.isEmpty) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: const Text(SymptomPickerStrings.noSymptomsGuard),
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: SymptomPickerStrings.noSymptomsGuardCta,
+              onPressed: () => _doAdvance(vm),
+            ),
+          ),
+        );
+      return;
+    }
+
+    _doAdvance(vm);
+  }
+
+  void _doAdvance(TriageViewModel vm) {
     // In-flow host (VisitFlowScreen) intercepts via callback. The host also
     // needs the SK-confirmed symptom set to build the Step-2 AI programme
     // recommendation request payload — surface it via the optional
@@ -1299,14 +1324,8 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
               .where((c) => !defaultCodes.contains(c))
               .toList();
           gridSections = [
-            for (final s in vm.groupedVocabSections)
-              (
-                s.programme?.displayName ??
-                    SymptomPickerStrings.sectionGeneral,
-                s.codes,
-              ),
-            if (extraSelected.isNotEmpty)
-              (SymptomPickerStrings.sectionFromSearch, extraSelected),
+            for (final s in vm.groupedVocabSections) (null, s.codes),
+            if (extraSelected.isNotEmpty) (null, extraSelected),
           ];
         }
         final gridIsEmpty =
@@ -1372,13 +1391,11 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
 
               const SizedBox(height: 14),
 
-              // ── Chip grid (one Wrap per programme section) ────────────────
+              // ── Chip grid (single flat Wrap — no per-section gaps) ───────
               if (gridIsEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Text(
-                    // Distinguish intentional empty default (no search yet)
-                    // from a genuine no-results search response.
                     isSearching
                         ? SymptomPickerStrings.searchNoResults
                         : SymptomPickerStrings.searchOnlyEmptyHint,
@@ -1389,40 +1406,22 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                   ),
                 )
               else
-                for (final (header, codes) in gridSections)
-                  if (codes.isNotEmpty) ...[
-                    if (header != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4, bottom: 8),
-                        child: Text(
-                          header,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.4,
-                            color: AppColors.textMuted,
-                          ),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: gridSections
+                      .expand((s) => s.$2)
+                      .map(
+                        (code) => _PickerChip(
+                          key: ValueKey('triage_chip_$code'),
+                          code: code,
+                          isSelected: selected.contains(code),
+                          isAi: vm.isScribePreTick(code),
+                          onTap: () => _toggleSymptom(code),
                         ),
-                      ),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: codes
-                            .map(
-                              (code) => _PickerChip(
-                                key: ValueKey('triage_chip_$code'),
-                                code: code,
-                                isSelected: selected.contains(code),
-                                isAi: vm.isScribePreTick(code),
-                                onTap: () => _toggleSymptom(code),
-                              ),
-                            )
-                            .toList(),
-                      ),
-                    ),
-                  ],
+                      )
+                      .toList(),
+                ),
 
               // ── Footer hint ──────────────────────────────────────────────
               if (hasEnrolledFilter && !isSearching) ...[
