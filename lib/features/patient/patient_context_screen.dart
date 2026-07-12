@@ -1544,6 +1544,7 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
   @override
   Widget build(BuildContext context) {
     final d = widget.data;
+    final scheme = Theme.of(context).colorScheme;
 
     Widget buildRow(String label, String? value,
         {IconData? icon, VoidCallback? onTap}) {
