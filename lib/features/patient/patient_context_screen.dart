@@ -1733,26 +1733,6 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
                     ),
                   ),
                   const Spacer(),
-                  if (d.nationalId != null)
-                    GestureDetector(
-                      onTap: () {
-                        Clipboard.setData(ClipboardData(text: d.nationalId!));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(PatientProfileStrings.nidCopied),
-                            duration: const Duration(seconds: 2),
-                          ),
-                        );
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                        child: Icon(
-                          Icons.copy_rounded,
-                          size: 16,
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                    ),
                   TextButton(
                     style: TextButton.styleFrom(
                       padding: EdgeInsets.zero,

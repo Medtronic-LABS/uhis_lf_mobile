@@ -909,7 +909,6 @@ abstract final class PatientProfileStrings {
   static String get yes => AppLocale.isBangla ? 'হ্যাঁ' : 'Yes';
   static String get no => AppLocale.isBangla ? 'না' : 'No';
   static const String notAvailable = '—';
-  static const String nidCopied = 'NID copied to clipboard';
   static const String dialFailed = 'Could not open the dialer';
   static const String mapsOpenFailed = 'Could not open maps';
 }
