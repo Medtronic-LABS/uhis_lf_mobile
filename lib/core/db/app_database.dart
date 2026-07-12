@@ -21,7 +21,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 24;
+  static const int schemaVersion = 25;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -30,6 +30,7 @@ class AppDatabase {
   static const String tableSyncMeta = 'sync_meta';
   static const String tablePatientProgrammes = 'patient_programmes';
   static const String tableFollowUps = 'follow_ups';
+  static const String tableFollowUpCalls = 'follow_up_calls';
   static const String tableImmunisations = 'immunisations';
   static const String tableAssessments = 'assessments';
   static const String tableReferrals = 'referrals';
@@ -221,8 +222,32 @@ class AppDatabase {
         type TEXT,
         referred_site_id TEXT,
         is_lost INTEGER,
+        backend_id INTEGER,
+        sync_status TEXT DEFAULT 'Success',
+        updated_at INTEGER,
         raw_json TEXT
       )''');
+    // Call attempts logged against a follow-up (mirrors Android FollowUpCall).
+    // Pushed inline as `followUpDetails` inside each follow-up on the next
+    // offline-sync/create; `is_synced` gates which rows ride the push.
+    await db.execute('''
+      CREATE TABLE $tableFollowUpCalls (
+        id TEXT PRIMARY KEY,
+        follow_up_id TEXT NOT NULL,
+        call_date INTEGER,
+        duration REAL,
+        status TEXT,
+        reason TEXT,
+        other_reason TEXT,
+        patient_status TEXT,
+        attempts INTEGER,
+        latitude TEXT,
+        longitude TEXT,
+        is_synced INTEGER NOT NULL DEFAULT 0,
+        raw_json TEXT
+      )''');
+    await db.execute(
+        'CREATE INDEX idx_fu_call_parent ON $tableFollowUpCalls(follow_up_id)');
     await db.execute('''
       CREATE TABLE $tableImmunisations (
         id TEXT PRIMARY KEY,
@@ -1097,13 +1122,53 @@ class AppDatabase {
         );
       } catch (_) {/* already present */}
     }
+    if (from < 25) {
+      // v25 — Follow-up call/close lifecycle. The device logs call attempts
+      // against server-minted follow-ups; those rows flip to NotSynced and
+      // ride the next offline-sync/create push with their calls inline
+      // (mirrors Android FollowUp + FollowUpCall).
+      Future<void> addCol25(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* column already present */}
+      }
+      await addCol25(
+          'ALTER TABLE $tableFollowUps ADD COLUMN backend_id INTEGER');
+      await addCol25(
+          "ALTER TABLE $tableFollowUps ADD COLUMN sync_status TEXT DEFAULT 'Success'");
+      await addCol25(
+          'ALTER TABLE $tableFollowUps ADD COLUMN updated_at INTEGER');
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS $tableFollowUpCalls (
+            id TEXT PRIMARY KEY,
+            follow_up_id TEXT NOT NULL,
+            call_date INTEGER,
+            duration REAL,
+            status TEXT,
+            reason TEXT,
+            other_reason TEXT,
+            patient_status TEXT,
+            attempts INTEGER,
+            latitude TEXT,
+            longitude TEXT,
+            is_synced INTEGER NOT NULL DEFAULT 0,
+            raw_json TEXT
+          )''');
+      } catch (_) {/* table already present */}
+      try {
+        await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_fu_call_parent ON $tableFollowUpCalls(follow_up_id)');
+      } catch (_) {/* index already present */}
+    }
   }
 
   // Single source of truth for "every table" — used by wipeAllData() so a
   // future new table can't be silently missed from a logout/login wipe.
   static const List<String> _allTables = [
     tableHouseholds, tableMembers, tablePatients, tableSyncMeta,
-    tablePatientProgrammes, tableFollowUps, tableImmunisations, tableAssessments,
+    tablePatientProgrammes, tableFollowUps, tableFollowUpCalls,
+    tableImmunisations, tableAssessments,
     tableReferrals, tableReferralStatusEvents, tableNotificationLog,
     tableEncounters, tableLocalAssessments, tablePregnancySnapshot,
     tableTreatmentPresence, tableAssessmentDraft, tableAiSuggestions,
