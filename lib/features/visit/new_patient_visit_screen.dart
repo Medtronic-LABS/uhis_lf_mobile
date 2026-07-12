@@ -7,7 +7,6 @@ import '../../core/config/app_config.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
-import '../../core/db/patient_programmes_dao.dart';
 import '../../core/models/programme.dart';
 import '../../core/theme/app_theme.dart';
 import '../patient/enroll/pregnancy_registration_sheet.dart';
@@ -153,10 +152,14 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
         if (!mounted) return;
       }
 
-      if (programme != Programme.unknown && mounted) {
-        final dao = context.read<PatientProgrammesDao>();
-        await dao.replaceFor(widget.patientId, {programme});
-      }
+      // Programme is NOT written here — writing at enrolment start would persist
+      // the programme even if the SK abandons the visit mid-form. The write is
+      // deferred to VisitFormScreen._onSectionedSubmit() so it only commits on
+      // successful assessment submission.
+      debugPrint(
+        '[NewPatientVisit] deferred programme write: ${programme.name} '
+        'for patientId=${widget.patientId}',
+      );
 
       if (!mounted) return;
 
