@@ -73,11 +73,14 @@ class VisitFormScreen extends StatefulWidget {
 
   final String? origin;
 
-  /// When non-null the screen calls this with the primary programme +
-  /// referral flag instead of pushing the `/complete` route. Used by
-  /// [VisitFlowScreen] to keep the SK on the same route for all 3 steps.
-  final void Function(Programme primaryProgramme, bool referralRecommended)?
-      onAdvance;
+  /// When non-null the screen calls this with the primary programme,
+  /// referral flag, and the list of detected clinical referral conditions.
+  /// Used by [VisitFlowScreen] to keep the SK on the same route for all 3 steps.
+  final void Function(
+    Programme primaryProgramme,
+    bool referralRecommended,
+    List<String> referredReasons,
+  )? onAdvance;
 
   /// Programmes the patient is already enrolled in (from [PatientProgrammesDao]).
   /// Used to order enrolled sections before pathway-recommended sections.
@@ -470,7 +473,11 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         final onAdvance = widget.onAdvance;
         if (onAdvance != null) {
           debugPrint('[VisitForm] calling onAdvance');
-          onAdvance(_getPrimaryProgramme(), _referralRecommended);
+          onAdvance(
+            _getPrimaryProgramme(),
+            _referralRecommended,
+            formNotifier.lastReferredReasons,
+          );
         } else {
           ctx.go(
             '/patients/visit/${widget.visitId}/complete',

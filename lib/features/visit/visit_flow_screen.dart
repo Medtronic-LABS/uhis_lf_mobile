@@ -263,6 +263,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   /// Set when Step 3 completes — handed to Step 4 for the recommendation card.
   Programme _primaryProgramme = Programme.unknown;
   bool _referralRecommended = false;
+  List<String> _referredReasons = const [];
 
   /// Smart age label: months for under-2, years otherwise.
   /// Falls back to DOB when age-in-years is null (common for infants).
@@ -424,10 +425,11 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           otherSymptoms: _otherSymptoms,
           seedProgrammes: _confirmedProgrammes,
           origin: widget.origin,
-          onAdvance: (programme, referral) {
+          onAdvance: (programme, referral, reasons) {
             setState(() {
               _primaryProgramme = programme;
               _referralRecommended = referral;
+              _referredReasons = reasons;
               _step = 2;
             });
           },
@@ -448,6 +450,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           confirmedProgrammes: _confirmedProgrammes,
           primaryProgramme: _primaryProgramme,
           referralRecommended: _referralRecommended,
+          referredReasons: _referredReasons,
           memberId: widget.memberId,
           householdId: widget.householdId,
           origin: widget.origin ?? 'patients',
@@ -720,8 +723,11 @@ class _Step2VitalsForm extends StatelessWidget {
   final List<String> confirmedSymptoms;
   /// Subset of [confirmedSymptoms] pre-selected by AI Scribe.
   final Set<String> aiPickedSymptoms;
-  final void Function(Programme primaryProgramme, bool referralRecommended)
-      onAdvance;
+  final void Function(
+    Programme primaryProgramme,
+    bool referralRecommended,
+    List<String> referredReasons,
+  ) onAdvance;
 
   @override
   Widget build(BuildContext context) {
@@ -868,8 +874,11 @@ class _Step2ProgrammesThenForm extends StatefulWidget {
   final String? otherSymptoms;
   final Set<Programme> seedProgrammes;
   final String? origin;
-  final void Function(Programme primaryProgramme, bool referralRecommended)
-      onAdvance;
+  final void Function(
+    Programme primaryProgramme,
+    bool referralRecommended,
+    List<String> referredReasons,
+  ) onAdvance;
 
   @override
   State<_Step2ProgrammesThenForm> createState() =>
@@ -997,6 +1006,7 @@ class _Step3AiReco extends StatefulWidget {
     required this.patientId,
     required this.primaryProgramme,
     required this.referralRecommended,
+    required this.referredReasons,
     required this.origin,
     required this.confirmedSymptoms,
     required this.confirmedProgrammes,
@@ -1024,6 +1034,7 @@ class _Step3AiReco extends StatefulWidget {
   final Set<Programme> confirmedProgrammes;
   final Programme primaryProgramme;
   final bool referralRecommended;
+  final List<String> referredReasons;
   final String? memberId;
   final String? householdId;
   final String origin;
@@ -2024,15 +2035,19 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── 1. Referral / danger banner — edge-to-edge, flush top ────
+          // ── 1. Referral banner — edge-to-edge, flush top ────────────
+          // Reason prefers the clinically-detected conditions threaded
+          // from _computeReferral(); falls back to NABA text only when
+          // no evaluator conditions are available (e.g. NABA-only referral).
           if (referral || naba.dangerSigns.isNotEmpty) ...[
             _ReferralAlertCard(
-              reason: naba.referralRecommendation?.reason ??
-                  (naba.dangerSigns.isNotEmpty
-                      ? naba.dangerSigns.take(2).join(', ')
-                      : 'Referral recommended'),
+              reason: widget.referredReasons.isNotEmpty
+                  ? widget.referredReasons.join('\n')
+                  : (naba.referralRecommendation?.reason ??
+                      (naba.dangerSigns.isNotEmpty
+                          ? naba.dangerSigns.take(2).join(', ')
+                          : 'Referral recommended')),
               urgency: naba.referralRecommendation?.urgency ?? 'Today',
-              isDanger: naba.dangerSigns.isNotEmpty,
             ),
             Container(height: 1.5, color: const Color(0xFFFECACA)),
           ],
@@ -2475,51 +2490,28 @@ class _ReferralAlertCard extends StatelessWidget {
   const _ReferralAlertCard({
     required this.reason,
     required this.urgency,
-    required this.isDanger,
   });
   final String reason;
   final String urgency;
-  final bool isDanger;
-
-  // Split reason into a short title + detail subtitle.
-  // Title: up to first sentence-break or first 50 chars.
-  // Subtitle: the rest.
-  (String, String) _split() {
-    final trimmed = reason.trim();
-    for (final sep in [' — ', ': ', '. ']) {
-      final idx = trimmed.indexOf(sep);
-      if (idx > 0 && idx < 60) {
-        return (
-          trimmed.substring(0, idx),
-          trimmed.substring(idx + sep.length),
-        );
-      }
-    }
-    if (trimmed.length > 55) {
-      return (trimmed.substring(0, 55).trim(), trimmed);
-    }
-    return (trimmed, '');
-  }
 
   @override
   Widget build(BuildContext context) {
-    const dangerBg = Color(0xFFFEE2E2);
-    const dangerAccent = Color(0xFFDC2626);
-    const referBg = Color(0xFFFFF7ED);
-    const referAccent = Color(0xFFB45309);
+    const bg     = Color(0xFFFEE2E2);
+    const accent = Color(0xFFDC2626);
 
-    final bg = isDanger ? dangerBg : referBg;
-    final accent = isDanger ? dangerAccent : referAccent;
-    final badgeLabel = isDanger ? 'IMMEDIATE' : 'Referred';
-    final (title, subtitle) = _split();
-    final displayTitle = isDanger ? 'Refer immediately' : 'Referred — $title';
+    // reason may be newline-joined conditions — split into bullet list.
+    final conditions = reason
+        .split('\n')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
 
     return Container(
       width: double.infinity,
       color: bg,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Icon with yellow badge dot
           Stack(
@@ -2528,7 +2520,7 @@ class _ReferralAlertCard extends StatelessWidget {
               Container(
                 width: 36,
                 height: 36,
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: accent,
                   shape: BoxShape.circle,
                 ),
@@ -2555,41 +2547,41 @@ class _ReferralAlertCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  displayTitle,
+                const Text(
+                  'Referred',
                   style: TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w800,
                     color: accent,
                   ),
                 ),
-                if (subtitle.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: accent.withValues(alpha: 0.8),
-                      height: 1.35,
+                const SizedBox(height: 3),
+                ...conditions.map(
+                  (c) => Padding(
+                    padding: const EdgeInsets.only(top: 1),
+                    child: Text(
+                      '• $c',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: accent.withValues(alpha: 0.85),
+                        height: 1.35,
+                      ),
                     ),
                   ),
-                ],
+                ),
               ],
             ),
           ),
           const SizedBox(width: 8),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: accent,
               borderRadius: BorderRadius.circular(20),
             ),
-            child: Text(
-              badgeLabel,
-              style: const TextStyle(
+            child: const Text(
+              'Referred',
+              style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
                 color: Colors.white,
@@ -2924,10 +2916,10 @@ class _FollowUpDateRow extends StatefulWidget {
 class _FollowUpDateRowState extends State<_FollowUpDateRow> {
   late DateTime _date;
 
-  static const _cardBorder = Color(0xFFFBCFE8);
-  static const _cardText = Color(0xFF9D174D);
-  static const _gradientStart = Color(0xFFFDF2F8);
-  static const _gradientEnd = Color(0xFFF5F3FF);
+  static const _cardBg     = Color(0xFFF3F4F8);
+  static const _cardBorder = Color(0xFFE5E7EB);
+  static const _cardText   = Color(0xFF9D174D);
+  static const _bellColor  = Color(0xFFB45309);
 
   @override
   void initState() {
@@ -3023,32 +3015,27 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [_gradientStart, _gradientEnd],
-          ),
+          color: _cardBg,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _cardBorder, width: 1.5),
+          border: Border.all(color: _cardBorder),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                // Calendar icon
+                // Bell icon
                 Container(
                   width: 36,
                   height: 36,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFDF2F8),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: _cardBorder),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFEF3C7),
+                    shape: BoxShape.circle,
                   ),
                   child: const Icon(
-                    Icons.calendar_month_rounded,
+                    Icons.notifications_rounded,
                     size: 18,
-                    color: _cardText,
+                    color: _bellColor,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -3093,18 +3080,15 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
                 ),
               ],
             ),
-            if (widget.item.activity.isNotEmpty) ...[
-              const SizedBox(height: 7),
-              Text(
-                widget.item.activity,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  color: _cardText.withValues(alpha: 0.75),
-                  height: 1.4,
-                  fontStyle: FontStyle.italic,
-                ),
+            const SizedBox(height: 6),
+            const Text(
+              'Auto-scheduled · already saved',
+              style: TextStyle(
+                fontSize: 11.5,
+                color: AppColors.textMuted,
+                height: 1.4,
               ),
-            ],
+            ),
           ],
         ),
       ),
