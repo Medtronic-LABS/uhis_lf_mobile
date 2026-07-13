@@ -7,6 +7,7 @@ import '../../../core/db/immunisation_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/models/patient.dart';
 import '../../../core/theme/app_theme.dart';
+import '../assessment_repository.dart';
 import '../triage/child_assessment_section.dart';
 import 'epi_schedule_engine.dart';
 import 'immunisation_dto.dart';
@@ -27,6 +28,8 @@ class ImmunisationTimelineScreen extends StatefulWidget {
     this.dob,
     this.onVisitComplete,
     this.encounterId,
+    this.householdMemberLocalId,
+    this.memberId,
   });
 
   final String patientId;
@@ -42,6 +45,14 @@ class ImmunisationTimelineScreen extends StatefulWidget {
   /// status updates can be pushed to the backend via [ImmunisationRepository].
   /// Null in standalone (patient profile) access; push is skipped in that case.
   final String? encounterId;
+
+  /// Local DB member ID — required for [AssessmentRepository.saveAssessment]
+  /// to correctly attribute the EPI child assessment to the right member row.
+  /// Defaults to 0 when not supplied (standalone/profile access).
+  final int? householdMemberLocalId;
+
+  /// Backend member UUID — carried through to the assessment payload.
+  final String? memberId;
 
   @override
   State<ImmunisationTimelineScreen> createState() =>
@@ -368,9 +379,69 @@ class _ImmunisationTimelineScreenState
           label: widget.onVisitComplete != null
               ? EpiStrings.doneVisitCta
               : EpiStrings.submitCta,
-          onSubmit: () {
+          onSubmit: () async {
+            final assessmentRepo = context.read<AssessmentRepository>();
+            final details = <String, dynamic>{
+              if (_childAssessmentData.congenitalDefect != null)
+                'congenitalDefect': _childAssessmentData.congenitalDefect,
+              if (_childAssessmentData.weightKg != null)
+                'weightKg': _childAssessmentData.weightKg,
+              if (_childAssessmentData.isBreastfeeding != null)
+                'isBreastfeeding': _childAssessmentData.isBreastfeeding,
+              if (_childAssessmentData.additionalFoodLast24h != null)
+                'additionalFoodLast24h':
+                    _childAssessmentData.additionalFoodLast24h,
+              if (_childAssessmentData.vaccinesReceived != null)
+                'vaccinesReceived': _childAssessmentData.vaccinesReceived,
+              if (_childAssessmentData.dewormingTaken != null)
+                'dewormingTaken': _childAssessmentData.dewormingTaken,
+              if (_childAssessmentData.anyIllness != null)
+                'anyIllness': _childAssessmentData.anyIllness,
+              if (_childAssessmentData.complications.isNotEmpty)
+                'complications': _childAssessmentData.complications,
+              if (_childAssessmentData.referralMade != null)
+                'referralMade': _childAssessmentData.referralMade,
+              if (_childAssessmentData.referralPlace != null)
+                'referralPlace': _childAssessmentData.referralPlace,
+            };
+            debugPrint(
+              '[ImmunisationTimeline] saving EPI child assessment '
+              '(householdMemberLocalId=${widget.householdMemberLocalId ?? 0}): '
+              '$details',
+            );
+            if (widget.householdMemberLocalId == null) {
+              debugPrint(
+                '[ImmunisationTimeline] WARNING: householdMemberLocalId not '
+                'supplied — assessment saved with localId=0. Pass it via the '
+                'immunisation route extra to fix attribution.',
+              );
+            }
+            try {
+              await assessmentRepo.saveAssessment(
+                assessmentType: 'EPI',
+                assessmentDetails: details,
+                householdMemberLocalId: widget.householdMemberLocalId ?? 0,
+                memberId: widget.memberId,
+                patientId: widget.patientId,
+                villageId: _patient?.villageId,
+                encounterId: widget.encounterId,
+                isReferred: _childAssessmentData.referralMade ?? false,
+                referredReasons:
+                    _childAssessmentData.referralMade == true &&
+                            _childAssessmentData.referralPlace != null
+                        ? [_childAssessmentData.referralPlace!]
+                        : null,
+              );
+              debugPrint(
+                '[ImmunisationTimeline] EPI assessment queued for sync',
+              );
+            } on Object catch (e) {
+              debugPrint(
+                '[ImmunisationTimeline] EPI assessment save error: $e',
+              );
+            }
             final onComplete = widget.onVisitComplete;
-            context.pop();
+            if (mounted) context.pop();
             onComplete?.call();
           },
         ),
@@ -852,7 +923,7 @@ class _DashedLinePainter extends CustomPainter {
 
 class _SubmitBar extends StatelessWidget {
   const _SubmitBar({required this.onSubmit, this.label});
-  final VoidCallback onSubmit;
+  final Future<void> Function() onSubmit;
   final String? label;
 
   @override

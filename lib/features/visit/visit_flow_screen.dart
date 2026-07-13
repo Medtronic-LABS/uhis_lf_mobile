@@ -401,6 +401,8 @@ class _VisitFlowState extends State<VisitFlowScreen> {
             patientId: widget.patientId,
             patientName: widget.patientName,
             encounterId: widget.visitId,
+            memberId: widget.memberId,
+            householdMemberLocalId: _householdMemberLocalId,
             onAdvance: () {
               setState(() {
                 _primaryProgramme = Programme.epi;
@@ -772,6 +774,8 @@ class _Step2Vaccination extends StatefulWidget {
     required this.onAdvance,
     this.patientName,
     this.encounterId,
+    this.memberId,
+    this.householdMemberLocalId,
   });
 
   final String patientId;
@@ -781,6 +785,8 @@ class _Step2Vaccination extends StatefulWidget {
   /// The visit encounter ID — forwarded to [ImmunisationTimelineScreen] so
   /// vaccine updates can be pushed to the backend via [ImmunisationRepository].
   final String? encounterId;
+  final String? memberId;
+  final int? householdMemberLocalId;
 
   @override
   State<_Step2Vaccination> createState() => _Step2VaccinationState();
@@ -823,6 +829,8 @@ class _Step2VaccinationState extends State<_Step2Vaccination> {
       dob: _dob,
       onVisitComplete: widget.onAdvance,
       encounterId: widget.encounterId,
+      memberId: widget.memberId,
+      householdMemberLocalId: widget.householdMemberLocalId,
     );
   }
 }

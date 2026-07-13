@@ -229,6 +229,9 @@ GoRouter buildRouter(AuthState auth) {
                           patientId: state.pathParameters['id']!,
                           patientName: extra['patientName'] as String?,
                           dob: extra['dob'] as String?,
+                          memberId: extra['memberId'] as String?,
+                          householdMemberLocalId:
+                              extra['householdMemberLocalId'] as int?,
                         ),
                       );
                     },

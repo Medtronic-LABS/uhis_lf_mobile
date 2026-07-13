@@ -18,7 +18,6 @@ import '../../scribe/widgets/ai_scribe_banner.dart';
 import '../briefing/briefing_models.dart';
 import '../briefing/visit_briefing_repository.dart';
 import '../pathway/pathway_engine.dart';
-import 'child_assessment_section.dart';
 import 'patient_context_builder.dart';
 import 'visit_step_header.dart';
 import 'triage_view_model.dart';
@@ -306,6 +305,8 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         extra: <String, dynamic>{
           'patientName': widget.patientName,
           if (patient?.dob != null) 'dob': patient!.dob,
+          if (widget.memberId != null) 'memberId': widget.memberId,
+          // householdMemberLocalId unavailable on this screen; defaults to 0
         },
       );
     });
