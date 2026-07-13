@@ -61,7 +61,13 @@ class _DashboardSearchFieldState extends State<DashboardSearchField> {
                   tooltip: SearchStrings.scanNidTooltip,
                   visualDensity: VisualDensity.compact,
                   padding: const EdgeInsets.symmetric(horizontal: 10),
-                  onPressed: () => showEnrollmentEntrySheet(context),
+                  onPressed: () async {
+                    final result = await showSearchScannerSheet(context);
+                    if (result != null && mounted) {
+                      _ctrl.text = result;
+                      widget.onChanged(result);
+                    }
+                  },
                 );
               }
               return IconButton(

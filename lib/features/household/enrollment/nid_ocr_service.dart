@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -78,6 +79,28 @@ class NidOcrService {
     }
     if (photo == null) return const NidScanResult(NidScanStatus.cancelled);
     return extractNidFromImage(photo.path);
+  }
+
+  /// Scans [imagePath] for any barcode / QR code. Returns the raw decoded
+  /// value, or null when no code is found or the scan fails. Checks QR, Code
+  /// 128 and EAN-13 — the formats most likely on health cards and patient
+  /// wristbands in this context.
+  Future<String?> extractQrCode(String imagePath) async {
+    final scanner = BarcodeScanner(formats: [
+      BarcodeFormat.qrCode,
+      BarcodeFormat.code128,
+      BarcodeFormat.ean13,
+    ]);
+    try {
+      final barcodes =
+          await scanner.processImage(InputImage.fromFilePath(imagePath));
+      return barcodes.isEmpty ? null : barcodes.first.rawValue;
+    } on Exception catch (e) {
+      debugPrint('NidOcrService: barcode scan failed: $e');
+      return null;
+    } finally {
+      await scanner.close();
+    }
   }
 
   /// Runs OCR on an already-captured image file (e.g. a frame from the in-app

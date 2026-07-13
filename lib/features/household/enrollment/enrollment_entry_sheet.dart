@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:camera/camera.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -34,6 +36,22 @@ Future<NidScanResult?> showNidScannerForMember(BuildContext context) {
     barrierColor: Colors.transparent,
     enableDrag: false,
     builder: (_) => const _MemberNidScanOverlay(),
+  );
+}
+
+/// Opens the NID / QR scanner in search mode.
+///
+/// Returns the raw value of the first successful scan — a QR/barcode payload
+/// or an NID number — so the caller can pre-fill a search field. Returns null
+/// when the user cancels.
+Future<String?> showSearchScannerSheet(BuildContext context) {
+  return showModalBottomSheet<String>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    barrierColor: Colors.transparent,
+    enableDrag: false,
+    builder: (_) => const _SearchScannerOverlay(),
   );
 }
 
@@ -77,6 +95,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
   CameraController? _cameraController;
   bool _cameraReady = false;
   bool _cameraUnavailable = false;
+  Timer? _autoScanTimer;
 
   late final AnimationController _sweepCtrl;
   late final Animation<double> _sweep;
@@ -127,6 +146,14 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
         _cameraController = controller;
         _cameraReady = true;
       });
+      _autoScanTimer = Timer.periodic(const Duration(milliseconds: 1800), (_) {
+        if (mounted &&
+            !_isScanning &&
+            _cameraReady &&
+            _overlayState == _OverlayState.scanner) {
+          _handleCapture();
+        }
+      });
     } on CameraException catch (e) {
       debugPrint('EnrollmentOverlay: camera init failed: $e');
       if (mounted) setState(() => _cameraUnavailable = true);
@@ -135,6 +162,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
 
   @override
   void dispose() {
+    _autoScanTimer?.cancel();
     _cameraController?.dispose();
     _sweepCtrl.dispose();
     super.dispose();
@@ -214,6 +242,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
                 readingCard: _overlayState == _OverlayState.postScan,
                 cameraController: _cameraReady ? _cameraController : null,
                 cameraUnavailable: _cameraUnavailable,
+                autoScanActive: _cameraReady && _autoScanTimer != null,
                 onCapture: _handleCapture,
                 onCreateHousehold: () {
                   Navigator.of(context).pop();
@@ -258,24 +287,26 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
   }
 }
 
-// ─── Member NID scan overlay ──────────────────────────────────────────────────
+// ─── Search scanner overlay ───────────────────────────────────────────────────
 
-/// Simplified NID scanner overlay used when adding a household member.
-/// On capture success, pops with [NidScanResult]; cancel pops with null.
-class _MemberNidScanOverlay extends StatefulWidget {
-  const _MemberNidScanOverlay();
+/// Lightweight scanner opened from the dashboard search bar.
+/// Tries QR / barcode first (fast), then NID OCR. Pops with the raw string
+/// value so the caller can pre-fill its search field.
+class _SearchScannerOverlay extends StatefulWidget {
+  const _SearchScannerOverlay();
 
   @override
-  State<_MemberNidScanOverlay> createState() => _MemberNidScanOverlayState();
+  State<_SearchScannerOverlay> createState() => _SearchScannerOverlayState();
 }
 
-class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
+class _SearchScannerOverlayState extends State<_SearchScannerOverlay>
     with SingleTickerProviderStateMixin {
   bool _isScanning = false;
   final NidOcrService _ocr = NidOcrService();
   CameraController? _cameraController;
   bool _cameraReady = false;
   bool _cameraUnavailable = false;
+  Timer? _autoScanTimer;
 
   late final AnimationController _sweepCtrl;
   late final Animation<double> _sweep;
@@ -320,6 +351,155 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
         _cameraController = controller;
         _cameraReady = true;
       });
+      _autoScanTimer = Timer.periodic(const Duration(milliseconds: 1800), (_) {
+        if (mounted && !_isScanning && _cameraReady) _handleCapture();
+      });
+    } on CameraException catch (e) {
+      debugPrint('SearchScanner: camera init failed: $e');
+      if (mounted) setState(() => _cameraUnavailable = true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _autoScanTimer?.cancel();
+    _cameraController?.dispose();
+    _sweepCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleCapture() async {
+    final controller = _cameraController;
+    if (_isScanning || controller == null || !_cameraReady) return;
+    setState(() => _isScanning = true);
+    try {
+      final frame = await controller.takePicture();
+      // QR / barcode first — faster and more reliable than OCR
+      final qr = await _ocr.extractQrCode(frame.path);
+      if (!mounted) return;
+      if (qr != null) {
+        Navigator.of(context).pop(qr);
+        return;
+      }
+      // Fall back to NID OCR
+      final nid = await _ocr.extractNidFromImage(frame.path);
+      if (!mounted) return;
+      if (nid.status == NidScanStatus.success && nid.data?.nidNumber != null) {
+        Navigator.of(context).pop(nid.data!.nidNumber);
+        return;
+      }
+      // Neither found — auto-scan will retry; manual tap shows snack
+      if (!_isAutoScan) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(EnrollmentStrings.nidScanNotFound),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } on CameraException catch (e) {
+      debugPrint('SearchScanner: takePicture failed: $e');
+    } finally {
+      if (mounted) setState(() => _isScanning = false);
+    }
+  }
+
+  // True when capture was triggered by the auto timer (not by user tap).
+  // Used to suppress the "not found" snackbar during periodic auto-scans.
+  bool get _isAutoScan => _autoScanTimer?.isActive ?? false;
+
+  @override
+  Widget build(BuildContext context) {
+    final screenH = MediaQuery.of(context).size.height;
+    return SizedBox(
+      height: screenH,
+      child: Material(
+        color: Colors.black.withValues(alpha: 0.92),
+        child: SafeArea(
+          child: _ScannerBody(
+            isScanning: _isScanning,
+            sweep: _sweep,
+            readingCard: false,
+            cameraController: _cameraReady ? _cameraController : null,
+            cameraUnavailable: _cameraUnavailable,
+            autoScanActive: _cameraReady && _autoScanTimer != null,
+            onCapture: _handleCapture,
+            onCreateHousehold: () {},
+            onCancel: () => Navigator.of(context).pop(null),
+            showCreateHousehold: false,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Member NID scan overlay ──────────────────────────────────────────────────
+
+/// Simplified NID scanner overlay used when adding a household member.
+/// On capture success, pops with [NidScanResult]; cancel pops with null.
+class _MemberNidScanOverlay extends StatefulWidget {
+  const _MemberNidScanOverlay();
+
+  @override
+  State<_MemberNidScanOverlay> createState() => _MemberNidScanOverlayState();
+}
+
+class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
+    with SingleTickerProviderStateMixin {
+  bool _isScanning = false;
+  final NidOcrService _ocr = NidOcrService();
+  CameraController? _cameraController;
+  bool _cameraReady = false;
+  bool _cameraUnavailable = false;
+  Timer? _autoScanTimer;
+
+  late final AnimationController _sweepCtrl;
+  late final Animation<double> _sweep;
+
+  @override
+  void initState() {
+    super.initState();
+    _sweepCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat(reverse: true);
+    _sweep = Tween<double>(begin: 0.06, end: 0.92).animate(
+      CurvedAnimation(parent: _sweepCtrl, curve: Curves.easeInOut),
+    );
+    _initCamera();
+  }
+
+  Future<void> _initCamera() async {
+    final status = await Permission.camera.request();
+    if (!mounted) return;
+    if (!status.isGranted) {
+      setState(() => _cameraUnavailable = true);
+      return;
+    }
+    try {
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        if (mounted) setState(() => _cameraUnavailable = true);
+        return;
+      }
+      final back = cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.back,
+        orElse: () => cameras.first,
+      );
+      final controller = CameraController(back, ResolutionPreset.high, enableAudio: false);
+      await controller.initialize();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      setState(() {
+        _cameraController = controller;
+        _cameraReady = true;
+      });
+      _autoScanTimer = Timer.periodic(const Duration(milliseconds: 1800), (_) {
+        if (mounted && !_isScanning && _cameraReady) _handleCapture();
+      });
     } on CameraException catch (e) {
       debugPrint('MemberNidScan: camera init failed: $e');
       if (mounted) setState(() => _cameraUnavailable = true);
@@ -328,6 +508,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
 
   @override
   void dispose() {
+    _autoScanTimer?.cancel();
     _cameraController?.dispose();
     _sweepCtrl.dispose();
     super.dispose();
@@ -388,6 +569,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
             readingCard: false,
             cameraController: _cameraReady ? _cameraController : null,
             cameraUnavailable: _cameraUnavailable,
+            autoScanActive: _cameraReady && _autoScanTimer != null,
             onCapture: _handleCapture,
             onCreateHousehold: () {},
             onCancel: () => Navigator.of(context).pop(null),
@@ -411,6 +593,7 @@ class _ScannerBody extends StatelessWidget {
     required this.onCapture,
     required this.onCreateHousehold,
     required this.onCancel,
+    this.autoScanActive = false,
     this.showCreateHousehold = true,
     this.onLinkToExisting,
   });
@@ -422,6 +605,8 @@ class _ScannerBody extends StatelessWidget {
   /// Live preview controller, or null while initialising / unavailable.
   final CameraController? cameraController;
   final bool cameraUnavailable;
+  /// When true, shows auto-scan status instead of default subtitle.
+  final bool autoScanActive;
   final VoidCallback onCapture;
   final VoidCallback onCreateHousehold;
   final VoidCallback onCancel;
@@ -545,6 +730,8 @@ class _ScannerBody extends StatelessWidget {
           Text(
             readingCard
                 ? '🔍 Reading card details…'
+                : autoScanActive
+                ? '✦ Auto-scanning'
                 : 'Take a Photo of NID Card',
             style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: Colors.white),
             textAlign: TextAlign.center,
@@ -555,6 +742,8 @@ class _ScannerBody extends StatelessWidget {
                 ? 'Reading the NID number…'
                 : cameraUnavailable
                 ? 'Camera unavailable'
+                : autoScanActive
+                ? EnrollmentStrings.autoScanActive
                 : 'Position the card within the frame',
             style: const TextStyle(fontSize: 12, color: AppColors.onDarkLow),
             textAlign: TextAlign.center,

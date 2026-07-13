@@ -362,7 +362,9 @@ abstract final class SearchStrings {
   static String nid(Object nid) => 'NID $nid';
   static String householdNo(Object no) => 'No $no';
   static String memberCount(Object count) => '$count members';
-  static const String scanNidTooltip = 'Scan NID card to find patient';
+  static const String scanNidTooltip = 'Scan NID or QR to find patient';
+  static const String scanSearchTitle = 'Scan to Search';
+  static const String scanSearchSubtitle = 'Point at NID card or QR code';
 }
 
 /// App-specific fallback PIN: setup (create + confirm), unlock, and management.
@@ -4511,6 +4513,8 @@ abstract final class EnrollmentStrings {
       'If member has no NID, enter Birth Registration ID instead.';
   static String nidNumberCaptured(String number) =>
       '✓ NID number captured: $number';
+  static const String autoScanActive = 'Auto-scanning — hold card steady';
+  static const String autoScanHint = 'Scanning every ~2 s · tap button to force capture';
   static const String nidScanNotFound =
       'Could not read the NID number. Try again or type it in below.';
   static const String nidScanError =
