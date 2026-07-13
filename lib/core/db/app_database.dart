@@ -518,6 +518,101 @@ class AppDatabase {
         last_card_viewed INTEGER NOT NULL DEFAULT -1,
         updated_at INTEGER NOT NULL
       )''');
+
+    // v26 — Clinical record tables: screenings, NCD medical reviews,
+    // diagnoses, treatment details, and Rx-Buddy check-ins. Mirrors the
+    // _onUpgrade v26 block below — fresh installs must get these tables
+    // here too, not just devices upgrading from an older schema version.
+    await db.execute('''
+      CREATE TABLE $tableScreenings (
+        id TEXT PRIMARY KEY,
+        patient_id TEXT NOT NULL,
+        programme TEXT NOT NULL,
+        screening_date INTEGER NOT NULL,
+        raw_json TEXT NOT NULL,
+        sync_status TEXT NOT NULL DEFAULT 'pending',
+        created_at INTEGER,
+        updated_at INTEGER
+      )''');
+    await db.execute(
+        'CREATE INDEX idx_screening_patient ON $tableScreenings(patient_id)');
+    await db.execute(
+        'CREATE INDEX idx_screening_sync ON $tableScreenings(sync_status)');
+
+    await db.execute('''
+      CREATE TABLE $tableNcdMedicalReviews (
+        id TEXT PRIMARY KEY,
+        patient_id TEXT NOT NULL,
+        visit_date INTEGER NOT NULL,
+        bp_systolic INTEGER,
+        bp_diastolic INTEGER,
+        glucose_value REAL,
+        glucose_type TEXT,
+        on_medication INTEGER DEFAULT 0,
+        raw_json TEXT NOT NULL,
+        sync_status TEXT NOT NULL DEFAULT 'pending',
+        created_at INTEGER,
+        updated_at INTEGER
+      )''');
+    await db.execute(
+        'CREATE INDEX idx_ncd_review_patient ON $tableNcdMedicalReviews(patient_id)');
+    await db.execute(
+        'CREATE INDEX idx_ncd_review_sync ON $tableNcdMedicalReviews(sync_status)');
+
+    await db.execute('''
+      CREATE TABLE $tableDiagnoses (
+        id TEXT PRIMARY KEY,
+        patient_id TEXT NOT NULL,
+        diagnosis_code TEXT NOT NULL,
+        diagnosis_label TEXT,
+        programme TEXT,
+        confirmed_at INTEGER,
+        raw_json TEXT NOT NULL,
+        sync_status TEXT NOT NULL DEFAULT 'pending',
+        created_at INTEGER,
+        updated_at INTEGER
+      )''');
+    await db.execute(
+        'CREATE INDEX idx_diagnosis_patient ON $tableDiagnoses(patient_id)');
+    await db.execute(
+        'CREATE INDEX idx_diagnosis_code ON $tableDiagnoses(diagnosis_code)');
+
+    await db.execute('''
+      CREATE TABLE $tableTreatmentDetails (
+        id TEXT PRIMARY KEY,
+        patient_id TEXT NOT NULL,
+        programme TEXT,
+        medication_name TEXT,
+        dosage TEXT,
+        frequency TEXT,
+        start_date INTEGER,
+        end_date INTEGER,
+        raw_json TEXT NOT NULL,
+        sync_status TEXT NOT NULL DEFAULT 'pending',
+        created_at INTEGER,
+        updated_at INTEGER
+      )''');
+    await db.execute(
+        'CREATE INDEX idx_treatment_patient ON $tableTreatmentDetails(patient_id)');
+
+    await db.execute('''
+      CREATE TABLE $tableRxBuddyCheckins (
+        id TEXT PRIMARY KEY,
+        patient_id TEXT NOT NULL,
+        check_date INTEGER NOT NULL,
+        medications_taken INTEGER NOT NULL DEFAULT 0,
+        notes TEXT,
+        raw_json TEXT,
+        sync_status TEXT NOT NULL DEFAULT 'pending',
+        created_at INTEGER,
+        updated_at INTEGER
+      )''');
+    await db.execute(
+        'CREATE INDEX idx_rx_buddy_patient ON $tableRxBuddyCheckins(patient_id)');
+    await db.execute(
+        'CREATE INDEX idx_rx_buddy_date ON $tableRxBuddyCheckins(check_date DESC)');
+    await db.execute(
+        'CREATE INDEX idx_rx_buddy_sync ON $tableRxBuddyCheckins(sync_status)');
   }
 
   static Future<void> _onUpgrade(Database db, int from, int to) async {
