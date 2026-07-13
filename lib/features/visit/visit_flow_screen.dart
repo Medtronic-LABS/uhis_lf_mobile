@@ -1153,7 +1153,9 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         sex: widget.patientGender,
         activeProgrammes: programmes,
         gestationalWeeks: widget.gestationalWeeks,
-        isPregnant: widget.gestationalWeeks != null || widget.lmpMs != null,
+        isPregnant: (widget.gestationalWeeks != null || widget.lmpMs != null) &&
+            (widget.confirmedProgrammes.contains(Programme.anc) ||
+             widget.confirmedProgrammes.contains(Programme.pnc)),
         manuallySelectedSymptoms: widget.confirmedSymptoms.toList(),
         currentVitals: _loadedVitals,
         labResults: _loadedLabs,
@@ -1877,7 +1879,11 @@ class _Step3AiRecoState extends State<_Step3AiReco>
           ],
 
           // ── Gestational age card (ANC / PNC patients only) ─────────
-          if (widget.gestationalWeeks != null || widget.lmpMs != null) ...[
+          // Guard on confirmedProgrammes: lmpMs may exist in DB for patients
+          // who had prior ANC visits, causing the card to appear on NCD visits.
+          if ((widget.gestationalWeeks != null || widget.lmpMs != null) &&
+              (widget.confirmedProgrammes.contains(Programme.anc) ||
+               widget.confirmedProgrammes.contains(Programme.pnc))) ...[
             _GestationalAgeCard(
               gestationalWeeks: widget.gestationalWeeks,
               lmpMs: widget.lmpMs,
