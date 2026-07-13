@@ -4,6 +4,15 @@ import '../../core/constants/app_strings.dart';
 import '../../core/models/programme.dart';
 import 'visit_controller.dart';
 
+/// RESUME-STASHED: the same-day draft resume/start-over prompt is
+/// temporarily disabled — held back for further review, not removed. All
+/// underlying plumbing (EncounterRepository.findTodayDraft/discardDraft,
+/// VisitController.checkTodayDraft/discardDraft, the dialog below) is intact
+/// and unused while this is `false`. Do not restore or modify without direct
+/// user instruction. Search `RESUME-STASHED` for the only other marker
+/// (there is none elsewhere — this flag is the single gate).
+const bool _resumeFeatureEnabled = false;
+
 /// Single entry point for starting a visit across every "Visit now"/"Start
 /// visit" call site in the app. Wraps [VisitController.startVisit] with a
 /// same-day resume check: if the patient has an assessment draft last
@@ -24,7 +33,9 @@ Future<String?> startOrResumeVisit(
   String? patientGender,
   String? householdId,
 }) async {
-  final draft = await controller.checkTodayDraft(patientId);
+  final draft = _resumeFeatureEnabled
+      ? await controller.checkTodayDraft(patientId)
+      : null;
   if (!context.mounted) return null;
 
   if (draft != null) {
