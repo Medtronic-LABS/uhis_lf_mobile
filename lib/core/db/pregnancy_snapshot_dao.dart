@@ -102,6 +102,16 @@ class PregnancySnapshotDao {
     return PregnancySnapshotRow.fromDb(rows.first);
   }
 
+  /// Insert or replace a single row — used by the pregnancy registration sheet
+  /// to persist LMP/EDD/risk flags captured offline before the first ANC visit.
+  Future<void> upsertOne(PregnancySnapshotRow row) async {
+    await _db.db.insert(
+      AppDatabase.tablePregnancySnapshot,
+      row.toDb(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
   Future<void> clearAll() async {
     await _db.db.delete(AppDatabase.tablePregnancySnapshot);
   }
