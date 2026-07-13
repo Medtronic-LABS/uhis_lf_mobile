@@ -505,8 +505,9 @@ class TriageViewModel extends ChangeNotifier {
   ///   - Maternal codes show when the patient is enrolled in ANY programme the
   ///     code spans (e.g. vaginal_bleeding shows for ANC-only patients), and
   ///     land in the first enrolled section of that span (ANC before PNC).
-  ///   - General symptoms (fever, headache…) get their own section so the SK
-  ///     sees the full clinically relevant list, visually separated.
+  ///   - General symptoms (fever, headache…) get their own section for non-NCD
+  ///     patients. NCD-only patients see no general section — all general codes
+  ///     are available via search only.
   ///
   /// Selection, search pools, and pathway activation are untouched.
   List<SymptomSection> get groupedVocabSections {
@@ -543,13 +544,11 @@ class TriageViewModel extends ChangeNotifier {
       }
       switch (AiScribeTriageVocab.categoryOf(code)) {
         case SymptomCategory.general:
-          // NCD-only patients: restrict the general section to the NCD-relevant
-          // subset (BP/diabetes characteristic symptoms). Non-relevant general
-          // codes (fever, vomiting, etc.) remain searchable but skip the grid.
+          // NCD-only patients: no general section — all general codes are
+          // searchable but the grid stays tight (NCD chips only).
           final isNcdOnly = enrolled.isNotEmpty &&
               enrolled.every((p) => p == Programme.ncd);
-          if (isNcdOnly &&
-              !AiScribeTriageVocab.ncdRelevantGeneralCodes.contains(code)) {
+          if (isNcdOnly) {
             if (kDebugMode) ncdDropped.add(code);
             break;
           }

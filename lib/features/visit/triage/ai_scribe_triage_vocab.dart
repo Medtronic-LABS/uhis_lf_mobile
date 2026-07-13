@@ -268,20 +268,6 @@ abstract final class AiScribeTriageVocab {
     'foot_wound',
   };
 
-  /// General-category codes shown in the chip grid when the patient's only
-  /// enrolled programme is NCD. Non-listed general codes (fever, vomiting,
-  /// abdominal_pain, painful_urination, convulsions) are still searchable —
-  /// they're not NCD-characteristic and add visual noise for a routine check.
-  static const Set<String> ncdRelevantGeneralCodes = {
-    'headache',
-    'dizziness',
-    'blurred_vision',
-    'breathlessness',
-    'fatigue',
-    'weakness',
-    'weight_loss',
-  };
-
   /// Human-readable label for a code — used when the AI surfaces a code that
   /// isn't present in TriageStrings. Underscores → spaces, capitalised words.
   static String labelFor(String code) {
