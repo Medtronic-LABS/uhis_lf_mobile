@@ -263,6 +263,7 @@ class AssessmentRepository extends ChangeNotifier {
     final householdMemberPayloads = byMember.entries
         .map((e) => <String, dynamic>{
               'referenceId': e.key,
+              'provenance': provenance.toJson(),
               'assessments': e.value,
               'followUps': <Map<String, dynamic>>[],
             })
