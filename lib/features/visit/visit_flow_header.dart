@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/constants/app_strings.dart';
@@ -30,6 +31,17 @@ class VisitFlowHeader extends StatelessWidget {
   final Programme primaryProgramme;
 
   static const Color headerColor = Color(0xFF831843);
+
+  /// Shared status-bar style for both screens using this header (issue #89)
+  /// — transparent so the maroon header paints through, light icons since
+  /// the background is dark. Single home for this literal; both consuming
+  /// screens wrap their body in `AnnotatedRegion<SystemUiOverlayStyle>`
+  /// with this value.
+  static const statusBarStyle = SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+    statusBarBrightness: Brightness.dark,
+  );
 
   String get _initials {
     final name = (patientName ?? '').trim();

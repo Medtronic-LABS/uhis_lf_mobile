@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -256,7 +257,9 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
       ),
       child: Scaffold(
         backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
-        body: Column(
+        body: AnnotatedRegion<SystemUiOverlayStyle>(
+          value: VisitFlowHeader.statusBarStyle,
+          child: Column(
         children: [
           VisitFlowHeader(
             step: 0,
@@ -299,6 +302,7 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
           ),
         ],
       ),
+        ),
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
