@@ -2682,7 +2682,6 @@ class _AiCounsellingCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: _outerBg(),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _outerBorder(), width: 1.5),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(14),
