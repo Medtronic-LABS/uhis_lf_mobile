@@ -190,6 +190,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       debugPrint('[SymptomPicker] Success! Setting up view model...');
       final vm = TriageViewModel(patientContext: ctx);
       final pathwaySet = vm.activatedPathways.map((p) => p.programme).toSet();
+      vm.addListener(_syncPathwaysToServiceGrid);
       setState(() {
         _patientContext = ctx;
         _viewModel = vm;
@@ -319,8 +320,27 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     }
   }
 
+  /// Keeps [_selectedProgrammes] and [_pathwayActivatedProgrammes] in sync
+  /// with the pathway engine whenever symptoms change (AI Scribe pre-tick or
+  /// manual selection). Only ever adds — never removes a programme the SK
+  /// manually deselected.
+  void _syncPathwaysToServiceGrid() {
+    if (!mounted) return;
+    final vm = _viewModel;
+    if (vm == null) return;
+    final activated = vm.allPathways.map((p) => p.programme).toSet();
+    final unseen = activated.difference(_selectedProgrammes);
+    if (unseen.isNotEmpty) {
+      setState(() {
+        _selectedProgrammes.addAll(unseen);
+        _pathwayActivatedProgrammes.addAll(unseen);
+      });
+    }
+  }
+
   @override
   void dispose() {
+    _viewModel?.removeListener(_syncPathwaysToServiceGrid);
     _viewModel?.dispose();
     super.dispose();
   }

@@ -505,8 +505,9 @@ class TriageViewModel extends ChangeNotifier {
   ///   - Maternal codes show when the patient is enrolled in ANY programme the
   ///     code spans (e.g. vaginal_bleeding shows for ANC-only patients), and
   ///     land in the first enrolled section of that span (ANC before PNC).
-  ///   - General symptoms (fever, headache…) get their own section so the SK
-  ///     sees the full clinically relevant list, visually separated.
+  ///   - General symptoms (fever, headache…) get their own section for non-NCD
+  ///     patients. NCD-only patients see no general section — all general codes
+  ///     are available via search only.
   ///
   /// Selection, search pools, and pathway activation are untouched.
   List<SymptomSection> get groupedVocabSections {
@@ -533,8 +534,7 @@ class TriageViewModel extends ChangeNotifier {
 
     final demographicSkipped = <String>[];
     final maternalSkipped = <String>[];
-    final ancExtendedRouted = <String>[];
-    final ncdDropped = <String>[];
+    final gridDropped = <String>[];
 
     for (final code in AiScribeTriageVocab.codes) {
       if (!AiScribeTriageVocab.isDemographicallyPlausible(code, ctx)) {
@@ -543,52 +543,50 @@ class TriageViewModel extends ChangeNotifier {
       }
       switch (AiScribeTriageVocab.categoryOf(code)) {
         case SymptomCategory.general:
-          // NCD-only patients: restrict the general section to the NCD-relevant
-          // subset (BP/diabetes characteristic symptoms). Non-relevant general
-          // codes (fever, vomiting, etc.) remain searchable but skip the grid.
           final isNcdOnly = enrolled.isNotEmpty &&
               enrolled.every((p) => p == Programme.ncd);
+          final isAncOnly = enrolled.isNotEmpty &&
+              enrolled.every((p) => p == Programme.anc);
           if (isNcdOnly &&
               !AiScribeTriageVocab.ncdRelevantGeneralCodes.contains(code)) {
-            if (kDebugMode) ncdDropped.add(code);
+            if (kDebugMode) gridDropped.add(code);
+            break;
+          }
+          if (isAncOnly &&
+              !AiScribeTriageVocab.ancRelevantGeneralCodes.contains(code)) {
+            if (kDebugMode) gridDropped.add(code);
             break;
           }
           general.add(code);
         case SymptomCategory.maternal:
           final codeProgs =
               AiScribeTriageVocab.programmesForMaternalCode(code);
-          // Show when enrolled in ANY programme this code spans (not ALL).
-          // e.g. vaginal_bleeding {anc,pnc} shows for ANC-only patients.
           if (!codeProgs.any(enrolled.contains)) {
             if (kDebugMode) maternalSkipped.add(code);
             break;
           }
-          // Route to the first enrolled programme from codeProgs in section
-          // order, so ANC-only patients see {anc,pnc} codes in the ANC bucket.
           final home = sectionOrder.firstWhere(
             (p) => codeProgs.contains(p) && byProgramme.containsKey(p),
             orElse: () => sectionOrder.firstWhere(codeProgs.contains),
           );
+          // ANC bucket: curated danger-sign list only; secondary maternal
+          // codes (heavy_bleeding, edema, contractions) go to search.
+          if (home == Programme.anc &&
+              !AiScribeTriageVocab.ancPrimaryMaternalCodes.contains(code)) {
+            if (kDebugMode) gridDropped.add(code);
+            break;
+          }
           byProgramme[home]?.add(code);
         case SymptomCategory.ncd:
           if (byProgramme.containsKey(Programme.ncd)) {
-            // NCD enrolled: only primary grid codes in the bucket; secondary
-            // NCD codes (epigastric_pain, swelling_one_leg, foot_pain) go to
-            // search so the grid stays tight (BP + diabetes focused).
             if (AiScribeTriageVocab.ncdPrimaryGridCodes.contains(code)) {
               byProgramme[Programme.ncd]?.add(code);
             } else {
-              if (kDebugMode) ncdDropped.add(code);
+              if (kDebugMode) gridDropped.add(code);
             }
-          } else if (byProgramme.containsKey(Programme.anc) &&
-              AiScribeTriageVocab.ancExtendedNcdCodes.contains(code)) {
-            // ANC-only patient: surface the clinical-crossover NCD codes
-            // (chest pain, one-sided weakness, palpitations etc.) in the
-            // ANC bucket so the SK sees them without searching.
-            byProgramme[Programme.anc]?.add(code);
-            if (kDebugMode) ancExtendedRouted.add(code);
           } else {
-            if (kDebugMode) ncdDropped.add(code);
+            // No NCD enrolment: NCD codes go to search only.
+            if (kDebugMode) gridDropped.add(code);
           }
         case SymptomCategory.pediatric:
           byProgramme[Programme.imci]?.add(code);
@@ -606,14 +604,9 @@ class TriageViewModel extends ChangeNotifier {
         debugPrint('[TriageGrid]   GENERAL bucket '
             '(${general.length}): ${general.join(', ')}');
       }
-      if (ancExtendedRouted.isNotEmpty) {
-        debugPrint('[TriageGrid]   ANC-extended NCD crossover '
-            '(${ancExtendedRouted.length}): ${ancExtendedRouted.join(', ')}');
-      }
-      if (ncdDropped.isNotEmpty) {
-        debugPrint('[TriageGrid]   NCD codes not shown (no NCD enrolment, '
-            'not ANC-extended) (${ncdDropped.length}): '
-            '${ncdDropped.join(', ')}');
+      if (gridDropped.isNotEmpty) {
+        debugPrint('[TriageGrid]   Grid-filtered → search-only '
+            '(${gridDropped.length}): ${gridDropped.join(', ')}');
       }
       if (maternalSkipped.isNotEmpty) {
         debugPrint('[TriageGrid]   Maternal codes hidden (not enrolled in any '
