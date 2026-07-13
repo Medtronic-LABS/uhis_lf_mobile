@@ -1855,21 +1855,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     }
 
     if (!mounted) return;
-    final others = (_householdMembers ?? [])
-        .where((m) => !m.isCurrentPatient)
-        .toList();
-    if (others.isNotEmpty) {
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => _WhileYoureHerePage(
-            members: _householdMembers!,
-            returnPath: _returnPath,
-          ),
-        ),
-      );
-    } else {
-      context.go(_returnPath);
-    }
+    context.go(_returnPath);
   }
 
   @override
