@@ -1843,10 +1843,29 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         naba.referralRecommendation?.required_ ?? widget.referralRecommended;
     return SingleChildScrollView(
       physics: const ClampingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
+      padding: const EdgeInsets.only(bottom: 40),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── 1. Referral / danger banner — edge-to-edge, flush top ────
+          if (referral || naba.dangerSigns.isNotEmpty) ...[
+            _ReferralAlertCard(
+              reason: naba.referralRecommendation?.reason ??
+                  (naba.dangerSigns.isNotEmpty
+                      ? naba.dangerSigns.take(2).join(', ')
+                      : 'Referral recommended'),
+              urgency: naba.referralRecommendation?.urgency ?? 'Today',
+              isDanger: naba.dangerSigns.isNotEmpty,
+            ),
+            Container(height: 1.5, color: const Color(0xFFFECACA)),
+          ],
+
+          // Inner content has horizontal padding
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
           // ── Household member strip ──────────────────────────────────
           if (_householdMembers != null && _householdMembers!.length > 1) ...[
             _HouseholdMemberStrip(
@@ -1854,7 +1873,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
               onTapMember: (patientId) =>
                   context.push('/patients/$patientId'),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
           ],
 
           // ── Gestational age card (ANC / PNC patients only) ─────────
@@ -1867,40 +1886,12 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             const SizedBox(height: 12),
           ],
 
-          // ── 1. Vitals summary ───────────────────────────────────────
-          _VitalsSummaryCard(
-            programme: widget.primaryProgramme,
-            summary: naba.visitSummary.summary,
-            hasIssues: referral || naba.dangerSigns.isNotEmpty,
-          ),
-          const SizedBox(height: 12),
-
-          // ── 2. Referral / danger alert ──────────────────────────────
-          if (referral || naba.dangerSigns.isNotEmpty) ...[
-            _ReferralAlertCard(
-              reason: naba.dangerSigns.isNotEmpty
-                  ? 'Danger signs detected: ${naba.dangerSigns.join(', ')}'
-                  : (naba.referralRecommendation?.reason ??
-                      'Referral recommended based on clinical assessment'),
-              urgency: naba.referralRecommendation?.urgency ?? 'Today',
-              isDanger: naba.dangerSigns.isNotEmpty,
-            ),
-            const SizedBox(height: 12),
-          ],
-
-          // ── 3. AI Counselling Guide ─────────────────────────────────
-          if (naba.counselling.isNotEmpty) ...[
+          // ── 3. AI Counselling Guide (WhatsApp preview) ──────────────
+          if (naba.whatsappSummary != null) ...[
             _AiCounsellingCard(
               programme: widget.primaryProgramme,
-              items: naba.counselling,
-            ),
-            const SizedBox(height: 12),
-          ],
-
-          // ── 4. WhatsApp / SMS banner ────────────────────────────────
-          if (naba.whatsappSummary != null) ...[
-            _WhatsAppCard(
               text: naba.whatsappSummary!,
+              patientLabel: widget.patientLabel,
               patientPhone: _patientPhone,
             ),
             const SizedBox(height: 12),
@@ -1914,6 +1905,9 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             ),
             const SizedBox(height: 16),
           ],
+              ], // end inner Column children
+            ),   // end inner Column
+          ),     // end Padding
 
           // ── 6. CTA: accept + call/refer ─────────────────────────────
           _BottomCtaBar(
@@ -2301,87 +2295,120 @@ class _ReferralAlertCard extends StatelessWidget {
   final String urgency;
   final bool isDanger;
 
+  // Split reason into a short title + detail subtitle.
+  // Title: up to first sentence-break or first 50 chars.
+  // Subtitle: the rest.
+  (String, String) _split() {
+    final trimmed = reason.trim();
+    for (final sep in [' — ', ': ', '. ']) {
+      final idx = trimmed.indexOf(sep);
+      if (idx > 0 && idx < 60) {
+        return (
+          trimmed.substring(0, idx),
+          trimmed.substring(idx + sep.length),
+        );
+      }
+    }
+    if (trimmed.length > 55) {
+      return (trimmed.substring(0, 55).trim(), trimmed);
+    }
+    return (trimmed, '');
+  }
+
   @override
   Widget build(BuildContext context) {
-    const dangerBg = Color(0xFFFEF2F2);
-    const dangerBorder = Color(0xFFFECACA);
+    const dangerBg = Color(0xFFFEE2E2);
     const dangerAccent = Color(0xFFDC2626);
-    const referBg = Color(0xFFFFFBEB);
-    const referBorder = Color(0xFFFDE68A);
+    const referBg = Color(0xFFFFF7ED);
     const referAccent = Color(0xFFB45309);
 
     final bg = isDanger ? dangerBg : referBg;
-    final border = isDanger ? dangerBorder : referBorder;
     final accent = isDanger ? dangerAccent : referAccent;
-    final icon =
-        isDanger ? Icons.emergency_rounded : Icons.local_hospital_rounded;
+    final badgeLabel = isDanger ? 'IMMEDIATE' : 'Referred';
+    final (title, subtitle) = _split();
+    final displayTitle = isDanger ? 'Refer immediately' : 'Referred — $title';
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: border, width: 1.5),
-      ),
+      color: bg,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Container(
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              color: accent,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, size: 16, color: Colors.white),
+          // Icon with yellow badge dot
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: accent,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.trending_up_rounded,
+                    size: 18, color: Colors.white),
+              ),
+              Positioned(
+                top: -2,
+                right: -2,
+                child: Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFBBF24),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: bg, width: 1.5),
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        isDanger ? 'Refer immediately' : 'Refer to facility',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          color: accent,
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: accent,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        urgency.toUpperCase(),
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
                 Text(
-                  reason,
+                  displayTitle,
                   style: TextStyle(
-                    fontSize: 12.5,
-                    color: accent.withValues(alpha: 0.85),
-                    height: 1.4,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w800,
+                    color: accent,
                   ),
                 ),
+                if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: accent.withValues(alpha: 0.8),
+                      height: 1.35,
+                    ),
+                  ),
+                ],
               ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: accent,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              badgeLabel,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+                letterSpacing: 0.3,
+              ),
             ),
           ),
         ],
@@ -2390,203 +2417,195 @@ class _ReferralAlertCard extends StatelessWidget {
   }
 }
 
-class _AiCounsellingCard extends StatefulWidget {
+class _AiCounsellingCard extends StatelessWidget {
   const _AiCounsellingCard({
     required this.programme,
-    required this.items,
+    required this.text,
+    this.patientLabel,
+    this.patientPhone,
   });
   final Programme programme;
-  final List<String> items;
+  final String text;
+  final String? patientLabel;
+  final String? patientPhone;
 
-  @override
-  State<_AiCounsellingCard> createState() => _AiCounsellingCardState();
-}
+  Color _outerBg() => programme == Programme.ncd
+      ? const Color(0xFFFFFBEB)
+      : const Color(0xFFF0FDF4);
+  Color _outerBorder() => programme == Programme.ncd
+      ? const Color(0xFFFDE68A)
+      : const Color(0xFFA7F3D0);
 
-class _AiCounsellingCardState extends State<_AiCounsellingCard> {
-  static const _pinkBg = Color(0xFFFDF2F8);
-  static const _pinkBorder = Color(0xFFF9A8D4);
-  static const _pinkAccent = Color(0xFF9D174D);
-
-  // Returns a fallback emoji for items that don't already start with one.
-  static String _fallbackEmoji(String item) {
-    final s = item.toLowerCase();
-    if (s.contains('salt') || s.contains('sodium')) { return '🧂'; }
-    if (s.contains('vegetable') || s.contains('fruit') || s.contains('eat') ||
-        s.contains('food') || s.contains('diet') || s.contains('lentil') ||
-        s.contains('egg') || s.contains('nutritious')) { return '🥦'; }
-    if (s.contains('walk') || s.contains('exercise') ||
-        s.contains('activity')) { return '🚶'; }
-    if (s.contains('tobacco') || s.contains('smoke') ||
-        s.contains('alcohol')) { return '🚫'; }
-    if (s.contains('medicine') || s.contains('medication') ||
-        s.contains('tablet') || s.contains('iron') ||
-        s.contains('calcium') || s.contains('zinc')) { return '💊'; }
-    if (s.contains('danger') || s.contains('emergency') ||
-        s.contains('immediately') || s.contains('headache') ||
-        s.contains('vision') || s.contains('convulsion') ||
-        s.contains('bleeding')) { return '⚠️'; }
-    if (s.contains('baby') || s.contains('neonate') ||
-        s.contains('breastfeed')) { return '👶'; }
-    if (s.contains('water') || s.contains('ors') ||
-        s.contains('hydrat')) { return '💧'; }
-    if (s.contains('sleep') || s.contains('rest') ||
-        s.contains('bednet')) { return '🌙'; }
-    if (s.contains('facility') || s.contains('delivery') ||
-        s.contains('hospital') || s.contains('uhc') ||
-        s.contains('refer')) { return '🏥'; }
-    if (s.contains('antenatal') || s.contains('anc') ||
-        s.contains('prenatal') || s.contains('fundal') ||
-        s.contains('fetal')) { return '🤰'; }
-    if (s.contains('tb') || s.contains('tuberculosis') ||
-        s.contains('adherence') || s.contains('cough') ||
-        s.contains('mask')) { return '😷'; }
-    return '✓';
-  }
-
-  // True when the first Unicode scalar is an emoji codepoint.
-  static bool _startsWithEmoji(String s) {
-    final trimmed = s.trimLeft();
-    if (trimmed.isEmpty) return false;
-    final first = trimmed.runes.first;
-    return (first >= 0x2600 && first <= 0x27BF) || first >= 0x1F000;
-  }
-
-  // Strips a leading emoji + trailing space so the widget emoji doesn't double.
-  static String _stripLeadingEmoji(String s) {
-    final trimmed = s.trimLeft();
-    if (trimmed.isEmpty) return trimmed;
-    final runes = trimmed.runes.toList();
-    int i = 0;
-    // Skip emoji codepoints and ZWJ / variation selectors
-    while (i < runes.length &&
-        ((runes[i] >= 0x2600 && runes[i] <= 0x27BF) ||
-            runes[i] >= 0x1F000 ||
-            runes[i] == 0xFE0F ||
-            runes[i] == 0x200D)) {
-      i++;
+  Future<void> _sendWhatsApp(BuildContext context) async {
+    final encoded = Uri.encodeComponent(text);
+    final rawPhone =
+        patientPhone?.replaceAll(RegExp(r'[^\d]'), '') ?? '';
+    final phoneParam = rawPhone.isNotEmpty ? 'phone=$rawPhone&' : '';
+    final nativeUri =
+        Uri.parse('whatsapp://send?${phoneParam}text=$encoded');
+    if (await canLaunchUrl(nativeUri)) {
+      await launchUrl(nativeUri);
+      return;
     }
-    // Skip trailing spaces
-    while (i < runes.length && runes[i] == 0x20) {
-      i++;
+    final webUri = Uri.parse(
+        'https://wa.me/${rawPhone.isNotEmpty ? rawPhone : ''}?text=$encoded');
+    if (await canLaunchUrl(webUri)) {
+      await launchUrl(webUri, mode: LaunchMode.externalApplication);
+      return;
     }
-    return String.fromCharCodes(runes.skip(i));
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text(NabaStrings.whatsAppNotInstalled)),
+      );
+    }
   }
-
-  String _sourceLabel() => switch (widget.programme) {
-        Programme.anc || Programme.pnc => 'BRAC ANC',
-        Programme.ncd => 'NCD',
-        Programme.imci => 'IMCI',
-        Programme.tb => 'TB',
-        _ => 'GUIDELINE',
-      };
 
   @override
   Widget build(BuildContext context) {
+    final recipientLine = patientLabel != null
+        ? 'To: $patientLabel${patientPhone != null ? ' · $patientPhone' : ''}'
+        : null;
+
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: _pinkBg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _pinkBorder),
+        color: _outerBg(),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _outerBorder(), width: 1.5),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Header ─────────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-            child: Row(
-              children: [
-                Container(
-                  width: 26,
-                  height: 26,
-                  decoration: BoxDecoration(
-                    color: _pinkAccent,
-                    borderRadius: BorderRadius.circular(7),
-                  ),
-                  child: const Icon(Icons.star, size: 13, color: Colors.white),
-                ),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text(
-                    'AI COUNSELLING GUIDE',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w900,
-                      color: _pinkAccent,
-                      letterSpacing: 0.6,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: _pinkAccent.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: _pinkBorder),
-                  ),
-                  child: Text(
-                    _sourceLabel(),
-                    style: const TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w700,
-                      color: _pinkAccent,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // ── Body (always visible) ───────────────────────────────────
-          const Divider(height: 1, color: _pinkBorder),
-          Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-              child: Column(
-                children: widget.items
-                    .map((item) {
-                      final hasEmoji = _startsWithEmoji(item);
-                      final emoji = hasEmoji ? '' : _fallbackEmoji(item);
-                      final displayText = hasEmoji ? _stripLeadingEmoji(item) : item;
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (hasEmoji) ...[
-                              // AI-provided emoji sits at the front of the text;
-                              // reconstruct it from the original item.
-                              Text(
-                                item.trimLeft().runes.first > 0
-                                    ? String.fromCharCode(item.trimLeft().runes.first)
-                                    : emoji,
-                                style: const TextStyle(fontSize: 14),
-                              ),
-                            ] else ...[
-                              Text(emoji, style: const TextStyle(fontSize: 14)),
-                            ],
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                displayText,
-                                style: const TextStyle(
-                                  fontSize: 12.5,
-                                  color: _pinkAccent,
-                                  height: 1.4,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ],
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── WhatsApp-green header ──────────────────────────
+            Container(
+              color: const Color(0xFF008069),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              child: Row(
+                children: [
+                  const Icon(Icons.star_rounded,
+                      size: 11, color: Colors.white),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          NabaStrings.aiCounsellingGuide,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
                         ),
-                      );
-                    })
-                    .toList(),
+                        if (recipientLine != null)
+                          Text(
+                            recipientLine,
+                            style: const TextStyle(
+                              fontSize: 7.5,
+                              color: Color(0xBFFFFFFF),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-        ],
+            // ── WhatsApp chat area ─────────────────────────────
+            Container(
+              width: double.infinity,
+              color: const Color(0xFFECE5DD),
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                children: [
+                  // Message bubble
+                  Container(
+                    width: double.infinity,
+                    padding:
+                        const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          text,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF111111),
+                            height: 1.45,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: const [
+                            Text(
+                              '10:52',
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: Color(0xFF8E9BA8),
+                              ),
+                            ),
+                            SizedBox(width: 3),
+                            Icon(Icons.done_all_rounded,
+                                size: 13,
+                                color: Color(0xFF53BDEB)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  // Send button
+                  GestureDetector(
+                    onTap: () => _sendWhatsApp(context),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF25D366),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color:
+                                Colors.black.withValues(alpha: 0.2),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(Icons.chat_rounded,
+                              size: 12, color: Colors.white),
+                          SizedBox(width: 7),
+                          Text(
+                            NabaStrings.sendThisMessage,
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2836,7 +2855,7 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: const Color(0xFFFDF2F8),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: _cardBorder),
                   ),
@@ -2860,20 +2879,29 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
                 // Date field
                 Expanded(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: _cardBorder),
                     ),
-                    child: Text(
-                      _formatted,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.navy,
-                      ),
-                      textAlign: TextAlign.center,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _formatted,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.navy,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                        const Icon(Icons.calendar_today_rounded,
+                            size: 14, color: _cardText),
+                      ],
                     ),
                   ),
                 ),
@@ -2916,224 +2944,6 @@ class _SkeletonCard extends StatelessWidget {
   }
 }
 
-class _WhatsAppCard extends StatefulWidget {
-  const _WhatsAppCard({
-    required this.text,
-    this.patientPhone,
-  });
-  final String text;
-  // Pre-loaded from MemberDao; pre-fills recipient in SMS and WhatsApp.
-  final String? patientPhone;
-
-  @override
-  State<_WhatsAppCard> createState() => _WhatsAppCardState();
-}
-
-class _WhatsAppCardState extends State<_WhatsAppCard> {
-  bool _copied = false;
-  bool _expanded = false;
-
-  Future<void> _copy() async {
-    await Clipboard.setData(ClipboardData(text: widget.text));
-    if (!mounted) return;
-    setState(() => _copied = true);
-    await Future<void>.delayed(const Duration(seconds: 2));
-    if (mounted) setState(() => _copied = false);
-  }
-
-  Future<void> _sendSms(BuildContext context) async {
-    final encoded = Uri.encodeComponent(widget.text);
-    // sms:<phone>?body=<text> pre-fills both the recipient and message body.
-    // When no phone is available, sms:?body=<text> still opens the composer.
-    final phone = widget.patientPhone ?? '';
-    final uri = Uri.parse('sms:$phone?body=$encoded');
-    if (!await canLaunchUrl(uri)) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(NabaStrings.smsNotAvailable)),
-        );
-      }
-      return;
-    }
-    await launchUrl(uri);
-  }
-
-  Future<void> _sendWhatsApp(BuildContext context) async {
-    final encoded = Uri.encodeComponent(widget.text);
-    // Normalise phone: WhatsApp expects E.164 without the leading +.
-    // e.g. +8801700123456 → 8801700123456
-    final rawPhone = widget.patientPhone?.replaceAll(RegExp(r'[^\d]'), '') ?? '';
-
-    // whatsapp://send?phone=<e164>&text=<text> opens a chat to the number.
-    // Omitting the phone param opens the share sheet to pick any contact.
-    final phoneParam = rawPhone.isNotEmpty ? 'phone=$rawPhone&' : '';
-    final nativeUri = Uri.parse('whatsapp://send?${phoneParam}text=$encoded');
-    if (await canLaunchUrl(nativeUri)) {
-      await launchUrl(nativeUri);
-      return;
-    }
-    // Fallback: wa.me/<phone>?text=<text> (browser universal link).
-    final waPath = rawPhone.isNotEmpty ? rawPhone : '';
-    final webUri = Uri.parse('https://wa.me/$waPath?text=$encoded');
-    if (await canLaunchUrl(webUri)) {
-      await launchUrl(webUri, mode: LaunchMode.externalApplication);
-      return;
-    }
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(NabaStrings.whatsAppNotInstalled)),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: AppColors.waBg,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.waBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Header row (tappable to expand/collapse) ────────────────
-          InkWell(
-            onTap: () => setState(() => _expanded = !_expanded),
-            borderRadius: BorderRadius.vertical(
-              top: Radius.circular(AppRadius.card),
-              bottom: _expanded ? Radius.zero : Radius.circular(AppRadius.card),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.xl, 8, AppSpacing.xl),
-              child: Row(
-                children: [
-                  Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: AppColors.whatsapp,
-                      borderRadius: BorderRadius.circular(AppRadius.waIcon),
-                    ),
-                    child: const Icon(
-                      Icons.chat_rounded,
-                      size: 15,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text(
-                      NabaStrings.sectionWhatsApp,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13,
-                        color: AppColors.waHeader,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 180),
-                    child: _copied
-                        ? TextButton.icon(
-                            key: const ValueKey('copied'),
-                            onPressed: null,
-                            icon: const Icon(Icons.check_rounded, size: 14),
-                            label: const Text(
-                              NabaStrings.whatsAppCopied,
-                              style: TextStyle(fontSize: 11),
-                            ),
-                            style: TextButton.styleFrom(
-                              foregroundColor: AppColors.statusSuccess,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                          )
-                        : TextButton.icon(
-                            key: const ValueKey('copy'),
-                            onPressed: _copy,
-                            icon: const Icon(Icons.copy_rounded, size: 14),
-                            label: const Text(
-                              NabaStrings.copyWhatsApp,
-                              style: TextStyle(fontSize: 11),
-                            ),
-                            style: TextButton.styleFrom(
-                              foregroundColor: AppColors.waHeader,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                          ),
-                  ),
-                  AnimatedRotation(
-                    turns: _expanded ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: const Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      color: AppColors.waHeader,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          // ── Collapsible body ────────────────────────────────────────
-          if (_expanded) ...[
-            const Divider(height: 1, color: AppColors.waBorder),
-            // Message body — full width now copy button is in the header
-            Padding(
-              padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.xl, AppSpacing.xxl, 0),
-              child: Text(
-                widget.text,
-                style: const TextStyle(
-                  fontSize: 13,
-                  height: 1.55,
-                  color: AppColors.textStrong,
-                ),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.xl),
-            const Divider(height: 1, color: AppColors.waBorder),
-            // Share actions
-            Padding(
-              padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, AppSpacing.xl),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _sendSms(context),
-                      icon: const Icon(Icons.sms_rounded, size: 16),
-                      label: const Text(NabaStrings.sendViaSms),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.navy,
-                        side: const BorderSide(color: AppColors.border),
-                        padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
-                        textStyle: AppTextStyles.chip,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: () => _sendWhatsApp(context),
-                      icon: const Icon(Icons.chat_rounded, size: 16),
-                      label: const Text(NabaStrings.sendViaWhatsApp),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.whatsapp,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
-                        textStyle: AppTextStyles.chip,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
 
 class _BottomCtaBar extends StatelessWidget {
   const _BottomCtaBar({
@@ -3186,40 +2996,6 @@ class _BottomCtaBar extends StatelessWidget {
                   ),
                 ),
               ),
-              if (primaryProgramme == Programme.ncd) ...[
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: () async {
-                      final uri = Uri.parse('tel:');
-                      if (await canLaunchUrl(uri)) await launchUrl(uri);
-                    },
-                    icon: const Icon(Icons.phone_rounded),
-                    label: const Text(VisitCompleteStrings.ncdCallDoctor),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.statusCritical,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () => context.go('/tasks'),
-                    icon: const Icon(Icons.local_hospital_rounded),
-                    label: const Text(VisitCompleteStrings.ncdBookHospital),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: headerColor,
-                      side: BorderSide(
-                          color: headerColor.withValues(alpha: 0.4)),
-                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
-                    ),
-                  ),
-                ),
-              ],
               if ((primaryProgramme == Programme.imci ||
                       primaryProgramme == Programme.epi) &&
                   naba.whatsappSummary != null) ...[
@@ -3520,32 +3296,27 @@ class _HouseholdMemberStrip extends StatelessWidget {
   static (Color ring, Color labelColor, String visitLabel) _style(Programme p) {
     switch (p) {
       case Programme.anc:
-        return (AppColors.ancText, AppColors.ancText, 'ANC visit');
+        return (const Color(0xFFFBCFE8), const Color(0xFFEC4899), 'ANC visit');
       case Programme.pnc:
-        return (AppColors.pncText, AppColors.pncText, 'PNC visit');
+        return (const Color(0xFFA7F3D0), const Color(0xFF10B981), 'PNC due');
       case Programme.imci:
-        return (AppColors.imciText, AppColors.imciText, 'Child visit');
+        return (const Color(0xFFFDE68A), const Color(0xFFF59E0B), 'Child visit');
       case Programme.ncd:
-        return (AppColors.ncdText, AppColors.ncdText, 'BP check');
+        return (const Color(0xFFFDE68A), const Color(0xFF92400E), 'BP check');
       case Programme.tb:
-        return (AppColors.tbText, AppColors.tbText, 'TB check');
+        return (const Color(0xFFA5B4FC), const Color(0xFF4F46E5), 'TB check');
       case Programme.epi:
-        return (const Color(0xFF1D4ED8), const Color(0xFF1D4ED8), 'Vaccines');
+        return (const Color(0xFF93C5FD), const Color(0xFF1D4ED8), 'Vaccines');
       case Programme.nutrition:
-        return (const Color(0xFF15803D), const Color(0xFF15803D), 'Nutrition');
+        return (const Color(0xFF6EE7B7), const Color(0xFF15803D), 'Nutrition');
       default:
-        return (AppColors.border, AppColors.textMuted, 'Scheduled');
+        return (const Color(0xFFE5E7EB), AppColors.textMuted, 'Scheduled');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
+    return Padding(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3644,25 +3415,45 @@ class _MemberAvatar extends StatelessWidget {
   final bool labelBold;
   final VoidCallback? onTap;
 
-  static IconData _icon(Programme p) {
+  static String _emoji(Programme p) {
+    switch (p) {
+      case Programme.anc:
+        return '🤰';
+      case Programme.pnc:
+        return '👩';
+      case Programme.imci:
+      case Programme.epi:
+        return '👶';
+      case Programme.ncd:
+        return '👨';
+      case Programme.tb:
+        return '😷';
+      case Programme.nutrition:
+        return '🥦';
+      case Programme.familyPlanning:
+        return '👪';
+      default:
+        return '👤';
+    }
+  }
+
+  static Color _bgColor(Programme p) {
     switch (p) {
       case Programme.anc:
       case Programme.pnc:
-        return Icons.pregnant_woman_rounded;
+        return const Color(0xFFFDF2F8);
       case Programme.imci:
-        return Icons.child_care_rounded;
-      case Programme.ncd:
-        return Icons.monitor_heart_outlined;
-      case Programme.tb:
-        return Icons.sick_outlined;
       case Programme.epi:
-        return Icons.vaccines_rounded;
+        return const Color(0xFFFEF3C7);
+      case Programme.ncd:
+        return const Color(0xFFFEF9EC);
+      case Programme.tb:
+        return const Color(0xFFEEF2FF);
       case Programme.nutrition:
-        return Icons.restaurant_rounded;
       case Programme.familyPlanning:
-        return Icons.family_restroom_rounded;
+        return const Color(0xFFF0FDF4);
       default:
-        return Icons.local_hospital_rounded;
+        return const Color(0xFFF8FAFC);
     }
   }
 
@@ -3674,22 +3465,23 @@ class _MemberAvatar extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         child: SizedBox(
-          width: 68,
+          width: 56,
           child: Column(
             children: [
               Container(
-                width: 56,
-                height: 56,
+                width: member.isCurrentPatient ? 46.0 : 42.0,
+                height: member.isCurrentPatient ? 46.0 : 42.0,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: const Color(0xFFF8FAFC),
+                  color: _bgColor(member.primaryProgramme),
                   border: Border.all(color: ringColor, width: ringWidth),
                 ),
                 child: Center(
-                  child: Icon(
-                    _icon(member.primaryProgramme),
-                    size: 26,
-                    color: ringColor,
+                  child: Text(
+                    _emoji(member.primaryProgramme),
+                    style: TextStyle(
+                      fontSize: member.isCurrentPatient ? 20.0 : 18.0,
+                    ),
                   ),
                 ),
               ),
@@ -3846,8 +3638,8 @@ class _WhileYouHereMemberCard extends StatelessWidget {
                 color: text.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
-              child: Icon(_MemberAvatar._icon(member.primaryProgramme),
-                  color: text, size: 22),
+              child: Text(_MemberAvatar._emoji(member.primaryProgramme),
+                  style: const TextStyle(fontSize: 20)),
             ),
             const SizedBox(width: 12),
             Expanded(

@@ -3856,6 +3856,8 @@ abstract final class NabaStrings {
   static const String whatsAppCopied = 'Copied!';
   static const String sendViaSms = 'Send via SMS';
   static const String sendViaWhatsApp = 'Send via WhatsApp';
+  static const String sendThisMessage = 'Send this message';
+  static const String aiCounsellingGuide = 'AI Counselling Guide';
   static const String whatsAppNotInstalled =
       'WhatsApp is not installed on this device.';
   static const String smsNotAvailable =
