@@ -13,6 +13,7 @@ import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
 import '../../core/mission/programme_reason.dart';
+import '../../core/models/dashboard_tier.dart';
 import '../../core/models/mission_queue_item.dart';
 import '../../core/models/programme.dart';
 import '../../core/widgets/empty_state_card.dart';
@@ -386,9 +387,11 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
       final missionRepo = context.read<MissionDashboardRepository>();
       final queue = await missionRepo.loadQueue();
       if (!mounted) return;
+      // Upcoming-tier members (due >7 days out, or no due date) get no
+      // status badge — they still appear in the roster, just untagged.
       final queueMap = <String, MissionQueueItem>{};
       for (final item in queue) {
-        if (item.patientId != null) {
+        if (item.patientId != null && item.tier != DashboardTier.upcoming) {
           queueMap[item.patientId!] = item;
         }
       }

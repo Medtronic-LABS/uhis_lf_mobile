@@ -1638,7 +1638,10 @@ abstract final class MissionDashboardStrings {
   static String statusPillForTier(DashboardTier tier) {
     switch (tier) {
       case DashboardTier.critical:
-        return statusPillToday;
+        // Folds into "Overdue" (red) rather than "Today" — only 3 status
+        // labels (Today/This week/Overdue) are meant to reach the SK, and
+        // critical is more urgent than a plain date-driven "Today".
+        return statusPillOverdue;
       case DashboardTier.overdue:
         return statusPillOverdue;
       case DashboardTier.dueToday:
