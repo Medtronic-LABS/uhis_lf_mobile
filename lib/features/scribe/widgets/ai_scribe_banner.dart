@@ -104,7 +104,9 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
     final assessmentType = widget.assessmentType;
     if (assessmentType != null) {
       _liveCtrl.setFormSchema(
-        FormFieldSchemaBuilder.forProgrammeNames([assessmentType]),
+        FormFieldSchemaBuilder.forProgrammeNames(
+          assessmentType.split(',').map((s) => s.trim()).toList(),
+        ),
       );
     }
   }

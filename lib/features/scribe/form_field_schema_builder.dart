@@ -82,8 +82,11 @@ abstract final class FormFieldSchemaBuilder {
     final programmes =
         activeFormTypes.map(Programme.fromString).toSet();
     if (programmes.contains(Programme.pnc)) return null;
-    if (programmes.contains(Programme.anc)) return 'anc';
-    if (programmes.contains(Programme.ncd)) return 'ncd';
+    final hasAnc = programmes.contains(Programme.anc);
+    final hasNcd = programmes.contains(Programme.ncd);
+    if (hasAnc && hasNcd) return 'anc,ncd';
+    if (hasAnc) return 'anc';
+    if (hasNcd) return 'ncd';
     return null;
   }
 
