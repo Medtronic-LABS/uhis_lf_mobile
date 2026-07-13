@@ -216,8 +216,10 @@ class AssessmentRepository extends ChangeNotifier {
     for (var i = 0; i < assessmentPayloads.length; i++) {
       final a = assessmentPayloads[i];
       final assessType = a['assessmentType'] as String? ?? 'unknown';
+      final enc = a['encounter'] as Map<String, dynamic>? ?? {};
       debugPrint('[AssessmentSync][$i] === $assessType ===');
-      debugPrint('[AssessmentSync][$i] patient=${a['encounter']?['patientId']} provenance=${a['encounter']?['provenance']}');
+      debugPrint('[AssessmentSync][$i] patient=${enc['patientId']} provenance=${enc['provenance']}');
+      debugPrint('[AssessmentSync][$i] referral: encounter.referred=${enc['referred']}  patientStatus=${a['patientStatus']}  referredReasons=${a['referredReasons'] ?? "(none)"}  customStatus=${enc['customStatus']}');
       logChunked('[AssessmentSync][$i] details:', jsonEncode(a['assessmentDetails']));
     }
 

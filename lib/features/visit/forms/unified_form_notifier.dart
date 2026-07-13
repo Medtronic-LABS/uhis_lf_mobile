@@ -632,6 +632,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
         asDouble('randomBloodSugar');
     final isFbs = glucoseType == 'fbs';
 
+    debugPrint('[Referral] inputs: sys=$sys dia=$dia glVal=$glVal glucoseType=$glucoseType isFbs=$isFbs activeTypes=$_activeFormTypes');
+
     if (_activeFormTypes.contains('ncd')) {
       final result = NcdReferralEvaluator.evaluate(
         systolic: sys,
@@ -642,6 +644,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
             (_data.getValue('ncdSymptoms') as List?)?.cast<String>() ??
                 const [],
       );
+      debugPrint('[Referral][NCD] required=${result.isReferralRequired}  reasons=${result.referralReasons}');
       if (result.isReferralRequired) {
         referred = true;
         reasons.addAll(result.referralReasons);
@@ -672,6 +675,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
         temperatureCelsius: asDouble('temperature'),
         pulseBpm: asDouble('pulse')?.toInt(),
       );
+      debugPrint('[Referral][ANC] required=${result.isReferralRequired}  emergency=${result.emergencyConditions}  nonEmergency=${result.nonEmergencyConditions}');
       if (result.isReferralRequired) {
         referred = true;
         reasons.addAll([
@@ -694,6 +698,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
         edema: (_data.getValue('oedema') ??
             _data.getValue('edema')) as String?,
       );
+      debugPrint('[Referral][PNC] required=${result.isReferralRequired}  urgent=${result.urgentConditions}  nonUrgent=${result.nonUrgentConditions}');
       if (result.isReferralRequired) {
         referred = true;
         reasons.addAll([
@@ -703,6 +708,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
       }
     }
 
+    debugPrint('[Referral] RESULT: isReferred=$referred  reasons=$reasons');
     return (referred, List<String>.unmodifiable(reasons));
   }
 
