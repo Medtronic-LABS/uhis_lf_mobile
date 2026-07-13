@@ -4943,6 +4943,25 @@ abstract final class CceStrings {
   static const String saveHint = 'Saves offline · syncs on next cycle';
   static const String updateSaved = 'Referral status updated';
   static const String selectStatus = 'Select the patient\'s current status';
+
+  // ── Follow-up banner (completed cards) ───────────────────────────────────
+  static String followUpDueBanner([String? date]) =>
+      date != null ? 'Follow-up due · $date' : 'Follow-up due';
+
+  // ── Update status sheet v2 (wireframe v14) ───────────────────────────────
+  static const String updateSheetTitle = 'Update patient status';
+  static const String updateSyncNote =
+      'CCE will sync this update to the facility and supervisor';
+  static const String updateOptReachedFacility = 'Patient reached facility';
+  static const String updateOptTransportIssue =
+      'Unable to travel — transport issue';
+  static const String updateOptRefused = 'Patient refused referral';
+  static const String updateOptRecoveredHome = 'Patient recovered at home';
+  static const String updateOptOther = 'Other — add note';
+  static const String updateConfirmSync = 'Confirm & sync to CCE';
+  static const String updateCancel = 'Cancel';
+  static const String updateOtherHint = 'Describe what happened…';
+  static const String updateOtherRequired = 'Please add a note before saving';
 }
 
 /// Follow-up call logging — the device-side close/update flow.

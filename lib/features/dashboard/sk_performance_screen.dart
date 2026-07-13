@@ -409,7 +409,7 @@ class _VisitTrendCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           SizedBox(
-            height: maxBarH + 32,
+            height: maxBarH + 40,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: List.generate(counts.length, (i) {

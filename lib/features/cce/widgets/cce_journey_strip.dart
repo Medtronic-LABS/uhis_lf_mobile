@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import '../../../app/theme.dart';
 import '../cce_alert.dart';
 
-/// Horizontal 4-node care-journey strip: SK Visit → Referred → Facility →
-/// Treatment. Each node is a coloured dot with a label + sublabel; connector
-/// lines tint green up to the last completed step and red at a missed step.
+/// Thin horizontal progress bar + 3-label status row for the CCE card.
+///
+/// Renders steps[1..3] (SK Visit at index 0 is always done and not shown).
+/// The bar fills to the furthest completed or missed node; the accent colour
+/// is derived from the worst step state across the visible steps.
 class CceJourneyStrip extends StatelessWidget {
   const CceJourneyStrip({super.key, required this.steps});
 
@@ -13,70 +15,161 @@ class CceJourneyStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final children = <Widget>[];
-    for (var i = 0; i < steps.length; i++) {
-      children.add(Expanded(child: _node(steps[i])));
-      if (i < steps.length - 1) {
-        children.add(_connector(steps[i], steps[i + 1]));
-      }
-    }
-    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: children);
+    final visible = steps.length > 1 ? steps.sublist(1) : steps;
+    if (visible.isEmpty) return const SizedBox.shrink();
+
+    final fill = _fillFraction(visible);
+    final accent = _accentFrom(visible);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _progressBar(fill, accent),
+        const SizedBox(height: 6),
+        _labels(visible),
+      ],
+    );
   }
 
-  Widget _node(CceJourneyStep step) {
-    final (bg, icon, iconColor) = _visuals(step.state);
-    return Column(
+  // ── Progress bar ─────────────────────────────────────────────────────────
+
+  Widget _progressBar(double fill, Color accent) {
+    return LayoutBuilder(
+      builder: (_, constraints) {
+        const trackHeight = 3.0;
+        const dotSize = 10.0;
+        final totalWidth = constraints.maxWidth;
+        final fillWidth = totalWidth * fill;
+
+        return SizedBox(
+          height: dotSize,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: AlignmentDirectional.centerStart,
+            children: [
+              // Track
+              Positioned(
+                top: (dotSize - trackHeight) / 2,
+                left: 0,
+                right: 0,
+                child: Container(
+                  height: trackHeight,
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+              ),
+              // Fill
+              if (fill > 0)
+                Positioned(
+                  top: (dotSize - trackHeight) / 2,
+                  left: 0,
+                  child: Container(
+                    height: trackHeight,
+                    width: fillWidth,
+                    decoration: BoxDecoration(
+                      color: accent,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                ),
+              // Dot at fill endpoint — only when not at 0% or 100%
+              if (fill > 0 && fill < 1)
+                Positioned(
+                  left: fillWidth - dotSize / 2,
+                  child: Container(
+                    width: dotSize,
+                    height: dotSize,
+                    decoration: BoxDecoration(
+                      color: accent,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // ── Labels ───────────────────────────────────────────────────────────────
+
+  Widget _labels(List<CceJourneyStep> visible) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: visible.map(_stepLabel).toList(),
+    );
+  }
+
+  Widget _stepLabel(CceJourneyStep step) {
+    final (icon, color) = _iconFor(step.state);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          width: 26,
-          height: 26,
-          decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
-          child: Icon(icon, size: 15, color: iconColor),
-        ),
-        const SizedBox(height: 4),
+        if (icon != null)
+          Icon(icon, size: 12, color: color)
+        else
+          Text(
+            '···',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        const SizedBox(width: 3),
         Text(
           step.label,
-          textAlign: TextAlign.center,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
-        ),
-        Text(
-          step.sublabel,
-          textAlign: TextAlign.center,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 9, color: AppColors.textMuted),
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
         ),
       ],
     );
   }
 
-  /// Connector colour reflects the transition into the next node: red when the
-  /// next step is missed, green when this step is done, grey otherwise.
-  Widget _connector(CceJourneyStep from, CceJourneyStep to) {
-    Color color;
-    if (to.state == CceStepState.missed) {
-      color = AppColors.statusCritical;
-    } else if (from.state == CceStepState.done) {
-      color = AppColors.statusSuccess;
-    } else {
-      color = AppColors.border;
-    }
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: Container(width: 18, height: 2.5, color: color),
-    );
-  }
-
-  (Color, IconData, Color) _visuals(CceStepState state) {
+  static (IconData?, Color) _iconFor(CceStepState state) {
     switch (state) {
       case CceStepState.done:
-        return (AppColors.statusSuccess, Icons.check, Colors.white);
+        return (Icons.check_rounded, AppColors.statusSuccess);
       case CceStepState.missed:
-        return (AppColors.statusCritical, Icons.close, Colors.white);
+        return (Icons.close_rounded, AppColors.statusCritical);
       case CceStepState.pending:
-        return (AppColors.border, Icons.more_horiz, AppColors.textMuted);
+        return (null, AppColors.textMuted);
     }
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+
+  /// Fill fraction: advances to each done step; advances to a missed step
+  /// (filling up to the block point) then stops.
+  static double _fillFraction(List<CceJourneyStep> steps) {
+    if (steps.isEmpty) return 0;
+    int pos = 0;
+    for (int i = 0; i < steps.length; i++) {
+      if (steps[i].state == CceStepState.done) {
+        pos = i + 1;
+      } else if (steps[i].state == CceStepState.missed) {
+        pos = i + 1; // fill to the missed node
+        break;
+      } else {
+        break;
+      }
+    }
+    return pos / steps.length;
+  }
+
+  static Color _accentFrom(List<CceJourneyStep> steps) {
+    if (steps.any((s) => s.state == CceStepState.missed)) {
+      return AppColors.statusCritical;
+    }
+    if (steps.every((s) => s.state == CceStepState.done)) {
+      return AppColors.statusSuccess;
+    }
+    return AppColors.statusWarning;
   }
 }
