@@ -557,6 +557,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _ReferralAlertBanner(
               key: ValueKey('referral_banner_$_refreshVersion'),
               onTap: () => CceAlertsDrawer.show(context),
+              count: _notificationCount,
             ),
             Expanded(
               child: RefreshIndicator(
@@ -1214,8 +1215,16 @@ class _DashboardHeader extends StatelessWidget {
 }
 
 class _ReferralAlertBanner extends StatefulWidget {
-  const _ReferralAlertBanner({super.key, required this.onTap});
+  const _ReferralAlertBanner({
+    super.key,
+    required this.onTap,
+    required this.count,
+  });
   final VoidCallback onTap;
+
+  /// Pre-computed CCE actions-needed count — keeps this banner in sync with
+  /// the bell badge (both now use the same source: CceRepository).
+  final int count;
 
   @override
   State<_ReferralAlertBanner> createState() => _ReferralAlertBannerState();
@@ -1223,9 +1232,6 @@ class _ReferralAlertBanner extends StatefulWidget {
 
 class _ReferralAlertBannerState extends State<_ReferralAlertBanner>
     with SingleTickerProviderStateMixin {
-  Future<({int critical, int active})>? _future;
-  ReferralRepository? _repo;
-  bool _listenerAdded = false;
   late final AnimationController _pulseCtrl;
   late final Animation<double> _pulseAnim;
 
@@ -1242,41 +1248,21 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner>
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _repo = context.read<ReferralRepository>();
-    if (!_listenerAdded) {
-      _listenerAdded = true;
-      _future = _repo!.counts();
-      _repo!.changes.addListener(_onChanges);
-    }
-  }
-
-  @override
   void dispose() {
     _pulseCtrl.dispose();
-    _repo?.changes.removeListener(_onChanges);
     super.dispose();
-  }
-
-  void _onChanges() {
-    if (!mounted) return;
-    setState(() { _future = _repo!.counts(); });
   }
 
   @override
   Widget build(BuildContext context) {
+    final total = widget.count;
     // Spec-exact #DC2626/#B91C1C — deliberately not tokens.statusCritical
     // (a different, more generic red), same rationale as the notification
     // badge's hardcoded pink below.
     final bannerColor = Theme.of(context).brightness == Brightness.dark
         ? AppColors.referralAlertBgDark
         : AppColors.referralAlertBg;
-    return FutureBuilder<({int critical, int active})>(
-      future: _future,
-      builder: (context, snap) {
-        final total = (snap.data?.critical ?? 0) + (snap.data?.active ?? 0);
-        return Semantics(
+    return Semantics(
           button: true,
           label: 'Referral alerts: $total',
           child: Container(
@@ -1367,8 +1353,6 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner>
             ),
           ),
         );
-      },
-    );
   }
 }
 
