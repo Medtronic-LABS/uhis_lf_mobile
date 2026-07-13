@@ -316,32 +316,36 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       },
       child: Scaffold(
         backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
-        body: SafeArea(
-          child: Column(
-            children: [
-              VisitFlowHeader(
-                step: _step,
-                patientId: widget.patientId,
-                patientName: _patientName,
-                ageDisplay: _ageDisplay,
-                householdId: widget.householdId,
-                patientGender: widget.patientGender,
-                primaryProgramme: _pathways.isNotEmpty
-                    ? _pathways.first.programme
-                    : _primaryProgramme,
-                activeFormTypes: _confirmedProgrammes
-                    .map((p) => p.name)
-                    .toList(),
-                onBack: () {
-                  if (_step > 0) {
-                    setState(() => _step -= 1);
-                  } else {
-                    _exitFlow();
-                  }
-                },
-              ),
-              Expanded(child: _buildStepBody()),
-            ],
+        body: AnnotatedRegion<SystemUiOverlayStyle>(
+          value: VisitFlowHeader.statusBarStyle,
+          child: SafeArea(
+            top: false,
+            child: Column(
+              children: [
+                VisitFlowHeader(
+                  step: _step,
+                  patientId: widget.patientId,
+                  patientName: _patientName,
+                  ageDisplay: _ageDisplay,
+                  householdId: widget.householdId,
+                  patientGender: widget.patientGender,
+                  primaryProgramme: _pathways.isNotEmpty
+                      ? _pathways.first.programme
+                      : _primaryProgramme,
+                  activeFormTypes: _confirmedProgrammes
+                      .map((p) => p.name)
+                      .toList(),
+                  onBack: () {
+                    if (_step > 0) {
+                      setState(() => _step -= 1);
+                    } else {
+                      _exitFlow();
+                    }
+                  },
+                ),
+                Expanded(child: _buildStepBody()),
+              ],
+            ),
           ),
         ),
       ),
