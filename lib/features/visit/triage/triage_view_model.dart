@@ -543,6 +543,16 @@ class TriageViewModel extends ChangeNotifier {
       }
       switch (AiScribeTriageVocab.categoryOf(code)) {
         case SymptomCategory.general:
+          // NCD-only patients: restrict the general section to the NCD-relevant
+          // subset (BP/diabetes characteristic symptoms). Non-relevant general
+          // codes (fever, vomiting, etc.) remain searchable but skip the grid.
+          final isNcdOnly = enrolled.isNotEmpty &&
+              enrolled.every((p) => p == Programme.ncd);
+          if (isNcdOnly &&
+              !AiScribeTriageVocab.ncdRelevantGeneralCodes.contains(code)) {
+            if (kDebugMode) ncdDropped.add(code);
+            break;
+          }
           general.add(code);
         case SymptomCategory.maternal:
           final codeProgs =
@@ -562,8 +572,14 @@ class TriageViewModel extends ChangeNotifier {
           byProgramme[home]?.add(code);
         case SymptomCategory.ncd:
           if (byProgramme.containsKey(Programme.ncd)) {
-            // Patient has NCD enrolled — NCD bucket takes all NCD codes.
-            byProgramme[Programme.ncd]?.add(code);
+            // NCD enrolled: only primary grid codes in the bucket; secondary
+            // NCD codes (epigastric_pain, swelling_one_leg, foot_pain) go to
+            // search so the grid stays tight (BP + diabetes focused).
+            if (AiScribeTriageVocab.ncdPrimaryGridCodes.contains(code)) {
+              byProgramme[Programme.ncd]?.add(code);
+            } else {
+              if (kDebugMode) ncdDropped.add(code);
+            }
           } else if (byProgramme.containsKey(Programme.anc) &&
               AiScribeTriageVocab.ancExtendedNcdCodes.contains(code)) {
             // ANC-only patient: surface the clinical-crossover NCD codes

@@ -252,6 +252,36 @@ abstract final class AiScribeTriageVocab {
     'foot_wound',
   };
 
+  /// NCD-category codes shown in the default chip grid for NCD patients.
+  ///
+  /// The full NCD vocab contains additional codes (epigastric_pain,
+  /// swelling_one_leg, foot_pain) that are clinically valid but niche enough
+  /// that they clutter the quick-glance grid. Those three are still findable
+  /// via search. This set keeps the NCD grid to core BP + Diabetes symptoms.
+  static const Set<String> ncdPrimaryGridCodes = {
+    'chest_pain',
+    'one_sided_weakness',
+    'swelling_both_feet',
+    'palpitations',
+    'excessive_thirst',
+    'foot_numbness',
+    'foot_wound',
+  };
+
+  /// General-category codes shown in the chip grid when the patient's only
+  /// enrolled programme is NCD. Non-listed general codes (fever, vomiting,
+  /// abdominal_pain, painful_urination, convulsions) are still searchable —
+  /// they're not NCD-characteristic and add visual noise for a routine check.
+  static const Set<String> ncdRelevantGeneralCodes = {
+    'headache',
+    'dizziness',
+    'blurred_vision',
+    'breathlessness',
+    'fatigue',
+    'weakness',
+    'weight_loss',
+  };
+
   /// Human-readable label for a code — used when the AI surfaces a code that
   /// isn't present in TriageStrings. Underscores → spaces, capitalised words.
   static String labelFor(String code) {
