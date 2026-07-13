@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../core/db/encounter_dao.dart';
+import '../../core/db/local_assessment_dao.dart' show AssessmentDraftRow;
 import '../../core/models/programme.dart';
 import 'encounter_repository.dart';
 import 'symptom_catalog.dart';
@@ -35,6 +36,17 @@ class VisitController extends ChangeNotifier {
 
   /// Whether a visit is currently active.
   bool get hasActiveVisit => _session != null;
+
+  /// Returns [patientId]'s resumable draft (last touched today), or null —
+  /// discarding it silently first if it's from a prior day. See
+  /// [EncounterRepository.findTodayDraft].
+  Future<AssessmentDraftRow?> checkTodayDraft(String patientId) =>
+      _repo.findTodayDraft(patientId);
+
+  /// Discards a draft and its parent encounter — used when the SK picks
+  /// "Start Over" on a same-day resume prompt.
+  Future<void> discardDraft(String encounterId) =>
+      _repo.discardDraft(encounterId);
 
   /// Start a new visit for a patient.
   ///

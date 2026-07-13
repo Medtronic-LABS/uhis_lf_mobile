@@ -19,6 +19,7 @@ import '../../core/sync/offline_sync_service.dart';
 import '../dashboard/mission_dashboard_repository.dart';
 import '../patient/followup_call_service.dart';
 import '../visit/visit_controller.dart';
+import '../visit/visit_start_helper.dart';
 import '../visit/widgets/widgets.dart';
 import 'referral_api_service.dart';
 import 'referral_repository.dart';
@@ -880,7 +881,9 @@ class _ReferralListScreenState extends State<ReferralListScreen>
     if (item.patientId == null) return;
     try {
       final visitController = context.read<VisitController>();
-      final encounterId = await visitController.startVisit(
+      final encounterId = await startOrResumeVisit(
+        context,
+        controller: visitController,
         patientId: item.patientId!,
         programme: item.primaryProgramme,
         patientName: item.patientName,

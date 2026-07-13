@@ -18,6 +18,7 @@ import '../scribe/widgets/ai_scribe_banner.dart';
 import 'symptom_catalog.dart';
 import 'visit_controller.dart';
 import 'visit_flow_header.dart';
+import 'visit_start_helper.dart';
 
 /// Which service the SK is selecting for this visit.
 enum _Svc { pw, anc, pnc, fp, general, ncd }
@@ -165,7 +166,9 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
       if (!mounted) return;
 
       final controller = context.read<VisitController>();
-      final encounterId = await controller.startVisit(
+      final encounterId = await startOrResumeVisit(
+        context,
+        controller: controller,
         patientId: widget.patientId,
         programme: programme,
         patientName: widget.patientName,

@@ -2077,6 +2077,13 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+          // ── Offline fallback notice — naba.modelVersion tags whether this
+          // ── is a real AI response or the local rule-based substitute used
+          // ── when the AI call couldn't be reached (see _fetchNaba).
+          if (naba.modelVersion == 'rule-based-fallback') ...[
+            const _OfflineFallbackBanner(),
+            const SizedBox(height: 12),
+          ],
           // ── Household member strip ──────────────────────────────────
           if (_householdMembers != null && _householdMembers!.length > 1) ...[
             _HouseholdMemberStrip(
@@ -2145,6 +2152,46 @@ class _Step3AiRecoState extends State<_Step3AiReco>
 }
 
 // ── Supporting widgets ────────────────────────────────────────────────────────
+
+/// Shown atop Step 3 when `_fetchNaba()` couldn't reach the AI service and
+/// silently substituted the local rule-based recommendation — makes that
+/// substitution visible instead of letting it pass as a full AI response.
+class _OfflineFallbackBanner extends StatelessWidget {
+  const _OfflineFallbackBanner();
+
+  static const _amberBg = Color(0xFFFFFBEB);
+  static const _amberBorder = Color(0xFFFDE68A);
+  static const _amberText = Color(0xFF92400E);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: _amberBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _amberBorder),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.wifi_off_rounded, size: 18, color: _amberText),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              ComposerStrings.offlineFallbackBannerText,
+              style: const TextStyle(
+                fontSize: 13,
+                color: _amberText,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 /// Pink gestational age summary shown at the top of Step 3 whenever any
 /// pregnancy data is available (gestationalWeeks, LMP, or EDD).

@@ -26,6 +26,7 @@ import '../../core/widgets/patient_filter_panel.dart';
 import '../referral/referral_repository.dart';
 import 'widgets/dashboard_search_field.dart';
 import '../visit/visit_controller.dart';
+import '../visit/visit_start_helper.dart';
 import '../visit/widgets/widgets.dart';
 import 'dashboard_repository.dart';
 import 'mission_dashboard_repository.dart';
@@ -466,7 +467,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // Flutter-submitted assessments. Parent villageId (34) is invisible to it.
     final villageId = member?.subVillageId ?? member?.villageId;
     debugPrint('[Dashboard] member lookup: patientId=$patientId referenceId=${member?.referenceId} memberId=$memberId villageId=$villageId → householdMemberLocalId=$householdMemberLocalId');
-    final encounterId = await controller.startVisit(
+    if (!mounted) return;
+    final encounterId = await startOrResumeVisit(
+      context,
+      controller: controller,
       patientId: patientId,
       programme: item.primaryProgramme,
       patientName: item.patientName,

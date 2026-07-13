@@ -2967,6 +2967,9 @@ abstract final class ComposerStrings {
       'An unfinished assessment was found.';
   static const String resumeButton = 'Resume';
   static const String discardButton = 'Discard';
+  static const String startOverButton = 'Start Over';
+  static const String offlineFallbackBannerText =
+      'Offline — showing basic guidance. Connect to internet for the full AI recommendation.';
   static const String nextButton = 'Next';
   static const String dismissOkButton = 'OK';
 

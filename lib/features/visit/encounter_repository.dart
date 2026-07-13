@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/api/api_repository.dart';
 import '../../core/db/encounter_dao.dart';
+import '../../core/db/local_assessment_dao.dart' show AssessmentDraftDao, AssessmentDraftRow;
 import '../../core/models/assessment_history_item.dart';
 import '../../core/models/programme.dart';
 import '../../core/sync/offline_sync_service.dart';
@@ -69,10 +70,13 @@ class EncounterRepository extends ApiRepository {
     super.api,
     this._dao, {
     OfflineSyncService? offlineSync,
-  }) : _offlineSync = offlineSync;
+    AssessmentDraftDao? draftDao,
+  })  : _offlineSync = offlineSync,
+        _draftDao = draftDao;
 
   final EncounterDao _dao;
   final OfflineSyncService? _offlineSync;
+  final AssessmentDraftDao? _draftDao;
 
   /// Generate a UUID v4 encounter reference ID.
   static String _generateId() => const Uuid().v4();
@@ -169,6 +173,34 @@ class EncounterRepository extends ApiRepository {
     );
     await _dao.upsert(row);
     return id;
+  }
+
+  /// Returns [patientId]'s most recent unfinished assessment draft if it was
+  /// last touched *today* — otherwise discards it (and its parent encounter)
+  /// and returns null, so a stale draft from a prior day never lingers and
+  /// never surfaces a resume prompt. Null if there's no draft at all.
+  Future<AssessmentDraftRow?> findTodayDraft(String patientId) async {
+    final draftDao = _draftDao;
+    if (draftDao == null) return null;
+    final draft = await draftDao.getLatestDraftForPatient(patientId);
+    if (draft == null) return null;
+    final touchedAt = DateTime.fromMillisecondsSinceEpoch(
+        draft.updatedAt ?? draft.createdAt ?? 0);
+    final now = DateTime.now();
+    final isToday = touchedAt.year == now.year &&
+        touchedAt.month == now.month &&
+        touchedAt.day == now.day;
+    if (isToday) return draft;
+    await discardDraft(draft.encounterId);
+    return null;
+  }
+
+  /// Deletes a draft and its parent encounter row — used both for silent
+  /// same-day cleanup of stale (prior-day) drafts and when the SK explicitly
+  /// chooses "Start Over" on a same-day resume prompt.
+  Future<void> discardDraft(String encounterId) async {
+    await _draftDao?.deleteDraft(encounterId);
+    await _dao.delete(encounterId);
   }
 
   /// Get a local encounter by ID.
