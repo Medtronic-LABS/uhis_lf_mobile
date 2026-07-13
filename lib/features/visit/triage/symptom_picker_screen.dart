@@ -6,6 +6,7 @@ import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/db/encounter_dao.dart';
 import '../../../core/db/immunisation_dao.dart';
+import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/models/programme.dart';
 import '../../../core/theme/app_theme.dart';
@@ -393,7 +394,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     _doAdvance(vm);
   }
 
-  void _doAdvance(TriageViewModel vm) {
+  Future<void> _doAdvance(TriageViewModel vm) async {
     // If the rule engine produced no pathways but the patient has enrolled
     // programmes, synthesize a pathway from enrolment so the form always
     // opens the correct section (guards against sex/data quality issues
@@ -426,6 +427,45 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           '[SymptomPicker] activatedPathways empty — using enrolment fallback: '
           '${pathways.map((p) => p.programme.name).join(', ')}',
         );
+      }
+    }
+
+    // Last-assessment fallback: if enrolment data is also absent (e.g. a
+    // patient whose enrollment sync hasn't landed yet), look at the most
+    // recent assessment in the local DB and open the same programme form.
+    if (pathways.isEmpty && mounted) {
+      try {
+        final dao = context.read<LocalAssessmentDao>();
+        final assessments = await dao.getByPatientId(widget.patientId);
+        if (assessments.isNotEmpty) {
+          final lastType = assessments.first.assessmentType;
+          final programme = Programme.fromTag(lastType);
+          if (programme != null) {
+            const priorityByProgramme = {
+              Programme.anc: 20,
+              Programme.pnc: 25,
+              Programme.imci: 10,
+              Programme.ncd: 40,
+              Programme.tb: 30,
+              Programme.epi: 100,
+            };
+            pathways = [
+              ActivatedPathway(
+                programme: programme,
+                priority: priorityByProgramme[programme] ?? 50,
+                confidence: 1.0,
+                trigger: PathwayTrigger.rule,
+                rationaleKey: 'pathwayLastAssessmentFallback',
+              ),
+            ];
+            debugPrint(
+              '[SymptomPicker] no enrolment — last-assessment fallback: '
+              '${programme.name} (from assessmentType=$lastType)',
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint('[SymptomPicker] last-assessment lookup failed: $e');
       }
     }
 
@@ -702,9 +742,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                                   ),
                                 ),
                                 if (vm.scribePreTickedSymptoms.isNotEmpty ||
-                                    vm.allPathways.any(
-                                      (p) => p.trigger == PathwayTrigger.ai,
-                                    ))
+                                    vm.activatedPathways.isNotEmpty)
                                   const Padding(
                                     padding: EdgeInsets.only(top: 2),
                                     child: Row(
