@@ -329,6 +329,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
                 primaryProgramme: _pathways.isNotEmpty
                     ? _pathways.first.programme
                     : _primaryProgramme,
+                activeFormTypes: _confirmedProgrammes
+                    .map((p) => p.name)
+                    .toList(),
                 onBack: () {
                   if (_step > 0) {
                     setState(() => _step -= 1);

@@ -18,6 +18,7 @@ class VisitFlowHeader extends StatelessWidget {
     this.householdId,
     this.patientGender,
     this.primaryProgramme = Programme.unknown,
+    this.activeFormTypes = const [],
   });
 
   final int step;
@@ -28,6 +29,18 @@ class VisitFlowHeader extends StatelessWidget {
   final String? householdId;
   final String? patientGender;
   final Programme primaryProgramme;
+  /// Programme keys active in the current visit — shown as pills on step 2.
+  final List<String> activeFormTypes;
+
+  static ({Color bg, Color text, String emoji}) _pillStyle(String ft) =>
+      switch (ft.toLowerCase()) {
+        'anc'                       => (bg: const Color(0xFFEC4899), text: Colors.white, emoji: '🤰'),
+        'pnc' || 'pncmother'        => (bg: const Color(0xFF10B981), text: Colors.white, emoji: '👶'),
+        'ncd'                       => (bg: const Color(0xFFF59E0B), text: Colors.white, emoji: '❤️'),
+        'imci' || 'pncchild'        => (bg: const Color(0xFF3B82F6), text: Colors.white, emoji: '🧒'),
+        'tb'                        => (bg: const Color(0xFF6366F1), text: Colors.white, emoji: '🫁'),
+        _                           => (bg: Colors.white,            text: const Color(0xFF831843), emoji: '📋'),
+      };
 
   static const Color headerColor = Color(0xFF831843);
 
@@ -153,6 +166,34 @@ class VisitFlowHeader extends StatelessWidget {
                   ),
                 ],
               ),
+              // ── Programme pills — shown on step 2 only ──────────────
+              if (step == 1 && activeFormTypes.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: activeFormTypes.map((ft) {
+                    final style = _pillStyle(ft);
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: style.bg.withValues(alpha: 0.85),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${style.emoji}  ${ft.toUpperCase()}',
+                        style: TextStyle(
+                          color: style.text,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
               const SizedBox(height: 10),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
