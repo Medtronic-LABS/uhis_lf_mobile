@@ -2990,7 +2990,7 @@ class _BottomCtaBar extends StatelessWidget {
                     backgroundColor: const Color(0xFFEC4899),
                     foregroundColor: Colors.white,
                     disabledBackgroundColor: const Color(0xFFEC4899).withValues(alpha: 0.4),
-                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxl),
+                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
                     textStyle: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
