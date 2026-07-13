@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:uhis_next/core/models/patient.dart';
 import 'package:uhis_next/core/models/referral.dart';
@@ -23,6 +25,7 @@ void main() {
     int priorityScore = 0,
     int escalationLevel = 0,
     String? diagnosisLabel = 'Severe pneumonia',
+    String? rawJson,
   }) {
     return Referral(
       id: 'ref-test',
@@ -39,6 +42,7 @@ void main() {
       createdAt: ms(created),
       updatedAt: ms(updated ?? created),
       closedAt: closed == null ? null : ms(closed),
+      rawJson: rawJson,
     );
   }
 
@@ -203,6 +207,59 @@ void main() {
       expect(CceSeverity.warning.needsAction, isTrue);
       expect(CceSeverity.onTrack.needsAction, isFalse);
       expect(CceSeverity.completed.needsAction, isFalse);
+    });
+  });
+
+  group('facility name', () {
+    test('parsed from rawJson appears in referredMeta', () {
+      final a = build(referral(
+        state: ReferralStatus.created,
+        tier: SlaTier.emergency,
+        rawJson: jsonEncode({'facilityName': 'UHC Manikganj'}),
+      ));
+      expect(a.facilityName, 'UHC Manikganj');
+      expect(a.referredMeta, contains('UHC Manikganj'));
+    });
+
+    test('tolerates alternate wire keys (referredTo)', () {
+      final a = build(referral(
+        state: ReferralStatus.created,
+        tier: SlaTier.emergency,
+        rawJson: jsonEncode({'referredTo': 'District Hospital'}),
+      ));
+      expect(a.facilityName, 'District Hospital');
+    });
+
+    test('absent facility leaves referredMeta as date · reason', () {
+      final a = build(referral(
+        state: ReferralStatus.created,
+        tier: SlaTier.emergency,
+        diagnosisLabel: 'Severe pneumonia',
+      ));
+      expect(a.facilityName, isNull);
+      expect(a.referredMeta, contains('Severe pneumonia'));
+      expect(a.referredMeta.split('·').length, 2);
+    });
+  });
+
+  group('locate geo', () {
+    test('hasGeo true when household coordinates are joined', () {
+      final a = CceAlert.fromReferral(
+        referral(state: ReferralStatus.created, tier: SlaTier.urgent),
+        latitude: 23.8,
+        longitude: 90.4,
+        landmark: 'Near mosque',
+        now: now,
+      );
+      expect(a.hasGeo, isTrue);
+      expect(a.latitude, 23.8);
+      expect(a.landmark, 'Near mosque');
+    });
+
+    test('hasGeo false without coordinates', () {
+      final a = build(referral(
+          state: ReferralStatus.created, tier: SlaTier.urgent));
+      expect(a.hasGeo, isFalse);
     });
   });
 }

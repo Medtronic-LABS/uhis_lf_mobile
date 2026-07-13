@@ -13,6 +13,7 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+import '../../core/db/household_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/models/patient.dart';
 import '../../core/models/referral.dart';
@@ -23,13 +24,17 @@ class CceRepository {
   CceRepository({
     required ReferralRepository referrals,
     required PatientDao patients,
+    HouseholdDao? households,
     DateTime Function()? clock,
   })  : _referrals = referrals,
         _patients = patients,
+        _households = households,
         _clock = clock ?? DateTime.now;
 
   final ReferralRepository _referrals;
   final PatientDao _patients;
+  // Optional — supplies household lat/long/landmark for a precise "Locate".
+  final HouseholdDao? _households;
   final DateTime Function() _clock;
 
   /// UI listens to this to refresh after any referral mutation.
@@ -45,10 +50,27 @@ class CceRepository {
     final patients = await _patients.allForVillages(const <String>[]);
     final byId = <String, Patient>{for (final p in patients) p.id: p};
 
+    // Join household geo for a precise "Locate" (best-effort).
+    final households = <String, HouseholdEntity>{};
+    if (_households != null) {
+      final all = await _households.getAll(limit: 1000);
+      for (final h in all) {
+        households[h.id] = h;
+      }
+    }
+
     final now = _clock();
-    final alerts = referrals
-        .map((r) => CceAlert.fromReferral(r, patient: byId[r.patientId], now: now))
-        .toList(growable: false);
+    final alerts = referrals.map((r) {
+      final h = r.householdId == null ? null : households[r.householdId];
+      return CceAlert.fromReferral(
+        r,
+        patient: byId[r.patientId],
+        latitude: h?.latitude,
+        longitude: h?.longitude,
+        landmark: h?.landmark,
+        now: now,
+      );
+    }).toList(growable: false);
 
     final sorted = [...alerts]..sort(_compare);
     return sorted;

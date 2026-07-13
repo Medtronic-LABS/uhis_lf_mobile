@@ -4873,6 +4873,88 @@ abstract final class ChildAssessmentStrings {
   ];
 }
 
+/// Care Coordination Engine (CCE) — the referral SLA alert drawer.
+/// All widget-facing copy for `lib/features/cce/`. Derivation-time strings
+/// interpolated by the pure-Dart model live in `cce_alert.dart`.
+abstract final class CceStrings {
+  CceStrings._();
+
+  // ── Drawer header ─────────────────────────────────────────────────────────
+  static const String drawerTitle = 'Care Coordination Alerts';
+  static const String poweredBy = 'Powered by CCE · Care Coordination Engine';
+  static String actionsNeeded(int n) =>
+      '$n action${n == 1 ? '' : 's'} needed';
+  static const String done = 'Done';
+
+  static const String explainer =
+      'CCE tracks every patient after referral and triggers alerts when SLAs '
+      'are breached — so no patient is lost between SK and facility.';
+
+  // ── Bell entry point ──────────────────────────────────────────────────────
+  static const String bellTooltip = 'Care Coordination Alerts';
+
+  // ── Empty state ───────────────────────────────────────────────────────────
+  static const String emptyTitle = 'All referrals on track';
+  static const String emptyBody =
+      'No SLA breaches. Every referred patient is accounted for between SK '
+      'and facility.';
+
+  // ── Card actions ──────────────────────────────────────────────────────────
+  static const String actionCallFamily = 'Call family';
+  static const String actionUpdateStatus = 'Update status';
+  static const String actionLocate = 'Locate';
+  static const String actionCheckIn = 'Check in';
+
+  static const String noPhone = 'No phone number on file for this patient';
+  static const String noLocation = 'No location on file for this patient';
+  static const String dialFailed = 'Could not open the dialer';
+
+  // ── Update-status sheet ───────────────────────────────────────────────────
+  static String updateTitle(String patientName) => 'Update — $patientName';
+  static const String updatePrompt = 'Where is the patient now?';
+  static const String updateOptNotLeft = 'Not yet left home';
+  static const String updateOptOnWay = 'On the way to facility';
+  static const String updateOptArrived = 'Arrived at facility';
+  static const String updateOptTreated = 'Seen by clinician / treated';
+  static const String updateOptDischarged = 'Discharged (recovered)';
+
+  static const String barrierPrompt = 'Add a barrier tag (optional)';
+  static const String barrierTransport = 'Transport';
+  static const String barrierCost = 'Cost';
+  static const String barrierFamily = 'Family';
+  static const String barrierDistance = 'Distance';
+
+  static const String saveUpdate = 'Save update';
+  static const String saveHint = 'Saves offline · syncs on next cycle';
+  static const String updateSaved = 'Referral status updated';
+  static const String selectStatus = 'Select the patient\'s current status';
+}
+
+/// Follow-up call logging — the device-side close/update flow.
+abstract final class FollowUpCallStrings {
+  FollowUpCallStrings._();
+
+  static const String logCall = 'Log call';
+  static const String sheetTitle = 'Log follow-up call';
+  static const String outcomePrompt = 'How did the call go?';
+  static const String outcomeSuccessful = 'Reached — successful';
+  static const String outcomeUnsuccessful = 'Could not reach';
+  static const String outcomeWrongNumber = 'Wrong number';
+  static const String reasonLabel = 'Note (optional)';
+  static const String reasonHint = 'e.g. no answer, will retry tomorrow';
+  static const String save = 'Save call';
+  static const String saved = 'Call logged — will sync on next cycle';
+  static const String schedule = 'Schedule';
+  static const String scheduled =
+      'Follow-up scheduled — will sync on next cycle';
+  static const String scheduleFailed = 'Could not schedule the follow-up';
+  static const String selectOutcome = 'Select the call outcome';
+  static const String closedNote =
+      'Wrong number or exhausted attempts will close this follow-up.';
+  static const String failed = 'Could not log the call';
+}
+
+
 abstract final class EnrollStrings {
   EnrollStrings._();
 
@@ -4964,87 +5046,6 @@ abstract final class NewPatientVisitStrings {
   static const String pwHint = "⚠ Select 'PW' first to unlock ANC";
   static const String startVisitCta = 'Start Visit →';
   static const String selectServiceCta = 'Select a service to continue';
-}
-
-/// Care Coordination Engine (CCE) — the referral SLA alert drawer.
-/// All widget-facing copy for `lib/features/cce/`. Derivation-time strings
-/// interpolated by the pure-Dart model live in `cce_alert.dart`.
-abstract final class CceStrings {
-  CceStrings._();
-
-  // ── Drawer header ─────────────────────────────────────────────────────────
-  static const String drawerTitle = 'Care Coordination Alerts';
-  static const String poweredBy = 'Powered by CCE · Care Coordination Engine';
-  static String actionsNeeded(int n) =>
-      '$n action${n == 1 ? '' : 's'} needed';
-  static const String done = 'Done';
-
-  static const String explainer =
-      'CCE tracks every patient after referral and triggers alerts when SLAs '
-      'are breached — so no patient is lost between SK and facility.';
-
-  // ── Bell entry point ──────────────────────────────────────────────────────
-  static const String bellTooltip = 'Care Coordination Alerts';
-
-  // ── Empty state ───────────────────────────────────────────────────────────
-  static const String emptyTitle = 'All referrals on track';
-  static const String emptyBody =
-      'No SLA breaches. Every referred patient is accounted for between SK '
-      'and facility.';
-
-  // ── Card actions ──────────────────────────────────────────────────────────
-  static const String actionCallFamily = 'Call family';
-  static const String actionUpdateStatus = 'Update status';
-  static const String actionLocate = 'Locate';
-  static const String actionCheckIn = 'Check in';
-
-  static const String noPhone = 'No phone number on file for this patient';
-  static const String noLocation = 'No location on file for this patient';
-  static const String dialFailed = 'Could not open the dialer';
-
-  // ── Update-status sheet ───────────────────────────────────────────────────
-  static String updateTitle(String patientName) => 'Update — $patientName';
-  static const String updatePrompt = 'Where is the patient now?';
-  static const String updateOptNotLeft = 'Not yet left home';
-  static const String updateOptOnWay = 'On the way to facility';
-  static const String updateOptArrived = 'Arrived at facility';
-  static const String updateOptTreated = 'Seen by clinician / treated';
-  static const String updateOptDischarged = 'Discharged (recovered)';
-
-  static const String barrierPrompt = 'Add a barrier tag (optional)';
-  static const String barrierTransport = 'Transport';
-  static const String barrierCost = 'Cost';
-  static const String barrierFamily = 'Family';
-  static const String barrierDistance = 'Distance';
-
-  static const String saveUpdate = 'Save update';
-  static const String saveHint = 'Saves offline · syncs on next cycle';
-  static const String updateSaved = 'Referral status updated';
-  static const String selectStatus = 'Select the patient\'s current status';
-}
-
-/// Follow-up call logging — the device-side close/update flow.
-abstract final class FollowUpCallStrings {
-  FollowUpCallStrings._();
-
-  static const String logCall = 'Log call';
-  static const String sheetTitle = 'Log follow-up call';
-  static const String outcomePrompt = 'How did the call go?';
-  static const String outcomeSuccessful = 'Reached — successful';
-  static const String outcomeUnsuccessful = 'Could not reach';
-  static const String outcomeWrongNumber = 'Wrong number';
-  static const String reasonLabel = 'Note (optional)';
-  static const String reasonHint = 'e.g. no answer, will retry tomorrow';
-  static const String save = 'Save call';
-  static const String saved = 'Call logged — will sync on next cycle';
-  static const String schedule = 'Schedule';
-  static const String scheduled =
-      'Follow-up scheduled — will sync on next cycle';
-  static const String scheduleFailed = 'Could not schedule the follow-up';
-  static const String selectOutcome = 'Select the call outcome';
-  static const String closedNote =
-      'Wrong number or exhausted attempts will close this follow-up.';
-  static const String failed = 'Could not log the call';
 }
 
 /// Patient-scoped AI assistant (the floating "✦" sheet).

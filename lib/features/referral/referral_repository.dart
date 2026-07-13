@@ -422,6 +422,7 @@ class ReferralRepository {
         state: ReferralStatus.created, // Still not arrived
         diagnosisCode: 'J18.9',
         diagnosisLabel: 'Severe pneumonia',
+        rawJson: jsonEncode({'facilityName': 'UHC Manikganj'}),
         priorityScore: 95,
         priorityLevel: 'critical',
         priorityDrivers: const [
@@ -485,6 +486,7 @@ class ReferralRepository {
         state: ReferralStatus.arrived, // At facility, waiting
         diagnosisCode: 'O26.8',
         diagnosisLabel: 'High-risk ANC - Pre-eclampsia screening',
+        rawJson: jsonEncode({'facilityName': 'District Hospital'}),
         priorityScore: 78,
         priorityLevel: 'high',
         priorityDrivers: const [
@@ -548,6 +550,7 @@ class ReferralRepository {
         state: ReferralStatus.closedRecovered,
         diagnosisCode: 'E11.621',
         diagnosisLabel: 'Diabetic foot ulcer - wound care',
+        rawJson: jsonEncode({'facilityName': 'UHC wound care clinic'}),
         priorityScore: 15,
         priorityLevel: 'low',
         priorityDrivers: const [
@@ -617,6 +620,7 @@ class ReferralRepository {
         state: ReferralStatus.inTransit,
         diagnosisCode: 'O62.1',
         diagnosisLabel: 'Prolonged labor - emergency C-section evaluation',
+        rawJson: jsonEncode({'facilityName': 'District Hospital'}),
         priorityScore: 88,
         priorityLevel: 'critical',
         priorityDrivers: const [
@@ -669,6 +673,7 @@ class ReferralRepository {
         state: ReferralStatus.treatmentStarted, // Needs follow-up
         diagnosisCode: 'I10',
         diagnosisLabel: 'Hypertension - medication adjustment',
+        rawJson: jsonEncode({'facilityName': 'UHC Manikganj'}),
         priorityScore: 55,
         priorityLevel: 'medium',
         priorityDrivers: const [
@@ -718,6 +723,7 @@ class ReferralRepository {
         state: ReferralStatus.acknowledged,
         diagnosisCode: 'K35.8',
         diagnosisLabel: 'Acute appendicitis - surgical evaluation',
+        rawJson: jsonEncode({'facilityName': 'District Hospital'}),
         priorityScore: 72,
         priorityLevel: 'high',
         priorityDrivers: const [
