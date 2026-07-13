@@ -398,13 +398,22 @@ class RealtimeAsrController extends ChangeNotifier {
   /// directly to form fields — used when the backend does not support
   /// `form_fill` mode and falls back to the standard symptoms response.
   ///
-  /// Field IDs match `field_library.json`:
-  ///   - `bpLogDetails` → `[{systolic, diastolic}]` list (WidgetHint.bpField)
-  ///   - `glucose`      → numeric value (WidgetHint.bloodGlucose)
-  ///   - `ncdSymptoms`  → List<String> (WidgetHint.dialogCheckbox)
+  /// Structured fields (from the server's typed response):
+  ///   - `bpLogDetails` → `[{systolic, diastolic}]` list
+  ///   - `glucose`      → numeric value (mmol/L)
+  ///   - `ncdSymptoms`  → List<String> from chiefComplaints
+  ///
+  /// Parsed from `clinicalNotes` (server English summary, generic prompt path):
+  ///   ANC: `weight` · `hemoglobin` · `fundalHeight` · `fetalMovement` ·
+  ///        `urinarySugar` · `urineProtein` · `urinaryAlbumin` ·
+  ///        `urinaryBilirubin` · `folicAcidProvided` · `folicAcidTotalConsumed` ·
+  ///        `ifaProvided` · `ifaTotalConsumed` · `calciumProvided` ·
+  ///        `calciumTotalConsumed` · `ancDangerSigns` (none-only safe path)
+  ///   NCD/shared: `weight` · `height` · `pulse` · `glucoseType` (qualifier-dependent)
   FormPrefillResult _symptomsToFormFill(RealtimeClinicalFields f) {
     final extracted = <AIExtractedField>[];
     final unmapped = <String>[];
+    final now = DateTime.now();
 
     // Blood pressure: "170/80" → bpLogDetails list [{systolic, diastolic}]
     // The form's _BpReadingField reads data.getValue('bpLogDetails') as a
@@ -427,7 +436,7 @@ class RealtimeAsrController extends ChangeNotifier {
             confidence: 0.9,
             source: FieldSource.aiPending,
             sourceSegment: bp,
-            extractedAt: DateTime.now(),
+            extractedAt: now,
           ));
         }
       } else {
@@ -447,7 +456,7 @@ class RealtimeAsrController extends ChangeNotifier {
           confidence: 0.85,
           source: FieldSource.aiPending,
           sourceSegment: glucose,
-          extractedAt: DateTime.now(),
+          extractedAt: now,
         ));
       } else {
         unmapped.add('Glucose: $glucose');
@@ -462,17 +471,250 @@ class RealtimeAsrController extends ChangeNotifier {
         confidence: 0.75,
         source: FieldSource.aiPending,
         sourceSegment: f.chiefComplaints.join(', '),
-        extractedAt: DateTime.now(),
+        extractedAt: now,
       ));
+    }
+
+    // ANC/NCD vitals from the English `clinicalNotes` summary written by the
+    // generic symptoms prompt. The server consistently formats these in English
+    // regardless of transcript language; regex parsing here bridges the gap
+    // until the server-side assessment-type extraction is deployed.
+    //
+    // `placed` tracks fieldIds already added above — prevents duplicates when
+    // the server also populates bloodPressure/bloodGlucose structured fields.
+    final notes = f.clinicalNotes;
+    if (notes != null && notes.isNotEmpty) {
+      final placed = {for (final e in extracted) e.fieldId};
+
+      // Helper: extract a numeric vital via [re]; skip if already placed or out of range.
+      void addNum(String id, RegExp re, double lo, double hi) {
+        if (placed.contains(id)) return;
+        final m = re.firstMatch(notes);
+        if (m == null) return;
+        final v = double.tryParse(m.group(1)!);
+        if (v == null || v < lo || v > hi) return;
+        extracted.add(AIExtractedField(
+          fieldId: id,
+          value: v,
+          confidence: 0.8,
+          source: FieldSource.aiPending,
+          sourceSegment: m.group(0)!,
+          extractedAt: now,
+        ));
+        placed.add(id);
+      }
+
+      // Weight (kg) — ANC + NCD
+      addNum('weight', RegExp(r'weight\s+(\d+(?:\.\d+)?)\s*kg', caseSensitive: false), 20, 200);
+
+      // Hemoglobin (g/dL; server writes "%" in summary but value is correct) — ANC
+      addNum('hemoglobin', RegExp(r'hemoglobin\s+(\d+(?:\.\d+)?)(?:%|g/dl)?', caseSensitive: false), 1, 25);
+
+      // Fundal height (cm) — must be extracted BEFORE generic height to claim priority
+      addNum('fundalHeight', RegExp(r'fundal\s+height\s+(\d+(?:\.\d+)?)\s*cm', caseSensitive: false), 5, 45);
+
+      // Pulse (/min) — NCD + ANC
+      addNum('pulse', RegExp(r'pulse\s+(\d+)', caseSensitive: false), 20, 250);
+
+      // Standalone height (cm) — NCD; skip if the matched "height" is preceded by "fundal"
+      if (!placed.contains('height')) {
+        final hm = RegExp(r'height\s+(\d+(?:\.\d+)?)\s*cm', caseSensitive: false).firstMatch(notes);
+        if (hm != null) {
+          final before = notes.substring(0, hm.start).trimRight().toLowerCase();
+          if (!before.endsWith('fundal')) {
+            final v = double.tryParse(hm.group(1)!);
+            if (v != null && v >= 50 && v <= 250) {
+              extracted.add(AIExtractedField(
+                fieldId: 'height',
+                value: v,
+                confidence: 0.8,
+                source: FieldSource.aiPending,
+                sourceSegment: hm.group(0)!,
+                extractedAt: now,
+              ));
+            }
+          }
+        }
+      }
+
+      // Fetal movement (ANC) — enum: normal / lessThanUsual / notFelt
+      if (!placed.contains('fetalMovement')) {
+        final fm = RegExp(
+          r'fetal\s+movement\s+(normal|not\s+felt|less(?:\s+than\s+usual)?|reduced)',
+          caseSensitive: false,
+        ).firstMatch(notes);
+        if (fm != null) {
+          final raw = fm.group(1)!.trim().toLowerCase();
+          final val = raw.startsWith('normal')
+              ? 'normal'
+              : (raw.contains('not') || raw.contains('felt'))
+                  ? 'notFelt'
+                  : 'lessThanUsual';
+          extracted.add(AIExtractedField(
+            fieldId: 'fetalMovement',
+            value: val,
+            confidence: 0.8,
+            source: FieldSource.aiPending,
+            sourceSegment: fm.group(0)!,
+            extractedAt: now,
+          ));
+        }
+      }
+
+      // Urinary sugar (ANC) — enum: Absent / Present
+      if (!placed.contains('urinarySugar')) {
+        final us = RegExp(r'urinary\s+sugar\s+(absent|present)', caseSensitive: false).firstMatch(notes);
+        if (us != null) {
+          extracted.add(AIExtractedField(
+            fieldId: 'urinarySugar',
+            value: us.group(1)!.toLowerCase() == 'absent' ? 'Absent' : 'Present',
+            confidence: 0.8,
+            source: FieldSource.aiPending,
+            sourceSegment: us.group(0)!,
+            extractedAt: now,
+          ));
+        }
+      }
+
+      // Urine protein (ANC) — enum: Absent / Present
+      if (!placed.contains('urineProtein')) {
+        final up = RegExp(r'urine\s+protein\s+(absent|present)', caseSensitive: false).firstMatch(notes);
+        if (up != null) {
+          extracted.add(AIExtractedField(
+            fieldId: 'urineProtein',
+            value: up.group(1)!.toLowerCase() == 'absent' ? 'Absent' : 'Present',
+            confidence: 0.8,
+            source: FieldSource.aiPending,
+            sourceSegment: up.group(0)!,
+            extractedAt: now,
+          ));
+        }
+      }
+
+      // Glucose type (NCD) — only fires when server includes qualifier in notes
+      // (current deployed server omits this; will auto-activate post-redeploy).
+      if (!placed.contains('glucoseType')) {
+        final lower = notes.toLowerCase();
+        String? gType;
+        if (lower.contains('fasting') &&
+            (lower.contains('glucose') || lower.contains('blood sugar'))) {
+          gType = 'fbs';
+        } else if ((lower.contains('post') &&
+                (lower.contains('prandial') || lower.contains('meal'))) ||
+            lower.contains('ppbs')) {
+          gType = 'ppbs';
+        } else if ((lower.contains('random') &&
+                (lower.contains('glucose') || lower.contains('blood sugar'))) ||
+            RegExp(r'\brbs\b').hasMatch(lower)) {
+          gType = 'rbs';
+        }
+        if (gType != null) {
+          extracted.add(AIExtractedField(
+            fieldId: 'glucoseType',
+            value: gType,
+            confidence: 0.75,
+            source: FieldSource.aiPending,
+            sourceSegment: gType == 'fbs'
+                ? 'fasting glucose'
+                : gType == 'ppbs'
+                    ? 'post-prandial glucose'
+                    : 'random glucose',
+            extractedAt: now,
+          ));
+        }
+      }
+
+      // Supplement tablet counts (ANC):
+      //   "received N X" → Provided (given this visit)
+      //   "took N X"     → TotalConsumed (patient-reported cumulative)
+      void addCount(String fieldId, RegExp re) {
+        if (placed.contains(fieldId)) return;
+        final m = re.firstMatch(notes);
+        if (m == null) return;
+        final v = int.tryParse(m.group(1)!);
+        if (v == null || v < 0 || v > 200) return;
+        extracted.add(AIExtractedField(
+          fieldId: fieldId,
+          value: v.toDouble(),
+          confidence: 0.75,
+          source: FieldSource.aiPending,
+          sourceSegment: m.group(0)!,
+          extractedAt: now,
+        ));
+        placed.add(fieldId);
+      }
+
+      addCount('folicAcidProvided',
+          RegExp(r'(?:received|given)\s+(\d+)\s+folic', caseSensitive: false));
+      addCount('folicAcidTotalConsumed',
+          RegExp(r'took\s+(\d+)\s+folic', caseSensitive: false));
+      addCount('ifaProvided',
+          RegExp(r'(?:received|given)\s+(\d+)\s+(?:IFA|ifa)', caseSensitive: false));
+      addCount('ifaTotalConsumed',
+          RegExp(r'took\s+(\d+)\s+(?:IFA|ifa)', caseSensitive: false));
+      addCount('calciumProvided',
+          RegExp(r'(?:received|given)\s+(\d+)\s+calcium', caseSensitive: false));
+      addCount('calciumTotalConsumed',
+          RegExp(r'took\s+(\d+)\s+calcium', caseSensitive: false));
+
+      // Urinary albumin (ANC) — enum: Absent / Present
+      if (!placed.contains('urinaryAlbumin')) {
+        final ua = RegExp(r'(?:urine\s+|urinary\s+)?albumin\s+(absent|present)',
+                caseSensitive: false)
+            .firstMatch(notes);
+        if (ua != null) {
+          extracted.add(AIExtractedField(
+            fieldId: 'urinaryAlbumin',
+            value: ua.group(1)!.toLowerCase() == 'absent' ? 'Absent' : 'Present',
+            confidence: 0.8,
+            source: FieldSource.aiPending,
+            sourceSegment: ua.group(0)!,
+            extractedAt: now,
+          ));
+        }
+      }
+
+      // Urinary bilirubin (ANC) — enum: Absent / Present
+      if (!placed.contains('urinaryBilirubin')) {
+        final ub =
+            RegExp(r'bilirubin\s+(absent|present)', caseSensitive: false)
+                .firstMatch(notes);
+        if (ub != null) {
+          extracted.add(AIExtractedField(
+            fieldId: 'urinaryBilirubin',
+            value: ub.group(1)!.toLowerCase() == 'absent' ? 'Absent' : 'Present',
+            confidence: 0.8,
+            source: FieldSource.aiPending,
+            sourceSegment: ub.group(0)!,
+            extractedAt: now,
+          ));
+        }
+      }
+
+      // ANC danger signs — only safe case: explicit "no danger signs" → None
+      if (!placed.contains('ancDangerSigns')) {
+        final nd = RegExp(r'no\s+(?:anc\s+)?danger\s+signs?', caseSensitive: false)
+            .firstMatch(notes);
+        if (nd != null) {
+          extracted.add(AIExtractedField(
+            fieldId: 'ancDangerSigns',
+            value: ['None of these'],
+            confidence: 0.75,
+            source: FieldSource.aiPending,
+            sourceSegment: nd.group(0)!,
+            extractedAt: now,
+          ));
+        }
+      }
+
+      // Keep notes visible in the banner unmapped list.
+      unmapped.add(notes);
     }
 
     // Surface remaining fields as unmapped so the banner shows them.
     if (f.diagnosis != null) unmapped.add('Diagnosis: ${f.diagnosis}');
     if (f.comorbidities.isNotEmpty) {
       unmapped.add('Comorbidities: ${f.comorbidities.join(', ')}');
-    }
-    if (f.clinicalNotes != null && f.clinicalNotes!.isNotEmpty) {
-      unmapped.add(f.clinicalNotes!);
     }
 
     debugPrint(

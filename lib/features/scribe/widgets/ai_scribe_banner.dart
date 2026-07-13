@@ -6,6 +6,7 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../realtime_asr/models/realtime_clinical_fields.dart';
 import '../../realtime_asr/realtime_asr_controller.dart';
+import '../form_field_schema_builder.dart';
 import '../models/ai_extracted_field.dart';
 import '../scribe_controller.dart';
 import '../scribe_mic_waveform.dart';
@@ -100,6 +101,12 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
       permissionService: ScribePermissionService(),
     );
     _liveCtrl.addListener(_onLiveChanged);
+    final assessmentType = widget.assessmentType;
+    if (assessmentType != null) {
+      _liveCtrl.setFormSchema(
+        FormFieldSchemaBuilder.forProgrammeNames([assessmentType]),
+      );
+    }
   }
 
   @override
