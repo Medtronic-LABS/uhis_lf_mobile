@@ -76,10 +76,10 @@ class CceRepository {
     return sorted;
   }
 
-  /// Count of alerts needing SK action — the number shown on the bell badge
-  /// and in the drawer header.
+  /// Total open CCE alerts — matches the number of cards the drawer renders.
+  /// Excludes completed referrals (discharged / closed).
   int actionsNeededCount(List<CceAlert> alerts) =>
-      alerts.where((a) => a.severity.needsAction).length;
+      alerts.where((a) => a.severity != CceSeverity.completed).length;
 
   /// Apply an SK status update. Delegates to the referral lifecycle owner so
   /// the transition is journaled and re-scored. [reason] carries an optional
