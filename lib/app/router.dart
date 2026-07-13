@@ -376,6 +376,12 @@ GoRouter buildRouter(AuthState auth) {
           ),
 
           // Tab 2: Tasks
+          // TASKS-STASHED: this branch is intentionally excluded from the
+          // bottom nav bar's visible destinations (see bottom_nav.dart) per
+          // GitHub issue #84 (2026-07-13). The branch/route itself is left
+          // fully functional — do not remove or restore it here without
+          // direct user instruction; the nav-bar visibility is the only
+          // thing that changed. Search `TASKS-STASHED` for every marker.
           StatefulShellBranch(
             navigatorKey: _tasksNavigatorKey,
             routes: [

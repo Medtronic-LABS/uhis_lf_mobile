@@ -7,8 +7,18 @@ import '../core/widgets/mockup_svg_icons.dart';
 import '../features/visit/visit_flow_screen.dart';
 import 'theme.dart';
 
-/// Shell widget for the persistent 5-tab bottom navigation.
+/// Shell widget for the persistent 3-tab bottom navigation.
 /// Each tab maintains its own navigation stack.
+///
+/// TASKS-STASHED: the Tasks tab (StatefulShellBranch index 2 in
+/// `router.dart`, routing to ReferralListScreen/ReferralDetailScreen) was
+/// intentionally hidden from this bar per GitHub issue #84 (2026-07-13).
+/// The branch itself, its route, and the 6 existing `context.go('/tasks')`
+/// call sites elsewhere in the app (visit_complete_screen.dart,
+/// visit_form_screen.dart, visit_flow_screen.dart, mission_dashboard_screen.dart)
+/// are untouched and still fully functional — only the visible nav entry was
+/// removed. Do NOT restore or further modify this without direct user
+/// instruction. Search `TASKS-STASHED` for every related marker.
 class BottomNavShell extends StatefulWidget {
   const BottomNavShell({
     super.key,
@@ -64,10 +74,11 @@ class _BottomNavShellState extends State<BottomNavShell>
     return true;
   }
 
-  Future<void> _onTap(BuildContext context, int index) async {
+  Future<void> _onTap(BuildContext context, int visibleIndex) async {
+    final branchIndex = _visibleBranchIndices[visibleIndex];
     // Same tab tapped — just reset to root of that branch.
-    if (index == widget.navigationShell.currentIndex) {
-      widget.navigationShell.goBranch(index, initialLocation: true);
+    if (branchIndex == widget.navigationShell.currentIndex) {
+      widget.navigationShell.goBranch(branchIndex, initialLocation: true);
       return;
     }
     // If an active visit flow is running, ask before leaving.
@@ -79,12 +90,20 @@ class _BottomNavShellState extends State<BottomNavShell>
       final leave = await showLeaveVisitDialog(context);
       if (leave != true || !mounted) return;
     }
-    widget.navigationShell.goBranch(index, initialLocation: true);
+    widget.navigationShell.goBranch(branchIndex, initialLocation: true);
   }
+
+  // TASKS-STASHED: maps visible nav-bar position -> real StatefulShellRoute
+  // branch index. Branch 2 (Tasks, see router.dart "Tab 2: Tasks") is
+  // deliberately excluded from this bar per GitHub issue #84 (2026-07-13) but
+  // remains a live branch for existing direct `context.go('/tasks')` callers.
+  static const List<int> _visibleBranchIndices = [0, 1, 3];
 
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
+    final visiblePosition =
+        _visibleBranchIndices.indexOf(widget.navigationShell.currentIndex);
 
     return Scaffold(
         body: widget.navigationShell,
@@ -93,7 +112,10 @@ class _BottomNavShellState extends State<BottomNavShell>
             border: Border(top: BorderSide(color: tokens.divider)),
           ),
           child: NavigationBar(
-            selectedIndex: widget.navigationShell.currentIndex,
+            // Falls back to 0 when currentIndex is the hidden Tasks branch
+            // (reached via a direct call site, not this bar) — nothing in
+            // the visible bar corresponds to it.
+            selectedIndex: visiblePosition == -1 ? 0 : visiblePosition,
             onDestinationSelected: (index) => _onTap(context, index),
             labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
             destinations: [
@@ -106,11 +128,6 @@ class _BottomNavShellState extends State<BottomNavShell>
                 icon: _NavIcon(builder: MockupIcons.navPatients, isSelected: false),
                 selectedIcon: _NavIcon(builder: MockupIcons.navPatients, isSelected: true),
                 label: BottomNavStrings.patients,
-              ),
-              NavigationDestination(
-                icon: _NavIcon(builder: MockupIcons.navTasks, isSelected: false),
-                selectedIcon: _NavIcon(builder: MockupIcons.navTasks, isSelected: true),
-                label: BottomNavStrings.tasks,
               ),
               NavigationDestination(
                 icon: _NavIcon(builder: MockupIcons.navAssistant, isSelected: false),
