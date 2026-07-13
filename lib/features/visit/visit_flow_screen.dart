@@ -3076,7 +3076,6 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
         decoration: BoxDecoration(
           color: _cardBg,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _cardBorder),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -3115,7 +3114,6 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: _cardBorder),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
