@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -15,6 +16,7 @@ import '../../core/constants/app_strings.dart';
 import '../../core/i18n/app_locale.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/db/household_dao.dart';
+import '../../core/db/patient_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/local_dashboard_repository.dart';
 import '../../core/models/dashboard_tier.dart';
@@ -26,10 +28,11 @@ import 'widgets/dashboard_search_field.dart';
 import '../visit/visit_controller.dart';
 import '../visit/widgets/widgets.dart';
 import 'dashboard_repository.dart';
-import 'sk_performance_screen.dart';
 import 'mission_dashboard_repository.dart';
 import '../household/enrollment/enrollment_entry_sheet.dart';
-import 'widgets/notification_drawer.dart';
+import '../cce/cce_alerts_drawer.dart';
+import '../cce/cce_repository.dart';
+import 'sk_performance_screen.dart';
 
 /// AI Mission Dashboard — the operational command center for the SK.
 ///
@@ -58,6 +61,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Cached reference to mission repository for change listening.
   MissionDashboardRepository? _missionRepo;
   bool _missionListenerAdded = false;
+  bool _demoSeeded = false;
   
   // Flag to track if data needs refresh when widget becomes visible.
   bool _pendingRefresh = false;
@@ -105,14 +109,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _missionListenerAdded = true;
       _missionRepo!.changes.addListener(_onMissionChanges);
     }
+    // Debug builds only: seed the 3 wireframe CCE scenarios once so the
+    // Care Coordination Alerts drawer has data to demo. Never runs in
+    // release, so real users never see fabricated referrals.
+    if (kDebugMode && !_demoSeeded) {
+      _demoSeeded = true;
+      context.read<ReferralRepository>().seedDemoDataIfEmpty().then((_) {
+        if (mounted) _refreshNotificationCount();
+      });
+    }
     _refreshNotificationCount();
   }
 
   Future<void> _refreshNotificationCount() async {
     try {
-      final counts = await context.read<ReferralRepository>().counts();
+      // The bell opens the CCE drawer, so its badge must match the drawer's
+      // "N actions needed" (breached + warning), not raw active count.
+      final cce = CceRepository(
+        referrals: context.read<ReferralRepository>(),
+        patients: context.read<PatientDao>(),
+      );
+      final alerts = await cce.loadAlerts();
       if (!mounted) return;
-      setState(() => _notificationCount = counts.critical + counts.active);
+      setState(() => _notificationCount = cce.actionsNeededCount(alerts));
     } catch (_) {}
   }
 
@@ -523,7 +542,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               settingsMenu: _SettingsMenu(onOfferBiometric: _offerBiometric),
               notificationCount: _notificationCount,
-              onNotificationTap: () => showNotificationDrawer(context),
+              onNotificationTap: () => CceAlertsDrawer.show(context),
               onSearchChanged: (q) {
                 setState(() => _searchQuery = q);
                 _applyFilters();
@@ -533,7 +552,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             // so it reads as a system-level alert before the worklist.
             _ReferralAlertBanner(
               key: ValueKey('referral_banner_$_refreshVersion'),
-              onTap: () => showNotificationDrawer(context),
+              onTap: () => CceAlertsDrawer.show(context),
             ),
             Expanded(
               child: RefreshIndicator(
