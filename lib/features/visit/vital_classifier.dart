@@ -57,8 +57,8 @@ class VitalClassifier {
 
   /// Classify blood pressure.
   static VitalClassification classifyBp(double systolic, double diastolic) {
-    // Critical hypertension
-    if (systolic >= 180 || diastolic >= 120) {
+    // Critical hypertension — crisis threshold matches AssessmentDefinedParams (110 diastolic, not 120)
+    if (systolic >= 180 || diastolic >= 110) {
       return VitalClassification.critical;
     }
     // Severe hypertension
@@ -141,19 +141,18 @@ class VitalClassifier {
     return VitalClassification.normal;
   }
 
-  /// Classify blood glucose (mg/dL).
+  /// Classify blood glucose (mmol/L).
   ///
-  /// Fasting thresholds (approximate — actual depends on fasting state):
-  /// - <70: Hypoglycemia
-  /// - 70-100: Normal fasting
-  /// - 100-126: Pre-diabetes
-  /// - >126: Diabetes
-  /// - >300: Critical high
+  /// Thresholds from NCDReferralColorEvaluator + AssessmentDefinedParams:
+  /// - <3.9: Hypoglycaemia (critical)
+  /// - >27.8: Crisis hyperglycaemia (critical)
+  /// - >11.1: Uncontrolled / PNC urgent (high)
+  /// - >7.8: Above RBS screening normal (elevated)
   static VitalClassification _classifyGlucose(double glucose) {
-    if (glucose < 54) return VitalClassification.critical; // Severe hypoglycemia
-    if (glucose < 70) return VitalClassification.low; // Hypoglycemia
-    if (glucose > 300) return VitalClassification.critical; // Critical hyperglycemia
-    if (glucose > 126) return VitalClassification.high; // Diabetes range
+    if (glucose < 3.9) return VitalClassification.critical; // Hypoglycaemia
+    if (glucose > 27.8) return VitalClassification.critical; // Crisis hyperglycaemia
+    if (glucose > 11.1) return VitalClassification.high; // NCD uncontrolled / PNC urgent
+    if (glucose > 7.8) return VitalClassification.low; // Above RBS screening normal
     return VitalClassification.normal;
   }
 

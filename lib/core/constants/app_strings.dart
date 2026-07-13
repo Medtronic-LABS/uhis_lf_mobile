@@ -2976,6 +2976,8 @@ abstract final class ComposerStrings {
   static const String bpDiastolicHint = 'DIA';
   static const String bpUnit = 'mmHg';
   static const String bpValidationError = 'Enter a valid reading';
+  static const String bpDiastolicExceedsSystolicError =
+      'Diastolic must be less than systolic';
   static const String ageLabel = 'Age';
   static const String dobLabel = 'Date of Birth';
   static const String yearsShort = 'Y';
