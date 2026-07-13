@@ -48,9 +48,12 @@ class TriageViewModel extends ChangeNotifier {
   final AiPathwayClient? _aiClient;
   final String? _memberId;
 
-  /// Lazily cached result of [enrolledProgrammeVocabCodes].
+  /// Lazily cached result of [groupedVocabSections].
   /// Enrolled programmes never change during a triage session, so we compute
   /// once and reuse — this also ensures debug logs fire only once per load.
+  List<SymptomSection>? _groupedSectionsCache;
+
+  /// Lazily cached flat list derived from [_groupedSectionsCache].
   List<String>? _enrolledProgrammeVocabCache;
 
   /// Currently selected symptom codes.
@@ -440,8 +443,9 @@ class TriageViewModel extends ChangeNotifier {
       return const [];
     }
 
-    final shown =
-        groupedVocabSections.expand((s) => s.codes).toList(growable: false);
+    // groupedVocabSections is cached — single compute, single log.
+    final sections = groupedVocabSections;
+    final shown = sections.expand((s) => s.codes).toList(growable: false);
 
     if (kDebugMode) {
       final applicable = AiScribeTriageVocab.applicableCodes(_patientContext);
@@ -450,22 +454,38 @@ class TriageViewModel extends ChangeNotifier {
       final excluded = AiScribeTriageVocab.codes
           .where((c) => !applicable.contains(c))
           .toList();
+      final ctx = _patientContext;
+      debugPrint('[SymptomPicker] ═══ Triage screen load ═══');
       debugPrint(
-        '[SymptomPicker] Enrolled programmes: '
-        '${enrolled.map((p) => p.wireTag).join(', ')}',
+        '[SymptomPicker] Patient: sex=${ctx.sex.name} '
+        'ageMonths=${ctx.ageMonths} ageKnown=${ctx.ageKnown} '
+        'isPregnant=${ctx.isPregnant} isPostpartum=${ctx.isPostpartum} '
+        'isUnder5=${ctx.isUnder5}',
       );
       debugPrint(
-        '[SymptomPicker] DEFAULT grid (${shown.length}): '
-        '${shown.join(', ')}',
+        '[SymptomPicker] Enrolled: '
+        '${enrolled.map((p) => p.wireTag).join(', ')} — '
+        'grid total ${shown.length}',
       );
-      debugPrint(
-        '[SymptomPicker] Search-only (${searchOnly.length}): '
-        '${searchOnly.join(', ')}',
-      );
-      debugPrint(
-        '[SymptomPicker] Excluded by demographics (${excluded.length}): '
-        '${excluded.join(', ')}',
-      );
+      for (final section in sections) {
+        final label = section.programme?.wireTag ?? 'GENERAL';
+        debugPrint(
+          '[SymptomPicker]   → $label (${section.codes.length}): '
+          '${section.codes.join(', ')}',
+        );
+      }
+      if (searchOnly.isNotEmpty) {
+        debugPrint(
+          '[SymptomPicker] Search-only (${searchOnly.length}): '
+          '${searchOnly.join(', ')}',
+        );
+      }
+      if (excluded.isNotEmpty) {
+        debugPrint(
+          '[SymptomPicker] Excluded/demographic (${excluded.length}): '
+          '${excluded.join(', ')}',
+        );
+      }
     }
 
     _enrolledProgrammeVocabCache = shown;
@@ -482,18 +502,21 @@ class TriageViewModel extends ChangeNotifier {
   ///     never show for males, and age gates apply whenever age is actually
   ///     known (an infant never sees ANC/NCD symptoms; missing-age records
   ///     are not treated as newborns).
-  ///   - Maternal codes show only when the patient is enrolled in EVERY
-  ///     programme the code spans (unchanged), and land in the first enrolled
-  ///     section of that span (ANC before PNC).
+  ///   - Maternal codes show when the patient is enrolled in ANY programme the
+  ///     code spans (e.g. vaginal_bleeding shows for ANC-only patients), and
+  ///     land in the first enrolled section of that span (ANC before PNC).
   ///   - General symptoms (fever, headache…) get their own section so the SK
   ///     sees the full clinically relevant list, visually separated.
   ///
   /// Selection, search pools, and pathway activation are untouched.
   List<SymptomSection> get groupedVocabSections {
+    if (_groupedSectionsCache != null) return _groupedSectionsCache!;
     final ctx = _patientContext;
     final enrolled = ctx.activeProgrammes;
     // Let under-5 patients through so the IMCI bucket below is populated.
-    if (enrolled.isEmpty && !ctx.isUnder5) return const [];
+    if (enrolled.isEmpty && !ctx.isUnder5) {
+      return _groupedSectionsCache = const [];
+    }
 
     const sectionOrder = [
       Programme.anc,
@@ -508,27 +531,103 @@ class TriageViewModel extends ChangeNotifier {
     };
     final general = <String>[];
 
+    final demographicSkipped = <String>[];
+    final maternalSkipped = <String>[];
+    final ancExtendedRouted = <String>[];
+    final ncdDropped = <String>[];
+
     for (final code in AiScribeTriageVocab.codes) {
       if (!AiScribeTriageVocab.isDemographicallyPlausible(code, ctx)) {
+        if (kDebugMode) demographicSkipped.add(code);
         continue;
       }
       switch (AiScribeTriageVocab.categoryOf(code)) {
         case SymptomCategory.general:
+          // NCD-only patients: restrict the general section to the NCD-relevant
+          // subset (BP/diabetes characteristic symptoms). Non-relevant general
+          // codes (fever, vomiting, etc.) remain searchable but skip the grid.
+          final isNcdOnly = enrolled.isNotEmpty &&
+              enrolled.every((p) => p == Programme.ncd);
+          if (isNcdOnly &&
+              !AiScribeTriageVocab.ncdRelevantGeneralCodes.contains(code)) {
+            if (kDebugMode) ncdDropped.add(code);
+            break;
+          }
           general.add(code);
         case SymptomCategory.maternal:
           final codeProgs =
               AiScribeTriageVocab.programmesForMaternalCode(code);
-          if (!codeProgs.every(enrolled.contains)) break;
-          final home = sectionOrder.firstWhere(codeProgs.contains);
+          // Show when enrolled in ANY programme this code spans (not ALL).
+          // e.g. vaginal_bleeding {anc,pnc} shows for ANC-only patients.
+          if (!codeProgs.any(enrolled.contains)) {
+            if (kDebugMode) maternalSkipped.add(code);
+            break;
+          }
+          // Route to the first enrolled programme from codeProgs in section
+          // order, so ANC-only patients see {anc,pnc} codes in the ANC bucket.
+          final home = sectionOrder.firstWhere(
+            (p) => codeProgs.contains(p) && byProgramme.containsKey(p),
+            orElse: () => sectionOrder.firstWhere(codeProgs.contains),
+          );
           byProgramme[home]?.add(code);
         case SymptomCategory.ncd:
-          byProgramme[Programme.ncd]?.add(code);
+          if (byProgramme.containsKey(Programme.ncd)) {
+            // NCD enrolled: only primary grid codes in the bucket; secondary
+            // NCD codes (epigastric_pain, swelling_one_leg, foot_pain) go to
+            // search so the grid stays tight (BP + diabetes focused).
+            if (AiScribeTriageVocab.ncdPrimaryGridCodes.contains(code)) {
+              byProgramme[Programme.ncd]?.add(code);
+            } else {
+              if (kDebugMode) ncdDropped.add(code);
+            }
+          } else if (byProgramme.containsKey(Programme.anc) &&
+              AiScribeTriageVocab.ancExtendedNcdCodes.contains(code)) {
+            // ANC-only patient: surface the clinical-crossover NCD codes
+            // (chest pain, one-sided weakness, palpitations etc.) in the
+            // ANC bucket so the SK sees them without searching.
+            byProgramme[Programme.anc]?.add(code);
+            if (kDebugMode) ancExtendedRouted.add(code);
+          } else {
+            if (kDebugMode) ncdDropped.add(code);
+          }
         case SymptomCategory.pediatric:
           byProgramme[Programme.imci]?.add(code);
       }
     }
 
-    return [
+    if (kDebugMode) {
+      debugPrint('[TriageGrid] ─── Section routing (enrolled: '
+          '${enrolled.map((p) => p.wireTag).join(', ')}) ───');
+      for (final entry in byProgramme.entries) {
+        debugPrint('[TriageGrid]   ${entry.key.wireTag} bucket '
+            '(${entry.value.length}): ${entry.value.join(', ')}');
+      }
+      if (general.isNotEmpty) {
+        debugPrint('[TriageGrid]   GENERAL bucket '
+            '(${general.length}): ${general.join(', ')}');
+      }
+      if (ancExtendedRouted.isNotEmpty) {
+        debugPrint('[TriageGrid]   ANC-extended NCD crossover '
+            '(${ancExtendedRouted.length}): ${ancExtendedRouted.join(', ')}');
+      }
+      if (ncdDropped.isNotEmpty) {
+        debugPrint('[TriageGrid]   NCD codes not shown (no NCD enrolment, '
+            'not ANC-extended) (${ncdDropped.length}): '
+            '${ncdDropped.join(', ')}');
+      }
+      if (maternalSkipped.isNotEmpty) {
+        debugPrint('[TriageGrid]   Maternal codes hidden (not enrolled in any '
+            'spanning programme) (${maternalSkipped.length}): '
+            '${maternalSkipped.join(', ')}');
+      }
+      if (demographicSkipped.isNotEmpty) {
+        debugPrint('[TriageGrid]   Demographic gate failed '
+            '(${demographicSkipped.length}): '
+            '${demographicSkipped.join(', ')}');
+      }
+    }
+
+    return _groupedSectionsCache = [
       for (final entry in byProgramme.entries)
         if (entry.value.isNotEmpty)
           SymptomSection(programme: entry.key, codes: entry.value),
@@ -549,13 +648,19 @@ class TriageViewModel extends ChangeNotifier {
       case SymptomCategory.general:
         return false;
       case SymptomCategory.maternal:
-        // Outside when the patient is not enrolled in every programme the
-        // symptom spans (mirrors the every-check in enrolledProgrammeVocabCodes).
+        // Outside when enrolled in NONE of the programmes this code spans.
         final codeProgs =
             AiScribeTriageVocab.programmesForMaternalCode(code);
-        return !codeProgs.every((p) => enrolled.contains(p));
+        return !codeProgs.any((p) => enrolled.contains(p));
       case SymptomCategory.ncd:
-        return !enrolled.contains(Programme.ncd);
+        if (enrolled.contains(Programme.ncd)) return false;
+        // ANC-extended NCD codes are shown inside the ANC bucket — they don't
+        // imply a new NCD programme enrollment prompt for ANC patients.
+        if (enrolled.contains(Programme.anc) &&
+            AiScribeTriageVocab.ancExtendedNcdCodes.contains(code)) {
+          return false;
+        }
+        return true;
       case SymptomCategory.pediatric:
         return !enrolled.contains(Programme.imci);
     }
@@ -641,7 +746,12 @@ class TriageViewModel extends ChangeNotifier {
         case SymptomCategory.maternal:
           return !isMale && isMaternalContext;
         case SymptomCategory.ncd:
-          return isNcdContext;
+          // Show NCD codes for NCD patients; also surface the ANC-extended
+          // subset (chest pain, one-sided weakness, etc.) for maternal context.
+          return isNcdContext ||
+              (!isMale &&
+                  isMaternalContext &&
+                  AiScribeTriageVocab.ancExtendedNcdCodes.contains(code));
         case SymptomCategory.pediatric:
           return isPediatricContext;
       }

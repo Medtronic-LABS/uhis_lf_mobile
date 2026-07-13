@@ -184,9 +184,19 @@ class UnifiedSymptomCatalog {
       cluster: SymptomCluster.dangerSigns,
       icon: 'favorite',
       emoji: '💔',
-      programmes: {Programme.ncd, Programme.tb},
+      programmes: {Programme.anc, Programme.ncd, Programme.tb},
       isDangerSign: true,
       snomedCode: '29857009',
+    ),
+    UnifiedSymptomDef(
+      code: 'one_sided_weakness',
+      labelKey: 'symptomOneSidedWeakness',
+      cluster: SymptomCluster.dangerSigns,
+      icon: 'warning',
+      emoji: '🫀',
+      programmes: {Programme.anc, Programme.ncd},
+      isDangerSign: true,
+      snomedCode: '230690007',
     ),
     UnifiedSymptomDef(
       code: 'hemoptysis',
@@ -256,7 +266,7 @@ class UnifiedSymptomCatalog {
       cluster: SymptomCluster.feverRespiratory,
       icon: 'air',
       emoji: '😮‍💨',
-      programmes: {Programme.ncd, Programme.tb},
+      programmes: {Programme.anc, Programme.ncd, Programme.tb},
       snomedCode: '267036007',
     ),
   ];
@@ -338,7 +348,7 @@ class UnifiedSymptomCatalog {
       cluster: SymptomCluster.giNutrition,
       icon: 'trending_down',
       emoji: '⚖️',
-      programmes: {Programme.tb, Programme.ncd},
+      programmes: {Programme.anc, Programme.tb, Programme.ncd},
       snomedCode: '89362005',
     ),
   ];
@@ -403,6 +413,15 @@ class UnifiedSymptomCatalog {
       emoji: '💊',
       programmes: {Programme.anc, Programme.ncd},
       snomedCode: '38341003',
+    ),
+    UnifiedSymptomDef(
+      code: 'palpitations',
+      labelKey: 'symptomPalpitations',
+      cluster: SymptomCluster.maternal,
+      icon: 'monitor_heart',
+      emoji: '💓',
+      programmes: {Programme.anc, Programme.ncd},
+      snomedCode: '80313002',
     ),
     UnifiedSymptomDef(
       code: 'labor_signs',
@@ -475,7 +494,7 @@ class UnifiedSymptomCatalog {
       cluster: SymptomCluster.ncdMetabolic,
       icon: 'blur_on',
       emoji: '💫',
-      programmes: {Programme.ncd},
+      programmes: {Programme.anc, Programme.ncd},
       snomedCode: '404640003',
     ),
     UnifiedSymptomDef(
@@ -484,7 +503,7 @@ class UnifiedSymptomCatalog {
       cluster: SymptomCluster.ncdMetabolic,
       icon: 'touch_app',
       emoji: '🖐️',
-      programmes: {Programme.ncd},
+      programmes: {Programme.anc, Programme.ncd},
       snomedCode: '44077006',
     ),
     UnifiedSymptomDef(
@@ -502,7 +521,7 @@ class UnifiedSymptomCatalog {
       cluster: SymptomCluster.ncdMetabolic,
       icon: 'local_drink',
       emoji: '💧',
-      programmes: {Programme.ncd},
+      programmes: {Programme.anc, Programme.ncd},
       snomedCode: '17173007',
     ),
     UnifiedSymptomDef(
@@ -520,9 +539,18 @@ class UnifiedSymptomCatalog {
       cluster: SymptomCluster.ncdMetabolic,
       icon: 'healing',
       emoji: '🩹',
-      programmes: {Programme.ncd},
+      programmes: {Programme.anc, Programme.ncd},
       isDangerSign: true,
       snomedCode: '13954005',
+    ),
+    UnifiedSymptomDef(
+      code: 'weakness',
+      labelKey: 'symptomWeakness',
+      cluster: SymptomCluster.ncdMetabolic,
+      icon: 'battery_alert',
+      emoji: '🪫',
+      programmes: {Programme.anc, Programme.ncd},
+      snomedCode: '13791008',
     ),
   ];
 

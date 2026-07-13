@@ -96,6 +96,9 @@ class ImmunisationRepository {
     String? encounterId,
     String? missedReason,
     String? villageId,
+    String? memberId,
+    String? householdId,
+    Map<String, dynamic>? provenance,
     // Numeric backend patient ID — separate from the FHIR route ID.
     // Use patient.patientId when available; falls back to patientId parse.
     String? numericPatientId,
@@ -107,6 +110,9 @@ class ImmunisationRepository {
       patientReference: patientReference,
       patientId: resolvedNumericId,
       villageId: villageId,
+      memberId: memberId,
+      householdId: householdId,
+      provenance: provenance,
     );
 
     final body = ImmunisationCreateRequestDto(

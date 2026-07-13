@@ -233,6 +233,55 @@ abstract final class AiScribeTriageVocab {
     }
   }
 
+  /// NCD-category codes that are also clinically relevant for ANC patients
+  /// (e.g. chest pain, palpitations as cardiac warning signs in pregnancy).
+  ///
+  /// These appear in the ANC section of the default grid when the patient is
+  /// enrolled in ANC but NOT NCD, so the SK sees them without a search. They
+  /// are intentionally excluded from the NCD bucket (no double-listing).
+  ///
+  /// Excludes pure metabolic codes (epigastric_pain, swelling_both_feet,
+  /// swelling_one_leg, foot_pain) and BP/diabetes flags (high_bp_known) that
+  /// are NCD-specific per clinical guidance.
+  static const Set<String> ancExtendedNcdCodes = {
+    'chest_pain',
+    'one_sided_weakness',
+    'palpitations',
+    'excessive_thirst',
+    'foot_numbness',
+    'foot_wound',
+  };
+
+  /// NCD-category codes shown in the default chip grid for NCD patients.
+  ///
+  /// The full NCD vocab contains additional codes (epigastric_pain,
+  /// swelling_one_leg, foot_pain) that are clinically valid but niche enough
+  /// that they clutter the quick-glance grid. Those three are still findable
+  /// via search. This set keeps the NCD grid to core BP + Diabetes symptoms.
+  static const Set<String> ncdPrimaryGridCodes = {
+    'chest_pain',
+    'one_sided_weakness',
+    'swelling_both_feet',
+    'palpitations',
+    'excessive_thirst',
+    'foot_numbness',
+    'foot_wound',
+  };
+
+  /// General-category codes shown in the chip grid when the patient's only
+  /// enrolled programme is NCD. Non-listed general codes (fever, vomiting,
+  /// abdominal_pain, painful_urination, convulsions) are still searchable —
+  /// they're not NCD-characteristic and add visual noise for a routine check.
+  static const Set<String> ncdRelevantGeneralCodes = {
+    'headache',
+    'dizziness',
+    'blurred_vision',
+    'breathlessness',
+    'fatigue',
+    'weakness',
+    'weight_loss',
+  };
+
   /// Human-readable label for a code — used when the AI surfaces a code that
   /// isn't present in TriageStrings. Underscores → spaces, capitalised words.
   static String labelFor(String code) {

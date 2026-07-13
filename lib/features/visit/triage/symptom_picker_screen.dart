@@ -6,7 +6,9 @@ import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/db/encounter_dao.dart';
 import '../../../core/db/immunisation_dao.dart';
+import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/db/patient_dao.dart';
+import '../../../core/models/programme.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/db/patient_programmes_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
@@ -18,7 +20,6 @@ import '../../scribe/widgets/ai_scribe_banner.dart';
 import '../briefing/briefing_models.dart';
 import '../briefing/visit_briefing_repository.dart';
 import '../pathway/pathway_engine.dart';
-import 'child_assessment_section.dart';
 import 'patient_context_builder.dart';
 import 'visit_step_header.dart';
 import 'triage_view_model.dart';
@@ -43,6 +44,7 @@ class SymptomPickerScreen extends StatefulWidget {
     this.origin,
     this.onAdvance,
     this.onSymptomsConfirmed,
+    this.onProgrammesSelected,
   });
 
   final String encounterId;
@@ -75,6 +77,11 @@ class SymptomPickerScreen extends StatefulWidget {
   )?
   onSymptomsConfirmed;
 
+  /// Fired just before [onAdvance] with the SK's confirmed programme set from
+  /// the inline eligible-services grid. Only called for adult patients —
+  /// child visits (under-5) skip the grid and use the vaccination path.
+  final ValueChanged<Set<Programme>>? onProgrammesSelected;
+
   @override
   State<SymptomPickerScreen> createState() => _SymptomPickerScreenState();
 }
@@ -89,7 +96,19 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   bool _briefingLoading = true;
   int? _ancVisitCount;
 
-  ChildAssessmentData? _childAssessmentData;
+  /// Programmes the SK has selected in the inline service grid.
+  /// Initialized from the pathway engine on load; SK can toggle freely.
+  final Set<Programme> _selectedProgrammes = {};
+
+  /// Subset of [_selectedProgrammes] that were pre-activated by the pathway
+  /// engine — rendered with the ✦ sparkle in the card.
+  final Set<Programme> _pathwayActivatedProgrammes = {};
+
+  /// PW meta-flag — gates ANC. Auto-true when patient is known pregnant.
+  bool _isPW = false;
+
+  /// Delivery meta-flag — gates PNC. Auto-true when patient is postpartum.
+  bool _isDelivery = false;
 
   @override
   void initState() {
@@ -169,12 +188,22 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       }
 
       debugPrint('[SymptomPicker] Success! Setting up view model...');
+      final vm = TriageViewModel(patientContext: ctx);
+      final pathwaySet = vm.activatedPathways.map((p) => p.programme).toSet();
       setState(() {
         _patientContext = ctx;
-        _viewModel = TriageViewModel(patientContext: ctx);
+        _viewModel = vm;
+        _selectedProgrammes
+          ..clear()
+          ..addAll(pathwaySet);
+        _pathwayActivatedProgrammes
+          ..clear()
+          ..addAll(pathwaySet);
+        _isPW = ctx.isPregnant;
+        _isDelivery = ctx.isPostpartum;
         _isLoading = false;
       });
-      debugPrint('[SymptomPicker] Load complete');
+      debugPrint('[SymptomPicker] Load complete — pathway programmes: ${pathwaySet.map((p) => p.name).join(', ')}');
       _startBriefingFetch(ctx);
     } catch (e, stack) {
       debugPrint('[SymptomPicker] ERROR: $e');
@@ -308,6 +337,8 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         extra: <String, dynamic>{
           'patientName': widget.patientName,
           if (patient?.dob != null) 'dob': patient!.dob,
+          if (widget.memberId != null) 'memberId': widget.memberId,
+          // householdMemberLocalId unavailable on this screen; defaults to 0
         },
       );
     });
@@ -337,9 +368,14 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       '[SymptomPicker] Continue tapped — ${vm.activatedPathways.length} pathways: ${vm.activatedPathways.map((p) => p.programme.name).join(', ')}',
     );
 
-    // Guard: no symptoms recorded → prompt the SK to double-check.
-    // "Continue anyway" in the SnackBar calls _doAdvance directly.
-    if (vm.selectedSymptoms.isEmpty && vm.activatedPathways.isEmpty) {
+    // Guard: only block when there is truly no programme context —
+    // no enrolled programmes, no activated pathways, no symptoms.
+    // Enrolled patients always proceed: enrolment alone determines the form.
+    final hasEnrolledProgrammes =
+        _patientContext!.activeProgrammes.isNotEmpty;
+    if (vm.selectedSymptoms.isEmpty &&
+        vm.activatedPathways.isEmpty &&
+        !hasEnrolledProgrammes) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
@@ -358,25 +394,99 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     _doAdvance(vm);
   }
 
-  void _doAdvance(TriageViewModel vm) {
-    // In-flow host (VisitFlowScreen) intercepts via callback. The host also
-    // needs the SK-confirmed symptom set to build the Step-2 AI programme
-    // recommendation request payload — surface it via the optional
-    // onSymptomsConfirmed callback before advancing.
+  Future<void> _doAdvance(TriageViewModel vm) async {
+    // If the rule engine produced no pathways but the patient has enrolled
+    // programmes, synthesize a pathway from enrolment so the form always
+    // opens the correct section (guards against sex/data quality issues
+    // that cause demographic gates to fail — see issue #127).
+    var pathways = vm.activatedPathways;
+    if (pathways.isEmpty && _patientContext != null) {
+      const priorityByProgramme = {
+        Programme.anc: 20,
+        Programme.pnc: 25,
+        Programme.imci: 10,
+        Programme.ncd: 40,
+        Programme.tb: 30,
+        Programme.epi: 100,
+      };
+      pathways = _patientContext!.activeProgrammes
+          .where(priorityByProgramme.containsKey)
+          .map(
+            (p) => ActivatedPathway(
+              programme: p,
+              priority: priorityByProgramme[p]!,
+              confidence: 1.0,
+              trigger: PathwayTrigger.rule,
+              rationaleKey: 'pathwayEnrolmentFallback',
+            ),
+          )
+          .toList()
+        ..sort((a, b) => a.priority.compareTo(b.priority));
+      if (pathways.isNotEmpty) {
+        debugPrint(
+          '[SymptomPicker] activatedPathways empty — using enrolment fallback: '
+          '${pathways.map((p) => p.programme.name).join(', ')}',
+        );
+      }
+    }
+
+    // Last-assessment fallback: if enrolment data is also absent (e.g. a
+    // patient whose enrollment sync hasn't landed yet), look at the most
+    // recent assessment in the local DB and open the same programme form.
+    if (pathways.isEmpty && mounted) {
+      try {
+        final dao = context.read<LocalAssessmentDao>();
+        final assessments = await dao.getByPatientId(widget.patientId);
+        if (assessments.isNotEmpty) {
+          final lastType = assessments.first.assessmentType;
+          final programme = Programme.fromTag(lastType);
+          if (programme != null) {
+            const priorityByProgramme = {
+              Programme.anc: 20,
+              Programme.pnc: 25,
+              Programme.imci: 10,
+              Programme.ncd: 40,
+              Programme.tb: 30,
+              Programme.epi: 100,
+            };
+            pathways = [
+              ActivatedPathway(
+                programme: programme,
+                priority: priorityByProgramme[programme] ?? 50,
+                confidence: 1.0,
+                trigger: PathwayTrigger.rule,
+                rationaleKey: 'pathwayLastAssessmentFallback',
+              ),
+            ];
+            debugPrint(
+              '[SymptomPicker] no enrolment — last-assessment fallback: '
+              '${programme.name} (from assessmentType=$lastType)',
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint('[SymptomPicker] last-assessment lookup failed: $e');
+      }
+    }
+
+    // In-flow host (VisitFlowScreen) intercepts via callback.
     final onAdvance = widget.onAdvance;
     if (onAdvance != null) {
+      if (!(_patientContext?.isUnder5 ?? false)) {
+        widget.onProgrammesSelected?.call(Set.unmodifiable(_selectedProgrammes));
+      }
       widget.onSymptomsConfirmed?.call(
         vm.selectedSymptoms,
         vm.sicknessDuration,
         vm.customSymptomText,
         vm.scribePreTickedCodes,
       );
-      onAdvance(vm.activatedPathways);
+      onAdvance(pathways);
       return;
     }
 
     // Bypass the triage-result interstitial and go straight to the form.
-    _navigateToForm(vm.activatedPathways);
+    _navigateToForm(pathways);
   }
 
   void _navigateToForm(List<ActivatedPathway> pathways) {
@@ -569,15 +679,39 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                   ),
                 ),
 
-                // Child Assessment questions — under-5 only, shown when at
-                // least one symptom has been selected (mirrors HTML s23).
-                if (_patientContext!.isUnder5 &&
-                    vm.selectedSymptoms.isNotEmpty)
-                  SliverToBoxAdapter(
-                    child: ChildAssessmentSection(
-                      data: _childAssessmentData ?? ChildAssessmentData(),
-                      onChanged: (updated) =>
-                          setState(() => _childAssessmentData = updated),
+                // Eligible services grid — adults only; under-5 uses vaccination CTA
+                if (!(_patientContext!.isUnder5))
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                    sliver: SliverToBoxAdapter(
+                      child: _InlineServiceSelector(
+                        patientContext: _patientContext!,
+                        selectedProgrammes: _selectedProgrammes,
+                        pathwayProgrammes: _pathwayActivatedProgrammes,
+                        isPW: _isPW,
+                        isDelivery: _isDelivery,
+                        onProgrammeToggle: (programme, selected) {
+                          setState(() {
+                            if (selected) {
+                              _selectedProgrammes.add(programme);
+                            } else {
+                              _selectedProgrammes.remove(programme);
+                            }
+                          });
+                        },
+                        onPWToggle: (selected) {
+                          setState(() {
+                            _isPW = selected;
+                            if (!selected) _selectedProgrammes.remove(Programme.anc);
+                          });
+                        },
+                        onDeliveryToggle: (selected) {
+                          setState(() {
+                            _isDelivery = selected;
+                            if (!selected) _selectedProgrammes.remove(Programme.pnc);
+                          });
+                        },
+                      ),
                     ),
                   ),
 
@@ -591,18 +725,47 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                         if (vm.activatedPathways.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 10),
-                            child: Text(
-                              SymptomPickerStrings.servicesOpeningStatus(
-                                vm.activatedPathways.length,
-                                vm.activatedPathways
-                                    .map((p) => p.programme.wireTag)
-                                    .toList(),
-                              ),
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.navy,
-                              ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  SymptomPickerStrings.servicesOpeningStatus(
+                                    vm.activatedPathways.length,
+                                    vm.activatedPathways
+                                        .map((p) => p.programme.wireTag)
+                                        .toList(),
+                                  ),
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppColors.navy,
+                                  ),
+                                ),
+                                if (vm.scribePreTickedSymptoms.isNotEmpty ||
+                                    vm.activatedPathways.isNotEmpty)
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 2),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.auto_awesome_rounded,
+                                          size: 11,
+                                          color: Color(0xFF7C3AED),
+                                        ),
+                                        SizedBox(width: 3),
+                                        Text(
+                                          'AI selected',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Color(0xFF7C3AED),
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
 
@@ -1535,4 +1698,292 @@ class _PickerChip extends StatelessWidget {
   }
 }
 
+// ── Inline Eligible Services Grid ────────────────────────────────────────────
+//
+// 8-card grid matching the wireframe (apon_sushashthya_v14.html).
+// Meta-cards PW and Delivery are UI gates (not Programme enums) that lock/unlock
+// ANC and PNC respectively. Under-5 patients skip this widget entirely.
 
+enum _ServiceCardKind { programme, pw, delivery, general }
+
+class _ServiceCardDef {
+  const _ServiceCardDef({
+    required this.kind,
+    required this.emoji,
+    required this.label,
+    this.programme,
+  });
+
+  final _ServiceCardKind kind;
+  final Programme? programme;
+  final String emoji;
+  final String label;
+
+  bool get isPW => kind == _ServiceCardKind.pw;
+  bool get isDelivery => kind == _ServiceCardKind.delivery;
+}
+
+// Full card set — visibility filtered per patient demographics in the widget.
+const _kAllServiceCards = [
+  _ServiceCardDef(kind: _ServiceCardKind.pw,        emoji: '🤰', label: 'PW'),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🏥', label: 'ANC',      programme: Programme.anc),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🌸', label: 'FP',       programme: Programme.familyPlanning),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '👶', label: 'PNC',      programme: Programme.pnc),
+  _ServiceCardDef(kind: _ServiceCardKind.general,   emoji: '🩺', label: 'General'),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '💊', label: 'NCD',      programme: Programme.ncd),
+  _ServiceCardDef(kind: _ServiceCardKind.delivery,  emoji: '🚼', label: 'Delivery'),
+];
+
+class _InlineServiceSelector extends StatelessWidget {
+  const _InlineServiceSelector({
+    required this.patientContext,
+    required this.selectedProgrammes,
+    required this.pathwayProgrammes,
+    required this.isPW,
+    required this.isDelivery,
+    required this.onProgrammeToggle,
+    required this.onPWToggle,
+    required this.onDeliveryToggle,
+  });
+
+  final PatientContext patientContext;
+  final Set<Programme> selectedProgrammes;
+  final Set<Programme> pathwayProgrammes;
+  final bool isPW;
+  final bool isDelivery;
+  final void Function(Programme programme, bool selected) onProgrammeToggle;
+  final ValueChanged<bool> onPWToggle;
+  final ValueChanged<bool> onDeliveryToggle;
+
+  List<_ServiceCardDef> _visibleCards() {
+    final ctx = patientContext;
+    return _kAllServiceCards.where((c) {
+      switch (c.kind) {
+        case _ServiceCardKind.pw:
+        case _ServiceCardKind.delivery:
+          return ctx.isFemale;
+        case _ServiceCardKind.programme:
+          final p = c.programme!;
+          if (p == Programme.anc || p == Programme.familyPlanning) {
+            return ctx.isFemale && ctx.ageYears >= 15;
+          }
+          if (p == Programme.pnc) return ctx.isFemale;
+          return ctx.ageYears >= 15; // NCD, TB
+        case _ServiceCardKind.general:
+          return ctx.ageYears >= 15;
+      }
+    }).toList();
+  }
+
+  bool _isLocked(_ServiceCardDef card) {
+    if (card.programme == Programme.anc) return !isPW;
+    if (card.programme == Programme.pnc) return !isDelivery;
+    return false;
+  }
+
+  bool _isCardSelected(_ServiceCardDef card) {
+    if (card.isPW) return isPW;
+    if (card.isDelivery) return isDelivery;
+    if (card.programme != null) return selectedProgrammes.contains(card.programme);
+    return false; // General — untacked
+  }
+
+  void _handleTap(BuildContext context, _ServiceCardDef card) {
+    if (_isLocked(card)) {
+      final hint = card.programme == Programme.anc
+          ? 'Select "PW" first to unlock ANC'
+          : 'Select "Delivery" first to unlock PNC';
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text(hint),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ));
+      return;
+    }
+    if (card.isPW) {
+      onPWToggle(!isPW);
+    } else if (card.isDelivery) {
+      onDeliveryToggle(!isDelivery);
+    } else if (card.programme != null) {
+      onProgrammeToggle(
+          card.programme!, !selectedProgrammes.contains(card.programme));
+    }
+    // General card — no programme tracking
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cards = _visibleCards();
+    if (cards.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            const Text(
+              '✦ Eligible services',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: AppColors.navy,
+              ),
+            ),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEEF0FF),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                'Age & gender based',
+                style: TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF6B63D4),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        GridView.count(
+          crossAxisCount: 3,
+          crossAxisSpacing: 9,
+          mainAxisSpacing: 9,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          childAspectRatio: 1.05,
+          children: cards
+              .map((c) => _ServiceTile(
+                    def: c,
+                    isSelected: _isCardSelected(c),
+                    isLocked: _isLocked(c),
+                    isPathwaySuggested: c.programme != null &&
+                        pathwayProgrammes.contains(c.programme),
+                    onTap: () => _handleTap(context, c),
+                  ))
+              .toList(),
+        ),
+      ],
+    );
+  }
+}
+
+class _ServiceTile extends StatelessWidget {
+  const _ServiceTile({
+    required this.def,
+    required this.isSelected,
+    required this.isLocked,
+    required this.isPathwaySuggested,
+    required this.onTap,
+  });
+
+  final _ServiceCardDef def;
+  final bool isSelected;
+  final bool isLocked;
+  final bool isPathwaySuggested;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      enabled: !isLocked,
+      label: '${isSelected ? 'Deselect' : 'Select'} ${def.label}',
+      child: GestureDetector(
+        onTap: onTap,
+        child: Opacity(
+          opacity: isLocked ? 0.45 : 1.0,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isSelected ? AppColors.navy : const Color(0xFFE5E7EB),
+                width: isSelected ? 1.5 : 1,
+              ),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x0A000000),
+                  blurRadius: 4,
+                  offset: Offset(0, 1),
+                ),
+              ],
+            ),
+            child: Stack(
+              children: [
+                // ✦ sparkle — pathway-engine suggested
+                if (isPathwaySuggested && isSelected)
+                  Positioned(
+                    top: 5,
+                    left: 6,
+                    child: Text(
+                      '✦',
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: AppColors.navy.withValues(alpha: 0.45),
+                      ),
+                    ),
+                  ),
+                // Checkmark circle
+                Positioned(
+                  top: 5,
+                  right: 6,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 140),
+                    width: 16,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isSelected ? AppColors.navy : Colors.transparent,
+                      border: Border.all(
+                        color: isSelected
+                            ? AppColors.navy
+                            : const Color(0xFFD1D5DB),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: isSelected
+                        ? const Icon(
+                            Icons.check_rounded,
+                            size: 10,
+                            color: Colors.white,
+                          )
+                        : null,
+                  ),
+                ),
+                // Emoji + label
+                Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(def.emoji, style: const TextStyle(fontSize: 20)),
+                      const SizedBox(height: 5),
+                      Text(
+                        def.label,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w800,
+                          color: isLocked
+                              ? AppColors.navy.withValues(alpha: 0.55)
+                              : AppColors.navy,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

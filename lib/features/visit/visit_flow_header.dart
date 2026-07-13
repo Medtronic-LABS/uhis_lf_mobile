@@ -166,38 +166,46 @@ class VisitFlowHeader extends StatelessWidget {
                       ],
                     ),
                   ),
-                  // ── Programme pills top-right — step 2 only ──────────
-                  if (step == 1 && activeFormTypes.isNotEmpty) ...[
-                    const SizedBox(width: 8),
-                    Wrap(
-                      spacing: 4,
-                      runSpacing: 4,
-                      alignment: WrapAlignment.end,
-                      children: activeFormTypes.map((ft) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 7, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.transparent,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.6),
-                              width: 1,
+                  // ── Visit-type badge — step 0 and step 1 ─────────────
+                  if ((step == 0 || step == 1) && activeFormTypes.isNotEmpty)
+                    Builder(
+                      builder: (_) {
+                        final primary = activeFormTypes
+                            .map(Programme.fromTag)
+                            .whereType<Programme>()
+                            .where((p) => p != Programme.unknown)
+                            .firstOrNull;
+                        final label = primary?.displayName ??
+                            activeFormTypes.first.toUpperCase();
+                        return Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 9, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.transparent,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.6),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Text(
+                                label,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.9),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
                             ),
-                          ),
-                          child: Text(
-                            ft.toUpperCase(),
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.9),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
+                          ],
                         );
-                      }).toList(),
+                      },
                     ),
-                  ],
                 ],
               ),
               const SizedBox(height: 10),
