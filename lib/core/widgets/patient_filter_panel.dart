@@ -5,7 +5,9 @@ import '../models/mission_queue_item.dart';
 import '../models/programme.dart';
 import '../theme/app_theme.dart';
 
-String _titleCase(String s) => s
+/// Normalizes a raw, inconsistently-cased place name (village/sub-village
+/// data as synced, often all-caps) to title case for display.
+String titleCaseWords(String s) => s
     .split(' ')
     .map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1).toLowerCase())
     .join(' ');
@@ -224,7 +226,7 @@ class PatientFilterPanel extends StatelessWidget {
                     onTap: () => onVillageSelected(null),
                   ),
                   ...villages.map((v) => VillageFilterTab(
-                        label: _titleCase(v.label),
+                        label: titleCaseWords(v.label),
                         isActive: selectedVillageValue == v.value,
                         onTap: () => onVillageSelected(
                             selectedVillageValue == v.value ? null : v.value),
@@ -280,11 +282,17 @@ class VillageFilterTab extends StatelessWidget {
     required this.label,
     required this.isActive,
     required this.onTap,
+    this.fontWeight,
   });
 
   final String label;
   final bool isActive;
   final VoidCallback onTap;
+
+  /// Overrides `AppTextStyles.villageTab`'s weight for this instance only —
+  /// null (the default) keeps every existing call site (the Home dashboard)
+  /// unchanged.
+  final FontWeight? fontWeight;
 
   @override
   Widget build(BuildContext context) {
@@ -313,6 +321,7 @@ class VillageFilterTab extends StatelessWidget {
           curve: AppAnimations.standard,
           style: AppTextStyles.villageTab.copyWith(
             color: isActive ? AppColors.navy : AppColors.textMuted,
+            fontWeight: fontWeight,
           ),
           child: Text(label),
         ),

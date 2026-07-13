@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/mission/programme_reason.dart';
 import '../../../core/models/dashboard_tier.dart';
 import '../../../core/models/mission_queue_item.dart';
 import '../../../core/models/programme.dart';
@@ -30,6 +31,7 @@ class MissionQueueCard extends StatelessWidget {
     this.onAction,
     this.showActionButton = true,
     this.compact = false,
+    this.embedded = false,
   });
 
   final MissionQueueItem item;
@@ -38,6 +40,13 @@ class MissionQueueCard extends StatelessWidget {
   final VoidCallback? onAction;
   final bool showActionButton;
   final bool compact;
+
+  /// When true, renders as a flush row with no card chrome of its own (no
+  /// background/shadow/rounded corners/left border) — for embedding inside
+  /// another surface that already provides the card boundary (e.g. a
+  /// household card's primary-member slot), matching the v13 mockup's
+  /// member row, which has no shadow/border of its own either.
+  final bool embedded;
 
   @override
   Widget build(BuildContext context) {
@@ -57,14 +66,17 @@ class MissionQueueCard extends StatelessWidget {
           label: 'View patient ${item.patientName}',
           button: true,
           child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppRadius.button),
-              color: tokens.cardSurface,
-              boxShadow: AppShadows.card,
-            ),
+            decoration: embedded
+                ? const BoxDecoration()
+                : BoxDecoration(
+                    borderRadius: BorderRadius.circular(AppRadius.button),
+                    color: tokens.cardSurface,
+                    boxShadow: AppShadows.card,
+                  ),
             child: Material(
               color: Colors.transparent,
-              borderRadius: BorderRadius.circular(AppRadius.button),
+              borderRadius:
+                  embedded ? BorderRadius.zero : BorderRadius.circular(AppRadius.button),
               child: InkWell(
                 key: const Key('visit_queue_card_tap'),
                 onTap: isCompleted
@@ -78,20 +90,25 @@ class MissionQueueCard extends StatelessWidget {
                           ),
                         )
                     : onTap,
-                borderRadius: BorderRadius.circular(AppRadius.button),
+                borderRadius:
+                    embedded ? BorderRadius.zero : BorderRadius.circular(AppRadius.button),
                 child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: const BorderRadius.all(
-                      Radius.circular(AppRadius.button),
-                    ),
-                    // Left border is always neutral — the mockup never
-                    // color-codes it by status; status is conveyed only by
-                    // the right-side status pill (_StatusDot below).
-                    border: const Border(
-                      left: BorderSide(color: AppColors.border, width: 4),
-                    ),
-                  ),
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                  decoration: embedded
+                      ? const BoxDecoration()
+                      : BoxDecoration(
+                          borderRadius: const BorderRadius.all(
+                            Radius.circular(AppRadius.button),
+                          ),
+                          // Left border is always neutral — the mockup never
+                          // color-codes it by status; status is conveyed only by
+                          // the right-side status pill (_StatusDot below).
+                          border: const Border(
+                            left: BorderSide(color: AppColors.border, width: 4),
+                          ),
+                        ),
+                  padding: embedded
+                      ? const EdgeInsets.symmetric(vertical: 12)
+                      : const EdgeInsets.fromLTRB(14, 12, 14, 12),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
@@ -246,7 +263,7 @@ class MissionReasonBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (bg, fg) = _badgeColors(item.primaryProgramme);
+    final (bg, fg) = programmeBadgeColors(item.primaryProgramme);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
@@ -266,24 +283,170 @@ class MissionReasonBadge extends StatelessWidget {
       ),
     );
   }
+}
 
-  /// v13 design palette — badge colour is keyed by programme, not priority,
-  /// so the label always matches the reason text it's painted around.
-  (Color, Color) _badgeColors(Programme programme) {
-    switch (programme) {
-      case Programme.anc:
-        return (const Color(0xFFFDF2F8), const Color(0xFF9D174D));
-      case Programme.pnc:
-        return (const Color(0xFFEEF0FF), const Color(0xFF4C1D95));
-      case Programme.imci:
-      case Programme.epi:
-      case Programme.ncd:
-        return (const Color(0xFFFFFBEB), const Color(0xFF92400E));
-      case Programme.tb:
-        return (const Color(0xFFF0FDF4), const Color(0xFF065F46));
-      default:
-        return (const Color(0xFFEEF0FF), const Color(0xFF1B2B5E));
-    }
+/// v13 design palette — badge colour is keyed by programme, not priority, so
+/// the label always matches the reason text it's painted around. Public and
+/// top-level so `HouseholdListScreen` (a non-queue member has no
+/// `MissionQueueItem` to key off) can render an identical badge.
+(Color, Color) programmeBadgeColors(Programme programme) {
+  switch (programme) {
+    case Programme.anc:
+      return (const Color(0xFFFDF2F8), const Color(0xFF9D174D));
+    case Programme.pnc:
+      return (const Color(0xFFEEF0FF), const Color(0xFF4C1D95));
+    case Programme.imci:
+    case Programme.epi:
+    case Programme.ncd:
+      return (const Color(0xFFFFFBEB), const Color(0xFF92400E));
+    case Programme.tb:
+      return (const Color(0xFFF0FDF4), const Color(0xFF065F46));
+    default:
+      return (const Color(0xFFEEF0FF), const Color(0xFF1B2B5E));
+  }
+}
+
+/// Flush member row for a patient with no active mission-queue entry —
+/// name+age/gender+programme badge, optional address line, optional phone
+/// line — no avatar, no card chrome of its own (always embedded inside a
+/// caller's own card). Reuses the same `AppTextStyles.worklist*` tokens
+/// `MissionQueueCard` uses so the two widgets never visually drift, and the
+/// same `programmeReason`/`programmeBadgeColors` inputs so a patient's badge
+/// reads identically whether the household list, the household detail
+/// screen, or (via `MissionQueueCard`) the dashboard renders them.
+///
+/// `onTap` is required rather than optional/shared: each caller decides its
+/// own tap behavior (e.g. the household list navigates to Patient Details,
+/// the household detail screen opens an in-place member sheet) — sharing a
+/// default here risks one screen silently adopting another's navigation.
+class PatientBadgeRow extends StatelessWidget {
+  const PatientBadgeRow({
+    super.key,
+    required this.name,
+    required this.onTap,
+    this.age,
+    this.gender,
+    this.phoneNumber,
+    this.programmes = const {},
+    this.ancVisitCount = 0,
+    this.pncVisitCount = 0,
+    this.householdNo,
+    this.householdName,
+  });
+
+  final String? name;
+  final int? age;
+  final String? gender;
+  final String? phoneNumber;
+  final Set<Programme> programmes;
+  final int ancVisitCount;
+  final int pncVisitCount;
+
+  /// Household-context line (e.g. "House #12, Rafiqul Islam's Household") —
+  /// omit both when the caller already shows the member inside a known
+  /// household (e.g. the household detail screen's own roster).
+  final String? householdNo;
+  final String? householdName;
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    // Same shared logic the dashboard's real MissionQueueCard badge uses —
+    // visit-count-aware, not an approximation of it.
+    final badgeLabel = programmeReason(
+      programmes: programmes,
+      ancVisitCount: ancVisitCount,
+      pncVisitCount: pncVisitCount,
+    );
+    final (badgeBg, badgeFg) = programmeBadgeColors(
+      primaryProgrammeOf(programmes),
+    );
+
+    final address = [
+      householdNo != null ? 'House #$householdNo' : null,
+      householdName,
+    ].whereType<String>().join(', ');
+
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 6,
+                    runSpacing: 3,
+                    children: [
+                      Text(
+                        name ?? CommonStrings.unnamed,
+                        style: AppTextStyles.worklistPatientName,
+                      ),
+                      if (age != null || gender != null)
+                        Text(
+                          [
+                            if (age != null) '$age',
+                            if (gender != null)
+                              gender!.substring(0, 1).toUpperCase(),
+                          ].join('/'),
+                          style: AppTextStyles.worklistPatientMeta,
+                        ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: badgeBg,
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: Text(
+                          badgeLabel,
+                          style: TextStyle(
+                            fontFamily: 'NunitoSans',
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: badgeFg,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (address.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        address,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.worklistAddress.copyWith(
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ),
+                  if (phoneNumber != null && phoneNumber!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        phoneNumber!,
+                        style: AppTextStyles.worklistPhone.copyWith(
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

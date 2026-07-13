@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/theme.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/widgets/empty_state_card.dart';
+import '../../core/widgets/header_icon_button.dart';
 import '../../core/widgets/phi_screen.dart';
 import '../../core/db/assessment_dao.dart';
 import '../../core/db/encounter_dao.dart';
@@ -191,7 +194,7 @@ class _PatientContextScreenState
             e.completedAt ?? e.startedAt);
         final prog = Programme.fromString(e.programme);
         final serviceLabel = prog == Programme.unknown
-            ? 'Assessment'
+            ? PatientContextStrings.genericAssessmentLabel
             : prog.wireTag;
         out.add(MemberAssessment(
           id: e.id,
@@ -223,7 +226,7 @@ class _PatientContextScreenState
             : DateTime.fromMillisecondsSinceEpoch(row.occurredAt!);
         out.add(MemberAssessment(
           id: row.id,
-          type: (row.kind ?? 'Assessment').toUpperCase(),
+          type: (row.kind ?? PatientContextStrings.genericAssessmentLabel).toUpperCase(),
           date: date,
           rawJson: <String, dynamic>{'kind': row.kind, 'raw': row.rawJson},
         ));
@@ -510,7 +513,7 @@ class _PatientContextScreenState
       return PatientOrMemberData(
         remoteMember: MemberHealthDetails(
           id: memberId,
-          name: data['name'] as String? ?? 'Unknown',
+          name: data['name'] as String? ?? PatientContextStrings.unknownMemberName,
           gender: data['gender'] as String?,
           age: data['age'] as int?,
           dateOfBirth: data['dateOfBirth'] as String?,
@@ -541,17 +544,32 @@ class _PatientContextScreenState
       if (!mounted) return;
       setState(() => _future = Future.value(data));
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(PatientContextStrings.refreshDone)),
+        SnackBar(content: Text(PatientContextStrings.refreshDone)),
       );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(PatientContextStrings.refreshFailed)),
+        SnackBar(content: Text(PatientContextStrings.refreshFailed)),
       );
     } finally {
       if (mounted) setState(() => _refreshing = false);
     }
   }
+
+  // Purple-header screens (this screen's real header, and its loading
+  // skeleton which mirrors it) need a transparent, light-icon status bar so
+  // the header color paints through it. The canvas-background "not found"
+  // state needs the opposite (dark icons) or its icons would be invisible.
+  static const _lightStatusBar = SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+    statusBarBrightness: Brightness.dark,
+  );
+  static const _darkStatusBar = SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.dark,
+    statusBarBrightness: Brightness.light,
+  );
 
   @override
   Widget buildPhi(BuildContext context) {
@@ -562,38 +580,45 @@ class _PatientContextScreenState
         future: _future,
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
-            return SafeArea(
-              child: SkeletonPatientDetail(
-                name: widget.memberData?['name'] as String?,
+            return AnnotatedRegion<SystemUiOverlayStyle>(
+              value: _lightStatusBar,
+              child: SafeArea(
+                top: false,
+                child: SkeletonPatientDetail(
+                  name: widget.memberData?['name'] as String?,
+                ),
               ),
             );
           }
           final data = snap.data;
           if (data == null || !data.hasData) {
-            return SafeArea(
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.person_search_outlined,
-                        size: 64,
-                        color: Theme.of(context).colorScheme.outline,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        PatientContextStrings.notFound,
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodyLarge,
-                      ),
-                      const SizedBox(height: 24),
-                      FilledButton.tonal(
-                        onPressed: _load,
-                        child: const Text(CommonStrings.retry),
-                      ),
-                    ],
+            return AnnotatedRegion<SystemUiOverlayStyle>(
+              value: _darkStatusBar,
+              child: SafeArea(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.person_search_outlined,
+                          size: 64,
+                          color: AppColors.textMuted,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          PatientContextStrings.notFound,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 15, color: AppColors.textPrimary),
+                        ),
+                        const SizedBox(height: 24),
+                        FilledButton.tonal(
+                          onPressed: _load,
+                          child: const Text(CommonStrings.retry),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -604,7 +629,10 @@ class _PatientContextScreenState
           // the same-day visit list.
           final isUrgent = data.riskBand == Band.band1 ||
               data.riskBand == Band.band2;
-          return SafeArea(
+          return AnnotatedRegion<SystemUiOverlayStyle>(
+            value: _lightStatusBar,
+            child: SafeArea(
+            top: false,
             bottom: false,
             child: Column(
               children: [
@@ -622,8 +650,15 @@ class _PatientContextScreenState
                     householdId: data.householdId!,
                   ),
                 Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(14, 14, 14, 110),
+                  child: RefreshIndicator(
+                    onRefresh: _refresh,
+                    child: ListView(
+                    padding: const EdgeInsets.fromLTRB(
+                      14,
+                      14,
+                      14,
+                      AppSpacing.stickyBarClearance,
+                    ),
                     children: [
                       _GeminiSummaryBanner(
                         patientId: data.patientId ?? widget.patientId,
@@ -660,9 +695,11 @@ class _PatientContextScreenState
                         origin: widget.origin,
                       ),
                     ],
+                    ),
                   ),
                 ),
               ],
+            ),
             ),
           );
         },
@@ -680,105 +717,104 @@ class _AssessmentsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final dateFormat = DateFormat('MMM d, yyyy · h:mm a');
 
     if (assessments.isEmpty) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.assignment_outlined, color: scheme.primary),
-                  const SizedBox(width: 8),
-                  Text(
-                    PatientContextStrings.sectionRecentVisits,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Center(
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.history_outlined,
-                      size: 48,
-                      color: scheme.outline,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'No assessments yet',
-                      style: TextStyle(color: scheme.onSurfaceVariant),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Card(
-      child: Padding(
+      return Container(
         padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.cardSurface,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: AppShadows.householdCard,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.assignment_outlined, color: scheme.primary),
+                const Icon(Icons.assignment_outlined, color: AppColors.navy),
                 const SizedBox(width: 8),
                 Text(
                   PatientContextStrings.sectionRecentVisits,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-                const Spacer(),
-                Text(
-                  '${assessments.length} total',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            const Divider(height: 1),
-            const SizedBox(height: 8),
-            ...assessments.take(5).map((a) => _AssessmentTile(
-                  assessment: a,
-                  dateFormat: dateFormat,
-                )),
-            if (assessments.length > 5)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Center(
-                  child: TextButton(
-                    onPressed: () {
-                      showModalBottomSheet(
-                        context: context,
-                        isScrollControlled: true,
-                        backgroundColor: Colors.transparent,
-                        builder: (_) => _AllAssessmentsSheet(
-                          assessments: assessments,
-                          dateFormat: dateFormat,
-                        ),
-                      );
-                    },
-                    child: Text('View all ${assessments.length} assessments'),
+            const SizedBox(height: 16),
+            EmptyStateCard(
+              icon: Icons.history_outlined,
+              iconColor: AppColors.textMuted,
+              iconBg: AppColors.progressTrack,
+              title: PatientContextStrings.noAssessmentsYet,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: AppShadows.householdCard,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.assignment_outlined, color: AppColors.navy),
+              const SizedBox(width: 8),
+              Text(
+                PatientContextStrings.sectionRecentVisits,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                PatientContextStrings.assessmentsTotal(assessments.length),
+                style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Divider(height: 1, color: AppColors.border),
+          const SizedBox(height: 8),
+          ...assessments.take(5).map((a) => _AssessmentTile(
+                assessment: a,
+                dateFormat: dateFormat,
+              )),
+          if (assessments.length > 5)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Center(
+                child: TextButton(
+                  onPressed: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => _AllAssessmentsSheet(
+                        assessments: assessments,
+                        dateFormat: dateFormat,
+                      ),
+                    );
+                  },
+                  child: Text(
+                    PatientContextStrings.viewAllAssessments(assessments.length),
                   ),
                 ),
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }
@@ -796,15 +832,14 @@ class _AllAssessmentsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return DraggableScrollableSheet(
       initialChildSize: 0.7,
       minChildSize: 0.4,
       maxChildSize: 0.95,
       builder: (context, scrollController) => Container(
-        decoration: BoxDecoration(
-          color: scheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        decoration: const BoxDecoration(
+          color: AppColors.cardSurface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
         ),
         child: Column(
           children: [
@@ -813,7 +848,7 @@ class _AllAssessmentsSheet extends StatelessWidget {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: scheme.outlineVariant,
+                color: AppColors.border,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -823,21 +858,21 @@ class _AllAssessmentsSheet extends StatelessWidget {
                 children: [
                   Text(
                     PatientContextStrings.allAssessmentsTitle,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
                   const Spacer(),
                   Text(
-                    '${assessments.length} total',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
+                    PatientContextStrings.assessmentsTotal(assessments.length),
+                    style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                   ),
                 ],
               ),
             ),
-            const Divider(height: 1),
+            const Divider(height: 1, color: AppColors.border),
             Expanded(
               child: ListView.builder(
                 controller: scrollController,
@@ -879,7 +914,6 @@ class _AssessmentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final progColors = Theme.of(context).extension<ProgrammeColors>()!;
 
     Color typeColor;
@@ -902,12 +936,15 @@ class _AssessmentTile extends StatelessWidget {
         typeIcon = Icons.healing;
         break;
       default:
-        typeColor = scheme.primary;
+        typeColor = AppColors.navy;
         typeIcon = Icons.assignment;
     }
 
     return Semantics(
-      label: 'View ${assessment.type} assessment on ${dateFormat.format(assessment.date)}',
+      label: PatientContextStrings.viewAssessmentSemantics(
+        assessment.type,
+        dateFormat.format(assessment.date),
+      ),
       button: true,
       child: InkWell(
       key: const Key('patient_assessment_row_tap'),
@@ -950,10 +987,8 @@ class _AssessmentTile extends StatelessWidget {
                       if (assessment.visitNumber != null) ...[
                         const SizedBox(width: 6),
                         Text(
-                          'Visit ${assessment.visitNumber}',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: scheme.onSurfaceVariant,
-                              ),
+                          PatientContextStrings.visitNumberLabel(assessment.visitNumber!),
+                          style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                         ),
                       ],
                     ],
@@ -961,14 +996,12 @@ class _AssessmentTile extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     dateFormat.format(assessment.date),
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
+                    style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                   ),
                 ],
               ),
             ),
-            Icon(Icons.chevron_right, color: scheme.outline),
+            const Icon(Icons.chevron_right, color: AppColors.textMuted),
           ],
         ),
       ),
@@ -989,10 +1022,9 @@ class _AssessmentDetailSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final progColors = Theme.of(context).extension<ProgrammeColors>()!;
     final raw = assessment.rawJson;
-    
+
     Color typeColor;
     IconData typeIcon;
     switch (assessment.type) {
@@ -1013,7 +1045,7 @@ class _AssessmentDetailSheet extends StatelessWidget {
         typeIcon = Icons.healing;
         break;
       default:
-        typeColor = scheme.primary;
+        typeColor = AppColors.navy;
         typeIcon = Icons.assignment;
     }
 
@@ -1033,9 +1065,9 @@ class _AssessmentDetailSheet extends StatelessWidget {
       maxChildSize: 0.9,
       builder: (context, scrollController) {
         return Container(
-          decoration: BoxDecoration(
-            color: scheme.surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          decoration: const BoxDecoration(
+            color: AppColors.cardSurface,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
           child: Column(
             children: [
@@ -1045,7 +1077,7 @@ class _AssessmentDetailSheet extends StatelessWidget {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: scheme.outlineVariant,
+                  color: AppColors.border,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -1092,9 +1124,9 @@ class _AssessmentDetailSheet extends StatelessWidget {
                                     color: AppColors.statusSuccess.withValues(alpha: 0.15),
                                     borderRadius: BorderRadius.circular(4),
                                   ),
-                                  child: const Text(
-                                    'Latest',
-                                    style: TextStyle(
+                                  child: Text(
+                                    PatientContextStrings.latestBadge,
+                                    style: const TextStyle(
                                       color: AppColors.statusSuccess,
                                       fontWeight: FontWeight.w600,
                                       fontSize: 10,
@@ -1106,16 +1138,18 @@ class _AssessmentDetailSheet extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Visit on ${dateFormat.format(assessment.date)}',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
+                            PatientContextStrings.visitOnLabel(dateFormat.format(assessment.date)),
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
                           ),
                         ],
                       ),
                     ),
                     IconButton(
-                      tooltip: 'Close',
+                      tooltip: PatientContextStrings.close,
                       icon: const Icon(Icons.close),
                       onPressed: () => Navigator.pop(context),
                     ),
@@ -1129,30 +1163,38 @@ class _AssessmentDetailSheet extends StatelessWidget {
                   controller: scrollController,
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   children: [
-                    _DetailRow(label: 'Service', value: serviceProvided ?? assessment.type),
+                    _DetailRow(
+                      label: PatientContextStrings.serviceLabel,
+                      value: serviceProvided ?? assessment.type,
+                    ),
                     if (assessment.visitNumber != null)
-                      _DetailRow(label: 'Visit Number', value: '${assessment.visitNumber}'),
+                      _DetailRow(
+                        label: PatientContextStrings.visitNumberFieldLabel,
+                        value: '${assessment.visitNumber}',
+                      ),
                     if (encounterId != null)
-                      _DetailRow(label: 'Encounter ID', value: encounterId),
+                      _DetailRow(label: PatientContextStrings.encounterIdLabel, value: encounterId),
                     if (memberId != null)
-                      _DetailRow(label: 'Member ID', value: memberId),
+                      _DetailRow(label: PatientContextStrings.memberIdLabel, value: memberId),
                     if (referralStatus != null && referralStatus.isNotEmpty)
                       _DetailRow(
-                        label: 'Referral Status',
+                        label: PatientContextStrings.referralStatusLabel,
                         value: referralStatus,
                         valueColor: referralStatus.toLowerCase() == 'referred' ? AppColors.statusWarning : null,
                       ),
                     if (referralReason != null && referralReason.isNotEmpty)
-                      _DetailRow(label: 'Referral Reason', value: referralReason),
+                      _DetailRow(label: PatientContextStrings.referralReasonLabel, value: referralReason),
                     if (nextFollowUpDate != null && nextFollowUpDate.isNotEmpty)
-                      _DetailRow(label: 'Next Follow-up', value: nextFollowUpDate),
+                      _DetailRow(label: PatientContextStrings.nextFollowUpLabel, value: nextFollowUpDate),
                     if (customStatus != null && customStatus.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       Text(
-                        'Status Indicators',
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
+                        PatientContextStrings.statusIndicatorsTitle,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Wrap(
@@ -1237,44 +1279,44 @@ class _AssessmentDetailSheet extends StatelessWidget {
           if (parsed != null) { sys = parsed.$1; dia = parsed.$2; }
         }
         if (sys != null && dia != null) {
-          fields.add(_ClinicalField('Blood Pressure', '${sys.toInt()}/${dia.toInt()} mmHg',
+          fields.add(_ClinicalField(PatientContextStrings.bloodPressureLabel, '${sys.toInt()}/${dia.toInt()} mmHg',
               icon: Icons.favorite, urgent: sys >= 140 || dia >= 90));
         }
         final glucose = num_('glucoseValue') ?? num_('bloodGlucose') ?? num_('bg');
         final glucoseType = str_('glucoseType') ?? str_('bgType');
         if (glucose != null) {
-          final label = glucoseType != null ? 'Glucose (${glucoseType.toLowerCase()})' : 'Glucose';
+          final label = PatientContextStrings.glucoseLabel(glucoseType?.toLowerCase());
           fields.add(_ClinicalField(label, '${glucose.toStringAsFixed(1)} mg/dL',
               icon: Icons.bloodtype, urgent: glucose > 200));
         }
         final height = num_('height'); final weight = num_('weight'); final bmi = num_('bmi');
-        if (height != null) fields.add(_ClinicalField('Height', '${height.toInt()} cm', icon: Icons.straighten));
-        if (weight != null) fields.add(_ClinicalField('Weight', '${weight.toStringAsFixed(1)} kg', icon: Icons.monitor_weight));
-        if (bmi != null) fields.add(_ClinicalField('BMI', bmi.toStringAsFixed(1), icon: Icons.calculate));
+        if (height != null) fields.add(_ClinicalField(PatientContextStrings.heightLabel, '${height.toInt()} cm', icon: Icons.straighten));
+        if (weight != null) fields.add(_ClinicalField(PatientContextStrings.weightLabel, '${weight.toStringAsFixed(1)} kg', icon: Icons.monitor_weight));
+        if (bmi != null) fields.add(_ClinicalField(PatientContextStrings.bmiLabel, bmi.toStringAsFixed(1), icon: Icons.calculate));
         final hb = num_('hemoglobin');
         if (hb != null) {
-          fields.add(_ClinicalField('Haemoglobin', '${hb.toStringAsFixed(1)} g/dL',
+          fields.add(_ClinicalField(PatientContextStrings.haemoglobinLabel, '${hb.toStringAsFixed(1)} g/dL',
               icon: Icons.opacity, urgent: hb < 10.0));
         }
         final smoker = bool_('isRegularSmoker') ?? bool_('isSmoking');
-        if (smoker != null) fields.add(_ClinicalField('Smoking', smoker ? 'Yes' : 'No', icon: Icons.smoking_rooms));
+        if (smoker != null) fields.add(_ClinicalField(PatientContextStrings.smokingLabel, smoker ? PatientContextStrings.yes : PatientContextStrings.no, icon: Icons.smoking_rooms));
         final alcohol = bool_('isDrinkingAlcohol') ?? bool_('alcoholConsumption');
-        if (alcohol != null) fields.add(_ClinicalField('Alcohol', alcohol ? 'Yes' : 'No', icon: Icons.local_bar));
+        if (alcohol != null) fields.add(_ClinicalField(PatientContextStrings.alcoholLabel, alcohol ? PatientContextStrings.yes : PatientContextStrings.no, icon: Icons.local_bar));
 
       case 'ANC':
         final ancVisit = str_('ancVisitNumber');
-        if (ancVisit != null) fields.add(_ClinicalField('ANC Visit', ancVisit, icon: Icons.calendar_today));
+        if (ancVisit != null) fields.add(_ClinicalField(PatientContextStrings.ancVisitLabel, ancVisit, icon: Icons.calendar_today));
         final ga = num_('gestationalAge') ?? num_('gestationAge');
-        if (ga != null) fields.add(_ClinicalField('Gestational Age', '${ga.toInt()} weeks', icon: Icons.calendar_month));
+        if (ga != null) fields.add(_ClinicalField(PatientContextStrings.gestationalAgeLabel, '${ga.toInt()} weeks', icon: Icons.calendar_month));
         final gravida = str_('gravida');
         final parity = str_('parity');
         if (gravida != null || parity != null) {
-          fields.add(_ClinicalField('G/P', 'G${gravida ?? '?'} P${parity ?? '?'}', icon: Icons.child_friendly));
+          fields.add(_ClinicalField(PatientContextStrings.gravidaParityLabel, 'G${gravida ?? '?'} P${parity ?? '?'}', icon: Icons.child_friendly));
         }
         final fetuses = num_('noOfFetus') ?? num_('numberOfFetus');
-        if (fetuses != null && fetuses > 1) fields.add(_ClinicalField('Fetuses', fetuses.toInt().toString(), icon: Icons.group));
+        if (fetuses != null && fetuses > 1) fields.add(_ClinicalField(PatientContextStrings.fetusesLabel, fetuses.toInt().toString(), icon: Icons.group));
         final fh = num_('fundalHeight');
-        if (fh != null) fields.add(_ClinicalField('Fundal Height', '${fh.toStringAsFixed(1)} cm', icon: Icons.height));
+        if (fh != null) fields.add(_ClinicalField(PatientContextStrings.fundalHeightLabel, '${fh.toStringAsFixed(1)} cm', icon: Icons.height));
         // BP: try numeric fields first, then obs['bp'] string
         var sys = num_('avgSystolic') ?? num_('systolicBp');
         var dia = num_('avgDiastolic') ?? num_('diastolicBp');
@@ -1283,31 +1325,31 @@ class _AssessmentDetailSheet extends StatelessWidget {
           if (parsed != null) { sys = parsed.$1; dia = parsed.$2; }
         }
         if (sys != null && dia != null) {
-          fields.add(_ClinicalField('Blood Pressure', '${sys.toInt()}/${dia.toInt()} mmHg',
+          fields.add(_ClinicalField(PatientContextStrings.bloodPressureLabel, '${sys.toInt()}/${dia.toInt()} mmHg',
               icon: Icons.favorite, urgent: sys >= 140 || dia >= 90));
         }
         final weight = num_('weight');
-        if (weight != null) fields.add(_ClinicalField('Weight', '${weight.toStringAsFixed(1)} kg', icon: Icons.monitor_weight));
+        if (weight != null) fields.add(_ClinicalField(PatientContextStrings.weightLabel, '${weight.toStringAsFixed(1)} kg', icon: Icons.monitor_weight));
         final hb = num_('hemoglobin');
         if (hb != null) {
-          fields.add(_ClinicalField('Haemoglobin', '${hb.toStringAsFixed(1)} g/dL',
+          fields.add(_ClinicalField(PatientContextStrings.haemoglobinLabel, '${hb.toStringAsFixed(1)} g/dL',
               icon: Icons.opacity, urgent: hb < 10.0));
         }
         final glucose = num_('bg') ?? num_('glucoseValue') ?? num_('bloodGlucose');
         final glucoseType = str_('bgType') ?? str_('glucoseType');
         if (glucose != null) {
-          final label = glucoseType != null ? 'Glucose (${glucoseType.toLowerCase()})' : 'Glucose';
+          final label = PatientContextStrings.glucoseLabel(glucoseType?.toLowerCase());
           fields.add(_ClinicalField(label, '${glucose.toStringAsFixed(1)} mg/dL', icon: Icons.bloodtype));
         }
         final fetalMovement = bool_('fetalMovement') ?? bool_('isFetalMovementNormal');
         if (fetalMovement != null) {
-          fields.add(_ClinicalField('Fetal Movement', fetalMovement ? 'Normal' : 'Abnormal',
+          fields.add(_ClinicalField(PatientContextStrings.fetalMovementLabel, fetalMovement ? PatientContextStrings.normal : PatientContextStrings.abnormal,
               icon: Icons.waves, urgent: fetalMovement == false));
         }
 
       case 'PNC':
         final pncVisit = str_('pncVisitNumber');
-        if (pncVisit != null) fields.add(_ClinicalField('PNC Visit', pncVisit, icon: Icons.calendar_today));
+        if (pncVisit != null) fields.add(_ClinicalField(PatientContextStrings.pncVisitLabel, pncVisit, icon: Icons.calendar_today));
         // BP: try numeric fields first, then obs['bp'] string
         var sys = num_('avgSystolic') ?? num_('systolicBp');
         var dia = num_('avgDiastolic') ?? num_('diastolicBp');
@@ -1316,45 +1358,45 @@ class _AssessmentDetailSheet extends StatelessWidget {
           if (parsed != null) { sys = parsed.$1; dia = parsed.$2; }
         }
         if (sys != null && dia != null) {
-          fields.add(_ClinicalField('Blood Pressure', '${sys.toInt()}/${dia.toInt()} mmHg',
+          fields.add(_ClinicalField(PatientContextStrings.bloodPressureLabel, '${sys.toInt()}/${dia.toInt()} mmHg',
               icon: Icons.favorite, urgent: sys >= 140 || dia >= 90));
         }
         final weight = num_('weight');
-        if (weight != null) fields.add(_ClinicalField('Weight', '${weight.toStringAsFixed(1)} kg', icon: Icons.monitor_weight));
+        if (weight != null) fields.add(_ClinicalField(PatientContextStrings.weightLabel, '${weight.toStringAsFixed(1)} kg', icon: Icons.monitor_weight));
         final hb = num_('hemoglobin');
         if (hb != null) {
-          fields.add(_ClinicalField('Haemoglobin', '${hb.toStringAsFixed(1)} g/dL',
+          fields.add(_ClinicalField(PatientContextStrings.haemoglobinLabel, '${hb.toStringAsFixed(1)} g/dL',
               icon: Icons.opacity, urgent: hb < 10.0));
         }
         final breastfeeding = bool_('isBreastfeeding') ?? bool_('breastfeeding');
-        if (breastfeeding != null) fields.add(_ClinicalField('Breastfeeding', breastfeeding ? 'Yes' : 'No', icon: Icons.child_friendly));
+        if (breastfeeding != null) fields.add(_ClinicalField(PatientContextStrings.breastfeedingLabel, breastfeeding ? PatientContextStrings.yes : PatientContextStrings.no, icon: Icons.child_friendly));
 
       case 'IMCI':
         final height = num_('height'); final weight = num_('weight'); final muac = num_('muac');
-        if (height != null) fields.add(_ClinicalField('Height', '${height.toInt()} cm', icon: Icons.straighten));
-        if (weight != null) fields.add(_ClinicalField('Weight', '${weight.toStringAsFixed(1)} kg', icon: Icons.monitor_weight));
+        if (height != null) fields.add(_ClinicalField(PatientContextStrings.heightLabel, '${height.toInt()} cm', icon: Icons.straighten));
+        if (weight != null) fields.add(_ClinicalField(PatientContextStrings.weightLabel, '${weight.toStringAsFixed(1)} kg', icon: Icons.monitor_weight));
         if (muac != null) {
-          fields.add(_ClinicalField('MUAC', '${muac.toStringAsFixed(1)} cm', icon: Icons.straighten,
+          fields.add(_ClinicalField(PatientContextStrings.muacLabel, '${muac.toStringAsFixed(1)} cm', icon: Icons.straighten,
               urgent: muac < 12.5));
         }
         final temp = num_('temperature') ?? num_('temp');
         if (temp != null) {
-          fields.add(_ClinicalField('Temperature', '${temp.toStringAsFixed(1)} °C', icon: Icons.thermostat,
+          fields.add(_ClinicalField(PatientContextStrings.temperatureLabel, '${temp.toStringAsFixed(1)} °C', icon: Icons.thermostat,
               urgent: temp >= 38.5));
         }
         final diagnosis = str_('childDiagnosis') ?? str_('diagnosis') ?? str_('classification');
-        if (diagnosis != null) fields.add(_ClinicalField('Diagnosis', diagnosis, icon: Icons.medical_information));
+        if (diagnosis != null) fields.add(_ClinicalField(PatientContextStrings.diagnosisLabel, diagnosis, icon: Icons.medical_information));
 
       case 'TB':
         final cough = num_('coughDuration') ?? num_('durationOfCough');
-        if (cough != null) fields.add(_ClinicalField('Cough Duration', '${cough.toInt()} days', icon: Icons.air));
+        if (cough != null) fields.add(_ClinicalField(PatientContextStrings.coughDurationLabel, '${cough.toInt()} days', icon: Icons.air));
         final diabetic = bool_('isDiabetic') ?? bool_('hasDiabetes');
-        if (diabetic != null) fields.add(_ClinicalField('Diabetes', diabetic ? 'Yes' : 'No', icon: Icons.bloodtype));
+        if (diabetic != null) fields.add(_ClinicalField(PatientContextStrings.diabetesLabel, diabetic ? PatientContextStrings.yes : PatientContextStrings.no, icon: Icons.bloodtype));
         final smoking = bool_('isSmoking') ?? bool_('isRegularSmoker');
-        if (smoking != null) fields.add(_ClinicalField('Smoking', smoking ? 'Yes' : 'No', icon: Icons.smoking_rooms));
+        if (smoking != null) fields.add(_ClinicalField(PatientContextStrings.smokingLabel, smoking ? PatientContextStrings.yes : PatientContextStrings.no, icon: Icons.smoking_rooms));
         final contact = bool_('hasTbContact') ?? bool_('tbContact');
         if (contact != null) {
-          fields.add(_ClinicalField('TB Contact', contact ? 'Yes' : 'No', icon: Icons.people,
+          fields.add(_ClinicalField(PatientContextStrings.tbContactLabel, contact ? PatientContextStrings.yes : PatientContextStrings.no, icon: Icons.people,
               urgent: contact == true));
         }
     }
@@ -1362,32 +1404,33 @@ class _AssessmentDetailSheet extends StatelessWidget {
     if (fields.isEmpty) return const SizedBox.shrink();
 
     final (label, icon) = switch (assessment.type) {
-      'NCD'  => ('NCD Screening Findings', Icons.monitor_heart_outlined),
-      'ANC'  => ('Antenatal Care Findings', Icons.pregnant_woman),
-      'PNC'  => ('Postnatal Care Findings', Icons.child_friendly),
-      'IMCI' => ('Child Health Findings', Icons.child_care),
-      'TB'   => ('TB Screening Findings', Icons.air),
-      _      => ('Clinical Findings', Icons.assignment),
+      'NCD'  => (PatientContextStrings.ncdFindingsTitle, Icons.monitor_heart_outlined),
+      'ANC'  => (PatientContextStrings.ancFindingsTitle, Icons.pregnant_woman),
+      'PNC'  => (PatientContextStrings.pncFindingsTitle, Icons.child_friendly),
+      'IMCI' => (PatientContextStrings.childHealthFindingsTitle, Icons.child_care),
+      'TB'   => (PatientContextStrings.tbFindingsTitle, Icons.air),
+      _      => (PatientContextStrings.clinicalFindingsTitle, Icons.assignment),
     };
 
-    return Card(
-      color: typeColor.withValues(alpha: 0.05),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              Icon(icon, color: typeColor, size: 18),
-              const SizedBox(width: 8),
-              Text(label, style: TextStyle(color: typeColor, fontWeight: FontWeight.w600)),
-            ]),
-            const SizedBox(height: 12),
-            const Divider(height: 1),
-            const SizedBox(height: 8),
-            ...fields.map((f) => _ClinicalFieldRow(field: f)),
-          ],
-        ),
+    return Container(
+      decoration: BoxDecoration(
+        color: typeColor.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(icon, color: typeColor, size: 18),
+            const SizedBox(width: 8),
+            Text(label, style: TextStyle(color: typeColor, fontWeight: FontWeight.w600)),
+          ]),
+          const SizedBox(height: 12),
+          const Divider(height: 1, color: AppColors.border),
+          const SizedBox(height: 8),
+          ...fields.map((f) => _ClinicalFieldRow(field: f)),
+        ],
       ),
     );
   }
@@ -1407,10 +1450,9 @@ class _ClinicalFieldRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final color = field.urgent ? scheme.error : scheme.onSurfaceVariant;
+    final color = field.urgent ? AppColors.statusCritical : AppColors.textMuted;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
       child: Row(
         children: [
           if (field.icon != null)
@@ -1421,7 +1463,7 @@ class _ClinicalFieldRow extends StatelessWidget {
           SizedBox(
             width: 130,
             child: Text(field.label,
-                style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
+                style: const TextStyle(fontSize: 13, color: AppColors.textMuted)),
           ),
           Expanded(
             child: Text(
@@ -1429,12 +1471,12 @@ class _ClinicalFieldRow extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: field.urgent ? scheme.error : null,
+                color: field.urgent ? AppColors.statusCritical : AppColors.textPrimary,
               ),
             ),
           ),
           if (field.urgent)
-            const Icon(Icons.warning_amber_rounded, size: 14, color: Colors.orange),
+            const Icon(Icons.warning_amber_rounded, size: 14, color: AppColors.statusWarning),
         ],
       ),
     );
@@ -1454,9 +1496,8 @@ class _DetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1464,18 +1505,16 @@ class _DetailRow extends StatelessWidget {
             width: 120,
             child: Text(
               label,
-              style: TextStyle(
-                color: scheme.onSurfaceVariant,
-                fontSize: 14,
-              ),
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 14),
             ),
           ),
           Expanded(
             child: Text(
               value,
               style: TextStyle(
+                fontSize: 14,
                 fontWeight: FontWeight.w500,
-                color: valueColor,
+                color: valueColor ?? AppColors.textPrimary,
               ),
             ),
           ),
@@ -1504,14 +1543,14 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final d = widget.data;
+    final scheme = Theme.of(context).colorScheme;
 
     Widget buildRow(String label, String? value,
         {IconData? icon, VoidCallback? onTap}) {
       if (value == null || value.isEmpty) return const SizedBox.shrink();
       final row = Padding(
-        padding: const EdgeInsets.symmetric(vertical: 5),
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1520,16 +1559,13 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
               child: Row(
                 children: [
                   if (icon != null) ...[
-                    Icon(icon, size: 14, color: scheme.onSurfaceVariant),
+                    Icon(icon, size: 14, color: AppColors.textMuted),
                     const SizedBox(width: 4),
                   ],
                   Expanded(
                     child: Text(
                       label,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: scheme.onSurfaceVariant,
-                      ),
+                      style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
                     ),
                   ),
                 ],
@@ -1538,11 +1574,15 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
             Expanded(
               child: Text(
                 value,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
               ),
             ),
             if (onTap != null)
-              Icon(Icons.chevron_right, size: 16, color: scheme.onSurfaceVariant),
+              const Icon(Icons.chevron_right, size: 16, color: AppColors.textMuted),
           ],
         ),
       );
@@ -1563,10 +1603,10 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
             padding: const EdgeInsets.only(top: 10, bottom: 4),
             child: Text(
               title,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: scheme.primary,
+                color: AppColors.navy,
                 letterSpacing: 0.6,
               ),
             ),
@@ -1650,126 +1690,134 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.cardSurface,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: AppShadows.householdCard,
+          ),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.person_pin_outlined, color: AppColors.navy, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    PatientProfileStrings.profileTitle,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 32),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: () => setState(() => _expanded = !_expanded),
+                    child: Text(
+                      _expanded
+                          ? PatientProfileStrings.hide
+                          : PatientProfileStrings.showMore,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              _expanded ? full : collapsed,
+            ],
+          ),
+        ),
+        if (d.programmes.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.cardSurface,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: AppShadows.householdCard,
+            ),
+            padding: const EdgeInsets.all(14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Icon(Icons.person_pin_outlined, color: scheme.primary, size: 20),
-                    const SizedBox(width: 8),
+                    const Icon(Icons.medical_services_outlined,
+                        size: 16, color: AppColors.navy),
+                    const SizedBox(width: 6),
                     Text(
-                      PatientProfileStrings.profileTitle,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleSmall
-                          ?.copyWith(fontWeight: FontWeight.w700),
+                      PatientProfileStrings.servicesProvidedTitle,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
                     const Spacer(),
-                    TextButton(
-                      style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        minimumSize: const Size(0, 32),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      onPressed: () => setState(() => _expanded = !_expanded),
-                      child: Text(
-                        _expanded
-                            ? PatientProfileStrings.hide
-                            : PatientProfileStrings.showMore,
-                        style: const TextStyle(fontSize: 12),
+                    GestureDetector(
+                      onTap: () {
+                        context.push(
+                          '/patients/${d.patientId ?? ''}/enroll',
+                          extra: <String, dynamic>{
+                            'patientName': d.name,
+                            'patientAge': d.age,
+                            'patientGender': d.gender,
+                            'villageName': d.villageName,
+                            'existingProgrammes': d.programmes,
+                          },
+                        );
+                      },
+                      child: const Text(
+                        '+ Edit',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.navy,
+                        ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                _expanded ? full : collapsed,
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: d.programmes.map((p) {
+                    final label = p.wireTag.toUpperCase();
+                    return Chip(
+                      label: Text(
+                        label,
+                        style: const TextStyle(
+                            fontSize: 11, fontWeight: FontWeight.w700),
+                      ),
+                      backgroundColor: scheme.primaryContainer,
+                      labelStyle: TextStyle(color: scheme.onPrimaryContainer),
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
+                    );
+                  }).toList(),
+                ),
               ],
             ),
           ),
-        ),
-        const SizedBox(height: 10),
-        if (d.programmes.isEmpty)
+        ],
+        if (d.programmes.isEmpty) ...[
+          const SizedBox(height: 10),
           _NoServicesCard(
             patientId: d.patientId ?? '',
             patientName: d.name,
             patientAge: d.age,
             patientGender: d.gender,
             villageName: d.villageName,
-          )
-        else
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.medical_services_outlined,
-                          size: 16, color: scheme.primary),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Services Provided',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      const Spacer(),
-                      GestureDetector(
-                        onTap: () {
-                          context.push(
-                            '/patients/${d.patientId ?? ''}/enroll',
-                            extra: <String, dynamic>{
-                              'patientName': d.name,
-                              'patientAge': d.age,
-                              'patientGender': d.gender,
-                              'villageName': d.villageName,
-                              'existingProgrammes': d.programmes,
-                            },
-                          );
-                        },
-                        child: const Text(
-                          '+ Edit',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF1B2B5E),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: d.programmes.map((p) {
-                      final label = p.wireTag.toUpperCase();
-                      return Chip(
-                        label: Text(
-                          label,
-                          style: const TextStyle(
-                              fontSize: 11, fontWeight: FontWeight.w700),
-                        ),
-                        backgroundColor: scheme.primaryContainer,
-                        labelStyle:
-                            TextStyle(color: scheme.onPrimaryContainer),
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 2),
-                        materialTapTargetSize:
-                            MaterialTapTargetSize.shrinkWrap,
-                        visualDensity: VisualDensity.compact,
-                      );
-                    }).toList(),
-                  ),
-                ],
-              ),
-            ),
           ),
+        ],
         // ── Clinical Risk ────────────────────────────────────────────────
         if (d.riskBand != null) ...[
           const SizedBox(height: 10),
@@ -2177,21 +2225,22 @@ class _PatientDetailHeader extends StatelessWidget {
   final VoidCallback onBack;
   final VoidCallback? onRefresh;
 
-  static const Color _headerColor = Color(0xFF831843);
-
   @override
   Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     final name = data.name ?? PatientContextStrings.fallbackTitle;
 
     final ageLabel = _ageLabelFromDob(data.dateOfBirth, data.age);
-    final prefixParts = <String>[
-      if (ageLabel != null) ageLabel,
-      if (data.gender != null && data.gender!.isNotEmpty)
-        data.gender!.toUpperCase().startsWith('F') ? 'Female' : 'Male',
-    ];
-    final subtitlePrefix = prefixParts.join(' · ');
-    final householdLabel = data.householdName ??
-        (data.householdId != null ? 'House #${data.householdId}' : null);
+    final subtitleParts = <String>[];
+    if (ageLabel != null) subtitleParts.add(ageLabel);
+    if (data.gender != null) subtitleParts.add(data.gender!);
+    if (data.householdId != null) {
+      subtitleParts.add(
+        data.householdName ??
+            PatientContextStrings.householdFallback(data.householdId!),
+      );
+    }
+    final subtitle = subtitleParts.join(' · ');
 
     final chips = <_HeaderChip>[
       if (data.nationalId != null)
@@ -2201,83 +2250,105 @@ class _PatientDetailHeader extends StatelessWidget {
       if (data.villageName != null)
         _HeaderChip(Icons.location_on_outlined, data.villageName!),
       if (data.isPregnant)
-        const _HeaderChip(Icons.pregnant_woman, 'Pregnant'),
+        _HeaderChip(Icons.pregnant_woman, PatientContextStrings.pregnantChip),
     ];
 
     return Container(
-      color: _headerColor,
-      padding: const EdgeInsets.fromLTRB(8, 8, 8, 14),
+      color: AppColors.navy,
+      padding: EdgeInsets.fromLTRB(
+        8,
+        MediaQuery.of(context).padding.top + 8,
+        8,
+        14,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(right: 4),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back, color: Colors.white),
-                  onPressed: onBack,
-                  tooltip: PatientContextStrings.backToWorklist,
-                ),
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: Colors.white.withValues(alpha: 0.18),
-                  child: Text(
-                    _initials(name),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 16,
-                    ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              HeaderIconButton(
+                icon: Icons.arrow_back,
+                tooltip: PatientContextStrings.backToWorklist,
+                onTap: onBack,
+              ),
+              const SizedBox(width: 10),
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: Colors.white.withValues(alpha: 0.18),
+                child: Text(
+                  _initials(name),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    if (subtitle.isNotEmpty)
                       Text(
-                        name,
+                        subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                      if (subtitlePrefix.isNotEmpty || householdLabel != null)
-                        Text.rich(
-                          TextSpan(
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            children: [
-                              if (subtitlePrefix.isNotEmpty)
-                                TextSpan(text: subtitlePrefix),
-                              if (householdLabel != null) ...[
-                                if (subtitlePrefix.isNotEmpty)
-                                  const TextSpan(text: ' · '),
-                                WidgetSpan(
-                                  alignment: PlaceholderAlignment.middle,
-                                  child: const Icon(Icons.home_outlined,
-                                      size: 12, color: Colors.white70),
-                                ),
-                                const TextSpan(text: ' '),
-                                TextSpan(text: householdLabel),
-                              ],
-                            ],
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                    ],
+                  ],
+                ),
+              ),
+              if (isUrgent)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
+                  margin: const EdgeInsets.only(left: 4),
+                  decoration: BoxDecoration(
+                    color: tokens.statusCritical,
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: Text(
+                    PatientContextStrings.urgentBadge,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                    ),
                   ),
                 ),
-              ],
-            ),
+              HeaderIconButton(
+                icon: Icons.cloud_download_outlined,
+                tooltip: PatientContextStrings.refresh,
+                onTap: onRefresh,
+                child: refreshing
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : null,
+              ),
+            ],
           ),
           if (chips.isNotEmpty)
             Padding(
@@ -2558,9 +2629,9 @@ class _GeminiSummaryBannerState extends State<_GeminiSummaryBanner> {
                       color: tokens.aiPurple,
                       borderRadius: BorderRadius.circular(5),
                     ),
-                    child: const Text(
-                      '✦ AI SUMMARY',
-                      style: TextStyle(
+                    child: Text(
+                      PatientContextStrings.aiSummaryBadge,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 10,
                         fontWeight: FontWeight.w800,
@@ -2631,9 +2702,9 @@ class _AiSummaryCard extends StatelessWidget {
                   color: tokens.aiPurple,
                   borderRadius: BorderRadius.circular(5),
                 ),
-                child: const Text(
-                  '✦ AI READ HER RECORD',
-                  style: TextStyle(
+                child: Text(
+                  PatientContextStrings.aiReadHerRecordBadge,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 10,
                     fontWeight: FontWeight.w800,
@@ -2662,12 +2733,12 @@ class _AiSummaryCard extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surface,
+                          color: AppColors.cardSurface,
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: tokens.aiBorder),
                         ),
                         child: Text(
-                          '⚠ $r',
+                          PatientContextStrings.riskReasonChip(r),
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
@@ -2716,12 +2787,10 @@ class _SameHouseholdStrip extends StatelessWidget {
 
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
+          decoration: const BoxDecoration(
+            color: AppColors.cardSurface,
             border: Border(
-              bottom: BorderSide(
-                color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.2),
-              ),
+              bottom: BorderSide(color: AppColors.border),
             ),
           ),
           child: Column(
@@ -2729,7 +2798,7 @@ class _SameHouseholdStrip extends StatelessWidget {
             children: [
               // Make header tappable to navigate to household detail
               Semantics(
-                label: 'View household details',
+                label: PatientContextStrings.viewHouseholdDetails,
                 button: true,
                 child: GestureDetector(
                 key: const Key('patient_household_header_tap'),
@@ -2745,7 +2814,7 @@ class _SameHouseholdStrip extends StatelessWidget {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      'Same household',
+                      PatientContextStrings.sameHousehold,
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
@@ -2786,7 +2855,7 @@ class _SameHouseholdStrip extends StatelessWidget {
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: others.map((m) {
-                    final name = m.name ?? 'Unknown';
+                    final name = m.name ?? PatientContextStrings.unknownMemberName;
                     final age = _ageFromDob(m.dob);
                     // Patient-scoped DAOs key on the national-ID-style
                     // patient_id (e.g. `0390444751459`), not the internal
@@ -2869,7 +2938,7 @@ class _HouseholdMemberChip extends StatelessWidget {
         ? tokens.brandNavy.withValues(alpha: 0.18)
         : tokens.brandNavy.withValues(alpha: 0.08);
     return Semantics(
-      label: 'View patient $_label',
+      label: PatientContextStrings.viewPatientSemantics(name, age),
       button: true,
       child: GestureDetector(
       key: const Key('patient_member_chip_tap'),

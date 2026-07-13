@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/constants/app_strings.dart';
+import '../core/widgets/mockup_svg_icons.dart';
 import '../features/visit/visit_flow_screen.dart';
 import 'theme.dart';
 
@@ -55,9 +56,9 @@ class _BottomNavShellState extends State<BottomNavShell>
     ScaffoldMessenger.of(context)
       ..removeCurrentSnackBar()
       ..showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(BottomNavStrings.pressBackAgainToExit),
-          duration: Duration(seconds: 2),
+          duration: const Duration(seconds: 2),
         ),
       );
     return true;
@@ -95,25 +96,25 @@ class _BottomNavShellState extends State<BottomNavShell>
             selectedIndex: widget.navigationShell.currentIndex,
             onDestinationSelected: (index) => _onTap(context, index),
             labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-            destinations: const [
+            destinations: [
               NavigationDestination(
-                icon: Icon(Icons.home_outlined),
-                selectedIcon: Icon(Icons.home),
+                icon: _NavIcon(builder: MockupIcons.navHome, isSelected: false),
+                selectedIcon: _NavIcon(builder: MockupIcons.navHome, isSelected: true),
                 label: BottomNavStrings.home,
               ),
               NavigationDestination(
-                icon: Icon(Icons.people_outline),
-                selectedIcon: Icon(Icons.people),
+                icon: _NavIcon(builder: MockupIcons.navPatients, isSelected: false),
+                selectedIcon: _NavIcon(builder: MockupIcons.navPatients, isSelected: true),
                 label: BottomNavStrings.patients,
               ),
               NavigationDestination(
-                icon: Icon(Icons.task_alt_outlined),
-                selectedIcon: Icon(Icons.task_alt),
+                icon: _NavIcon(builder: MockupIcons.navTasks, isSelected: false),
+                selectedIcon: _NavIcon(builder: MockupIcons.navTasks, isSelected: true),
                 label: BottomNavStrings.tasks,
               ),
               NavigationDestination(
-                icon: Icon(Icons.chat_outlined),
-                selectedIcon: Icon(Icons.chat),
+                icon: _NavIcon(builder: MockupIcons.navAssistant, isSelected: false),
+                selectedIcon: _NavIcon(builder: MockupIcons.navAssistant, isSelected: true),
                 label: BottomNavStrings.assistant,
               ),
             ],
@@ -134,7 +135,7 @@ class AssistantPlaceholderScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(BottomNavStrings.assistantTitle),
+        title: Text(BottomNavStrings.assistantTitle),
         centerTitle: true,
       ),
       body: Center(
@@ -164,6 +165,26 @@ class AssistantPlaceholderScreen extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Bottom-nav icon matching the v13 mockup's exact dual selection mechanism:
+/// fill-hex swap (`#9CA3AF` inactive → `#1B2B5E` active) *and* an opacity
+/// transition (`0.35` inactive → `1`) layered on top of it — both are present
+/// simultaneously in the mockup's CSS/markup, not just one or the other.
+class _NavIcon extends StatelessWidget {
+  const _NavIcon({required this.builder, required this.isSelected});
+
+  final Widget Function({double size, required Color color}) builder;
+  final bool isSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedOpacity(
+      opacity: isSelected ? 1 : 0.35,
+      duration: const Duration(milliseconds: 150),
+      child: builder(color: isSelected ? AppColors.navy : const Color(0xFF9CA3AF)),
     );
   }
 }

@@ -28,7 +28,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         await auth.enrolBiometric();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+            SnackBar(
               content: Text(DashboardStrings.deviceUnlockEnabled),
             ),
           );

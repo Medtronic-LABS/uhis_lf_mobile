@@ -115,7 +115,7 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
                                   if (ok) router.go('/home');
                                 },
                           icon: const Icon(Icons.lock_open),
-                          label: const Text(LockStrings.unlockWithBiometrics),
+                          label: Text(LockStrings.unlockWithBiometrics),
                         ),
                       TextButton(
                         onPressed: _busy

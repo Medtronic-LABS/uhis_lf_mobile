@@ -15,6 +15,7 @@ import '../../core/models/patient.dart';
 import '../../core/models/programme.dart';
 import '../../core/models/risk.dart';
 import '../../core/models/worklist_entry.dart';
+import '../../core/mission/programme_reason.dart' as programme_reason;
 import '../../core/risk/risk_scoring_service.dart';
 
 /// View-model layer above the worklist DAOs. UI consumes [load] /
@@ -48,9 +49,11 @@ class WorklistRepository {
   final AssessmentDao _assessments;
 
   /// Programme.wireTag-family kinds counted as completed ANC / PNC visits
-  /// for the visit-count-aware dashboard label (spec v13).
-  static const _ancKinds = ['ANC', 'PREGNANCY', 'PREGNANT', 'EMTCT'];
-  static const _pncKinds = ['PNC', 'POSTNATAL'];
+  /// for the visit-count-aware dashboard label (spec v13) — shared with
+  /// HouseholdListScreen via `programme_reason.dart` so both surfaces count
+  /// visits identically.
+  static const _ancKinds = programme_reason.ancVisitKinds;
+  static const _pncKinds = programme_reason.pncVisitKinds;
 
   final _changes = ValueNotifier<int>(0);
 
