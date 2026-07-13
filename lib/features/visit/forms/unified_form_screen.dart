@@ -240,6 +240,9 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         String? lastFormType;
         for (final annotatedSection in annotated) {
           final ft = annotatedSection.section.formType;
+          final isNew = ft.isNotEmpty &&
+              annotatedSection.group != SectionGroup.vitals &&
+              !widget.enrolledFormTypes.contains(ft);
           if (ft != lastFormType) {
             lastFormType = ft;
             if (annotatedSection.group != SectionGroup.vitals) {
@@ -250,6 +253,8 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
                 relevantSymptomCodes: TriageSymptomMapper.relevantCodes(
                     ft, widget.confirmedSymptoms),
                 aiPickedSymptomCodes: widget.aiPickedSymptoms,
+                isNewEnrolment: isNew,
+                formType: ft,
               ));
             }
           }
@@ -261,6 +266,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             onFieldChanged: notifier.updateField,
             previousWeight: _lastRecordedWeight,
             gestationalWeeks: widget.gestationalWeeks,
+            isNewEnrolment: isNew,
           ));
         }
 
@@ -404,6 +410,8 @@ class _ProgrammeDivider extends StatefulWidget {
     required this.label,
     this.relevantSymptomCodes = const [],
     this.aiPickedSymptomCodes = const {},
+    this.isNewEnrolment = false,
+    this.formType,
   });
 
   final String label;
@@ -411,6 +419,10 @@ class _ProgrammeDivider extends StatefulWidget {
   /// Codes from Step 1 that were pre-selected by the AI Scribe.
   /// Chips for these codes render with the purple AI palette.
   final Set<String> aiPickedSymptomCodes;
+  /// True when this programme was not previously enrolled — drives accent tint.
+  final bool isNewEnrolment;
+  /// Raw formType key (e.g. 'ncd', 'anc') — used for colour lookup.
+  final String? formType;
 
   @override
   State<_ProgrammeDivider> createState() => _ProgrammeDividerState();
@@ -425,6 +437,10 @@ class _ProgrammeDividerState extends State<_ProgrammeDivider> {
     final theme = Theme.of(context);
     final codes = widget.relevantSymptomCodes;
     final hasChips = codes.isNotEmpty;
+
+    final accentColor = widget.isNewEnrolment
+        ? _newEnrolmentAccent(widget.formType ?? '')
+        : null;
 
     return Padding(
       padding: const EdgeInsets.only(
@@ -444,13 +460,13 @@ class _ProgrammeDividerState extends State<_ProgrammeDivider> {
                 Text(
                   widget.label.toUpperCase(),
                   style: theme.textTheme.labelMedium?.copyWith(
-                    color: AppColors.textPrimary,
+                    color: accentColor ?? AppColors.textPrimary,
                     letterSpacing: 0.6,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
-                Expanded(child: Divider(color: AppColors.border, height: 1)),
+                Expanded(child: Divider(color: accentColor ?? AppColors.border, height: 1)),
                 if (hasChips) ...[
                   const SizedBox(width: AppSpacing.sm),
                   Icon(
@@ -1178,6 +1194,7 @@ class _SectionCard extends StatelessWidget {
     required this.onFieldChanged,
     this.previousWeight,
     this.gestationalWeeks,
+    this.isNewEnrolment = false,
   });
 
   final FormSection section;
@@ -1193,6 +1210,10 @@ class _SectionCard extends StatelessWidget {
   /// Patient's current gestational age in weeks — used to compute the
   /// fundal-height expected value and lag/ahead badge.  `null` when unknown.
   final int? gestationalWeeks;
+
+  /// True when this section belongs to a newly enrolled programme.
+  /// Renders with a tinted background + accent border.
+  final bool isNewEnrolment;
 
   // ── Supplement pair detection ─────────────────────────────────────────────
   // Maps each "consumed" field id → (set of possible "provided" field ids,
@@ -1401,7 +1422,7 @@ class _SectionCard extends StatelessWidget {
       ));
     }
 
-    return Padding(
+    final inner = Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.xxxl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1416,6 +1437,21 @@ class _SectionCard extends StatelessWidget {
           ...fieldWidgets,
         ],
       ),
+    );
+
+    if (!isNewEnrolment) return inner;
+
+    final bg = _newEnrolmentBg(section.formType);
+    final accent = _newEnrolmentAccent(section.formType);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: accent, width: 1.5),
+      ),
+      child: inner,
     );
   }
 
@@ -3613,3 +3649,21 @@ class _SubmitBar extends StatelessWidget {
     );
   }
 }
+
+// ── New-enrolment colour helpers ──────────────────────────────────────────────
+
+Color _newEnrolmentBg(String formType) => switch (formType) {
+      'anc' || 'pnc' => const Color(0xFFFFF0F5),
+      'ncd'          => const Color(0xFFFEFCE8),
+      'imci'         => const Color(0xFFEFF6FF),
+      'tb'           => const Color(0xFFF0FDF4),
+      _              => const Color(0xFFF8F8F8),
+    };
+
+Color _newEnrolmentAccent(String formType) => switch (formType) {
+      'anc' || 'pnc' => const Color(0xFFEC4899),
+      'ncd'          => const Color(0xFFF59E0B),
+      'imci'         => const Color(0xFF3B82F6),
+      'tb'           => const Color(0xFF10B981),
+      _              => const Color(0xFF6B7280),
+    };
