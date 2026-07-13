@@ -7,6 +7,7 @@ import '../../core/models/programme.dart';
 import 'encounter_repository.dart';
 import 'household_repository.dart';
 import 'visit_controller.dart';
+import 'visit_start_helper.dart';
 
 /// Data passed to visit landing screen.
 class VisitLandingData {
@@ -87,7 +88,9 @@ class _VisitLandingScreenState extends State<VisitLandingScreen> {
     final controller = context.read<VisitController>();
     final programme = widget.data?.programme ?? Programme.unknown;
 
-    final encounterId = await controller.startVisit(
+    final encounterId = await startOrResumeVisit(
+      context,
+      controller: controller,
       patientId: widget.patientId,
       programme: programme,
       patientName: widget.data?.patientName,

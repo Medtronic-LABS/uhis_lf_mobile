@@ -13,6 +13,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_strings.dart';
+import '../visit/visit_start_helper.dart';
 import '../../core/models/programme.dart';
 import '../../core/models/referral.dart';
 import '../referral/referral_repository.dart';
@@ -169,7 +170,9 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
     final controller = context.read<VisitController>();
     final programme =
         c.programmes.isNotEmpty ? c.programmes.first : Programme.unknown;
-    final encounterId = await controller.startVisit(
+    final encounterId = await startOrResumeVisit(
+      context,
+      controller: controller,
       patientId: c.patientId,
       programme: programme,
       patientName: c.patientName,

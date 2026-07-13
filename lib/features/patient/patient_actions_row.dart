@@ -7,6 +7,7 @@ import '../../core/models/programme.dart';
 import '../../core/models/referral.dart';
 import '../referral/referral_repository.dart';
 import '../visit/visit_controller.dart';
+import '../visit/visit_start_helper.dart';
 
 /// Row of action buttons for patient context screen.
 class PatientActionsRow extends StatefulWidget {
@@ -68,7 +69,9 @@ class _PatientActionsRowState extends State<PatientActionsRow> {
     final programme = widget.programmes.isNotEmpty
         ? widget.programmes.first
         : Programme.unknown;
-    final encounterId = await controller.startVisit(
+    final encounterId = await startOrResumeVisit(
+      context,
+      controller: controller,
       patientId: widget.patientId,
       programme: programme,
       patientName: widget.patientName,

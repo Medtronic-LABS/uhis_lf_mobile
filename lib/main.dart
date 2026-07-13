@@ -421,6 +421,7 @@ class _UhisNextAppState extends State<UhisNextApp>
                   widget.api,
                   ctx.read<EncounterDao>(),
                   offlineSync: _sync,
+                  draftDao: _draftDao,
                 )),
         Provider<VitalsRepository>(
             create: (ctx) => VitalsRepository(
