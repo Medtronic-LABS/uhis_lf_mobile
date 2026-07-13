@@ -2064,10 +2064,13 @@ class _Step3AiRecoState extends State<_Step3AiReco>
           // no evaluator conditions are available (e.g. NABA-only referral).
           if (referral || naba.dangerSigns.isNotEmpty) ...[
             _ReferralAlertCard(
-              reason: widget.referredReasons.isNotEmpty
-                  ? widget.referredReasons.join('\n')
-                  : (naba.referralRecommendation?.reason ??
-                      (naba.dangerSigns.isNotEmpty
+              // Prefer NABA reason — it carries the 'context — finding' format
+              // the two-line banner needs. Fall back to referredReasons bullets
+              // only when no NABA reason is available.
+              reason: naba.referralRecommendation?.reason ??
+                  (widget.referredReasons.isNotEmpty
+                      ? widget.referredReasons.join('\n')
+                      : (naba.dangerSigns.isNotEmpty
                           ? naba.dangerSigns.take(2).join(', ')
                           : 'Referral recommended')),
               urgency: naba.referralRecommendation?.urgency ?? 'Today',
@@ -2513,37 +2516,45 @@ class _ReferralAlertCard extends StatelessWidget {
   final String reason;
   final String urgency;
 
+  // Maps raw API camelCase referral keys → human-readable labels (fallback path).
+  static const _reasonLabels = <String, String>{
+    'bloodPressure':  'High blood pressure',
+    'bloodGlucose':   'High blood glucose',
+    'symptoms':       'Reported symptoms',
+    'hbLevel':        'Low haemoglobin',
+    'weight':         'Abnormal weight',
+    'urineProtein':   'Urine protein detected',
+    'dangerSigns':    'Danger signs present',
+    'bmi':            'Abnormal BMI',
+    'gestationalAge': 'Gestational age concern',
+  };
+
   @override
   Widget build(BuildContext context) {
     const bg     = Color(0xFFFEE2E2);
     const accent = Color(0xFFDC2626);
 
-    // reason may be newline-joined raw API field names or NABA text —
-    // map known camelCase keys to human-readable labels before displaying.
-    const _reasonLabels = <String, String>{
-      'bloodPressure':  'High blood pressure',
-      'bloodGlucose':   'High blood glucose',
-      'symptoms':       'Reported symptoms',
-      'hbLevel':        'Low haemoglobin',
-      'weight':         'Abnormal weight',
-      'urineProtein':   'Urine protein detected',
-      'dangerSigns':    'Danger signs present',
-      'bmi':            'Abnormal BMI',
-      'gestationalAge': 'Gestational age concern',
-    };
-    final conditions = reason
-        .split('\n')
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty)
-        .map((s) => _reasonLabels[s] ?? s)
-        .toList();
+    // Two-line format: NABA reason uses 'context — finding' separator.
+    // Single-line / bullet fallback: raw API keys mapped to labels.
+    final hasSplit = reason.contains(' — ');
+    final parts    = hasSplit ? reason.split(' — ') : <String>[];
+    final title    = hasSplit ? 'Referred — ${parts.first.trim()}' : 'Referred';
+    final subtitle = hasSplit ? parts.skip(1).join(' — ').trim() : null;
+    final bullets  = hasSplit
+        ? const <String>[]
+        : reason
+            .split('\n')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .map((s) => _reasonLabels[s] ?? s)
+            .toList();
 
     return Container(
       width: double.infinity,
       color: bg,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // Icon with yellow badge dot
           Stack(
@@ -2579,16 +2590,27 @@ class _ReferralAlertCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Referred',
-                  style: TextStyle(
-                    fontSize: 13.5,
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14,
                     fontWeight: FontWeight.w800,
                     color: accent,
                   ),
                 ),
-                const SizedBox(height: 3),
-                ...conditions.map(
+                if (subtitle != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w500,
+                      color: accent.withValues(alpha: 0.85),
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+                ...bullets.map(
                   (c) => Padding(
                     padding: const EdgeInsets.only(top: 1),
                     child: Text(
