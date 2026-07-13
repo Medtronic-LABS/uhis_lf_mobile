@@ -39,6 +39,7 @@ import '../../core/theme/app_theme.dart';
 import 'naba/naba_models.dart';
 import 'naba/naba_repository.dart';
 import 'pathway/pathway_engine.dart';
+import '../patient/followup_call_service.dart';
 import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
 import 'immunisation/immunisation_timeline_screen.dart';
@@ -1052,6 +1053,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   List<_HouseholdMember>? _householdMembers;
   NabaVitalSnapshot? _loadedVitals;
   List<NabaLabResult> _loadedLabs = [];
+  DateTime? _selectedFollowUpDate;
 
   Color _headerColor(Programme p) => switch (p) {
         Programme.anc || Programme.pnc => AppColors.ancHeader,
@@ -1832,6 +1834,27 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     if (_accepted) return;
     setState(() => _accepted = true);
     if (!mounted) return;
+
+    // Schedule follow-up locally using the date the SK selected (or the
+    // auto-calculated date from the first follow-up item). Stored as
+    // NotSynced and pushed on the next offline-sync cycle.
+    final followUpDate = _selectedFollowUpDate ??
+        (naba.followUp.isNotEmpty
+            ? _FollowUpDateRowState.resolveDate(naba.followUp.first)
+            : DateTime.now().add(const Duration(days: 14)));
+    try {
+      final followUpSvc = context.read<FollowUpCallService>();
+      await followUpSvc.scheduleLocal(
+        patientId: widget.patientId,
+        dueDate: followUpDate,
+        type: 'MEDICAL_REVIEW',
+      );
+      debugPrint('[Step3] follow-up scheduled: $followUpDate');
+    } catch (e) {
+      debugPrint('[Step3] follow-up schedule failed (non-blocking): $e');
+    }
+
+    if (!mounted) return;
     final others = (_householdMembers ?? [])
         .where((m) => !m.isCurrentPatient)
         .toList();
@@ -2098,6 +2121,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             _FollowUpTimeline(
               items: naba.followUp,
               programme: widget.primaryProgramme,
+              onDateChanged: (d) => setState(() => _selectedFollowUpDate = d),
             ),
             const SizedBox(height: 16),
           ],
@@ -2800,18 +2824,27 @@ class _AiCounsellingCard extends StatelessWidget {
 // Shows all follow-up items: first item has a date picker; remaining items
 // are compact left-border-coloured timeline rows.
 class _FollowUpTimeline extends StatelessWidget {
-  const _FollowUpTimeline({required this.items, this.programme = Programme.unknown});
+  const _FollowUpTimeline({
+    required this.items,
+    this.programme = Programme.unknown,
+    this.onDateChanged,
+  });
   final List<NabaFollowUpItem> items;
 
   /// Primary programme, used to apply the routine follow-up cadence
   /// (ANC = 4 weeks, NCD = 2 weeks) to the editable date row.
   final Programme programme;
+  final ValueChanged<DateTime>? onDateChanged;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _FollowUpDateRow(item: items.first, programme: programme),
+        _FollowUpDateRow(
+          item: items.first,
+          programme: programme,
+          onDateChanged: onDateChanged,
+        ),
         for (final item in items.skip(1)) ...[
           const SizedBox(height: 6),
           _FollowUpTimelineItem(item: item),
@@ -2913,9 +2946,14 @@ class _FollowUpTimelineItem extends StatelessWidget {
 }
 
 class _FollowUpDateRow extends StatefulWidget {
-  const _FollowUpDateRow({required this.item, this.programme = Programme.unknown});
+  const _FollowUpDateRow({
+    required this.item,
+    this.programme = Programme.unknown,
+    this.onDateChanged,
+  });
   final NabaFollowUpItem item;
   final Programme programme;
+  final ValueChanged<DateTime>? onDateChanged;
 
   @override
   State<_FollowUpDateRow> createState() => _FollowUpDateRowState();
@@ -2928,6 +2966,18 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
   static const _cardBorder = Color(0xFFE5E7EB);
   static const _cardText   = Color(0xFF9D174D);
   static const _bellColor  = Color(0xFFB45309);
+
+  /// Public static helper so _Step3AiRecoState can compute the default date
+  /// for a follow-up item without needing to instantiate the widget.
+  static DateTime resolveDate(NabaFollowUpItem item) {
+    final t = item.timeline.toLowerCase();
+    final isUrgentDays = RegExp(r'(\d+)\s*day').hasMatch(t);
+    if (!isUrgentDays) {
+      final days = _followUpDays(item.programme);
+      if (days != null) return DateTime.now().add(Duration(days: days));
+    }
+    return _dateFromTimeline(item.timeline);
+  }
 
   @override
   void initState() {
@@ -3012,6 +3062,7 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
     );
     if (picked != null && mounted) {
       setState(() => _date = picked);
+      widget.onDateChanged?.call(picked);
     }
   }
 
