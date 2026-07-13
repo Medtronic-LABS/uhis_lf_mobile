@@ -48,9 +48,12 @@ class TriageViewModel extends ChangeNotifier {
   final AiPathwayClient? _aiClient;
   final String? _memberId;
 
-  /// Lazily cached result of [enrolledProgrammeVocabCodes].
+  /// Lazily cached result of [groupedVocabSections].
   /// Enrolled programmes never change during a triage session, so we compute
   /// once and reuse — this also ensures debug logs fire only once per load.
+  List<SymptomSection>? _groupedSectionsCache;
+
+  /// Lazily cached flat list derived from [_groupedSectionsCache].
   List<String>? _enrolledProgrammeVocabCache;
 
   /// Currently selected symptom codes.
@@ -440,8 +443,9 @@ class TriageViewModel extends ChangeNotifier {
       return const [];
     }
 
-    final shown =
-        groupedVocabSections.expand((s) => s.codes).toList(growable: false);
+    // groupedVocabSections is cached — single compute, single log.
+    final sections = groupedVocabSections;
+    final shown = sections.expand((s) => s.codes).toList(growable: false);
 
     if (kDebugMode) {
       final applicable = AiScribeTriageVocab.applicableCodes(_patientContext);
@@ -451,9 +455,7 @@ class TriageViewModel extends ChangeNotifier {
           .where((c) => !applicable.contains(c))
           .toList();
       final ctx = _patientContext;
-      debugPrint(
-        '[SymptomPicker] ═══ Triage screen load ═══',
-      );
+      debugPrint('[SymptomPicker] ═══ Triage screen load ═══');
       debugPrint(
         '[SymptomPicker] Patient: sex=${ctx.sex.name} '
         'ageMonths=${ctx.ageMonths} ageKnown=${ctx.ageKnown} '
@@ -461,28 +463,29 @@ class TriageViewModel extends ChangeNotifier {
         'isUnder5=${ctx.isUnder5}',
       );
       debugPrint(
-        '[SymptomPicker] Enrolled programmes: '
-        '${enrolled.map((p) => p.wireTag).join(', ')}',
+        '[SymptomPicker] Enrolled: '
+        '${enrolled.map((p) => p.wireTag).join(', ')} — '
+        'grid total ${shown.length}',
       );
-      debugPrint(
-        '[SymptomPicker] DEFAULT grid total (${shown.length}): '
-        '${shown.join(', ')}',
-      );
-      for (final section in groupedVocabSections) {
+      for (final section in sections) {
         final label = section.programme?.wireTag ?? 'GENERAL';
         debugPrint(
           '[SymptomPicker]   → $label (${section.codes.length}): '
           '${section.codes.join(', ')}',
         );
       }
-      debugPrint(
-        '[SymptomPicker] Search-only (${searchOnly.length}): '
-        '${searchOnly.join(', ')}',
-      );
-      debugPrint(
-        '[SymptomPicker] Excluded by demographics (${excluded.length}): '
-        '${excluded.join(', ')}',
-      );
+      if (searchOnly.isNotEmpty) {
+        debugPrint(
+          '[SymptomPicker] Search-only (${searchOnly.length}): '
+          '${searchOnly.join(', ')}',
+        );
+      }
+      if (excluded.isNotEmpty) {
+        debugPrint(
+          '[SymptomPicker] Excluded/demographic (${excluded.length}): '
+          '${excluded.join(', ')}',
+        );
+      }
     }
 
     _enrolledProgrammeVocabCache = shown;
@@ -507,10 +510,13 @@ class TriageViewModel extends ChangeNotifier {
   ///
   /// Selection, search pools, and pathway activation are untouched.
   List<SymptomSection> get groupedVocabSections {
+    if (_groupedSectionsCache != null) return _groupedSectionsCache!;
     final ctx = _patientContext;
     final enrolled = ctx.activeProgrammes;
     // Let under-5 patients through so the IMCI bucket below is populated.
-    if (enrolled.isEmpty && !ctx.isUnder5) return const [];
+    if (enrolled.isEmpty && !ctx.isUnder5) {
+      return _groupedSectionsCache = const [];
+    }
 
     const sectionOrder = [
       Programme.anc,
@@ -605,7 +611,7 @@ class TriageViewModel extends ChangeNotifier {
       }
     }
 
-    return [
+    return _groupedSectionsCache = [
       for (final entry in byProgramme.entries)
         if (entry.value.isNotEmpty)
           SymptomSection(programme: entry.key, codes: entry.value),
