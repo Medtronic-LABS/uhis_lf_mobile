@@ -32,7 +32,14 @@ class AssistantRepository {
     return (_client.dio, Endpoints.assistantAsk);
   }
 
-  Future<String> ask(String question) async {
+  /// Ask the assistant a question. Pass [patientContext] to scope the answer
+  /// to a single patient (the patient-context floating assistant); omit it for
+  /// the general Ask-AI tab. Returns the prose answer plus any suggested
+  /// actions the backend selected from the fixed allowlist.
+  Future<AssistantAnswer> ask(
+    String question, {
+    Map<String, dynamic>? patientContext,
+  }) async {
     final (dio, path) = _resolve();
     try {
       final response = await dio.post<Map<String, dynamic>>(
@@ -40,7 +47,10 @@ class AssistantRepository {
         data: {
           'question': question,
           'locale': 'en',
-          'context': 'community-health-worker',
+          'context': patientContext == null
+              ? 'community-health-worker'
+              : 'patient-scoped',
+          if (patientContext != null) 'patientContext': patientContext,
         },
       );
       final data = response.data;
@@ -49,7 +59,17 @@ class AssistantRepository {
       if (answer == null || answer.isEmpty) {
         throw const AssistantException('No answer in response');
       }
-      return answer;
+      final rawActions = data['actions'];
+      final actions = <AssistantAction>[];
+      if (rawActions is List) {
+        for (final a in rawActions) {
+          if (a is Map<String, dynamic>) {
+            final parsed = AssistantAction.fromJson(a);
+            if (parsed != null) actions.add(parsed);
+          }
+        }
+      }
+      return AssistantAnswer(text: answer, actions: actions);
     } on DioException catch (e) {
       throw AssistantException(
         e.message ?? 'Network error',

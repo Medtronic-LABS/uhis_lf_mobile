@@ -4787,3 +4787,24 @@ abstract final class ChildAssessmentStrings {
     'Community Clinic',
   ];
 }
+
+/// Patient-scoped AI assistant (the floating "✦" sheet).
+abstract final class PatientAiStrings {
+  PatientAiStrings._();
+
+  static String title(String name) => 'Ask about $name';
+  static const String intro =
+      "I have this patient's record. I'll answer only from their data — ask "
+      'about their care, or tap an action below.';
+  static const String inputHint = 'Ask about this patient...';
+  static const String scopeNote = '🔒 Answers limited to this patient';
+  static const String noPhone = 'No phone number on file for this patient';
+  static const String dialFailed = 'Could not open the dialer';
+  static const String fabTooltip = 'Ask AI about this patient';
+
+  static const List<String> starters = [
+    'Any danger signs to check?',
+    'What should I do this visit?',
+    'Is a referral needed?',
+  ];
+}
