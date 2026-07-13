@@ -410,7 +410,17 @@ class _VisitFlowState extends State<VisitFlowScreen> {
             householdMemberLocalId: _householdMemberLocalId,
             onAdvance: () {
               setState(() {
-                _primaryProgramme = Programme.epi;
+                _primaryProgramme = Programme.imci;
+                // Ensure NABA and WhatsApp message generators see the IMCI
+                // programme — vaccination step doesn't come through the
+                // programme-selection path so _confirmedProgrammes may be
+                // empty for under-5 patients with no symptoms.
+                if (!_confirmedProgrammes.contains(Programme.imci)) {
+                  _confirmedProgrammes = {
+                    ..._confirmedProgrammes,
+                    Programme.imci,
+                  };
+                }
                 _referralRecommended = false;
                 _step = 2;
               });
