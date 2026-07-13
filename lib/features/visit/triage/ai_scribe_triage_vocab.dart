@@ -252,6 +252,29 @@ abstract final class AiScribeTriageVocab {
     'foot_wound',
   };
 
+  /// Maternal ANC codes shown in the chip grid — curated danger-sign set.
+  ///
+  /// heavy_bleeding, edema, and painful_uterine_contractions remain
+  /// searchable but skip the grid to keep the ANC view tight.
+  static const Set<String> ancPrimaryMaternalCodes = {
+    'vaginal_bleeding',        // placenta previa / abruption
+    'leaking_fluid_vagina',    // PROM
+    'swelling_face_hands',     // pre-eclampsia
+    'reduced_fetal_movement',  // fetal distress
+  };
+
+  /// General-category codes shown in the chip grid for ANC-only patients.
+  ///
+  /// All other general codes (vomiting, breathlessness, etc.) remain
+  /// searchable so the ANC grid stays focused on core danger signs.
+  static const Set<String> ancRelevantGeneralCodes = {
+    'abdominal_pain',
+    'headache',
+    'convulsions',
+    'fever',
+    'dizziness',
+  };
+
   /// NCD-category codes shown in the default chip grid for NCD patients.
   ///
   /// The full NCD vocab contains additional codes (epigastric_pain,
@@ -266,6 +289,18 @@ abstract final class AiScribeTriageVocab {
     'excessive_thirst',
     'foot_numbness',
     'foot_wound',
+  };
+
+  /// General-category codes that are clinically characteristic for NCD patients
+  /// and should appear in the chip grid even for NCD-only enrolment.
+  ///
+  /// All other general codes (fever, vomiting, etc.) remain search-only for
+  /// NCD patients — they add noise to a BP/diabetes-focused routine check.
+  static const Set<String> ncdRelevantGeneralCodes = {
+    'blurred_vision',  // diabetic retinopathy / hypertensive vision change
+    'breathlessness',  // cardiac / HTN
+    'weakness',        // DM / stroke prodrome
+    'weight_loss',     // DM / metabolic
   };
 
   /// Human-readable label for a code — used when the AI surfaces a code that
