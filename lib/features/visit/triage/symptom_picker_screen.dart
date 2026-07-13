@@ -103,6 +103,12 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   /// engine — rendered with the ✦ sparkle in the card.
   final Set<Programme> _pathwayActivatedProgrammes = {};
 
+  /// PW meta-flag — gates ANC. Auto-true when patient is known pregnant.
+  bool _isPW = false;
+
+  /// Delivery meta-flag — gates PNC. Auto-true when patient is postpartum.
+  bool _isDelivery = false;
+
   @override
   void initState() {
     super.initState();
@@ -192,6 +198,8 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         _pathwayActivatedProgrammes
           ..clear()
           ..addAll(pathwaySet);
+        _isPW = ctx.isPregnant;
+        _isDelivery = ctx.isPostpartum;
         _isLoading = false;
       });
       debugPrint('[SymptomPicker] Load complete — pathway programmes: ${pathwaySet.map((p) => p.name).join(', ')}');
@@ -640,13 +648,27 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                         patientContext: _patientContext!,
                         selectedProgrammes: _selectedProgrammes,
                         pathwayProgrammes: _pathwayActivatedProgrammes,
-                        onToggle: (programme, selected) {
+                        isPW: _isPW,
+                        isDelivery: _isDelivery,
+                        onProgrammeToggle: (programme, selected) {
                           setState(() {
                             if (selected) {
                               _selectedProgrammes.add(programme);
                             } else {
                               _selectedProgrammes.remove(programme);
                             }
+                          });
+                        },
+                        onPWToggle: (selected) {
+                          setState(() {
+                            _isPW = selected;
+                            if (!selected) _selectedProgrammes.remove(Programme.anc);
+                          });
+                        },
+                        onDeliveryToggle: (selected) {
+                          setState(() {
+                            _isDelivery = selected;
+                            if (!selected) _selectedProgrammes.remove(Programme.pnc);
                           });
                         },
                       ),
@@ -1640,28 +1662,39 @@ class _PickerChip extends StatelessWidget {
 
 // ── Inline Eligible Services Grid ────────────────────────────────────────────
 //
-// Shown at the bottom of Step 1 for adult patients. Pre-checks programmes
-// that the pathway engine activated; SK can toggle freely before tapping
-// "Start Checkup". Under-5 patients skip this widget entirely.
+// 8-card grid matching the wireframe (apon_sushashthya_v14.html).
+// Meta-cards PW and Delivery are UI gates (not Programme enums) that lock/unlock
+// ANC and PNC respectively. Under-5 patients skip this widget entirely.
 
-class _ServiceCardConfig {
-  const _ServiceCardConfig({
-    required this.programme,
+enum _ServiceCardKind { programme, pw, delivery, general }
+
+class _ServiceCardDef {
+  const _ServiceCardDef({
+    required this.kind,
     required this.emoji,
     required this.label,
+    this.programme,
   });
 
-  final Programme programme;
+  final _ServiceCardKind kind;
+  final Programme? programme;
   final String emoji;
   final String label;
+
+  bool get isPW => kind == _ServiceCardKind.pw;
+  bool get isDelivery => kind == _ServiceCardKind.delivery;
 }
 
-// Pilot-scoped cards — mirrors Programme.kPilotProgrammes minus EPI/IMCI
-// (those route to the vaccination timeline, not the service grid).
-const _kPilotServiceCards = [
-  _ServiceCardConfig(programme: Programme.anc, emoji: '🤰', label: 'ANC'),
-  _ServiceCardConfig(programme: Programme.pnc, emoji: '👶', label: 'PNC'),
-  _ServiceCardConfig(programme: Programme.ncd, emoji: '💊', label: 'NCD'),
+// Full card set — visibility filtered per patient demographics in the widget.
+const _kAllServiceCards = [
+  _ServiceCardDef(kind: _ServiceCardKind.pw,        emoji: '🤰', label: 'PW'),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🏥', label: 'ANC',      programme: Programme.anc),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🌸', label: 'FP',       programme: Programme.familyPlanning),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '👶', label: 'PNC',      programme: Programme.pnc),
+  _ServiceCardDef(kind: _ServiceCardKind.general,   emoji: '🩺', label: 'General'),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '💊', label: 'NCD',      programme: Programme.ncd),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🫁', label: 'TB',       programme: Programme.tb),
+  _ServiceCardDef(kind: _ServiceCardKind.delivery,  emoji: '🚼', label: 'Delivery'),
 ];
 
 class _InlineServiceSelector extends StatelessWidget {
@@ -1669,33 +1702,83 @@ class _InlineServiceSelector extends StatelessWidget {
     required this.patientContext,
     required this.selectedProgrammes,
     required this.pathwayProgrammes,
-    required this.onToggle,
+    required this.isPW,
+    required this.isDelivery,
+    required this.onProgrammeToggle,
+    required this.onPWToggle,
+    required this.onDeliveryToggle,
   });
 
   final PatientContext patientContext;
   final Set<Programme> selectedProgrammes;
   final Set<Programme> pathwayProgrammes;
-  final void Function(Programme programme, bool selected) onToggle;
+  final bool isPW;
+  final bool isDelivery;
+  final void Function(Programme programme, bool selected) onProgrammeToggle;
+  final ValueChanged<bool> onPWToggle;
+  final ValueChanged<bool> onDeliveryToggle;
 
-  List<_ServiceCardConfig> get _visibleCards {
+  List<_ServiceCardDef> _visibleCards() {
     final ctx = patientContext;
-    return _kPilotServiceCards.where((c) {
-      switch (c.programme) {
-        case Programme.anc:
-          return ctx.isFemale && ctx.ageYears >= 15 && !ctx.isPostpartum;
-        case Programme.pnc:
-          return ctx.isFemale && ctx.isPostpartum;
-        case Programme.ncd:
+    return _kAllServiceCards.where((c) {
+      switch (c.kind) {
+        case _ServiceCardKind.pw:
+        case _ServiceCardKind.delivery:
+          return ctx.isFemale;
+        case _ServiceCardKind.programme:
+          final p = c.programme!;
+          if (p == Programme.anc || p == Programme.familyPlanning) {
+            return ctx.isFemale && ctx.ageYears >= 15;
+          }
+          if (p == Programme.pnc) return ctx.isFemale;
+          return ctx.ageYears >= 15; // NCD, TB
+        case _ServiceCardKind.general:
           return ctx.ageYears >= 15;
-        default:
-          return false;
       }
     }).toList();
   }
 
+  bool _isLocked(_ServiceCardDef card) {
+    if (card.programme == Programme.anc) return !isPW;
+    if (card.programme == Programme.pnc) return !isDelivery;
+    return false;
+  }
+
+  bool _isCardSelected(_ServiceCardDef card) {
+    if (card.isPW) return isPW;
+    if (card.isDelivery) return isDelivery;
+    if (card.programme != null) return selectedProgrammes.contains(card.programme);
+    return false; // General — untacked
+  }
+
+  void _handleTap(BuildContext context, _ServiceCardDef card) {
+    if (_isLocked(card)) {
+      final hint = card.programme == Programme.anc
+          ? 'Select "PW" first to unlock ANC'
+          : 'Select "Delivery" first to unlock PNC';
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text(hint),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ));
+      return;
+    }
+    if (card.isPW) {
+      onPWToggle(!isPW);
+    } else if (card.isDelivery) {
+      onDeliveryToggle(!isDelivery);
+    } else if (card.programme != null) {
+      onProgrammeToggle(
+          card.programme!, !selectedProgrammes.contains(card.programme));
+    }
+    // General card — no programme tracking
+  }
+
   @override
   Widget build(BuildContext context) {
-    final cards = _visibleCards;
+    final cards = _visibleCards();
     if (cards.isEmpty) return const SizedBox.shrink();
 
     return Column(
@@ -1739,15 +1822,14 @@ class _InlineServiceSelector extends StatelessWidget {
           physics: const NeverScrollableScrollPhysics(),
           childAspectRatio: 1.05,
           children: cards
-              .map(
-                (c) => _ServiceTile(
-                  config: c,
-                  isSelected: selectedProgrammes.contains(c.programme),
-                  isPathwaySuggested: pathwayProgrammes.contains(c.programme),
-                  onTap: () =>
-                      onToggle(c.programme, !selectedProgrammes.contains(c.programme)),
-                ),
-              )
+              .map((c) => _ServiceTile(
+                    def: c,
+                    isSelected: _isCardSelected(c),
+                    isLocked: _isLocked(c),
+                    isPathwaySuggested: c.programme != null &&
+                        pathwayProgrammes.contains(c.programme),
+                    onTap: () => _handleTap(context, c),
+                  ))
               .toList(),
         ),
       ],
@@ -1757,14 +1839,16 @@ class _InlineServiceSelector extends StatelessWidget {
 
 class _ServiceTile extends StatelessWidget {
   const _ServiceTile({
-    required this.config,
+    required this.def,
     required this.isSelected,
+    required this.isLocked,
     required this.isPathwaySuggested,
     required this.onTap,
   });
 
-  final _ServiceCardConfig config;
+  final _ServiceCardDef def;
   final bool isSelected;
+  final bool isLocked;
   final bool isPathwaySuggested;
   final VoidCallback onTap;
 
@@ -1773,90 +1857,93 @@ class _ServiceTile extends StatelessWidget {
     return Semantics(
       button: true,
       selected: isSelected,
-      label: '${isSelected ? 'Deselect' : 'Select'} ${config.label}',
+      enabled: !isLocked,
+      label: '${isSelected ? 'Deselect' : 'Select'} ${def.label}',
       child: GestureDetector(
         onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: isSelected ? AppColors.navy : const Color(0xFFE5E7EB),
-              width: isSelected ? 1.5 : 1,
+        child: Opacity(
+          opacity: isLocked ? 0.45 : 1.0,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isSelected ? AppColors.navy : const Color(0xFFE5E7EB),
+                width: isSelected ? 1.5 : 1,
+              ),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x0A000000),
+                  blurRadius: 4,
+                  offset: Offset(0, 1),
+                ),
+              ],
             ),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x0A000000),
-                blurRadius: 4,
-                offset: Offset(0, 1),
-              ),
-            ],
-          ),
-          child: Stack(
-            children: [
-              // ✦ sparkle — pathway-engine suggested
-              if (isPathwaySuggested && isSelected)
-                Positioned(
-                  top: 5,
-                  left: 6,
-                  child: Text(
-                    '✦',
-                    style: TextStyle(
-                      fontSize: 9,
-                      color: AppColors.navy.withValues(alpha: 0.45),
-                    ),
-                  ),
-                ),
-              // Checkmark circle
-              Positioned(
-                top: 5,
-                right: 6,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 140),
-                  width: 16,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isSelected ? AppColors.navy : Colors.transparent,
-                    border: Border.all(
-                      color: isSelected
-                          ? AppColors.navy
-                          : const Color(0xFFD1D5DB),
-                      width: 1.5,
-                    ),
-                  ),
-                  child: isSelected
-                      ? const Icon(
-                          Icons.check_rounded,
-                          size: 10,
-                          color: Colors.white,
-                        )
-                      : null,
-                ),
-              ),
-              // Emoji + label
-              Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      config.emoji,
-                      style: const TextStyle(fontSize: 20),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      config.label,
-                      style: const TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.navy,
+            child: Stack(
+              children: [
+                // ✦ sparkle — pathway-engine suggested
+                if (isPathwaySuggested && isSelected)
+                  Positioned(
+                    top: 5,
+                    left: 6,
+                    child: Text(
+                      '✦',
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: AppColors.navy.withValues(alpha: 0.45),
                       ),
                     ),
-                  ],
+                  ),
+                // Checkmark circle
+                Positioned(
+                  top: 5,
+                  right: 6,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 140),
+                    width: 16,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isSelected ? AppColors.navy : Colors.transparent,
+                      border: Border.all(
+                        color: isSelected
+                            ? AppColors.navy
+                            : const Color(0xFFD1D5DB),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: isSelected
+                        ? const Icon(
+                            Icons.check_rounded,
+                            size: 10,
+                            color: Colors.white,
+                          )
+                        : null,
+                  ),
                 ),
-              ),
-            ],
+                // Emoji + label
+                Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(def.emoji, style: const TextStyle(fontSize: 20)),
+                      const SizedBox(height: 5),
+                      Text(
+                        def.label,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w800,
+                          color: isLocked
+                              ? AppColors.navy.withValues(alpha: 0.55)
+                              : AppColors.navy,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
