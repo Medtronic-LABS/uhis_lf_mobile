@@ -89,8 +89,6 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   bool _briefingLoading = true;
   int? _ancVisitCount;
 
-  ChildAssessmentData? _childAssessmentData;
-
   @override
   void initState() {
     super.initState();
@@ -568,18 +566,6 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                     child: _UnifiedSymptomPicker(vm: vm),
                   ),
                 ),
-
-                // Child Assessment questions — under-5 only, shown when at
-                // least one symptom has been selected (mirrors HTML s23).
-                if (_patientContext!.isUnder5 &&
-                    vm.selectedSymptoms.isNotEmpty)
-                  SliverToBoxAdapter(
-                    child: ChildAssessmentSection(
-                      data: _childAssessmentData ?? ChildAssessmentData(),
-                      onChanged: (updated) =>
-                          setState(() => _childAssessmentData = updated),
-                    ),
-                  ),
 
                 // Status bar + CTA row
                 SliverPadding(

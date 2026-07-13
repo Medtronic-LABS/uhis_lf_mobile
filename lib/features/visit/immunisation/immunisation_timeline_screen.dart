@@ -7,6 +7,7 @@ import '../../../core/db/immunisation_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/models/patient.dart';
 import '../../../core/theme/app_theme.dart';
+import '../triage/child_assessment_section.dart';
 import 'epi_schedule_engine.dart';
 import 'immunisation_dto.dart';
 import 'immunisation_repository.dart';
@@ -53,6 +54,7 @@ class _ImmunisationTimelineScreenState
   Patient? _patient;
   bool _loading = true;
   String? _error;
+  ChildAssessmentData _childAssessmentData = ChildAssessmentData();
 
   @override
   void initState() {
@@ -346,6 +348,16 @@ class _ImmunisationTimelineScreenState
                 ageLabel: _ageLabel(_patient),
                 onUpdateStatus: (milestone) =>
                     _showUpdateSheet(milestone, patientName),
+              ),
+
+              // Child health programme questions — always visible on vaccination screen
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: ChildAssessmentSection(
+                  data: _childAssessmentData,
+                  onChanged: (updated) =>
+                      setState(() => _childAssessmentData = updated),
+                ),
               ),
             ],
           ),
