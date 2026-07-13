@@ -3023,22 +3023,6 @@ class _BottomCtaBar extends StatelessWidget {
                   ),
                 ),
               ],
-              if (referral) ...[
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: () => context.go('/tasks'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.statusCritical,
-                      side: const BorderSide(
-                          color: AppColors.statusCriticalBorder),
-                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
-                    ),
-                    child: const Text(VisitCompleteStrings.createReferral),
-                  ),
-                ),
-              ],
             ],
           ),
         ],
