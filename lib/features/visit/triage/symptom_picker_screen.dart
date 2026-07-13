@@ -359,9 +359,14 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       '[SymptomPicker] Continue tapped — ${vm.activatedPathways.length} pathways: ${vm.activatedPathways.map((p) => p.programme.name).join(', ')}',
     );
 
-    // Guard: no symptoms recorded → prompt the SK to double-check.
-    // "Continue anyway" in the SnackBar calls _doAdvance directly.
-    if (vm.selectedSymptoms.isEmpty && vm.activatedPathways.isEmpty) {
+    // Guard: only block when there is truly no programme context —
+    // no enrolled programmes, no activated pathways, no symptoms.
+    // Enrolled patients always proceed: enrolment alone determines the form.
+    final hasEnrolledProgrammes =
+        _patientContext!.activeProgrammes.isNotEmpty;
+    if (vm.selectedSymptoms.isEmpty &&
+        vm.activatedPathways.isEmpty &&
+        !hasEnrolledProgrammes) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
@@ -381,14 +386,44 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   }
 
   void _doAdvance(TriageViewModel vm) {
-    // In-flow host (VisitFlowScreen) intercepts via callback. The host also
-    // needs the SK-confirmed symptom set to build the Step-2 AI programme
-    // recommendation request payload — surface it via the optional
-    // onSymptomsConfirmed callback before advancing.
+    // If the rule engine produced no pathways but the patient has enrolled
+    // programmes, synthesize a pathway from enrolment so the form always
+    // opens the correct section (guards against sex/data quality issues
+    // that cause demographic gates to fail — see issue #127).
+    var pathways = vm.activatedPathways;
+    if (pathways.isEmpty && _patientContext != null) {
+      const priorityByProgramme = {
+        Programme.anc: 20,
+        Programme.pnc: 25,
+        Programme.imci: 10,
+        Programme.ncd: 40,
+        Programme.tb: 30,
+        Programme.epi: 100,
+      };
+      pathways = _patientContext!.activeProgrammes
+          .where(priorityByProgramme.containsKey)
+          .map(
+            (p) => ActivatedPathway(
+              programme: p,
+              priority: priorityByProgramme[p]!,
+              confidence: 1.0,
+              trigger: PathwayTrigger.rule,
+              rationaleKey: 'pathwayEnrolmentFallback',
+            ),
+          )
+          .toList()
+        ..sort((a, b) => a.priority.compareTo(b.priority));
+      if (pathways.isNotEmpty) {
+        debugPrint(
+          '[SymptomPicker] activatedPathways empty — using enrolment fallback: '
+          '${pathways.map((p) => p.programme.name).join(', ')}',
+        );
+      }
+    }
+
+    // In-flow host (VisitFlowScreen) intercepts via callback.
     final onAdvance = widget.onAdvance;
     if (onAdvance != null) {
-      // Fire programme selection first so the host has _confirmedProgrammes set
-      // before the step counter advances.
       if (!(_patientContext?.isUnder5 ?? false)) {
         widget.onProgrammesSelected?.call(Set.unmodifiable(_selectedProgrammes));
       }
@@ -398,12 +433,12 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         vm.customSymptomText,
         vm.scribePreTickedCodes,
       );
-      onAdvance(vm.activatedPathways);
+      onAdvance(pathways);
       return;
     }
 
     // Bypass the triage-result interstitial and go straight to the form.
-    _navigateToForm(vm.activatedPathways);
+    _navigateToForm(pathways);
   }
 
   void _navigateToForm(List<ActivatedPathway> pathways) {
