@@ -79,6 +79,7 @@ class CceAlert {
     this.latitude,
     this.longitude,
     this.landmark,
+    this.followUpDate,
   });
 
   final String referralId;
@@ -125,6 +126,27 @@ class CceAlert {
 
   bool get hasPhone => patientPhone != null && patientPhone!.trim().isNotEmpty;
 
+  /// Short label rendered inside the donut ring: "+4d" (breached), "4h"
+  /// (warning with countdown), "!" (warning with no countdown), empty for
+  /// on-track/completed (those use an icon instead of text).
+  String get ringLabel {
+    switch (severity) {
+      case CceSeverity.breached:
+        final m = RegExp(r'\+\S+').firstMatch(slaBadge);
+        return m?.group(0) ?? '+?';
+      case CceSeverity.warning:
+        final m = RegExp(r'SLA:\s*(\S+)\s+left').firstMatch(slaBadge);
+        return m?.group(1) ?? '!';
+      case CceSeverity.onTrack:
+      case CceSeverity.completed:
+        return '';
+    }
+  }
+
+  /// Formatted follow-up date string (e.g. "27 May") if a follow-up is
+  /// scheduled after discharge. Null when not applicable or not yet populated.
+  final String? followUpDate;
+
   /// Derive a [CceAlert] from a referral row + (optional) cached patient.
   ///
   /// [now] is injected so the same referral yields deterministic output in
@@ -163,6 +185,7 @@ class CceAlert {
       intelTags: _intelTags(r, severity, arrived, treated),
       journey: _journey(r, arrived, treated),
       priorityScore: r.priorityScore ?? 0,
+      followUpDate: null,
     );
   }
 

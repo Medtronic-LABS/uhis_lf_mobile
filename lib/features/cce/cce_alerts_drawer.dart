@@ -96,11 +96,10 @@ class _CceAlertsDrawerState extends State<CceAlertsDrawer> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
                 const Text(
                   CceStrings.drawerTitle,
@@ -109,13 +108,25 @@ class _CceAlertsDrawerState extends State<CceAlertsDrawer> {
                       fontWeight: FontWeight.w800,
                       color: Colors.white),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  '${CceStrings.poweredBy} · ${CceStrings.actionsNeeded(count)}',
-                  style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.white.withValues(alpha: 0.75)),
-                ),
+                if (count > 0) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    width: 22,
+                    height: 22,
+                    alignment: Alignment.center,
+                    decoration: const BoxDecoration(
+                      color: AppColors.statusCritical,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      '$count',
+                      style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -137,37 +148,7 @@ class _CceAlertsDrawerState extends State<CceAlertsDrawer> {
   Widget _list(List<CceAlert> alerts) {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-      children: [
-        _explainer(),
-        const SizedBox(height: 14),
-        ...alerts.map(_card),
-      ],
-    );
-  }
-
-  Widget _explainer() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.tagBlueSurface.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.star_rounded, size: 18, color: AppColors.navy),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              CceStrings.explainer,
-              style: TextStyle(
-                  fontSize: 12,
-                  height: 1.4,
-                  color: AppColors.navy.withValues(alpha: 0.9)),
-            ),
-          ),
-        ],
-      ),
+      children: alerts.map(_card).toList(),
     );
   }
 
@@ -178,6 +159,7 @@ class _CceAlertsDrawerState extends State<CceAlertsDrawer> {
       onUpdateStatus: () => _onUpdateStatus(alert),
       onCall: () => _onCall(alert),
       onLocate: () => _onLocate(alert),
+      onWhatsapp: alert.hasPhone ? () => _onWhatsapp(alert) : null,
     );
   }
 
@@ -205,6 +187,22 @@ class _CceAlertsDrawerState extends State<CceAlertsDrawer> {
     final uri = Uri(scheme: 'tel', path: phone.trim());
     try {
       final ok = await launchUrl(uri);
+      if (!ok && mounted) _snack(CceStrings.dialFailed);
+    } catch (_) {
+      if (mounted) _snack(CceStrings.dialFailed);
+    }
+  }
+
+  Future<void> _onWhatsapp(CceAlert alert) async {
+    final phone = alert.patientPhone;
+    if (phone == null || phone.trim().isEmpty) {
+      _snack(CceStrings.noPhone);
+      return;
+    }
+    final cleaned = phone.trim().replaceAll(RegExp(r'\D'), '');
+    final uri = Uri.parse('https://wa.me/$cleaned');
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!ok && mounted) _snack(CceStrings.dialFailed);
     } catch (_) {
       if (mounted) _snack(CceStrings.dialFailed);
