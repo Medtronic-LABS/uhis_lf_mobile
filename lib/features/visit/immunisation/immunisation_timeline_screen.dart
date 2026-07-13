@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/auth/auth_repository.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/db/immunisation_dao.dart';
 import '../../../core/db/patient_dao.dart';
@@ -1032,6 +1033,7 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
     setState(() => _saving = true);
     final immunisationDao = context.read<ImmunisationDao>();
     final immunisationRepo = context.read<ImmunisationRepository>();
+    final authRepo = context.read<AuthRepository>();
     try {
       final givenMs = _givenDate.millisecondsSinceEpoch;
       final givenIso =
@@ -1077,6 +1079,15 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
         // backend integer ID that /immunisation/create actually validates.
         final numericId =
             widget.patient?.patientId ?? widget.patientId;
+        final spiceUserId = await authRepo.userId();
+        final userFhirId = await authRepo.userFhirId();
+        final orgFhirId = await authRepo.organizationFhirId();
+        final provenance = <String, dynamic>{
+          if (userFhirId != null && userFhirId.isNotEmpty) 'userId': userFhirId,
+          if (orgFhirId != null && orgFhirId.isNotEmpty) 'organizationId': orgFhirId,
+          if (spiceUserId != null) 'spiceUserId': spiceUserId,
+          'modifiedDate': DateTime.now().toUtc().toIso8601String(),
+        };
         await immunisationRepo.submitVaccinations(
           patientId: widget.patientId,
           numericPatientId: numericId,
@@ -1086,6 +1097,7 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
           villageId: widget.patient?.villageId,
           memberId: widget.memberId,
           householdId: widget.householdId,
+          provenance: provenance,
           missedReason: _notesCtrl.text.isNotEmpty ? _notesCtrl.text : null,
         );
       }
