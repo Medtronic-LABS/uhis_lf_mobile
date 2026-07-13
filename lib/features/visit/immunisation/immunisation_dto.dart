@@ -109,16 +109,22 @@ class MedicalReviewEncounterDto {
     this.patientReference,
     this.patientId,
     this.villageId,
+    this.memberId,
+    this.householdId,
   });
 
   final String? patientReference;
   final int? patientId;
   final String? villageId;
+  final String? memberId;
+  final String? householdId;
 
   Map<String, dynamic> toJson() => {
         if (patientReference != null) 'patientReference': patientReference,
         if (patientId != null) 'patientId': patientId,
         if (villageId != null) 'villageId': villageId,
+        if (memberId != null) 'memberId': memberId,
+        if (householdId != null) 'householdId': householdId,
       };
 }
 

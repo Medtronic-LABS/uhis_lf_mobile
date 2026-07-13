@@ -481,6 +481,8 @@ class _ImmunisationTimelineScreenState
         ageLabel: _ageLabel(_patient),
         locationLabel: _patient?.villageName ?? '',
         encounterId: widget.encounterId,
+        memberId: widget.memberId,
+        householdId: _patient?.householdId,
         onRecorded: () {
           setState(() => _loading = true);
           _load();
@@ -981,6 +983,8 @@ class _UpdateStatusSheet extends StatefulWidget {
     required this.onRecorded,
     this.patient,
     this.encounterId,
+    this.memberId,
+    this.householdId,
   });
 
   final VaccineMilestone milestone;
@@ -997,6 +1001,10 @@ class _UpdateStatusSheet extends StatefulWidget {
   /// When set, vaccine status is pushed to the backend via [ImmunisationRepository]
   /// after saving locally. Null in standalone access; push skipped.
   final String? encounterId;
+
+  /// Required by /immunisation/create to look up the household member.
+  final String? memberId;
+  final String? householdId;
 
   @override
   State<_UpdateStatusSheet> createState() => _UpdateStatusSheetState();
@@ -1076,6 +1084,8 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
           vaccines: dtos,
           encounterId: widget.encounterId,
           villageId: widget.patient?.villageId,
+          memberId: widget.memberId,
+          householdId: widget.householdId,
           missedReason: _notesCtrl.text.isNotEmpty ? _notesCtrl.text : null,
         );
       }
