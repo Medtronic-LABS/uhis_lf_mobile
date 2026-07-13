@@ -362,7 +362,9 @@ abstract final class SearchStrings {
   static String nid(Object nid) => 'NID $nid';
   static String householdNo(Object no) => 'No $no';
   static String memberCount(Object count) => '$count members';
-  static const String scanNidTooltip = 'Scan NID card to find patient';
+  static const String scanNidTooltip = 'Scan NID or QR to find patient';
+  static const String scanSearchTitle = 'Scan to Search';
+  static const String scanSearchSubtitle = 'Point at NID card or QR code';
 }
 
 /// App-specific fallback PIN: setup (create + confirm), unlock, and management.
@@ -909,6 +911,26 @@ abstract final class PatientProfileStrings {
   static String get yes => AppLocale.isBangla ? 'হ্যাঁ' : 'Yes';
   static String get no => AppLocale.isBangla ? 'না' : 'No';
   static const String notAvailable = '—';
+  static const String dialFailed = 'Could not open the dialer';
+  static const String mapsOpenFailed = 'Could not open maps';
+}
+
+abstract final class ContactSheetStrings {
+  ContactSheetStrings._();
+
+  static const String noContactAvailable =
+      'No contact number available for this household';
+  static const String whatsAppFailed = 'Could not open WhatsApp';
+  static const String smsFailed = 'Could not open SMS';
+  static const String householdHead = 'Household head';
+  static const String familyMember = 'Family member';
+  static const String unknownPatient = 'Patient';
+
+  /// Shown when contacting a household member on behalf of the patient.
+  static String fallbackBanner(
+          String patientName, String recipientName, String relationship) =>
+      '$patientName has no registered number. '
+      'Contacting $recipientName ($relationship) on their behalf.';
 }
 
 /// Copy for the Referral SLA dashboard, cards, banners, and notifications.
@@ -4491,6 +4513,8 @@ abstract final class EnrollmentStrings {
       'If member has no NID, enter Birth Registration ID instead.';
   static String nidNumberCaptured(String number) =>
       '✓ NID number captured: $number';
+  static const String autoScanActive = 'Auto-scanning — hold card steady';
+  static const String autoScanHint = 'Scanning every ~2 s · tap button to force capture';
   static const String nidScanNotFound =
       'Could not read the NID number. Try again or type it in below.';
   static const String nidScanError =
@@ -4906,7 +4930,6 @@ abstract final class CceStrings {
   static const String selectStatus = 'Select the patient\'s current status';
 }
 
-
 /// Follow-up call logging — the device-side close/update flow.
 abstract final class FollowUpCallStrings {
   FollowUpCallStrings._();
@@ -4930,6 +4953,7 @@ abstract final class FollowUpCallStrings {
       'Wrong number or exhausted attempts will close this follow-up.';
   static const String failed = 'Could not log the call';
 }
+
 
 abstract final class EnrollStrings {
   EnrollStrings._();
@@ -5022,4 +5046,25 @@ abstract final class NewPatientVisitStrings {
   static const String pwHint = "⚠ Select 'PW' first to unlock ANC";
   static const String startVisitCta = 'Start Visit →';
   static const String selectServiceCta = 'Select a service to continue';
+}
+
+/// Patient-scoped AI assistant (the floating "✦" sheet).
+abstract final class PatientAiStrings {
+  PatientAiStrings._();
+
+  static String title(String name) => 'Ask about $name';
+  static const String intro =
+      "I have this patient's record. I'll answer only from their data — ask "
+      'about their care, or tap an action below.';
+  static const String inputHint = 'Ask about this patient...';
+  static const String scopeNote = '🔒 Answers limited to this patient';
+  static const String noPhone = 'No phone number on file for this patient';
+  static const String dialFailed = 'Could not open the dialer';
+  static const String fabTooltip = 'Ask AI about this patient';
+
+  static const List<String> starters = [
+    'Any danger signs to check?',
+    'What should I do this visit?',
+    'Is a referral needed?',
+  ];
 }

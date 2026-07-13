@@ -111,8 +111,9 @@ class _ChatTabState extends State<_ChatTab> {
       setState(() {
         _messages.add(ChatMessage(
           role: MessageRole.assistant,
-          text: answer,
+          text: answer.text,
           timestamp: DateTime.now(),
+          actions: answer.actions,
         ));
         _loading = false;
       });

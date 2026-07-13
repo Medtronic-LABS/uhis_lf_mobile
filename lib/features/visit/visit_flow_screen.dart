@@ -1902,7 +1902,6 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             _WhatsAppCard(
               text: naba.whatsappSummary!,
               patientPhone: _patientPhone,
-              onShared: () => _onAccepted(naba),
             ),
             const SizedBox(height: 12),
           ],
@@ -2921,44 +2920,18 @@ class _WhatsAppCard extends StatefulWidget {
   const _WhatsAppCard({
     required this.text,
     this.patientPhone,
-    this.onShared,
   });
   final String text;
   // Pre-loaded from MemberDao; pre-fills recipient in SMS and WhatsApp.
   final String? patientPhone;
-  // Called when the user returns to the app after launching SMS or WhatsApp.
-  final VoidCallback? onShared;
 
   @override
   State<_WhatsAppCard> createState() => _WhatsAppCardState();
 }
 
-class _WhatsAppCardState extends State<_WhatsAppCard>
-    with WidgetsBindingObserver {
+class _WhatsAppCardState extends State<_WhatsAppCard> {
   bool _copied = false;
   bool _expanded = false;
-  // True after a launch so we fire onShared on the next app-resume event.
-  bool _launchedExternal = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _launchedExternal) {
-      _launchedExternal = false;
-      widget.onShared?.call();
-    }
-  }
 
   Future<void> _copy() async {
     await Clipboard.setData(ClipboardData(text: widget.text));
@@ -2983,7 +2956,6 @@ class _WhatsAppCardState extends State<_WhatsAppCard>
       return;
     }
     await launchUrl(uri);
-    _launchedExternal = true;
   }
 
   Future<void> _sendWhatsApp(BuildContext context) async {
@@ -2998,7 +2970,6 @@ class _WhatsAppCardState extends State<_WhatsAppCard>
     final nativeUri = Uri.parse('whatsapp://send?${phoneParam}text=$encoded');
     if (await canLaunchUrl(nativeUri)) {
       await launchUrl(nativeUri);
-      _launchedExternal = true;
       return;
     }
     // Fallback: wa.me/<phone>?text=<text> (browser universal link).
@@ -3006,7 +2977,6 @@ class _WhatsAppCardState extends State<_WhatsAppCard>
     final webUri = Uri.parse('https://wa.me/$waPath?text=$encoded');
     if (await canLaunchUrl(webUri)) {
       await launchUrl(webUri, mode: LaunchMode.externalApplication);
-      _launchedExternal = true;
       return;
     }
     if (context.mounted) {
@@ -3064,37 +3034,6 @@ class _WhatsAppCardState extends State<_WhatsAppCard>
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  AnimatedRotation(
-                    turns: _expanded ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: const Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      color: AppColors.waHeader,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          // ── Collapsible body ────────────────────────────────────────
-          if (_expanded) ...[
-            const Divider(height: 1, color: AppColors.waBorder),
-            // Message body with copy button
-            Padding(
-              padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.xl, AppSpacing.xxl, 0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Text(
-                      widget.text,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        height: 1.55,
-                        color: AppColors.textStrong,
-                      ),
-                    ),
-                  ),
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 180),
                     child: _copied
@@ -3125,7 +3064,31 @@ class _WhatsAppCardState extends State<_WhatsAppCard>
                             ),
                           ),
                   ),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: AppColors.waHeader,
+                    ),
+                  ),
                 ],
+              ),
+            ),
+          ),
+          // ── Collapsible body ────────────────────────────────────────
+          if (_expanded) ...[
+            const Divider(height: 1, color: AppColors.waBorder),
+            // Message body — full width now copy button is in the header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.xl, AppSpacing.xxl, 0),
+              child: Text(
+                widget.text,
+                style: const TextStyle(
+                  fontSize: 13,
+                  height: 1.55,
+                  color: AppColors.textStrong,
+                ),
               ),
             ),
             const SizedBox(height: AppSpacing.xl),
