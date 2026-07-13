@@ -23,6 +23,23 @@ const double tempHighFeverF = 102.0;
 const double tempMildFeverMinF = 100.0;
 const double tempMildFeverMaxF = 101.9;
 
+// ── Temperature (°C — derived from °F constants via formal conversion) ──
+// Conversion: °C = (°F − 32) × 5/9
+const double tempHighFeverC = 38.89;       // 102°F
+const double tempMildFeverMinC = 37.78;    // 100°F
+const double tempMildFeverMaxC = 38.83;    // 101.9°F
+const double tempHypothermiaC = 35.0;
+const double tempNormalMinC = 36.1;
+const double tempNormalMaxC = 37.5;
+
+/// Form input bounds for temperature entry (°C).
+const double tempFormMinC = 30.0;
+const double tempFormMaxC = 43.0;
+
+// ── Temperature conversion utilities ──
+double fahrenheitToCelsius(double f) => (f - 32) * 5 / 9;
+double celsiusToFahrenheit(double c) => c * 9 / 5 + 32;
+
 // ── Pulse (bpm — AssessmentDefinedParams) ──
 const double pulseHigh = 90.0;
 const double pulseLow = 60.0;

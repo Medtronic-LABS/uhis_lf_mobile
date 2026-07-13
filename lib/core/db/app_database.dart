@@ -21,7 +21,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 25;
+  static const int schemaVersion = 26;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -46,6 +46,11 @@ class AppDatabase {
   static const String tableAiResponseCache = 'ai_response_cache';
   static const String tableCoachingModules = 'coaching_modules';
   static const String tableCoachingProgress = 'coaching_progress';
+  static const String tableScreenings = 'screenings';
+  static const String tableNcdMedicalReviews = 'ncd_medical_reviews';
+  static const String tableDiagnoses = 'diagnoses';
+  static const String tableTreatmentDetails = 'treatment_details';
+  static const String tableRxBuddyCheckins = 'rx_buddy_checkins';
 
   /// Opens (creating if needed) the on-device database, encrypted with
   /// a per-device key stored in Android EncryptedSharedPreferences.
@@ -1161,6 +1166,110 @@ class AppDatabase {
             'CREATE INDEX IF NOT EXISTS idx_fu_call_parent ON $tableFollowUpCalls(follow_up_id)');
       } catch (_) {/* index already present */}
     }
+    if (from < 26) {
+      // v26 — Clinical record tables: screenings, NCD medical reviews,
+      // diagnoses, treatment details, and Rx-Buddy check-ins. All additive.
+      Future<void> addTbl26(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* table already present */}
+      }
+      Future<void> addIdx26(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* index already present */}
+      }
+      await addTbl26('''
+        CREATE TABLE IF NOT EXISTS $tableScreenings (
+          id TEXT PRIMARY KEY,
+          patient_id TEXT NOT NULL,
+          programme TEXT NOT NULL,
+          screening_date INTEGER NOT NULL,
+          raw_json TEXT NOT NULL,
+          sync_status TEXT NOT NULL DEFAULT 'pending',
+          created_at INTEGER,
+          updated_at INTEGER
+        )''');
+      await addIdx26(
+          'CREATE INDEX IF NOT EXISTS idx_screening_patient ON $tableScreenings(patient_id)');
+      await addIdx26(
+          'CREATE INDEX IF NOT EXISTS idx_screening_sync ON $tableScreenings(sync_status)');
+
+      await addTbl26('''
+        CREATE TABLE IF NOT EXISTS $tableNcdMedicalReviews (
+          id TEXT PRIMARY KEY,
+          patient_id TEXT NOT NULL,
+          visit_date INTEGER NOT NULL,
+          bp_systolic INTEGER,
+          bp_diastolic INTEGER,
+          glucose_value REAL,
+          glucose_type TEXT,
+          on_medication INTEGER DEFAULT 0,
+          raw_json TEXT NOT NULL,
+          sync_status TEXT NOT NULL DEFAULT 'pending',
+          created_at INTEGER,
+          updated_at INTEGER
+        )''');
+      await addIdx26(
+          'CREATE INDEX IF NOT EXISTS idx_ncd_review_patient ON $tableNcdMedicalReviews(patient_id)');
+      await addIdx26(
+          'CREATE INDEX IF NOT EXISTS idx_ncd_review_sync ON $tableNcdMedicalReviews(sync_status)');
+
+      await addTbl26('''
+        CREATE TABLE IF NOT EXISTS $tableDiagnoses (
+          id TEXT PRIMARY KEY,
+          patient_id TEXT NOT NULL,
+          diagnosis_code TEXT NOT NULL,
+          diagnosis_label TEXT,
+          programme TEXT,
+          confirmed_at INTEGER,
+          raw_json TEXT NOT NULL,
+          sync_status TEXT NOT NULL DEFAULT 'pending',
+          created_at INTEGER,
+          updated_at INTEGER
+        )''');
+      await addIdx26(
+          'CREATE INDEX IF NOT EXISTS idx_diagnosis_patient ON $tableDiagnoses(patient_id)');
+      await addIdx26(
+          'CREATE INDEX IF NOT EXISTS idx_diagnosis_code ON $tableDiagnoses(diagnosis_code)');
+
+      await addTbl26('''
+        CREATE TABLE IF NOT EXISTS $tableTreatmentDetails (
+          id TEXT PRIMARY KEY,
+          patient_id TEXT NOT NULL,
+          programme TEXT,
+          medication_name TEXT,
+          dosage TEXT,
+          frequency TEXT,
+          start_date INTEGER,
+          end_date INTEGER,
+          raw_json TEXT NOT NULL,
+          sync_status TEXT NOT NULL DEFAULT 'pending',
+          created_at INTEGER,
+          updated_at INTEGER
+        )''');
+      await addIdx26(
+          'CREATE INDEX IF NOT EXISTS idx_treatment_patient ON $tableTreatmentDetails(patient_id)');
+
+      await addTbl26('''
+        CREATE TABLE IF NOT EXISTS $tableRxBuddyCheckins (
+          id TEXT PRIMARY KEY,
+          patient_id TEXT NOT NULL,
+          check_date INTEGER NOT NULL,
+          medications_taken INTEGER NOT NULL DEFAULT 0,
+          notes TEXT,
+          raw_json TEXT,
+          sync_status TEXT NOT NULL DEFAULT 'pending',
+          created_at INTEGER,
+          updated_at INTEGER
+        )''');
+      await addIdx26(
+          'CREATE INDEX IF NOT EXISTS idx_rx_buddy_patient ON $tableRxBuddyCheckins(patient_id)');
+      await addIdx26(
+          'CREATE INDEX IF NOT EXISTS idx_rx_buddy_date ON $tableRxBuddyCheckins(check_date DESC)');
+      await addIdx26(
+          'CREATE INDEX IF NOT EXISTS idx_rx_buddy_sync ON $tableRxBuddyCheckins(sync_status)');
+    }
   }
 
   // Single source of truth for "every table" — used by wipeAllData() so a
@@ -1173,6 +1282,8 @@ class AppDatabase {
     tableEncounters, tableLocalAssessments, tablePregnancySnapshot,
     tableTreatmentPresence, tableAssessmentDraft, tableAiSuggestions,
     tableEvalLog, tableAiResponseCache, tableCoachingModules, tableCoachingProgress,
+    tableScreenings, tableNcdMedicalReviews, tableDiagnoses,
+    tableTreatmentDetails, tableRxBuddyCheckins,
   ];
 
   /// Test-only view of [_allTables] so wipe tests can assert against the

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/clinical/assessment_thresholds.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_theme.dart';
 import '../widgets/form_fields/radio_form_field.dart';
@@ -1525,6 +1526,14 @@ class _SectionCard extends StatelessWidget {
                     onFieldChanged('pulse', int.tryParse(v) ?? double.tryParse(v) ?? v);
                   }
                 },
+                validator: (v) {
+                  if (v == null || v.isEmpty) return null;
+                  final n = num.tryParse(v);
+                  if (n == null || n < pulseFormMin || n > pulseFormMax) {
+                    return ComposerStrings.pulseValidationError;
+                  }
+                  return null;
+                },
               ),
             ),
           ],
@@ -1927,6 +1936,43 @@ class _SectionCard extends StatelessWidget {
     }
   }
 
+  /// Returns a range validator for known clinical numeric fields.
+  /// Returns null (no validation) for fields not in the list.
+  static FormFieldValidator<String>? _numericRangeValidator(String fieldId) {
+    switch (fieldId) {
+      case 'fastingBloodSugar':
+      case 'randomBloodSugar':
+        return (v) {
+          if (v == null || v.isEmpty) return null;
+          final n = double.tryParse(v);
+          if (n == null || n < 1.0 || n > fbsScreeningMax) {
+            return ComposerStrings.glucoseValidationError;
+          }
+          return null;
+        };
+      case 'hemoglobin':
+        return (v) {
+          if (v == null || v.isEmpty) return null;
+          final n = double.tryParse(v);
+          if (n == null || n < 1.0 || n > 20.0) {
+            return ComposerStrings.haemoglobinValidationError;
+          }
+          return null;
+        };
+      case 'temperature':
+        return (v) {
+          if (v == null || v.isEmpty) return null;
+          final n = double.tryParse(v);
+          if (n == null || n < tempFormMinC || n > tempFormMaxC) {
+            return ComposerStrings.temperatureValidationError;
+          }
+          return null;
+        };
+      default:
+        return null;
+    }
+  }
+
   /// True when a spinner's options are a boolean Yes/No pair — these render as
   /// pill buttons rather than a dropdown. Matches on id or display name so a
   /// localised label (titleCulture) does not defeat the check.
@@ -2091,6 +2137,7 @@ class _SectionCard extends StatelessWidget {
               onFieldChanged(def.id, parsed ?? v);
             }
           },
+          validator: _numericRangeValidator(def.id),
         );
 
       case WidgetHint.dateField:
@@ -2822,6 +2869,7 @@ class _NumericField extends StatefulWidget {
     this.initialValue,
     this.unit,
     this.hint,
+    this.validator,
   });
 
   final bool isDecimal;
@@ -2829,6 +2877,7 @@ class _NumericField extends StatefulWidget {
   final ValueChanged<String?> onChanged;
   final String? unit;
   final String? hint;
+  final FormFieldValidator<String>? validator;
 
   @override
   State<_NumericField> createState() => _NumericFieldState();
@@ -2896,6 +2945,7 @@ class _NumericFieldState extends State<_NumericField> {
         suffixText: widget.unit,
       ),
       onChanged: widget.onChanged,
+      validator: widget.validator,
     );
   }
 }

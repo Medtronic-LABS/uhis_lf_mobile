@@ -26,7 +26,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/scribe_api_service.dart';
+import '../../core/clinical/referral_evaluator.dart';
 import '../../core/constants/app_strings.dart';
+import 'models/anc_assessment.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
@@ -1637,6 +1639,179 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         _ => 'Visit — Guideline Care Plan',
       };
 
+  /// Builds a rule-based clinical referral color card using the local vitals
+  /// loaded by [_loadVitalsAndLabs]. Shown above the NABA result for NCD,
+  /// ANC, and PNC programmes so the SK sees the referral band immediately.
+  Widget? _buildClinicalReferralCard() {
+    final progs = widget.confirmedProgrammes;
+    final v = _loadedVitals;
+
+    if (progs.contains(Programme.ncd) && v != null) {
+      final sys = v.bloodPressureSystolic?.toDouble();
+      final dia = v.bloodPressureDiastolic?.toDouble();
+      final gl = _loadedLabs.isNotEmpty ? _loadedLabs.first : null;
+      final isFasting = gl?.name.contains('Fasting') ?? false;
+      final glVal = double.tryParse(gl?.value ?? '');
+
+      final result = NcdReferralEvaluator.evaluate(
+        systolic: sys,
+        diastolic: dia,
+        fastingGlucoseMmol: isFasting ? glVal : null,
+        randomGlucoseMmol: isFasting ? null : glVal,
+        symptoms: widget.confirmedSymptoms.toList(),
+      );
+
+      if (!result.isReferralRequired) return null;
+
+      final color = Color(
+        int.parse(result.hexColor.replaceFirst('#', '0xFF')),
+      );
+      final label = switch (result.band) {
+        NcdRiskBand.red => 'HIGH RISK — Refer today',
+        NcdRiskBand.orange => 'Elevated risk — Referral recommended',
+        NcdRiskBand.yellowHigh => 'Moderate risk — Monitor closely',
+        NcdRiskBand.yellowLow => 'Borderline — Review at next visit',
+        NcdRiskBand.green => 'Controlled',
+      };
+
+      return Container(
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          border: Border.all(color: color, width: 1.5),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.circle, size: 14, color: color),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color: color,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (progs.contains(Programme.anc)) {
+      final sys = v?.bloodPressureSystolic;
+      final dia = v?.bloodPressureDiastolic;
+      final hb = _loadedLabs
+          .where((l) => l.name == 'Hemoglobin')
+          .map((l) => double.tryParse(l.value))
+          .whereType<double>()
+          .firstOrNull;
+
+      final result = AncReferralEvaluator.evaluate(
+        AncAssessment(
+          gestationalWeeks: widget.gestationalWeeks,
+          medicalHistoryPhysicalExamination: (sys != null || dia != null)
+              ? MedicalHistoryPhysicalExamination(
+                  bloodPressureSystolic: sys,
+                  bloodPressureDiastolic: dia,
+                )
+              : null,
+          pointOfCareInvestigations: hb != null
+              ? PointOfCareInvestigations(hemoglobin: hb)
+              : null,
+        ),
+      );
+      if (!result.isReferralRequired) return null;
+
+      final isEmergency = result.isEmergencyReferral;
+      final conditions = isEmergency
+          ? result.emergencyConditions
+          : result.nonEmergencyConditions;
+      final color = isEmergency ? const Color(0xFFDC2626) : const Color(0xFFF97316);
+
+      return Container(
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.10),
+          border: Border.all(color: color, width: 1.5),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isEmergency ? 'Emergency conditions detected' : 'Referral conditions detected',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 4),
+            ...conditions.map((c) => Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                '• $c',
+                style: TextStyle(fontSize: 13, color: color),
+              ),
+            )),
+          ],
+        ),
+      );
+    }
+
+    if (progs.contains(Programme.pnc) && v != null) {
+      final sys = v.bloodPressureSystolic?.toDouble();
+      final dia = v.bloodPressureDiastolic?.toDouble();
+      final result = PncReferralEvaluator.evaluate(
+        systolic: sys,
+        diastolic: dia,
+      );
+      if (!result.isReferralRequired) return null;
+
+      final isUrgent = result.isUrgentReferral;
+      final conditions = isUrgent ? result.urgentConditions : result.nonUrgentConditions;
+      final color = isUrgent ? const Color(0xFFDC2626) : const Color(0xFFF97316);
+
+      return Container(
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.10),
+          border: Border.all(color: color, width: 1.5),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isUrgent ? 'Urgent PNC conditions' : 'PNC conditions requiring review',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 4),
+            ...conditions.map((c) => Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                '• $c',
+                style: TextStyle(fontSize: 13, color: color),
+              ),
+            )),
+          ],
+        ),
+      );
+    }
+
+    return null;
+  }
+
   void _retry() {
     final nextFuture = _fetchNaba();
     setState(() => _future = nextFuture);
@@ -1890,6 +2065,11 @@ class _Step3AiRecoState extends State<_Step3AiReco>
               eddMs: widget.eddMs,
             ),
             const SizedBox(height: 12),
+          ],
+
+          // ── Rule-based clinical referral band ─────────────────────
+          if (_buildClinicalReferralCard() case final card?) ...[
+            card,
           ],
 
           // ── 3. AI Counselling Guide (WhatsApp preview) ──────────────
