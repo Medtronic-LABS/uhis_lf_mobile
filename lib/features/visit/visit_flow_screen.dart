@@ -1650,9 +1650,9 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         _ => 'Visit — Guideline Care Plan',
       };
 
-  /// Builds a rule-based clinical referral color card using the local vitals
-  /// loaded by [_loadVitalsAndLabs]. Shown above the NABA result for NCD,
-  /// ANC, and PNC programmes so the SK sees the referral band immediately.
+  /// Previously shown as a separate "HIGH RISK — Refer today" card.
+  /// Removed: referral reasons are now surfaced in [_ReferralAlertCard] above.
+  // ignore: unused_element
   Widget? _buildClinicalReferralCard() {
     final progs = widget.confirmedProgrammes;
     final v = _loadedVitals;
@@ -2082,11 +2082,6 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             const SizedBox(height: 12),
           ],
 
-          // ── Rule-based clinical referral band ─────────────────────
-          if (_buildClinicalReferralCard() case final card?) ...[
-            card,
-          ],
-
           // ── 3. AI Counselling Guide (WhatsApp preview) ──────────────
           if (naba.whatsappSummary != null) ...[
             _AiCounsellingCard(
@@ -2499,11 +2494,24 @@ class _ReferralAlertCard extends StatelessWidget {
     const bg     = Color(0xFFFEE2E2);
     const accent = Color(0xFFDC2626);
 
-    // reason may be newline-joined conditions — split into bullet list.
+    // reason may be newline-joined raw API field names or NABA text —
+    // map known camelCase keys to human-readable labels before displaying.
+    const _reasonLabels = <String, String>{
+      'bloodPressure':  'High blood pressure',
+      'bloodGlucose':   'High blood glucose',
+      'symptoms':       'Reported symptoms',
+      'hbLevel':        'Low haemoglobin',
+      'weight':         'Abnormal weight',
+      'urineProtein':   'Urine protein detected',
+      'dangerSigns':    'Danger signs present',
+      'bmi':            'Abnormal BMI',
+      'gestationalAge': 'Gestational age concern',
+    };
     final conditions = reason
         .split('\n')
         .map((s) => s.trim())
         .where((s) => s.isNotEmpty)
+        .map((s) => _reasonLabels[s] ?? s)
         .toList();
 
     return Container(
