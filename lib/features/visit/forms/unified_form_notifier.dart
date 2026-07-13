@@ -336,6 +336,19 @@ class UnifiedFormNotifier extends ChangeNotifier {
         continue;
       }
 
+      // Flicker guard: if this field was already set by AI from the same source
+      // segment, the LLM is re-processing unchanged context — skip to prevent
+      // urinaryAlbumin / urineProtein-style oscillation across rounds.
+      final storedSegment = _fieldSourceSegments[field.fieldId];
+      final incomingSegment = field.sourceSegment;
+      if (_fieldSources[field.fieldId] == FieldSource.aiPending &&
+          storedSegment != null &&
+          incomingSegment != null &&
+          storedSegment == incomingSegment &&
+          _data.getValue(field.fieldId) != null) {
+        continue;
+      }
+
       final previous = _data.getValue(field.fieldId);
       _data = _data.setValue(field.fieldId, validated);
       _fieldSources[field.fieldId] = FieldSource.aiPending;
