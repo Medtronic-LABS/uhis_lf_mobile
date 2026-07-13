@@ -89,10 +89,11 @@ class EncounterRepository extends ApiRepository {
   }) async {
     final visits = <String, VisitSummary>{};
 
-    // 1. Local encounters first — includes drafts the device has captured
-    //    but not yet synced.
+    // 1. Completed local encounters only — drafts (patient tapped Start Visit
+    //    but never submitted the form) must not appear in recent visits.
     final local = await _dao.recentForPatient(patientId, limit: limit);
     for (final row in local) {
+      if (row.status != EncounterStatus.completed) continue;
       visits[row.id] = VisitSummary.fromEncounterRow(row);
     }
 

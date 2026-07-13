@@ -761,6 +761,22 @@ class OfflineSyncService extends ChangeNotifier {
   /// Returns null if the member lacks a usable identifier.
   static Patient? _memberToPatient(HouseholdMemberEntity m) {
     if (m.id.isEmpty) return null;
+    // Derive age in years from DOB when available — the JSON bundle never carries
+    // a pre-computed `age` field for household members, so without this the
+    // patient.age stays null and all age-gated sections show for every member.
+    int? ageYears;
+    if (m.dob != null) {
+      final dob = DateTime.tryParse(m.dob!);
+      if (dob != null) {
+        final now = DateTime.now();
+        ageYears = now.year - dob.year;
+        if (now.month < dob.month ||
+            (now.month == dob.month && now.day < dob.day)) {
+          ageYears--;
+        }
+        if (ageYears < 0) ageYears = 0;
+      }
+    }
     return Patient(
       // Prefer the explicit patientId when the backend has minted one, else
       // fall back to the member's own UUID so every member shows up exactly
@@ -784,6 +800,7 @@ class OfflineSyncService extends ChangeNotifier {
       isActive: m.isActive,
       updatedAt: m.updatedAt,
       rawJson: m.rawJson ?? '{}',
+      age: ageYears,
     );
   }
 
