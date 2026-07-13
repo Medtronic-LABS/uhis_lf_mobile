@@ -536,6 +536,7 @@ class _ReferralPlacePicker extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
+          isExpanded: true,
           initialValue: value,
           hint: const Text(
             'Select…',
