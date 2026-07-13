@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 import '../../../core/db/immunisation_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/db/patient_programmes_dao.dart';
@@ -186,14 +188,24 @@ class PatientContextBuilder {
   Future<PatientContext?> build(String patientId) async {
     // Fetch patient record
     final patient = await _patientDao.byId(patientId);
-    if (patient == null) return null;
+    if (patient == null) {
+      debugPrint('[PatientCtx] ✗ patient not found: $patientId');
+      return null;
+    }
+
+    debugPrint(
+      '[PatientCtx] raw: id=$patientId '
+      'gender="${patient.gender}" dob="${patient.dob}" age=${patient.age}',
+    );
 
     // Fetch enrolled programmes
     final programmes = await _programmesDao.programmesFor(patientId);
+    debugPrint('[PatientCtx] programmes from DB: ${programmes.map((p) => p.name).toList()}');
 
     // Fetch pregnancy facts if available
     final pregnancyMap = await _pregnancyDao.getAll();
     final pregnancyFacts = pregnancyMap[patientId];
+    debugPrint('[PatientCtx] pregnancyFacts from snapshot: ${pregnancyFacts != null}');
 
     // Calculate age in months
     final ageMonths = _calculateAgeMonths(patient.dob, patient.age);
@@ -202,17 +214,26 @@ class PatientContextBuilder {
 
     // Determine sex
     final sex = _parseSex(patient.gender);
+    debugPrint(
+      '[PatientCtx] sex parse: raw="${patient.gender}" → ${sex.name}',
+    );
 
-    // Determine pregnancy status
-    final isPregnant = pregnancyFacts != null ||
-        programmes.contains(Programme.anc) ||
-        _isPregnantFromRaw(patient.rawJson);
+    // Determine pregnancy status (three sources)
+    final pregnantFromFacts = pregnancyFacts != null;
+    final pregnantFromProgramme = programmes.contains(Programme.anc);
+    final pregnantFromRaw = _isPregnantFromRaw(patient.rawJson);
+    final isPregnant = pregnantFromFacts || pregnantFromProgramme || pregnantFromRaw;
+    debugPrint(
+      '[PatientCtx] isPregnant=$isPregnant '
+      '(facts=$pregnantFromFacts programme=$pregnantFromProgramme raw=$pregnantFromRaw)',
+    );
 
     // Extract gestational weeks from raw JSON if available
     final gestationalWeeks = _extractGestationalWeeks(patient.rawJson);
 
     // Extract known conditions from raw JSON
     final knownConditions = _extractConditions(patient.rawJson);
+    debugPrint('[PatientCtx] knownConditions: $knownConditions');
 
     // Extract delivery date for PNC
     final deliveryDateMillis = _extractDeliveryDate(patient.rawJson);
