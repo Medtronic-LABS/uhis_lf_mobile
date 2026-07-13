@@ -23,6 +23,7 @@ import 'patient_actions_row.dart';
 import 'patient_repository.dart';
 import 'recent_vitals_section.dart';
 import 'vitals_repository.dart';
+import '../assistant/patient_ai_sheet.dart';
 import '../visit/briefing/visit_briefing_repository.dart';
 import 'contact_sheet.dart';
 import 'followup_repository.dart';
@@ -574,10 +575,76 @@ class _PatientContextScreenState
   );
 
   @override
+  /// Build the patient-scoped AI context (chip line, 2-line summary, and the
+  /// structured payload the assistant answers from) out of the loaded data.
+  PatientAiContext _aiContext(PatientOrMemberData data) {
+    final progs = data.programmes.toList();
+    final progLabel = progs.isEmpty
+        ? '—'
+        : progs.map((p) => p.wireTag.toUpperCase()).join('/');
+    final band = data.riskBand;
+    final bandLabel = band == null ? null : 'Band ${band.index + 1}';
+    final reasons = data.riskReasons;
+
+    final chip = <String>[
+      progLabel,
+      if (data.age != null) '${data.age}y',
+      if (bandLabel != null) bandLabel,
+    ].join(' · ');
+
+    final summary = StringBuffer()
+      ..write('${data.age ?? '—'}'
+          '${data.gender != null ? ', ${data.gender}' : ''} · $progLabel.');
+    if (bandLabel != null) {
+      summary.write(
+          ' $bandLabel${reasons.isNotEmpty ? ' — ${reasons.first}' : ''}.');
+    }
+    if (data.isPregnant) summary.write(' Pregnant.');
+
+    return PatientAiContext(
+      patientId: data.patientId ?? widget.patientId,
+      patientName: data.name ?? 'Patient',
+      patientAge: data.age,
+      patientGender: data.gender,
+      phone: data.phoneNumber,
+      householdId: data.householdId,
+      villageId: data.villageId,
+      memberId: data.memberId,
+      programmes: progs,
+      diagnosisLabel: reasons.isNotEmpty ? reasons.first : null,
+      chipLine: chip,
+      summary: summary.toString(),
+      apiContext: <String, dynamic>{
+        'patientId': data.patientId ?? widget.patientId,
+        'name': data.name,
+        'age': data.age,
+        'gender': data.gender,
+        'programmes': progs.map((p) => p.wireTag).toList(),
+        'riskBand': bandLabel,
+        'riskReasons': reasons,
+        'isPregnant': data.isPregnant,
+        'villageName': data.villageName,
+      },
+    );
+  }
+
   Widget buildPhi(BuildContext context) {
     final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     return Scaffold(
       backgroundColor: tokens.canvas,
+      floatingActionButton: FutureBuilder<PatientOrMemberData>(
+        future: _future,
+        builder: (context, snap) {
+          final d = snap.data;
+          if (d == null || !d.hasData) return const SizedBox.shrink();
+          return FloatingActionButton(
+            heroTag: 'patient-ai-fab',
+            tooltip: PatientAiStrings.fabTooltip,
+            onPressed: () => PatientAiSheet.show(context, _aiContext(d)),
+            child: const Icon(Icons.auto_awesome),
+          );
+        },
+      ),
       body: FutureBuilder<PatientOrMemberData>(
         future: _future,
         builder: (context, snap) {
