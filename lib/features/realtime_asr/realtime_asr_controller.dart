@@ -405,8 +405,11 @@ class RealtimeAsrController extends ChangeNotifier {
   ///
   /// Parsed from `clinicalNotes` (server English summary, generic prompt path):
   ///   ANC: `weight` · `hemoglobin` · `fundalHeight` · `fetalMovement` ·
-  ///        `urinarySugar` · `urineProtein`
-  ///   NCD/shared: `weight` · `height` · `pulse`
+  ///        `urinarySugar` · `urineProtein` · `urinaryAlbumin` ·
+  ///        `urinaryBilirubin` · `folicAcidProvided` · `folicAcidTotalConsumed` ·
+  ///        `ifaProvided` · `ifaTotalConsumed` · `calciumProvided` ·
+  ///        `calciumTotalConsumed` · `ancDangerSigns` (none-only safe path)
+  ///   NCD/shared: `weight` · `height` · `pulse` · `glucoseType` (qualifier-dependent)
   FormPrefillResult _symptomsToFormFill(RealtimeClinicalFields f) {
     final extracted = <AIExtractedField>[];
     final unmapped = <String>[];
@@ -583,6 +586,122 @@ class RealtimeAsrController extends ChangeNotifier {
             confidence: 0.8,
             source: FieldSource.aiPending,
             sourceSegment: up.group(0)!,
+            extractedAt: now,
+          ));
+        }
+      }
+
+      // Glucose type (NCD) — only fires when server includes qualifier in notes
+      // (current deployed server omits this; will auto-activate post-redeploy).
+      if (!placed.contains('glucoseType')) {
+        final lower = notes.toLowerCase();
+        String? gType;
+        if (lower.contains('fasting') &&
+            (lower.contains('glucose') || lower.contains('blood sugar'))) {
+          gType = 'fbs';
+        } else if ((lower.contains('post') &&
+                (lower.contains('prandial') || lower.contains('meal'))) ||
+            lower.contains('ppbs')) {
+          gType = 'ppbs';
+        } else if ((lower.contains('random') &&
+                (lower.contains('glucose') || lower.contains('blood sugar'))) ||
+            RegExp(r'\brbs\b').hasMatch(lower)) {
+          gType = 'rbs';
+        }
+        if (gType != null) {
+          extracted.add(AIExtractedField(
+            fieldId: 'glucoseType',
+            value: gType,
+            confidence: 0.75,
+            source: FieldSource.aiPending,
+            sourceSegment: gType == 'fbs'
+                ? 'fasting glucose'
+                : gType == 'ppbs'
+                    ? 'post-prandial glucose'
+                    : 'random glucose',
+            extractedAt: now,
+          ));
+        }
+      }
+
+      // Supplement tablet counts (ANC):
+      //   "received N X" → Provided (given this visit)
+      //   "took N X"     → TotalConsumed (patient-reported cumulative)
+      void addCount(String fieldId, RegExp re) {
+        if (placed.contains(fieldId)) return;
+        final m = re.firstMatch(notes);
+        if (m == null) return;
+        final v = int.tryParse(m.group(1)!);
+        if (v == null || v < 0 || v > 200) return;
+        extracted.add(AIExtractedField(
+          fieldId: fieldId,
+          value: v.toDouble(),
+          confidence: 0.75,
+          source: FieldSource.aiPending,
+          sourceSegment: m.group(0)!,
+          extractedAt: now,
+        ));
+        placed.add(fieldId);
+      }
+
+      addCount('folicAcidProvided',
+          RegExp(r'(?:received|given)\s+(\d+)\s+folic', caseSensitive: false));
+      addCount('folicAcidTotalConsumed',
+          RegExp(r'took\s+(\d+)\s+folic', caseSensitive: false));
+      addCount('ifaProvided',
+          RegExp(r'(?:received|given)\s+(\d+)\s+(?:IFA|ifa)', caseSensitive: false));
+      addCount('ifaTotalConsumed',
+          RegExp(r'took\s+(\d+)\s+(?:IFA|ifa)', caseSensitive: false));
+      addCount('calciumProvided',
+          RegExp(r'(?:received|given)\s+(\d+)\s+calcium', caseSensitive: false));
+      addCount('calciumTotalConsumed',
+          RegExp(r'took\s+(\d+)\s+calcium', caseSensitive: false));
+
+      // Urinary albumin (ANC) — enum: Absent / Present
+      if (!placed.contains('urinaryAlbumin')) {
+        final ua = RegExp(r'(?:urine\s+|urinary\s+)?albumin\s+(absent|present)',
+                caseSensitive: false)
+            .firstMatch(notes);
+        if (ua != null) {
+          extracted.add(AIExtractedField(
+            fieldId: 'urinaryAlbumin',
+            value: ua.group(1)!.toLowerCase() == 'absent' ? 'Absent' : 'Present',
+            confidence: 0.8,
+            source: FieldSource.aiPending,
+            sourceSegment: ua.group(0)!,
+            extractedAt: now,
+          ));
+        }
+      }
+
+      // Urinary bilirubin (ANC) — enum: Absent / Present
+      if (!placed.contains('urinaryBilirubin')) {
+        final ub =
+            RegExp(r'bilirubin\s+(absent|present)', caseSensitive: false)
+                .firstMatch(notes);
+        if (ub != null) {
+          extracted.add(AIExtractedField(
+            fieldId: 'urinaryBilirubin',
+            value: ub.group(1)!.toLowerCase() == 'absent' ? 'Absent' : 'Present',
+            confidence: 0.8,
+            source: FieldSource.aiPending,
+            sourceSegment: ub.group(0)!,
+            extractedAt: now,
+          ));
+        }
+      }
+
+      // ANC danger signs — only safe case: explicit "no danger signs" → None
+      if (!placed.contains('ancDangerSigns')) {
+        final nd = RegExp(r'no\s+(?:anc\s+)?danger\s+signs?', caseSensitive: false)
+            .firstMatch(notes);
+        if (nd != null) {
+          extracted.add(AIExtractedField(
+            fieldId: 'ancDangerSigns',
+            value: ['None of these'],
+            confidence: 0.75,
+            source: FieldSource.aiPending,
+            sourceSegment: nd.group(0)!,
             extractedAt: now,
           ));
         }
