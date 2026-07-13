@@ -1693,7 +1693,6 @@ const _kAllServiceCards = [
   _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '👶', label: 'PNC',      programme: Programme.pnc),
   _ServiceCardDef(kind: _ServiceCardKind.general,   emoji: '🩺', label: 'General'),
   _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '💊', label: 'NCD',      programme: Programme.ncd),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🫁', label: 'TB',       programme: Programme.tb),
   _ServiceCardDef(kind: _ServiceCardKind.delivery,  emoji: '🚼', label: 'Delivery'),
 ];
 
