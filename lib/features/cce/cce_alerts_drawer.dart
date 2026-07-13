@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/theme.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/db/household_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../referral/referral_repository.dart';
 import 'cce_alert.dart';
@@ -29,6 +30,7 @@ class CceAlertsDrawer extends StatefulWidget {
     final repository = CceRepository(
       referrals: context.read<ReferralRepository>(),
       patients: context.read<PatientDao>(),
+      households: context.read<HouseholdDao>(),
     );
     return showModalBottomSheet<void>(
       context: context,
@@ -210,13 +212,28 @@ class _CceAlertsDrawerState extends State<CceAlertsDrawer> {
   }
 
   Future<void> _onLocate(CceAlert alert) async {
-    final place = alert.villageName;
-    if (place == null || place.trim().isEmpty) {
-      _snack(CceStrings.noLocation);
-      return;
+    // Precise pin when the household has coordinates; otherwise fall back to a
+    // name search enriched with the landmark + village + facility.
+    final Uri uri;
+    if (alert.hasGeo) {
+      final lat = alert.latitude!;
+      final lng = alert.longitude!;
+      final label = Uri.encodeComponent(alert.patientName);
+      uri = Uri.parse(
+          'https://www.google.com/maps/search/?api=1&query=$lat,$lng($label)');
+    } else {
+      final query = [
+        alert.landmark,
+        alert.villageName,
+        alert.facilityName,
+      ].where((s) => s != null && s.trim().isNotEmpty).join(', ');
+      if (query.isEmpty) {
+        _snack(CceStrings.noLocation);
+        return;
+      }
+      uri = Uri.parse(
+          'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(query)}');
     }
-    final uri = Uri.parse(
-        'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(place.trim())}');
     try {
       final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!ok && mounted) _snack(CceStrings.noLocation);

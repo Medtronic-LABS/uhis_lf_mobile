@@ -12,6 +12,8 @@
 /// Wireframe: `apon_sushashthya_v13.html` → CCE NOTIFICATION DRAWER.
 library;
 
+import 'dart:convert';
+
 import '../../core/models/patient.dart';
 import '../../core/models/referral.dart';
 import '../../core/models/sla.dart';
@@ -73,6 +75,10 @@ class CceAlert {
     this.patientGender,
     this.patientPhone,
     this.villageName,
+    this.facilityName,
+    this.latitude,
+    this.longitude,
+    this.landmark,
   });
 
   final String referralId;
@@ -82,7 +88,19 @@ class CceAlert {
   final String? patientGender;
   final String? patientPhone;
   final String? villageName;
+
+  /// Referral target facility name (e.g. "UHC Manikganj"), parsed from the
+  /// referral payload when present.
+  final String? facilityName;
+
+  /// Patient household location — drives a precise "Locate" when present.
+  final double? latitude;
+  final double? longitude;
+  final String? landmark;
   final CceSeverity severity;
+
+  /// Whether a precise map pin is available (vs. a name-based search).
+  bool get hasGeo => latitude != null && longitude != null;
 
   /// Right-aligned pill text, e.g. "SLA BREACHED +4d" / "SLA: 1d left" /
   /// "Completed".
@@ -114,11 +132,15 @@ class CceAlert {
   factory CceAlert.fromReferral(
     Referral r, {
     Patient? patient,
+    double? latitude,
+    double? longitude,
+    String? landmark,
     required DateTime now,
   }) {
     final severity = _severity(r, now);
     final arrived = _arrived(r.state);
     final treated = _treated(r.state);
+    final facility = _facilityName(r);
 
     return CceAlert(
       referralId: r.id,
@@ -130,14 +152,40 @@ class CceAlert {
       patientGender: patient?.gender,
       patientPhone: patient?.phone,
       villageName: patient?.villageName,
+      facilityName: facility,
+      latitude: latitude,
+      longitude: longitude,
+      landmark: landmark,
       severity: severity,
       slaBadge: _slaBadge(r, severity, now),
-      referredMeta: _referredMeta(r),
+      referredMeta: _referredMeta(r, facility),
       statusLine: _statusLine(r, severity, arrived, treated, now),
       intelTags: _intelTags(r, severity, arrived, treated),
       journey: _journey(r, arrived, treated),
       priorityScore: r.priorityScore ?? 0,
     );
+  }
+
+  /// Best-effort facility name from the referral payload. The `Referral`
+  /// model carries no dedicated facility field, so we read the original
+  /// server/seed JSON, tolerant of the several keys the wire has used.
+  static String? _facilityName(Referral r) {
+    final raw = r.rawJson;
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final m = jsonDecode(raw);
+      if (m is! Map) return null;
+      for (final k in const [
+        'facilityName',
+        'referredTo',
+        'referredSiteName',
+        'referredSite',
+      ]) {
+        final v = m[k];
+        if (v is String && v.trim().isNotEmpty) return v.trim();
+      }
+    } catch (_) {}
+    return null;
   }
 
   // ── Derivation constants (pilot-grade; clinical lead to tune) ─────────────
@@ -202,12 +250,12 @@ class CceAlert {
     }
   }
 
-  static String _referredMeta(Referral r) {
+  static String _referredMeta(Referral r, String? facility) {
     final date = _dateShort(r.createdAt);
     final reason = (r.diagnosisLabel != null && r.diagnosisLabel!.isNotEmpty)
         ? r.diagnosisLabel!
         : _CceCopy.referralReasonFallback;
-    return _CceCopy.referredMeta(date, reason);
+    return _CceCopy.referredMeta(date, facility, reason);
   }
 
   static String _statusLine(
@@ -410,8 +458,10 @@ abstract final class _CceCopy {
 
   static String breachBadge(String over) => 'SLA BREACHED +$over';
   static String leftBadge(String left) => 'SLA: $left left';
-  static String referredMeta(String date, String reason) =>
-      'Referred: $date · $reason';
+  static String referredMeta(String date, String? facility, String reason) =>
+      (facility != null && facility.isNotEmpty)
+          ? 'Referred: $date · $facility · $reason'
+          : 'Referred: $date · $reason';
   static String notArrivedOverdue(String overdue, String slaWindow) =>
       'Not arrived · $overdue overdue · SLA was $slaWindow';
   static String treatmentOverdue(String slaWindow) =>
