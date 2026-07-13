@@ -233,6 +233,25 @@ abstract final class AiScribeTriageVocab {
     }
   }
 
+  /// NCD-category codes that are also clinically relevant for ANC patients
+  /// (e.g. chest pain, palpitations as cardiac warning signs in pregnancy).
+  ///
+  /// These appear in the ANC section of the default grid when the patient is
+  /// enrolled in ANC but NOT NCD, so the SK sees them without a search. They
+  /// are intentionally excluded from the NCD bucket (no double-listing).
+  ///
+  /// Excludes pure metabolic codes (epigastric_pain, swelling_both_feet,
+  /// swelling_one_leg, foot_pain) and BP/diabetes flags (high_bp_known) that
+  /// are NCD-specific per clinical guidance.
+  static const Set<String> ancExtendedNcdCodes = {
+    'chest_pain',
+    'one_sided_weakness',
+    'palpitations',
+    'excessive_thirst',
+    'foot_numbness',
+    'foot_wound',
+  };
+
   /// Human-readable label for a code — used when the AI surfaces a code that
   /// isn't present in TriageStrings. Underscores → spaces, capitalised words.
   static String labelFor(String code) {

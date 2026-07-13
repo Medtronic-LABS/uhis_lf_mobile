@@ -522,7 +522,16 @@ class TriageViewModel extends ChangeNotifier {
           final home = sectionOrder.firstWhere(codeProgs.contains);
           byProgramme[home]?.add(code);
         case SymptomCategory.ncd:
-          byProgramme[Programme.ncd]?.add(code);
+          if (byProgramme.containsKey(Programme.ncd)) {
+            // Patient has NCD enrolled — NCD bucket takes all NCD codes.
+            byProgramme[Programme.ncd]?.add(code);
+          } else if (byProgramme.containsKey(Programme.anc) &&
+              AiScribeTriageVocab.ancExtendedNcdCodes.contains(code)) {
+            // ANC-only patient: surface the clinical-crossover NCD codes
+            // (chest pain, one-sided weakness, palpitations etc.) in the
+            // ANC bucket so the SK sees them without searching.
+            byProgramme[Programme.anc]?.add(code);
+          }
         case SymptomCategory.pediatric:
           byProgramme[Programme.imci]?.add(code);
       }
@@ -555,7 +564,14 @@ class TriageViewModel extends ChangeNotifier {
             AiScribeTriageVocab.programmesForMaternalCode(code);
         return !codeProgs.every((p) => enrolled.contains(p));
       case SymptomCategory.ncd:
-        return !enrolled.contains(Programme.ncd);
+        if (enrolled.contains(Programme.ncd)) return false;
+        // ANC-extended NCD codes are shown inside the ANC bucket — they don't
+        // imply a new NCD programme enrollment prompt for ANC patients.
+        if (enrolled.contains(Programme.anc) &&
+            AiScribeTriageVocab.ancExtendedNcdCodes.contains(code)) {
+          return false;
+        }
+        return true;
       case SymptomCategory.pediatric:
         return !enrolled.contains(Programme.imci);
     }
@@ -641,7 +657,12 @@ class TriageViewModel extends ChangeNotifier {
         case SymptomCategory.maternal:
           return !isMale && isMaternalContext;
         case SymptomCategory.ncd:
-          return isNcdContext;
+          // Show NCD codes for NCD patients; also surface the ANC-extended
+          // subset (chest pain, one-sided weakness, etc.) for maternal context.
+          return isNcdContext ||
+              (!isMale &&
+                  isMaternalContext &&
+                  AiScribeTriageVocab.ancExtendedNcdCodes.contains(code));
         case SymptomCategory.pediatric:
           return isPediatricContext;
       }
