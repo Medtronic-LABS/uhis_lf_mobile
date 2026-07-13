@@ -245,36 +245,12 @@ class AssessmentRepository extends ChangeNotifier {
       }
     }
 
-    // Group assessments by memberId — mirrors Android's formatMemberForPnc()
-    // which nests assessments inside householdMembers entries so the server can
-    // populate MemberAssessmentFollowUpMap correctly. Assessments with no
-    // memberId go in the top-level assessments array (orphan path).
-    final byMember = <String, List<Map<String, dynamic>>>{};
-    final memberHouseholdId = <String, String>{}; // memberId → householdId
-    final orphanAssessments = <Map<String, dynamic>>[];
-    for (final payload in assessmentPayloads) {
-      final enc = payload['encounter'] as Map<String, dynamic>? ?? {};
-      final mid = enc['memberId'] as String? ?? '';
-      if (mid.isNotEmpty) {
-        byMember.putIfAbsent(mid, () => []).add(payload);
-        final hid = enc['householdId'] as String? ?? '';
-        if (hid.isNotEmpty) memberHouseholdId[mid] = hid;
-      } else {
-        orphanAssessments.add(payload);
-      }
-    }
-    final householdMemberPayloads = byMember.entries
-        .map((e) => <String, dynamic>{
-              'referenceId': e.key,
-              if (memberHouseholdId.containsKey(e.key))
-                'householdId': memberHouseholdId[e.key],
-              'provenance': provenance.toJson(),
-              'assessments': e.value,
-              'followUps': <Map<String, dynamic>>[],
-            })
-        .toList();
-    debugPrint(
-        '[AssessmentSync] householdMembers: ${householdMemberPayloads.length} stubs, orphans: ${orphanAssessments.length}');
+    // householdMembers[] is for NEW member registrations only — the server calls
+    // createHouseHoldMember on every entry and expects a full DTO. For existing
+    // member assessments we send everything in the top-level assessments[] array;
+    // the server builds MemberAssessmentFollowUpMap from encounter.memberId +
+    // encounter.householdId + provenance on each assessment.
+    debugPrint('[AssessmentSync] assessments[${assessmentPayloads.length}]:');
 
     // Build create request matching Android's OfflineSyncRepository.getRequestObject().
     // communityProfiles and rxBuddies are included (empty arrays) so the server
@@ -288,8 +264,8 @@ class AssessmentRepository extends ChangeNotifier {
       'syncMode': syncMode,
       if (deviceId.isNotEmpty) 'deviceId': deviceId,
       'households': <Map<String, dynamic>>[],
-      'householdMembers': householdMemberPayloads,
-      'assessments': orphanAssessments,
+      'householdMembers': <Map<String, dynamic>>[],
+      'assessments': assessmentPayloads,
       'followUps': followUpPayloads,
       'householdMemberLinks': <Map<String, dynamic>>[],
       'communityProfiles': <Map<String, dynamic>>[],
