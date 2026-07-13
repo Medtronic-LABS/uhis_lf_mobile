@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:dio/io.dart';
+import 'package:flutter/foundation.dart' show debugPrint, kDebugMode, kIsWeb;
 
 import '../config/app_config.dart';
 import 'browser_adapter_stub.dart'
@@ -44,6 +47,19 @@ class ApiClient {
       ),
     );
     final client = ApiClient._(dio, cookieJar);
+    // Android ≤ 7.1 (API ≤ 25) ships a root-CA store that predates ISRG Root X1
+    // (Let's Encrypt's post-2021 chain). TLS handshakes to the dev backend fail
+    // with CERTIFICATE_VERIFY_FAILED on those devices. In debug builds we bypass
+    // the check so engineers can test on older hardware; release builds always
+    // enforce full certificate verification.
+    if (!kIsWeb && kDebugMode) {
+      (dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () =>
+          HttpClient()
+            ..badCertificateCallback = (cert, host, port) {
+              debugPrint('ApiClient [debug]: bypassing cert check for $host:$port');
+              return true;
+            };
+    }
     if (kIsWeb) {
       configureWebCredentials(dio);
       // On web the browser manages cookies via withCredentials.  The Bearer
