@@ -336,7 +336,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         confirmedSymptoms: widget.confirmedSymptoms,
         aiPickedSymptoms: widget.aiPickedSymptoms,
         onSubmitComplete: () =>
-            _onSectionedSubmit(ctx, visitCtrl, session),
+            _onSectionedSubmit(ctx, visitCtrl, session, notifier),
       ),
     );
   }
@@ -377,6 +377,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     BuildContext ctx,
     VisitController visitCtrl,
     VisitSession session,
+    UnifiedFormNotifier formNotifier,
   ) async {
     if (_isSubmitting) {
       debugPrint('[VisitForm] _onSectionedSubmit — already submitting, ignoring duplicate tap');
@@ -391,6 +392,9 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     final patientDao = ctx.read<PatientDao>();
     final worklistRepo = ctx.read<WorklistRepository>();
     final progDao = ctx.read<PatientProgrammesDao>();
+    // Read referral result computed by UnifiedFormNotifier.submit() so
+    // _referralRecommended propagates correctly to Step-3's onAdvance callback.
+    setState(() => _sectionedReferralTriggered = formNotifier.lastIsReferred);
     try {
       final draft = await draftDao.getDraft(widget.visitId);
       debugPrint('[VisitForm] draft=${draft != null ? "found" : "null"}');

@@ -240,6 +240,9 @@ class LocalAssessmentEntity {
       'peerSupervisorId': ?peerSupervisorId,
       // Android sends a joined String, not a JSON array.
       'referredReasons': _joinedReferredReasons(referredReasons),
+      // NCD: Spice assessment/create expects "referAssessment" as "positive"/"negative"
+      // at the top level (mirrors encounter.referred for the offline-sync path).
+      if (type == 'NCD') 'referAssessment': isReferred ? 'positive' : 'negative',
       if (otherDetails != null) 'summary': jsonDecode(otherDetails!),
       'encounter': {
         'householdId': householdId,

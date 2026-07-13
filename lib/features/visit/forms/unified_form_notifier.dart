@@ -2,11 +2,13 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../../../core/clinical/referral_evaluator.dart';
 import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
 import '../../scribe/models/ai_extracted_field.dart';
 import '../assessment_repository.dart';
+import '../models/anc_assessment.dart';
 import 'canonical_visit_data.dart';
 import 'form_config.dart';
 import 'unified_payload_mapper.dart';
@@ -75,6 +77,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
   String? _submitError;
   Set<String> _validationErrors = const {};
 
+  bool _lastIsReferred = false;
+  List<String> _lastReferredReasons = const [];
+
   /// Provenance per fieldId — who last set the value (SK vs AI scribe).
   /// Fields never touched have no entry (treated as manual-owned once typed).
   final Map<String, FieldSource> _fieldSources = {};
@@ -85,6 +90,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
 
   CanonicalVisitData get data => _data;
   bool get submitting => _submitting;
+
+  /// Referral result computed during the most-recent [submit] call.
+  /// Read by [visit_form_screen] after submit to propagate to the Step-3 card.
+  bool get lastIsReferred => _lastIsReferred;
+  List<String> get lastReferredReasons => _lastReferredReasons;
   String? get submitError => _submitError;
   Set<String> get validationErrors => _validationErrors;
 
@@ -556,11 +566,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// can extract vitals from [field_values] before deleting the draft row.
   ///
   /// Returns list of saved local IDs. Throws on DB error.
-  Future<List<String>> submit({
-    bool isReferred = false,
-    String? referralStatus,
-    List<String>? referredReasons,
-  }) async {
+  Future<List<String>> submit() async {
     if (_submitting) return const [];
     _submitting = true;
     _submitError = null;
@@ -571,6 +577,10 @@ class UnifiedFormNotifier extends ChangeNotifier {
         _data,
         _activeFormTypes.toSet(),
       );
+
+      final (isReferred, referredReasons) = _computeReferral();
+      _lastIsReferred = isReferred;
+      _lastReferredReasons = referredReasons;
 
       final savedIds = <String>[];
       for (final payload in payloads) {
@@ -584,8 +594,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
           villageId: _villageId,
           encounterId: _encounterId,
           isReferred: isReferred,
-          referralStatus: referralStatus,
-          referredReasons: referredReasons,
+          referredReasons: referredReasons.isEmpty ? null : referredReasons,
           pregnancyEpisodeId: _pregnancyEpisodeId,
         );
         savedIds.add(id);
@@ -598,6 +607,103 @@ class UnifiedFormNotifier extends ChangeNotifier {
       _submitting = false;
       notifyListeners();
     }
+  }
+
+  /// Runs clinical evaluators against current form data and returns
+  /// `(isReferred, referredReasons)`.  Called inside [submit] so every
+  /// saved [LocalAssessmentEntity] carries the correct referral flag.
+  (bool, List<String>) _computeReferral() {
+    bool referred = false;
+    final reasons = <String>[];
+
+    double? asDouble(String k) {
+      final v = _data.getValue(k);
+      if (v is num) return v.toDouble();
+      if (v is String) return double.tryParse(v);
+      return null;
+    }
+
+    final sys = asDouble('systolic') ?? asDouble('bloodPressureSystolic');
+    final dia = asDouble('diastolic') ?? asDouble('bloodPressureDiastolic');
+    final glucoseType = _data.getValue('glucoseType') as String?;
+    final glVal = asDouble('glucoseValue') ??
+        asDouble('glucose') ??
+        asDouble('fastingBloodSugar') ??
+        asDouble('randomBloodSugar');
+    final isFbs = glucoseType == 'fbs';
+
+    if (_activeFormTypes.contains('ncd')) {
+      final result = NcdReferralEvaluator.evaluate(
+        systolic: sys,
+        diastolic: dia,
+        fastingGlucoseMmol: isFbs ? glVal : null,
+        randomGlucoseMmol: !isFbs ? glVal : null,
+        symptoms:
+            (_data.getValue('ncdSymptoms') as List?)?.cast<String>() ??
+                const [],
+      );
+      if (result.isReferralRequired) {
+        referred = true;
+        reasons.addAll(result.referralReasons);
+      }
+    }
+
+    if (_activeFormTypes.contains('anc')) {
+      final ancAssessment = AncAssessment(
+        medicalHistoryPhysicalExamination: MedicalHistoryPhysicalExamination(
+          bloodPressureSystolic: sys?.toInt(),
+          bloodPressureDiastolic: dia?.toInt(),
+          fundalHeight: asDouble('fundalHeight'),
+          oedema: (_data.getValue('oedema') ??
+              _data.getValue('edema')) as String?,
+          weight: asDouble('weight'),
+          height: asDouble('height'),
+        ),
+        pointOfCareInvestigations: PointOfCareInvestigations(
+          hemoglobin: asDouble('hemoglobin'),
+          urinaryAlbumin: _data.getValue('urinaryAlbumin') as String?,
+          urinaryBilirubin: _data.getValue('urinaryBilirubin') as String?,
+          urinarySugar: _data.getValue('urinarySugar') as String?,
+        ),
+        gestationalWeeks: asDouble('gestationalAge')?.toInt(),
+      );
+      final result = AncReferralEvaluator.evaluate(
+        ancAssessment,
+        temperatureCelsius: asDouble('temperature'),
+        pulseBpm: asDouble('pulse')?.toInt(),
+      );
+      if (result.isReferralRequired) {
+        referred = true;
+        reasons.addAll([
+          ...result.emergencyConditions,
+          ...result.nonEmergencyConditions,
+        ]);
+      }
+    }
+
+    if (_activeFormTypes.contains('pncMother')) {
+      final result = PncReferralEvaluator.evaluate(
+        systolic: sys,
+        diastolic: dia,
+        temperatureCelsius: asDouble('temperature'),
+        pulseBpm: asDouble('pulse')?.toInt(),
+        hemoglobinGdL: asDouble('hemoglobin'),
+        fastingGlucoseMmol: isFbs ? glVal : null,
+        randomGlucoseMmol: !isFbs ? glVal : null,
+        urinaryAlbumin: _data.getValue('urinaryAlbumin') as String?,
+        edema: (_data.getValue('oedema') ??
+            _data.getValue('edema')) as String?,
+      );
+      if (result.isReferralRequired) {
+        referred = true;
+        reasons.addAll([
+          ...result.urgentConditions,
+          ...result.nonUrgentConditions,
+        ]);
+      }
+    }
+
+    return (referred, List<String>.unmodifiable(reasons));
   }
 
   void _saveDraft() {
