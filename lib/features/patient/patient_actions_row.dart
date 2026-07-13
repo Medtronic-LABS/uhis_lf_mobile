@@ -47,12 +47,30 @@ class _PatientActionsRowState extends State<PatientActionsRow> {
 
   Future<void> _startVisit() async {
     if (_starting) return;
+
+    // First-time patient (no programmes) → service selection screen first
+    if (widget.programmes.isEmpty) {
+      context.push(
+        '/patients/${widget.patientId}/new-visit',
+        extra: <String, dynamic>{
+          if (widget.patientName != null) 'patientName': widget.patientName,
+          if (widget.patientAge != null) 'patientAge': widget.patientAge,
+          if (widget.patientGender != null) 'patientGender': widget.patientGender,
+          if (widget.householdId != null) 'householdId': widget.householdId,
+        },
+      );
+      return;
+    }
+
     setState(() => _starting = true);
 
     final controller = context.read<VisitController>();
+    final programme = widget.programmes.isNotEmpty
+        ? widget.programmes.first
+        : Programme.unknown;
     final encounterId = await controller.startVisit(
       patientId: widget.patientId,
-      programme: Programme.unknown,
+      programme: programme,
       patientName: widget.patientName,
       patientAge: widget.patientAge,
       patientGender: widget.patientGender,

@@ -362,7 +362,9 @@ abstract final class SearchStrings {
   static String nid(Object nid) => 'NID $nid';
   static String householdNo(Object no) => 'No $no';
   static String memberCount(Object count) => '$count members';
-  static const String scanNidTooltip = 'Scan NID card to find patient';
+  static const String scanNidTooltip = 'Scan NID or QR to find patient';
+  static const String scanSearchTitle = 'Scan to Search';
+  static const String scanSearchSubtitle = 'Point at NID card or QR code';
 }
 
 /// App-specific fallback PIN: setup (create + confirm), unlock, and management.
@@ -909,6 +911,26 @@ abstract final class PatientProfileStrings {
   static String get yes => AppLocale.isBangla ? 'হ্যাঁ' : 'Yes';
   static String get no => AppLocale.isBangla ? 'না' : 'No';
   static const String notAvailable = '—';
+  static const String dialFailed = 'Could not open the dialer';
+  static const String mapsOpenFailed = 'Could not open maps';
+}
+
+abstract final class ContactSheetStrings {
+  ContactSheetStrings._();
+
+  static const String noContactAvailable =
+      'No contact number available for this household';
+  static const String whatsAppFailed = 'Could not open WhatsApp';
+  static const String smsFailed = 'Could not open SMS';
+  static const String householdHead = 'Household head';
+  static const String familyMember = 'Family member';
+  static const String unknownPatient = 'Patient';
+
+  /// Shown when contacting a household member on behalf of the patient.
+  static String fallbackBanner(
+          String patientName, String recipientName, String relationship) =>
+      '$patientName has no registered number. '
+      'Contacting $recipientName ($relationship) on their behalf.';
 }
 
 /// Copy for the Referral SLA dashboard, cards, banners, and notifications.
@@ -3881,12 +3903,43 @@ abstract final class TrainingStrings {
   TrainingStrings._();
 
   static const String title = 'Training Hub';
-  static const String subtitle =
-      'Clinical training modules for frontline health workers';
+  static const String subtitle = 'Short videos · Learn at your own pace';
   static const String comingSoon = 'Coming soon';
   static const String certificatesTitle = 'Certificates';
   static const String certificatesSubtitle =
       'Complete modules to earn programme certificates';
+
+  // Leaderboard
+  static const String leaderboardTitle = '🏆 Top SKs this month';
+  static const String leaderboardYou = '(You)';
+  static const String leaderboardMotivationPrefix = '⚡ ';
+  static const String leaderboardMotivationSuffix =
+      ' pts away from 1st place · Watch 3 more videos to catch up!';
+
+  // Section labels
+  static const String sectionTodaysLessons = "TODAY'S LESSONS — BASED ON YOUR VISITS";
+  static const String sectionMonthlyProgress = 'Your progress this month';
+
+  // Video states
+  static const String badgeNowPlaying = 'NOW PLAYING';
+  static const String badgeCompleted = '✓ COMPLETED';
+  static const String badgeLocked = '🔒 LOCKED';
+
+  // Pill badges
+  static String pillTriggered(String reason) => 'New · Triggered by $reason';
+  static String pillDonePoints(int pts) => 'Done · +$pts pts';
+  static const String pillNew = 'New';
+  static String pillUnlockAfter(int n) => 'Complete $n more to unlock';
+  static const String pillLocked = 'Locked';
+
+  // Monthly stats
+  static const String statVideos = 'Videos watched';
+  static const String statPoints = 'Points earned';
+  static const String statStreak = 'Day streak 🔥';
+
+  // Locked snackbar
+  static const String lockedSnackbar =
+      'Complete earlier lessons to unlock this one';
 }
 
 /// Micro-coaching pilot strings — three-loop system:
@@ -4202,6 +4255,36 @@ abstract final class PerformanceStrings {
 
   static String periodLabelMonth(DateTime date) =>
       DateFormat('MMMM yyyy').format(date);
+
+  // ── Wireframe v2 additions ──────────────────────────────────────────────────
+  static const String appBarSubtitle = 'Jahnara Begum · SK ID 4521 · Manikganj Sadar';
+  static const String heroScoreLabel = 'PERFORMANCE SCORE';
+  static const String heroDesc = 'Blends visit completion, referral follow-through & SLA compliance';
+  static const String slaLabel = 'SLA COMPLIANCE';
+  static const String highRiskLabel = 'HIGH-RISK RESPONSE';
+  static const String visitTrendLabel = 'VISIT TREND';
+  static const String trendSteady = '↑ steady';
+  static const String statVisitsCompleted = 'Visits Completed';
+  static const String statReferralsMade = 'Referrals Made';
+  static const String statReferralsCompleted = 'Referrals Completed';
+  static const String statHouseholdsCovered = 'Households Covered';
+  static const String statAvgVisitsDay = 'Avg Visits / Day';
+  static const String statMissedOverdue = 'Missed / Overdue';
+  static const String sectionServiceBreakdown = 'SERVICE-WISE BREAKDOWN';
+  static const String insightBoldPhrase = 'more visits';
+  static const List<String> weekdayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  static const List<String> weekLabels = ['W1', 'W2', 'W3', 'W4'];
+  static const String serviceAnc = 'ANC';
+  static const String serviceNcd = 'NCD';
+  static const String serviceChild = 'Child / Immunisation';
+  static const String servicePnc = 'PNC';
+  static const String serviceHousehold = 'Household enrolment';
+
+  static String insightWeek(int pct) =>
+      'You completed $pct% more visits than the Manikganj Sadar area average this week.';
+
+  static String insightMonth(int pct) =>
+      'You completed $pct% more visits than the Manikganj Sadar area average this month.';
 }
 
 /// Household enrollment flow strings.
@@ -4430,6 +4513,8 @@ abstract final class EnrollmentStrings {
       'If member has no NID, enter Birth Registration ID instead.';
   static String nidNumberCaptured(String number) =>
       '✓ NID number captured: $number';
+  static const String autoScanActive = 'Auto-scanning — hold card steady';
+  static const String autoScanHint = 'Scanning every ~2 s · tap button to force capture';
   static const String nidScanNotFound =
       'Could not read the NID number. Try again or type it in below.';
   static const String nidScanError =
@@ -4786,6 +4871,181 @@ abstract final class ChildAssessmentStrings {
     'Health & Family Welfare Center',
     'Community Clinic',
   ];
+}
+
+/// Care Coordination Engine (CCE) — the referral SLA alert drawer.
+/// All widget-facing copy for `lib/features/cce/`. Derivation-time strings
+/// interpolated by the pure-Dart model live in `cce_alert.dart`.
+abstract final class CceStrings {
+  CceStrings._();
+
+  // ── Drawer header ─────────────────────────────────────────────────────────
+  static const String drawerTitle = 'Care Coordination Alerts';
+  static const String poweredBy = 'Powered by CCE · Care Coordination Engine';
+  static String actionsNeeded(int n) =>
+      '$n action${n == 1 ? '' : 's'} needed';
+  static const String done = 'Done';
+
+  static const String explainer =
+      'CCE tracks every patient after referral and triggers alerts when SLAs '
+      'are breached — so no patient is lost between SK and facility.';
+
+  // ── Bell entry point ──────────────────────────────────────────────────────
+  static const String bellTooltip = 'Care Coordination Alerts';
+
+  // ── Empty state ───────────────────────────────────────────────────────────
+  static const String emptyTitle = 'All referrals on track';
+  static const String emptyBody =
+      'No SLA breaches. Every referred patient is accounted for between SK '
+      'and facility.';
+
+  // ── Card actions ──────────────────────────────────────────────────────────
+  static const String actionCallFamily = 'Call family';
+  static const String actionUpdateStatus = 'Update status';
+  static const String actionLocate = 'Locate';
+  static const String actionCheckIn = 'Check in';
+
+  static const String noPhone = 'No phone number on file for this patient';
+  static const String noLocation = 'No location on file for this patient';
+  static const String dialFailed = 'Could not open the dialer';
+
+  // ── Update-status sheet ───────────────────────────────────────────────────
+  static String updateTitle(String patientName) => 'Update — $patientName';
+  static const String updatePrompt = 'Where is the patient now?';
+  static const String updateOptNotLeft = 'Not yet left home';
+  static const String updateOptOnWay = 'On the way to facility';
+  static const String updateOptArrived = 'Arrived at facility';
+  static const String updateOptTreated = 'Seen by clinician / treated';
+  static const String updateOptDischarged = 'Discharged (recovered)';
+
+  static const String barrierPrompt = 'Add a barrier tag (optional)';
+  static const String barrierTransport = 'Transport';
+  static const String barrierCost = 'Cost';
+  static const String barrierFamily = 'Family';
+  static const String barrierDistance = 'Distance';
+
+  static const String saveUpdate = 'Save update';
+  static const String saveHint = 'Saves offline · syncs on next cycle';
+  static const String updateSaved = 'Referral status updated';
+  static const String selectStatus = 'Select the patient\'s current status';
+}
+
+/// Follow-up call logging — the device-side close/update flow.
+abstract final class FollowUpCallStrings {
+  FollowUpCallStrings._();
+
+  static const String logCall = 'Log call';
+  static const String sheetTitle = 'Log follow-up call';
+  static const String outcomePrompt = 'How did the call go?';
+  static const String outcomeSuccessful = 'Reached — successful';
+  static const String outcomeUnsuccessful = 'Could not reach';
+  static const String outcomeWrongNumber = 'Wrong number';
+  static const String reasonLabel = 'Note (optional)';
+  static const String reasonHint = 'e.g. no answer, will retry tomorrow';
+  static const String save = 'Save call';
+  static const String saved = 'Call logged — will sync on next cycle';
+  static const String schedule = 'Schedule';
+  static const String scheduled =
+      'Follow-up scheduled — will sync on next cycle';
+  static const String scheduleFailed = 'Could not schedule the follow-up';
+  static const String selectOutcome = 'Select the call outcome';
+  static const String closedNote =
+      'Wrong number or exhausted attempts will close this follow-up.';
+  static const String failed = 'Could not log the call';
+}
+
+
+abstract final class EnrollStrings {
+  EnrollStrings._();
+
+  static const String screenTitle = 'Add Services';
+  static String selectFor(String name) => 'Select services for $name';
+  static const String subtitle =
+      'Add the health programmes this person needs. Tap a programme to select it.';
+  static const String sectionPregnancy = 'PREGNANCY CARE';
+  static const String sectionChronic = 'CHRONIC CONDITIONS';
+  static const String sectionChild = 'CHILD HEALTH';
+  static const String pregnantWomanLabel = 'Pregnant Woman';
+  static const String pregnantWomanBengali = 'গর্ভবতী মা';
+  static const String ancLabel = 'ANC Visit';
+  static const String ancBengali = 'মাতৃস্বাস্থ্য সেবা';
+  static const String pncLabel = 'PNC Visit';
+  static const String pncBengali = 'প্রসবোত্তর সেবা';
+  static const String ncdLabel = 'NCD Check';
+  static const String ncdBengali = 'অসংক্রামক রোগ';
+  static const String tbLabel = 'TB Check';
+  static const String tbBengali = 'যক্ষ্মা';
+  static const String imciLabel = 'Child Visit';
+  static const String imciBengali = 'শিশু স্বাস্থ্য সেবা';
+  static const String epiLabel = 'Vaccination';
+  static const String epiBengali = 'টিকা';
+  static const String lockedToastAnc =
+      '⚠ Select "Pregnant Woman" first to unlock ANC';
+  static const String lockedToastPnc =
+      '⚠ Select "Pregnant Woman" first to unlock PNC';
+  static const String noProgrammes =
+      'No eligible programmes for this patient based on age and gender.';
+  static String confirmCta(int n) =>
+      n == 0 ? 'Select Programmes' : 'Confirm Enrollment ($n selected)';
+  static const String savedToast = 'Programmes saved ✓';
+  static const String addServicesCta = 'Add Services';
+  static const String noServicesTitle = 'No services enrolled';
+  static const String noServicesSubtitle =
+      'Tap below to add health programmes for this patient.';
+}
+
+abstract final class PregnancyRegStrings {
+  PregnancyRegStrings._();
+
+  static const String sheetTitle = 'Register Pregnancy';
+  static String forPatient(String name) => 'For $name';
+  static const String sectionDates = 'PREGNANCY DATES';
+  static const String lmpLabel = 'Last Menstrual Period (LMP)';
+  static const String lmpRequired = '* Required';
+  static const String lmpHint = 'Tap to select date';
+  static const String eddLabel = 'Est. Due Date (EDD)';
+  static const String gaLabel = 'Gestational Age';
+  static const String tooEarlyWarning =
+      '⚠ LMP is less than 6 weeks ago. Only basic details saved — full risk screening at next visit.';
+  static const String sectionHistory = 'OBSTETRIC HISTORY';
+  static const String gravidaLabel = 'Gravida (total pregnancies)';
+  static const String parityLabel = 'Parity (live births)';
+  static const String firstPregnancy = 'First pregnancy';
+  static const String sectionRisk = 'RISK SCREENING';
+  static String ageRiskNormal(int age) => 'Age $age · Normal age for pregnancy';
+  static String ageRiskLow(int age) => '⚠ Age $age · Under 18 — high risk';
+  static String ageRiskHigh(int age) => '⚠ Age $age · Over 35 — high risk';
+  static const String conditionsLabel = 'Any existing conditions?';
+  static const String conditionHtn = 'Hypertension / High BP';
+  static const String conditionDiabetes = 'Diabetes';
+  static const String conditionCsection = 'Previous C-section';
+  static const String conditionComplicated = 'Previous complicated delivery';
+  static const String registerCta = '🤰  Register Pregnancy';
+  static const String skipCta = 'Skip for now';
+  static const String savedToast = 'Pregnancy registered ✓';
+  static const String lmpRequiredError = 'Please select the LMP date';
+  static const String lmpFutureError = 'LMP cannot be in the future';
+  static const String multiparaWarning = '⚠ Gravida > 4 — multipara risk';
+}
+
+abstract final class NewPatientVisitStrings {
+  NewPatientVisitStrings._();
+
+  static const String backTooltip = 'Back';
+  static const String step1Label = '1. How are you?';
+  static const String step3Label = '3. Summary';
+  static const String howFeelFemale = 'How is she feeling today? 🎙';
+  static const String howFeelMale = 'How is he feeling today? 🎙';
+  static const String scribeTitle = 'AI Scribe';
+  static const String scribeSubtitle = 'Tap and let her speak';
+  static const String scribeStart = '🎙 Start';
+  static const String searchHint = 'Search symptoms...';
+  static const String noSymptomsFound = 'No symptoms found';
+  static const String eligibleServicesHeader = '✦ Eligible services';
+  static const String eligibleServicesTag = 'Age & gender based';
+  static const String pwHint = "⚠ Select 'PW' first to unlock ANC";
+  static const String startVisitCta = 'Start Visit →';
+  static const String selectServiceCta = 'Select a service to continue';
 }
 
 /// Patient-scoped AI assistant (the floating "✦" sheet).

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:camera/camera.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -77,6 +79,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
   CameraController? _cameraController;
   bool _cameraReady = false;
   bool _cameraUnavailable = false;
+  Timer? _autoScanTimer;
 
   late final AnimationController _sweepCtrl;
   late final Animation<double> _sweep;
@@ -127,6 +130,14 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
         _cameraController = controller;
         _cameraReady = true;
       });
+      _autoScanTimer = Timer.periodic(const Duration(milliseconds: 1800), (_) {
+        if (mounted &&
+            !_isScanning &&
+            _cameraReady &&
+            _overlayState == _OverlayState.scanner) {
+          _handleCapture();
+        }
+      });
     } on CameraException catch (e) {
       debugPrint('EnrollmentOverlay: camera init failed: $e');
       if (mounted) setState(() => _cameraUnavailable = true);
@@ -135,6 +146,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
 
   @override
   void dispose() {
+    _autoScanTimer?.cancel();
     _cameraController?.dispose();
     _sweepCtrl.dispose();
     super.dispose();
@@ -214,6 +226,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
                 readingCard: _overlayState == _OverlayState.postScan,
                 cameraController: _cameraReady ? _cameraController : null,
                 cameraUnavailable: _cameraUnavailable,
+                autoScanActive: _cameraReady && _autoScanTimer != null,
                 onCapture: _handleCapture,
                 onCreateHousehold: () {
                   Navigator.of(context).pop();
@@ -276,6 +289,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
   CameraController? _cameraController;
   bool _cameraReady = false;
   bool _cameraUnavailable = false;
+  Timer? _autoScanTimer;
 
   late final AnimationController _sweepCtrl;
   late final Animation<double> _sweep;
@@ -320,6 +334,9 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
         _cameraController = controller;
         _cameraReady = true;
       });
+      _autoScanTimer = Timer.periodic(const Duration(milliseconds: 1800), (_) {
+        if (mounted && !_isScanning && _cameraReady) _handleCapture();
+      });
     } on CameraException catch (e) {
       debugPrint('MemberNidScan: camera init failed: $e');
       if (mounted) setState(() => _cameraUnavailable = true);
@@ -328,6 +345,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
 
   @override
   void dispose() {
+    _autoScanTimer?.cancel();
     _cameraController?.dispose();
     _sweepCtrl.dispose();
     super.dispose();
@@ -388,6 +406,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
             readingCard: false,
             cameraController: _cameraReady ? _cameraController : null,
             cameraUnavailable: _cameraUnavailable,
+            autoScanActive: _cameraReady && _autoScanTimer != null,
             onCapture: _handleCapture,
             onCreateHousehold: () {},
             onCancel: () => Navigator.of(context).pop(null),
@@ -411,6 +430,7 @@ class _ScannerBody extends StatelessWidget {
     required this.onCapture,
     required this.onCreateHousehold,
     required this.onCancel,
+    this.autoScanActive = false,
     this.showCreateHousehold = true,
     this.onLinkToExisting,
   });
@@ -422,6 +442,8 @@ class _ScannerBody extends StatelessWidget {
   /// Live preview controller, or null while initialising / unavailable.
   final CameraController? cameraController;
   final bool cameraUnavailable;
+  /// When true, shows auto-scan status instead of default subtitle.
+  final bool autoScanActive;
   final VoidCallback onCapture;
   final VoidCallback onCreateHousehold;
   final VoidCallback onCancel;
@@ -545,6 +567,8 @@ class _ScannerBody extends StatelessWidget {
           Text(
             readingCard
                 ? '🔍 Reading card details…'
+                : autoScanActive
+                ? '✦ Auto-scanning'
                 : 'Take a Photo of NID Card',
             style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: Colors.white),
             textAlign: TextAlign.center,
@@ -555,6 +579,8 @@ class _ScannerBody extends StatelessWidget {
                 ? 'Reading the NID number…'
                 : cameraUnavailable
                 ? 'Camera unavailable'
+                : autoScanActive
+                ? EnrollmentStrings.autoScanActive
                 : 'Position the card within the frame',
             style: const TextStyle(fontSize: 12, color: AppColors.onDarkLow),
             textAlign: TextAlign.center,
@@ -928,7 +954,7 @@ class _PostScanSheet extends StatelessWidget {
                   ),
                 ),
                 GestureDetector(
-                  onTap: onLinkExisting,
+                  onTap: () => Navigator.of(context).pop(),
                   child: const Icon(Icons.close, color: AppColors.textMuted),
                 ),
               ],

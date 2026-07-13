@@ -42,6 +42,7 @@ import '../scribe/scribe_permission_service.dart';
 import 'immunisation/immunisation_timeline_screen.dart';
 import 'programme_selection/programme_selection_screen.dart';
 import 'triage/symptom_picker_screen.dart';
+import 'visit_flow_header.dart';
 import 'visit_form_screen.dart';
 
 /// Single-route 3-step visit flow wrapper.
@@ -61,6 +62,8 @@ class VisitFlowScreen extends StatefulWidget {
     this.isPostpartum = false,
     this.postpartumWeeks,
     this.origin,
+    this.initialStep = 0,
+    this.seedProgrammes = const <Programme>{},
     this.debugInitialStep,
   });
 
@@ -77,6 +80,15 @@ class VisitFlowScreen extends StatefulWidget {
   final bool isPostpartum;
   final int? postpartumWeeks;
   final String? origin;
+
+  /// Step to start the flow at. Use 1 when the caller already captured
+  /// symptom selection (e.g. [NewPatientVisitScreen]) so the SK goes straight
+  /// to programme recommendation + clinical form.
+  final int initialStep;
+
+  /// Programmes pre-confirmed by the caller — seeded into [_confirmedProgrammes]
+  /// so [_Step2ProgrammesThenForm] can pre-select without step 0.
+  final Set<Programme> seedProgrammes;
 
   /// Test-only hook: starts the wrapper at the given step so widget tests
   /// can exercise the progress header / Step 3 body without building Steps
@@ -106,7 +118,8 @@ class _VisitFlowState extends State<VisitFlowScreen> {
 
   /// Current step index — 0..2.
   late int _step =
-      widget.debugInitialStep?.clamp(0, _totalSteps - 1) ?? 0;
+      widget.debugInitialStep?.clamp(0, _totalSteps - 1) ??
+      widget.initialStep.clamp(0, _totalSteps - 1);
 
   /// Patient name resolved from constructor or, as a fallback, looked up
   /// from the local DB via [PatientDao]. The constructor value wins —
@@ -242,7 +255,8 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   String? _otherSymptoms;
 
   /// Programmes the SK confirmed in Step 2 — drives Step 3 form composition.
-  Set<Programme> _confirmedProgrammes = const <Programme>{};
+  late Set<Programme> _confirmedProgrammes =
+      widget.seedProgrammes.isNotEmpty ? {...widget.seedProgrammes} : const <Programme>{};
 
   /// Set when Step 3 completes — handed to Step 4 for the recommendation card.
   Programme _primaryProgramme = Programme.unknown;
@@ -301,7 +315,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
         body: SafeArea(
           child: Column(
             children: [
-              _VisitFlowHeader(
+              VisitFlowHeader(
                 step: _step,
                 patientId: widget.patientId,
                 patientName: _patientName,
@@ -580,217 +594,6 @@ Future<bool?> showLeaveVisitDialog(BuildContext context) {
 ///
 /// Step label 2 takes the activated programme name (or "Visit" fallback)
 /// so the SK sees what they are about to enter.
-class _VisitFlowHeader extends StatelessWidget {
-  const _VisitFlowHeader({
-    required this.step,
-    required this.onBack,
-    this.patientId,
-    this.patientName,
-    this.ageDisplay,
-    this.householdId,
-    this.patientGender,
-    this.primaryProgramme = Programme.unknown,
-  });
-
-  final int step; // 0..2
-  final VoidCallback onBack;
-  final String? patientId;
-  final String? patientName;
-  final String? ageDisplay; // pre-formatted: "1 month", "14 months", "5 yrs"
-  final String? householdId;
-  final String? patientGender;
-  final Programme primaryProgramme;
-
-  static const Color _headerColor = Color(0xFF831843);
-
-  String get _initials {
-    final name = (patientName ?? '').trim();
-    if (name.isEmpty) return '?';
-    final parts = name.split(RegExp(r'\s+'));
-    if (parts.length >= 2 && parts[0].isNotEmpty && parts[1].isNotEmpty) {
-      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    }
-    return name.substring(0, name.length >= 2 ? 2 : 1).toUpperCase();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final step2Title = (primaryProgramme == Programme.anc ||
-            primaryProgramme == Programme.pnc)
-        ? 'Pregnancy checks'
-        : VisitFlowStrings.step2Title;
-    final stepLabels = <String>[
-      '1. ${VisitFlowStrings.step1Title}',
-      '2. $step2Title',
-      '3. ${VisitFlowStrings.step3Title}',
-    ];
-
-    // Compact subtitle: "age · gender · house" — plain text, no chips.
-    final subtitleParts = <String>[
-      if (ageDisplay != null) ageDisplay!,
-      if (patientGender != null && patientGender!.isNotEmpty)
-        patientGender!.toUpperCase().startsWith('F') ? 'Female' : 'Male',
-      if (householdId != null && householdId!.isNotEmpty)
-        'House #$householdId',
-    ];
-    final subtitle = subtitleParts.join(' · ');
-
-    return Material(
-      color: _headerColor,
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Compact row: [← button] [avatar] [name + subtitle]
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  // Circular back button — inline, no separate row
-                  GestureDetector(
-                    onTap: onBack,
-                    child: Container(
-                      width: 30,
-                      height: 30,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
-                      ),
-                      alignment: Alignment.center,
-                      child: const Icon(
-                        Icons.arrow_back_rounded,
-                        color: Colors.white,
-                        size: 16,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  // Avatar circle with initials
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.18),
-                      shape: BoxShape.circle,
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      _initials,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  // Name + subtitle
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        GestureDetector(
-                          onTap: patientId != null
-                              ? () => context.push('/patients/$patientId')
-                              : null,
-                          child: Text(
-                            patientName ?? '—',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              decoration: patientId != null
-                                  ? TextDecoration.underline
-                                  : TextDecoration.none,
-                              decorationColor: Colors.white,
-                            ),
-                          ),
-                        ),
-                        if (subtitle.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            subtitle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.75),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-
-              // 3-step line indicators with labels below.
-              Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: List.generate(stepLabels.length, (i) {
-                        final filled = i <= step;
-                        return Expanded(
-                          child: Container(
-                            height: 3,
-                            margin: EdgeInsets.only(
-                              right: i == stepLabels.length - 1 ? 0 : AppSpacing.sm,
-                            ),
-                            decoration: BoxDecoration(
-                              color: filled
-                                  ? Colors.white
-                                  : Colors.white.withValues(alpha: 0.3),
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                        );
-                      }),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: List.generate(stepLabels.length, (i) {
-                        final active = i == step;
-                        return Expanded(
-                          child: Padding(
-                            padding: EdgeInsets.only(
-                              right: i == stepLabels.length - 1 ? 0 : AppSpacing.sm,
-                            ),
-                            child: Text(
-                              stepLabels[i],
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight:
-                                    active ? FontWeight.w800 : FontWeight.w500,
-                                color: Colors.white.withValues(
-                                  alpha: active ? 1.0 : 0.6,
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      }),
-                    ),
-                  ],
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-}
 
 class _DemoChip extends StatelessWidget {
   const _DemoChip({required this.icon, required this.label});
@@ -2099,7 +1902,6 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             _WhatsAppCard(
               text: naba.whatsappSummary!,
               patientPhone: _patientPhone,
-              onShared: () => _onAccepted(naba),
             ),
             const SizedBox(height: 12),
           ],
@@ -3118,44 +2920,18 @@ class _WhatsAppCard extends StatefulWidget {
   const _WhatsAppCard({
     required this.text,
     this.patientPhone,
-    this.onShared,
   });
   final String text;
   // Pre-loaded from MemberDao; pre-fills recipient in SMS and WhatsApp.
   final String? patientPhone;
-  // Called when the user returns to the app after launching SMS or WhatsApp.
-  final VoidCallback? onShared;
 
   @override
   State<_WhatsAppCard> createState() => _WhatsAppCardState();
 }
 
-class _WhatsAppCardState extends State<_WhatsAppCard>
-    with WidgetsBindingObserver {
+class _WhatsAppCardState extends State<_WhatsAppCard> {
   bool _copied = false;
   bool _expanded = false;
-  // True after a launch so we fire onShared on the next app-resume event.
-  bool _launchedExternal = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _launchedExternal) {
-      _launchedExternal = false;
-      widget.onShared?.call();
-    }
-  }
 
   Future<void> _copy() async {
     await Clipboard.setData(ClipboardData(text: widget.text));
@@ -3180,7 +2956,6 @@ class _WhatsAppCardState extends State<_WhatsAppCard>
       return;
     }
     await launchUrl(uri);
-    _launchedExternal = true;
   }
 
   Future<void> _sendWhatsApp(BuildContext context) async {
@@ -3195,7 +2970,6 @@ class _WhatsAppCardState extends State<_WhatsAppCard>
     final nativeUri = Uri.parse('whatsapp://send?${phoneParam}text=$encoded');
     if (await canLaunchUrl(nativeUri)) {
       await launchUrl(nativeUri);
-      _launchedExternal = true;
       return;
     }
     // Fallback: wa.me/<phone>?text=<text> (browser universal link).
@@ -3203,7 +2977,6 @@ class _WhatsAppCardState extends State<_WhatsAppCard>
     final webUri = Uri.parse('https://wa.me/$waPath?text=$encoded');
     if (await canLaunchUrl(webUri)) {
       await launchUrl(webUri, mode: LaunchMode.externalApplication);
-      _launchedExternal = true;
       return;
     }
     if (context.mounted) {
@@ -3261,37 +3034,6 @@ class _WhatsAppCardState extends State<_WhatsAppCard>
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  AnimatedRotation(
-                    turns: _expanded ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: const Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      color: AppColors.waHeader,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          // ── Collapsible body ────────────────────────────────────────
-          if (_expanded) ...[
-            const Divider(height: 1, color: AppColors.waBorder),
-            // Message body with copy button
-            Padding(
-              padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.xl, AppSpacing.xxl, 0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Text(
-                      widget.text,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        height: 1.55,
-                        color: AppColors.textStrong,
-                      ),
-                    ),
-                  ),
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 180),
                     child: _copied
@@ -3322,7 +3064,31 @@ class _WhatsAppCardState extends State<_WhatsAppCard>
                             ),
                           ),
                   ),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: AppColors.waHeader,
+                    ),
+                  ),
                 ],
+              ),
+            ),
+          ),
+          // ── Collapsible body ────────────────────────────────────────
+          if (_expanded) ...[
+            const Divider(height: 1, color: AppColors.waBorder),
+            // Message body — full width now copy button is in the header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.xl, AppSpacing.xxl, 0),
+              child: Text(
+                widget.text,
+                style: const TextStyle(
+                  fontSize: 13,
+                  height: 1.55,
+                  color: AppColors.textStrong,
+                ),
               ),
             ),
             const SizedBox(height: AppSpacing.xl),

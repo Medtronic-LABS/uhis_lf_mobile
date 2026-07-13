@@ -27,6 +27,8 @@ import '../features/training/training_screen.dart';
 import '../features/assistant/assistant_screen.dart';
 import '../features/visit/briefing/visit_briefing_screen.dart';
 import '../features/visit/immunisation/immunisation_timeline_screen.dart';
+import '../features/patient/enroll/programme_enroll_screen.dart';
+import '../features/visit/new_patient_visit_screen.dart';
 import '../features/visit/visit_flow_screen.dart';
 import '../core/api/api_client.dart';
 import '../core/auth/auth_repository.dart';
@@ -231,6 +233,59 @@ GoRouter buildRouter(AuthState auth) {
                       );
                     },
                   ),
+                  // First-time visit — symptom picker + service grid (Priya Rani Das wireframe)
+                  GoRoute(
+                    path: ':id/new-visit',
+                    name: 'new-patient-visit',
+                    pageBuilder: (context, state) {
+                      final extra = state.extra is Map<String, dynamic>
+                          ? state.extra as Map<String, dynamic>
+                          : <String, dynamic>{};
+                      final origin = state.uri.queryParameters['origin'];
+                      return MaterialPage(
+                        key: ValueKey(
+                            'new-visit-${state.pathParameters['id']}'),
+                        child: NewPatientVisitScreen(
+                          patientId: state.pathParameters['id']!,
+                          patientName:
+                              extra['patientName'] as String?,
+                          patientAge: extra['patientAge'] as int?,
+                          patientGender:
+                              extra['patientGender'] as String?,
+                          householdId:
+                              extra['householdId'] as String?,
+                          villageName:
+                              extra['villageName'] as String?,
+                          origin: origin,
+                        ),
+                      );
+                    },
+                  ),
+                  // Programme enrollment — edit existing services
+                  GoRoute(
+                    path: ':id/enroll',
+                    name: 'programme-enroll',
+                    pageBuilder: (context, state) {
+                      final extra = state.extra is Map<String, dynamic>
+                          ? state.extra as Map<String, dynamic>
+                          : <String, dynamic>{};
+                      return MaterialPage(
+                        key: ValueKey(
+                            'enroll-${state.pathParameters['id']}'),
+                        child: ProgrammeEnrollScreen(
+                          patientId: state.pathParameters['id']!,
+                          patientName:
+                              extra['patientName'] as String? ?? 'Patient',
+                          patientAge: extra['patientAge'] as int?,
+                          patientGender: extra['patientGender'] as String?,
+                          villageName: extra['villageName'] as String?,
+                          existingProgrammes: (extra['existingProgrammes']
+                                  as Set<Programme>?) ??
+                              const {},
+                        ),
+                      );
+                    },
+                  ),
                   // Visit flow routes
                   GoRoute(
                     path: 'visit/:visitId/briefing',
@@ -298,6 +353,19 @@ GoRouter buildRouter(AuthState auth) {
                           postpartumWeeks:
                               extra?['postpartumWeeks'] as int?,
                           origin: origin,
+                          initialStep:
+                              extra?['initialStep'] as int? ?? 0,
+                          seedProgrammes: () {
+                            final raw = extra?['seedProgrammes'];
+                            if (raw is List) {
+                              return raw
+                                  .whereType<String>()
+                                  .map(Programme.fromString)
+                                  .where((p) => p != Programme.unknown)
+                                  .toSet();
+                            }
+                            return const <Programme>{};
+                          }(),
                         ),
                       );
                     },

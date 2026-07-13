@@ -17,6 +17,7 @@ import '../../core/models/referral.dart';
 import '../../core/models/sla.dart';
 import '../../core/sync/offline_sync_service.dart';
 import '../dashboard/mission_dashboard_repository.dart';
+import '../patient/followup_call_service.dart';
 import '../visit/visit_controller.dart';
 import '../visit/widgets/widgets.dart';
 import 'referral_api_service.dart';
@@ -1597,16 +1598,30 @@ class _ReferralListScreenState extends State<ReferralListScreen>
   }
 
   Future<void> _handleScheduleFollowUp(Referral r, Patient? patient) async {
+    final followUpCalls = context.read<FollowUpCallService>();
     final success = await FollowUpScheduler.show(
       context,
       referralId: r.id,
       patientName: patient?.name ?? 'Patient',
-      existingFollowUpDate: r.dueTreatmentAt != null 
+      existingFollowUpDate: r.dueTreatmentAt != null
           ? DateTime.fromMillisecondsSinceEpoch(r.dueTreatmentAt!)
           : null,
       onSchedule: (date, type, notes) async {
-        // In production, call ReferralApiService.createFollowUp()
-        await Future.delayed(const Duration(milliseconds: 500));
+        // Persist a real local follow-up (backend accepts a null-id follow-up
+        // as a create; it pushes on the next offline-sync cycle and shows in
+        // the patient's Open Follow-ups). Replaces the former no-op stub.
+        try {
+          await followUpCalls.scheduleLocal(
+            patientId: r.patientId,
+            dueDate: date,
+            type: type ?? 'MEDICAL_REVIEW',
+            reason: notes,
+            referredSiteId: r.diagnosisCode,
+          );
+        } catch (e) {
+          debugPrint('[Referral] scheduleLocal failed: $e');
+          return false;
+        }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(

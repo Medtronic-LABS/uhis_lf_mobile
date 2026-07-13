@@ -11,6 +11,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/patient_dao.dart';
+import '../../core/db/patient_programmes_dao.dart';
 import '../../core/db/pregnancy_snapshot_dao.dart';
 import '../../core/models/programme.dart';
 import '../dashboard/mission_dashboard_repository.dart';
@@ -389,6 +390,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     final assessmentRepo = ctx.read<AssessmentRepository>();
     final patientDao = ctx.read<PatientDao>();
     final worklistRepo = ctx.read<WorklistRepository>();
+    final progDao = ctx.read<PatientProgrammesDao>();
     try {
       final draft = await draftDao.getDraft(widget.visitId);
       debugPrint('[VisitForm] draft=${draft != null ? "found" : "null"}');
@@ -396,10 +398,36 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         await draftDao.deleteDraft(draft.encounterId);
         debugPrint('[VisitForm] draft deleted, sync will pick up pending assessments');
 
+        // Persist confirmed programme enrolment NOW — only on successful submit.
+        // Doing this earlier (at visit start) would leave the patient showing as
+        // enrolled even if the SK abandons the form mid-way.
+        final patientId = widget.patientId;
+        if (patientId != null) {
+          final newProgs = (widget.activatedPathways ?? [])
+              .map(Programme.fromString)
+              .where((p) => p != Programme.unknown)
+              .toSet();
+          debugPrint(
+            '[VisitForm] programme enrolment — activatedPathways=${widget.activatedPathways} '
+            'newProgs=${newProgs.map((p) => p.name).toList()} patientId=$patientId',
+          );
+          if (newProgs.isNotEmpty) {
+            final current = await progDao.programmesFor(patientId);
+            final merged = {...current, ...newProgs};
+            await progDao.replaceFor(patientId, merged);
+            debugPrint(
+              '[VisitForm] programme enrolment written: '
+              'previous=${current.map((p) => p.name).toList()} '
+              'merged=${merged.map((p) => p.name).toList()}',
+            );
+          } else {
+            debugPrint('[VisitForm] programme enrolment skipped — no active pathways');
+          }
+        }
+
         final fieldValues = jsonDecode(draft.fieldValues) as Map<String, dynamic>;
         final vitalsMap = _extractVitals(fieldValues);
         final encounterId = draft.encounterId;
-        final patientId = widget.patientId;
         final primaryProgramme = _getPrimaryProgramme();
         final now = DateTime.now();
 
