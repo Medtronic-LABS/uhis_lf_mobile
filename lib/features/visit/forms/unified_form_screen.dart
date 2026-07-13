@@ -282,7 +282,12 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
           onSubmit: () => _onSubmit(ctx, notifier, annotated),
         ));
 
-        return Column(
+        // Tapping anywhere outside a focused field dismisses the keyboard;
+        // it only reopens when the SK explicitly taps back into a field.
+        return GestureDetector(
+          onTap: () => FocusScope.of(context).unfocus(),
+          behavior: HitTestBehavior.opaque,
+          child: Column(
           children: [
             // ── Step 2 AI Scribe banner — the SAME widget as Step 1, in
             // live-first mode. When the programme mix supports auto-fill
@@ -324,6 +329,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
               ),
             ),
           ],
+          ),
         );
       },
     );
