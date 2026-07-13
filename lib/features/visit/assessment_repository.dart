@@ -250,12 +250,15 @@ class AssessmentRepository extends ChangeNotifier {
     // populate MemberAssessmentFollowUpMap correctly. Assessments with no
     // memberId go in the top-level assessments array (orphan path).
     final byMember = <String, List<Map<String, dynamic>>>{};
+    final memberHouseholdId = <String, String>{}; // memberId → householdId
     final orphanAssessments = <Map<String, dynamic>>[];
     for (final payload in assessmentPayloads) {
       final enc = payload['encounter'] as Map<String, dynamic>? ?? {};
       final mid = enc['memberId'] as String? ?? '';
       if (mid.isNotEmpty) {
         byMember.putIfAbsent(mid, () => []).add(payload);
+        final hid = enc['householdId'] as String? ?? '';
+        if (hid.isNotEmpty) memberHouseholdId[mid] = hid;
       } else {
         orphanAssessments.add(payload);
       }
@@ -263,6 +266,8 @@ class AssessmentRepository extends ChangeNotifier {
     final householdMemberPayloads = byMember.entries
         .map((e) => <String, dynamic>{
               'referenceId': e.key,
+              if (memberHouseholdId.containsKey(e.key))
+                'householdId': memberHouseholdId[e.key],
               'provenance': provenance.toJson(),
               'assessments': e.value,
               'followUps': <Map<String, dynamic>>[],
