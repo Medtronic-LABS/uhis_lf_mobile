@@ -282,7 +282,7 @@ abstract final class PathwayRulesV1 {
         'pregnant',
         'vaginal_bleeding',
         'water_break',
-        'leaking_fluid_vagina', // amniotic fluid leak — labor sign
+        'leaking_fluid_vagina',
         'reduced_fetal_movement',
         'labor_signs',
         'painful_uterine_contractions',
@@ -292,7 +292,21 @@ abstract final class PathwayRulesV1 {
         'abdominal_pain',
         'blurred_vision',
         'headache_severe',
-        'edema', // WHO ANC danger sign
+        'edema',
+        // Extended ANC symptom set — WHO ANC 2016 + clinical guidance
+        'convulsions',
+        'fever',
+        'dizziness',
+        'high_bp_known',
+        'chest_pain',
+        'one_sided_weakness',
+        'palpitations',
+        'shortness_breath',
+        'polydipsia',
+        'numbness',
+        'foot_wound',
+        'weakness',
+        'weight_loss',
       },
       // Female-only, pregnant, minimum 10 years — prevents ANC firing on
       // male patients or infants with corrupted isPregnant flags.
@@ -318,10 +332,11 @@ abstract final class PathwayRulesV1 {
       programme: Programme.anc,
       priority: 21,
       anyOf: {
-        'reduced_fetal_movement',   // unambiguous — fetus must be present
-        'leaking_fluid_vagina',     // amniotic fluid — pregnancy only
-        'painful_uterine_contractions', // labour — pregnancy only
-        'water_break',              // rupture of membranes — pregnancy only
+        'reduced_fetal_movement',
+        'leaking_fluid_vagina',
+        'painful_uterine_contractions',
+        'water_break',
+        'one_sided_weakness', // stroke-sign — activate ANC even if pregnancy unrecorded
       },
       gate: DemographicGate(
         sex: Sex.female,

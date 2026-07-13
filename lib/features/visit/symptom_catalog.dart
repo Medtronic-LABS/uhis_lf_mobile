@@ -35,14 +35,26 @@ class SymptomCatalog {
 
   // ── ANC Symptoms (Pregnant women) ────────────────────────────────────────
   static const ancSymptoms = [
-    SymptomDef(code: 'headache', label: 'Severe headache', icon: 'psychology'),
-    SymptomDef(code: 'blurred_vision', label: 'Blurred vision', icon: 'visibility_off'),
-    SymptomDef(code: 'abdominal_pain', label: 'Abdominal pain', icon: 'healing'),
     SymptomDef(code: 'vaginal_bleeding', label: 'Vaginal bleeding', icon: 'water_drop', isDangerSign: true),
-    SymptomDef(code: 'swelling', label: 'Swelling (face/hands/feet)', icon: 'bubble_chart'),
+    SymptomDef(code: 'abdominal_pain', label: 'Abdominal pain', icon: 'healing'),
+    SymptomDef(code: 'water_break', label: 'Leaking fluids', icon: 'water', isDangerSign: true),
+    SymptomDef(code: 'headache_severe', label: 'Headache', icon: 'psychology'),
+    SymptomDef(code: 'swelling_face_hands', label: 'Swelling', icon: 'bubble_chart'),
+    SymptomDef(code: 'convulsions', label: 'Fits / Convulsions', icon: 'warning', isDangerSign: true),
     SymptomDef(code: 'fever', label: 'Fever', icon: 'thermostat'),
-    SymptomDef(code: 'reduced_fetal_movement', label: 'Reduced fetal movement', icon: 'child_care', isDangerSign: true),
-    SymptomDef(code: 'water_break', label: 'Water break/leaking', icon: 'water', isDangerSign: true),
+    SymptomDef(code: 'reduced_fetal_movement', label: 'Baby not moving', icon: 'child_care', isDangerSign: true),
+    SymptomDef(code: 'dizziness', label: 'Dizziness', icon: 'blur_on'),
+    SymptomDef(code: 'high_bp_known', label: 'BP', icon: 'favorite'),
+    SymptomDef(code: 'blurred_vision', label: 'Blurred vision', icon: 'visibility_off'),
+    SymptomDef(code: 'chest_pain', label: 'Chest pain', icon: 'favorite', isDangerSign: true),
+    SymptomDef(code: 'one_sided_weakness', label: 'One side weakness', icon: 'warning', isDangerSign: true),
+    SymptomDef(code: 'palpitations', label: 'Palpitations', icon: 'monitor_heart'),
+    SymptomDef(code: 'shortness_breath', label: 'Shortness of breath', icon: 'air'),
+    SymptomDef(code: 'polydipsia', label: 'Excessive thirst / Diabetes', icon: 'local_drink'),
+    SymptomDef(code: 'numbness', label: 'Foot numbness', icon: 'touch_app'),
+    SymptomDef(code: 'foot_wound', label: 'Wound', icon: 'healing'),
+    SymptomDef(code: 'weakness', label: 'Weakness', icon: 'battery_alert'),
+    SymptomDef(code: 'weight_loss', label: 'Weight loss', icon: 'trending_down'),
   ];
 
   // ── NCD Symptoms (Diabetes/Hypertension) ─────────────────────────────────
