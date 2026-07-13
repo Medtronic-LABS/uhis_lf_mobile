@@ -312,29 +312,38 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       },
       child: Scaffold(
         backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
-        body: SafeArea(
-          child: Column(
-            children: [
-              VisitFlowHeader(
-                step: _step,
-                patientId: widget.patientId,
-                patientName: _patientName,
-                ageDisplay: _ageDisplay,
-                householdId: widget.householdId,
-                patientGender: widget.patientGender,
-                primaryProgramme: _pathways.isNotEmpty
-                    ? _pathways.first.programme
-                    : _primaryProgramme,
-                onBack: () {
-                  if (_step > 0) {
-                    setState(() => _step -= 1);
-                  } else {
-                    _exitFlow();
-                  }
-                },
-              ),
-              Expanded(child: _buildStepBody()),
-            ],
+        body: AnnotatedRegion<SystemUiOverlayStyle>(
+          value: VisitFlowHeader.statusBarStyle,
+          child: SafeArea(
+            // top: false — VisitFlowHeader paints its own Material color
+            // behind the status bar and pads its content via its own inner
+            // SafeArea(bottom: false); reserving top padding here would
+            // leave a plain-background gap above the header instead of the
+            // maroon extending seamlessly to the physical top (issue #89).
+            top: false,
+            child: Column(
+              children: [
+                VisitFlowHeader(
+                  step: _step,
+                  patientId: widget.patientId,
+                  patientName: _patientName,
+                  ageDisplay: _ageDisplay,
+                  householdId: widget.householdId,
+                  patientGender: widget.patientGender,
+                  primaryProgramme: _pathways.isNotEmpty
+                      ? _pathways.first.programme
+                      : _primaryProgramme,
+                  onBack: () {
+                    if (_step > 0) {
+                      setState(() => _step -= 1);
+                    } else {
+                      _exitFlow();
+                    }
+                  },
+                ),
+                Expanded(child: _buildStepBody()),
+              ],
+            ),
           ),
         ),
       ),
