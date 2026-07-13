@@ -954,7 +954,7 @@ class _PostScanSheet extends StatelessWidget {
                   ),
                 ),
                 GestureDetector(
-                  onTap: onLinkExisting,
+                  onTap: () => Navigator.of(context).pop(),
                   child: const Icon(Icons.close, color: AppColors.textMuted),
                 ),
               ],
