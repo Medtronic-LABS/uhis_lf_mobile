@@ -253,12 +253,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // completedIds comes from EncounterDao (updated the instant a visit is
     // submitted, offline-safe); this is the only reliable "done today" signal
     // — MissionInputData.completedTodayPatientIds lags until the next sync.
-    final queue = completedIds.isEmpty
-        ? rawQueue
-        : rawQueue
-            .where((i) =>
-                i.patientId == null || !completedIds.contains(i.patientId))
-            .toList(growable: false);
+    //
+    // Upcoming-tier items (due >7 days out, or no due date) are excluded
+    // here too — the dashboard only ever shows Today/Overdue/This week.
+    // Filtered here (not in the shared classifier) so the Tasks screen,
+    // which reads the same loadQueue() result, is unaffected.
+    final queue = rawQueue
+        .where((i) =>
+            i.tier != DashboardTier.upcoming &&
+            (completedIds.isEmpty ||
+                i.patientId == null || !completedIds.contains(i.patientId)))
+        .toList(growable: false);
 
     // Cache filtered base queue so filters can be re-applied synchronously
     // without a repository round-trip on every chip tap.

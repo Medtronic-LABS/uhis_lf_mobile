@@ -237,17 +237,25 @@ class MissionQueueCard extends StatelessWidget {
     UrgencyTheme urgency,
   ) {
     final label = MissionDashboardStrings.statusPillForTier(tier);
+    // Only 3 colors are meant to ever reach the SK: green "Today", amber
+    // "This week", red "Overdue". `critical` folds into "Overdue" (most
+    // urgent tier gets the strongest label+color, see statusPillForTier);
+    // `upcoming` is filtered out before reaching this widget on the Home
+    // dashboard and household screens (see mission_dashboard_screen.dart /
+    // household_list_screen.dart / household_detail_screen.dart) — the
+    // grey "Routine" case below only remains reachable on the Tasks screen,
+    // which still shows upcoming items unfiltered.
     switch (tier) {
       case DashboardTier.critical:
-        return (label, urgency.visitNow);       // red   — "Now"
+        return (label, tokens.statusCritical);   // red   — "Overdue"
       case DashboardTier.overdue:
-        return (label, urgency.today);           // amber — "Overdue"
+        return (label, tokens.statusCritical);   // red   — "Overdue"
       case DashboardTier.dueToday:
         return (label, tokens.statusSuccess);    // green — "Today"
       case DashboardTier.thisWeek:
-        return (label, urgency.thisWeek);        // teal  — "This week"
+        return (label, tokens.statusWarning);    // amber — "This week"
       case DashboardTier.upcoming:
-        return (label, urgency.routine);         // grey  — "Routine"
+        return (label, urgency.routine);         // grey  — "Routine" (Tasks screen only)
     }
   }
 }
