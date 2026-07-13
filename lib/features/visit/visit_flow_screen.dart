@@ -381,15 +381,20 @@ class _VisitFlowState extends State<VisitFlowScreen> {
             _sicknessDuration = duration;
             _otherSymptoms = other;
           },
+          // Inline service selector fires this before onAdvance — use it to
+          // override the pathway-derived set with the SK's explicit selection.
+          onProgrammesSelected: (programmes) {
+            _confirmedProgrammes = programmes;
+          },
           onAdvance: (pathways) {
             _pathways = pathways;
-            // Bypass the "Opening forms for" confirmation sheet — proceed
-            // directly to Step 2 with all activated pathways confirmed.
-            setState(() {
+            // Fall back to pathway-derived set only when the service selector
+            // was not shown (child visits — under-5 skips the grid).
+            if (_confirmedProgrammes.isEmpty) {
               _confirmedProgrammes =
                   pathways.map((p) => p.programme).toSet();
-              _step = 1;
-            });
+            }
+            setState(() => _step = 1);
           },
         );
       case 1:
@@ -466,28 +471,6 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           origin: widget.origin ?? 'patients',
         );
     }
-  }
-
-  void _showProgrammeConfirmSheet(List<ActivatedPathway> pathways) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (_) => _ProgrammeConfirmSheet(
-        pathways: pathways,
-        patientGender: widget.patientGender,
-        patientAgeYears: widget.patientAge,
-        onConfirm: (selected) {
-          if (!mounted) return;
-          setState(() {
-            _confirmedProgrammes = selected;
-            _step = 1;
-          });
-        },
-      ),
-    );
   }
 
   Future<bool?> _confirmExit() => showLeaveVisitDialog(context);
@@ -653,6 +636,7 @@ class _Step1Symptoms extends StatelessWidget {
     this.patientName,
     this.patientGender,
     this.origin,
+    this.onProgrammesSelected,
   });
 
   final String encounterId;
@@ -670,6 +654,10 @@ class _Step1Symptoms extends StatelessWidget {
     String? otherSymptoms,
     Set<String> aiPickedSymptoms,
   ) onSymptomsConfirmed;
+
+  /// Fired just before [onAdvance] with the SK-confirmed programme set from
+  /// the inline eligible-services grid. Absent for child visits (under-5).
+  final ValueChanged<Set<Programme>>? onProgrammesSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -689,6 +677,7 @@ class _Step1Symptoms extends StatelessWidget {
         origin: origin,
         onAdvance: onAdvance,
         onSymptomsConfirmed: onSymptomsConfirmed,
+        onProgrammesSelected: onProgrammesSelected,
       ),
     );
   }
