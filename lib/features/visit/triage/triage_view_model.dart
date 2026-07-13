@@ -518,8 +518,15 @@ class TriageViewModel extends ChangeNotifier {
         case SymptomCategory.maternal:
           final codeProgs =
               AiScribeTriageVocab.programmesForMaternalCode(code);
-          if (!codeProgs.every(enrolled.contains)) break;
-          final home = sectionOrder.firstWhere(codeProgs.contains);
+          // Show when enrolled in ANY programme this code spans (not ALL).
+          // e.g. vaginal_bleeding {anc,pnc} shows for ANC-only patients.
+          if (!codeProgs.any(enrolled.contains)) break;
+          // Route to the first enrolled programme from codeProgs in section
+          // order, so ANC-only patients see {anc,pnc} codes in the ANC bucket.
+          final home = sectionOrder.firstWhere(
+            (p) => codeProgs.contains(p) && byProgramme.containsKey(p),
+            orElse: () => sectionOrder.firstWhere(codeProgs.contains),
+          );
           byProgramme[home]?.add(code);
         case SymptomCategory.ncd:
           if (byProgramme.containsKey(Programme.ncd)) {
@@ -558,11 +565,10 @@ class TriageViewModel extends ChangeNotifier {
       case SymptomCategory.general:
         return false;
       case SymptomCategory.maternal:
-        // Outside when the patient is not enrolled in every programme the
-        // symptom spans (mirrors the every-check in enrolledProgrammeVocabCodes).
+        // Outside when enrolled in NONE of the programmes this code spans.
         final codeProgs =
             AiScribeTriageVocab.programmesForMaternalCode(code);
-        return !codeProgs.every((p) => enrolled.contains(p));
+        return !codeProgs.any((p) => enrolled.contains(p));
       case SymptomCategory.ncd:
         if (enrolled.contains(Programme.ncd)) return false;
         // ANC-extended NCD codes are shown inside the ANC bucket — they don't
