@@ -663,18 +663,49 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                         if (vm.activatedPathways.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 10),
-                            child: Text(
-                              SymptomPickerStrings.servicesOpeningStatus(
-                                vm.activatedPathways.length,
-                                vm.activatedPathways
-                                    .map((p) => p.programme.wireTag)
-                                    .toList(),
-                              ),
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.navy,
-                              ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  SymptomPickerStrings.servicesOpeningStatus(
+                                    vm.activatedPathways.length,
+                                    vm.activatedPathways
+                                        .map((p) => p.programme.wireTag)
+                                        .toList(),
+                                  ),
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppColors.navy,
+                                  ),
+                                ),
+                                if (vm.scribePreTickedSymptoms.isNotEmpty ||
+                                    vm.allPathways.any(
+                                      (p) => p.trigger == PathwayTrigger.ai,
+                                    ))
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 2),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.auto_awesome_rounded,
+                                          size: 11,
+                                          color: Color(0xFF7C3AED),
+                                        ),
+                                        SizedBox(width: 3),
+                                        Text(
+                                          'AI selected',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Color(0xFF7C3AED),
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
 
