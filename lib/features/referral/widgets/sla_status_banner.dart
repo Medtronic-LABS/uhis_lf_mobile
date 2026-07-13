@@ -23,7 +23,7 @@ class SlaStatusBanner extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
       decoration: BoxDecoration(
         gradient: _gradient(stateInfo.type, scheme),
         borderRadius: BorderRadius.circular(12),
@@ -35,7 +35,7 @@ class SlaStatusBanner extends StatelessWidget {
       child: Row(
         children: [
           _icon(stateInfo.type, scheme),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

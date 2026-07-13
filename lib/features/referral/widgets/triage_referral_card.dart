@@ -74,8 +74,8 @@ class TriageReferralCard extends StatelessWidget {
     final isBreached = referral.breachedSince != null;
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      elevation: isBreached ? 4 : 2,
+      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      elevation: isBreached ? 3 : 1,
       shadowColor: isBreached 
           ? scheme.error.withValues(alpha: 0.3)
           : scheme.shadow.withValues(alpha: 0.1),
@@ -97,7 +97,7 @@ class TriageReferralCard extends StatelessWidget {
           children: [
             // Main content area
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -108,14 +108,14 @@ class TriageReferralCard extends StatelessWidget {
                     priority: priority,
                     isCompleted: isCompleted,
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 10),
 
                   // Section 2: SLA Status Banner
                   SlaStatusBanner(
                     referral: referral,
                     priority: priority,
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 10),
 
                   // Section 3: Referral Metadata
                   ReferralMetadata(
@@ -124,7 +124,7 @@ class TriageReferralCard extends StatelessWidget {
                     programmeName: programmeName,
                     assignedDoctor: assignedDoctor,
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 10),
 
                   // Section 4: Operational Status
                   OperationalStatus(
@@ -132,11 +132,11 @@ class TriageReferralCard extends StatelessWidget {
                     followUpDueAt: followUpDueAt,
                     prescriptionShared: prescriptionShared,
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 10),
 
                   // Section 5: Timeline Progress
                   Container(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    padding: const EdgeInsets.symmetric(vertical: 6),
                     decoration: BoxDecoration(
                       color: scheme.surfaceContainerLow,
                       borderRadius: BorderRadius.circular(10),

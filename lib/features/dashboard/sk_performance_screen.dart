@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
@@ -38,17 +36,30 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen> {
       backgroundColor: AppColors.canvas,
       appBar: AppBar(
         backgroundColor: AppColors.navy,
-        foregroundColor: AppColors.textOnNavy,
+        foregroundColor: Colors.white,
         elevation: 0,
-        title: const Text(
-          PerformanceStrings.title,
-          style: TextStyle(
-            color: AppColors.textOnNavy,
-            fontWeight: FontWeight.w700,
-            fontSize: 17,
-          ),
+        toolbarHeight: 60,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '📊 ${PerformanceStrings.title}',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 17,
+              ),
+            ),
+            Text(
+              PerformanceStrings.appBarSubtitle,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 11,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ],
         ),
-        centerTitle: false,
       ),
       body: FutureBuilder<SkPerformanceStats>(
         future: _statsFuture,
@@ -60,8 +71,6 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen> {
             return _ErrorView(onRetry: _retry);
           }
           final stats = snapshot.data!;
-          final visitCount =
-              _showMonth ? stats.visitsThisMonth : stats.visitsThisWeek;
           return ListView(
             physics: const ClampingScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
@@ -71,17 +80,15 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen> {
                 onToggle: (v) => setState(() => _showMonth = v),
               ),
               const SizedBox(height: 14),
-              _HeroCard(
-                visitCount: visitCount,
-                showMonth: _showMonth,
-                stats: stats,
-              ),
+              _HeroCard(stats: stats, showMonth: _showMonth),
               const SizedBox(height: 14),
-              _StatGrid(stats: stats, showMonth: _showMonth),
-              const SizedBox(height: 20),
-              _ProgrammeStrip(stats: stats, showMonth: _showMonth),
-              const SizedBox(height: 20),
-              _RecentActivity(items: stats.recentActivity),
+              _VisitTrendCard(stats: stats, showMonth: _showMonth),
+              const SizedBox(height: 14),
+              _StatsGrid(stats: stats, showMonth: _showMonth),
+              const SizedBox(height: 14),
+              _ServiceBreakdownCard(stats: stats, showMonth: _showMonth),
+              const SizedBox(height: 14),
+              _InsightStrip(stats: stats, showMonth: _showMonth),
             ],
           );
         },
@@ -93,10 +100,7 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen> {
 // ── Period toggle ──────────────────────────────────────────────────────────────
 
 class _PeriodToggle extends StatelessWidget {
-  const _PeriodToggle({
-    required this.showMonth,
-    required this.onToggle,
-  });
+  const _PeriodToggle({required this.showMonth, required this.onToggle});
 
   final bool showMonth;
   final ValueChanged<bool> onToggle;
@@ -111,12 +115,12 @@ class _PeriodToggle extends StatelessWidget {
       padding: const EdgeInsets.all(3),
       child: Row(
         children: [
-          _Tab(
+          _ToggleTab(
             label: PerformanceStrings.periodWeek,
             active: !showMonth,
             onTap: () => onToggle(false),
           ),
-          _Tab(
+          _ToggleTab(
             label: PerformanceStrings.periodMonth,
             active: showMonth,
             onTap: () => onToggle(true),
@@ -127,8 +131,8 @@ class _PeriodToggle extends StatelessWidget {
   }
 }
 
-class _Tab extends StatelessWidget {
-  const _Tab({
+class _ToggleTab extends StatelessWidget {
+  const _ToggleTab({
     required this.label,
     required this.active,
     required this.onTap,
@@ -145,9 +149,8 @@ class _Tab extends StatelessWidget {
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          curve: Curves.easeInOut,
           decoration: BoxDecoration(
-            color: active ? AppColors.cardSurface : Colors.transparent,
+            color: active ? Colors.white : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
           ),
           padding: const EdgeInsets.symmetric(vertical: 9),
@@ -155,7 +158,7 @@ class _Tab extends StatelessWidget {
           child: Text(
             label,
             style: TextStyle(
-              color: active ? AppColors.navy : AppColors.onDarkMid,
+              color: active ? AppColors.navy : AppColors.aiPurple,
               fontWeight: FontWeight.w700,
               fontSize: 13,
             ),
@@ -169,33 +172,23 @@ class _Tab extends StatelessWidget {
 // ── Hero card ─────────────────────────────────────────────────────────────────
 
 class _HeroCard extends StatelessWidget {
-  const _HeroCard({
-    required this.visitCount,
-    required this.showMonth,
-    required this.stats,
-  });
+  const _HeroCard({required this.stats, required this.showMonth});
 
-  final int visitCount;
-  final bool showMonth;
   final SkPerformanceStats stats;
+  final bool showMonth;
 
   @override
   Widget build(BuildContext context) {
-    final target = showMonth
-        ? SkPerformanceStats.monthlyTarget
-        : SkPerformanceStats.weeklyTarget;
-    final progress = (visitCount / target).clamp(0.0, 1.0);
-    final periodLabel = showMonth
-        ? PerformanceStrings.periodLabelMonth(stats.monthStartDate)
-        : PerformanceStrings.periodLabelWeek(
-            stats.weekStartDate,
-            stats.weekStartDate.add(const Duration(days: 6)),
-          );
+    final score = showMonth ? stats.performanceScoreMonth : stats.performanceScore;
+    final rating = showMonth ? stats.performanceRatingMonth : stats.performanceRating;
+    final emoji  = showMonth ? stats.performanceEmojiMonth : stats.performanceEmoji;
+    final slaText = '${(stats.slaCompliance * 100).round()}%';
+    final hrText = '${stats.highRiskResponseDays}d';
 
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [AppColors.aiPurpleDark, AppColors.aiPurple],
+          colors: [Color(0xFF1B2B5E), Color(0xFF2D3F7A)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -205,393 +198,531 @@ class _HeroCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            periodLabel,
-            style: const TextStyle(
-              color: AppColors.onDarkMid,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 6),
+          // Score row
           Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text(
-                '$visitCount',
-                style: const TextStyle(
-                  color: AppColors.textOnNavy,
-                  fontSize: 52,
-                  fontWeight: FontWeight.w900,
-                  height: 1,
+              // Circle gauge
+              SizedBox(
+                width: 80,
+                height: 80,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    SizedBox.expand(
+                      child: CircularProgressIndicator(
+                        value: score / 100,
+                        strokeWidth: 7,
+                        backgroundColor:
+                            Colors.white.withAlpha(40),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          Color(0xFF10B981),
+                        ),
+                      ),
+                    ),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '$score',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            height: 1.1,
+                          ),
+                        ),
+                        const Text(
+                          '/ 100',
+                          style: TextStyle(
+                            color: Colors.white60,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 8),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Text(
-                  PerformanceStrings.heroSubline,
-                  style: const TextStyle(
-                    color: AppColors.onDarkLow,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
+              const SizedBox(width: 16),
+              // Text block
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      PerformanceStrings.heroScoreLabel,
+                      style: TextStyle(
+                        color: Colors.white60,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$rating $emoji',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        height: 1.1,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      PerformanceStrings.heroDesc,
+                      style: TextStyle(
+                        color: Colors.white60,
+                        fontSize: 11,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          // Divider
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: Divider(
+              color: Colors.white.withAlpha(40),
+              height: 1,
+            ),
+          ),
+
+          // SLA + High-risk row
+          Row(
+            children: [
+              Expanded(
+                child: _MetricCell(
+                  label: PerformanceStrings.slaLabel,
+                  value: slaText,
+                ),
+              ),
+              Container(
+                width: 1,
+                height: 32,
+                color: Colors.white.withAlpha(40),
+              ),
+              Expanded(
+                child: _MetricCell(
+                  label: PerformanceStrings.highRiskLabel,
+                  value: hrText,
+                  align: CrossAxisAlignment.end,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetricCell extends StatelessWidget {
+  const _MetricCell({
+    required this.label,
+    required this.value,
+    this.align = CrossAxisAlignment.start,
+  });
+
+  final String label;
+  final String value;
+  final CrossAxisAlignment align;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: align,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white54,
+            fontSize: 9,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Visit trend card ──────────────────────────────────────────────────────────
+
+class _VisitTrendCard extends StatelessWidget {
+  const _VisitTrendCard({required this.stats, required this.showMonth});
+
+  final SkPerformanceStats stats;
+  final bool showMonth;
+
+  @override
+  Widget build(BuildContext context) {
+    final counts = showMonth
+        ? stats.weeklyVisitCounts
+        : stats.dailyVisitCounts;
+    final labels = showMonth
+        ? PerformanceStrings.weekLabels
+        : PerformanceStrings.weekdayLabels;
+    final maxCount =
+        counts.isEmpty ? 1 : counts.reduce((a, b) => a > b ? a : b);
+    const maxBarH = 56.0;
+
+    return _WhiteCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                PerformanceStrings.visitTrendLabel,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textMuted,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const Text(
+                PerformanceStrings.trendSteady,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF10B981),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 14),
-          if (!showMonth) ...[
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  PerformanceStrings.weeklyTarget,
-                  style: const TextStyle(
-                    color: AppColors.onDarkLow,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
+          SizedBox(
+            height: maxBarH + 32,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: List.generate(counts.length, (i) {
+                final c = counts[i];
+                final barH =
+                    maxCount > 0 ? (c / maxCount) * maxBarH : 2.0;
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        if (c > 0)
+                          Text(
+                            '$c',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.navy,
+                            ),
+                          ),
+                        const SizedBox(height: 3),
+                        Container(
+                          height: barH.clamp(2.0, maxBarH),
+                          decoration: BoxDecoration(
+                            color: AppColors.aiPurple.withAlpha(180),
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(4),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          labels.length > i ? labels[i] : '',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
+                );
+              }),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Stats grid ────────────────────────────────────────────────────────────────
+
+class _StatsGrid extends StatelessWidget {
+  const _StatsGrid({required this.stats, required this.showMonth});
+
+  final SkPerformanceStats stats;
+  final bool showMonth;
+
+  @override
+  Widget build(BuildContext context) {
+    final visits = showMonth ? stats.visitsThisMonth : stats.visitsThisWeek;
+    final target = showMonth
+        ? SkPerformanceStats.visitsTargetMonth
+        : SkPerformanceStats.visitsTarget;
+    final referrals =
+        showMonth ? stats.referralsThisMonth : stats.referralsThisWeek;
+    final avgVisits = showMonth
+        ? stats.avgVisitsPerDayMonth
+        : stats.avgVisitsPerDay;
+    final completionPct = referrals > 0
+        ? ((stats.referralsCompleted / referrals) * 100).round()
+        : 0;
+
+    final tiles = [
+      _StatTileData(
+        icon: Icons.check_rounded,
+        color: AppColors.navy,
+        value: '$visits / $target',
+        label: PerformanceStrings.statVisitsCompleted,
+      ),
+      _StatTileData(
+        icon: Icons.assignment_outlined,
+        color: const Color(0xFFF59E0B),
+        value: '$referrals',
+        label: PerformanceStrings.statReferralsMade,
+      ),
+      _StatTileData(
+        icon: Icons.check_box_rounded,
+        color: const Color(0xFF10B981),
+        value: '${stats.referralsCompleted}',
+        subValue: '$completionPct%',
+        label: PerformanceStrings.statReferralsCompleted,
+      ),
+      _StatTileData(
+        icon: Icons.home_rounded,
+        color: AppColors.aiPurple,
+        value: '${stats.totalHouseholds}',
+        label: PerformanceStrings.statHouseholdsCovered,
+      ),
+      _StatTileData(
+        icon: Icons.bolt_rounded,
+        color: const Color(0xFFF59E0B),
+        value: avgVisits.toStringAsFixed(1),
+        label: PerformanceStrings.statAvgVisitsDay,
+      ),
+      _StatTileData(
+        icon: Icons.alarm_rounded,
+        color: const Color(0xFFEF4444),
+        value: '${stats.missedOverdue}',
+        label: PerformanceStrings.statMissedOverdue,
+        valueIsRed: true,
+      ),
+    ];
+
+    return Column(
+      children: [
+        for (int row = 0; row < 3; row++) ...[
+          if (row > 0) const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(child: _StatTile(data: tiles[row * 2])),
+              const SizedBox(width: 10),
+              Expanded(child: _StatTile(data: tiles[row * 2 + 1])),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _StatTileData {
+  const _StatTileData({
+    required this.icon,
+    required this.color,
+    required this.value,
+    required this.label,
+    this.subValue,
+    this.valueIsRed = false,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String value;
+  final String label;
+  final String? subValue;
+  final bool valueIsRed;
+}
+
+class _StatTile extends StatelessWidget {
+  const _StatTile({required this.data});
+
+  final _StatTileData data;
+
+  @override
+  Widget build(BuildContext context) {
+    final valueColor =
+        data.valueIsRed ? const Color(0xFFEF4444) : data.color;
+
+    return _WhiteCard(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(data.icon, color: data.color, size: 22),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      data.value,
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        color: valueColor,
+                        height: 1,
+                      ),
+                    ),
+                    if (data.subValue != null) ...[
+                      const SizedBox(width: 4),
+                      Text(
+                        data.subValue!,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: data.color,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
+                const SizedBox(height: 2),
                 Text(
-                  '$visitCount / $target',
+                  data.label,
                   style: const TextStyle(
-                    color: AppColors.textOnNavy,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                    color: AppColors.textMuted,
+                    height: 1.2,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 6),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: progress,
-                minHeight: 6,
-                backgroundColor: AppColors.onDarkSurface,
-                valueColor:
-                    AlwaysStoppedAnimation<Color>(AppColors.pink),
-              ),
-            ),
-          ],
+          ),
         ],
       ),
     );
   }
 }
 
-// ── Stat grid ─────────────────────────────────────────────────────────────────
+// ── Service breakdown card ────────────────────────────────────────────────────
 
-class _StatGrid extends StatelessWidget {
-  const _StatGrid({required this.stats, required this.showMonth});
+class _ServiceBreakdownCard extends StatelessWidget {
+  const _ServiceBreakdownCard({required this.stats, required this.showMonth});
 
   final SkPerformanceStats stats;
   final bool showMonth;
 
   @override
   Widget build(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 10,
-      mainAxisSpacing: 10,
-      childAspectRatio: 1.55,
-      children: [
-        _StatCard(
-          value: '${stats.visitsToday}',
-          label: PerformanceStrings.statVisitsToday,
-          subline: PerformanceStrings.statVisitsTodaySub,
-          accentColor: AppColors.aiPurpleDark,
-        ),
-        _StatCard(
-          value: '${stats.totalHouseholds}',
-          label: PerformanceStrings.statHouseholds,
-          subline: PerformanceStrings.statHouseholdsSub,
-          accentColor: AppColors.navy,
-        ),
-        _StatCard(
-          value: showMonth
-              ? '${stats.referralsThisMonth}'
-              : '${stats.referralsThisWeek}',
-          label: PerformanceStrings.statReferrals,
-          subline: PerformanceStrings.statReferralsSub,
-          accentColor: AppColors.statusWarning,
-        ),
-        _StatCard(
-          value: showMonth
-              ? '${stats.visitsThisMonth}'
-              : '${stats.visitsThisWeek}',
-          label: showMonth
-              ? PerformanceStrings.statThisMonth
-              : PerformanceStrings.statThisWeek,
-          subline: PerformanceStrings.statTotalVisitsSub,
-          accentColor: AppColors.statusSuccess,
-        ),
-      ],
-    );
-  }
-}
+    final byProg = showMonth ? stats.visitsByProgrammeMonth : stats.visitsByProgramme;
+    final rows = [
+      (PerformanceStrings.serviceAnc, byProg['ANC'] ?? 0, AppColors.ancHeader),
+      (PerformanceStrings.serviceNcd, byProg['NCD'] ?? 0, const Color(0xFFF59E0B)),
+      (PerformanceStrings.serviceChild, byProg['IMCI'] ?? 0, AppColors.aiPurpleDark),
+      (PerformanceStrings.servicePnc, byProg['PNC'] ?? 0, AppColors.aiPurple),
+      (PerformanceStrings.serviceHousehold, byProg['HOUSEHOLD'] ?? 0, AppColors.statusSuccess),
+    ];
 
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.value,
-    required this.label,
-    required this.subline,
-    required this.accentColor,
-  });
+    final maxCount =
+        rows.map((r) => r.$2).reduce((a, b) => a > b ? a : b);
+    final denom = maxCount > 0 ? maxCount.toDouble() : 1.0;
 
-  final String value;
-  final String label;
-  final String subline;
-  final Color accentColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.cardSurface,
-        borderRadius: BorderRadius.circular(AppRadius.button),
-        border: Border(top: BorderSide(color: accentColor, width: 3)),
-        boxShadow: AppShadows.statBox,
-      ),
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+    return _WhiteCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            value,
+          const Text(
+            PerformanceStrings.sectionServiceBreakdown,
             style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w900,
-              color: accentColor,
-              fontFeatures: const [FontFeature.tabularFigures()],
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textMuted,
+              letterSpacing: 0.8,
             ),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textMid,
-                ),
-              ),
-              Text(
-                subline,
-                style: const TextStyle(
-                  fontSize: 10,
-                  color: AppColors.textDisabled,
-                ),
-              ),
-            ],
-          ),
+          const SizedBox(height: 12),
+          for (final (label, count, color) in rows) ...[
+            _ServiceRow(
+                label: label, count: count, color: color, denom: denom),
+            const SizedBox(height: 10),
+          ],
         ],
       ),
     );
   }
 }
 
-// ── Programme strip ────────────────────────────────────────────────────────────
-
-class _ProgrammeStrip extends StatelessWidget {
-  const _ProgrammeStrip({required this.stats, required this.showMonth});
-
-  final SkPerformanceStats stats;
-  final bool showMonth;
-
-  @override
-  Widget build(BuildContext context) {
-    final byProg = showMonth
-        ? stats.visitsByProgrammeMonth
-        : stats.visitsByProgramme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          PerformanceStrings.sectionProgramme,
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textMuted,
-            letterSpacing: 0.8,
-          ),
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: _ProgCard(
-                label: 'IMCI',
-                count: byProg['IMCI'] ?? 0,
-                color: AppColors.imciHeader,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _ProgCard(
-                label: 'ANC',
-                count: byProg['ANC'] ?? 0,
-                color: AppColors.ancHeader,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _ProgCard(
-                label: 'NCD',
-                count: byProg['NCD'] ?? 0,
-                color: AppColors.ncdHeader,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _ProgCard extends StatelessWidget {
-  const _ProgCard({
+class _ServiceRow extends StatelessWidget {
+  const _ServiceRow({
     required this.label,
     required this.count,
     required this.color,
+    required this.denom,
   });
 
   final String label;
   final int count;
   final Color color;
+  final double denom;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.cardSurface,
-        borderRadius: BorderRadius.circular(AppRadius.field),
-        boxShadow: AppShadows.statBox,
-      ),
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha:0.12),
-              borderRadius: BorderRadius.circular(5),
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                color: color,
-                letterSpacing: 0.5,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '$count',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-              color: color,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-          Text(
-            'visits',
-            style: TextStyle(
-              fontSize: 10,
-              color: color.withValues(alpha:0.7),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Recent activity ────────────────────────────────────────────────────────────
-
-class _RecentActivity extends StatelessWidget {
-  const _RecentActivity({required this.items});
-
-  final List<RecentVisitActivity> items;
-
-  @override
-  Widget build(BuildContext context) {
-    if (items.isEmpty) return const SizedBox.shrink();
-
-    String dateHeader(DateTime dt) {
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      final d = DateTime(dt.year, dt.month, dt.day);
-      if (d == today) return PerformanceStrings.today;
-      if (d == today.subtract(const Duration(days: 1))) {
-        return PerformanceStrings.yesterday;
-      }
-      return DateFormat('MMM d').format(dt);
-    }
-
-    final grouped = <String, List<RecentVisitActivity>>{};
-    for (final item in items) {
-      final key = dateHeader(item.createdAt);
-      grouped.putIfAbsent(key, () => []).add(item);
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          PerformanceStrings.sectionRecent,
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textMuted,
-            letterSpacing: 0.8,
-          ),
-        ),
-        const SizedBox(height: 10),
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.cardSurface,
-            borderRadius: BorderRadius.circular(AppRadius.button),
-            boxShadow: AppShadows.statBox,
-          ),
-          child: Column(
-            children: [
-              for (final entry in grouped.entries) ...[
-                Padding(
-                  padding:
-                      const EdgeInsets.fromLTRB(14, 12, 14, 4),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      entry.key,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textDisabled,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
+        Row(
+          children: [
+            SizedBox(
+              width: 140,
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
                 ),
-                for (int i = 0; i < entry.value.length; i++) ...[
-                  if (i > 0)
-                    const Divider(
-                        height: 1, indent: 56, endIndent: 14, thickness: 0.5),
-                  _ActivityRow(item: entry.value[i]),
-                ],
-              ],
-            ],
+              ),
+            ),
+            const Spacer(),
+            Text(
+              '$count',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 5),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: LinearProgressIndicator(
+            value: count / denom,
+            minHeight: 6,
+            backgroundColor: Colors.grey.shade100,
+            valueColor: AlwaysStoppedAnimation<Color>(color),
           ),
         ),
       ],
@@ -599,110 +730,97 @@ class _RecentActivity extends StatelessWidget {
   }
 }
 
-class _ActivityRow extends StatelessWidget {
-  const _ActivityRow({required this.item});
+// ── Insight strip ─────────────────────────────────────────────────────────────
 
-  final RecentVisitActivity item;
+class _InsightStrip extends StatelessWidget {
+  const _InsightStrip({required this.stats, required this.showMonth});
+
+  final SkPerformanceStats stats;
+  final bool showMonth;
 
   @override
   Widget build(BuildContext context) {
-    final initial =
-        item.patientName.isNotEmpty ? item.patientName[0].toUpperCase() : '?';
-    final canNavigate = item.patientId != null;
+    const pct = 12;
+    final full = showMonth
+        ? PerformanceStrings.insightMonth(pct)
+        : PerformanceStrings.insightWeek(pct);
+    final boldPhrase = '$pct% ${PerformanceStrings.insightBoldPhrase}';
+    final idx = full.indexOf(boldPhrase);
 
-    return InkWell(
-      onTap: canNavigate
-          ? () => context.push('/patients/${item.patientId}')
-          : null,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 17,
-              backgroundColor: AppColors.aiPurpleDark.withValues(alpha: 0.12),
-              child: Text(
-                initial,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.aiPurpleDark,
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.patientName,
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.ancSurface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.show_chart_rounded,
+            color: AppColors.ancHeader,
+            size: 18,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: idx < 0
+                ? Text(full,
                     style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textStrong,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    '${item.programme}  ·  ${item.villageName}',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textDisabled,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: item.isReferred
-                        ? AppColors.statusWarning.withValues(alpha: 0.12)
-                        : AppColors.statusSuccess.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    item.isReferred
-                        ? PerformanceStrings.badgeReferred
-                        : PerformanceStrings.badgeCompleted,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: item.isReferred
-                          ? AppColors.statusWarning
-                          : AppColors.statusSuccess,
+                        fontSize: 12, color: AppColors.textMid))
+                : Text.rich(
+                    TextSpan(
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.textMid),
+                      children: [
+                        TextSpan(text: full.substring(0, idx)),
+                        TextSpan(
+                          text: boldPhrase,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.ancHeader,
+                          ),
+                        ),
+                        TextSpan(
+                            text: full.substring(idx + boldPhrase.length)),
+                      ],
                     ),
                   ),
-                ),
-                if (canNavigate)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 2),
-                    child: Icon(
-                      Icons.chevron_right_rounded,
-                      size: 16,
-                      color: AppColors.borderDashed,
-                    ),
-                  ),
-              ],
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
-// ── Error view ─────────────────────────────────────────────────────────────────
+// ── Shared card container ─────────────────────────────────────────────────────
+
+class _WhiteCard extends StatelessWidget {
+  const _WhiteCard({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0F000000),
+            blurRadius: 6,
+            offset: Offset(0, 1),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(14),
+      child: child,
+    );
+  }
+}
+
+// ── Error view ────────────────────────────────────────────────────────────────
 
 class _ErrorView extends StatelessWidget {
   const _ErrorView({required this.onRetry});
@@ -715,7 +833,8 @@ class _ErrorView extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.error_outline, size: 40, color: AppColors.textDisabled),
+          const Icon(Icons.error_outline,
+              size: 40, color: AppColors.textDisabled),
           const SizedBox(height: 12),
           Text(
             PerformanceStrings.loadError,
