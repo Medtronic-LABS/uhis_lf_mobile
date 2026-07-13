@@ -2987,10 +2987,9 @@ class _BottomCtaBar extends StatelessWidget {
                   icon: const Icon(Icons.check_rounded),
                   label: const Text(NabaStrings.acceptProposal),
                   style: FilledButton.styleFrom(
-                    backgroundColor: headerColor,
+                    backgroundColor: const Color(0xFFEC4899),
                     foregroundColor: Colors.white,
-                    disabledBackgroundColor:
-                        headerColor.withValues(alpha: 0.4),
+                    disabledBackgroundColor: const Color(0xFFEC4899).withValues(alpha: 0.4),
                     padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxl),
                     textStyle: Theme.of(context).textTheme.titleMedium,
                   ),
