@@ -1891,8 +1891,8 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
                         style: const TextStyle(
                             fontSize: 11, fontWeight: FontWeight.w700),
                       ),
-                      backgroundColor: AppColors.navy.withValues(alpha: 0.1),
-                      labelStyle: const TextStyle(color: AppColors.navy),
+                      backgroundColor: scheme.primaryContainer,
+                      labelStyle: TextStyle(color: scheme.onPrimaryContainer),
                       padding: const EdgeInsets.symmetric(horizontal: 2),
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       visualDensity: VisualDensity.compact,
