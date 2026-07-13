@@ -108,7 +108,7 @@ abstract final class TriageSymptomMapper {
     final Map<String, Object> map;
     switch (formType) {
       case 'ncd':
-        map = _ncdSymptomByCode;
+        return const []; // NCD symptoms pre-filled into fields; no divider chips
       case 'anc':
       case 'pncMother':
       case 'pncChild':

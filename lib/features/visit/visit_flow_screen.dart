@@ -26,7 +26,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/api/scribe_api_service.dart';
+import '../../core/clinical/referral_evaluator.dart';
 import '../../core/constants/app_strings.dart';
+import 'models/anc_assessment.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
@@ -37,6 +39,7 @@ import '../../core/theme/app_theme.dart';
 import 'naba/naba_models.dart';
 import 'naba/naba_repository.dart';
 import 'pathway/pathway_engine.dart';
+import '../patient/followup_call_service.dart';
 import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
 import 'immunisation/immunisation_timeline_screen.dart';
@@ -261,6 +264,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   /// Set when Step 3 completes — handed to Step 4 for the recommendation card.
   Programme _primaryProgramme = Programme.unknown;
   bool _referralRecommended = false;
+  List<String> _referredReasons = const [];
 
   /// Smart age label: months for under-2, years otherwise.
   /// Falls back to DOB when age-in-years is null (common for infants).
@@ -315,11 +319,6 @@ class _VisitFlowState extends State<VisitFlowScreen> {
         body: AnnotatedRegion<SystemUiOverlayStyle>(
           value: VisitFlowHeader.statusBarStyle,
           child: SafeArea(
-            // top: false — VisitFlowHeader paints its own Material color
-            // behind the status bar and pads its content via its own inner
-            // SafeArea(bottom: false); reserving top padding here would
-            // leave a plain-background gap above the header instead of the
-            // maroon extending seamlessly to the physical top (issue #89).
             top: false,
             child: Column(
               children: [
@@ -333,6 +332,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
                   primaryProgramme: _pathways.isNotEmpty
                       ? _pathways.first.programme
                       : _primaryProgramme,
+                  activeFormTypes: _confirmedProgrammes
+                      .map((p) => p.name)
+                      .toList(),
                   onBack: () {
                     if (_step > 0) {
                       setState(() => _step -= 1);
@@ -431,10 +433,11 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           otherSymptoms: _otherSymptoms,
           seedProgrammes: _confirmedProgrammes,
           origin: widget.origin,
-          onAdvance: (programme, referral) {
+          onAdvance: (programme, referral, reasons) {
             setState(() {
               _primaryProgramme = programme;
               _referralRecommended = referral;
+              _referredReasons = reasons;
               _step = 2;
             });
           },
@@ -455,6 +458,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           confirmedProgrammes: _confirmedProgrammes,
           primaryProgramme: _primaryProgramme,
           referralRecommended: _referralRecommended,
+          referredReasons: _referredReasons,
           memberId: widget.memberId,
           householdId: widget.householdId,
           origin: widget.origin ?? 'patients',
@@ -727,8 +731,11 @@ class _Step2VitalsForm extends StatelessWidget {
   final List<String> confirmedSymptoms;
   /// Subset of [confirmedSymptoms] pre-selected by AI Scribe.
   final Set<String> aiPickedSymptoms;
-  final void Function(Programme primaryProgramme, bool referralRecommended)
-      onAdvance;
+  final void Function(
+    Programme primaryProgramme,
+    bool referralRecommended,
+    List<String> referredReasons,
+  ) onAdvance;
 
   @override
   Widget build(BuildContext context) {
@@ -875,8 +882,11 @@ class _Step2ProgrammesThenForm extends StatefulWidget {
   final String? otherSymptoms;
   final Set<Programme> seedProgrammes;
   final String? origin;
-  final void Function(Programme primaryProgramme, bool referralRecommended)
-      onAdvance;
+  final void Function(
+    Programme primaryProgramme,
+    bool referralRecommended,
+    List<String> referredReasons,
+  ) onAdvance;
 
   @override
   State<_Step2ProgrammesThenForm> createState() =>
@@ -1004,6 +1014,7 @@ class _Step3AiReco extends StatefulWidget {
     required this.patientId,
     required this.primaryProgramme,
     required this.referralRecommended,
+    required this.referredReasons,
     required this.origin,
     required this.confirmedSymptoms,
     required this.confirmedProgrammes,
@@ -1031,6 +1042,7 @@ class _Step3AiReco extends StatefulWidget {
   final Set<Programme> confirmedProgrammes;
   final Programme primaryProgramme;
   final bool referralRecommended;
+  final List<String> referredReasons;
   final String? memberId;
   final String? householdId;
   final String origin;
@@ -1048,6 +1060,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   List<_HouseholdMember>? _householdMembers;
   NabaVitalSnapshot? _loadedVitals;
   List<NabaLabResult> _loadedLabs = [];
+  DateTime? _selectedFollowUpDate;
 
   Color _headerColor(Programme p) => switch (p) {
         Programme.anc || Programme.pnc => AppColors.ancHeader,
@@ -1162,7 +1175,9 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         sex: widget.patientGender,
         activeProgrammes: programmes,
         gestationalWeeks: widget.gestationalWeeks,
-        isPregnant: widget.gestationalWeeks != null || widget.lmpMs != null,
+        isPregnant: (widget.gestationalWeeks != null || widget.lmpMs != null) &&
+            (widget.confirmedProgrammes.contains(Programme.anc) ||
+             widget.confirmedProgrammes.contains(Programme.pnc)),
         manuallySelectedSymptoms: widget.confirmedSymptoms.toList(),
         currentVitals: _loadedVitals,
         labResults: _loadedLabs,
@@ -1644,6 +1659,179 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         _ => 'Visit — Guideline Care Plan',
       };
 
+  /// Previously shown as a separate "HIGH RISK — Refer today" card.
+  /// Removed: referral reasons are now surfaced in [_ReferralAlertCard] above.
+  // ignore: unused_element
+  Widget? _buildClinicalReferralCard() {
+    final progs = widget.confirmedProgrammes;
+    final v = _loadedVitals;
+
+    if (progs.contains(Programme.ncd) && v != null) {
+      final sys = v.bloodPressureSystolic?.toDouble();
+      final dia = v.bloodPressureDiastolic?.toDouble();
+      final gl = _loadedLabs.isNotEmpty ? _loadedLabs.first : null;
+      final isFasting = gl?.name.contains('Fasting') ?? false;
+      final glVal = double.tryParse(gl?.value ?? '');
+
+      final result = NcdReferralEvaluator.evaluate(
+        systolic: sys,
+        diastolic: dia,
+        fastingGlucoseMmol: isFasting ? glVal : null,
+        randomGlucoseMmol: isFasting ? null : glVal,
+        symptoms: widget.confirmedSymptoms.toList(),
+      );
+
+      if (!result.isReferralRequired) return null;
+
+      final color = Color(
+        int.parse(result.hexColor.replaceFirst('#', '0xFF')),
+      );
+      final label = switch (result.band) {
+        NcdRiskBand.red => 'HIGH RISK — Refer today',
+        NcdRiskBand.orange => 'Elevated risk — Referral recommended',
+        NcdRiskBand.yellowHigh => 'Moderate risk — Monitor closely',
+        NcdRiskBand.yellowLow => 'Borderline — Review at next visit',
+        NcdRiskBand.green => 'Controlled',
+      };
+
+      return Container(
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          border: Border.all(color: color, width: 1.5),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.circle, size: 14, color: color),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color: color,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (progs.contains(Programme.anc)) {
+      final sys = v?.bloodPressureSystolic;
+      final dia = v?.bloodPressureDiastolic;
+      final hb = _loadedLabs
+          .where((l) => l.name == 'Hemoglobin')
+          .map((l) => double.tryParse(l.value))
+          .whereType<double>()
+          .firstOrNull;
+
+      final result = AncReferralEvaluator.evaluate(
+        AncAssessment(
+          gestationalWeeks: widget.gestationalWeeks,
+          medicalHistoryPhysicalExamination: (sys != null || dia != null)
+              ? MedicalHistoryPhysicalExamination(
+                  bloodPressureSystolic: sys,
+                  bloodPressureDiastolic: dia,
+                )
+              : null,
+          pointOfCareInvestigations: hb != null
+              ? PointOfCareInvestigations(hemoglobin: hb)
+              : null,
+        ),
+      );
+      if (!result.isReferralRequired) return null;
+
+      final isEmergency = result.isEmergencyReferral;
+      final conditions = isEmergency
+          ? result.emergencyConditions
+          : result.nonEmergencyConditions;
+      final color = isEmergency ? const Color(0xFFDC2626) : const Color(0xFFF97316);
+
+      return Container(
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.10),
+          border: Border.all(color: color, width: 1.5),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isEmergency ? 'Emergency conditions detected' : 'Referral conditions detected',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 4),
+            ...conditions.map((c) => Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                '• $c',
+                style: TextStyle(fontSize: 13, color: color),
+              ),
+            )),
+          ],
+        ),
+      );
+    }
+
+    if (progs.contains(Programme.pnc) && v != null) {
+      final sys = v.bloodPressureSystolic?.toDouble();
+      final dia = v.bloodPressureDiastolic?.toDouble();
+      final result = PncReferralEvaluator.evaluate(
+        systolic: sys,
+        diastolic: dia,
+      );
+      if (!result.isReferralRequired) return null;
+
+      final isUrgent = result.isUrgentReferral;
+      final conditions = isUrgent ? result.urgentConditions : result.nonUrgentConditions;
+      final color = isUrgent ? const Color(0xFFDC2626) : const Color(0xFFF97316);
+
+      return Container(
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.10),
+          border: Border.all(color: color, width: 1.5),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isUrgent ? 'Urgent PNC conditions' : 'PNC conditions requiring review',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 4),
+            ...conditions.map((c) => Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                '• $c',
+                style: TextStyle(fontSize: 13, color: color),
+              ),
+            )),
+          ],
+        ),
+      );
+    }
+
+    return null;
+  }
+
   void _retry() {
     final nextFuture = _fetchNaba();
     setState(() => _future = nextFuture);
@@ -1653,21 +1841,28 @@ class _Step3AiRecoState extends State<_Step3AiReco>
     if (_accepted) return;
     setState(() => _accepted = true);
     if (!mounted) return;
-    final others = (_householdMembers ?? [])
-        .where((m) => !m.isCurrentPatient)
-        .toList();
-    if (others.isNotEmpty) {
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => _WhileYoureHerePage(
-            members: _householdMembers!,
-            returnPath: _returnPath,
-          ),
-        ),
+
+    // Schedule follow-up locally using the date the SK selected (or the
+    // auto-calculated date from the first follow-up item). Stored as
+    // NotSynced and pushed on the next offline-sync cycle.
+    final followUpDate = _selectedFollowUpDate ??
+        (naba.followUp.isNotEmpty
+            ? _FollowUpDateRowState.resolveDate(naba.followUp.first)
+            : DateTime.now().add(const Duration(days: 14)));
+    try {
+      final followUpSvc = context.read<FollowUpCallService>();
+      await followUpSvc.scheduleLocal(
+        patientId: widget.patientId,
+        dueDate: followUpDate,
+        type: 'MEDICAL_REVIEW',
       );
-    } else {
-      context.go(_returnPath);
+      debugPrint('[Step3] follow-up scheduled: $followUpDate');
+    } catch (e) {
+      debugPrint('[Step3] follow-up schedule failed (non-blocking): $e');
     }
+
+    if (!mounted) return;
+    context.go(_returnPath);
   }
 
   @override
@@ -1856,15 +2051,22 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── 1. Referral / danger banner — edge-to-edge, flush top ────
+          // ── 1. Referral banner — edge-to-edge, flush top ────────────
+          // Reason prefers the clinically-detected conditions threaded
+          // from _computeReferral(); falls back to NABA text only when
+          // no evaluator conditions are available (e.g. NABA-only referral).
           if (referral || naba.dangerSigns.isNotEmpty) ...[
             _ReferralAlertCard(
+              // Prefer NABA reason — it carries the 'context — finding' format
+              // the two-line banner needs. Fall back to referredReasons bullets
+              // only when no NABA reason is available.
               reason: naba.referralRecommendation?.reason ??
-                  (naba.dangerSigns.isNotEmpty
-                      ? naba.dangerSigns.take(2).join(', ')
-                      : 'Referral recommended'),
+                  (widget.referredReasons.isNotEmpty
+                      ? widget.referredReasons.join('\n')
+                      : (naba.dangerSigns.isNotEmpty
+                          ? naba.dangerSigns.take(2).join(', ')
+                          : 'Referral recommended')),
               urgency: naba.referralRecommendation?.urgency ?? 'Today',
-              isDanger: naba.dangerSigns.isNotEmpty,
             ),
             Container(height: 1.5, color: const Color(0xFFFECACA)),
           ],
@@ -1886,7 +2088,11 @@ class _Step3AiRecoState extends State<_Step3AiReco>
           ],
 
           // ── Gestational age card (ANC / PNC patients only) ─────────
-          if (widget.gestationalWeeks != null || widget.lmpMs != null) ...[
+          // Guard on confirmedProgrammes: lmpMs may exist in DB for patients
+          // who had prior ANC visits, causing the card to appear on NCD visits.
+          if ((widget.gestationalWeeks != null || widget.lmpMs != null) &&
+              (widget.confirmedProgrammes.contains(Programme.anc) ||
+               widget.confirmedProgrammes.contains(Programme.pnc))) ...[
             _GestationalAgeCard(
               gestationalWeeks: widget.gestationalWeeks,
               lmpMs: widget.lmpMs,
@@ -1911,6 +2117,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             _FollowUpTimeline(
               items: naba.followUp,
               programme: widget.primaryProgramme,
+              onDateChanged: (d) => setState(() => _selectedFollowUpDate = d),
             ),
             const SizedBox(height: 16),
           ],
@@ -2298,44 +2505,42 @@ class _ReferralAlertCard extends StatelessWidget {
   const _ReferralAlertCard({
     required this.reason,
     required this.urgency,
-    required this.isDanger,
   });
   final String reason;
   final String urgency;
-  final bool isDanger;
 
-  // Split reason into a short title + detail subtitle.
-  // Title: up to first sentence-break or first 50 chars.
-  // Subtitle: the rest.
-  (String, String) _split() {
-    final trimmed = reason.trim();
-    for (final sep in [' — ', ': ', '. ']) {
-      final idx = trimmed.indexOf(sep);
-      if (idx > 0 && idx < 60) {
-        return (
-          trimmed.substring(0, idx),
-          trimmed.substring(idx + sep.length),
-        );
-      }
-    }
-    if (trimmed.length > 55) {
-      return (trimmed.substring(0, 55).trim(), trimmed);
-    }
-    return (trimmed, '');
-  }
+  // Maps raw API camelCase referral keys → human-readable labels (fallback path).
+  static const _reasonLabels = <String, String>{
+    'bloodPressure':  'High blood pressure',
+    'bloodGlucose':   'High blood glucose',
+    'symptoms':       'Reported symptoms',
+    'hbLevel':        'Low haemoglobin',
+    'weight':         'Abnormal weight',
+    'urineProtein':   'Urine protein detected',
+    'dangerSigns':    'Danger signs present',
+    'bmi':            'Abnormal BMI',
+    'gestationalAge': 'Gestational age concern',
+  };
 
   @override
   Widget build(BuildContext context) {
-    const dangerBg = Color(0xFFFEE2E2);
-    const dangerAccent = Color(0xFFDC2626);
-    const referBg = Color(0xFFFFF7ED);
-    const referAccent = Color(0xFFB45309);
+    const bg     = Color(0xFFFEE2E2);
+    const accent = Color(0xFFDC2626);
 
-    final bg = isDanger ? dangerBg : referBg;
-    final accent = isDanger ? dangerAccent : referAccent;
-    final badgeLabel = isDanger ? 'IMMEDIATE' : 'Referred';
-    final (title, subtitle) = _split();
-    final displayTitle = isDanger ? 'Refer immediately' : 'Referred — $title';
+    // Two-line format: NABA reason uses 'context — finding' separator.
+    // Single-line / bullet fallback: raw API keys mapped to labels.
+    final hasSplit = reason.contains(' — ');
+    final parts    = hasSplit ? reason.split(' — ') : <String>[];
+    final title    = hasSplit ? 'Referred — ${parts.first.trim()}' : 'Referred';
+    final subtitle = hasSplit ? parts.skip(1).join(' — ').trim() : null;
+    final bullets  = hasSplit
+        ? const <String>[]
+        : reason
+            .split('\n')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .map((s) => _reasonLabels[s] ?? s)
+            .toList();
 
     return Container(
       width: double.infinity,
@@ -2351,7 +2556,7 @@ class _ReferralAlertCard extends StatelessWidget {
               Container(
                 width: 36,
                 height: 36,
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: accent,
                   shape: BoxShape.circle,
                 ),
@@ -2379,40 +2584,51 @@ class _ReferralAlertCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  displayTitle,
-                  style: TextStyle(
-                    fontSize: 13.5,
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14,
                     fontWeight: FontWeight.w800,
                     color: accent,
                   ),
                 ),
-                if (subtitle.isNotEmpty) ...[
+                if (subtitle != null) ...[
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 12,
-                      color: accent.withValues(alpha: 0.8),
-                      height: 1.35,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w500,
+                      color: accent.withValues(alpha: 0.85),
+                      height: 1.4,
                     ),
                   ),
                 ],
+                ...bullets.map(
+                  (c) => Padding(
+                    padding: const EdgeInsets.only(top: 1),
+                    child: Text(
+                      '• $c',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: accent.withValues(alpha: 0.85),
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
           const SizedBox(width: 8),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: accent,
               borderRadius: BorderRadius.circular(20),
             ),
-            child: Text(
-              badgeLabel,
-              style: const TextStyle(
+            child: const Text(
+              'Referred',
+              style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
                 color: Colors.white,
@@ -2481,7 +2697,6 @@ class _AiCounsellingCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: _outerBg(),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _outerBorder(), width: 1.5),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(14),
@@ -2623,18 +2838,27 @@ class _AiCounsellingCard extends StatelessWidget {
 // Shows all follow-up items: first item has a date picker; remaining items
 // are compact left-border-coloured timeline rows.
 class _FollowUpTimeline extends StatelessWidget {
-  const _FollowUpTimeline({required this.items, this.programme = Programme.unknown});
+  const _FollowUpTimeline({
+    required this.items,
+    this.programme = Programme.unknown,
+    this.onDateChanged,
+  });
   final List<NabaFollowUpItem> items;
 
   /// Primary programme, used to apply the routine follow-up cadence
   /// (ANC = 4 weeks, NCD = 2 weeks) to the editable date row.
   final Programme programme;
+  final ValueChanged<DateTime>? onDateChanged;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _FollowUpDateRow(item: items.first, programme: programme),
+        _FollowUpDateRow(
+          item: items.first,
+          programme: programme,
+          onDateChanged: onDateChanged,
+        ),
         for (final item in items.skip(1)) ...[
           const SizedBox(height: 6),
           _FollowUpTimelineItem(item: item),
@@ -2736,9 +2960,14 @@ class _FollowUpTimelineItem extends StatelessWidget {
 }
 
 class _FollowUpDateRow extends StatefulWidget {
-  const _FollowUpDateRow({required this.item, this.programme = Programme.unknown});
+  const _FollowUpDateRow({
+    required this.item,
+    this.programme = Programme.unknown,
+    this.onDateChanged,
+  });
   final NabaFollowUpItem item;
   final Programme programme;
+  final ValueChanged<DateTime>? onDateChanged;
 
   @override
   State<_FollowUpDateRow> createState() => _FollowUpDateRowState();
@@ -2747,10 +2976,22 @@ class _FollowUpDateRow extends StatefulWidget {
 class _FollowUpDateRowState extends State<_FollowUpDateRow> {
   late DateTime _date;
 
-  static const _cardBorder = Color(0xFFFBCFE8);
-  static const _cardText = Color(0xFF9D174D);
-  static const _gradientStart = Color(0xFFFDF2F8);
-  static const _gradientEnd = Color(0xFFF5F3FF);
+  static const _cardBg     = Color(0xFFF3F4F8);
+  static const _cardBorder = Color(0xFFE5E7EB);
+  static const _cardText   = Color(0xFF9D174D);
+  static const _bellColor  = Color(0xFFB45309);
+
+  /// Public static helper so _Step3AiRecoState can compute the default date
+  /// for a follow-up item without needing to instantiate the widget.
+  static DateTime resolveDate(NabaFollowUpItem item) {
+    final t = item.timeline.toLowerCase();
+    final isUrgentDays = RegExp(r'(\d+)\s*day').hasMatch(t);
+    if (!isUrgentDays) {
+      final days = _followUpDays(item.programme);
+      if (days != null) return DateTime.now().add(Duration(days: days));
+    }
+    return _dateFromTimeline(item.timeline);
+  }
 
   @override
   void initState() {
@@ -2835,6 +3076,7 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
     );
     if (picked != null && mounted) {
       setState(() => _date = picked);
+      widget.onDateChanged?.call(picked);
     }
   }
 
@@ -2846,32 +3088,26 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [_gradientStart, _gradientEnd],
-          ),
+          color: _cardBg,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _cardBorder, width: 1.5),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                // Calendar icon
+                // Bell icon
                 Container(
                   width: 36,
                   height: 36,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFDF2F8),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: _cardBorder),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFEF3C7),
+                    shape: BoxShape.circle,
                   ),
                   child: const Icon(
-                    Icons.calendar_month_rounded,
+                    Icons.notifications_rounded,
                     size: 18,
-                    color: _cardText,
+                    color: _bellColor,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -2892,7 +3128,6 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: _cardBorder),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -2916,18 +3151,15 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
                 ),
               ],
             ),
-            if (widget.item.activity.isNotEmpty) ...[
-              const SizedBox(height: 7),
-              Text(
-                widget.item.activity,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  color: _cardText.withValues(alpha: 0.75),
-                  height: 1.4,
-                  fontStyle: FontStyle.italic,
-                ),
+            const SizedBox(height: 6),
+            const Text(
+              'Auto-scheduled · already saved',
+              style: TextStyle(
+                fontSize: 11.5,
+                color: AppColors.textMuted,
+                height: 1.4,
               ),
-            ],
+            ),
           ],
         ),
       ),

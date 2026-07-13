@@ -73,11 +73,14 @@ class VisitFormScreen extends StatefulWidget {
 
   final String? origin;
 
-  /// When non-null the screen calls this with the primary programme +
-  /// referral flag instead of pushing the `/complete` route. Used by
-  /// [VisitFlowScreen] to keep the SK on the same route for all 3 steps.
-  final void Function(Programme primaryProgramme, bool referralRecommended)?
-      onAdvance;
+  /// When non-null the screen calls this with the primary programme,
+  /// referral flag, and the list of detected clinical referral conditions.
+  /// Used by [VisitFlowScreen] to keep the SK on the same route for all 3 steps.
+  final void Function(
+    Programme primaryProgramme,
+    bool referralRecommended,
+    List<String> referredReasons,
+  )? onAdvance;
 
   /// Programmes the patient is already enrolled in (from [PatientProgrammesDao]).
   /// Used to order enrolled sections before pathway-recommended sections.
@@ -336,7 +339,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         confirmedSymptoms: widget.confirmedSymptoms,
         aiPickedSymptoms: widget.aiPickedSymptoms,
         onSubmitComplete: () =>
-            _onSectionedSubmit(ctx, visitCtrl, session),
+            _onSectionedSubmit(ctx, visitCtrl, session, notifier),
       ),
     );
   }
@@ -377,6 +380,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     BuildContext ctx,
     VisitController visitCtrl,
     VisitSession session,
+    UnifiedFormNotifier formNotifier,
   ) async {
     if (_isSubmitting) {
       debugPrint('[VisitForm] _onSectionedSubmit — already submitting, ignoring duplicate tap');
@@ -391,6 +395,9 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     final patientDao = ctx.read<PatientDao>();
     final worklistRepo = ctx.read<WorklistRepository>();
     final progDao = ctx.read<PatientProgrammesDao>();
+    // Read referral result computed by UnifiedFormNotifier.submit() so
+    // _referralRecommended propagates correctly to Step-3's onAdvance callback.
+    setState(() => _sectionedReferralTriggered = formNotifier.lastIsReferred);
     try {
       final draft = await draftDao.getDraft(widget.visitId);
       debugPrint('[VisitForm] draft=${draft != null ? "found" : "null"}');
@@ -466,7 +473,11 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         final onAdvance = widget.onAdvance;
         if (onAdvance != null) {
           debugPrint('[VisitForm] calling onAdvance');
-          onAdvance(_getPrimaryProgramme(), _referralRecommended);
+          onAdvance(
+            _getPrimaryProgramme(),
+            _referralRecommended,
+            formNotifier.lastReferredReasons,
+          );
         } else {
           ctx.go(
             '/patients/visit/${widget.visitId}/complete',

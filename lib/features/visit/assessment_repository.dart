@@ -216,8 +216,10 @@ class AssessmentRepository extends ChangeNotifier {
     for (var i = 0; i < assessmentPayloads.length; i++) {
       final a = assessmentPayloads[i];
       final assessType = a['assessmentType'] as String? ?? 'unknown';
+      final enc = a['encounter'] as Map<String, dynamic>? ?? {};
       debugPrint('[AssessmentSync][$i] === $assessType ===');
-      debugPrint('[AssessmentSync][$i] patient=${a['encounter']?['patientId']} provenance=${a['encounter']?['provenance']}');
+      debugPrint('[AssessmentSync][$i] patient=${enc['patientId']} provenance=${enc['provenance']}');
+      debugPrint('[AssessmentSync][$i] referral: encounter.referred=${enc['referred']}  patientStatus=${a['patientStatus']}  referredReasons=${a['referredReasons'] ?? "(none)"}  customStatus=${enc['customStatus']}');
       logChunked('[AssessmentSync][$i] details:', jsonEncode(a['assessmentDetails']));
     }
 
@@ -242,6 +244,13 @@ class AssessmentRepository extends ChangeNotifier {
         debugPrint('[AssessmentSync] follow-up serialize skipped: $e');
       }
     }
+
+    // householdMembers[] is for NEW member registrations only — the server calls
+    // createHouseHoldMember on every entry and expects a full DTO. For existing
+    // member assessments we send everything in the top-level assessments[] array;
+    // the server builds MemberAssessmentFollowUpMap from encounter.memberId +
+    // encounter.householdId + provenance on each assessment.
+    debugPrint('[AssessmentSync] assessments[${assessmentPayloads.length}]:');
 
     // Build create request matching Android's OfflineSyncRepository.getRequestObject().
     // communityProfiles and rxBuddies are included (empty arrays) so the server

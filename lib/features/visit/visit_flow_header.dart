@@ -19,6 +19,7 @@ class VisitFlowHeader extends StatelessWidget {
     this.householdId,
     this.patientGender,
     this.primaryProgramme = Programme.unknown,
+    this.activeFormTypes = const [],
   });
 
   final int step;
@@ -29,6 +30,8 @@ class VisitFlowHeader extends StatelessWidget {
   final String? householdId;
   final String? patientGender;
   final Programme primaryProgramme;
+  /// Programme keys active in the current visit — shown as pills on step 2.
+  final List<String> activeFormTypes;
 
   static const Color headerColor = Color(0xFF831843);
 
@@ -163,6 +166,38 @@ class VisitFlowHeader extends StatelessWidget {
                       ],
                     ),
                   ),
+                  // ── Programme pills top-right — step 2 only ──────────
+                  if (step == 1 && activeFormTypes.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      alignment: WrapAlignment.end,
+                      children: activeFormTypes.map((ft) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.transparent,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.6),
+                              width: 1,
+                            ),
+                          ),
+                          child: Text(
+                            ft.toUpperCase(),
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.9),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
                 ],
               ),
               const SizedBox(height: 10),

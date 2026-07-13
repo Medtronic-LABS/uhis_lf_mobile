@@ -65,13 +65,15 @@ class _BpFormFieldState extends State<BpFormField> {
 
   String? _validateSystolic(String? v) {
     final n = int.tryParse(v ?? '');
-    if (n == null || n < 60 || n > 250) return ComposerStrings.bpValidationError;
+    if (n == null || n < 50 || n > 300) return ComposerStrings.bpValidationError;
     return null;
   }
 
   String? _validateDiastolic(String? v) {
     final n = int.tryParse(v ?? '');
-    if (n == null || n < 40 || n > 150) return ComposerStrings.bpValidationError;
+    if (n == null || n < 50 || n > 300) return ComposerStrings.bpValidationError;
+    final sys = int.tryParse(_sysCtrl.text);
+    if (sys != null && n >= sys) return ComposerStrings.bpDiastolicExceedsSystolicError;
     return null;
   }
 

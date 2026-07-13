@@ -2976,6 +2976,12 @@ abstract final class ComposerStrings {
   static const String bpDiastolicHint = 'DIA';
   static const String bpUnit = 'mmHg';
   static const String bpValidationError = 'Enter a valid reading';
+  static const String bpDiastolicExceedsSystolicError =
+      'Diastolic must be less than systolic';
+  static const String pulseValidationError = 'Enter a pulse between 50 and 300 bpm';
+  static const String glucoseValidationError = 'Enter a glucose reading between 1.0 and 15.0 mmol/L';
+  static const String haemoglobinValidationError = 'Enter a Hb reading between 1.0 and 20.0 g/dL';
+  static const String temperatureValidationError = 'Enter a temperature between 30.0 and 43.0°C';
   static const String ageLabel = 'Age';
   static const String dobLabel = 'Date of Birth';
   static const String yearsShort = 'Y';
