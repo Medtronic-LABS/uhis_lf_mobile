@@ -612,7 +612,7 @@ class _VitalsTrendCard extends StatefulWidget {
 }
 
 class _VitalsTrendCardState extends State<_VitalsTrendCard> {
-  bool _expanded = true;
+  bool _expanded = false;
 
   static const _rising = '📈';
   static const _flat = '·';
