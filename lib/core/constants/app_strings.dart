@@ -1871,6 +1871,10 @@ abstract final class BottomNavStrings {
 
   static String get home => AppLocale.isBangla ? 'হোম' : 'Home';
   static String get patients => AppLocale.isBangla ? 'রোগী' : 'Patients';
+
+  // TASKS-STASHED: unused by the nav bar itself (see bottom_nav.dart) since
+  // GitHub issue #84 (2026-07-13) — reserved for the stashed Tasks tab, not
+  // dead code. Do not remove.
   static String get tasks => AppLocale.isBangla ? 'কাজ' : 'Tasks';
   static String get assistant => AppLocale.isBangla ? 'সহকারী' : 'Assistant';
 
