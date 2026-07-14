@@ -10,6 +10,7 @@ import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
 import '../../core/db/sync_meta_dao.dart';
+import '../../core/debug/console_log.dart';
 import '../../core/models/dashboard_tier.dart';
 import '../../core/models/patient.dart';
 import '../../core/models/programme.dart';
@@ -124,13 +125,14 @@ class WorklistRepository {
     );
   }
 
-  /// Apply sort order — date urgency first, then clinical severity within each group:
+  /// Apply sort order — date urgency first, then clinical severity (spec §2.8):
   ///   1. Date tier: Overdue → Today → This week → Upcoming
   ///   2. Band: 1 → 2 → 3 → 4
-  ///   3. Pregnant > non-pregnant within band
-  ///   4. Modifier: a → b → none
-  ///   5. Village match (when SK has selected a village)
-  ///   6. Display name (stable tiebreaker)
+  ///   3. Modifier: a → b → none
+  ///   4. Pregnant > non-pregnant (spec §2.8 step 3)
+  ///   5. Modifier b: longer overdue ranks higher (spec §2.8 step 4)
+  ///   6. Village match (when SK has selected a village)
+  ///   7. Display name (stable tiebreaker)
   static void _applySpecSort(
     List<WorklistEntry> entries, {
     String? selectedVillageId,
@@ -141,6 +143,12 @@ class WorklistRepository {
       final due = e.nextDueAt;
       if (due == null) return DashboardTier.upcoming.rank;
       return DashboardTier.fromDaysToDue(due.difference(now).inDays).rank;
+    }
+
+    String tierLabel(WorklistEntry e) {
+      final due = e.nextDueAt;
+      if (due == null) return 'upcoming';
+      return DashboardTier.fromDaysToDue(due.difference(now).inDays).name;
     }
 
     int bandRank(Band b) => switch (b) {
@@ -154,15 +162,25 @@ class WorklistRepository {
           Modifier.b => 1,
           Modifier.none => 2,
         };
+    int overdueDays(WorklistEntry e) {
+      final due = e.nextDueAt;
+      if (due == null) return 0;
+      return now.difference(due).inDays.clamp(0, 999);
+    }
+
     entries.sort((a, b) {
       final byTier = tierRank(a).compareTo(tierRank(b));
       if (byTier != 0) return byTier;
       final byBand = bandRank(a.band).compareTo(bandRank(b.band));
       if (byBand != 0) return byBand;
-      final byPreg = (a.isPregnant ? 0 : 1).compareTo(b.isPregnant ? 0 : 1);
-      if (byPreg != 0) return byPreg;
       final byMod = modRank(a.modifier).compareTo(modRank(b.modifier));
       if (byMod != 0) return byMod;
+      final byPreg = (a.isPregnant ? 0 : 1).compareTo(b.isPregnant ? 0 : 1);
+      if (byPreg != 0) return byPreg;
+      if (a.modifier == Modifier.b) {
+        final byOverdue = overdueDays(b).compareTo(overdueDays(a));
+        if (byOverdue != 0) return byOverdue;
+      }
       if (selectedVillageId != null && selectedVillageId.isNotEmpty) {
         final byVillage = (a.villageId == selectedVillageId ? 0 : 1)
             .compareTo(b.villageId == selectedVillageId ? 0 : 1);
@@ -170,6 +188,23 @@ class WorklistRepository {
       }
       return a.displayName.compareTo(b.displayName);
     });
+
+    assert(() {
+      ConsoleLog.step('[Worklist sort] ${entries.length} patients:');
+      for (var i = 0; i < entries.length; i++) {
+        final e = entries[i];
+        final progs = e.programmes.map((p) => p.name).join(',');
+        final modTag = e.modifier == Modifier.none ? '' : e.modifier.wireTag;
+        final overdue = overdueDays(e);
+        final tier = tierLabel(e);
+        ConsoleLog.step(
+          '  ${i + 1}. [${e.band.wireTag}$modTag] ${e.displayName}'
+          ' | prog: $progs | tier: $tier'
+          '${overdue > 0 ? " | overdue: ${overdue}d" : ""}',
+        );
+      }
+      return true;
+    }());
   }
 
   /// Iterate cached patients, derive [PatientFacts] from joined follow-ups +

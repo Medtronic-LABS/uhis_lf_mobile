@@ -325,34 +325,40 @@ class MissionQueueItem {
       a.tier.rank.compareTo(b.tier.rank);
 
   /// Intra-band comparator implementing PRD §2.8 sort order within a band:
-  ///   modifier a → modifier b → no modifier
-  ///   then ANC programme > NCD (CD-1: ANC priority when modifier ties)
-  ///   then pregnant > non-pregnant
-  ///   then patient name ASC (stable tiebreaker)
+  ///   1. modifier a → modifier b → no modifier
+  ///   2. pregnant > non-pregnant (spec §2.8 step 3)
+  ///   3. modifier b: longer overdue ranks higher (spec §2.8 step 4)
+  ///   4. ANC programme > NCD (CD-1 tiebreaker)
+  ///   5. patient name ASC (stable tiebreaker)
   static int compareInBand(MissionQueueItem a, MissionQueueItem b) {
-    // 1. Modifier: a(0) < b(1) < none(2) — best modifier wins (CD-1)
+    // 1. Modifier: a(0) < b(1) < none(2) — best modifier wins
     final modCmp = a.modifier.sortRank.compareTo(b.modifier.sortRank);
     if (modCmp != 0) return modCmp;
-    // 2. ANC programme ranks above NCD when modifier is tied (CD-1)
-    final ancCmp = _ancRank(b).compareTo(_ancRank(a));
-    if (ancCmp != 0) return ancCmp;
-    // 3. Pregnant before non-pregnant (PRD §2.8 requirement)
+    // 2. Pregnant before non-pregnant (spec §2.8 step 3)
     final pregCmp = (b.isPregnant ? 0 : 1).compareTo(a.isPregnant ? 0 : 1);
     if (pregCmp != 0) return pregCmp;
-    // 4. Stable alphabetical tiebreaker
+    // 3. Modifier b: longer overdue ranks higher (spec §2.8 step 4)
+    if (a.modifier == Modifier.b) {
+      final overdueCmp = (b.daysOverdue ?? 0).compareTo(a.daysOverdue ?? 0);
+      if (overdueCmp != 0) return overdueCmp;
+    }
+    // 4. ANC programme ranks above NCD (CD-1 tiebreaker)
+    final ancCmp = _ancRank(b).compareTo(_ancRank(a));
+    if (ancCmp != 0) return ancCmp;
+    // 5. Stable alphabetical tiebreaker
     return a.patientName.compareTo(b.patientName);
   }
 
   static int _ancRank(MissionQueueItem item) =>
       item.programmes.contains(Programme.anc) ? 1 : 0;
 
-  /// Intra-tier comparator: composite [priorityScore] DESC, then
-  /// [patientName] ASC as deterministic tiebreaker. Use after grouping by
-  /// [tier] so equal-priority routine cards have a stable clinical order.
+  /// Intra-tier comparator: [priorityScore] DESC (encodes band+modifier), then
+  /// the full [compareInBand] tiebreaker chain — pregnant, overdue (mod b),
+  /// ANC > NCD, name — so PRD §2.8 ordering is preserved end-to-end.
   static int compareInTier(MissionQueueItem a, MissionQueueItem b) {
     final scoreCmp = b.priorityScore.compareTo(a.priorityScore);
     if (scoreCmp != 0) return scoreCmp;
-    return a.patientName.compareTo(b.patientName);
+    return compareInBand(a, b);
   }
 
   /// Nulls-last ascending comparator on [dueAt]. Falls back to patient name

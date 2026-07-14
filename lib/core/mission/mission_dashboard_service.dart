@@ -23,6 +23,7 @@ import '../models/worklist_entry.dart';
 import '../models/referral.dart';
 import 'mission_pregnancy_facts.dart';
 import 'programme_reason.dart' as shared;
+import '../debug/console_log.dart';
 
 /// Input data for computing mission brief and queue.
 class MissionInputData {
@@ -973,6 +974,22 @@ class MissionDashboardService {
       if (bandCmp != 0) return bandCmp;
       return MissionQueueItem.compareInBand(a, b);
     });
+
+    assert(() {
+      ConsoleLog.banner('[Dashboard queue] ${result.length} items:');
+      for (var i = 0; i < result.length; i++) {
+        final q = result[i];
+        final modTag = q.modifier == Modifier.none ? '' : q.modifier.wireTag;
+        final progs = q.programmes.map((p) => p.name).join(',');
+        final overdue = q.daysOverdue != null ? ' | overdue: ${q.daysOverdue}d' : '';
+        ConsoleLog.banner(
+          '  ${i + 1}. [${q.band.wireTag}$modTag] ${q.patientName}'
+          ' | prog: $progs | tier: ${q.tier.name}$overdue',
+        );
+      }
+      return true;
+    }());
+
     return result;
   }
 

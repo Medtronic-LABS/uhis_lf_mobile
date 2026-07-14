@@ -173,6 +173,102 @@ void main() {
     expect(list.last.patientId, 'np');
   });
 
+  test('modifier b: longer overdue ranks higher within same band (spec §2.8 step 4)',
+      () async {
+    final baseDate = DateTime.now();
+    await patients.upsertMany([
+      Patient(
+        id: 'late',
+        patientId: 'late',
+        name: 'Late Patient',
+        villageId: 'v1',
+        rawJson: '{}',
+        age: 35,
+        nextDueAt: baseDate.subtract(const Duration(days: 7)).millisecondsSinceEpoch,
+      ),
+      Patient(
+        id: 'near',
+        patientId: 'near',
+        name: 'Near Patient',
+        villageId: 'v1',
+        rawJson: '{}',
+        age: 35,
+        nextDueAt: baseDate.subtract(const Duration(days: 2)).millisecondsSinceEpoch,
+      ),
+    ]);
+    final sortRank = sortRankFor(Band.band3, Modifier.b);
+    for (final id in ['late', 'near']) {
+      await patients.updateRisk(
+        patientId: id,
+        sortRank: sortRank,
+        bandWireTag: Band.band3.wireTag,
+        modifierWireTag: Modifier.b.wireTag,
+        reasonsJson: '[]',
+      );
+    }
+
+    final list = await repo.load();
+    expect(list.first.patientId, 'late');
+    expect(list.last.patientId, 'near');
+  });
+
+  test('modifier order: a before b before none within same band and tier',
+      () async {
+    final due = DateTime.now().subtract(const Duration(days: 1));
+    await patients.upsertMany([
+      Patient(
+        id: 'mNone',
+        patientId: 'mNone',
+        name: 'Mod None',
+        villageId: 'v1',
+        rawJson: '{}',
+        nextDueAt: due.millisecondsSinceEpoch,
+      ),
+      Patient(
+        id: 'mB',
+        patientId: 'mB',
+        name: 'Mod B',
+        villageId: 'v1',
+        rawJson: '{}',
+        nextDueAt: due.millisecondsSinceEpoch,
+      ),
+      Patient(
+        id: 'mA',
+        patientId: 'mA',
+        name: 'Mod A',
+        villageId: 'v1',
+        rawJson: '{}',
+        nextDueAt: due.millisecondsSinceEpoch,
+      ),
+    ]);
+    await patients.updateRisk(
+      patientId: 'mNone',
+      sortRank: sortRankFor(Band.band2, Modifier.none),
+      bandWireTag: Band.band2.wireTag,
+      modifierWireTag: Modifier.none.wireTag,
+      reasonsJson: '[]',
+    );
+    await patients.updateRisk(
+      patientId: 'mB',
+      sortRank: sortRankFor(Band.band2, Modifier.b),
+      bandWireTag: Band.band2.wireTag,
+      modifierWireTag: Modifier.b.wireTag,
+      reasonsJson: '[]',
+    );
+    await patients.updateRisk(
+      patientId: 'mA',
+      sortRank: sortRankFor(Band.band2, Modifier.a),
+      bandWireTag: Band.band2.wireTag,
+      modifierWireTag: Modifier.a.wireTag,
+      reasonsJson: '[]',
+    );
+
+    final list = await repo.load();
+    final ids = list.map((e) => e.patientId).toList();
+    expect(ids.indexOf('mA'), lessThan(ids.indexOf('mB')));
+    expect(ids.indexOf('mB'), lessThan(ids.indexOf('mNone')));
+  });
+
   test('village match within band ranks ahead when SK selects a village',
       () async {
     await patients.upsertMany([
