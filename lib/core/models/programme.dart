@@ -56,6 +56,8 @@ enum Programme {
       case 'PREGNANCY':
       case 'PREGNANT':
       case 'EMTCT':
+      case 'PWPROFILE':
+      case 'PW_PROFILE':
         return Programme.anc;
       case 'PNC':
       case 'POSTNATAL':
