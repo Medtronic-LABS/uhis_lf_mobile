@@ -132,6 +132,21 @@ class UnifiedFormNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Removes [fieldIds] from the canonical data — used right before submit
+  /// to strip stale values for fields that are no longer visible (e.g. the
+  /// SK entered Parity, then changed Gravida back to 1, hiding Parity).
+  /// Without this, a value the SK can no longer see or edit would still be
+  /// included in the submitted payload. See [FieldVisibilityRules] in
+  /// unified_section_rules.dart — the caller (unified_form_screen.dart)
+  /// computes which fields are currently hidden using the same rules the
+  /// form itself renders with.
+  void clearFields(Set<String> fieldIds) {
+    if (fieldIds.isEmpty) return;
+    _data = _data.removeFields(fieldIds);
+    _saveDraft();
+    notifyListeners();
+  }
+
   /// Load existing draft from DB on screen init.
   ///
   /// Merges draft values ON TOP of any values already in [_data] (e.g. triage

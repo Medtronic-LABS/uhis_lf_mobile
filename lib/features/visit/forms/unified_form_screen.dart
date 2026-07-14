@@ -342,6 +342,14 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   ) async {
     if (_config == null) return;
 
+    // Strip stale values for fields that are no longer visible (e.g. Parity
+    // was answered while Gravida >= 2, then Gravida was changed back to 1) so
+    // the submitted payload never contains a value the SK can't see or edit.
+    final hiddenFieldIds = _computeHiddenFieldIds(notifier, annotated);
+    if (hiddenFieldIds.isNotEmpty) {
+      notifier.clearFields(hiddenFieldIds);
+    }
+
     // Validate mandatory fields before submitting.
     final errors = _computeValidationErrors(notifier, annotated);
     if (errors.isNotEmpty) {
@@ -407,6 +415,31 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
       }
     }
     return errors;
+  }
+
+  /// Returns the set of field IDs that are currently hidden (per the same
+  /// visibility rules used for rendering and validation) but still hold a
+  /// value in [notifier] — these are stale and must not reach the payload.
+  Set<String> _computeHiddenFieldIds(
+    UnifiedFormNotifier notifier,
+    List<AnnotatedFormSection> annotated,
+  ) {
+    final hidden = <String>{};
+    for (final a in annotated) {
+      for (final ref in a.section.fieldRefs) {
+        final def = _config!.fields[ref.id];
+        if (def == null) continue;
+        if (FieldVisibilityRules.isFieldVisible(
+          field: def,
+          data: notifier.data,
+          rulesByTargetId: _config!.visibilityRulesByTargetId,
+        )) {
+          continue;
+        }
+        if (notifier.data.getValue(ref.id) != null) hidden.add(ref.id);
+      }
+    }
+    return hidden;
   }
 }
 
