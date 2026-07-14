@@ -937,9 +937,12 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
       final progs = await dao.programmesFor(widget.patientId);
       if (!mounted) return;
 
-      // If ANC is active and no LMP recorded yet, collect it BEFORE the form
-      // renders so the unified form initialises with the correct LMP data.
-      if (_selectedProgrammes.contains(Programme.anc)) {
+      // If ANC is active and PW registration was NOT selected (i.e. returning
+      // ANC patient with missing snapshot), collect LMP via sheet BEFORE the
+      // form renders. When Programme.pw is selected, LMP is captured inline in
+      // the unified form — do not show the sheet in that case.
+      if (_selectedProgrammes.contains(Programme.anc) &&
+          !_selectedProgrammes.contains(Programme.pw)) {
         final snapshotDao = context.read<PregnancySnapshotDao>();
         final snapshot = await snapshotDao.byPatient(widget.patientId);
         if ((snapshot?.lmpDate == null) && mounted) {
