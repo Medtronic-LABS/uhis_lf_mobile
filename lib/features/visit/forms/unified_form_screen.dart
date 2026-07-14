@@ -228,6 +228,15 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         final items = <Widget>[];
         final isAnc = widget.activeFormTypes.contains('anc');
 
+        // ── Pregnancy dates card (ANC) — editable LMP + computed EDD/GA ────
+        if (isAnc) {
+          items.add(_PregnancyDatesCard(
+            lmpDate: notifier.lmpDate,
+            eddDate: notifier.eddDate,
+            gestationalWeeks: notifier.gestationalWeeks,
+            onLmpChanged: notifier.updateLmpDate,
+          ));
+        }
 
         String? lastFormType;
         for (final annotatedSection in annotated) {
@@ -884,6 +893,193 @@ class _VitalsTrendCardState extends State<_VitalsTrendCard> {
             return UnifiedFormStrings.trendMissingValue;
         }
     }
+  }
+}
+
+// ── Pregnancy dates card (inline LMP picker) ──────────────────────────────────
+
+/// Editable card shown at the top of the ANC form. Displays LMP (tap to pick),
+/// EDD (auto-computed), and gestational age. On LMP pick, calls [onLmpChanged]
+/// which persists to PregnancySnapshotDao via [UnifiedFormNotifier.updateLmpDate].
+class _PregnancyDatesCard extends StatelessWidget {
+  const _PregnancyDatesCard({
+    required this.onLmpChanged,
+    this.lmpDate,
+    this.eddDate,
+    this.gestationalWeeks,
+  });
+
+  final DateTime? lmpDate;
+  final DateTime? eddDate;
+  final int? gestationalWeeks;
+  final ValueChanged<DateTime> onLmpChanged;
+
+  static const _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  static String _fmt(DateTime d) =>
+      '${d.day} ${_months[d.month - 1]} ${d.year}';
+
+  static const _pink = Color(0xFF9D174D);
+  static const _cardBg = Color(0xFFFDF2F8);
+  static const _cardBorder = Color(0xFFF9A8D4);
+
+  @override
+  Widget build(BuildContext context) {
+    int? weeks;
+    int? days;
+    if (lmpDate != null) {
+      final total = DateTime.now().difference(lmpDate!).inDays;
+      weeks = total ~/ 7;
+      days = total % 7;
+    } else if (gestationalWeeks != null) {
+      weeks = gestationalWeeks;
+      days = 0;
+    }
+
+    final resolvedEdd = eddDate ?? lmpDate?.add(const Duration(days: 280));
+    final eddStr = resolvedEdd != null ? _fmt(resolvedEdd) : null;
+    final lmpStr = lmpDate != null ? _fmt(lmpDate!) : null;
+
+    String? gaStr;
+    if (weeks != null && days != null) {
+      gaStr = '$weeks ${UnifiedFormStrings.pregnancyDatesWks} '
+          '$days ${UnifiedFormStrings.pregnancyDatesDays}';
+    } else if (weeks != null) {
+      gaStr = '$weeks ${UnifiedFormStrings.pregnancyDatesWks}';
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xl),
+      child: Container(
+        decoration: BoxDecoration(
+          color: _cardBg,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _cardBorder),
+        ),
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              UnifiedFormStrings.pregnancyDatesTitle,
+              style: AppTextStyles.subText.copyWith(
+                fontWeight: FontWeight.w600,
+                color: _pink,
+              ),
+            ),
+            const SizedBox(height: 10),
+            _PdRow(
+              label: UnifiedFormStrings.pregnancyDatesLmpLabel,
+              value: lmpStr,
+              placeholder: UnifiedFormStrings.pregnancyDatesLmpHint,
+              editable: true,
+              onTap: () async {
+                final initial = lmpDate ??
+                    DateTime.now().subtract(const Duration(days: 90));
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: initial,
+                  firstDate: DateTime.now().subtract(
+                    const Duration(days: 310),
+                  ),
+                  lastDate: DateTime.now(),
+                );
+                if (picked != null) onLmpChanged(picked);
+              },
+            ),
+            const SizedBox(height: 8),
+            _PdRow(
+              label: UnifiedFormStrings.pregnancyDatesEddLabel,
+              value: eddStr,
+              placeholder: UnifiedFormStrings.autoComputedPlaceholder,
+              editable: false,
+            ),
+            if (gaStr != null) ...[
+              const SizedBox(height: 8),
+              _PdRow(
+                label: UnifiedFormStrings.pregnancyDatesGaLabel,
+                value: gaStr,
+                placeholder: null,
+                editable: false,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PdRow extends StatelessWidget {
+  const _PdRow({
+    required this.label,
+    required this.value,
+    required this.editable,
+    this.placeholder,
+    this.onTap,
+  });
+
+  final String label;
+  final String? value;
+  final String? placeholder;
+  final bool editable;
+  final VoidCallback? onTap;
+
+  static const _pink = Color(0xFF9D174D);
+  static const _cardBorder = Color(0xFFF9A8D4);
+  static const _grey = Color(0xFF6B7280);
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: editable ? onTap : null,
+      child: Row(
+        children: [
+          SizedBox(
+            width: 88,
+            child: Text(
+              label,
+              style: AppTextStyles.subText.copyWith(color: _grey),
+            ),
+          ),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: editable
+                  ? BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _cardBorder),
+                    )
+                  : null,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      value ?? placeholder ?? '—',
+                      style: AppTextStyles.body.copyWith(
+                        color: value != null
+                            ? AppColors.textPrimary
+                            : AppColors.textMuted,
+                      ),
+                    ),
+                  ),
+                  if (editable)
+                    const Icon(
+                      Icons.calendar_today_outlined,
+                      size: 16,
+                      color: _pink,
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

@@ -4197,6 +4197,15 @@ abstract final class UnifiedFormStrings {
   static const String heightSubLabel = 'Height · cm';
   static const String weightSubLabel = 'Weight · kg';
 
+  // ── Pregnancy Dates inline card (ANC form top) ─────────────────────────────
+  static const String pregnancyDatesTitle    = 'Pregnancy Dates';
+  static const String pregnancyDatesLmpLabel = 'LMP';
+  static const String pregnancyDatesEddLabel = 'EDD';
+  static const String pregnancyDatesGaLabel  = 'Gest. Age';
+  static const String pregnancyDatesLmpHint  = 'Tap to set date';
+  static const String pregnancyDatesWks      = 'wks';
+  static const String pregnancyDatesDays     = 'd';
+
   /// Human-readable label for a formType key shown as a programme badge.
   ///
   /// Returns `null` for the synthetic `vitals` formType (no badge needed).

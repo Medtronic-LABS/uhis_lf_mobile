@@ -936,9 +936,9 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
       final progs = await dao.programmesFor(widget.patientId);
       if (!mounted) return;
 
-      // LMP is collected inline in the ANC form (pregnancyDetailsAndHistory
-      // section). UnifiedFormNotifier.loadPregnancyData() seeds the field on
-      // open; updateField('lmp') recomputes EDD/GA and persists on change.
+      // LMP is now collected inline in the ANC form via _PregnancyDatesCard —
+      // no pre-form popup needed. UnifiedFormNotifier.loadPregnancyData() loads
+      // any existing snapshot on form open, and updateLmpDate() saves on pick.
       setState(() {
         _currentProgrammes = progs;
         _request = _buildRequest(progs);
