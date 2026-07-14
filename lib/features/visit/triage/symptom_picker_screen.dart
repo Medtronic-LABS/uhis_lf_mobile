@@ -1599,29 +1599,6 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                       .toList(),
                 ),
 
-              // ── Footer hint ──────────────────────────────────────────────
-              if (hasEnrolledFilter && !isSearching) ...[
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.search_rounded,
-                      size: 13,
-                      color: AppColors.textMuted,
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        SymptomPickerStrings.searchOtherProgramsHint,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
               const SizedBox(height: 10),
             ],
           ),
