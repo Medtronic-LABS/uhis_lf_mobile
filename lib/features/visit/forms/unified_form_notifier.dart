@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -77,6 +78,10 @@ class UnifiedFormNotifier extends ChangeNotifier {
   bool _submitting = false;
   String? _submitError;
   Set<String> _validationErrors = const {};
+
+  /// Debounces [_saveDraft] so rapid keystrokes coalesce into one DB write
+  /// instead of persisting every intermediate value (e.g. "1", "12", "120").
+  Timer? _saveDraftTimer;
 
   bool _lastIsReferred = false;
   List<String> _lastReferredReasons = const [];
@@ -722,7 +727,15 @@ class UnifiedFormNotifier extends ChangeNotifier {
     return (referred, List<String>.unmodifiable(reasons));
   }
 
+  /// Debounced — schedules [_persistDraftNow], coalescing rapid keystrokes
+  /// into a single DB write. See [_saveDraftTimer].
   void _saveDraft() {
+    _saveDraftTimer?.cancel();
+    _saveDraftTimer = Timer(const Duration(milliseconds: 400), _persistDraftNow);
+  }
+
+  void _persistDraftNow() {
+    _saveDraftTimer = null;
     final row = AssessmentDraftRow(
       encounterId: _encounterId,
       patientId: _patientId,
@@ -738,5 +751,16 @@ class UnifiedFormNotifier extends ChangeNotifier {
     _draftDao.saveDraft(row).catchError((e) {
       debugPrint('[UnifiedForm] autosave error: $e');
     });
+  }
+
+  @override
+  void dispose() {
+    // Flush any pending debounced save so the last keystroke before
+    // navigating away isn't lost — don't just cancel it.
+    if (_saveDraftTimer != null) {
+      _saveDraftTimer!.cancel();
+      _persistDraftNow();
+    }
+    super.dispose();
   }
 }
