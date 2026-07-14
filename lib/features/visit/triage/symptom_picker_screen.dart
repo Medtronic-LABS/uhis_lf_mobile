@@ -615,17 +615,6 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           builder: (context, vm, _) {
             return CustomScrollView(
               slivers: [
-                // 0) ANC visit summary chip — only for ANC patients.
-                //    Spec §4.1 "AI Brief — Visit summary chip — Read-only".
-                if (_patientContext!.isPregnant)
-                  SliverToBoxAdapter(
-                    child: _AncVisitSummaryChip(
-                      patientName: widget.patientName,
-                      patientContext: _patientContext!,
-                      visitCount: _ancVisitCount,
-                    ),
-                  ),
-
                 // 1) Before You Knock (AI brief — collapsible card).
                 // 2) Sit with her / him — greet warmly (navy filled card).
                 // 3) "How is she feeling today?" heading.
