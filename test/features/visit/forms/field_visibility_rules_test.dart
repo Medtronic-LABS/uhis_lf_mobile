@@ -116,6 +116,114 @@ void main() {
         reason: 'reveals once isBeforeDiabetesDiagnosis is answered Yes',
       );
     });
+
+    // Regression test: a broader sweep (prompted by manual testing finding
+    // the same bug in pncMother's "Counseling & Education" section after the
+    // NCD fix above) found 12 more fields with the identical problem — base
+    // visibility "gone" with either no incoming condition at all, or a
+    // condition whose driver field is absent from the field's own formType.
+    test('pncMother Counseling & Education and pncChild core fields are visible', () async {
+      final config = await FormConfig.load(rootBundle);
+      const emptyData = CanonicalVisitData();
+
+      for (final id in [
+        // pncMother "counselling" section (COUNSELING & EDUCATION) — was
+        // rendering completely empty; these are static guidance text /
+        // an optional referral dropdown, never meant to be conditional.
+        'counsellingMotherCare',
+        'motherCare',
+        'newbornCare',
+        'referralFacility',
+        // pncChild's own core assessment questions — zero incoming rules.
+        'hrsBreastFed',
+        'monthAdditionalFeedGiven',
+        'childBreastFeeding',
+        'additionalFood24Hrs',
+        'receivedVaccine',
+        'dewormingMedicine',
+        // cataract's computed CVD-risk display — an InformationLabel with
+        // no incoming rule, same unreachable-by-default problem.
+        'cvdRisk',
+        // enrollment's own "Is the patient pregnant?" question.
+        'isPregnant',
+      ]) {
+        final field = config.fields[id];
+        expect(field, isNotNull, reason: '$id should exist in field_library.json');
+        expect(
+          FieldVisibilityRules.isFieldVisible(
+            field: field!,
+            data: emptyData,
+            rulesByTargetId: config.visibilityRulesByTargetId,
+          ),
+          isTrue,
+          reason: '$id should be visible with no prior answers',
+        );
+      }
+    });
+
+    // Belt-and-suspenders: programmatically sweep every field referenced by
+    // every actively-rendered formType's own sections and assert none of
+    // them are PERMANENTLY unreachable (visibility "gone" with either no
+    // incoming rule, or every incoming rule's driver absent from that same
+    // formType's own field set). This is exactly the bug class found twice
+    // above — this test exists so a future field/condition edit can't
+    // silently reintroduce it without a red test.
+    test('no field in an actively-rendered formType is permanently unreachable', () async {
+      final config = await FormConfig.load(rootBundle);
+
+      // formTypes actually reachable via the visit flow (Programme enum
+      // wireTags + the fixed vitals/enrollment forms) — excludes formTypes
+      // like pwProfile/household_registration that aren't wired into
+      // unified_form_screen.dart at all yet, so their data is inert either way.
+      const activeFormTypes = {
+        'anc', 'ncd', 'pncMother', 'pncChild', 'pncNeonatal',
+        'pregnancyOutcome', 'cataract', 'eye_care', 'family_planning',
+        'enrollment',
+      };
+
+      final formTypeFields = <String, Set<String>>{};
+      for (final entry in config.forms.entries) {
+        if (!activeFormTypes.contains(entry.key)) continue;
+        final ids = formTypeFields.putIfAbsent(entry.key, () => {});
+        for (final section in entry.value) {
+          for (final ref in section.fieldRefs) {
+            ids.add(ref.id);
+          }
+        }
+      }
+
+      final failures = <String>[];
+      for (final formType in activeFormTypes) {
+        final ownFields = formTypeFields[formType];
+        if (ownFields == null) continue;
+        for (final section in config.forms[formType] ?? const []) {
+          for (final ref in section.fieldRefs) {
+            final field = config.fields[ref.id];
+            if (field == null) continue;
+            if (field.visibility != 'gone') continue;
+            // The obstetric-history composite chain is handled by its own
+            // dedicated branch in isFieldVisible, not by incoming rules.
+            if (field.compositeGroup == 'obstetricHistory') continue;
+
+            final rules = config.visibilityRulesByTargetId[field.id] ?? const [];
+            final reachable = rules.isNotEmpty &&
+                rules.any((r) => ownFields.contains(r.driverId));
+            if (!reachable) {
+              failures.add(
+                '$formType/${section.sectionId}/${field.id} '
+                '(drivers: ${rules.map((r) => r.driverId).toList()})',
+              );
+            }
+          }
+        }
+      }
+
+      expect(
+        failures,
+        isEmpty,
+        reason: 'Permanently-unreachable fields found:\n${failures.join('\n')}',
+      );
+    });
   });
   group('FormConfig.buildVisibilityRules', () {
     test('inverts a driver field\'s condition array by targetId', () {
