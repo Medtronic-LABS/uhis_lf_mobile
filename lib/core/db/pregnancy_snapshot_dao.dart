@@ -123,8 +123,39 @@ class PregnancySnapshotDao {
     await _db.db.delete(AppDatabase.tablePregnancySnapshot);
   }
 
+  /// Collapse multiple server episodes for the same patient into one row.
+  ///
+  /// `pregnancyInfos[]` often has several episodes per member; later rows
+  /// frequently omit `lastMenstrualPeriod` / EDD even when an earlier episode
+  /// has them. Prefer any non-null LMP/EDD so a null later row cannot wipe a
+  /// good date before [upsertMany] (last-write-wins on `patient_id`).
+  static List<PregnancySnapshotRow> coalesceByPatient(
+    List<PregnancySnapshotRow> rows,
+  ) {
+    final byId = <String, PregnancySnapshotRow>{};
+    for (final row in rows) {
+      final prev = byId[row.patientId];
+      if (prev == null) {
+        byId[row.patientId] = row;
+        continue;
+      }
+      final rowAt = row.updatedAt ?? 0;
+      final prevAt = prev.updatedAt ?? 0;
+      byId[row.patientId] = PregnancySnapshotRow(
+        patientId: row.patientId,
+        // Later episode facts tend to reflect current state (PNC window etc.).
+        facts: row.facts,
+        updatedAt: rowAt >= prevAt ? row.updatedAt : prev.updatedAt,
+        eddDate: row.eddDate ?? prev.eddDate,
+        lmpDate: row.lmpDate ?? prev.lmpDate,
+      );
+    }
+    return byId.values.toList(growable: false);
+  }
+
   /// Merge server [incoming] rows with [prior] local snapshots.
   ///
+  /// - Incoming is first coalesced per patient (see [coalesceByPatient]).
   /// - Incoming facts always win.
   /// - Null `lmpDate` / `eddDate` on incoming keeps the prior value.
   /// - Prior rows for patients absent from [incoming] are kept (local enroll).
@@ -132,9 +163,10 @@ class PregnancySnapshotDao {
     required List<PregnancySnapshotRow> incoming,
     required Map<String, PregnancySnapshotRow> prior,
   }) {
+    final coalesced = coalesceByPatient(incoming);
     final incomingIds = <String>{};
     final merged = <PregnancySnapshotRow>[];
-    for (final row in incoming) {
+    for (final row in coalesced) {
       incomingIds.add(row.patientId);
       final prev = prior[row.patientId];
       merged.add(prev == null

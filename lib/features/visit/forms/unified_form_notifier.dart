@@ -208,18 +208,24 @@ class UnifiedFormNotifier extends ChangeNotifier {
       DateTime? lmp;
       DateTime? edd;
       int? weeks;
+      var source = 'none';
 
       // ── 1. Prefer pregnancy snapshot (stable per-patient store) ───────────
       final snap = await _pregnancySnapshotDao.byPatient(_patientId);
-      debugPrint('[UnifiedForm] pregnancy data: snapshot lmpDate=${snap?.lmpDate} '
-          'eddDate=${snap?.eddDate}');
+      debugPrint(
+        '[LMP] load patient=$_patientId snapshot='
+        '${snap == null ? "missing" : "hit"} '
+        'lmpMs=${snap?.lmpDate} eddMs=${snap?.eddDate}',
+      );
       if (snap?.lmpDate != null) {
         lmp = DateTime.fromMillisecondsSinceEpoch(snap!.lmpDate!);
         weeks = DateTime.now().difference(lmp).inDays ~/ 7;
+        source = 'snapshot.lmp';
       } else if (snap?.eddDate != null) {
         edd = DateTime.fromMillisecondsSinceEpoch(snap!.eddDate!);
         lmp = edd.subtract(const Duration(days: 280));
         weeks = DateTime.now().difference(lmp).inDays ~/ 7;
+        source = 'snapshot.edd→lmp';
       }
       if (snap?.eddDate != null) {
         edd ??= DateTime.fromMillisecondsSinceEpoch(snap!.eddDate!);
@@ -227,25 +233,28 @@ class UnifiedFormNotifier extends ChangeNotifier {
 
       // ── 2. Fallback: scan server-synced ANC assessment history ────────────
       if (lmp == null) {
-        debugPrint('[UnifiedForm] pregnancy data: snapshot had no LMP — '
-            'trying assessment history');
+        debugPrint('[LMP] load snapshot empty — trying assessment history');
         lmp = await _assessmentRepo.lmpDateFromHistory(_patientId);
-        if (lmp != null) weeks = DateTime.now().difference(lmp).inDays ~/ 7;
+        if (lmp != null) {
+          weeks = DateTime.now().difference(lmp).inDays ~/ 7;
+          source = 'assessmentHistory';
+        }
       }
 
       // ── 3. Fallback: patient rawJson (ISO string or epoch ms) ─────────────
       if (lmp == null) {
         final patient = await _patientDao.byId(_patientId);
         if (patient == null) {
-          debugPrint(
-              '[UnifiedForm] pregnancy data: patient $_patientId not found in DB');
+          debugPrint('[LMP] load patient $_patientId not found in DB');
         }
         if (patient != null) {
           try {
             final json = jsonDecode(patient.rawJson) as Map<String, dynamic>;
             debugPrint(
-                '[UnifiedForm] pregnancy data: rawJson lmpDate=${json['lmpDate']} '
-                'gestationalWeeks=${json['gestationalWeeks']}');
+              '[LMP] load rawJson keys lmp=${json['lmpDate']} '
+              'lastMenstrualPeriod=${json['lastMenstrualPeriod']} '
+              'ga=${json['gestationalWeeks']}',
+            );
             lmp = JsonRead.firstDateTime(json, const [
               'lmpDate',
               'lastMenstrualPeriod',
@@ -254,9 +263,11 @@ class UnifiedFormNotifier extends ChangeNotifier {
             ]);
             if (lmp != null) {
               weeks = DateTime.now().difference(lmp).inDays ~/ 7;
+              source = 'patient.rawJson';
             } else if (json['gestationalWeeks'] != null) {
               weeks = (json['gestationalWeeks'] as num).toInt();
               lmp = DateTime.now().subtract(Duration(days: weeks * 7));
+              source = 'patient.gestationalWeeks';
             }
           } catch (_) {}
         }
@@ -266,10 +277,13 @@ class UnifiedFormNotifier extends ChangeNotifier {
       _lmpDate = lmp;
       _eddDate = edd;
       _gestationalWeeks = weeks;
-      debugPrint('[UnifiedForm] pregnancy data: resolved lmp=$lmp weeks=$weeks edd=$edd');
+      debugPrint(
+        '[LMP] card data READY source=$source showLmp=${lmp != null} '
+        'lmp=$lmp weeks=$weeks edd=$edd',
+      );
       notifyListeners();
     } catch (e) {
-      debugPrint('[UnifiedForm] pregnancy data load failed: $e');
+      debugPrint('[LMP] load FAILED: $e');
     }
   }
 

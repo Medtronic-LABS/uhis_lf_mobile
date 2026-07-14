@@ -97,6 +97,37 @@ void main() {
       expect(merged.first.lmpDate, 99);
       expect(merged.first.eddDate, 88);
     });
+
+    test('coalesces duplicate incoming episodes so later null LMP cannot wipe',
+        () {
+      // Mirrors spice-dev pregnancyInfos for one member: first episode has
+      // lastMenstrualPeriod, a later episode row omits it.
+      final incoming = [
+        PregnancySnapshotRow(
+          patientId: '05501421602887',
+          facts: PregnancyFacts.empty,
+          updatedAt: 1,
+          lmpDate: 1746921600000, // 2026-05-11
+          eddDate: 1771113600000,
+        ),
+        PregnancySnapshotRow(
+          patientId: '05501421602887',
+          facts: const PregnancyFacts(isPostpartumWindow: true),
+          updatedAt: 2,
+          // later episode — LMP/EDD null on wire
+        ),
+      ];
+
+      final merged = PregnancySnapshotDao.mergePreservingDates(
+        incoming: incoming,
+        prior: const {},
+      );
+
+      expect(merged, hasLength(1));
+      expect(merged.first.lmpDate, 1746921600000);
+      expect(merged.first.eddDate, 1771113600000);
+      expect(merged.first.facts.isPostpartumWindow, isTrue);
+    });
   });
 
   group('PregnancySnapshotDao.getAllRows', () {
