@@ -2339,6 +2339,18 @@ abstract final class TriageStrings {
         return code;
     }
   }
+
+  // ── Eligible services grid (Step 1) ───────────────────────────────────────
+  static const String eligibleServicesHeader = '✦ Eligible services';
+  static const String eligibleServicesTag = 'Age & gender based';
+  static const String enrolledBadge = 'Enrolled';
+  static const String pwHint = "⚠ Select 'PW' first to unlock ANC";
+  static const String deliveryHint = 'Select "Delivery" first to unlock PNC';
+
+  static String selectProgrammeA11y(String label) => 'Select $label';
+  static String deselectProgrammeA11y(String label) => 'Deselect $label';
+  static String enrolledProgrammeA11y(String label) =>
+      'Enrolled $label — tap to include or exclude from this visit';
 }
 
 /// Form compositor strings — section titles, field labels, banners, and
@@ -5076,16 +5088,9 @@ abstract final class NewPatientVisitStrings {
   static const String noSymptomsFound = 'No symptoms found';
   static const String eligibleServicesHeader = '✦ Eligible services';
   static const String eligibleServicesTag = 'Age & gender based';
-  static const String enrolledBadge = 'Enrolled';
   static const String pwHint = "⚠ Select 'PW' first to unlock ANC";
-  static const String deliveryHint = 'Select "Delivery" first to unlock PNC';
   static const String startVisitCta = 'Start Visit →';
   static const String selectServiceCta = 'Select a service to continue';
-
-  static String selectProgrammeA11y(String label) => 'Select $label';
-  static String deselectProgrammeA11y(String label) => 'Deselect $label';
-  static String enrolledProgrammeA11y(String label) =>
-      'Enrolled $label — tap to include or exclude from this visit';
 }
 
 /// Patient-scoped AI assistant (the floating "✦" sheet).
