@@ -208,7 +208,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         _pathwayActivatedProgrammes
           ..clear()
           ..addAll(pathwaySet);
-        _isPW = ctx.isPregnant;
+        _isPW = ctx.isPregnant || ctx.activeProgrammes.contains(Programme.anc);
         _isDelivery = ctx.isPostpartum;
         _isLoading = false;
       });
@@ -704,14 +704,23 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                     ),
                   ),
 
-                // Unified symptom section: AI chips + search/type-to-add
-                // inline list + other symptoms free-text — all in one card.
+                // Chip grid + search bar — no white card bg; blends with canvas.
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                   sliver: SliverToBoxAdapter(
                     child: _UnifiedSymptomPicker(vm: vm),
                   ),
                 ),
+
+                // Selected symptoms panel — one wide row per picked symptom,
+                // shown below the chip grid.
+                if (vm.selectedSymptoms.isNotEmpty)
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    sliver: SliverToBoxAdapter(
+                      child: _SelectedSymptomsPanel(vm: vm),
+                    ),
+                  ),
 
                 // Eligible services grid — adults only; under-5 uses vaccination CTA
                 if (!(_patientContext!.isUnder5))
@@ -1501,81 +1510,70 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
               null,
               searchPool
                   .where(
-                    (c) => TriageStrings.symptomLabel(c)
-                        .toLowerCase()
-                        .contains(_query),
+                    (c) =>
+                        !selected.contains(c) &&
+                        TriageStrings.symptomLabel(c)
+                            .toLowerCase()
+                            .contains(_query),
                   )
                   .toList(),
             ),
           ];
         } else {
-          final extraSelected = selected
-              .where((c) => !defaultCodes.contains(c))
-              .toList();
           gridSections = [
-            for (final s in vm.groupedVocabSections) (null, s.codes),
-            if (extraSelected.isNotEmpty) (null, extraSelected),
+            for (final s in vm.groupedVocabSections)
+              (null, s.codes.where((c) => !selected.contains(c)).toList()),
           ];
         }
         final gridIsEmpty =
             gridSections.every((s) => s.$2.isEmpty);
 
-        return Container(
-          decoration: BoxDecoration(
-            color: AppColors.textOnNavy,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.border),
-          ),
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
               // ── Search bar ────────────────────────────────────────────────
-              TextField(
-                key: const Key('triage_symptom_search'),
-                controller: _searchCtrl,
-                decoration: InputDecoration(
-                  hintText: SymptomPickerStrings.searchSymptomsHint,
-                  prefixIcon: const Icon(
-                    Icons.search_rounded,
-                    size: 18,
-                    color: AppColors.textMuted,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: AppColors.border),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: AppColors.border),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: AppColors.navy),
-                  ),
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  filled: true,
-                  fillColor: AppColors.canvas,
-                  suffixIcon: _query.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(
-                            Icons.close_rounded,
-                            size: 16,
-                            color: AppColors.textMuted,
-                          ),
-                          onPressed: () {
-                            _searchCtrl.clear();
-                            FocusScope.of(context).unfocus();
-                          },
-                        )
-                      : null,
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.border),
                 ),
-                maxLines: 1,
+                child: TextField(
+                  key: const Key('triage_symptom_search'),
+                  controller: _searchCtrl,
+                  decoration: InputDecoration(
+                    hintText: SymptomPickerStrings.searchSymptomsHint,
+                    prefixIcon: const Icon(
+                      Icons.search_rounded,
+                      size: 18,
+                      color: AppColors.textMuted,
+                    ),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                    filled: false,
+                    suffixIcon: _query.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(
+                              Icons.close_rounded,
+                              size: 16,
+                              color: AppColors.textMuted,
+                            ),
+                            onPressed: () {
+                              _searchCtrl.clear();
+                              FocusScope.of(context).unfocus();
+                            },
+                          )
+                        : null,
+                  ),
+                  maxLines: 1,
+                ),
               ),
 
               const SizedBox(height: 14),
@@ -1614,9 +1612,115 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
 
               const SizedBox(height: 10),
             ],
-          ),
+          );
+      },
+    );
+  }
+}
+
+/// Panel of selected symptom rows shown above the chip grid.
+/// Rebuilds whenever [vm] notifies (it is a [ChangeNotifier]).
+class _SelectedSymptomsPanel extends StatelessWidget {
+  const _SelectedSymptomsPanel({required this.vm});
+  final TriageViewModel vm;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: vm,
+      builder: (context, _) {
+        final codes = vm.selectedSymptoms.toList();
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final code in codes)
+              _SelectedSymptomRow(
+                key: ValueKey('sel_$code'),
+                code: code,
+                isAi: vm.isScribePreTick(code),
+                onRemove: () => vm.removeSymptom(code),
+              ),
+          ],
         );
       },
+    );
+  }
+}
+
+/// Wide card row for a single selected symptom.
+class _SelectedSymptomRow extends StatelessWidget {
+  const _SelectedSymptomRow({
+    super.key,
+    required this.code,
+    required this.isAi,
+    required this.onRemove,
+  });
+
+  final String code;
+  final bool isAi;
+  final VoidCallback onRemove;
+
+  static const _rowBg     = Color(0xFFEEF0FF);
+  static const _rowBorder = Color(0xFFC4B5FD);
+  static const _rowText   = Color(0xFF3D3599);
+  static const _xBg       = Color(0x1AEF4444); // rgba(239,68,68,0.1)
+  static const _xColor    = Color(0xFFEF4444);
+
+  @override
+  Widget build(BuildContext context) {
+    final label = TriageStrings.symptomLabel(code);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+      decoration: BoxDecoration(
+        color: _rowBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _rowBorder, width: 1.5),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: _rowText,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Color(0x99FFFFFF), // rgba(255,255,255,0.6)
+              borderRadius: BorderRadius.circular(5),
+            ),
+            child: Text(
+              isAi ? 'AI detected' : 'Standard',
+              style: const TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+                color: _rowText,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: onRemove,
+            child: Container(
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                color: _xBg,
+                borderRadius: BorderRadius.circular(7),
+              ),
+              alignment: Alignment.center,
+              child: const Icon(Icons.close, size: 9, color: _xColor),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1665,7 +1769,7 @@ class _PickerChip extends StatelessWidget {
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 140),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
           decoration: BoxDecoration(
             color: bg,
             borderRadius: BorderRadius.circular(20),
@@ -1688,8 +1792,8 @@ class _PickerChip extends StatelessWidget {
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
                   color: textColor,
                 ),
               ),
@@ -1799,7 +1903,11 @@ class _InlineServiceSelector extends StatelessWidget {
 
   void _handleTap(BuildContext context, _ServiceCardDef card) {
     // Enrolled cards are not toggleable — they are always part of this visit.
-    if (card.programme != null && enrolledProgrammes.contains(card.programme)) {
+    final isPwEnrolled =
+        card.isPW && enrolledProgrammes.contains(Programme.anc);
+    final isProgrammeEnrolled =
+        card.programme != null && enrolledProgrammes.contains(card.programme);
+    if (isPwEnrolled || isProgrammeEnrolled) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(
@@ -1884,8 +1992,10 @@ class _InlineServiceSelector extends StatelessWidget {
                     def: c,
                     isSelected: _isCardSelected(c),
                     isLocked: _isLocked(c),
-                    isEnrolled: c.programme != null &&
-                        enrolledProgrammes.contains(c.programme),
+                    isEnrolled: (c.programme != null &&
+                            enrolledProgrammes.contains(c.programme)) ||
+                        (c.isPW &&
+                            enrolledProgrammes.contains(Programme.anc)),
                     isPathwaySuggested: c.programme != null &&
                         pathwayProgrammes.contains(c.programme),
                     onTap: () => _handleTap(context, c),
