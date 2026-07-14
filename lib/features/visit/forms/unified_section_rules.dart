@@ -324,3 +324,68 @@ abstract final class UnifiedSectionRules {
     return true;
   }
 }
+
+/// Field-level (as opposed to [UnifiedSectionRules]'s section-level)
+/// conditional-visibility evaluation — replaces what used to be silently
+/// discarded `condition`/`visibility`/`compositeGroup` data from
+/// `field_library.json` (see `FieldDef.fromJson`, `FormConfig.
+/// buildVisibilityRules`).
+abstract final class FieldVisibilityRules {
+  FieldVisibilityRules._();
+
+  /// Returns whether [field] should render, given the current form [data]
+  /// and the [rulesByTargetId] lookup built by
+  /// `FormConfig.buildVisibilityRules`.
+  ///
+  /// Evaluation order:
+  /// 1. A generic `condition` rule targeting this field (another field's
+  ///    value equals a declared trigger value) — the common case, covers
+  ///    ~96 Yes/No/Other-dependent follow-up fields.
+  /// 2. The obstetric-history progressive-disclosure chain (Gravida → Parity
+  ///    → Living Children → Age of Last Child) — a separate mechanism from
+  ///    (1): the field library only tags `compositeRole` (trigger/member),
+  ///    the actual reveal thresholds are hand-ported here from the design
+  ///    mockup's `handleGravidaChange()`/`handleParityChange()`/
+  ///    `handleLivingChange()` JS, since the JSON doesn't encode them.
+  ///    Other `compositeGroup` values (e.g. supplement consumed/provided
+  ///    pairs) are unrelated dedup metadata handled elsewhere and are not
+  ///    interpreted here.
+  /// 3. The field's own declared base `visibility` ("visible"/"gone").
+  static bool isFieldVisible({
+    required FieldDef field,
+    required CanonicalVisitData data,
+    required Map<String, List<FieldVisibilityRule>> rulesByTargetId,
+  }) {
+    final rules = rulesByTargetId[field.id];
+    if (rules != null && rules.isNotEmpty) {
+      for (final rule in rules) {
+        final driverValue = data.getValue(rule.driverId);
+        if (driverValue != null && driverValue.toString() == rule.eq) {
+          return rule.visibility == 'visible';
+        }
+      }
+      // No rule's trigger value matched — fall through to base visibility.
+    }
+
+    if (field.compositeGroup == 'obstetricHistory') {
+      int asInt(String fieldId) =>
+          int.tryParse(data.getValue(fieldId)?.toString() ?? '') ?? 0;
+      switch (field.id) {
+        case 'gravida':
+          // Trigger — always visible once the section itself renders,
+          // regardless of its own base visibility (declared "gone" in the
+          // JSON, since Android reveals it via app-side composite-group
+          // handling this Flutter port doesn't otherwise have visibility into).
+          return true;
+        case 'parity':
+          return asInt('gravida') >= 2;
+        case 'livingChildren':
+          return asInt('parity') >= 1;
+        case 'ageOfLastChild':
+          return asInt('livingChildren') >= 1;
+      }
+    }
+
+    return field.visibility != 'gone';
+  }
+}
