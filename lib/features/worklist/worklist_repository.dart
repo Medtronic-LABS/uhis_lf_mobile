@@ -130,7 +130,9 @@ class WorklistRepository {
   ///   2. Band: 1 → 2 → 3 → 4
   ///   3. Modifier: a → b → none
   ///   4. Pregnant > non-pregnant (spec §2.8 step 3)
-  ///   5. Modifier b: longer overdue ranks higher (spec §2.8 step 4)
+  ///   5. Longer overdue ranks higher (spec §2.8 step 4 — applied to all patients
+  ///      with positive overdue days, not just modifier b, because the risk scorer
+  ///      does not always assign modifier b to overdue patients)
   ///   6. Village match (when SK has selected a village)
   ///   7. Display name (stable tiebreaker)
   static void _applySpecSort(
@@ -177,10 +179,9 @@ class WorklistRepository {
       if (byMod != 0) return byMod;
       final byPreg = (a.isPregnant ? 0 : 1).compareTo(b.isPregnant ? 0 : 1);
       if (byPreg != 0) return byPreg;
-      if (a.modifier == Modifier.b) {
-        final byOverdue = overdueDays(b).compareTo(overdueDays(a));
-        if (byOverdue != 0) return byOverdue;
-      }
+      // Longer overdue ranks higher for any patient with positive overdue days.
+      final byOverdue = overdueDays(b).compareTo(overdueDays(a));
+      if (byOverdue != 0) return byOverdue;
       if (selectedVillageId != null && selectedVillageId.isNotEmpty) {
         final byVillage = (a.villageId == selectedVillageId ? 0 : 1)
             .compareTo(b.villageId == selectedVillageId ? 0 : 1);

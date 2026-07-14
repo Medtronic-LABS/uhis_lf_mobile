@@ -173,7 +173,7 @@ void main() {
     expect(list.last.patientId, 'np');
   });
 
-  test('modifier b: longer overdue ranks higher within same band (spec §2.8 step 4)',
+  test('longer overdue ranks higher within same band regardless of modifier',
       () async {
     final baseDate = DateTime.now();
     await patients.upsertMany([
@@ -196,13 +196,13 @@ void main() {
         nextDueAt: baseDate.subtract(const Duration(days: 2)).millisecondsSinceEpoch,
       ),
     ]);
-    final sortRank = sortRankFor(Band.band3, Modifier.b);
+    final sortRank = sortRankFor(Band.band3, Modifier.none);
     for (final id in ['late', 'near']) {
       await patients.updateRisk(
         patientId: id,
         sortRank: sortRank,
         bandWireTag: Band.band3.wireTag,
-        modifierWireTag: Modifier.b.wireTag,
+        modifierWireTag: Modifier.none.wireTag,
         reasonsJson: '[]',
       );
     }

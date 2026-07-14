@@ -337,11 +337,10 @@ class MissionQueueItem {
     // 2. Pregnant before non-pregnant (spec §2.8 step 3)
     final pregCmp = (b.isPregnant ? 0 : 1).compareTo(a.isPregnant ? 0 : 1);
     if (pregCmp != 0) return pregCmp;
-    // 3. Modifier b: longer overdue ranks higher (spec §2.8 step 4)
-    if (a.modifier == Modifier.b) {
-      final overdueCmp = (b.daysOverdue ?? 0).compareTo(a.daysOverdue ?? 0);
-      if (overdueCmp != 0) return overdueCmp;
-    }
+    // 3. Longer overdue ranks higher (spec §2.8 step 4 — applied to all patients
+    //    with positive overdue days; risk scorer does not always assign modifier b).
+    final overdueCmp = (b.daysOverdue ?? 0).compareTo(a.daysOverdue ?? 0);
+    if (overdueCmp != 0) return overdueCmp;
     // 4. ANC programme ranks above NCD (CD-1 tiebreaker)
     final ancCmp = _ancRank(b).compareTo(_ancRank(a));
     if (ancCmp != 0) return ancCmp;

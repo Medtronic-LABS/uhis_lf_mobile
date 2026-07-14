@@ -981,7 +981,9 @@ class MissionDashboardService {
         final q = result[i];
         final modTag = q.modifier == Modifier.none ? '' : q.modifier.wireTag;
         final progs = q.programmes.map((p) => p.name).join(',');
-        final overdue = q.daysOverdue != null ? ' | overdue: ${q.daysOverdue}d' : '';
+        final overdue = (q.daysOverdue != null && q.daysOverdue! > 0)
+            ? ' | overdue: ${q.daysOverdue}d'
+            : '';
         ConsoleLog.banner(
           '  ${i + 1}. [${q.band.wireTag}$modTag] ${q.patientName}'
           ' | prog: $progs | tier: ${q.tier.name}$overdue',

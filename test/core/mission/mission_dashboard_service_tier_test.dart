@@ -161,16 +161,16 @@ void main() {
     );
 
     test(
-      'modifier b: longer overdue ranks higher within same band (spec §2.8 step 4)',
+      'longer overdue ranks higher within same band regardless of modifier',
       () {
         final moreOverdue = _entry(
           patientId: 'late',
-          modifier: Modifier.b,
+          modifier: Modifier.none,
           nextDueAt: today.subtract(const Duration(days: 7)),
         );
         final lessOverdue = _entry(
           patientId: 'near',
-          modifier: Modifier.b,
+          modifier: Modifier.none,
           nextDueAt: today.subtract(const Duration(days: 2)),
         );
         final input = MissionInputData(
