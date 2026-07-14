@@ -153,6 +153,7 @@ abstract final class UnifiedSectionRules {
         if (!_isSectionVisible(
           section: section,
           activeFormTypes: activeFormTypes,
+          enrolledFormTypes: enrolledFormTypes,
           currentData: currentData,
           gestationalWeeks: gestationalWeeks,
         )) { continue; }
@@ -195,6 +196,7 @@ abstract final class UnifiedSectionRules {
           if (!_isSectionVisible(
             section: section,
             activeFormTypes: activeFormTypes,
+            enrolledFormTypes: enrolledFormTypes,
             currentData: currentData,
             gestationalWeeks: gestationalWeeks,
           )) { continue; }
@@ -293,9 +295,18 @@ abstract final class UnifiedSectionRules {
     required FormSection section,
     required List<String> activeFormTypes,
     required CanonicalVisitData currentData,
+    List<String> enrolledFormTypes = const [],
     int? gestationalWeeks,
   }) {
     final id = section.sectionId;
+
+    // pregnancyDetailsAndHistory: only for first-time pregnancy registration.
+    // Once PW/ANC is on file the LMP cannot be re-edited — hide on all
+    // subsequent visits where the patient is already enrolled in ANC or pwProfile.
+    if (id == 'pregnancyDetailsAndHistory') {
+      return !enrolledFormTypes.contains('anc') &&
+          !enrolledFormTypes.contains('pwProfile');
+    }
 
     // birthPreparedness: shown whenever ANC is active.
     if (id == 'birthPreparedness') {

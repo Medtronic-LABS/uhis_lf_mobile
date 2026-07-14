@@ -308,6 +308,17 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
           .map((p) => p.name)
           .toList(),
     );
+
+    // First-time ANC/PW registration: inject pwProfile before anc so the
+    // Pregnancy Details & History section (LMP, gravida, parity) renders.
+    // unified_section_rules._isSectionVisible() suppresses it on return visits
+    // once enrolledFormTypes contains 'anc'.
+    if (formTypes.contains('anc') &&
+        !enrolledFormTypes.contains('anc') &&
+        !enrolledFormTypes.contains('pwProfile')) {
+      formTypes.insert(formTypes.indexOf('anc'), 'pwProfile');
+    }
+
     debugPrint('[VisitForm] ── form-type resolution ──────────────────────');
     debugPrint('[VisitForm]   activated pathways : ${rawPathways.join(', ')}');
     debugPrint('[VisitForm]   activeFormTypes    : ${formTypes.join(', ')}');

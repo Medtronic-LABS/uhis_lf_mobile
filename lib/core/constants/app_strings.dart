@@ -1918,7 +1918,7 @@ abstract final class TriageStrings {
 
   // ── Symptom labels ───────────────────────────────────────────────────────
   // Danger signs
-  static const String symptomConvulsions = 'Convulsions / Fits';
+  static const String symptomConvulsions = 'Fits / Convulsions';
   static const String symptomUnconscious = 'Unconscious / Unresponsive';
   static const String symptomLethargy = 'Unusually sleepy / Difficult to wake';
   static const String symptomNotEating = 'Not eating / drinking';
@@ -1926,7 +1926,7 @@ abstract final class TriageStrings {
   static const String symptomStridor = 'Stridor (noisy breathing)';
   static const String symptomVaginalBleeding = 'Vaginal bleeding';
   static const String symptomWaterBreak = 'Water break / Leaking';
-  static const String symptomReducedFetalMovement = 'Reduced fetal movement';
+  static const String symptomReducedFetalMovement = 'Baby not moving';
   static const String symptomChestPain = 'Chest pain';
   static const String symptomHemoptysis = 'Blood in sputum';
 
@@ -1953,7 +1953,7 @@ abstract final class TriageStrings {
   static const String symptomHeadacheSevere = 'Severe headache';
   static const String symptomBlurredVision = 'Blurred vision';
   static const String symptomAbdominalPain = 'Abdominal pain';
-  static const String symptomSwellingFaceHands = 'Swelling (face / hands)';
+  static const String symptomSwellingFaceHands = 'Swelling';
   static const String symptomHighBpKnown = 'High BP known / suspected';
   static const String symptomLaborSigns = 'Labor signs';
 
@@ -1997,7 +1997,7 @@ abstract final class TriageStrings {
       'Perineal wound discharge';
   static const String symptomPainfulUrination = 'Painful urination';
   static const String symptomBreathlessness = 'Breathlessness';
-  static const String symptomLeakingFluidVagina = 'Leaking fluid from vagina';
+  static const String symptomLeakingFluidVagina = 'Leaking fluids';
   static const String symptomPainfulUterineContractions =
       'Painful uterine contractions';
   static const String symptomOneSidedWeakness = 'One-sided weakness';

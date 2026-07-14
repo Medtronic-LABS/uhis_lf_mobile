@@ -29,6 +29,7 @@ import '../../core/api/scribe_api_service.dart';
 import '../../core/clinical/referral_evaluator.dart';
 import '../../core/constants/app_strings.dart';
 import 'models/anc_assessment.dart';
+import '../patient/enroll/pregnancy_registration_sheet.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
@@ -935,6 +936,23 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
     try {
       final progs = await dao.programmesFor(widget.patientId);
       if (!mounted) return;
+
+      // If ANC is active and no LMP recorded yet, collect it BEFORE the form
+      // renders so the unified form initialises with the correct LMP data.
+      if (_selectedProgrammes.contains(Programme.anc)) {
+        final snapshotDao = context.read<PregnancySnapshotDao>();
+        final snapshot = await snapshotDao.byPatient(widget.patientId);
+        if ((snapshot?.lmpDate == null) && mounted) {
+          await PregnancyRegistrationSheet.show(
+            context,
+            patientId: widget.patientId,
+            patientName: widget.patientName ?? 'Patient',
+            patientAge: widget.patientAge,
+          );
+          if (!mounted) return;
+        }
+      }
+
       setState(() {
         _currentProgrammes = progs;
         _request = _buildRequest(progs);
@@ -2128,20 +2146,6 @@ class _Step3AiRecoState extends State<_Step3AiReco>
               members: _householdMembers!,
               onTapMember: (patientId) =>
                   context.push('/patients/$patientId'),
-            ),
-            const SizedBox(height: 12),
-          ],
-
-          // ── Gestational age card (ANC / PNC patients only) ─────────
-          // Guard on confirmedProgrammes: lmpMs may exist in DB for patients
-          // who had prior ANC visits, causing the card to appear on NCD visits.
-          if ((widget.gestationalWeeks != null || widget.lmpMs != null) &&
-              (widget.confirmedProgrammes.contains(Programme.anc) ||
-               widget.confirmedProgrammes.contains(Programme.pnc))) ...[
-            _GestationalAgeCard(
-              gestationalWeeks: widget.gestationalWeeks,
-              lmpMs: widget.lmpMs,
-              eddMs: widget.eddMs,
             ),
             const SizedBox(height: 12),
           ],

@@ -52,7 +52,7 @@ class NewPatientVisitScreen extends StatefulWidget {
 
 class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
   bool _pwSelected = false;
-  _Svc? _selectedSvc;
+  final Set<_Svc> _selectedSvcs = {};
   final Set<String> _selectedSymptoms = {};
   String _searchQuery = '';
   bool _starting = false;
@@ -77,10 +77,10 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
   // ── symptom list ──────────────────────────────────────────────────────────
 
   List<SymptomDef> get _symptomList {
-    if (_selectedSvc == _Svc.ncd) return SymptomCatalog.ncdSymptoms;
-    if (_selectedSvc == _Svc.anc || _selectedSvc == _Svc.pnc) {
+    if (_selectedSvcs.contains(_Svc.anc) || _selectedSvcs.contains(_Svc.pnc)) {
       return SymptomCatalog.ancSymptoms;
     }
+    if (_selectedSvcs.contains(_Svc.ncd)) return SymptomCatalog.ncdSymptoms;
     if (_showPregnancySection) return SymptomCatalog.ancSymptoms;
     if (_showImci) return SymptomCatalog.imciSymptoms;
     if (_showNcd) return SymptomCatalog.ncdSymptoms;
@@ -118,9 +118,9 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
     if (svc == _Svc.pw) {
       setState(() {
         _pwSelected = !_pwSelected;
-        if (!_pwSelected &&
-            (_selectedSvc == _Svc.anc || _selectedSvc == _Svc.pnc)) {
-          _selectedSvc = null;
+        if (!_pwSelected) {
+          _selectedSvcs.remove(_Svc.anc);
+          _selectedSvcs.remove(_Svc.pnc);
         }
       });
       return;
@@ -132,34 +132,51 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
       return;
     }
-    setState(() => _selectedSvc = _selectedSvc == svc ? null : svc);
+    setState(() {
+      if (_selectedSvcs.contains(svc)) {
+        _selectedSvcs.remove(svc);
+      } else {
+        _selectedSvcs.add(svc);
+      }
+    });
   }
 
   // ── start visit ───────────────────────────────────────────────────────────
 
   Future<void> _startVisit() async {
-    if (_starting || _selectedSvc == null || _selectedSvc == _Svc.pw) return;
+    if (_starting) return;
+
+    // PW-only: no programme selected — just register the pregnancy then return.
+    if (_pwSelected && _selectedSvcs.isEmpty) {
+      await PregnancyRegistrationSheet.show(
+        context,
+        patientId: widget.patientId,
+        patientName: widget.patientName ?? 'Patient',
+        patientAge: widget.patientAge,
+      );
+      if (mounted) context.pop();
+      return;
+    }
+
+    if (_selectedSvcs.isEmpty) return;
     setState(() => _starting = true);
 
     try {
-      final programme = _toProgram(_selectedSvc!);
+      final programmes = _selectedSvcs
+          .map(_toProgram)
+          .where((p) => p != Programme.unknown)
+          .toList();
+      final programme = programmes.isNotEmpty ? programmes.first : Programme.unknown;
 
-      if (_selectedSvc == _Svc.anc && mounted) {
-        await PregnancyRegistrationSheet.show(
-          context,
-          patientId: widget.patientId,
-          patientName: widget.patientName ?? 'Patient',
-          patientAge: widget.patientAge,
-        );
-        if (!mounted) return;
-      }
+      // Pregnancy data (LMP / EDD / obstetric history) is collected inline
+      // inside the unified ANC form — do not show the registration sheet here.
 
       // Programme is NOT written here — writing at enrolment start would persist
       // the programme even if the SK abandons the visit mid-form. The write is
       // deferred to VisitFormScreen._onSectionedSubmit() so it only commits on
       // successful assessment submission.
       debugPrint(
-        '[NewPatientVisit] deferred programme write: ${programme.name} '
+        '[NewPatientVisit] deferred programme write: ${programmes.map((p) => p.name).join(',')} '
         'for patientId=${widget.patientId}',
       );
 
@@ -228,8 +245,8 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
             'patientAge': widget.patientAge,
             'patientGender': widget.patientGender,
             'initialStep': 1,
-            if (programme != Programme.unknown)
-              'seedProgrammes': [programme.name],
+            if (programmes.isNotEmpty)
+              'seedProgrammes': programmes.map((p) => p.name).toList(),
           },
         );
       } else {
@@ -297,7 +314,7 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
             showNcd: _showNcd,
             showImci: _showImci,
             pwSelected: _pwSelected,
-            selectedSvc: _selectedSvc,
+            selectedSvcs: _selectedSvcs,
             onSvcTap: _onSvcTap,
           ),
         ],
@@ -310,7 +327,8 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
           child: _Cta(
-            selectedSvc: _selectedSvc,
+            selectedSvcs: _selectedSvcs,
+            pwSelected: _pwSelected,
             starting: _starting,
             onTap: _startVisit,
           ),
@@ -554,7 +572,7 @@ class _ServicesSection extends StatelessWidget {
     required this.showNcd,
     required this.showImci,
     required this.pwSelected,
-    required this.selectedSvc,
+    required this.selectedSvcs,
     required this.onSvcTap,
   });
 
@@ -562,7 +580,7 @@ class _ServicesSection extends StatelessWidget {
   final bool showNcd;
   final bool showImci;
   final bool pwSelected;
-  final _Svc? selectedSvc;
+  final Set<_Svc> selectedSvcs;
   final ValueChanged<_Svc> onSvcTap;
 
   @override
@@ -604,7 +622,7 @@ class _ServicesSection extends StatelessWidget {
           showNcd: showNcd,
           showImci: showImci,
           pwSelected: pwSelected,
-          selectedSvc: selectedSvc,
+          selectedSvcs: selectedSvcs,
           onSvcTap: onSvcTap,
         ),
         if (!pwSelected && showPregnancySection) ...[
@@ -633,7 +651,7 @@ class _ServiceGrid extends StatelessWidget {
     required this.showNcd,
     required this.showImci,
     required this.pwSelected,
-    required this.selectedSvc,
+    required this.selectedSvcs,
     required this.onSvcTap,
   });
 
@@ -641,7 +659,7 @@ class _ServiceGrid extends StatelessWidget {
   final bool showNcd;
   final bool showImci;
   final bool pwSelected;
-  final _Svc? selectedSvc;
+  final Set<_Svc> selectedSvcs;
   final ValueChanged<_Svc> onSvcTap;
 
   @override
@@ -684,7 +702,7 @@ class _ServiceGrid extends StatelessWidget {
                           spec: specs[i + j],
                           selected: specs[i + j].isPrereq
                               ? pwSelected
-                              : selectedSvc == specs[i + j].svc,
+                              : selectedSvcs.contains(specs[i + j].svc),
                           onTap: () => onSvcTap(specs[i + j].svc!),
                         ),
                 ),
@@ -821,19 +839,20 @@ class _SvcTile extends StatelessWidget {
 
 class _Cta extends StatelessWidget {
   const _Cta({
-    required this.selectedSvc,
+    required this.selectedSvcs,
+    required this.pwSelected,
     required this.starting,
     required this.onTap,
   });
 
-  final _Svc? selectedSvc;
+  final Set<_Svc> selectedSvcs;
+  final bool pwSelected;
   final bool starting;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final canStart =
-        selectedSvc != null && selectedSvc != _Svc.pw && !starting;
+    final canStart = !starting && (selectedSvcs.isNotEmpty || pwSelected);
 
     return FilledButton(
       onPressed: canStart ? onTap : null,
@@ -855,9 +874,11 @@ class _Cta extends StatelessWidget {
               ),
             )
           : Text(
-              canStart
-                  ? NewPatientVisitStrings.startVisitCta
-                  : NewPatientVisitStrings.selectServiceCta,
+              !canStart
+                  ? NewPatientVisitStrings.selectServiceCta
+                  : (pwSelected && selectedSvcs.isEmpty)
+                      ? PregnancyRegStrings.registerCta
+                      : NewPatientVisitStrings.startVisitCta,
               style: const TextStyle(
                 fontWeight: FontWeight.w800,
                 fontSize: 15,
