@@ -1061,6 +1061,10 @@ class OfflineSyncService extends ChangeNotifier {
       if (v != null) vitals[key] = v;
     }
 
+    // Haemoglobin — drives ANC anaemia bands in RiskScoringService.
+    final hb = num_('hemoglobin') ?? num_('hb');
+    if (hb != null) vitals['hemoglobin'] = hb;
+
     // Glucose — `bg` is the observations field; also handle longer names.
     final glucose =
         num_('bg') ?? num_('glucoseValue') ?? num_('glucose') ?? num_('bloodGlucose');

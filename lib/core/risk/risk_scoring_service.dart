@@ -45,56 +45,63 @@ class RiskScoringService {
     final isNcd = f.programmes.contains(Programme.ncd);
 
     // ── ANC clinical rules (§2.8.1) ─────────────────────────────────────────
-    if (isAnc && v != null) {
-      // Band 1 — Severe
-      if (v.hasDangerSign) {
-        considerBand(Band.band1, 'anc-danger-sign');
-      }
-      final hb = v.hemoglobin;
-      if (hb != null && hb < 7.0) {
-        considerBand(Band.band1, 'anc-anaemia-severe:${hb.toStringAsFixed(1)}');
-      }
-      final sys = v.systolicBp;
-      final dia = v.diastolicBp;
-      if ((sys != null && sys >= 160) || (dia != null && dia >= 110)) {
-        considerBand(Band.band1, 'anc-bp-severe:${sys ?? 0}/${dia ?? 0}');
-      }
+    // Programme enrolment gates the rules; missing vitals means "no finding"
+    // for that rule — never "no programme".
+    if (isAnc) {
+      if (v != null) {
+        // Band 1 — Severe
+        if (v.hasDangerSign) {
+          considerBand(Band.band1, 'anc-danger-sign');
+        }
+        final hb = v.hemoglobin;
+        if (hb != null && hb < 7.0) {
+          considerBand(
+              Band.band1, 'anc-anaemia-severe:${hb.toStringAsFixed(1)}');
+        }
+        final sys = v.systolicBp;
+        final dia = v.diastolicBp;
+        if ((sys != null && sys >= 160) || (dia != null && dia >= 110)) {
+          considerBand(Band.band1, 'anc-bp-severe:${sys ?? 0}/${dia ?? 0}');
+        }
 
-      // Band 2 — Moderate
-      if (v.hasEclampsia) {
-        considerBand(Band.band2, 'anc-eclampsia');
-      }
-      if (((sys != null && sys >= 140) || (dia != null && dia >= 90)) &&
-          !((sys != null && sys >= 160) || (dia != null && dia >= 110))) {
-        considerBand(Band.band2, 'anc-bp-elevated:${sys ?? 0}/${dia ?? 0}');
-      }
-      if (v.hasAbnormalUrine) {
-        considerBand(Band.band2, 'anc-urine-abnormal');
-      }
-      final glu = v.fastingGlucoseMmolL;
-      if (glu != null && glu >= 5.1) {
-        considerBand(Band.band2, 'anc-gdm-risk:${glu.toStringAsFixed(1)}');
-      }
-      if (hb != null && hb >= 7.0 && hb < 10.0) {
-        considerBand(Band.band2, 'anc-anaemia-moderate:${hb.toStringAsFixed(1)}');
-      }
+        // Band 2 — Moderate
+        if (v.hasEclampsia) {
+          considerBand(Band.band2, 'anc-eclampsia');
+        }
+        if (((sys != null && sys >= 140) || (dia != null && dia >= 90)) &&
+            !((sys != null && sys >= 160) || (dia != null && dia >= 110))) {
+          considerBand(Band.band2, 'anc-bp-elevated:${sys ?? 0}/${dia ?? 0}');
+        }
+        if (v.hasAbnormalUrine) {
+          considerBand(Band.band2, 'anc-urine-abnormal');
+        }
+        final glu = v.fastingGlucoseMmolL;
+        if (glu != null && glu >= 5.1) {
+          considerBand(Band.band2, 'anc-gdm-risk:${glu.toStringAsFixed(1)}');
+        }
+        if (hb != null && hb >= 7.0 && hb < 10.0) {
+          considerBand(
+              Band.band2, 'anc-anaemia-moderate:${hb.toStringAsFixed(1)}');
+        }
 
-      // Band 3 — Mild
-      if (hb != null && hb >= 10.0 && hb < 11.0) {
-        considerBand(Band.band3, 'anc-anaemia-mild:${hb.toStringAsFixed(1)}');
-      }
-      final ga = v.gestationalAgeWeeks;
-      if (ga != null && ga >= 36) {
-        considerBand(Band.band3, 'anc-late-term:$ga');
-        markA('anc-late-term-modifier');
-      }
+        // Band 3 — Mild
+        if (hb != null && hb >= 10.0 && hb < 11.0) {
+          considerBand(
+              Band.band3, 'anc-anaemia-mild:${hb.toStringAsFixed(1)}');
+        }
+        final ga = v.gestationalAgeWeeks;
+        if (ga != null && ga >= 36) {
+          considerBand(Band.band3, 'anc-late-term:$ga');
+          markA('anc-late-term-modifier');
+        }
 
-      // Modifiers
-      if (v.parity != null && v.parity == 0) {
-        markA('anc-primigravida');
-      }
-      if (v.hasDiabetes) {
-        markA('anc-comorbidity-dm');
+        // Modifiers
+        if (v.parity != null && v.parity == 0) {
+          markA('anc-primigravida');
+        }
+        if (v.hasDiabetes || v.hasHypertension) {
+          markA(v.hasDiabetes ? 'anc-comorbidity-dm' : 'anc-comorbidity-htn');
+        }
       }
     }
 
@@ -162,12 +169,25 @@ class RiskScoringService {
       }
     }
 
-    // ── Overdue follow-up — modifier b ──────────────────────────────────────
-    final daysSince = f.daysSinceLastVisit;
-    if (isAnc && daysSince != null && daysSince > 28) {
-      markB('anc-missed-visit:${daysSince}d');
-    } else if (isNcd && daysSince != null && daysSince > 42) {
-      markB('ncd-missed-followup:${daysSince}d');
+    // ── Overdue scheduled visit — modifier b (spec: due date in the past) ───
+    // Prefer nextDueAt (scheduled follow-up). Fall back to days-since-last
+    // only when no schedule exists (legacy cache rows).
+    final due = f.nextDueAt;
+    final now = DateTime.now();
+    if (due != null && due.isBefore(now)) {
+      final overdueDays = now.difference(due).inDays.clamp(1, 999);
+      if (isAnc) {
+        markB('anc-missed-visit:${overdueDays}d');
+      } else if (isNcd) {
+        markB('ncd-missed-followup:${overdueDays}d');
+      }
+    } else {
+      final daysSince = f.daysSinceLastVisit;
+      if (isAnc && daysSince != null && daysSince > 28) {
+        markB('anc-missed-visit:${daysSince}d');
+      } else if (isNcd && daysSince != null && daysSince > 42) {
+        markB('ncd-missed-followup:${daysSince}d');
+      }
     }
 
     // ── Non-ANC/NCD programme defaults — keep them visible in the worklist
@@ -232,9 +252,20 @@ class RiskScoringService {
             ? Modifier.b
             : Modifier.none;
 
-    if (drivers.isEmpty) drivers.add('no-programme');
+    // Empty drivers ≠ missing enrolment. Enrolled ANC/NCD patients with no
+    // abnormal findings are Band 4 routine — say so explicitly.
+    if (drivers.isEmpty) {
+      if (isAnc) {
+        drivers.add('anc-controlled');
+      } else if (isNcd) {
+        drivers.add('ncd-controlled');
+      } else if (f.programmes.isNotEmpty) {
+        drivers.add('enrolment-routine');
+      } else {
+        drivers.add('no-programme');
+      }
+    }
 
-    final now = DateTime.now();
     final rationale = RiskRationale(
       drivers: List.unmodifiable(drivers),
       modelVersion: modelVersion,

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:sqflite/sqflite.dart';
 
+import '../time/calendar_day.dart';
 import 'app_database.dart';
 
 /// Visit/encounter status lifecycle.
@@ -315,23 +316,25 @@ class EncounterDao {
     );
   }
 
-  /// Get patient IDs with completed visits today.
+  /// Get patient IDs with completed visits on the current **calendar** day.
   ///
-  /// Returns a set of patient IDs that have at least one completed
-  /// encounter with `completed_at` on the current calendar day.
+  /// Uses a half-open local-midnight window `[today, tomorrow)` so comparison
+  /// is by date, not wall-clock time (and does not include future days).
   Future<Set<String>> completedTodayPatientIds() async {
-    final now = DateTime.now();
-    final startOfDay = DateTime(now.year, now.month, now.day);
-    final startMs = startOfDay.millisecondsSinceEpoch;
-    
+    final todayStart = CalendarDay.todayStart();
+    final tomorrowStart = CalendarDay.tomorrowStart(todayStart);
+    final startMs = todayStart.millisecondsSinceEpoch;
+    final endMs = tomorrowStart.millisecondsSinceEpoch;
+
     final rows = await _db.db.query(
       AppDatabase.tableEncounters,
       columns: ['patient_id'],
-      where: 'status IN (?, ?) AND completed_at >= ?',
+      where: 'status IN (?, ?) AND completed_at >= ? AND completed_at < ?',
       whereArgs: [
         EncounterStatus.completed.name,
         EncounterStatus.synced.name,
         startMs,
+        endMs,
       ],
       distinct: true,
     );
