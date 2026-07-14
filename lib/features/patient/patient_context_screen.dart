@@ -7,6 +7,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/theme.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/debug/console_log.dart';
+import '../../core/models/dashboard_tier.dart';
 import '../../core/widgets/empty_state_card.dart';
 import '../../core/widgets/header_icon_button.dart';
 import '../../core/widgets/phi_screen.dart';
@@ -347,6 +349,36 @@ class _PatientContextScreenState
     if (localPatient != null) {
       // ignore: avoid_print
       print('[PatientContextScreen] Found local patient: ${localPatient.patient.name}');
+      assert(() {
+        final p = localPatient.patient;
+        final band = p.riskBand ?? Band.band4;
+        final modifier = p.riskModifier ?? Modifier.none;
+        final modTag = modifier == Modifier.none ? '' : modifier.wireTag;
+        final progs = localPatient.programmes.map((pr) => pr.name).join(',');
+        final now = DateTime.now();
+        final overdueDays = p.nextDueAt != null
+            ? now.difference(DateTime.fromMillisecondsSinceEpoch(p.nextDueAt!)).inDays.clamp(0, 999)
+            : null;
+        final tier = p.nextDueAt != null
+            ? DashboardTier.fromDaysToDue(
+                DateTime.fromMillisecondsSinceEpoch(p.nextDueAt!).difference(now).inDays)
+            : DashboardTier.upcoming;
+        final overdueTag =
+            (overdueDays != null && overdueDays > 0) ? ' | overdue: ${overdueDays}d' : '';
+        ConsoleLog.banner(
+          '[Patient opened] [${band.wireTag}$modTag] ${p.name ?? widget.patientId}'
+          ' | prog: $progs | tier: ${tier.name}$overdueTag',
+        );
+        if (p.riskReasons.isNotEmpty) {
+          ConsoleLog.banner('  Why ${band.wireTag}$modTag:');
+          for (final r in p.riskReasons) {
+            ConsoleLog.banner('    • $r');
+          }
+        } else {
+          ConsoleLog.banner('  Why ${band.wireTag}$modTag: (no clinical reasons stored)');
+        }
+        return true;
+      }());
 
       // Scope history query to the patient's own village — falling back to all
       // assigned villages when villageId is null. Previously used

@@ -337,9 +337,13 @@ class MissionQueueItem {
   /// Intra-band comparator implementing PRD §2.8 sort order within a band:
   ///   1. modifier a → modifier b → no modifier
   ///   2. pregnant > non-pregnant (spec §2.8 step 3)
-  ///   3. modifier b: longer overdue ranks higher (spec §2.8 step 4)
-  ///   4. ANC programme > NCD (CD-1 tiebreaker)
-  ///   5. patient name ASC (stable tiebreaker)
+  ///   3. longer overdue ranks higher (spec §2.8 step 4)
+  ///   4. tier rank: critical > overdue > dueToday > thisWeek > upcoming
+  ///      (handles clinical-driver escalation — neonate/pnc-window patients that
+  ///      reach critical tier without a band upgrade must still surface above
+  ///      routine upcoming patients in the same band)
+  ///   5. ANC programme > NCD (CD-1 tiebreaker)
+  ///   6. patient name ASC (stable tiebreaker)
   static int compareInBand(MissionQueueItem a, MissionQueueItem b) {
     // 1. Modifier: a(0) < b(1) < none(2) — best modifier wins
     final modCmp = a.modifier.sortRank.compareTo(b.modifier.sortRank);
@@ -351,10 +355,16 @@ class MissionQueueItem {
     //    with positive overdue days; risk scorer does not always assign modifier b).
     final overdueCmp = (b.daysOverdue ?? 0).compareTo(a.daysOverdue ?? 0);
     if (overdueCmp != 0) return overdueCmp;
-    // 4. ANC programme ranks above NCD (CD-1 tiebreaker)
+    // 4. Tier rank: critical (0) < overdue (1) < dueToday (2) < thisWeek (3) < upcoming (4).
+    //    Clinical-driver escalation (neonate, pnc-window, ltfu-streak) can give a patient
+    //    critical/overdue tier without upgrading their band; tier rank surfaces them above
+    //    routine upcoming patients that share the same band, modifier, and overdue-days.
+    final tierCmp = a.tier.rank.compareTo(b.tier.rank);
+    if (tierCmp != 0) return tierCmp;
+    // 5. ANC programme ranks above NCD (CD-1 tiebreaker)
     final ancCmp = _ancRank(b).compareTo(_ancRank(a));
     if (ancCmp != 0) return ancCmp;
-    // 5. Stable alphabetical tiebreaker
+    // 6. Stable alphabetical tiebreaker
     return a.patientName.compareTo(b.patientName);
   }
 
