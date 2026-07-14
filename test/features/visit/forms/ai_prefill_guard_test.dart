@@ -10,7 +10,7 @@
 ///  6. dialogCheckbox list validation (one bad entry rejects the set).
 ///  7. bpLogDetails shape validation.
 ///  8. Draft persistence round-trips fieldSources (restore keeps aiPending).
-///  9. assessmentTypeFor mapper: anc > ncd priority, pnc → null.
+///  9. assessmentTypeFor mapper: combined anc+ncd comma-joined, pnc → null.
 /// 10. updateField flips aiPending → aiModified.
 library;
 
@@ -276,9 +276,9 @@ void main() {
       expect(FormFieldSchemaBuilder.assessmentTypeFor(['ncd']), 'ncd');
     });
 
-    test('anc outranks ncd in combined visits', () {
+    test('combined anc+ncd visit returns both types comma-joined', () {
       expect(
-          FormFieldSchemaBuilder.assessmentTypeFor(['ncd', 'anc']), 'anc');
+          FormFieldSchemaBuilder.assessmentTypeFor(['ncd', 'anc']), 'anc,ncd');
     });
 
     test('pnc (any expansion) disables auto-fill', () {
