@@ -235,11 +235,21 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
 
         // ── Gestational age card (ANC) — top of scroll area ────────────────
         if (isAnc) {
+          debugPrint(
+            '[LMP] card MOUNT patient=${notifier.patientId} '
+            'lmp=${notifier.lmpDate} edd=${notifier.eddDate} '
+            'weeks=${notifier.gestationalWeeks} '
+            'hasDate=${notifier.lmpDate != null || notifier.eddDate != null}',
+          );
           items.add(_GestationalAgeCard(
             lmpDate: notifier.lmpDate,
             eddDate: notifier.eddDate,
             gestationalWeeks: notifier.gestationalWeeks,
           ));
+        } else {
+          debugPrint(
+            '[LMP] card SKIP — not ANC activeFormTypes=${widget.activeFormTypes}',
+          );
         }
 
         String? lastFormType;

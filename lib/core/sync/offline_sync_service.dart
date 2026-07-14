@@ -629,20 +629,40 @@ class OfflineSyncService extends ChangeNotifier {
       final patientId =
           memberKey == null ? null : memberIdToPatientId[memberKey] ?? memberKey;
       if (patientId == null || patientId.isEmpty) continue;
-      final facts = _pregnancyFactsFrom(raw, now: now);
-      if (facts == null) continue;
-      final eddRaw = raw['estimatedDeliveryDate'] ?? raw['edd'];
-      final eddMs = JsonRead.epochMillis({'_': eddRaw}, const ['_']);
-      // LMP: try several field names the server may use.
-      final lmpMs = JsonRead.epochMillis(raw, const [
-        'lmpDate',
+      // Always persist a row when we have a member key — LMP/EDD must not be
+      // dropped just because clinical fact flags failed to parse.
+      final facts = _pregnancyFactsFrom(raw, now: now) ?? PregnancyFacts.empty;
+      final flat = _flattenPregnancyInfo(raw);
+      final eddMs = JsonRead.epochMillis(flat, const [
+        'estimatedDeliveryDate',
+        'edd',
+        'eddDate',
+      ]);
+      // Android spice entity field is `lastMenstrualPeriod` (ISO string).
+      final lmpMs = JsonRead.epochMillis(flat, const [
         'lastMenstrualPeriod',
         'lastMenstrualPeriodDate',
+        'lmpDate',
         'lmp',
         'lmpValue',
         'menstrualDate',
         'lastPeriodDate',
       ]);
+      if (lmpMs == null) {
+        final wire = flat['lastMenstrualPeriod'] ?? flat['lmpDate'];
+        // Key present with null is normal for multi-episode rows — not a parse error.
+        if (wire != null && '$wire'.trim().isNotEmpty && '$wire' != 'null') {
+          debugPrint(
+            '[LMP] sync parse FAIL patient=$patientId raw=$wire',
+          );
+        }
+      } else {
+        debugPrint(
+          '[LMP] sync parse OK patient=$patientId member=$memberKey '
+          'lmpMs=$lmpMs eddMs=$eddMs '
+          'wire=${flat['lastMenstrualPeriod']}',
+        );
+      }
       pregnancyRows.add(PregnancySnapshotRow(
         patientId: patientId,
         facts: facts,
@@ -651,6 +671,12 @@ class OfflineSyncService extends ChangeNotifier {
         lmpDate: lmpMs,
       ));
     }
+    final withLmp =
+        pregnancyRows.where((r) => r.lmpDate != null).map((r) => r.patientId);
+    debugPrint(
+      '[LMP] sync pregnancyInfos n=${pregnancyRows.length} '
+      'withLmp=${withLmp.length} ids=${withLmp.toSet().take(8).toList()}',
+    );
 
     // Bundle `treatmentDetails[]` → presence-only set (clinical specifics
     // live elsewhere). Drives the `ncd-drift` OVERDUE-min driver and the
@@ -737,6 +763,13 @@ class OfflineSyncService extends ChangeNotifier {
       final merged = PregnancySnapshotDao.mergePreservingDates(
         incoming: pregnancyRows,
         prior: prior,
+      );
+      final mergedWithLmp =
+          merged.where((r) => r.lmpDate != null).length;
+      debugPrint(
+        '[LMP] snapshot merge prior=${prior.length} '
+        'incoming=${pregnancyRows.length} merged=${merged.length} '
+        'mergedWithLmp=$mergedWithLmp',
       );
       await _pregnancySnapshot.clearAll();
       if (merged.isNotEmpty) {
@@ -968,6 +1001,32 @@ class OfflineSyncService extends ChangeNotifier {
     if (lower == 'null' || lower == 'false') return false;
     if (s == '[]' || s == '{}') return false;
     return true;
+  }
+
+  /// Flatten nested pregnancy DTOs so LMP/EDD keys are readable at the top
+  /// level. Spice `pregnancyInfos[]` is usually flat (`lastMenstrualPeriod`),
+  /// but assessment-shaped nests still show up on some builds.
+  static Map<String, dynamic> _flattenPregnancyInfo(Map raw) {
+    final flat = <String, dynamic>{
+      for (final e in raw.entries) e.key.toString(): e.value,
+    };
+    for (final sub in const [
+      'pregnancyDetails',
+      'pregnancyDetail',
+      'pwProfile',
+      'pregnancyProfile',
+      'obstetricHistory',
+      'observations',
+      'assessmentDetails',
+    ]) {
+      final nested = raw[sub];
+      if (nested is Map) {
+        for (final e in nested.entries) {
+          flat.putIfAbsent(e.key.toString(), () => e.value);
+        }
+      }
+    }
+    return flat;
   }
 
   /// Build a [PregnancyFacts] snapshot from one `pregnancyInfos[]` row.
