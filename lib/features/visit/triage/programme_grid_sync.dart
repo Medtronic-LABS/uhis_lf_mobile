@@ -16,4 +16,29 @@ abstract final class ProgrammeGridSync {
     required Set<Programme> dismissedBySk,
   }) =>
       activated.difference(selected).difference(dismissedBySk);
+
+  /// Enrolled programmes that may be auto-selected for *this* visit.
+  ///
+  /// Maternal programmes are gated by current state so a historical PNC
+  /// enrollment does not force PNC forms onto a still-pregnant ANC visit
+  /// (and vice versa). NCD / FP / other programmes stay eligible when enrolled.
+  static Set<Programme> applicableEnrolledSeed({
+    required Set<Programme> enrolled,
+    required bool isPregnant,
+    required bool isPostpartum,
+  }) {
+    return enrolled.where((p) {
+      switch (p) {
+        case Programme.anc:
+        case Programme.pw:
+          return isPregnant;
+        case Programme.pnc:
+          return isPostpartum;
+        case Programme.unknown:
+          return false;
+        default:
+          return true;
+      }
+    }).toSet();
+  }
 }

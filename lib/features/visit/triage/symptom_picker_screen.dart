@@ -201,6 +201,14 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       debugPrint('[SymptomPicker] Success! Setting up view model...');
       final vm = TriageViewModel(patientContext: ctx);
       final pathwaySet = vm.activatedPathways.map((p) => p.programme).toSet();
+      final isPw =
+          ctx.isPregnant || ctx.activeProgrammes.contains(Programme.anc);
+      final isDelivery = ctx.isPostpartum;
+      final enrolledSeed = ProgrammeGridSync.applicableEnrolledSeed(
+        enrolled: ctx.activeProgrammes.toSet(),
+        isPregnant: ctx.isPregnant,
+        isPostpartum: ctx.isPostpartum,
+      );
       vm.addListener(_syncPathwaysToServiceGrid);
       setState(() {
         _patientContext = ctx;
@@ -208,17 +216,21 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         _selectedProgrammes
           ..clear()
           ..addAll(pathwaySet)
-          // Seed enrolled programmes so the grid starts with them selected;
-          // the SK may still opt a programme out of *this* visit.
-          ..addAll(ctx.activeProgrammes);
+          // Only seed enrolled programmes that apply to *this* visit state
+          // (e.g. skip enrolled PNC while still pregnant). SK can still add
+          // or remove cards after load.
+          ..addAll(enrolledSeed);
         _pathwayActivatedProgrammes
           ..clear()
           ..addAll(pathwaySet);
-        _isPW = ctx.isPregnant || ctx.activeProgrammes.contains(Programme.anc);
-        _isDelivery = ctx.isPostpartum;
+        _isPW = isPw;
+        _isDelivery = isDelivery;
         _isLoading = false;
       });
-      debugPrint('[SymptomPicker] Load complete — pathway programmes: ${pathwaySet.map((p) => p.name).join(', ')}');
+      debugPrint(
+          '[SymptomPicker] Load complete — pathway programmes: ${pathwaySet.map((p) => p.name).join(', ')} '
+          'enrolledSeed: ${enrolledSeed.map((p) => p.name).join(', ')} '
+          'selected: ${_selectedProgrammes.map((p) => p.name).join(', ')}');
       _fireProgrammesLive();
       _startBriefingFetch(ctx);
     } catch (e, stack) {
@@ -412,7 +424,9 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     if (vm == null || _patientContext == null) return;
 
     debugPrint(
-      '[SymptomPicker] Continue tapped — ${vm.activatedPathways.length} pathways: ${vm.activatedPathways.map((p) => p.programme.name).join(', ')}',
+      '[SymptomPicker] Continue tapped — ${vm.activatedPathways.length} pathways: '
+      '${vm.activatedPathways.map((p) => p.programme.name).join(', ')} | '
+      'selected programmes: ${_selectedProgrammes.map((p) => p.name).join(', ')}',
     );
 
     // Guard: only block when there is truly no programme context —
@@ -753,9 +767,20 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                             _isPW = selected;
                             if (!selected) {
                               _selectedProgrammes.remove(Programme.anc);
+                              _selectedProgrammes.remove(Programme.pw);
                               _skDismissedProgrammes.add(Programme.anc);
+                              _skDismissedProgrammes.add(Programme.pw);
                             } else {
                               _skDismissedProgrammes.remove(Programme.anc);
+                              _skDismissedProgrammes.remove(Programme.pw);
+                              _selectedProgrammes.add(Programme.pw);
+                              // Turning PW on surfaces enrolled/pathway ANC.
+                              if (_patientContext!.activeProgrammes
+                                      .contains(Programme.anc) ||
+                                  _pathwayActivatedProgrammes
+                                      .contains(Programme.anc)) {
+                                _selectedProgrammes.add(Programme.anc);
+                              }
                             }
                           });
                           _fireProgrammesLive();
@@ -768,6 +793,11 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                               _skDismissedProgrammes.add(Programme.pnc);
                             } else {
                               _skDismissedProgrammes.remove(Programme.pnc);
+                              // Delivery unlocks PNC — include enrolled PNC.
+                              if (_patientContext!.activeProgrammes
+                                  .contains(Programme.pnc)) {
+                                _selectedProgrammes.add(Programme.pnc);
+                              }
                             }
                           });
                           _fireProgrammesLive();
@@ -1873,7 +1903,7 @@ class _InlineServiceSelector extends StatelessWidget {
   final Set<Programme> pathwayProgrammes;
 
   /// Programmes the patient is already enrolled in from past visits.
-  /// These cards are shown in a distinct "enrolled" style and are not toggleable.
+  /// Cards show an "Enrolled" badge; they remain selectable for this visit.
   final Set<Programme> enrolledProgrammes;
 
   final bool isPW;
@@ -1916,9 +1946,11 @@ class _InlineServiceSelector extends StatelessWidget {
   }
 
   void _handleTap(BuildContext context, _ServiceCardDef card) {
-    // Enrolment is a hint (badge), not a lock — SK can opt a programme out
-    // of *this* visit. Only PW/Delivery unlock gates still block a tap.
-    if (_isLocked(card)) {
+    // Lock only blocks *adding* when the PW/Delivery gate is closed.
+    // Already-selected cards can always be deselected (e.g. enrolled PNC that
+    // was seeded incorrectly, or pathway ANC the SK does not want this visit).
+    final alreadySelected = _isCardSelected(card);
+    if (_isLocked(card) && !alreadySelected) {
       final hint = card.programme == Programme.anc
           ? TriageStrings.pwHint
           : TriageStrings.deliveryHint;

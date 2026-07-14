@@ -31,4 +31,24 @@ void main() {
       expect(adds, isEmpty);
     });
   });
+
+  group('ProgrammeGridSync.applicableEnrolledSeed', () {
+    test('pregnant visit keeps ANC/PW, drops historical PNC', () {
+      final seeded = ProgrammeGridSync.applicableEnrolledSeed(
+        enrolled: {Programme.anc, Programme.pnc, Programme.pw, Programme.ncd},
+        isPregnant: true,
+        isPostpartum: false,
+      );
+      expect(seeded, {Programme.anc, Programme.pw, Programme.ncd});
+    });
+
+    test('postpartum visit keeps PNC, drops ANC/PW', () {
+      final seeded = ProgrammeGridSync.applicableEnrolledSeed(
+        enrolled: {Programme.anc, Programme.pnc, Programme.pw},
+        isPregnant: false,
+        isPostpartum: true,
+      );
+      expect(seeded, {Programme.pnc});
+    });
+  });
 }
