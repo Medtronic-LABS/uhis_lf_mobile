@@ -188,6 +188,7 @@ class RiskScoringService {
           case Programme.cataract:
           case Programme.eyeCare:
           case Programme.anc:
+          case Programme.pw:
           case Programme.ncd:
           case Programme.unknown:
             break;

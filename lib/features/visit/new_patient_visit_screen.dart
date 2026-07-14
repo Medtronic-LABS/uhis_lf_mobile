@@ -10,7 +10,6 @@ import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/models/programme.dart';
 import '../../core/theme/app_theme.dart';
-import '../patient/enroll/pregnancy_registration_sheet.dart';
 import '../realtime_asr/chief_complaint_matcher.dart';
 import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
@@ -106,8 +105,9 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
       case _Svc.ncd:
         return Programme.ncd;
       case _Svc.general:
-      case _Svc.pw:
         return Programme.unknown;
+      case _Svc.pw:
+        return Programme.pw;
     }
   }
 
@@ -145,27 +145,17 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
 
   Future<void> _startVisit() async {
     if (_starting) return;
-
-    // PW-only: no programme selected — just register the pregnancy then return.
-    if (_pwSelected && _selectedSvcs.isEmpty) {
-      await PregnancyRegistrationSheet.show(
-        context,
-        patientId: widget.patientId,
-        patientName: widget.patientName ?? 'Patient',
-        patientAge: widget.patientAge,
-      );
-      if (mounted) context.pop();
-      return;
-    }
-
-    if (_selectedSvcs.isEmpty) return;
+    if (!_pwSelected && _selectedSvcs.isEmpty) return;
     setState(() => _starting = true);
 
     try {
-      final programmes = _selectedSvcs
-          .map(_toProgram)
-          .where((p) => p != Programme.unknown)
-          .toList();
+      // PW always goes first so pwProfile renders before ANC clinical sections.
+      final programmes = <Programme>[
+        if (_pwSelected) Programme.pw,
+        ..._selectedSvcs
+            .map(_toProgram)
+            .where((p) => p != Programme.unknown),
+      ];
       final programme = programmes.isNotEmpty ? programmes.first : Programme.unknown;
 
       // Pregnancy data (LMP / EDD / obstetric history) is collected inline

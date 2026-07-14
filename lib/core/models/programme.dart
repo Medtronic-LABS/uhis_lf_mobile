@@ -13,6 +13,9 @@
 enum Programme {
   imci,
   anc,
+  /// Standalone PW registration visit (PWPROFILE). Not a clinical ANC visit;
+  /// captures LMP, gravida, parity only. Subsequent ANC visits use [Programme.anc].
+  pw,
   pnc,
   ncd,
   tb,
@@ -31,6 +34,7 @@ enum Programme {
   static const Set<Programme> kPilotProgrammes = {
     Programme.imci,
     Programme.anc,
+    Programme.pw,
     Programme.pnc,
     Programme.ncd,
   };
@@ -56,9 +60,10 @@ enum Programme {
       case 'PREGNANCY':
       case 'PREGNANT':
       case 'EMTCT':
+        return Programme.anc;
       case 'PWPROFILE':
       case 'PW_PROFILE':
-        return Programme.anc;
+        return Programme.pw;
       case 'PNC':
       case 'POSTNATAL':
       // Expanded form-type names used by the unified Step 2 form
@@ -112,6 +117,8 @@ enum Programme {
         return 'IMCI';
       case Programme.anc:
         return 'ANC';
+      case Programme.pw:
+        return 'PWPROFILE';
       case Programme.pnc:
         return 'PNC';
       case Programme.ncd:
@@ -140,6 +147,9 @@ enum Programme {
         return Programme.imci;
       case 'ANC':
         return Programme.anc;
+      case 'PWPROFILE':
+      case 'PW_PROFILE':
+        return Programme.pw;
       case 'PNC':
         return Programme.pnc;
       case 'NCD':
@@ -167,6 +177,8 @@ enum Programme {
         return 'Child Visit';
       case Programme.anc:
         return 'ANC Visit';
+      case Programme.pw:
+        return 'PW Registration';
       case Programme.pnc:
         return 'PNC Visit';
       case Programme.ncd:

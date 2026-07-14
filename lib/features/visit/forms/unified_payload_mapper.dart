@@ -38,6 +38,13 @@ abstract final class UnifiedPayloadMapper {
   ) {
     final payloads = <ProgrammePayload>[];
 
+    if (activeFormTypes.contains('pwProfile')) {
+      payloads.add(ProgrammePayload(
+        assessmentType: 'PWPROFILE',
+        details: _toPwProfile(data),
+      ));
+    }
+
     if (activeFormTypes.contains('anc')) {
       payloads.add(ProgrammePayload(
         assessmentType: 'ANC',
@@ -282,6 +289,26 @@ abstract final class UnifiedPayloadMapper {
       if (vaccination.isNotEmpty) 'vaccinationAndSupplements': vaccination,
       if (birthPrep.isNotEmpty) 'ancServicesBirthPreparedness': birthPrep,
     };
+  }
+
+  // ── PWPROFILE ──────────────────────────────────────────────────────────────
+  // PW registration assessment — captures LMP, gravida, parity, living
+  // children, and obstetric history collected in pregnancyDetailsAndHistory.
+  // Sent as a separate assessment alongside ANC when both are selected.
+  static Map<String, dynamic> _toPwProfile(CanonicalVisitData d) {
+    final lmpStr = d.getValue('lmp') as String?;
+    // Server stores and returns LMP as epoch milliseconds.
+    final lmpMs = lmpStr != null
+        ? DateTime.tryParse(lmpStr)?.millisecondsSinceEpoch
+        : null;
+    return _compact({
+      if (lmpMs != null) 'lmpDate': lmpMs,
+      'gravida': d.getValue('gravida'),
+      'parity': d.getValue('parity'),
+      'livingChildren': d.getValue('livingChildren'),
+      'ageOfLastChild': d.getValue('ageOfLastChild'),
+      'pregnancyTest': d.getValue('pregnancyTest'),
+    });
   }
 
   // ── NCD ────────────────────────────────────────────────────────────────────

@@ -87,6 +87,7 @@ class SymptomCatalog {
       case Programme.imci:
         return imciSymptoms;
       case Programme.anc:
+      case Programme.pw:
         return ancSymptoms;
       case Programme.ncd:
         return ncdSymptoms;
@@ -329,6 +330,7 @@ class VitalCatalog {
         vitals.addAll(imciVitals);
         break;
       case Programme.anc:
+      case Programme.pw:
       case Programme.pnc:
         vitals.addAll(ancVitals);
         break;
