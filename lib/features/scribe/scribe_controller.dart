@@ -14,7 +14,6 @@ import 'form_field_schema_builder.dart';
 import 'models/ai_extracted_field.dart';
 import 'scribe_permission_service.dart';
 import 'scribe_session.dart';
-import 'soap_field_extractor.dart';
 
 /// Manages the full scribe lifecycle for one visit:
 /// permission → record → upload → poll → review → accept/reject.
@@ -163,36 +162,6 @@ class ScribeController extends ChangeNotifier {
       );
       notifyListeners();
     }
-  }
-
-  /// Start recording for form prefill mode.
-  ///
-  /// This extracts structured field values from the audio that can be
-  /// used to auto-populate form fields with AI-extracted values.
-  Future<void> startRecordingForFormPrefill({
-    String? patientId,
-    String? encounterId,
-    required List<FormFieldSchema> formSchema,
-    List<String> programmes = const [],
-  }) async {
-    debugPrint(
-      '[AIScribe] Starting form prefill recording for programmes: $programmes',
-    );
-    debugPrint(
-      '[AIScribe] Form schema has ${formSchema.length} fields: '
-      '${formSchema.map((f) => f.fieldId).join(', ')}',
-    );
-
-    _currentMode = ScribeMode.formPrefill;
-    _currentFormSchema = formSchema;
-    _currentProgrammes = programmes;
-    _currentSymptomCatalog = null;
-
-    await _startRecordingInternal(
-      patientId: patientId,
-      encounterId: encounterId,
-      mode: ScribeMode.formPrefill,
-    );
   }
 
   /// Start recording for triage mode.
@@ -883,60 +852,15 @@ class ScribeController extends ChangeNotifier {
               );
             }
 
-            // If we're in formPrefill mode client-side but backend returned SOAP,
-            // extract fields from SOAP and use the embedded flow
-            if (_currentMode == ScribeMode.formPrefill && soap != null) {
-              debugPrint(
-                '[AIScribe] Converting SOAP to form fields (backend fallback)',
-              );
-              final extractedFields = SoapFieldExtractor.extractFromSoap(soap);
-              debugPrint(
-                '[AIScribe] Extracted ${extractedFields.length} fields from SOAP:',
-              );
-              for (final f in extractedFields) {
-                debugPrint(
-                  '[AIScribe]   → ${f.fieldId}: ${f.value} '
-                  '(confidence=${(f.confidence * 100).toStringAsFixed(0)}%)',
-                );
-              }
-
-              _session = _session.copyWith(
-                state: ScribeState.fieldsPopulated,
-                noteId: result.noteId,
-                transcriptText: result.transcriptText,
-                soap: soap,
-                rationale: rationale,
-                formPrefillResult: FormPrefillResult(
-                  fields: extractedFields,
-                  unmappedFindings: [],
-                  transcriptText: result.transcriptText,
-                  noteId: result.noteId,
-                ),
-                fieldsJustPopulated: true,
-              );
-              debugPrint(
-                '[AIScribe] Fields populated inline from SOAP - ${extractedFields.length} fields ready',
-              );
-              notifyListeners();
-
-              // Clear the "just populated" flag after a delay
-              Future.delayed(const Duration(seconds: 5), () {
-                if (_session.fieldsJustPopulated) {
-                  _session = _session.copyWith(fieldsJustPopulated: false);
-                  notifyListeners();
-                }
-              });
-            } else {
-              // Standard SOAP mode - show review sheet
-              _session = _session.copyWith(
-                state: ScribeState.reviewReady,
-                noteId: result.noteId,
-                soap: soap,
-                transcriptText: result.transcriptText,
-                rationale: rationale,
-              );
-              notifyListeners();
-            }
+            // Standard SOAP mode - show review sheet
+            _session = _session.copyWith(
+              state: ScribeState.reviewReady,
+              noteId: result.noteId,
+              soap: soap,
+              transcriptText: result.transcriptText,
+              rationale: rationale,
+            );
+            notifyListeners();
           }
           break;
 

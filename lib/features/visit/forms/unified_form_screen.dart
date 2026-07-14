@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/clinical/assessment_thresholds.dart';
+import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_theme.dart';
 import '../widgets/form_fields/radio_form_field.dart';
@@ -298,32 +299,34 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             // live-first mode. When the programme mix supports auto-fill
             // (NCD/ANC), extractions come back as form_fill and are written
             // straight into the form through the validated prefill gate.
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.xxxl, AppSpacing.xl, AppSpacing.xxxl, 0),
-              child: AiScribeBanner(
-                encounterId: notifier.encounterId,
-                patientId: notifier.patientId,
-                isFemale: widget.activeFormTypes.contains('anc') ||
-                    widget.activeFormTypes.contains('pnc'),
-                tapStartsLiveAsr: true,
-                assessmentType: FormFieldSchemaBuilder.assessmentTypeFor(
-                    widget.activeFormTypes),
-                onFormFill: (fill) {
-                  final rejected = notifier.applyAiPrefill(
-                    fill.fields.where((f) => f.value != null).toList(),
-                    fieldDefs: _config!.fields,
-                  );
-                  if (rejected.isNotEmpty) {
-                    debugPrint(
-                        '[Step2ASR] rejected: ${rejected.join(' | ')}');
-                  }
-                },
-                // VisitFormScreen watches ScribeController state and auto-opens
-                // the SOAP review sheet when reviewReady — no action needed here.
-                onReviewReady: (_) {},
+            if (AppConfig.scribeEnabled)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.xxxl, AppSpacing.xl, AppSpacing.xxxl, 0),
+                child: AiScribeBanner(
+                  encounterId: notifier.encounterId,
+                  patientId: notifier.patientId,
+                  isFemale: widget.activeFormTypes.contains('anc') ||
+                      widget.activeFormTypes.contains('pnc'),
+                  tapStartsLiveAsr: true,
+                  assessmentType: FormFieldSchemaBuilder.assessmentTypeFor(
+                      widget.activeFormTypes),
+                  onFormFill: (fill) {
+                    final rejected = notifier.applyAiPrefill(
+                      fill.fields.where((f) => f.value != null).toList(),
+                      fieldDefs: _config!.fields,
+                    );
+                    if (rejected.isNotEmpty) {
+                      debugPrint(
+                          '[Step2ASR] rejected: ${rejected.join(' | ')}');
+                    }
+                  },
+                  // VisitFormScreen watches ScribeController state and
+                  // auto-opens the SOAP review sheet when reviewReady — no
+                  // action needed here.
+                  onReviewReady: (_) {},
+                ),
               ),
-            ),
             // ── Assessment form sections + submit button ────────────────────
             Expanded(
               child: Form(
