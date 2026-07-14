@@ -8,6 +8,7 @@ import '../../../core/clinical/referral_evaluator.dart';
 import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
+import '../../../core/models/json_read.dart';
 import '../../scribe/models/ai_extracted_field.dart';
 import '../assessment_repository.dart';
 import '../models/anc_assessment.dart';
@@ -198,62 +199,69 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// Load LMP and EDD for this ANC visit.
   ///
   /// Priority order:
-  /// 1. `lmpDate` / `gestationalWeeks` in patient rawJson (from bulk sync).
-  /// 2. LMP derived from server-synced past ANC assessments via
+  /// 1. Pregnancy snapshot (`lmp_date` / `edd_date`) written at sync / enroll.
+  /// 2. LMP from server-synced past ANC assessments via
   ///    [AssessmentRepository.lmpDateFromHistory].
+  /// 3. `lmpDate` / `gestationalWeeks` in patient rawJson (bulk member DTO).
   Future<void> loadPregnancyData() async {
     try {
-      // ── 1. Try patient rawJson ─────────────────────────────────────────────
-      final patient = await _patientDao.byId(_patientId);
-      if (patient == null) {
-        debugPrint('[UnifiedForm] pregnancy data: patient $_patientId not found in DB');
-      }
-      debugPrint('[UnifiedForm] pregnancy data: rawJson length=${patient?.rawJson.length ?? 0}');
-
       DateTime? lmp;
+      DateTime? edd;
       int? weeks;
 
-      if (patient != null) {
-        try {
-          final json = jsonDecode(patient.rawJson) as Map<String, dynamic>;
-          debugPrint('[UnifiedForm] pregnancy data: lmpDate=${json['lmpDate']} '
-              'gestationalWeeks=${json['gestationalWeeks']}');
-          if (json['lmpDate'] != null) {
-            lmp = DateTime.tryParse(json['lmpDate'] as String);
-            if (lmp != null) weeks = DateTime.now().difference(lmp).inDays ~/ 7;
-          } else if (json['gestationalWeeks'] != null) {
-            weeks = (json['gestationalWeeks'] as num).toInt();
-            lmp = DateTime.now().subtract(Duration(days: weeks * 7));
-          }
-        } catch (_) {}
+      // ── 1. Prefer pregnancy snapshot (stable per-patient store) ───────────
+      final snap = await _pregnancySnapshotDao.byPatient(_patientId);
+      debugPrint('[UnifiedForm] pregnancy data: snapshot lmpDate=${snap?.lmpDate} '
+          'eddDate=${snap?.eddDate}');
+      if (snap?.lmpDate != null) {
+        lmp = DateTime.fromMillisecondsSinceEpoch(snap!.lmpDate!);
+        weeks = DateTime.now().difference(lmp).inDays ~/ 7;
+      } else if (snap?.eddDate != null) {
+        edd = DateTime.fromMillisecondsSinceEpoch(snap!.eddDate!);
+        lmp = edd.subtract(const Duration(days: 280));
+        weeks = DateTime.now().difference(lmp).inDays ~/ 7;
+      }
+      if (snap?.eddDate != null) {
+        edd ??= DateTime.fromMillisecondsSinceEpoch(snap!.eddDate!);
       }
 
       // ── 2. Fallback: scan server-synced ANC assessment history ────────────
       if (lmp == null) {
-        debugPrint('[UnifiedForm] pregnancy data: rawJson had no LMP — '
-            'trying assessment history fallback');
+        debugPrint('[UnifiedForm] pregnancy data: snapshot had no LMP — '
+            'trying assessment history');
         lmp = await _assessmentRepo.lmpDateFromHistory(_patientId);
         if (lmp != null) weeks = DateTime.now().difference(lmp).inDays ~/ 7;
       }
 
-      // ── 3. Fallback: LMP / EDD from pregnancy snapshot stored at sync time ──
-      DateTime? edd;
+      // ── 3. Fallback: patient rawJson (ISO string or epoch ms) ─────────────
       if (lmp == null) {
-        debugPrint('[UnifiedForm] pregnancy data: history had no LMP — '
-            'trying pregnancy snapshot');
-        final snap = await _pregnancySnapshotDao.byPatient(_patientId);
-        debugPrint('[UnifiedForm] pregnancy data: snapshot lmpDate=${snap?.lmpDate} eddDate=${snap?.eddDate}');
-        if (snap?.lmpDate != null) {
-          lmp = DateTime.fromMillisecondsSinceEpoch(snap!.lmpDate!);
-          weeks = DateTime.now().difference(lmp).inDays ~/ 7;
-          debugPrint('[UnifiedForm] pregnancy data: from snapshot LMP=$lmp weeks=$weeks');
-        } else if (snap?.eddDate != null) {
-          edd = DateTime.fromMillisecondsSinceEpoch(snap!.eddDate!);
-          lmp = edd.subtract(const Duration(days: 280));
-          weeks = DateTime.now().difference(lmp).inDays ~/ 7;
-          debugPrint('[UnifiedForm] pregnancy data: derived from snapshot EDD=$edd lmp=$lmp weeks=$weeks');
+        final patient = await _patientDao.byId(_patientId);
+        if (patient == null) {
+          debugPrint(
+              '[UnifiedForm] pregnancy data: patient $_patientId not found in DB');
+        }
+        if (patient != null) {
+          try {
+            final json = jsonDecode(patient.rawJson) as Map<String, dynamic>;
+            debugPrint(
+                '[UnifiedForm] pregnancy data: rawJson lmpDate=${json['lmpDate']} '
+                'gestationalWeeks=${json['gestationalWeeks']}');
+            lmp = JsonRead.firstDateTime(json, const [
+              'lmpDate',
+              'lastMenstrualPeriod',
+              'lastMenstrualPeriodDate',
+              'lmp',
+            ]);
+            if (lmp != null) {
+              weeks = DateTime.now().difference(lmp).inDays ~/ 7;
+            } else if (json['gestationalWeeks'] != null) {
+              weeks = (json['gestationalWeeks'] as num).toInt();
+              lmp = DateTime.now().subtract(Duration(days: weeks * 7));
+            }
+          } catch (_) {}
         }
       }
+
       edd ??= lmp?.add(const Duration(days: 280));
       _lmpDate = lmp;
       _eddDate = edd;

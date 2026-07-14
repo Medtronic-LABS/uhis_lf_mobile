@@ -97,6 +97,26 @@ abstract final class JsonRead {
     return null;
   }
 
+  /// Tolerant [DateTime] from a single JSON value (ISO string or epoch ms).
+  ///
+  /// Prefer this over `DateTime.tryParse(v as String)` — backends often send
+  /// LMP / visit dates as epoch ints, which would throw on the String cast.
+  static DateTime? asDateTime(Object? v) {
+    if (v == null) return null;
+    if (v is DateTime) return v;
+    final ms = epochMillis({'_': v}, const ['_']);
+    return ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms);
+  }
+
+  /// First parseable [DateTime] among [keys] (ISO string or epoch ms).
+  static DateTime? firstDateTime(Map json, List<String> keys) {
+    for (final k in keys) {
+      final d = asDateTime(json[k]);
+      if (d != null) return d;
+    }
+    return null;
+  }
+
   /// Compact JSON encoding of [json] for the `raw_json` column.
   static String encode(Map json) => jsonEncode(json);
 }

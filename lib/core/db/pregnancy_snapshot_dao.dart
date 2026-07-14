@@ -82,11 +82,18 @@ class PregnancySnapshotDao {
   /// that has a stored snapshot. Callers should treat missing keys as
   /// [PregnancyFacts.empty].
   Future<Map<String, PregnancyFacts>> getAll() async {
+    final rows = await getAllRows();
+    return {for (final e in rows.entries) e.key: e.value.facts};
+  }
+
+  /// Full snapshot rows keyed by patient ID (includes `lmp_date` / `edd_date`).
+  /// Used by sync to preserve dates the server omits on re-write.
+  Future<Map<String, PregnancySnapshotRow>> getAllRows() async {
     final rows = await _db.db.query(AppDatabase.tablePregnancySnapshot);
-    final out = <String, PregnancyFacts>{};
+    final out = <String, PregnancySnapshotRow>{};
     for (final r in rows) {
       final row = PregnancySnapshotRow.fromDb(r);
-      out[row.patientId] = row.facts;
+      out[row.patientId] = row;
     }
     return out;
   }
@@ -114,5 +121,37 @@ class PregnancySnapshotDao {
 
   Future<void> clearAll() async {
     await _db.db.delete(AppDatabase.tablePregnancySnapshot);
+  }
+
+  /// Merge server [incoming] rows with [prior] local snapshots.
+  ///
+  /// - Incoming facts always win.
+  /// - Null `lmpDate` / `eddDate` on incoming keeps the prior value.
+  /// - Prior rows for patients absent from [incoming] are kept (local enroll).
+  static List<PregnancySnapshotRow> mergePreservingDates({
+    required List<PregnancySnapshotRow> incoming,
+    required Map<String, PregnancySnapshotRow> prior,
+  }) {
+    final incomingIds = <String>{};
+    final merged = <PregnancySnapshotRow>[];
+    for (final row in incoming) {
+      incomingIds.add(row.patientId);
+      final prev = prior[row.patientId];
+      merged.add(prev == null
+          ? row
+          : PregnancySnapshotRow(
+              patientId: row.patientId,
+              facts: row.facts,
+              updatedAt: row.updatedAt,
+              eddDate: row.eddDate ?? prev.eddDate,
+              lmpDate: row.lmpDate ?? prev.lmpDate,
+            ));
+    }
+    for (final entry in prior.entries) {
+      if (!incomingIds.contains(entry.key)) {
+        merged.add(entry.value);
+      }
+    }
+    return merged;
   }
 }
