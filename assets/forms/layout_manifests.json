@@ -542,6 +542,37 @@
     "clinicalWorkflowId": 4,
     "sections": [
       {
+        "sectionId": "pregnancyDetailsAndHistory",
+        "title": "Pregnancy Details & History",
+        "fieldRefs": [
+          {
+            "isMandatory": true,
+            "id": "lmp"
+          },
+          "EDD",
+          "gestationalWeek",
+          {
+            "isMandatory": false,
+            "id": "pregnancyTest"
+          },
+          {
+            "inputType": 2,
+            "isMandatory": false,
+            "id": "gravida"
+          },
+          {
+            "inputType": 2,
+            "isMandatory": false,
+            "id": "parity"
+          },
+          {
+            "inputType": 2,
+            "isMandatory": false,
+            "id": "livingChildren"
+          }
+        ]
+      },
+      {
         "sectionId": "ancSpecificVitals",
         "title": "Clinical Examination",
         "fieldRefs": [

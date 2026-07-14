@@ -239,6 +239,17 @@ class UnifiedFormNotifier extends ChangeNotifier {
       _eddDate = edd;
       _gestationalWeeks = weeks;
       debugPrint('[UnifiedForm] pregnancy data: resolved lmp=$lmp weeks=$weeks edd=$edd');
+      // Seed form data fields so InfoLabel tiles show on first render.
+      if (lmp != null) {
+        _data = _data.setValue('lmp', lmp.toIso8601String().substring(0, 10));
+      }
+      if (edd != null) {
+        _data = _data.setValue('EDD', _fmtDate(edd));
+      }
+      if (weeks != null && lmp != null) {
+        final d = DateTime.now().difference(lmp).inDays % 7;
+        _data = _data.setValue('gestationalWeek', '$weeks wks $d d');
+      }
       notifyListeners();
     } catch (e) {
       debugPrint('[UnifiedForm] pregnancy data load failed: $e');
@@ -261,6 +272,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
     if (fieldId == 'height' || fieldId == 'weight') {
       _recomputeBmi();
     }
+    if (fieldId == 'lmp') {
+      _recomputePregnancyDates();
+    }
     notifyListeners();
     _saveDraft();
   }
@@ -274,27 +288,47 @@ class UnifiedFormNotifier extends ChangeNotifier {
     }
   }
 
-  /// Update LMP picked inline in the ANC form, recompute EDD + GA, and persist.
-  Future<void> updateLmpDate(DateTime lmp) async {
+  /// Triggered when the `lmp` field changes. Updates EDD and gestationalWeek
+  /// in [_data] so the InfoLabel tiles refresh, syncs notifier pregnancy state,
+  /// and persists to [PregnancySnapshotDao] asynchronously.
+  void _recomputePregnancyDates() {
+    final lmpStr = _data.getValue('lmp') as String?;
+    if (lmpStr == null || lmpStr.isEmpty) return;
+    final lmp = DateTime.tryParse(lmpStr);
+    if (lmp == null) return;
     final edd = lmp.add(const Duration(days: 280));
-    final weeks = DateTime.now().difference(lmp).inDays ~/ 7;
+    final totalDays = DateTime.now().difference(lmp).inDays;
+    final weeks = totalDays ~/ 7;
+    final days = totalDays % 7;
     _lmpDate = lmp;
     _eddDate = edd;
     _gestationalWeeks = weeks;
-    notifyListeners();
-    try {
-      final existing = await _pregnancySnapshotDao.byPatient(_patientId);
-      await _pregnancySnapshotDao.upsertOne(PregnancySnapshotRow(
+    _data = _data.setValue('EDD', _fmtDate(edd));
+    _data = _data.setValue('gestationalWeek', '$weeks wks $days d');
+    _persistLmpAsync(lmp, edd);
+  }
+
+  void _persistLmpAsync(DateTime lmp, DateTime edd) {
+    _pregnancySnapshotDao.byPatient(_patientId).then((existing) {
+      return _pregnancySnapshotDao.upsertOne(PregnancySnapshotRow(
         patientId: _patientId,
         facts: existing?.facts ?? PregnancyFacts.empty,
         lmpDate: lmp.millisecondsSinceEpoch,
         eddDate: edd.millisecondsSinceEpoch,
         updatedAt: DateTime.now().millisecondsSinceEpoch,
       ));
-    } catch (e) {
-      debugPrint('[UnifiedForm] updateLmpDate persist failed: $e');
-    }
+    }).catchError((Object e) {
+      debugPrint('[UnifiedForm] persist LMP failed: $e');
+    });
   }
+
+  static const _fmtMonths = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  static String _fmtDate(DateTime d) =>
+      '${d.day} ${_fmtMonths[d.month - 1]} ${d.year}';
 
   static double? _toDouble(dynamic v) {
     if (v is double) return v;
