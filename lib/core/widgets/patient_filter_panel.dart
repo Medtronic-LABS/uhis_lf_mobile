@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../constants/app_strings.dart';
+import '../models/dashboard_tier.dart';
 import '../models/mission_queue_item.dart';
 import '../models/programme.dart';
 import '../theme/app_theme.dart';
@@ -115,8 +116,12 @@ extension NeedFilterHelpers on NeedFilter {
         return item.priority == MissionPriority.critical ||
             item.priority == MissionPriority.high;
       case NeedFilter.ancMnch:
-        return item.programmes
-            .any((p) => p == Programme.anc || p == Programme.pnc);
+        // PWPROFILE is pregnancy enrolment (anc+pw flow) — must match ANC/MNCH
+        // or PW-only patients never appear when the SK selects this chip (#158).
+        return item.programmes.any(
+          (p) =>
+              p == Programme.anc || p == Programme.pnc || p == Programme.pw,
+        );
       case NeedFilter.childImmunisation:
         // PILOT-SCOPE v1: imci only (epi not in pilot).
         return item.programmes.contains(Programme.imci);
@@ -146,7 +151,9 @@ Set<NeedFilter> computeAvailableNeeds(List<MissionQueueItem> items) {
         item.priority == MissionPriority.high) {
       available.add(NeedFilter.highRisk);
     }
-    if (item.programmes.any((p) => p == Programme.anc || p == Programme.pnc)) {
+    if (item.programmes.any(
+      (p) => p == Programme.anc || p == Programme.pnc || p == Programme.pw,
+    )) {
       available.add(NeedFilter.ancMnch);
     }
     if (item.programmes.contains(Programme.imci)) {
@@ -174,6 +181,71 @@ Set<NeedFilter> computeAvailableNeeds(List<MissionQueueItem> items) {
     }
   }
   return available;
+}
+
+/// Programme-category need chips (ANC/MNCH, child, NCD, eye).
+bool isProgrammeNeedFilter(NeedFilter need) {
+  switch (need) {
+    case NeedFilter.ancMnch:
+    case NeedFilter.childImmunisation:
+    case NeedFilter.ncd:
+    case NeedFilter.eyeCare:
+      return true;
+    case NeedFilter.highRisk:
+    case NeedFilter.missedFollowUp:
+    case NeedFilter.pendingReferral:
+    case NeedFilter.homeVisit:
+    case NeedFilter.facilityReferral:
+      return false;
+  }
+}
+
+/// Apply village / need / search filters to a mission queue.
+///
+/// When a programme need chip is selected, [upcoming] tier patients are kept
+/// so every enrolled patient can surface (#158). Otherwise upcoming is dropped
+/// — the unfiltered dashboard only shows Today / Overdue / This week.
+List<MissionQueueItem> filterMissionQueue({
+  required List<MissionQueueItem> queue,
+  String? village,
+  Set<NeedFilter> selectedNeeds = const {},
+  String searchQuery = '',
+}) {
+  var result = List<MissionQueueItem>.from(queue);
+
+  final programmeFilterActive =
+      selectedNeeds.any(isProgrammeNeedFilter);
+  if (!programmeFilterActive) {
+    result = result
+        .where((i) => i.tier != DashboardTier.upcoming)
+        .toList(growable: false);
+  }
+
+  final chipVillage = village?.trim();
+  if (chipVillage != null && chipVillage.isNotEmpty) {
+    result =
+        result.where((i) => i.village?.trim() == chipVillage).toList();
+  }
+
+  if (selectedNeeds.isNotEmpty) {
+    result = result
+        .where((item) => selectedNeeds.any((need) => need.matches(item)))
+        .toList();
+  }
+
+  final q = searchQuery.trim().toLowerCase();
+  if (q.isNotEmpty) {
+    result = result
+        .where(
+          (i) =>
+              i.patientName.toLowerCase().contains(q) ||
+              (i.phoneNumber?.contains(q) ?? false) ||
+              (i.nid?.toLowerCase().contains(q) ?? false),
+        )
+        .toList();
+  }
+
+  return result;
 }
 
 /// Village option: [value] used for selection logic, [label] shown in the tab.
