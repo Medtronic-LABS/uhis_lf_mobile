@@ -3581,12 +3581,10 @@ abstract final class SymptomPickerStrings {
   static String servicesOpeningStatus(int count, List<String> labels) {
     if (labels.isEmpty) return '';
     final caps = labels.map((l) => l.toUpperCase()).toList();
-    if (caps.length == 1) {
-      return 'This visit will cover ${caps[0]} screening';
-    }
-    final primary = caps.first;
-    final rest = caps.sublist(1).join(', ');
-    return 'This visit will cover $primary screening in addition to the $rest care';
+    if (caps.length == 1) return 'This visit will cover ${caps[0]} screening';
+    final joined = caps.sublist(0, caps.length - 1).join(', ') +
+        ' & ${caps.last}';
+    return 'This visit will cover $joined';
   }
 
   // ── Other symptoms free-text ─────────────────────────────────────────────

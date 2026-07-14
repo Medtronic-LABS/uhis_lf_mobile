@@ -261,6 +261,10 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   late Set<Programme> _confirmedProgrammes =
       widget.seedProgrammes.isNotEmpty ? {...widget.seedProgrammes} : const <Programme>{};
 
+  /// Live programmes from Step 1 service card selection — drives header badge
+  /// before the SK advances. Updated on every card toggle via [onProgrammesLive].
+  Set<Programme> _step1LiveProgrammes = {};
+
   /// Set when Step 3 completes — handed to Step 4 for the recommendation card.
   Programme _primaryProgramme = Programme.unknown;
   bool _referralRecommended = false;
@@ -332,9 +336,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
                   primaryProgramme: _pathways.isNotEmpty
                       ? _pathways.first.programme
                       : _primaryProgramme,
-                  activeFormTypes: _confirmedProgrammes
-                      .map((p) => p.name)
-                      .toList(),
+                  activeFormTypes: _step == 0
+                      ? _step1LiveProgrammes.map((p) => p.name).toList()
+                      : _confirmedProgrammes.map((p) => p.name).toList(),
                   onBack: () {
                     if (_step > 0) {
                       setState(() => _step -= 1);
@@ -385,6 +389,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           // override the pathway-derived set with the SK's explicit selection.
           onProgrammesSelected: (programmes) {
             _confirmedProgrammes = programmes;
+          },
+          onProgrammesLive: (programmes) {
+            setState(() => _step1LiveProgrammes = programmes);
           },
           onAdvance: (pathways) {
             _pathways = pathways;
@@ -647,6 +654,7 @@ class _Step1Symptoms extends StatelessWidget {
     this.patientGender,
     this.origin,
     this.onProgrammesSelected,
+    this.onProgrammesLive,
   });
 
   final String encounterId;
@@ -669,6 +677,9 @@ class _Step1Symptoms extends StatelessWidget {
   /// the inline eligible-services grid. Absent for child visits (under-5).
   final ValueChanged<Set<Programme>>? onProgrammesSelected;
 
+  /// Fired on every service card toggle — drives the Step 1 header badge live.
+  final ValueChanged<Set<Programme>>? onProgrammesLive;
+
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider<ScribeController>(
@@ -688,6 +699,7 @@ class _Step1Symptoms extends StatelessWidget {
         onAdvance: onAdvance,
         onSymptomsConfirmed: onSymptomsConfirmed,
         onProgrammesSelected: onProgrammesSelected,
+        onProgrammesLive: onProgrammesLive,
       ),
     );
   }

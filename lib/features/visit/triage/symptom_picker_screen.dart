@@ -45,6 +45,7 @@ class SymptomPickerScreen extends StatefulWidget {
     this.onAdvance,
     this.onSymptomsConfirmed,
     this.onProgrammesSelected,
+    this.onProgrammesLive,
   });
 
   final String encounterId;
@@ -81,6 +82,10 @@ class SymptomPickerScreen extends StatefulWidget {
   /// the inline eligible-services grid. Only called for adult patients —
   /// child visits (under-5) skip the grid and use the vaccination path.
   final ValueChanged<Set<Programme>>? onProgrammesSelected;
+
+  /// Fired on every service-card toggle so the host can update the visit
+  /// header badge in real time without waiting for the SK to tap Continue.
+  final ValueChanged<Set<Programme>>? onProgrammesLive;
 
   @override
   State<SymptomPickerScreen> createState() => _SymptomPickerScreenState();
@@ -208,6 +213,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         _isLoading = false;
       });
       debugPrint('[SymptomPicker] Load complete — pathway programmes: ${pathwaySet.map((p) => p.name).join(', ')}');
+      _fireProgrammesLive();
       _startBriefingFetch(ctx);
     } catch (e, stack) {
       debugPrint('[SymptomPicker] ERROR: $e');
@@ -323,6 +329,10 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     }
   }
 
+  void _fireProgrammesLive() {
+    widget.onProgrammesLive?.call(Set.unmodifiable(_selectedProgrammes));
+  }
+
   /// Keeps [_selectedProgrammes] and [_pathwayActivatedProgrammes] in sync
   /// with the pathway engine whenever symptoms change (AI Scribe pre-tick or
   /// manual selection). Only ever adds — never removes a programme the SK
@@ -338,6 +348,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         _selectedProgrammes.addAll(unseen);
         _pathwayActivatedProgrammes.addAll(unseen);
       });
+      _fireProgrammesLive();
     }
   }
 
@@ -722,18 +733,21 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                               _selectedProgrammes.remove(programme);
                             }
                           });
+                          _fireProgrammesLive();
                         },
                         onPWToggle: (selected) {
                           setState(() {
                             _isPW = selected;
                             if (!selected) _selectedProgrammes.remove(Programme.anc);
                           });
+                          _fireProgrammesLive();
                         },
                         onDeliveryToggle: (selected) {
                           setState(() {
                             _isDelivery = selected;
                             if (!selected) _selectedProgrammes.remove(Programme.pnc);
                           });
+                          _fireProgrammesLive();
                         },
                       ),
                     ),
@@ -746,7 +760,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (vm.activatedPathways.isNotEmpty)
+                        if (_selectedProgrammes.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 10),
                             child: Column(
@@ -754,9 +768,9 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                               children: [
                                 Text(
                                   SymptomPickerStrings.servicesOpeningStatus(
-                                    vm.activatedPathways.length,
-                                    vm.activatedPathways
-                                        .map((p) => p.programme.wireTag)
+                                    _selectedProgrammes.length,
+                                    _selectedProgrammes
+                                        .map((p) => p.wireTag)
                                         .toList(),
                                   ),
                                   style: const TextStyle(
@@ -765,8 +779,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                                     color: AppColors.navy,
                                   ),
                                 ),
-                                if (vm.scribePreTickedSymptoms.isNotEmpty ||
-                                    vm.activatedPathways.isNotEmpty)
+                                if (vm.activatedPathways.isNotEmpty)
                                   const Padding(
                                     padding: EdgeInsets.only(top: 2),
                                     child: Row(
