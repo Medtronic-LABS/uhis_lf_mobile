@@ -158,9 +158,10 @@ class VitalsRepository extends ApiRepository {
     final stripped = _bareId(patientId);
     final out = <VitalReading>[];
     try {
-      final rows = await encDao.recentForPatient(stripped, limit: 20);
+      final rows =
+          await encDao.recentWithVitalsForPatient(stripped, limit: 20);
       for (final row in rows) {
-        final m = row.vitalsData;
+        final m = _flattenVitalsMap(row.vitalsData);
         if (m == null || m.isEmpty) continue;
         final ts = DateTime.fromMillisecondsSinceEpoch(
             row.completedAt ?? row.startedAt);
@@ -345,7 +346,8 @@ class VitalsRepository extends ApiRepository {
     final dao = _encounters;
     if (dao == null) return const [];
     final stripped = _bareId(patientId);
-    final rows = await dao.recentForPatient(stripped, limit: limit);
+    final rows =
+        await dao.recentWithVitalsForPatient(stripped, limit: limit);
     return rows.map((r) => r.id).where((id) => id.isNotEmpty).toList();
   }
 
@@ -362,9 +364,10 @@ class VitalsRepository extends ApiRepository {
     final stripped = _bareId(patientId);
     final result = <VisitVitals>[];
     try {
-      final rows = await encDao.recentForPatient(stripped, limit: limit);
+      final rows =
+          await encDao.recentWithVitalsForPatient(stripped, limit: limit);
       for (final row in rows) {
-        final m = row.vitalsData;
+        final m = _flattenVitalsMap(row.vitalsData);
         if (m == null || m.isEmpty) continue;
         final ts = DateTime.fromMillisecondsSinceEpoch(
             row.completedAt ?? row.startedAt);
@@ -446,6 +449,20 @@ class VitalsRepository extends ApiRepository {
       debugPrint('[VitalsRepository] recentByVisit failed: $e');
     }
     return result;
+  }
+
+  /// Normalise vitals JSON: merge nested `vitals` / `vitalSigns` maps into a
+  /// flat key space so readers can use `systolic` / `weight` consistently.
+  static Map<String, dynamic>? _flattenVitalsMap(Map<String, dynamic>? raw) {
+    if (raw == null || raw.isEmpty) return raw;
+    final out = Map<String, dynamic>.from(raw);
+    for (final key in const ['vitals', 'vitalSigns', 'observations']) {
+      final nested = raw[key];
+      if (nested is Map) {
+        out.addAll(Map<String, dynamic>.from(nested));
+      }
+    }
+    return out;
   }
 
 }

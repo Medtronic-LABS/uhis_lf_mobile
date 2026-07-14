@@ -186,6 +186,10 @@ class EncounterDao {
   }
 
   /// Get recent encounters for a patient, ordered by most recent first.
+  ///
+  /// Restricted to [EncounterStatus.completed] — use
+  /// [recentWithVitalsForPatient] when reading vitals (sync seeds `synced`;
+  /// the vitals step writes `vitalsComplete`).
   Future<List<EncounterRow>> recentForPatient(
     String patientId, {
     int limit = 10,
@@ -195,6 +199,33 @@ class EncounterDao {
       where: 'patient_id = ? AND status = ?',
       whereArgs: [patientId, EncounterStatus.completed.name],
       orderBy: 'started_at DESC',
+      limit: limit,
+    );
+    return rows.map(EncounterRow.fromDb).toList();
+  }
+
+  /// Encounters with a non-empty `vitals_json` blob for [patientId].
+  ///
+  /// Includes [EncounterStatus.completed], [EncounterStatus.synced], and
+  /// [EncounterStatus.vitalsComplete] — the statuses that actually carry
+  /// captured vitals after a visit or assessment-history sync seed.
+  Future<List<EncounterRow>> recentWithVitalsForPatient(
+    String patientId, {
+    int limit = 10,
+  }) async {
+    final rows = await _db.db.query(
+      AppDatabase.tableEncounters,
+      where: 'patient_id = ? '
+          'AND vitals_json IS NOT NULL AND vitals_json != ? '
+          'AND status IN (?, ?, ?)',
+      whereArgs: [
+        patientId,
+        '',
+        EncounterStatus.completed.name,
+        EncounterStatus.synced.name,
+        EncounterStatus.vitalsComplete.name,
+      ],
+      orderBy: 'COALESCE(completed_at, started_at) DESC',
       limit: limit,
     );
     return rows.map(EncounterRow.fromDb).toList();

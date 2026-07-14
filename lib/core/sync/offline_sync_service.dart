@@ -730,11 +730,17 @@ class OfflineSyncService extends ChangeNotifier {
     }
 
     // Mission Dashboard side tables (schema v8). Replace-then-write so a
-    // re-sync drops stale per-patient flags.
+    // re-sync drops stale per-patient flags — but preserve LMP/EDD (and
+    // local-only enroll rows) when the server omits dates or drops a row.
     if (_pregnancySnapshot != null) {
+      final prior = await _pregnancySnapshot.getAllRows();
+      final merged = PregnancySnapshotDao.mergePreservingDates(
+        incoming: pregnancyRows,
+        prior: prior,
+      );
       await _pregnancySnapshot.clearAll();
-      if (pregnancyRows.isNotEmpty) {
-        await _pregnancySnapshot.upsertMany(pregnancyRows);
+      if (merged.isNotEmpty) {
+        await _pregnancySnapshot.upsertMany(merged);
       }
     }
     if (_treatmentPresence != null) {
