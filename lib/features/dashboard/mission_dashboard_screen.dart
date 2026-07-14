@@ -19,9 +19,11 @@ import '../../core/db/household_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/local_dashboard_repository.dart';
+import '../../core/debug/console_log.dart';
 import '../../core/models/dashboard_tier.dart';
 import '../../core/models/mission_queue_item.dart';
 import '../../core/models/programme.dart';
+import '../../core/models/risk.dart';
 import '../../core/widgets/patient_filter_panel.dart';
 import '../referral/referral_repository.dart';
 import 'widgets/dashboard_search_field.dart';
@@ -432,6 +434,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// prototype's "Visit now" — single tap drops the SK into triage.
   /// Falls back to opening the patient detail when the visit can't start.
   Future<void> _startVisitFromQueue(MissionQueueItem item) async {
+    assert(() {
+      final modTag = item.modifier == Modifier.none ? '' : item.modifier.wireTag;
+      final progs = item.programmes.map((p) => p.name).join(',');
+      final overdueTag = (item.daysOverdue != null && item.daysOverdue! > 0)
+          ? ' | overdue: ${item.daysOverdue}d'
+          : '';
+      final driversTag =
+          item.drivers.isNotEmpty ? ' | drivers: ${item.drivers.join(",")}' : '';
+      ConsoleLog.banner(
+        '[Patient selected] [${item.band.wireTag}$modTag] ${item.patientName}'
+        ' | prog: $progs | tier: ${item.tier.name}$overdueTag$driversTag',
+      );
+      return true;
+    }());
     final patientId = item.patientId;
     if (patientId != null && _completedIds.contains(patientId)) {
       ScaffoldMessenger.of(context).showSnackBar(
