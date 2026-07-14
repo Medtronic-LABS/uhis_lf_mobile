@@ -2132,20 +2132,6 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             const SizedBox(height: 12),
           ],
 
-          // ── Gestational age card (ANC / PNC patients only) ─────────
-          // Guard on confirmedProgrammes: lmpMs may exist in DB for patients
-          // who had prior ANC visits, causing the card to appear on NCD visits.
-          if ((widget.gestationalWeeks != null || widget.lmpMs != null) &&
-              (widget.confirmedProgrammes.contains(Programme.anc) ||
-               widget.confirmedProgrammes.contains(Programme.pnc))) ...[
-            _GestationalAgeCard(
-              gestationalWeeks: widget.gestationalWeeks,
-              lmpMs: widget.lmpMs,
-              eddMs: widget.eddMs,
-            ),
-            const SizedBox(height: 12),
-          ],
-
           // ── 3. AI Counselling Guide (WhatsApp preview) ──────────────
           if (naba.whatsappSummary != null) ...[
             _AiCounsellingCard(
