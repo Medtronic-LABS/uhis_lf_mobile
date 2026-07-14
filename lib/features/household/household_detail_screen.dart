@@ -861,7 +861,7 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
         ? member.patientId!
         : member.id;
     context.push(
-      '/patients/$navId',
+      '/patients/$navId?origin=household',
       extra: {
         'id': member.id,
         'referenceId': member.referenceId,

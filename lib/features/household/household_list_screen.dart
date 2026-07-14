@@ -918,7 +918,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen>
     }
     // Push directly to /patients/:id — the /patient/:id redirect drops extra.
     context.push(
-      '/patients/$id',
+      '/patients/$id?origin=household',
       extra: {
         'id': member.id,
         'name': member.name,
