@@ -543,10 +543,24 @@ class TriageViewModel extends ChangeNotifier {
       }
       switch (AiScribeTriageVocab.categoryOf(code)) {
         case SymptomCategory.general:
-          final isNcdOnly = enrolled.isNotEmpty &&
-              enrolled.every((p) => p == Programme.ncd);
-          final isAncOnly = enrolled.isNotEmpty &&
-              enrolled.every((p) => p == Programme.anc);
+          // Only programmes with dedicated symptom sections (sectionOrder)
+          // should influence the general-code filter. Non-clinical programmes
+          // (eyeCare, familyPlanning, epi, nutrition, cataract) have no
+          // symptom grid and must not block the NCD/ANC filter from applying.
+          const symptomProgrammes = {
+            Programme.anc,
+            Programme.pnc,
+            Programme.imci,
+            Programme.ncd,
+          };
+          final clinicalEnrolled =
+              enrolled.where(symptomProgrammes.contains).toSet();
+          final isNcdOnly =
+              clinicalEnrolled.length == 1 &&
+              clinicalEnrolled.contains(Programme.ncd);
+          final isAncOnly =
+              clinicalEnrolled.length == 1 &&
+              clinicalEnrolled.contains(Programme.anc);
           if (isNcdOnly &&
               !AiScribeTriageVocab.ncdRelevantGeneralCodes.contains(code)) {
             if (kDebugMode) gridDropped.add(code);
