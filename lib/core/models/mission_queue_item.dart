@@ -248,6 +248,9 @@ class MissionQueueItem {
   /// never surfaced in the SK UI.
   final List<String> clinicalReasons;
 
+  /// Spec §2.8 priority code for debug (`1a`, `2b`, `3`, `4`).
+  String get priorityCode => priorityCodeFor(band, modifier);
+
   /// Returns a copy with the supplied fields overridden. Null arguments leave
   /// the original value in place — to clear a nullable field, pass the
   /// existing value through the call site or build a fresh ctor. Used by
@@ -336,46 +339,44 @@ class MissionQueueItem {
 
   /// Intra-band comparator implementing PRD §2.8 sort order within a band:
   ///   1. modifier a → modifier b → no modifier
-  ///   2. pregnant > non-pregnant (spec §2.8 step 3)
-  ///   3. tier rank: critical > overdue > dueToday > thisWeek > upcoming
-  ///      (clinical-driver escalation — neonate/pnc-window patients that reach
-  ///      critical tier without a band upgrade surface above overdue patients
-  ///      with the same band/modifier/pregnant status)
-  ///   4. longer overdue ranks higher within the same tier (spec §2.8 step 4)
-  ///   5. ANC programme > NCD (CD-1 tiebreaker)
-  ///   6. patient name ASC (stable tiebreaker)
+  ///   2. pregnant > non-pregnant
+  ///   3. longer overdue ranks higher (esp. modifier b)
+  ///   4. ANC programme > NCD (stable clinical tiebreaker)
+  ///   5. patient name ASC (stable tiebreaker)
+  ///
+  /// Date-tier urgency is NOT a §2.8 sort key — overdue days + modifier `b`
+  /// already encode schedule pressure. Tier labels remain UX chrome only.
   static int compareInBand(MissionQueueItem a, MissionQueueItem b) {
     // 1. Modifier: a(0) < b(1) < none(2) — best modifier wins
     final modCmp = a.modifier.sortRank.compareTo(b.modifier.sortRank);
     if (modCmp != 0) return modCmp;
-    // 2. Pregnant before non-pregnant (spec §2.8 step 3).
-    //    Key: 0=pregnant, 1=not-pregnant — ascending so pregnant (0) sorts first.
+    // 2. Pregnant before non-pregnant (spec §2.8).
     final pregCmp = (a.isPregnant ? 0 : 1).compareTo(b.isPregnant ? 0 : 1);
     if (pregCmp != 0) return pregCmp;
-    // 3. Tier rank: critical (0) < overdue (1) < dueToday (2) < thisWeek (3) < upcoming (4).
-    //    Must precede the overdue-days step: clinical-driver patients (neonate, pnc-window,
-    //    ltfu-streak) have tier=critical but daysOverdue=0 because their nextDueAt is
-    //    today/future. Without this guard they would be buried after every patient that
-    //    carries even 1 positive overdue day.
-    final tierCmp = a.tier.rank.compareTo(b.tier.rank);
-    if (tierCmp != 0) return tierCmp;
-    // 4. Within the same tier, longer overdue ranks higher (spec §2.8 step 4 —
-    //    applied to all patients; risk scorer does not always assign modifier b).
+    // 3. Longer overdue ranks higher.
     final overdueCmp = (b.daysOverdue ?? 0).compareTo(a.daysOverdue ?? 0);
     if (overdueCmp != 0) return overdueCmp;
-    // 5. ANC programme ranks above NCD (CD-1 tiebreaker)
+    // 4. ANC programme ranks above NCD
     final ancCmp = _ancRank(b).compareTo(_ancRank(a));
     if (ancCmp != 0) return ancCmp;
-    // 6. Stable alphabetical tiebreaker
+    // 5. Stable alphabetical tiebreaker
     return a.patientName.compareTo(b.patientName);
   }
 
   static int _ancRank(MissionQueueItem item) =>
       item.programmes.contains(Programme.anc) ? 1 : 0;
 
-  /// Intra-tier comparator: [priorityScore] DESC (encodes band+modifier), then
-  /// the full [compareInBand] tiebreaker chain — pregnant, overdue (mod b),
-  /// ANC > NCD, name — so PRD §2.8 ordering is preserved end-to-end.
+  /// Spec §2.8 full comparator: band ASC, then [compareInBand].
+  /// Prefer this for any dashboard / worklist surface that must show
+  /// `1a → 1b → 1 → 2a → 2b → 2 → 3a → 3b → 3 → 4`.
+  static int compareByPriority(MissionQueueItem a, MissionQueueItem b) {
+    final bandCmp = a.band.index.compareTo(b.band.index);
+    if (bandCmp != 0) return bandCmp;
+    return compareInBand(a, b);
+  }
+
+  /// Intra-tier comparator kept for legacy callers that still group by date
+  /// tier first. Prefer [compareByPriority] for §2.8 surfaces.
   static int compareInTier(MissionQueueItem a, MissionQueueItem b) {
     final scoreCmp = b.priorityScore.compareTo(a.priorityScore);
     if (scoreCmp != 0) return scoreCmp;

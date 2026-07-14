@@ -61,6 +61,16 @@ class RiskRationale {
         return 'Patient flagged red by clinician';
       case 'no-programme':
         return 'No programme enrolment recorded';
+      case 'anc-controlled':
+        return 'ANC enrolled — no abnormal findings';
+      case 'ncd-controlled':
+        return 'NCD enrolled — no abnormal findings';
+      case 'enrolment-routine':
+        return 'Programme enrolled — routine priority';
+      case 'anc-comorbidity-htn':
+        return 'ANC: comorbidity (hypertension)';
+      case 'anc-comorbidity-dm':
+        return 'ANC: comorbidity (diabetes)';
       case 'anc-danger-sign':
         return 'ANC: danger sign present — immediate referral';
       case 'anc-eclampsia':
@@ -228,6 +238,43 @@ enum Modifier {
   }
 }
 
+/// Spec §2.8 wire-form priority code (`1a`, `2b`, `3`, `4`).
+String priorityCodeFor(Band band, Modifier modifier) {
+  final mod = modifier == Modifier.none ? '' : modifier.wireTag;
+  return '${band.wireTag.replaceFirst('band', '')}$mod';
+}
+
+/// Spec sort legend for debug banners.
+const String kPrioritySortSpecLegend =
+    '1a → 1b → 1 → 2a → 2b → 2 → 3a → 3b → 3 → 4';
+
+/// Joins priority codes in list order for debug: `1a → 1a → 2b → 2 → 4`.
+String prioritySortChain(Iterable<String> codes) {
+  final list = codes.toList(growable: false);
+  if (list.isEmpty) return '(empty)';
+  return list.join(' → ');
+}
+
+/// Collapses consecutive identical codes: `1a×3 → 1 → 2a×2 → 2b → 3 → 4`.
+String prioritySortChainCompact(Iterable<String> codes) {
+  final list = codes.toList(growable: false);
+  if (list.isEmpty) return '(empty)';
+  final parts = <String>[];
+  var current = list.first;
+  var count = 1;
+  for (var i = 1; i < list.length; i++) {
+    if (list[i] == current) {
+      count++;
+    } else {
+      parts.add(count > 1 ? '$current×$count' : current);
+      current = list[i];
+      count = 1;
+    }
+  }
+  parts.add(count > 1 ? '$current×$count' : current);
+  return parts.join(' → ');
+}
+
 /// Numeric sort key for SQL `ORDER BY ... DESC`.
 ///
 /// Higher value = higher priority on the worklist.
@@ -353,6 +400,9 @@ class RiskAssessment {
 
   /// Structured rationale payload (architecture.md §3.4 contract).
   final RiskRationale? rationale;
+
+  /// Wire-form priority code used by sort debug logs (`1a`, `2b`, `3`, `4`).
+  String get priorityCode => priorityCodeFor(band, modifier);
 
   /// Sort key persisted into `patients.risk_score` so SQL ORDER BY DESC
   /// produces the spec sequence (1a → 1b → 1 → 2a → 2b → 2 → 3a → 3b → 3 → 4).

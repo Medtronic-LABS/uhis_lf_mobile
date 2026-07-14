@@ -83,7 +83,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _selectedVillageChipName;
   Set<NeedFilter> _selectedNeeds = const {};
   Set<NeedFilter> _availableNeeds = const {};
-  Set<Programme> _selectedProgrammes = const {};
   String _searchQuery = '';
 
   // Full unfiltered queue — filter/search applied synchronously from this cache.
@@ -250,21 +249,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final rawQueue = await missionRepo.loadQueue(limit: 500);
 
-    // A visit completed today is done — it must not occupy a dashboard slot,
-    // count toward the visits-today total, or seed the need-filter chips.
-    // completedIds comes from EncounterDao (updated the instant a visit is
-    // submitted, offline-safe); this is the only reliable "done today" signal
-    // — MissionInputData.completedTodayPatientIds lags until the next sync.
-    //
-    // Upcoming-tier items (due >7 days out, or no due date) are excluded
-    // here too — the dashboard only ever shows Today/Overdue/This week.
-    // Filtered here (not in the shared classifier) so the Tasks screen,
-    // which reads the same loadQueue() result, is unaffected.
+    // Upcoming is kept in the cache so programme need filters can surface
+    // every enrolled patient (#158). Unfiltered dashboard still drops
+    // upcoming inside filterMissionQueue().
     final queue = rawQueue
         .where((i) =>
-            i.tier != DashboardTier.upcoming &&
-            (completedIds.isEmpty ||
-                i.patientId == null || !completedIds.contains(i.patientId)))
+            completedIds.isEmpty ||
+            i.patientId == null ||
+            !completedIds.contains(i.patientId))
         .toList(growable: false);
 
     // Cache filtered base queue so filters can be re-applied synchronously
@@ -295,27 +287,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// Apply all active filters (village, need category, search query) to [queue]
   /// and return the matching subset. Pure — reads current filter state fields.
   List<MissionQueueItem> _buildFilteredList(List<MissionQueueItem> queue) {
-    var result = queue;
-
-    final chipVillage = _selectedVillageChipName;
-    if (chipVillage != null) {
-      result = result.where((i) => i.village?.trim() == chipVillage).toList();
-    }
-
-    if (_selectedNeeds.isNotEmpty) {
-      result = result.where(_needMatches).toList();
-    }
-
-    final q = _searchQuery.trim().toLowerCase();
-    if (q.isNotEmpty) {
-      result = result.where((i) =>
-        i.patientName.toLowerCase().contains(q) ||
-        (i.phoneNumber?.contains(q) ?? false) ||
-        (i.nid?.toLowerCase().contains(q) ?? false)
-      ).toList();
-    }
-
-    return result;
+    return filterMissionQueue(
+      queue: queue,
+      village: _selectedVillageChipName,
+      selectedNeeds: _selectedNeeds,
+      searchQuery: _searchQuery,
+    );
   }
 
   /// Re-apply current filters to the cached base queue synchronously.
@@ -435,7 +412,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// Falls back to opening the patient detail when the visit can't start.
   Future<void> _startVisitFromQueue(MissionQueueItem item) async {
     assert(() {
-      final modTag = item.modifier == Modifier.none ? '' : item.modifier.wireTag;
+      final code = '${item.band.wireTag.replaceFirst('band', '')}'
+          '${item.modifier == Modifier.none ? '' : item.modifier.wireTag}';
       final progs = item.programmes.map((p) => p.name).join(',');
       final overdueTag = (item.daysOverdue != null && item.daysOverdue! > 0)
           ? ' | overdue: ${item.daysOverdue}d'
@@ -443,16 +421,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final driversTag =
           item.drivers.isNotEmpty ? ' | drivers: ${item.drivers.join(",")}' : '';
       ConsoleLog.banner(
-        '[Patient selected] [${item.band.wireTag}$modTag] ${item.patientName}'
-        ' | prog: $progs | tier: ${item.tier.name}$overdueTag$driversTag',
+        '[Patient selected] [$code] ${item.patientName}'
+        ' | prog: $progs | tier: ${item.tier.name}'
+        '${item.isPregnant ? " | pregnant" : ""}'
+        '$overdueTag$driversTag'
+        ' | sortRank: ${item.priorityScore}',
       );
       if (item.clinicalReasons.isNotEmpty) {
-        ConsoleLog.banner('  Why ${item.band.wireTag}$modTag:');
+        ConsoleLog.banner('  Why $code:');
         for (final r in item.clinicalReasons) {
           ConsoleLog.banner('    • $r');
         }
       } else {
-        ConsoleLog.banner('  Why ${item.band.wireTag}$modTag: (no clinical reasons stored)');
+        ConsoleLog.banner('  Why $code: (no clinical reasons stored)');
       }
       return true;
     }());
@@ -536,11 +517,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _navigateToFirstQueueItem() async {
     // Navigate to Tasks screen (Visits tab)
     if (mounted) context.push('/tasks');
-  }
-
-  bool _needMatches(MissionQueueItem item) {
-    if (_selectedNeeds.isEmpty) return true;
-    return _selectedNeeds.any((need) => need.matches(item));
   }
 
   @override
@@ -630,7 +606,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         final queue = snap.data ?? const [];
                         if (queue.isEmpty) {
                           final hasFilters = _selectedNeeds.isNotEmpty ||
-                              _selectedProgrammes.isNotEmpty ||
                               _selectedVillageChipName != null ||
                               _searchQuery.isNotEmpty;
                           return Column(
@@ -646,7 +621,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   onClearFilters: () {
                                     setState(() {
                                       _selectedNeeds = const {};
-                                      _selectedProgrammes = const {};
                                       _selectedVillageChipName = null;
                                       _searchQuery = '';
                                     });
@@ -658,82 +632,57 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ],
                           );
                         }
-                        // 5-tier model: top 8 cards genuinely *mixed* across
-                        // tiers per spec
-                        // (leapfrog-setup/designs/dashboard-prioritization.md).
-                        // Pure rank-ASC sort lets the top tier hog all 8 slots
-                        // when ≥8 patients exist there, so the SK never sees
-                        // the per-tier CTA variety (Visit today / Plan visit /
-                        // Schedule). Round-robin: guarantee 1 slot per
-                        // non-empty tier in rank order, then top up the
-                        // remainder rank-ASC while capping any single tier at
-                        // [maxPerTier].
-                        const visibleLimit = 8;
-                        const minPerTier = 1;
-                        const maxPerTier = 3;
+                        // Spec §2.8: show the highest clinical-priority patients
+                        // in order 1a → 1b → 1 → 2a → 2b → 2 → 3a → 3b → 3 → 4.
+                        // [queue] is already sorted that way by
+                        // computeTieredQueue — take the head. Do NOT remix by
+                        // date-tier round-robin (that buried Band 1 behind
+                        // milder patients who only had a hotter date tier).
+                        //
+                        // Unfiltered: top 8 only. With village/need/search
+                        // filters active: show the full matching set so a
+                        // programme chip does not silently hide enrolments (#158).
+                        final filtersActive = _selectedNeeds.isNotEmpty ||
+                            _selectedVillageChipName != null ||
+                            _searchQuery.trim().isNotEmpty;
+                        const defaultVisibleLimit = 8;
+                        final visibleLimit =
+                            filtersActive ? queue.length : defaultVisibleLimit;
+                        final visible = queue.length <= visibleLimit
+                            ? List<MissionQueueItem>.from(queue)
+                            : queue.sublist(0, visibleLimit);
 
-                        final byTier =
-                            <DashboardTier, List<MissionQueueItem>>{};
-                        for (final item in queue) {
-                          (byTier[item.tier] ??= <MissionQueueItem>[])
-                              .add(item);
-                        }
-
-                        final visible = <MissionQueueItem>[];
-                        final perTierUsed = <DashboardTier, int>{
-                          for (final t in DashboardTier.values) t: 0,
-                        };
-
-                        // Pass 1 — guarantee [minPerTier] per non-empty tier,
-                        // walking tiers in rank order.
-                        for (final t in DashboardTier.values) {
-                          if (t == DashboardTier.upcoming) continue;
-                          final list = byTier[t] ?? const <MissionQueueItem>[];
-                          for (var i = 0;
-                              i < list.length && i < minPerTier;
-                              i++) {
-                            if (visible.length >= visibleLimit) break;
-                            visible.add(list[i]);
-                            perTierUsed[t] = (perTierUsed[t] ?? 0) + 1;
+                        assert(() {
+                          final codes = visible.map((q) => q.priorityCode);
+                          ConsoleLog.banner(
+                            '[Dashboard UI] top ${visible.length} (spec §2.8):',
+                          );
+                          ConsoleLog.banner(
+                            '  spec:     $kPrioritySortSpecLegend',
+                          );
+                          ConsoleLog.banner(
+                            '  chain:    ${prioritySortChain(codes)}',
+                          );
+                          ConsoleLog.banner(
+                            '  compact:  ${prioritySortChainCompact(codes)}',
+                          );
+                          for (var i = 0; i < visible.length; i++) {
+                            final q = visible[i];
+                            ConsoleLog.banner(
+                              '  ${i + 1}. [${q.priorityCode}] ${q.patientName}'
+                              ' | tier: ${q.tier.name}'
+                              '${q.isPregnant ? " | pregnant" : ""}',
+                            );
                           }
-                          if (visible.length >= visibleLimit) break;
-                        }
-
-                        // Pass 2 — fill remaining slots rank-ASC, capped at
-                        // [maxPerTier] per tier so urgency variety stays
-                        // visible.
-                        for (final t in DashboardTier.values) {
-                          if (t == DashboardTier.upcoming) continue;
-                          final list = byTier[t] ?? const <MissionQueueItem>[];
-                          while (visible.length < visibleLimit &&
-                              (perTierUsed[t] ?? 0) < maxPerTier &&
-                              (perTierUsed[t] ?? 0) < list.length) {
-                            visible.add(list[perTierUsed[t]!]);
-                            perTierUsed[t] = (perTierUsed[t] ?? 0) + 1;
-                          }
-                          if (visible.length >= visibleLimit) break;
-                        }
-
-                        // Restore tier-rank ordering for inline tier-header
-                        // rendering. Within-tier order stays composite-DESC.
-                        visible.sort((a, b) {
-                          final c = a.tier.rank.compareTo(b.tier.rank);
-                          if (c != 0) return c;
-                          return MissionQueueItem.compareInTier(a, b);
-                        });
+                          return true;
+                        }());
 
                         final overflow = queue.length - visible.length;
-                        // Overflow's dominant tier = first remaining item
-                        // (queue is rank-ASC sorted upstream).
+                        // Overflow's dominant patient = first item past the
+                        // visible window (already §2.8 ordered).
                         DashboardTier? overflowTier;
                         if (overflow > 0) {
-                          final visibleSet = visible.toSet();
-                          for (final q in queue) {
-                            if (!visibleSet.contains(q)) {
-                              overflowTier = q.tier;
-                              break;
-                            }
-                          }
+                          overflowTier = queue[visible.length].tier;
                         }
 
                         final widgets = <Widget>[];

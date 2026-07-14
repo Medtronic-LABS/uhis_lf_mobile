@@ -353,7 +353,8 @@ class _PatientContextScreenState
         final p = localPatient.patient;
         final band = p.riskBand ?? Band.band4;
         final modifier = p.riskModifier ?? Modifier.none;
-        final modTag = modifier == Modifier.none ? '' : modifier.wireTag;
+        final code = '${band.wireTag.replaceFirst('band', '')}'
+            '${modifier == Modifier.none ? '' : modifier.wireTag}';
         final progs = localPatient.programmes.map((pr) => pr.name).join(',');
         final now = DateTime.now();
         final overdueDays = p.nextDueAt != null
@@ -365,17 +366,21 @@ class _PatientContextScreenState
             : DashboardTier.upcoming;
         final overdueTag =
             (overdueDays != null && overdueDays > 0) ? ' | overdue: ${overdueDays}d' : '';
+        final pregnant = localPatient.programmes.contains(Programme.anc);
         ConsoleLog.banner(
-          '[Patient opened] [${band.wireTag}$modTag] ${p.name ?? widget.patientId}'
-          ' | prog: $progs | tier: ${tier.name}$overdueTag',
+          '[Patient opened] [$code] ${p.name ?? widget.patientId}'
+          ' | prog: $progs | tier: ${tier.name}'
+          '${pregnant ? " | pregnant" : ""}'
+          '$overdueTag'
+          ' | sortRank: ${sortRankFor(band, modifier)}',
         );
         if (p.riskReasons.isNotEmpty) {
-          ConsoleLog.banner('  Why ${band.wireTag}$modTag:');
+          ConsoleLog.banner('  Why $code:');
           for (final r in p.riskReasons) {
             ConsoleLog.banner('    • $r');
           }
         } else {
-          ConsoleLog.banner('  Why ${band.wireTag}$modTag: (no clinical reasons stored)');
+          ConsoleLog.banner('  Why $code: (no clinical reasons stored)');
         }
         return true;
       }());

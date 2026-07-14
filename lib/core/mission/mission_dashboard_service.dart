@@ -968,26 +968,31 @@ class MissionDashboardService {
     }
 
     // Primary sort: band ASC (Band 1 first).
-    // Secondary sort: PRD §2.8 within-band order via compareInBand.
+    // Secondary sort: PRD §2.8 within-band order via compareInBand
+    // (a → b → none, pregnant, overdue).
     final result = <MissionQueueItem>[...byPid.values, ...nonPatient];
-    result.sort((a, b) {
-      final bandCmp = a.band.index.compareTo(b.band.index);
-      if (bandCmp != 0) return bandCmp;
-      return MissionQueueItem.compareInBand(a, b);
-    });
+    result.sort(MissionQueueItem.compareByPriority);
 
     assert(() {
+      final codes = result.map((q) => q.priorityCode);
       ConsoleLog.banner('[Dashboard queue] ${result.length} items:');
+      ConsoleLog.banner('  spec:     $kPrioritySortSpecLegend');
+      ConsoleLog.banner('  chain:    ${prioritySortChain(codes)}');
+      ConsoleLog.banner('  compact:  ${prioritySortChainCompact(codes)}');
       for (var i = 0; i < result.length; i++) {
         final q = result[i];
-        final modTag = q.modifier == Modifier.none ? '' : q.modifier.wireTag;
         final progs = q.programmes.map((p) => p.name).join(',');
         final overdue = (q.daysOverdue != null && q.daysOverdue! > 0)
             ? ' | overdue: ${q.daysOverdue}d'
             : '';
+        final why = q.clinicalReasons.isNotEmpty
+            ? ' | why: ${q.clinicalReasons.first}'
+            : '';
         ConsoleLog.banner(
-          '  ${i + 1}. [${q.band.wireTag}$modTag] ${q.patientName}'
-          ' | prog: $progs | tier: ${q.tier.name}$overdue',
+          '  ${i + 1}. [${q.priorityCode}] ${q.patientName}'
+          ' | prog: $progs | tier: ${q.tier.name}'
+          '${q.isPregnant ? " | pregnant" : ""}'
+          '$overdue$why',
         );
       }
       return true;

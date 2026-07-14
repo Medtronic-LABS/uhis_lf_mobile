@@ -269,6 +269,79 @@ void main() {
     expect(ids.indexOf('mB'), lessThan(ids.indexOf('mNone')));
   });
 
+  test('band ranks ahead of overdue duration (band2 before overdue band4)',
+      () async {
+    final now = DateTime.now();
+    await patients.upsertMany([
+      Patient(
+        id: 'overdue4',
+        patientId: 'overdue4',
+        name: 'Overdue Band4',
+        villageId: 'v1',
+        rawJson: '{}',
+        age: 40,
+        nextDueAt:
+            now.subtract(const Duration(days: 30)).millisecondsSinceEpoch,
+      ),
+      Patient(
+        id: 'mild3',
+        patientId: 'mild3',
+        name: 'Mild Band3',
+        villageId: 'v1',
+        rawJson: '{}',
+        age: 3,
+      ),
+    ]);
+    await programmes.replaceFor('mild3', {Programme.imci});
+    await patients.updateRisk(
+      patientId: 'overdue4',
+      sortRank: sortRankFor(Band.band4, Modifier.b),
+      bandWireTag: Band.band4.wireTag,
+      modifierWireTag: Modifier.b.wireTag,
+      reasonsJson: '[]',
+      nextDueAt:
+          now.subtract(const Duration(days: 30)).millisecondsSinceEpoch,
+    );
+    await patients.updateRisk(
+      patientId: 'mild3',
+      sortRank: sortRankFor(Band.band3, Modifier.none),
+      bandWireTag: Band.band3.wireTag,
+      modifierWireTag: Modifier.none.wireTag,
+      reasonsJson: '[]',
+    );
+
+    final list = await repo.load();
+    expect(list.first.patientId, 'mild3');
+    expect(list.last.patientId, 'overdue4');
+  });
+
+  test('recompute scores ANC Hb from assessment-history rows → band2',
+      () async {
+    await patients.upsertMany([
+      mkPatient('naz', name: 'Nazmeen', age: 25),
+    ]);
+    await programmes.replaceFor('naz', {Programme.anc, Programme.pw});
+    await assessments.upsertMany([
+      AssessmentRow(
+        id: 'enc-naz',
+        patientId: 'naz',
+        kind: 'ANC',
+        occurredAt: DateTime.now().millisecondsSinceEpoch,
+        rawJson:
+            '{"serviceProvided":"ANC","observations":{"hemoglobin":7,"weight":45}}',
+      ),
+    ]);
+
+    await repo.recomputeAllAfterSync();
+    final list = await repo.load();
+    expect(list.single.patientId, 'naz');
+    expect(list.single.band, Band.band2);
+    expect(
+      list.single.reasons.any((r) => r.toLowerCase().contains('anaemia')),
+      isTrue,
+    );
+  });
+
   test('village match within band ranks ahead when SK selects a village',
       () async {
     await patients.upsertMany([
