@@ -94,6 +94,11 @@ void main() {
     notifier = buildTestNotifier(draftDao: draftDao);
   });
 
+  // updateField()/applyAiPrefill() schedule a debounced autosave Timer;
+  // dispose() flushes-or-cancels it so it can't fire after the test (and
+  // its FakeAsync zone) has already completed.
+  tearDown(() => notifier.dispose());
+
   group('applyAiPrefill — apply + provenance', () {
     test('valid numeric value applies and is marked aiPending', () {
       final rejected = notifier.applyAiPrefill(
@@ -239,7 +244,9 @@ void main() {
         fieldDefs: _fieldDefs(),
       );
       notifier.updateField('glucoseType', 'fbs'); // manual entry
-      await pumpMicrotasks();
+      // Autosave is debounced (~400ms) — wait it out rather than pumping
+      // microtasks, since the write hasn't been scheduled yet at that point.
+      await Future<void>.delayed(const Duration(milliseconds: 500));
 
       final saved = draftDao.lastSaved;
       expect(saved, isNotNull);
