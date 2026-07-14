@@ -196,7 +196,10 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         _viewModel = vm;
         _selectedProgrammes
           ..clear()
-          ..addAll(pathwaySet);
+          ..addAll(pathwaySet)
+          // Enrolled programmes are always included in the visit regardless
+          // of pathway activation — seed them at load so the grid reflects it.
+          ..addAll(ctx.activeProgrammes);
         _pathwayActivatedProgrammes
           ..clear()
           ..addAll(pathwaySet);
@@ -708,6 +711,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                         patientContext: _patientContext!,
                         selectedProgrammes: _selectedProgrammes,
                         pathwayProgrammes: _pathwayActivatedProgrammes,
+                        enrolledProgrammes: _patientContext!.activeProgrammes.toSet(),
                         isPW: _isPW,
                         isDelivery: _isDelivery,
                         onProgrammeToggle: (programme, selected) {
@@ -1759,6 +1763,7 @@ class _InlineServiceSelector extends StatelessWidget {
     required this.patientContext,
     required this.selectedProgrammes,
     required this.pathwayProgrammes,
+    required this.enrolledProgrammes,
     required this.isPW,
     required this.isDelivery,
     required this.onProgrammeToggle,
@@ -1769,6 +1774,11 @@ class _InlineServiceSelector extends StatelessWidget {
   final PatientContext patientContext;
   final Set<Programme> selectedProgrammes;
   final Set<Programme> pathwayProgrammes;
+
+  /// Programmes the patient is already enrolled in from past visits.
+  /// These cards are shown in a distinct "enrolled" style and are not toggleable.
+  final Set<Programme> enrolledProgrammes;
+
   final bool isPW;
   final bool isDelivery;
   final void Function(Programme programme, bool selected) onProgrammeToggle;
@@ -1809,6 +1819,17 @@ class _InlineServiceSelector extends StatelessWidget {
   }
 
   void _handleTap(BuildContext context, _ServiceCardDef card) {
+    // Enrolled cards are not toggleable — they are always part of this visit.
+    if (card.programme != null && enrolledProgrammes.contains(card.programme)) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text('Already enrolled in ${card.label} — included in this visit'),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ));
+      return;
+    }
     if (_isLocked(card)) {
       final hint = card.programme == Programme.anc
           ? 'Select "PW" first to unlock ANC'
@@ -1883,6 +1904,8 @@ class _InlineServiceSelector extends StatelessWidget {
                     def: c,
                     isSelected: _isCardSelected(c),
                     isLocked: _isLocked(c),
+                    isEnrolled: c.programme != null &&
+                        enrolledProgrammes.contains(c.programme),
                     isPathwaySuggested: c.programme != null &&
                         pathwayProgrammes.contains(c.programme),
                     onTap: () => _handleTap(context, c),
@@ -1899,6 +1922,7 @@ class _ServiceTile extends StatelessWidget {
     required this.def,
     required this.isSelected,
     required this.isLocked,
+    required this.isEnrolled,
     required this.isPathwaySuggested,
     required this.onTap,
   });
@@ -1906,16 +1930,47 @@ class _ServiceTile extends StatelessWidget {
   final _ServiceCardDef def;
   final bool isSelected;
   final bool isLocked;
+
+  /// Patient is already enrolled in this programme from past visits.
+  /// Card renders in a distinct "enrolled" style and tapping shows a hint.
+  final bool isEnrolled;
+
   final bool isPathwaySuggested;
   final VoidCallback onTap;
 
+  static const _enrolledBg = Color(0xFFF0FDF4);
+  static const _enrolledBorder = Color(0xFF86EFAC);
+  static const _enrolledText = Color(0xFF166534);
+  static const _enrolledBadgeBg = Color(0xFFDCFCE7);
+
   @override
   Widget build(BuildContext context) {
+    final Color bg;
+    final Color borderColor;
+    final double borderWidth;
+    final Color labelColor;
+
+    if (isEnrolled) {
+      bg = _enrolledBg;
+      borderColor = _enrolledBorder;
+      borderWidth = 1.5;
+      labelColor = _enrolledText;
+    } else {
+      bg = Colors.white;
+      borderColor = isSelected ? AppColors.navy : const Color(0xFFE5E7EB);
+      borderWidth = isSelected ? 1.5 : 1;
+      labelColor = isLocked
+          ? AppColors.navy.withValues(alpha: 0.55)
+          : AppColors.navy;
+    }
+
     return Semantics(
       button: true,
       selected: isSelected,
-      enabled: !isLocked,
-      label: '${isSelected ? 'Deselect' : 'Select'} ${def.label}',
+      enabled: !isLocked && !isEnrolled,
+      label: isEnrolled
+          ? 'Already enrolled ${def.label}'
+          : '${isSelected ? 'Deselect' : 'Select'} ${def.label}',
       child: GestureDetector(
         onTap: onTap,
         child: Opacity(
@@ -1923,12 +1978,9 @@ class _ServiceTile extends StatelessWidget {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 140),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: bg,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: isSelected ? AppColors.navy : const Color(0xFFE5E7EB),
-                width: isSelected ? 1.5 : 1,
-              ),
+              border: Border.all(color: borderColor, width: borderWidth),
               boxShadow: const [
                 BoxShadow(
                   color: Color(0x0A000000),
@@ -1940,7 +1992,7 @@ class _ServiceTile extends StatelessWidget {
             child: Stack(
               children: [
                 // ✦ sparkle — pathway-engine suggested
-                if (isPathwaySuggested && isSelected)
+                if (isPathwaySuggested && isSelected && !isEnrolled)
                   Positioned(
                     top: 5,
                     left: 6,
@@ -1952,7 +2004,7 @@ class _ServiceTile extends StatelessWidget {
                       ),
                     ),
                   ),
-                // Checkmark circle
+                // Checkmark / enrolled indicator circle
                 Positioned(
                   top: 5,
                   right: 6,
@@ -1962,40 +2014,65 @@ class _ServiceTile extends StatelessWidget {
                     height: 16,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: isSelected ? AppColors.navy : Colors.transparent,
+                      color: isEnrolled
+                          ? _enrolledBorder
+                          : isSelected
+                          ? AppColors.navy
+                          : Colors.transparent,
                       border: Border.all(
-                        color: isSelected
+                        color: isEnrolled
+                            ? _enrolledBorder
+                            : isSelected
                             ? AppColors.navy
                             : const Color(0xFFD1D5DB),
                         width: 1.5,
                       ),
                     ),
-                    child: isSelected
-                        ? const Icon(
+                    child: (isSelected || isEnrolled)
+                        ? Icon(
                             Icons.check_rounded,
                             size: 10,
-                            color: Colors.white,
+                            color: isEnrolled
+                                ? _enrolledText
+                                : Colors.white,
                           )
                         : null,
                   ),
                 ),
-                // Emoji + label
+                // Emoji + label + enrolled badge
                 Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(def.emoji, style: const TextStyle(fontSize: 20)),
-                      const SizedBox(height: 5),
+                      const SizedBox(height: 4),
                       Text(
                         def.label,
                         style: TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w800,
-                          color: isLocked
-                              ? AppColors.navy.withValues(alpha: 0.55)
-                              : AppColors.navy,
+                          color: labelColor,
                         ),
                       ),
+                      if (isEnrolled) ...[
+                        const SizedBox(height: 3),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: _enrolledBadgeBg,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            'Enrolled',
+                            style: TextStyle(
+                              fontSize: 8,
+                              fontWeight: FontWeight.w700,
+                              color: _enrolledText,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
