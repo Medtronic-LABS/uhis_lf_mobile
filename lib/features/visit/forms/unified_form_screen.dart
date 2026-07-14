@@ -403,6 +403,15 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
       for (final ref in a.section.fieldRefs) {
         final def = _config!.fields[ref.id];
         if (def == null) continue;
+        // A hidden field (e.g. Parity before Gravida >= 2) must never block
+        // submission even if it's flagged mandatory in the field library.
+        if (!FieldVisibilityRules.isFieldVisible(
+          field: def,
+          data: notifier.data,
+          rulesByTargetId: _config!.visibilityRulesByTargetId,
+        )) {
+          continue;
+        }
         final mandatory = def.isMandatory || ref.isMandatory;
         if (!mandatory) continue;
         final v = notifier.data.getValue(ref.id);
@@ -1355,6 +1364,13 @@ class _SectionCard extends StatelessWidget {
 
       final def = config.fields[ref.id];
       if (def == null) continue;
+      if (!FieldVisibilityRules.isFieldVisible(
+        field: def,
+        data: data,
+        rulesByTargetId: config.visibilityRulesByTargetId,
+      )) {
+        continue;
+      }
 
       // IDs whose AI-pending state lights this widget's badge (composite
       // cards cover their absorbed counterpart fields too).

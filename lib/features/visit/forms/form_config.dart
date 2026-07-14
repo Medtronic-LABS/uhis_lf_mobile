@@ -84,6 +84,94 @@ class FieldOption {
       );
 }
 
+/// A single `condition` entry declared on a *driver* field in
+/// `field_library.json` — e.g. `pncNeonateSigns`'s `condition` array contains
+/// `{eq: "Other", targetId: "otherPncNeonateSigns", visibility: "visible"}`,
+/// meaning "when the driver field's value equals `eq`, set the target
+/// field's (`targetId`) visibility to `visibility`". Some conditions use
+/// `eqList` instead of `eq` — matches if the driver's value is any of
+/// several values (e.g. `{eqList: ["nid", "brn"], ...}`) — or
+/// `greaterThanOrEqual` for a numeric driver (e.g. `{greaterThanOrEqual: 1,
+/// targetId: "typeOfAbortion", ...}`). Exactly one of [eq]/[eqList]/
+/// [greaterThanOrEqual] is set per the source JSON.
+class FieldCondition {
+  const FieldCondition({
+    required this.targetId,
+    required this.visibility,
+    this.eq,
+    this.eqList = const [],
+    this.greaterThanOrEqual,
+  });
+
+  final String targetId;
+  final String visibility;
+
+  /// Single acceptable trigger value, or null when this condition uses
+  /// [eqList] or [greaterThanOrEqual] instead.
+  final String? eq;
+
+  /// Multiple acceptable trigger values (from the JSON's `eqList` array).
+  /// Empty when this condition uses [eq]/[greaterThanOrEqual] instead.
+  final List<String> eqList;
+
+  /// Numeric threshold — matches when the driver's value, parsed as a
+  /// number, is `>=` this. Null when this condition uses [eq]/[eqList].
+  final num? greaterThanOrEqual;
+
+  /// True when the driver's current value matches this condition's trigger.
+  bool matches(String? driverValue) {
+    if (driverValue == null) return false;
+    if (greaterThanOrEqual != null) {
+      final n = num.tryParse(driverValue);
+      return n != null && n >= greaterThanOrEqual!;
+    }
+    if (eq != null) return driverValue == eq;
+    return eqList.contains(driverValue);
+  }
+
+  factory FieldCondition.fromJson(Map<String, dynamic> json) {
+    final rawEqList = json['eqList'] as List<dynamic>?;
+    final rawGte = json['greaterThanOrEqual'] as num?;
+    return FieldCondition(
+      targetId: json['targetId'] as String? ?? '',
+      visibility: json['visibility'] as String? ?? 'gone',
+      eq: (rawEqList == null && rawGte == null) ? json['eq']?.toString() : null,
+      eqList: rawEqList?.map((e) => e.toString()).toList() ?? const [],
+      greaterThanOrEqual: rawGte,
+    );
+  }
+}
+
+/// A [FieldCondition] inverted and indexed by the *target* field id, with the
+/// driver field id attached — built once in [FormConfig.load] so evaluating a
+/// target field's visibility doesn't require scanning every other field.
+class FieldVisibilityRule {
+  const FieldVisibilityRule({
+    required this.driverId,
+    required this.visibility,
+    this.eq,
+    this.eqList = const [],
+    this.greaterThanOrEqual,
+  });
+
+  final String driverId;
+  final String visibility;
+  final String? eq;
+  final List<String> eqList;
+  final num? greaterThanOrEqual;
+
+  /// True when the driver's current value matches this rule's trigger.
+  bool matches(String? driverValue) {
+    if (driverValue == null) return false;
+    if (greaterThanOrEqual != null) {
+      final n = num.tryParse(driverValue);
+      return n != null && n >= greaterThanOrEqual!;
+    }
+    if (eq != null) return driverValue == eq;
+    return eqList.contains(driverValue);
+  }
+}
+
 class FieldDef {
   const FieldDef({
     required this.id,
@@ -96,6 +184,12 @@ class FieldDef {
     this.hintText,
     this.labelCulture,
     this.family,
+    this.visibility = 'visible',
+    this.conditions = const [],
+    this.compositeGroup,
+    this.compositeRole,
+    this.infoTitle,
+    this.isInfoVisible = false,
   });
 
   final String id;
@@ -121,6 +215,29 @@ class FieldDef {
   /// used to pick a fallback glyph when the field id is not explicitly mapped.
   final String? family;
 
+  /// Raw `"visibility"` string from the field library — `"visible"` or
+  /// `"gone"`. This is the field's *base* state, used when no
+  /// [FieldVisibilityRule] targeting it matches (see `FieldVisibilityRules`
+  /// in `unified_section_rules.dart`).
+  final String visibility;
+
+  /// `condition` entries declared on THIS field as the driver — i.e. rules
+  /// this field's value applies to OTHER fields, not to itself.
+  final List<FieldCondition> conditions;
+
+  /// `compositeGroup`/`compositeRole` from the field library — used for the
+  /// obstetric-history progressive-disclosure chain (Gravida → Parity →
+  /// Living Children → Age of Last Child). Only that one group is currently
+  /// interpreted for visibility; other composite groups (e.g. supplement
+  /// consumed/provided pairs) are unrelated dedup metadata handled elsewhere.
+  final String? compositeGroup;
+  final String? compositeRole;
+
+  /// Short clinical help/guidance text (e.g. "0 = if BP could not be
+  /// measured") shown under the field when [isInfoVisible] is true.
+  final String? infoTitle;
+  final bool isInfoVisible;
+
   factory FieldDef.fromJson(String id, Map<String, dynamic> json) {
     final rawHint = json['widgetHint'] as String?;
     final optionsList = (json['optionsList'] as List<dynamic>? ?? [])
@@ -131,6 +248,11 @@ class FieldDef {
         .whereType<Map<String, dynamic>>()
         .map((p) => p['id'] as String? ?? '')
         .where((s) => s.isNotEmpty)
+        .toList();
+    final conditions = (json['condition'] as List<dynamic>? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .map(FieldCondition.fromJson)
+        .where((c) => c.targetId.isNotEmpty)
         .toList();
 
     return FieldDef(
@@ -144,6 +266,12 @@ class FieldDef {
       hintText: json['hint'] as String?,
       labelCulture: json['titleCulture'] as String?,
       family: json['family'] as String?,
+      visibility: json['visibility'] as String? ?? 'visible',
+      conditions: conditions,
+      compositeGroup: json['compositeGroup'] as String?,
+      compositeRole: json['compositeRole'] as String?,
+      infoTitle: json['infoTitle'] as String?,
+      isInfoVisible: json['isInfo'] == 'visible',
     );
   }
 }
@@ -210,6 +338,7 @@ class FormConfig {
   const FormConfig({
     required this.fields,
     required this.forms,
+    this.visibilityRulesByTargetId = const {},
   });
 
   /// fieldId → [FieldDef] (from `field_library.json`).
@@ -217,6 +346,34 @@ class FormConfig {
 
   /// formType → ordered [FormSection] list (from `layout_manifests.json`).
   final Map<String, List<FormSection>> forms;
+
+  /// Target fieldId → the [FieldVisibilityRule]s that control it, built once
+  /// from every field's `condition` array (see [FieldCondition]). A separate,
+  /// pure step from parsing so it's independently testable — see
+  /// `buildVisibilityRules`.
+  final Map<String, List<FieldVisibilityRule>> visibilityRulesByTargetId;
+
+  /// Inverts every field's `condition` array (keyed by the *driver* field)
+  /// into a lookup keyed by the *target* field id, so evaluating a field's
+  /// visibility is an O(1) map lookup instead of a scan over every field.
+  static Map<String, List<FieldVisibilityRule>> buildVisibilityRules(
+      Map<String, FieldDef> fields) {
+    final rules = <String, List<FieldVisibilityRule>>{};
+    for (final field in fields.values) {
+      for (final condition in field.conditions) {
+        rules.putIfAbsent(condition.targetId, () => []).add(
+              FieldVisibilityRule(
+                driverId: field.id,
+                eq: condition.eq,
+                eqList: condition.eqList,
+                greaterThanOrEqual: condition.greaterThanOrEqual,
+                visibility: condition.visibility,
+              ),
+            );
+      }
+    }
+    return rules;
+  }
 
   /// Loads and parses all three form config assets.
   ///
@@ -262,7 +419,11 @@ class FormConfig {
         forms[formType] = sections;
       }
 
-      return FormConfig(fields: fields, forms: forms);
+      return FormConfig(
+        fields: fields,
+        forms: forms,
+        visibilityRulesByTargetId: buildVisibilityRules(fields),
+      );
     } on FormConfigException {
       rethrow;
     } on FormatException catch (e) {
