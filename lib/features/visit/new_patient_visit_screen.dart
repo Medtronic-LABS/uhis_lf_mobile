@@ -138,21 +138,28 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
   // ── start visit ───────────────────────────────────────────────────────────
 
   Future<void> _startVisit() async {
-    if (_starting || _selectedSvc == null || _selectedSvc == _Svc.pw) return;
+    if (_starting) return;
+
+    // PW-only: no programme selected — just register the pregnancy then return.
+    if (_pwSelected && _selectedSvc == null) {
+      await PregnancyRegistrationSheet.show(
+        context,
+        patientId: widget.patientId,
+        patientName: widget.patientName ?? 'Patient',
+        patientAge: widget.patientAge,
+      );
+      if (mounted) context.pop();
+      return;
+    }
+
+    if (_selectedSvc == null || _selectedSvc == _Svc.pw) return;
     setState(() => _starting = true);
 
     try {
       final programme = _toProgram(_selectedSvc!);
 
-      if (_selectedSvc == _Svc.anc && mounted) {
-        await PregnancyRegistrationSheet.show(
-          context,
-          patientId: widget.patientId,
-          patientName: widget.patientName ?? 'Patient',
-          patientAge: widget.patientAge,
-        );
-        if (!mounted) return;
-      }
+      // Pregnancy data (LMP / EDD / obstetric history) is collected inline
+      // inside the unified ANC form — do not show the registration sheet here.
 
       // Programme is NOT written here — writing at enrolment start would persist
       // the programme even if the SK abandons the visit mid-form. The write is
@@ -311,6 +318,7 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
           child: _Cta(
             selectedSvc: _selectedSvc,
+            pwSelected: _pwSelected,
             starting: _starting,
             onTap: _startVisit,
           ),
@@ -822,18 +830,21 @@ class _SvcTile extends StatelessWidget {
 class _Cta extends StatelessWidget {
   const _Cta({
     required this.selectedSvc,
+    required this.pwSelected,
     required this.starting,
     required this.onTap,
   });
 
   final _Svc? selectedSvc;
+  final bool pwSelected;
   final bool starting;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final canStart =
-        selectedSvc != null && selectedSvc != _Svc.pw && !starting;
+    final canStart = !starting &&
+        ((selectedSvc != null && selectedSvc != _Svc.pw) ||
+            (pwSelected && selectedSvc == null));
 
     return FilledButton(
       onPressed: canStart ? onTap : null,
@@ -855,9 +866,11 @@ class _Cta extends StatelessWidget {
               ),
             )
           : Text(
-              canStart
-                  ? NewPatientVisitStrings.startVisitCta
-                  : NewPatientVisitStrings.selectServiceCta,
+              !canStart
+                  ? NewPatientVisitStrings.selectServiceCta
+                  : (pwSelected && selectedSvc == null)
+                      ? PregnancyRegStrings.registerCta
+                      : NewPatientVisitStrings.startVisitCta,
               style: const TextStyle(
                 fontWeight: FontWeight.w800,
                 fontSize: 15,
