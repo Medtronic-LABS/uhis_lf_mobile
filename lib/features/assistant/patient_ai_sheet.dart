@@ -183,7 +183,7 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
     if (!mounted) return;
     if (encounterId != null) {
       Navigator.of(context).pop(); // close the AI sheet before navigating
-      context.go('/patients/visit/$encounterId/flow', extra: {
+      context.go('/patients/visit/$encounterId/flow?origin=patient', extra: {
         'patientId': c.patientId,
         'patientName': c.patientName,
         'patientAge': c.patientAge,

@@ -1077,7 +1077,26 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         _ => AppColors.navy,
       };
 
-  String get _returnPath => widget.origin == 'dashboard' ? '/home' : '/tasks';
+  // Maps the entry point the SK launched this visit from back to the
+  // screen they should land on after accepting Step 3 — 'household' and
+  // 'patient' return to the specific record instead of the generic Tasks
+  // list, which previously swallowed every origin but 'dashboard'.
+  String get _returnPath {
+    switch (widget.origin) {
+      case 'dashboard':
+        return '/home';
+      case 'household':
+        final householdId = widget.householdId;
+        return householdId != null && householdId.isNotEmpty
+            ? '/patients/household/$householdId'
+            : '/home';
+      case 'patient':
+        return '/patients/${widget.patientId}';
+      case 'tasks':
+      default:
+        return '/tasks';
+    }
+  }
 
   @override
   void initState() {
