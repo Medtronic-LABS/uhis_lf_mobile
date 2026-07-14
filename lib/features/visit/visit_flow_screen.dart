@@ -262,6 +262,11 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   late Set<Programme> _confirmedProgrammes =
       widget.seedProgrammes.isNotEmpty ? {...widget.seedProgrammes} : const <Programme>{};
 
+  /// True once Step 1's service grid reported an explicit selection (adult
+  /// visits). Prevents the empty-set fallback from resurrecting pathway NCD
+  /// after the SK deselected every programme.
+  bool _programmesExplicitlyChosen = false;
+
   /// Live programmes from Step 1 service card selection — drives header badge
   /// before the SK advances. Updated on every card toggle via [onProgrammesLive].
   Set<Programme> _step1LiveProgrammes = {};
@@ -390,6 +395,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           // override the pathway-derived set with the SK's explicit selection.
           onProgrammesSelected: (programmes) {
             _confirmedProgrammes = programmes;
+            _programmesExplicitlyChosen = true;
           },
           onProgrammesLive: (programmes) {
             setState(() => _step1LiveProgrammes = programmes);
@@ -398,7 +404,8 @@ class _VisitFlowState extends State<VisitFlowScreen> {
             _pathways = pathways;
             // Fall back to pathway-derived set only when the service selector
             // was not shown (child visits — under-5 skips the grid).
-            if (_confirmedProgrammes.isEmpty) {
+            if (!_programmesExplicitlyChosen &&
+                _confirmedProgrammes.isEmpty) {
               _confirmedProgrammes =
                   pathways.map((p) => p.programme).toSet();
             }
