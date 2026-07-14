@@ -224,6 +224,112 @@ void main() {
         reason: 'Permanently-unreachable fields found:\n${failures.join('\n')}',
       );
     });
+
+    // Regression test: 23 of the 80 condition entries in field_library.json
+    // use `eqList` (multiple acceptable trigger values) instead of a single
+    // `eq` — FieldCondition.fromJson previously only read `eq`, so every
+    // eqList-only condition parsed as eq: '' and could never match a real
+    // driver value. This silently broke 14 fields across pregnancyOutcome,
+    // cataract, eye_care, and enrollment (their driver field WAS present and
+    // answered, but the match itself could never succeed).
+    test('eqList conditions (multiple acceptable trigger values) are honored', () async {
+      final config = await FormConfig.load(rootBundle);
+
+      final causeOfDeath = config.fields['causeOfDeath']!;
+      final identityValue = config.fields['identityValue']!;
+
+      // timeOfDeath's eqList: ['beforeDelivery', 'within42DaysAfterDelivery', 'duringChildbirth']
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: causeOfDeath,
+          data: const CanonicalVisitData({'timeOfDeath': 'duringChildbirth'}),
+          rulesByTargetId: config.visibilityRulesByTargetId,
+        ),
+        isTrue,
+        reason: 'duringChildbirth is a member of the eqList',
+      );
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: causeOfDeath,
+          data: const CanonicalVisitData({'timeOfDeath': 'somethingElse'}),
+          rulesByTargetId: config.visibilityRulesByTargetId,
+        ),
+        isFalse,
+        reason: 'a value outside the eqList must not match',
+      );
+
+      // identityType's eqList: ['nid', 'brn']
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: identityValue,
+          data: const CanonicalVisitData({'identityType': 'brn'}),
+          rulesByTargetId: config.visibilityRulesByTargetId,
+        ),
+        isTrue,
+      );
+    });
+
+    test('FieldCondition/FieldVisibilityRule.matches — unit coverage', () {
+      const eqCondition = FieldVisibilityRule(
+        driverId: 'x',
+        eq: 'Yes',
+        visibility: 'visible',
+      );
+      expect(eqCondition.matches('Yes'), isTrue);
+      expect(eqCondition.matches('No'), isFalse);
+      expect(eqCondition.matches(null), isFalse);
+
+      const eqListCondition = FieldVisibilityRule(
+        driverId: 'x',
+        eqList: ['a', 'b', 'c'],
+        visibility: 'visible',
+      );
+      expect(eqListCondition.matches('b'), isTrue);
+      expect(eqListCondition.matches('z'), isFalse);
+      expect(eqListCondition.matches(null), isFalse);
+
+      const gteCondition = FieldVisibilityRule(
+        driverId: 'x',
+        greaterThanOrEqual: 2,
+        visibility: 'visible',
+      );
+      expect(gteCondition.matches('2'), isTrue);
+      expect(gteCondition.matches('5'), isTrue);
+      expect(gteCondition.matches('1'), isFalse);
+      expect(gteCondition.matches('not a number'), isFalse);
+      expect(gteCondition.matches(null), isFalse);
+    });
+
+    // Regression test: field_library.json also has a 3rd condition variant,
+    // `greaterThanOrEqual` (numeric comparison), used by
+    // gestationMonthAtAbortion to reveal typeOfAbortion in the pregnancyOutcome
+    // form's own "abortion" section. FieldCondition.fromJson previously
+    // dropped this key entirely (parsed as eq: null, eqList: []), so the
+    // condition could never match, and typeOfAbortion had no other reachable
+    // reveal path when filling out the abortion section on its own.
+    test('greaterThanOrEqual conditions (numeric threshold) are honored', () async {
+      final config = await FormConfig.load(rootBundle);
+      final typeOfAbortion = config.fields['typeOfAbortion']!;
+
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: typeOfAbortion,
+          data: const CanonicalVisitData({'gestationMonthAtAbortion': '3'}),
+          rulesByTargetId: config.visibilityRulesByTargetId,
+        ),
+        isTrue,
+        reason: 'gestationMonthAtAbortion >= 1 should reveal typeOfAbortion',
+      );
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: typeOfAbortion,
+          data: const CanonicalVisitData({'gestationMonthAtAbortion': '0'}),
+          rulesByTargetId: config.visibilityRulesByTargetId,
+        ),
+        isFalse,
+        reason: 'below the threshold, typeOfAbortion should stay hidden',
+      );
+    });
   });
   group('FormConfig.buildVisibilityRules', () {
     test('inverts a driver field\'s condition array by targetId', () {

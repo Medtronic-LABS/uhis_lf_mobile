@@ -359,8 +359,8 @@ abstract final class FieldVisibilityRules {
     final rules = rulesByTargetId[field.id];
     if (rules != null && rules.isNotEmpty) {
       for (final rule in rules) {
-        final driverValue = data.getValue(rule.driverId);
-        if (driverValue != null && driverValue.toString() == rule.eq) {
+        final driverValue = data.getValue(rule.driverId)?.toString();
+        if (rule.matches(driverValue)) {
           return rule.visibility == 'visible';
         }
       }

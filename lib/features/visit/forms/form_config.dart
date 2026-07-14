@@ -88,23 +88,58 @@ class FieldOption {
 /// `field_library.json` — e.g. `pncNeonateSigns`'s `condition` array contains
 /// `{eq: "Other", targetId: "otherPncNeonateSigns", visibility: "visible"}`,
 /// meaning "when the driver field's value equals `eq`, set the target
-/// field's (`targetId`) visibility to `visibility`".
+/// field's (`targetId`) visibility to `visibility`". Some conditions use
+/// `eqList` instead of `eq` — matches if the driver's value is any of
+/// several values (e.g. `{eqList: ["nid", "brn"], ...}`) — or
+/// `greaterThanOrEqual` for a numeric driver (e.g. `{greaterThanOrEqual: 1,
+/// targetId: "typeOfAbortion", ...}`). Exactly one of [eq]/[eqList]/
+/// [greaterThanOrEqual] is set per the source JSON.
 class FieldCondition {
   const FieldCondition({
     required this.targetId,
-    required this.eq,
     required this.visibility,
+    this.eq,
+    this.eqList = const [],
+    this.greaterThanOrEqual,
   });
 
   final String targetId;
-  final String eq;
   final String visibility;
 
-  factory FieldCondition.fromJson(Map<String, dynamic> json) => FieldCondition(
-        targetId: json['targetId'] as String? ?? '',
-        eq: json['eq']?.toString() ?? '',
-        visibility: json['visibility'] as String? ?? 'gone',
-      );
+  /// Single acceptable trigger value, or null when this condition uses
+  /// [eqList] or [greaterThanOrEqual] instead.
+  final String? eq;
+
+  /// Multiple acceptable trigger values (from the JSON's `eqList` array).
+  /// Empty when this condition uses [eq]/[greaterThanOrEqual] instead.
+  final List<String> eqList;
+
+  /// Numeric threshold — matches when the driver's value, parsed as a
+  /// number, is `>=` this. Null when this condition uses [eq]/[eqList].
+  final num? greaterThanOrEqual;
+
+  /// True when the driver's current value matches this condition's trigger.
+  bool matches(String? driverValue) {
+    if (driverValue == null) return false;
+    if (greaterThanOrEqual != null) {
+      final n = num.tryParse(driverValue);
+      return n != null && n >= greaterThanOrEqual!;
+    }
+    if (eq != null) return driverValue == eq;
+    return eqList.contains(driverValue);
+  }
+
+  factory FieldCondition.fromJson(Map<String, dynamic> json) {
+    final rawEqList = json['eqList'] as List<dynamic>?;
+    final rawGte = json['greaterThanOrEqual'] as num?;
+    return FieldCondition(
+      targetId: json['targetId'] as String? ?? '',
+      visibility: json['visibility'] as String? ?? 'gone',
+      eq: (rawEqList == null && rawGte == null) ? json['eq']?.toString() : null,
+      eqList: rawEqList?.map((e) => e.toString()).toList() ?? const [],
+      greaterThanOrEqual: rawGte,
+    );
+  }
 }
 
 /// A [FieldCondition] inverted and indexed by the *target* field id, with the
@@ -113,13 +148,28 @@ class FieldCondition {
 class FieldVisibilityRule {
   const FieldVisibilityRule({
     required this.driverId,
-    required this.eq,
     required this.visibility,
+    this.eq,
+    this.eqList = const [],
+    this.greaterThanOrEqual,
   });
 
   final String driverId;
-  final String eq;
   final String visibility;
+  final String? eq;
+  final List<String> eqList;
+  final num? greaterThanOrEqual;
+
+  /// True when the driver's current value matches this rule's trigger.
+  bool matches(String? driverValue) {
+    if (driverValue == null) return false;
+    if (greaterThanOrEqual != null) {
+      final n = num.tryParse(driverValue);
+      return n != null && n >= greaterThanOrEqual!;
+    }
+    if (eq != null) return driverValue == eq;
+    return eqList.contains(driverValue);
+  }
 }
 
 class FieldDef {
@@ -315,6 +365,8 @@ class FormConfig {
               FieldVisibilityRule(
                 driverId: field.id,
                 eq: condition.eq,
+                eqList: condition.eqList,
+                greaterThanOrEqual: condition.greaterThanOrEqual,
                 visibility: condition.visibility,
               ),
             );
