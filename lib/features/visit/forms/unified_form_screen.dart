@@ -1230,6 +1230,23 @@ class _SectionCard extends StatelessWidget {
   /// Renders with a tinted background + accent border.
   final bool isNewEnrolment;
 
+  // ── Tri-state clinical-severity chip colors ───────────────────────────────
+  // Danger-sign-adjacent Yes/No/tri-state fields where the mockup colors
+  // each option by clinical meaning rather than the generic navy selected
+  // state — keyed by field id, then by the option's exact display name
+  // (not id) since RadioFormField operates on display names.
+  static const Map<String, Map<String, Color>> _severityColorsByField = {
+    'urinaryAlbumin': {
+      'Present': AppColors.statusCritical,
+      'Absent': AppColors.statusSuccess,
+    },
+    'fetalMovement': {
+      'Not felt': AppColors.statusCritical,
+      'Less than usual': AppColors.statusWarning,
+      'Yes — normal': AppColors.statusSuccess,
+    },
+  };
+
   // ── Supplement pair detection ─────────────────────────────────────────────
   // Maps each "consumed" field id → (set of possible "provided" field ids,
   // outer card label, Bengali sub-label, emoji).
@@ -1344,6 +1361,11 @@ class _SectionCard extends StatelessWidget {
         notifier.fieldSource(fieldId) == FieldSource.aiPending;
 
     final fieldWidgets = <Widget>[];
+    // Sequential question numbering (matches the design mockup) — scoped to
+    // the pregnancy-history section only, not a global _FieldLabel change.
+    // Only counts fields that actually render, so a hidden question (e.g.
+    // Parity before Gravida >= 2) doesn't leave a gap in the sequence.
+    var pregnancyHistoryQuestionNumber = 0;
     for (final ref in section.fieldRefs) {
       if (consumedIds.contains(ref.id)) continue;
 
@@ -1356,6 +1378,9 @@ class _SectionCard extends StatelessWidget {
       )) {
         continue;
       }
+      final questionNumber = section.sectionId == 'pregnancyHistory'
+          ? ++pregnancyHistoryQuestionNumber
+          : null;
 
       // IDs whose AI-pending state lights this widget's badge (composite
       // cards cover their absorbed counterpart fields too).
@@ -1380,7 +1405,7 @@ class _SectionCard extends StatelessWidget {
               pulseDef: pulseDef, pulseRef: pulseRef,
             );
           } else {
-            child = _fieldRow(context, def, ref);
+            child = _fieldRow(context, def, ref, questionNumber: questionNumber);
           }
         } else {
           continue;
@@ -1395,7 +1420,7 @@ class _SectionCard extends StatelessWidget {
           if (randomDef != null) {
             child = _glucosePairCard(context, def, ref, randomDef, randomRef);
           } else {
-            child = _fieldRow(context, def, ref);
+            child = _fieldRow(context, def, ref, questionNumber: questionNumber);
           }
         } else {
           continue;
@@ -1410,7 +1435,7 @@ class _SectionCard extends StatelessWidget {
           if (weightDef != null) {
             child = _heightWeightPairCard(context, def, ref, weightDef, weightRef);
           } else {
-            child = _fieldRow(context, def, ref);
+            child = _fieldRow(context, def, ref, questionNumber: questionNumber);
           }
         } else {
           continue;
@@ -1425,13 +1450,13 @@ class _SectionCard extends StatelessWidget {
           if (providedDef != null) {
             child = _supplementPairCard(context, def, ref, providedDef, providedId, meta);
           } else {
-            child = _fieldRow(context, def, ref);
+            child = _fieldRow(context, def, ref, questionNumber: questionNumber);
           }
         } else {
-          child = _fieldRow(context, def, ref);
+          child = _fieldRow(context, def, ref, questionNumber: questionNumber);
         }
       } else {
-        child = _fieldRow(context, def, ref);
+        child = _fieldRow(context, def, ref, questionNumber: questionNumber);
       }
 
       if (badgeIds.any(aiPending)) {
@@ -1517,6 +1542,7 @@ class _SectionCard extends StatelessWidget {
       statusBadge: bpStatus != null
           ? _VitalBadge(label: bpStatus.label, color: bpStatus.color)
           : null,
+      infoText: sysDef.isInfoVisible ? sysDef.infoTitle : null,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
@@ -1890,9 +1916,15 @@ class _SectionCard extends StatelessWidget {
   /// For the handful of vital-sign fields that have clinical rules (weight,
   /// fundal height, urine albumin, haemoglobin), a [_VitalBadge] and optional
   /// inline warning are computed from the current field value and appended.
-  Widget _fieldRow(BuildContext context, FieldDef def, FieldRef ref) {
+  Widget _fieldRow(
+    BuildContext context,
+    FieldDef def,
+    FieldRef ref, {
+    int? questionNumber,
+  }) {
     final currentValue = data.getValue(ref.id);
-    final control = _buildField(context, def, ref, currentValue);
+    final control =
+        _buildField(context, def, ref, currentValue, questionNumber: questionNumber);
     switch (def.widgetHint) {
       case WidgetHint.infoLabel:
         // For BMI, enrich the read-only display with a WHO classification badge.
@@ -1976,10 +2008,25 @@ class _SectionCard extends StatelessWidget {
               null,
               _VitalStatusEval.asDouble(currentValue),
             );
+
+          case 'bpLogDetails':
+            // NCD's composite BP widget (_BpReadingField) — reuse the
+            // existing badge/color logic rather than reimplementing it,
+            // but with NCD's own thresholds (different from ANC's).
+            final readings = currentValue is List
+                ? currentValue.cast<Map<String, dynamic>>()
+                : const <Map<String, dynamic>>[];
+            if (readings.isNotEmpty) {
+              final reading = readings.first;
+              vitalStatus = _VitalStatusEval.bloodPressureNcd(
+                _VitalStatusEval.asInt(reading['systolic']),
+                _VitalStatusEval.asInt(reading['diastolic']),
+              );
+            }
         }
 
         return _FieldShell(
-          label: def.label,
+          label: questionNumber != null ? '$questionNumber. ${def.label}' : def.label,
           subLabel: subParts.isEmpty ? null : subParts.join(' · '),
           emoji: glyph?.emoji,
           emojiBg: glyph?.background,
@@ -1989,6 +2036,7 @@ class _SectionCard extends StatelessWidget {
               ? _VitalBadge(label: vitalStatus.label, color: vitalStatus.color)
               : null,
           inlineWarning: vitalStatus?.warning,
+          infoText: def.isInfoVisible ? def.infoTitle : null,
           child: control,
         );
     }
@@ -2046,8 +2094,9 @@ class _SectionCard extends StatelessWidget {
     BuildContext context,
     FieldDef def,
     FieldRef ref,
-    dynamic currentValue,
-  ) {
+    dynamic currentValue, {
+    int? questionNumber,
+  }) {
     switch (def.widgetHint) {
       case WidgetHint.radioGroup:
         // Canonical store uses option id; RadioFormField works with display names.
@@ -2064,6 +2113,7 @@ class _SectionCard extends StatelessWidget {
           key: Key('unified_form_${def.id}_input'),
           options: def.options.map((o) => o.name).toList(),
           currentValue: displayName,
+          severityColors: _severityColorsByField[def.id],
           onChanged: (name) {
             if (name == null) {
               // Toggle-deselect: tapping the active pill clears the value.
@@ -2298,6 +2348,48 @@ abstract final class _VitalStatusEval {
       );
     }
     if (s >= 120) {
+      return _VitalStatus(
+        label: UnifiedFormStrings.vsBpElevated,
+        color: AppColors.statusWarning,
+      );
+    }
+    if (s > 0 || d > 0) {
+      return _VitalStatus(
+        label: UnifiedFormStrings.vsBpNormal,
+        color: AppColors.statusSuccess,
+      );
+    }
+    return null;
+  }
+
+  /// NCD-specific BP bands — deliberately separate from [bloodPressure]
+  /// (ANC): the two programmes use different threshold sets (see CLAUDE.md
+  /// "Key Clinical Thresholds" — NCD's crisis/high bands sit higher than
+  /// ANC's), so this reuses the shared NCD constants from
+  /// assessment_thresholds.dart rather than the ANC-tuned evaluator above.
+  static _VitalStatus? bloodPressureNcd(int? sys, int? dia) {
+    if (sys == null && dia == null) return null;
+    final s = sys ?? 0;
+    final d = dia ?? 0;
+    if (s >= bpCrisisSystolic || d >= bpCrisisDiastolic) {
+      return _VitalStatus(
+        label: UnifiedFormStrings.vsBpSevere,
+        color: AppColors.statusCritical,
+      );
+    }
+    if (s >= upazilaUpperLimitSystolic || d >= upazilaUpperLimitDiastolic) {
+      return _VitalStatus(
+        label: UnifiedFormStrings.vsBpHigh,
+        color: AppColors.statusCritical,
+      );
+    }
+    if (s >= bpHighSystolic || d >= bpHighDiastolic) {
+      return _VitalStatus(
+        label: UnifiedFormStrings.vsBpSlightlyElevated,
+        color: AppColors.statusWarning,
+      );
+    }
+    if (s >= 130 || d >= 85) {
       return _VitalStatus(
         label: UnifiedFormStrings.vsBpElevated,
         color: AppColors.statusWarning,
@@ -2619,6 +2711,7 @@ class _FieldShell extends StatelessWidget {
     this.hasError = false,
     this.statusBadge,
     this.inlineWarning,
+    this.infoText,
   });
 
   final String label;
@@ -2641,10 +2734,16 @@ class _FieldShell extends StatelessWidget {
   /// Optional inline warning shown below the field control (⚠ text).
   final String? inlineWarning;
 
+  /// Optional short clinical guidance shown between the label and the
+  /// control (e.g. "0 = if BP could not be measured") — from the field
+  /// library's `infoTitle`, previously parsed but never rendered.
+  final String? infoText;
+
   @override
   Widget build(BuildContext context) {
     final hasSubLabel = subLabel != null && subLabel!.isNotEmpty;
     final hasWarning  = inlineWarning != null && inlineWarning!.isNotEmpty;
+    final hasInfoText = infoText != null && infoText!.isNotEmpty;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(12, 11, 12, 12),
@@ -2695,6 +2794,26 @@ class _FieldShell extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 9),
+          ],
+          if (hasInfoText) ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('💡', style: TextStyle(fontSize: 10)),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    infoText!,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: AppColors.textMuted,
+                      height: 1.3,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
           ],
           child,
           if (hasWarning) ...[
@@ -3277,27 +3396,15 @@ class _BpReadingFieldState extends State<_BpReadingField> {
     required TextEditingController controller,
     String? suffixText,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          caption,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: AppColors.textMuted,
-                fontWeight: FontWeight.w600,
-                fontSize: 10.5,
-              ),
-        ),
-        const SizedBox(height: 4),
-        TextFormField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          style: Theme.of(context).textTheme.bodyMedium,
-          decoration: _filledInputDecoration(suffixText: suffixText),
-          onChanged: (_) => _emit(),
-        ),
-      ],
+    // Placeholder-inside-input, matching the mockup — disappears once the SK
+    // starts typing, rather than a permanent label above the field.
+    return TextFormField(
+      controller: controller,
+      keyboardType: TextInputType.number,
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      style: Theme.of(context).textTheme.bodyMedium,
+      decoration: _filledInputDecoration(hintText: caption, suffixText: suffixText),
+      onChanged: (_) => _emit(),
     );
   }
 }

@@ -15,6 +15,7 @@ class RadioFormField extends StatelessWidget {
     required this.options,
     required this.onChanged,
     this.currentValue,
+    this.severityColors,
   });
 
   final List<String> options;
@@ -23,6 +24,12 @@ class RadioFormField extends StatelessWidget {
   /// Called with the tapped option's string, or `null` when the already-
   /// selected option is tapped again (toggle-deselect).
   final ValueChanged<String?> onChanged;
+
+  /// Optional per-option selected-state color, keyed by the option's display
+  /// name — e.g. `{'Present': red, 'Absent': green}` for a danger-sign-
+  /// adjacent tri-state field. Options not present in the map (or when this
+  /// is null) fall back to the default navy selected color.
+  final Map<String, Color>? severityColors;
 
   @override
   Widget build(BuildContext context) {
@@ -47,6 +54,7 @@ class RadioFormField extends StatelessWidget {
       final tile = _PillButton(
         label: opt,
         selected: selected,
+        selectedColor: severityColors?[opt],
         // Tapping the already-selected pill deselects (sends null); tapping
         // an unselected pill selects it.
         onTap: () => onChanged(selected ? null : opt),
@@ -67,25 +75,31 @@ class _PillButton extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.selectedColor,
   });
 
   final String label;
   final bool selected;
   final VoidCallback onTap;
 
+  /// Overrides the default navy selected-state color (see
+  /// [RadioFormField.severityColors]).
+  final Color? selectedColor;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final activeColor = selectedColor ?? AppColors.navy;
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 120),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
         decoration: BoxDecoration(
-          color: selected ? AppColors.navy : AppColors.cardSurface,
+          color: selected ? activeColor : AppColors.cardSurface,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: selected ? AppColors.navy : AppColors.border,
+            color: selected ? activeColor : AppColors.border,
             width: 2,
           ),
         ),
