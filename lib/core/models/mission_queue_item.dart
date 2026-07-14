@@ -123,6 +123,7 @@ class MissionQueueItem {
     this.modifier = Modifier.none,
     this.isPregnant = false,
     this.band = Band.band4,
+    this.clinicalReasons = const <String>[],
   });
 
   /// Unique identifier (patient ID, referral ID, or composite key).
@@ -240,6 +241,13 @@ class MissionQueueItem {
   /// compile unchanged before the tiered queue is wired up.
   final Band band;
 
+  /// Human-readable clinical scoring reasons that explain *why* this patient
+  /// received their [band] and [modifier] — e.g. "NCD: stage 1 hypertension
+  /// (BP 142/88)", "NCD: elderly patient (age 65)". Sourced from
+  /// [RiskRationale.formattedReasons] via [WorklistEntry.reasons]. Debug-only;
+  /// never surfaced in the SK UI.
+  final List<String> clinicalReasons;
+
   /// Returns a copy with the supplied fields overridden. Null arguments leave
   /// the original value in place — to clear a nullable field, pass the
   /// existing value through the call site or build a fresh ctor. Used by
@@ -283,6 +291,7 @@ class MissionQueueItem {
     Modifier? modifier,
     bool? isPregnant,
     Band? band,
+    List<String>? clinicalReasons,
   }) {
     return MissionQueueItem(
       id: id,
@@ -315,6 +324,7 @@ class MissionQueueItem {
       modifier: modifier ?? this.modifier,
       isPregnant: isPregnant ?? this.isPregnant,
       band: band ?? this.band,
+      clinicalReasons: clinicalReasons ?? this.clinicalReasons,
     );
   }
 

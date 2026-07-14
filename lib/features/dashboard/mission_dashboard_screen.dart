@@ -446,6 +446,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         '[Patient selected] [${item.band.wireTag}$modTag] ${item.patientName}'
         ' | prog: $progs | tier: ${item.tier.name}$overdueTag$driversTag',
       );
+      if (item.clinicalReasons.isNotEmpty) {
+        ConsoleLog.banner('  Why ${item.band.wireTag}$modTag:');
+        for (final r in item.clinicalReasons) {
+          ConsoleLog.banner('    • $r');
+        }
+      } else {
+        ConsoleLog.banner('  Why ${item.band.wireTag}$modTag: (no clinical reasons stored)');
+      }
       return true;
     }());
     final patientId = item.patientId;

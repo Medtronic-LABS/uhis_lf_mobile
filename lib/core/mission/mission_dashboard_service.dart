@@ -571,6 +571,7 @@ class MissionDashboardService {
       dueAt: entry.nextDueAt,
       aiInsight: aiInsight,
       aiDrivers: drivers,
+      clinicalReasons: entry.reasons,
       availableActions: [
         MissionAction.openCase,
         MissionAction.scheduleVisit,
