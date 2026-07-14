@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../../../core/clinical/assessment_thresholds.dart';
 import '../../../core/clinical/referral_evaluator.dart';
 import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/db/patient_dao.dart';
@@ -76,6 +78,10 @@ class UnifiedFormNotifier extends ChangeNotifier {
   bool _submitting = false;
   String? _submitError;
   Set<String> _validationErrors = const {};
+
+  /// Debounces [_saveDraft] so rapid keystrokes coalesce into one DB write
+  /// instead of persisting every intermediate value (e.g. "1", "12", "120").
+  Timer? _saveDraftTimer;
 
   bool _lastIsReferred = false;
   List<String> _lastReferredReasons = const [];
@@ -623,6 +629,15 @@ class UnifiedFormNotifier extends ChangeNotifier {
       return null;
     }
 
+    // The `temperature` field is captured in °F (field_library.json
+    // `unitMeasurement: "°F"`), but every referral evaluator's fever
+    // thresholds are in °C — convert before evaluating, or a normal 98.6°F
+    // reading (>= 38.9 raw) reads as a false high fever on every visit.
+    double? temperatureCelsius() {
+      final f = asDouble('temperature');
+      return f == null ? null : fahrenheitToCelsius(f);
+    }
+
     final sys = asDouble('systolic') ?? asDouble('bloodPressureSystolic');
     final dia = asDouble('diastolic') ?? asDouble('bloodPressureDiastolic');
     final glucoseType = _data.getValue('glucoseType') as String?;
@@ -672,7 +687,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
       );
       final result = AncReferralEvaluator.evaluate(
         ancAssessment,
-        temperatureCelsius: asDouble('temperature'),
+        temperatureCelsius: temperatureCelsius(),
         pulseBpm: asDouble('pulse')?.toInt(),
       );
       debugPrint('[Referral][ANC] required=${result.isReferralRequired}  emergency=${result.emergencyConditions}  nonEmergency=${result.nonEmergencyConditions}');
@@ -689,7 +704,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
       final result = PncReferralEvaluator.evaluate(
         systolic: sys,
         diastolic: dia,
-        temperatureCelsius: asDouble('temperature'),
+        temperatureCelsius: temperatureCelsius(),
         pulseBpm: asDouble('pulse')?.toInt(),
         hemoglobinGdL: asDouble('hemoglobin'),
         fastingGlucoseMmol: isFbs ? glVal : null,
@@ -712,7 +727,15 @@ class UnifiedFormNotifier extends ChangeNotifier {
     return (referred, List<String>.unmodifiable(reasons));
   }
 
+  /// Debounced — schedules [_persistDraftNow], coalescing rapid keystrokes
+  /// into a single DB write. See [_saveDraftTimer].
   void _saveDraft() {
+    _saveDraftTimer?.cancel();
+    _saveDraftTimer = Timer(const Duration(milliseconds: 400), _persistDraftNow);
+  }
+
+  void _persistDraftNow() {
+    _saveDraftTimer = null;
     final row = AssessmentDraftRow(
       encounterId: _encounterId,
       patientId: _patientId,
@@ -728,5 +751,16 @@ class UnifiedFormNotifier extends ChangeNotifier {
     _draftDao.saveDraft(row).catchError((e) {
       debugPrint('[UnifiedForm] autosave error: $e');
     });
+  }
+
+  @override
+  void dispose() {
+    // Flush any pending debounced save so the last keystroke before
+    // navigating away isn't lost — don't just cancel it.
+    if (_saveDraftTimer != null) {
+      _saveDraftTimer!.cancel();
+      _persistDraftNow();
+    }
+    super.dispose();
   }
 }

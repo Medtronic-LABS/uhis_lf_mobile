@@ -78,6 +78,11 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   Object? _configError;
   final ScrollController _scrollCtrl = ScrollController();
 
+  // Activates the numeric-range `validator:`s already wired on individual
+  // TextFormFields (e.g. _numericRangeValidator) — a FormFieldValidator only
+  // ever runs inside a Form.validate() call.
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+
   // Used to suppress duplicate [Form] debug logs — only log when the section
   // count or field count actually changes between rebuilds.
   int _lastLoggedSectionCount = -1;
@@ -321,11 +326,14 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             ),
             // ── Assessment form sections + submit button ────────────────────
             Expanded(
-              child: ListView(
-                controller: _scrollCtrl,
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.xxxl, AppSpacing.md, AppSpacing.xxxl, AppSpacing.xxxl),
-                children: items,
+              child: Form(
+                key: _formKey,
+                child: ListView(
+                  controller: _scrollCtrl,
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.xxxl, AppSpacing.md, AppSpacing.xxxl, AppSpacing.xxxl),
+                  children: items,
+                ),
               ),
             ),
           ],
@@ -362,6 +370,13 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
       }
       return;
     }
+
+    // Range-check numeric fields (BP, fundal height, glucose, Hb, temperature)
+    // — activates the validator:s already attached to the individual
+    // TextFormFields; Form.validate() renders each one's message inline
+    // under the offending field, so no separate snackbar is needed here.
+    final rangeValid = _formKey.currentState?.validate() ?? true;
+    if (!rangeValid) return;
 
     // Clear any previous errors before submitting.
     notifier.setValidationErrors(const {});
@@ -1559,6 +1574,7 @@ class _SectionCard extends StatelessWidget {
                   onFieldChanged('systolic', int.tryParse(v) ?? double.tryParse(v) ?? v);
                 }
               },
+              validator: _numericRangeValidator('systolic'),
             ),
           ),
           Padding(
@@ -1584,6 +1600,7 @@ class _SectionCard extends StatelessWidget {
                   onFieldChanged('diastolic', int.tryParse(v) ?? double.tryParse(v) ?? v);
                 }
               },
+              validator: _numericRangeValidator('diastolic'),
             ),
           ),
           if (pulseDef != null) ...[
@@ -2069,8 +2086,27 @@ class _SectionCard extends StatelessWidget {
         return (v) {
           if (v == null || v.isEmpty) return null;
           final n = double.tryParse(v);
-          if (n == null || n < tempFormMinC || n > tempFormMaxC) {
+          if (n == null || !isPlausibleTemperatureF(n)) {
             return ComposerStrings.temperatureValidationError;
+          }
+          return null;
+        };
+      case 'systolic':
+      case 'diastolic':
+        return (v) {
+          if (v == null || v.isEmpty) return null;
+          final n = double.tryParse(v);
+          if (n == null || !isPlausibleBpReading(n)) {
+            return ComposerStrings.bpValidationError;
+          }
+          return null;
+        };
+      case 'fundalHeight':
+        return (v) {
+          if (v == null || v.isEmpty) return null;
+          final n = double.tryParse(v);
+          if (n == null || !isPlausibleFundalHeightCm(n)) {
+            return ComposerStrings.fundalHeightValidationError;
           }
           return null;
         };
@@ -3354,6 +3390,7 @@ class _BpReadingFieldState extends State<_BpReadingField> {
             caption: UnifiedFormStrings.bpSystolicLabel,
             controller: _sys,
             suffixText: UnifiedFormStrings.bpUnit,
+            validator: _SectionCard._numericRangeValidator('systolic'),
           ),
         ),
         Padding(
@@ -3372,6 +3409,7 @@ class _BpReadingFieldState extends State<_BpReadingField> {
             context,
             caption: UnifiedFormStrings.bpDiastolicLabel,
             controller: _dia,
+            validator: _SectionCard._numericRangeValidator('diastolic'),
           ),
         ),
         const SizedBox(width: 10),
@@ -3395,6 +3433,7 @@ class _BpReadingFieldState extends State<_BpReadingField> {
     required String caption,
     required TextEditingController controller,
     String? suffixText,
+    FormFieldValidator<String>? validator,
   }) {
     // Placeholder-inside-input, matching the mockup — disappears once the SK
     // starts typing, rather than a permanent label above the field.
@@ -3405,6 +3444,7 @@ class _BpReadingFieldState extends State<_BpReadingField> {
       style: Theme.of(context).textTheme.bodyMedium,
       decoration: _filledInputDecoration(hintText: caption, suffixText: suffixText),
       onChanged: (_) => _emit(),
+      validator: validator,
     );
   }
 }
