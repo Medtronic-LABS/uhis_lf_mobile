@@ -29,6 +29,7 @@ import '../../core/api/scribe_api_service.dart';
 import '../../core/clinical/referral_evaluator.dart';
 import '../../core/constants/app_strings.dart';
 import 'models/anc_assessment.dart';
+import '../patient/enroll/pregnancy_registration_sheet.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
@@ -936,9 +937,22 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
       final progs = await dao.programmesFor(widget.patientId);
       if (!mounted) return;
 
-      // LMP is now collected inline in the ANC form via _PregnancyDatesCard —
-      // no pre-form popup needed. UnifiedFormNotifier.loadPregnancyData() loads
-      // any existing snapshot on form open, and updateLmpDate() saves on pick.
+      // If ANC is active and no LMP recorded yet, collect it BEFORE the form
+      // renders so the unified form initialises with the correct LMP data.
+      if (_selectedProgrammes.contains(Programme.anc)) {
+        final snapshotDao = context.read<PregnancySnapshotDao>();
+        final snapshot = await snapshotDao.byPatient(widget.patientId);
+        if ((snapshot?.lmpDate == null) && mounted) {
+          await PregnancyRegistrationSheet.show(
+            context,
+            patientId: widget.patientId,
+            patientName: widget.patientName ?? 'Patient',
+            patientAge: widget.patientAge,
+          );
+          if (!mounted) return;
+        }
+      }
+
       setState(() {
         _currentProgrammes = progs;
         _request = _buildRequest(progs);

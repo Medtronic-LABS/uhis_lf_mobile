@@ -228,13 +228,12 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         final items = <Widget>[];
         final isAnc = widget.activeFormTypes.contains('anc');
 
-        // ── Pregnancy dates card (ANC) — editable LMP + computed EDD/GA ────
+        // ── Gestational age card (ANC) — top of scroll area ────────────────
         if (isAnc) {
-          items.add(_PregnancyDatesCard(
+          items.add(_GestationalAgeCard(
             lmpDate: notifier.lmpDate,
             eddDate: notifier.eddDate,
             gestationalWeeks: notifier.gestationalWeeks,
-            onLmpChanged: notifier.updateLmpDate,
           ));
         }
 
@@ -896,23 +895,20 @@ class _VitalsTrendCardState extends State<_VitalsTrendCard> {
   }
 }
 
-// ── Pregnancy dates card (inline LMP picker) ──────────────────────────────────
+// ── Gestational age card ──────────────────────────────────────────────────────
 
-/// Editable card shown at the top of the ANC form. Displays LMP (tap to pick),
-/// EDD (auto-computed), and gestational age. On LMP pick, calls [onLmpChanged]
-/// which persists to PregnancySnapshotDao via [UnifiedFormNotifier.updateLmpDate].
-class _PregnancyDatesCard extends StatelessWidget {
-  const _PregnancyDatesCard({
-    required this.onLmpChanged,
-    this.lmpDate,
-    this.eddDate,
-    this.gestationalWeeks,
+/// Navy-gradient card shown at the top of the ANC section displaying the
+/// patient's gestational age, LMP, and EDD loaded from patient rawJson.
+class _GestationalAgeCard extends StatelessWidget {
+  const _GestationalAgeCard({
+    required this.lmpDate,
+    required this.eddDate,
+    required this.gestationalWeeks,
   });
 
   final DateTime? lmpDate;
   final DateTime? eddDate;
   final int? gestationalWeeks;
-  final ValueChanged<DateTime> onLmpChanged;
 
   static const _months = [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -922,12 +918,15 @@ class _PregnancyDatesCard extends StatelessWidget {
   static String _fmt(DateTime d) =>
       '${d.day} ${_months[d.month - 1]} ${d.year}';
 
-  static const _pink = Color(0xFF9D174D);
-  static const _cardBg = Color(0xFFFDF2F8);
-  static const _cardBorder = Color(0xFFF9A8D4);
+  static const _pinkAccent = Color(0xFF9D174D);
+  static const _navy = Color(0xFF1B2B5E);
+  static const _unitGrey = Color(0xFF6B7280);
 
   @override
   Widget build(BuildContext context) {
+    final lmpStr = lmpDate != null ? _fmt(lmpDate!) : null;
+    final eddStr = eddDate != null ? _fmt(eddDate!) : null;
+
     int? weeks;
     int? days;
     if (lmpDate != null) {
@@ -939,73 +938,144 @@ class _PregnancyDatesCard extends StatelessWidget {
       days = 0;
     }
 
-    final resolvedEdd = eddDate ?? lmpDate?.add(const Duration(days: 280));
-    final eddStr = resolvedEdd != null ? _fmt(resolvedEdd) : null;
-    final lmpStr = lmpDate != null ? _fmt(lmpDate!) : null;
-
-    String? gaStr;
-    if (weeks != null && days != null) {
-      gaStr = '$weeks ${UnifiedFormStrings.pregnancyDatesWks} '
-          '$days ${UnifiedFormStrings.pregnancyDatesDays}';
-    } else if (weeks != null) {
-      gaStr = '$weeks ${UnifiedFormStrings.pregnancyDatesWks}';
-    }
-
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.xl),
       child: Container(
         decoration: BoxDecoration(
-          color: _cardBg,
+          color: const Color(0xFFFDF2F8),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: _cardBorder),
+          border: Border.all(color: const Color(0xFFF9A8D4)),
         ),
         padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              UnifiedFormStrings.pregnancyDatesTitle,
-              style: AppTextStyles.subText.copyWith(
-                fontWeight: FontWeight.w600,
-                color: _pink,
-              ),
+            // Hero row: circle avatar + label + number
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.06),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                  alignment: Alignment.center,
+                  child: const Text('🤰', style: TextStyle(fontSize: 19)),
+                ),
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      ComposerStrings.gestationalAgeLabel.toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: _pinkAccent,
+                        letterSpacing: 0.6,
+                        height: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    RichText(
+                      text: TextSpan(
+                        style: const TextStyle(
+                          fontFamily: 'Nunito',
+                          color: _navy,
+                          height: 1,
+                        ),
+                        children: weeks != null
+                            ? [
+                                TextSpan(
+                                  text: '$weeks ',
+                                  style: const TextStyle(
+                                    fontSize: 21,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: ComposerStrings.gestationalAgeWeeks,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: _unitGrey,
+                                  ),
+                                ),
+                                if (days != null && days > 0) ...[
+                                  TextSpan(
+                                    text: ' $days ',
+                                    style: const TextStyle(
+                                      fontSize: 21,
+                                      fontWeight: FontWeight.w900,
+                                      color: _navy,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: ComposerStrings.gestationalAgeDays,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: _unitGrey,
+                                    ),
+                                  ),
+                                ],
+                              ]
+                            : [
+                                TextSpan(
+                                  text: '— ',
+                                  style: const TextStyle(
+                                    fontSize: 21,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: ComposerStrings.gestationalAgeWeeks,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: _unitGrey,
+                                  ),
+                                ),
+                              ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
             const SizedBox(height: 10),
-            _PdRow(
-              label: UnifiedFormStrings.pregnancyDatesLmpLabel,
-              value: lmpStr,
-              placeholder: UnifiedFormStrings.pregnancyDatesLmpHint,
-              editable: true,
-              onTap: () async {
-                final initial = lmpDate ??
-                    DateTime.now().subtract(const Duration(days: 90));
-                final picked = await showDatePicker(
-                  context: context,
-                  initialDate: initial,
-                  firstDate: DateTime.now().subtract(
-                    const Duration(days: 310),
+            // LMP + EDD row
+            Row(
+              children: [
+                Expanded(
+                  child: _DateSubBox(
+                    emoji: '📅',
+                    label: ComposerStrings.pregnancyOverviewLmp,
+                    value: lmpStr,
+                    valueColor: _navy,
                   ),
-                  lastDate: DateTime.now(),
-                );
-                if (picked != null) onLmpChanged(picked);
-              },
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _DateSubBox(
+                    emoji: '🍼',
+                    label: ComposerStrings.pregnancyOverviewEdd,
+                    value: eddStr,
+                    valueColor: const Color(0xFFDB2777),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            _PdRow(
-              label: UnifiedFormStrings.pregnancyDatesEddLabel,
-              value: eddStr,
-              placeholder: UnifiedFormStrings.autoComputedPlaceholder,
-              editable: false,
-            ),
-            if (gaStr != null) ...[
-              const SizedBox(height: 8),
-              _PdRow(
-                label: UnifiedFormStrings.pregnancyDatesGaLabel,
-                value: gaStr,
-                placeholder: null,
-                editable: false,
-              ),
-            ],
           ],
         ),
       ),
@@ -1013,68 +1083,54 @@ class _PregnancyDatesCard extends StatelessWidget {
   }
 }
 
-class _PdRow extends StatelessWidget {
-  const _PdRow({
+class _DateSubBox extends StatelessWidget {
+  const _DateSubBox({
+    required this.emoji,
     required this.label,
     required this.value,
-    required this.editable,
-    this.placeholder,
-    this.onTap,
+    required this.valueColor,
   });
 
+  final String emoji;
   final String label;
   final String? value;
-  final String? placeholder;
-  final bool editable;
-  final VoidCallback? onTap;
+  final Color valueColor;
 
-  static const _pink = Color(0xFF9D174D);
-  static const _cardBorder = Color(0xFFF9A8D4);
-  static const _grey = Color(0xFF6B7280);
+  static const _pinkAccent = Color(0xFF9D174D);
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: editable ? onTap : null,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(9),
+      ),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          SizedBox(
-            width: 88,
-            child: Text(
-              label,
-              style: AppTextStyles.subText.copyWith(color: _grey),
-            ),
-          ),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-              decoration: editable
-                  ? BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: _cardBorder),
-                    )
-                  : null,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      value ?? placeholder ?? '—',
-                      style: AppTextStyles.body.copyWith(
-                        color: value != null
-                            ? AppColors.textPrimary
-                            : AppColors.textMuted,
-                      ),
-                    ),
-                  ),
-                  if (editable)
-                    const Icon(
-                      Icons.calendar_today_outlined,
-                      size: 16,
-                      color: _pink,
-                    ),
-                ],
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(emoji, style: const TextStyle(fontSize: 12)),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: _pinkAccent,
+                  letterSpacing: 0.6,
+                ),
               ),
+            ],
+          ),
+          Text(
+            value ?? '—',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: valueColor,
             ),
           ),
         ],
