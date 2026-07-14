@@ -3295,7 +3295,12 @@ class _DateFieldState extends State<_DateField> {
   void didUpdateWidget(_DateField old) {
     super.didUpdateWidget(old);
     if (old.currentValue != widget.currentValue) {
-      _ctrl.text = widget.currentValue ?? '';
+      // Defer the controller update so it never fires inside a build phase.
+      // Setting TextEditingController.text= triggers FormField.didChange →
+      // FormState._forceRebuild → setState(), which crashes if called mid-build.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _ctrl.text = widget.currentValue ?? '';
+      });
     }
   }
 

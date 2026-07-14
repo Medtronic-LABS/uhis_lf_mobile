@@ -81,7 +81,8 @@ class AssessmentRepository extends ChangeNotifier {
     final now = DateTime.now();
     final resolvedEpisodeId = pregnancyEpisodeId ??
         (assessmentType.toUpperCase() == 'ANC' ||
-                assessmentType.toUpperCase() == 'PNC'
+                assessmentType.toUpperCase() == 'PNC' ||
+                assessmentType.toUpperCase() == 'PWPROFILE'
             ? const Uuid().v4()
             : null);
 

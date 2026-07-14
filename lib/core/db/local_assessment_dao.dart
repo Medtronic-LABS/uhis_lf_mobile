@@ -337,6 +337,7 @@ class LocalAssessmentEntity {
       'PNC_CHILD' || 'PNC_NEONATAL' => 'pncChild',
       'TB' => 'tb',
       'ICCM' || 'IMCI' => 'iccm',
+      'PWPROFILE' || 'PW_PROFILE' => 'pwProfile',
       'EPI' => null,
       _ => null,
     };
