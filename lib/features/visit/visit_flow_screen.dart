@@ -29,6 +29,7 @@ import '../../core/api/scribe_api_service.dart';
 import '../../core/clinical/referral_evaluator.dart';
 import '../../core/constants/app_strings.dart';
 import 'models/anc_assessment.dart';
+import '../patient/enroll/pregnancy_registration_sheet.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
@@ -940,6 +941,24 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
         _request = _buildRequest(progs);
         _ready = true;
       });
+
+      // If ANC is active and no LMP has been recorded yet, prompt the SK to
+      // register the pregnancy details from within Step 2 (not as a pre-modal).
+      if (_selectedProgrammes.contains(Programme.anc) && mounted) {
+        final snapshotDao = context.read<PregnancySnapshotDao>();
+        final snapshot = await snapshotDao.byPatient(widget.patientId);
+        if ((snapshot?.lmpDate == null) && mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
+            if (!mounted) return;
+            await PregnancyRegistrationSheet.show(
+              context,
+              patientId: widget.patientId,
+              patientName: widget.patientName ?? 'Patient',
+              patientAge: widget.patientAge,
+            );
+          });
+        }
+      }
     } catch (e) {
       debugPrint('[Step2] currentProgrammes lookup failed: $e');
       if (!mounted) return;
