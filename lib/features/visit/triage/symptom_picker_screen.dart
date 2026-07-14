@@ -324,7 +324,9 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           _ancVisitCount = visitsByVisit.length;
         });
       }
-    } on Object {
+    } on Object catch (e, st) {
+      debugPrint('[Briefing] fetch failed: $e');
+      debugPrint('[Briefing] $st');
       if (mounted) setState(() => _briefingLoading = false);
     }
   }
