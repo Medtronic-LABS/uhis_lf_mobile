@@ -512,21 +512,6 @@ abstract final class HouseholdListStrings {
   static String get enrolledTag =>
       AppLocale.isBangla ? 'নথিভুক্ত' : 'Enrolled';
 
-  // Households / Members tab strip
-  static String get tabHouseholds =>
-      AppLocale.isBangla ? 'পরিবার' : 'Households';
-  static String get tabMembers => AppLocale.isBangla ? 'সদস্য' : 'Members';
-  static String myPatientsCount(int n) =>
-      AppLocale.isBangla ? 'আমার রোগী ($n)' : 'My Patients ($n)';
-  static String allMembersCount(int n) =>
-      AppLocale.isBangla ? 'সব সদস্য ($n)' : 'All Members ($n)';
-  static String get noPatientsAssigned => AppLocale.isBangla
-      ? 'আপনার কোনো রোগী নির্ধারিত নেই'
-      : 'No patients assigned to you';
-  static String searchResultsEmpty(String query) => AppLocale.isBangla
-      ? '"$query" এর জন্য কোনো ফলাফল নেই'
-      : 'No results for "$query"';
-
   // Manual server refresh
   static String refreshSummary(int patients, int assessments, int followUps) =>
       AppLocale.isBangla
