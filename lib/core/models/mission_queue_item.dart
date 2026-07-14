@@ -337,30 +337,32 @@ class MissionQueueItem {
   /// Intra-band comparator implementing PRD §2.8 sort order within a band:
   ///   1. modifier a → modifier b → no modifier
   ///   2. pregnant > non-pregnant (spec §2.8 step 3)
-  ///   3. longer overdue ranks higher (spec §2.8 step 4)
-  ///   4. tier rank: critical > overdue > dueToday > thisWeek > upcoming
-  ///      (handles clinical-driver escalation — neonate/pnc-window patients that
-  ///      reach critical tier without a band upgrade must still surface above
-  ///      routine upcoming patients in the same band)
+  ///   3. tier rank: critical > overdue > dueToday > thisWeek > upcoming
+  ///      (clinical-driver escalation — neonate/pnc-window patients that reach
+  ///      critical tier without a band upgrade surface above overdue patients
+  ///      with the same band/modifier/pregnant status)
+  ///   4. longer overdue ranks higher within the same tier (spec §2.8 step 4)
   ///   5. ANC programme > NCD (CD-1 tiebreaker)
   ///   6. patient name ASC (stable tiebreaker)
   static int compareInBand(MissionQueueItem a, MissionQueueItem b) {
     // 1. Modifier: a(0) < b(1) < none(2) — best modifier wins
     final modCmp = a.modifier.sortRank.compareTo(b.modifier.sortRank);
     if (modCmp != 0) return modCmp;
-    // 2. Pregnant before non-pregnant (spec §2.8 step 3)
-    final pregCmp = (b.isPregnant ? 0 : 1).compareTo(a.isPregnant ? 0 : 1);
+    // 2. Pregnant before non-pregnant (spec §2.8 step 3).
+    //    Key: 0=pregnant, 1=not-pregnant — ascending so pregnant (0) sorts first.
+    final pregCmp = (a.isPregnant ? 0 : 1).compareTo(b.isPregnant ? 0 : 1);
     if (pregCmp != 0) return pregCmp;
-    // 3. Longer overdue ranks higher (spec §2.8 step 4 — applied to all patients
-    //    with positive overdue days; risk scorer does not always assign modifier b).
-    final overdueCmp = (b.daysOverdue ?? 0).compareTo(a.daysOverdue ?? 0);
-    if (overdueCmp != 0) return overdueCmp;
-    // 4. Tier rank: critical (0) < overdue (1) < dueToday (2) < thisWeek (3) < upcoming (4).
-    //    Clinical-driver escalation (neonate, pnc-window, ltfu-streak) can give a patient
-    //    critical/overdue tier without upgrading their band; tier rank surfaces them above
-    //    routine upcoming patients that share the same band, modifier, and overdue-days.
+    // 3. Tier rank: critical (0) < overdue (1) < dueToday (2) < thisWeek (3) < upcoming (4).
+    //    Must precede the overdue-days step: clinical-driver patients (neonate, pnc-window,
+    //    ltfu-streak) have tier=critical but daysOverdue=0 because their nextDueAt is
+    //    today/future. Without this guard they would be buried after every patient that
+    //    carries even 1 positive overdue day.
     final tierCmp = a.tier.rank.compareTo(b.tier.rank);
     if (tierCmp != 0) return tierCmp;
+    // 4. Within the same tier, longer overdue ranks higher (spec §2.8 step 4 —
+    //    applied to all patients; risk scorer does not always assign modifier b).
+    final overdueCmp = (b.daysOverdue ?? 0).compareTo(a.daysOverdue ?? 0);
+    if (overdueCmp != 0) return overdueCmp;
     // 5. ANC programme ranks above NCD (CD-1 tiebreaker)
     final ancCmp = _ancRank(b).compareTo(_ancRank(a));
     if (ancCmp != 0) return ancCmp;

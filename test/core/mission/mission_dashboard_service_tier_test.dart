@@ -212,6 +212,52 @@ void main() {
       },
     );
 
+    test(
+      'critical-driver patient (0d overdue) sorts before regular overdue patient',
+      () {
+        // Real-device bug: Baby 1 of Raani (critical, 0d) was after sdsdsdf
+        // (dueToday, 1d overdue) because overdueCmp fired before tierCmp.
+        final criticalDriver = _entry(
+          patientId: 'neonate',
+          nextDueAt: DateTime.now().add(const Duration(days: 3)),
+        );
+        final regularOverdue = _entry(
+          patientId: 'overdue',
+          nextDueAt: DateTime.now().subtract(const Duration(days: 1)),
+        );
+        final input = MissionInputData(
+          worklistEntries: [regularOverdue, criticalDriver],
+          neonatePatientIds: const {'neonate'},
+        );
+        final queue = service.computeTieredQueue(input);
+        expect(queue.first.patientId, 'neonate');
+        expect(queue.first.tier, DashboardTier.critical);
+        expect(queue[1].patientId, 'overdue');
+      },
+    );
+
+    test(
+      'isPregnant=true sorts before isPregnant=false within same band/modifier',
+      () {
+        // Real-device bug: pregCmp was (b ? 0 : 1).compareTo(a ? 0 : 1) — inverted,
+        // so non-pregnant NCD patients clustered before pregnant ANC patients.
+        final pregnantPatient = _entry(
+          patientId: 'preg-ncd',
+          programmes: const {Programme.ncd},
+        );
+        final notPregnant = _entry(
+          patientId: 'npreg-ncd',
+          programmes: const {Programme.ncd},
+        );
+        final input = MissionInputData(
+          worklistEntries: [notPregnant, pregnantPatient],
+          pregnantPatientIds: const {'preg-ncd'},
+        );
+        final queue = service.computeTieredQueue(input);
+        expect(queue.first.patientId, 'preg-ncd');
+      },
+    );
+
     test('band1 risk band → CRITICAL', () {
       final input = MissionInputData(
         worklistEntries: [
