@@ -793,17 +793,6 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                             ),
                           ),
 
-                        // ── Routine visit fallback link ────────────────────
-                        if (vm.isRoutineVisit && vm.activatedPathways.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: TextButton(
-                              onPressed: () => _navigateToForm([]),
-                              child: const Text(
-                                  TriageStrings.noSymptomsRoutineVisit),
-                            ),
-                          ),
-
                         // ── Vaccination CTA (under-5 only) ─────────────────
                         // For children the vaccination button is the primary
                         // CTA; in embedded mode it also advances the visit flow
