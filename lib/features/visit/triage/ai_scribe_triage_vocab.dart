@@ -223,6 +223,12 @@ abstract final class AiScribeTriageVocab {
       case SymptomCategory.maternal:
         // Require confirmed female — unknown sex gets no maternal chips.
         if (ctx.sex != Sex.female) return false;
+        // Confirmed pregnant or ANC-enrolled overrides the age ceiling —
+        // a 46-year-old enrolled in ANC is clinically pregnant regardless
+        // of the nominal 14-44 reproductive window.
+        if (ctx.isPregnant || ctx.activeProgrammes.contains(Programme.anc)) {
+          return true;
+        }
         if (!ctx.ageKnown) return true;
         return ctx.ageMonths >= maternalMinAgeMonths &&
             ctx.ageMonths <= maternalMaxAgeMonths;
