@@ -1887,6 +1887,7 @@ class _InlineServiceSelector extends StatelessWidget {
           mainAxisSpacing: 9,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
           childAspectRatio: 1.05,
           children: cards
               .map((c) => _ServiceTile(
