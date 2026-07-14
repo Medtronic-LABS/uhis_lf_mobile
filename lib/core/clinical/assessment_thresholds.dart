@@ -1,6 +1,8 @@
 library;
 
 // ── BP (form input bounds — Screening) ──
+// `0` is accepted separately as the documented "could not be measured"
+// sentinel (field_library.json `infoTitle` on `systolic`/`diastolic`).
 const double bpFormMin = 50.0; // mmHg floor
 const double bpFormMax = 300.0; // mmHg ceiling
 const double pulseFormMin = 50.0; // bpm floor
@@ -32,9 +34,21 @@ const double tempHypothermiaC = 35.0;
 const double tempNormalMinC = 36.1;
 const double tempNormalMaxC = 37.5;
 
-/// Form input bounds for temperature entry (°C).
-const double tempFormMinC = 30.0;
-const double tempFormMaxC = 43.0;
+/// Form input bounds for temperature entry — the `temperature` field is
+/// captured in °F (field_library.json `unitMeasurement: "°F"`), so these are
+/// deliberately wide Fahrenheit bounds, not the clinical fever thresholds
+/// above. `0` is accepted separately as the documented "could not be
+/// measured" sentinel (field_library.json `infoTitle`).
+const double tempFormMinF = 90.0;
+const double tempFormMaxF = 110.0;
+
+// ── Form input plausibility checks — pure predicates so Step 2's numeric
+//    range validators are unit-testable independent of the Form/widget layer.
+bool isPlausibleTemperatureF(double f) =>
+    f == 0 || (f >= tempFormMinF && f <= tempFormMaxF);
+bool isPlausibleBpReading(double v) => v == 0 || (v >= bpFormMin && v <= bpFormMax);
+bool isPlausibleFundalHeightCm(double cm) =>
+    cm >= fundalHeightFormMinCm && cm <= fundalHeightFormMaxCm;
 
 // ── Temperature conversion utilities ──
 double fahrenheitToCelsius(double f) => (f - 32) * 5 / 9;
@@ -96,6 +110,11 @@ const int parityHighRisk = 3;
 const double fundalHeightToleranceCm = 2.0;
 const double heightLowCm = 145.0;
 const double weightLowKg = 45.0;
+
+/// Form input bounds for fundal-height entry (cm) — deliberately wide to
+/// avoid rejecting a genuine outlier reading (e.g. twin pregnancy).
+const double fundalHeightFormMinCm = 8.0;
+const double fundalHeightFormMaxCm = 45.0;
 
 // ── CVD risk bands (%) ──
 const double cvdVeryLowRisk = 5.0;
