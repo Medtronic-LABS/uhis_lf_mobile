@@ -19,6 +19,7 @@ import '../../core/models/worklist_entry.dart';
 import '../../core/mission/programme_reason.dart' as programme_reason;
 import '../../core/risk/clinical_vitals_from_history.dart';
 import '../../core/risk/risk_scoring_service.dart';
+import '../../core/time/calendar_day.dart';
 
 /// View-model layer above the worklist DAOs. UI consumes [load] /
 /// [watchChanges] only — never touches DAOs or the risk engine directly.
@@ -147,7 +148,7 @@ class WorklistRepository {
     String tierLabel(WorklistEntry e) {
       final due = e.nextDueAt;
       if (due == null) return 'upcoming';
-      return DashboardTier.fromDaysToDue(due.difference(now).inDays).name;
+      return DashboardTier.fromDueAt(due, now: now).name;
     }
 
     int bandRank(Band b) => switch (b) {
@@ -164,7 +165,7 @@ class WorklistRepository {
     int overdueDays(WorklistEntry e) {
       final due = e.nextDueAt;
       if (due == null) return 0;
-      return now.difference(due).inDays.clamp(0, 999);
+      return CalendarDay.daysBetween(due, now).clamp(0, 999);
     }
 
     entries.sort((a, b) {
@@ -270,8 +271,8 @@ class WorklistRepository {
 
       assert(() {
         final progs = facts.programmes.map((x) => x.name).join(',');
-        final overdueDays = nextDue != null && nextDue.isBefore(now)
-            ? now.difference(nextDue).inDays.clamp(1, 999)
+        final overdueDays = nextDue != null
+            ? CalendarDay.daysBetween(nextDue, now).clamp(0, 999)
             : 0;
         final vitalsSrc = hasLocal && hasHistory
             ? 'local+history'

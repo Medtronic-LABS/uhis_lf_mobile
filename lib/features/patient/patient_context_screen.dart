@@ -9,6 +9,7 @@ import '../../app/theme.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/debug/console_log.dart';
 import '../../core/models/dashboard_tier.dart';
+import '../../core/time/calendar_day.dart';
 import '../../core/widgets/empty_state_card.dart';
 import '../../core/widgets/header_icon_button.dart';
 import '../../core/widgets/phi_screen.dart';
@@ -358,11 +359,18 @@ class _PatientContextScreenState
         final progs = localPatient.programmes.map((pr) => pr.name).join(',');
         final now = DateTime.now();
         final overdueDays = p.nextDueAt != null
-            ? now.difference(DateTime.fromMillisecondsSinceEpoch(p.nextDueAt!)).inDays.clamp(0, 999)
+            ? CalendarDay
+                .daysBetween(
+                  DateTime.fromMillisecondsSinceEpoch(p.nextDueAt!),
+                  now,
+                )
+                .clamp(0, 999)
             : null;
         final tier = p.nextDueAt != null
-            ? DashboardTier.fromDaysToDue(
-                DateTime.fromMillisecondsSinceEpoch(p.nextDueAt!).difference(now).inDays)
+            ? DashboardTier.fromDueAt(
+                DateTime.fromMillisecondsSinceEpoch(p.nextDueAt!),
+                now: now,
+              )
             : DashboardTier.upcoming;
         final overdueTag =
             (overdueDays != null && overdueDays > 0) ? ' | overdue: ${overdueDays}d' : '';
@@ -2075,11 +2083,13 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
     final lastDate = lastMs != null ? DateTime.fromMillisecondsSinceEpoch(lastMs) : null;
     final nextDate = nextMs != null ? DateTime.fromMillisecondsSinceEpoch(nextMs) : null;
 
-    final isOverdue = nextDate != null && nextDate.isBefore(now);
-    final overdueDays = isOverdue ? now.difference(nextDate).inDays : 0;
-    final dueSoonDays = (!isOverdue && nextDate != null)
-        ? nextDate.difference(now).inDays
-        : null;
+    // Compare calendar dates only — wall-clock difference truncates (e.g.
+    // next due midnight tomorrow vs evening today ⇒ 0 days, not 1).
+    final daysToDue =
+        nextDate == null ? null : CalendarDay.daysBetween(now, nextDate);
+    final isOverdue = daysToDue != null && daysToDue < 0;
+    final overdueDays = (daysToDue != null && daysToDue < 0) ? -daysToDue : 0;
+    final dueSoonDays = (daysToDue != null && daysToDue >= 0) ? daysToDue : null;
 
     Color headerColor = scheme.primary;
     if (isOverdue) headerColor = AppColors.statusCritical;

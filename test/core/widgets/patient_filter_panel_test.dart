@@ -94,6 +94,78 @@ void main() {
       expect(result.map((e) => e.patientName).toSet(), {'Yasmeen', 'PwOnly'});
     });
 
+    test('ANC/MNCH stacks completed-today after open visits', () {
+      final doneYasmeen = _item(
+        name: 'Yasmeen',
+        programmes: {Programme.anc, Programme.pw},
+        band: Band.band2,
+      );
+      final nonew = _item(
+        name: 'nonew',
+        programmes: {Programme.anc, Programme.pw},
+        band: Band.band2,
+      );
+      final prachi = _item(
+        name: 'Prachi',
+        programmes: {Programme.anc, Programme.pw},
+        band: Band.band4,
+      );
+      // Input already priority-ordered; Yasmeen is done and must sink.
+      final result = filterMissionQueue(
+        queue: [doneYasmeen, nonew, prachi],
+        selectedNeeds: {NeedFilter.ancMnch},
+        completedPatientIds: {'Yasmeen'},
+      );
+      expect(result.map((e) => e.patientName), [
+        'nonew',
+        'Prachi',
+        'Yasmeen',
+      ]);
+    });
+
+    test('unfiltered hides completed-today', () {
+      final doneYasmeen = _item(
+        name: 'Yasmeen',
+        programmes: {Programme.anc, Programme.pw},
+        band: Band.band2,
+      );
+      final result = filterMissionQueue(
+        queue: [doneYasmeen, ncdToday],
+        completedPatientIds: {'Yasmeen'},
+      );
+      expect(result.map((e) => e.patientName), ['Jakir']);
+    });
+
+    test('This week need keeps completed due-in-1–7 in list', () {
+      final doneYasmeen = _item(
+        name: 'Yasmeen',
+        programmes: {Programme.anc, Programme.pw},
+        band: Band.band2,
+      ).copyWith(dueAt: DateTime.now().add(const Duration(days: 1)));
+      final openPushp = _item(
+        name: 'Pushp',
+        programmes: {Programme.anc, Programme.pw},
+        band: Band.band4,
+      ).copyWith(dueAt: DateTime.now().add(const Duration(days: 3)));
+      final prachiUpcoming = _item(
+        name: 'Prachi',
+        programmes: {Programme.anc, Programme.pw},
+        band: Band.band4,
+        tier: DashboardTier.upcoming,
+      ).copyWith(dueAt: DateTime.now().add(const Duration(days: 20)));
+
+      expect(NeedFilter.thisWeek.matches(doneYasmeen), isTrue);
+      expect(NeedFilter.thisWeek.matches(openPushp), isTrue);
+      expect(NeedFilter.thisWeek.matches(prachiUpcoming), isFalse);
+
+      final result = filterMissionQueue(
+        queue: [doneYasmeen, openPushp, prachiUpcoming],
+        selectedNeeds: {NeedFilter.thisWeek},
+        completedPatientIds: {'Yasmeen'},
+      );
+      expect(result.map((e) => e.patientName), ['Pushp', 'Yasmeen']);
+    });
+
     test('NCD keeps only NCD and still drops unrelated upcoming', () {
       final result = filterMissionQueue(
         queue: [ancToday, pwUpcoming, ncdToday],
@@ -103,3 +175,4 @@ void main() {
     });
   });
 }
+
