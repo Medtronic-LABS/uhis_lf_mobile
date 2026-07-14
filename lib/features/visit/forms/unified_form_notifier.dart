@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../../../core/clinical/assessment_thresholds.dart';
 import '../../../core/clinical/referral_evaluator.dart';
 import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/db/patient_dao.dart';
@@ -623,6 +624,15 @@ class UnifiedFormNotifier extends ChangeNotifier {
       return null;
     }
 
+    // The `temperature` field is captured in °F (field_library.json
+    // `unitMeasurement: "°F"`), but every referral evaluator's fever
+    // thresholds are in °C — convert before evaluating, or a normal 98.6°F
+    // reading (>= 38.9 raw) reads as a false high fever on every visit.
+    double? temperatureCelsius() {
+      final f = asDouble('temperature');
+      return f == null ? null : fahrenheitToCelsius(f);
+    }
+
     final sys = asDouble('systolic') ?? asDouble('bloodPressureSystolic');
     final dia = asDouble('diastolic') ?? asDouble('bloodPressureDiastolic');
     final glucoseType = _data.getValue('glucoseType') as String?;
@@ -672,7 +682,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
       );
       final result = AncReferralEvaluator.evaluate(
         ancAssessment,
-        temperatureCelsius: asDouble('temperature'),
+        temperatureCelsius: temperatureCelsius(),
         pulseBpm: asDouble('pulse')?.toInt(),
       );
       debugPrint('[Referral][ANC] required=${result.isReferralRequired}  emergency=${result.emergencyConditions}  nonEmergency=${result.nonEmergencyConditions}');
@@ -689,7 +699,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
       final result = PncReferralEvaluator.evaluate(
         systolic: sys,
         diastolic: dia,
-        temperatureCelsius: asDouble('temperature'),
+        temperatureCelsius: temperatureCelsius(),
         pulseBpm: asDouble('pulse')?.toInt(),
         hemoglobinGdL: asDouble('hemoglobin'),
         fastingGlucoseMmol: isFbs ? glVal : null,
