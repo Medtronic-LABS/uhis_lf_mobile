@@ -6,6 +6,7 @@ import '../../../core/clinical/referral_evaluator.dart';
 import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
+import '../../../core/mission/mission_pregnancy_facts.dart';
 import '../../scribe/models/ai_extracted_field.dart';
 import '../assessment_repository.dart';
 import '../models/anc_assessment.dart';
@@ -270,6 +271,28 @@ class UnifiedFormNotifier extends ChangeNotifier {
     if (h != null && h > 0 && w != null && w > 0) {
       final bmi = w / ((h / 100) * (h / 100));
       _data = _data.setValue('bmi', double.parse(bmi.toStringAsFixed(1)));
+    }
+  }
+
+  /// Update LMP picked inline in the ANC form, recompute EDD + GA, and persist.
+  Future<void> updateLmpDate(DateTime lmp) async {
+    final edd = lmp.add(const Duration(days: 280));
+    final weeks = DateTime.now().difference(lmp).inDays ~/ 7;
+    _lmpDate = lmp;
+    _eddDate = edd;
+    _gestationalWeeks = weeks;
+    notifyListeners();
+    try {
+      final existing = await _pregnancySnapshotDao.byPatient(_patientId);
+      await _pregnancySnapshotDao.upsertOne(PregnancySnapshotRow(
+        patientId: _patientId,
+        facts: existing?.facts ?? PregnancyFacts.empty,
+        lmpDate: lmp.millisecondsSinceEpoch,
+        eddDate: edd.millisecondsSinceEpoch,
+        updatedAt: DateTime.now().millisecondsSinceEpoch,
+      ));
+    } catch (e) {
+      debugPrint('[UnifiedForm] updateLmpDate persist failed: $e');
     }
   }
 
