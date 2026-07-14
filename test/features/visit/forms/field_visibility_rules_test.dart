@@ -60,6 +60,62 @@ void main() {
         isTrue,
       );
     });
+
+    // Regression test: `isBeforeDiabetesDiagnosis` / `glucoseType` /
+    // `isBeforeHtnDiagnosis` / `isRegularSmoker` were gated behind a
+    // `ncdServiceProvided` condition, but that driver field only exists in
+    // the `cataract` form's own section — it's never part of the `ncd`
+    // formType's fieldRefs, so in a standalone NCD visit it can never be
+    // answered, which made these 4 fields permanently unreachable (empty
+    // Diabetes section, missing questions in the Blood Pressure section).
+    // Their base `visibility` was changed to "visible" since they're core
+    // NCD-programme questions, not gated behind a cataract-only toggle.
+    test('core NCD fields (Diabetes + Blood Pressure sections) are visible '
+        'without needing the unreachable ncdServiceProvided gate', () async {
+      final config = await FormConfig.load(rootBundle);
+      const emptyData = CanonicalVisitData();
+
+      for (final id in [
+        'isBeforeDiabetesDiagnosis',
+        'glucoseType',
+        'isBeforeHtnDiagnosis',
+        'isRegularSmoker',
+      ]) {
+        final field = config.fields[id]!;
+        expect(
+          FieldVisibilityRules.isFieldVisible(
+            field: field,
+            data: emptyData,
+            rulesByTargetId: config.visibilityRulesByTargetId,
+          ),
+          isTrue,
+          reason: '$id should be visible in a standalone NCD visit',
+        );
+      }
+
+      // medicationFrequencyBg/Bp don't need a base-visibility change — they
+      // have their own real, working conditional logic once their immediate
+      // driver (now fixed above) becomes answerable.
+      final medicationFrequencyBg = config.fields['medicationFrequencyBg']!;
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: medicationFrequencyBg,
+          data: emptyData,
+          rulesByTargetId: config.visibilityRulesByTargetId,
+        ),
+        isFalse,
+        reason: 'stays hidden until isBeforeDiabetesDiagnosis is answered Yes',
+      );
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: medicationFrequencyBg,
+          data: const CanonicalVisitData({'isBeforeDiabetesDiagnosis': 'Yes'}),
+          rulesByTargetId: config.visibilityRulesByTargetId,
+        ),
+        isTrue,
+        reason: 'reveals once isBeforeDiabetesDiagnosis is answered Yes',
+      );
+    });
   });
   group('FormConfig.buildVisibilityRules', () {
     test('inverts a driver field\'s condition array by targetId', () {
