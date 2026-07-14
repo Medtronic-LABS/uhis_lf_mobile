@@ -1938,10 +1938,10 @@ class _ServiceTile extends StatelessWidget {
   final bool isPathwaySuggested;
   final VoidCallback onTap;
 
-  static const _enrolledBg = Color(0xFFF0FDF4);
-  static const _enrolledBorder = Color(0xFF86EFAC);
-  static const _enrolledText = Color(0xFF166534);
-  static const _enrolledBadgeBg = Color(0xFFDCFCE7);
+  static const _enrolledBg = Color(0xFFF3F4F6);
+  static const _enrolledBorder = Color(0xFFD1D5DB);
+  static const _enrolledText = Color(0xFF6B7280);
+  static const _enrolledBadgeBg = Color(0xFFE5E7EB);
 
   @override
   Widget build(BuildContext context) {
