@@ -163,6 +163,10 @@ class RealtimeAsrController extends ChangeNotifier {
         onError: (Object e) {
           debugPrint('[RealtimeASR] websocket error: $e');
           _setError('Connection error: $e');
+          // A socket error leaves the mic stream and auto-extract timer
+          // running against a dead channel unless torn down here too — same
+          // leak as an unexpected close (see _onSocketDone).
+          unawaited(_teardown());
         },
       );
 
@@ -732,6 +736,11 @@ class RealtimeAsrController extends ChangeNotifier {
   void _onSocketDone() {
     debugPrint('[RealtimeASR] websocket closed (state was $_state)');
     if (_state == RealtimeAsrState.listening || _state == RealtimeAsrState.connecting) {
+      // An unexpected close (network blip, server restart) must stop the mic
+      // and auto-extract timer here, not just flip the reported state —
+      // otherwise both keep running against a dead channel while the banner
+      // shows idle and looks tappable again.
+      unawaited(_teardown());
       _state = RealtimeAsrState.idle;
       notifyListeners();
     }
@@ -756,6 +765,8 @@ class RealtimeAsrController extends ChangeNotifier {
   }
 
   Future<void> _teardown() async {
+    _autoExtractTimer?.cancel();
+    _autoExtractTimer = null;
     await _audioSub?.cancel();
     _audioSub = null;
     try {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -128,7 +130,19 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
   void dispose() {
     _scribe?.removeListener(_onScribeChanged);
     _liveCtrl.removeListener(_onLiveChanged);
-    _liveCtrl.dispose();
+    // Leaving mid-session (e.g. advancing Step 1 -> Step 2, or backing out)
+    // must not abandon the live session with a raw socket close: stop() runs
+    // the flush/extract/wait/stop handshake so the last few seconds of
+    // transcript are captured and the server sees a clean end. The listener
+    // is already detached above, so stop()'s notifyListeners calls can't
+    // reach this (by-then-unmounted) widget. dispose() only runs once stop()
+    // has actually finished, since ChangeNotifier forbids notifyListeners
+    // after dispose() and stop() can't be awaited inside this sync method.
+    if (_liveCtrl.isActive) {
+      unawaited(_liveCtrl.stop().then((_) => _liveCtrl.dispose()));
+    } else {
+      _liveCtrl.dispose();
+    }
     super.dispose();
   }
 
