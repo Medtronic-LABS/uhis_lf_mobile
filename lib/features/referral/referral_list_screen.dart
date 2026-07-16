@@ -22,6 +22,7 @@ import '../visit/visit_controller.dart';
 import '../visit/visit_start_helper.dart';
 import '../visit/widgets/widgets.dart';
 import 'referral_api_service.dart';
+import '../../core/widgets/patient_filter_panel.dart' show VillageFilterTab;
 import 'referral_repository.dart';
 import 'widgets/bulk_actions.dart';
 import 'widgets/critical_banner.dart';
@@ -673,21 +674,18 @@ class _ReferralListScreenState extends State<ReferralListScreen>
             ),
           ),
           const SizedBox(height: 6),
-          SizedBox(
-            height: 32,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
               children: [
-                _VisitVillageChip(
+                VillageFilterTab(
                   label: MissionDashboardStrings.allVillages,
                   isActive: _selectedVisitVillage == null,
-                  navyColor: AppColors.navy,
                   onTap: () => setState(() => _selectedVisitVillage = null),
                 ),
-                ...villageNames.map((v) => _VisitVillageChip(
+                ...villageNames.map((v) => VillageFilterTab(
                       label: v,
                       isActive: _selectedVisitVillage == v,
-                      navyColor: AppColors.navy,
                       onTap: () => setState(() {
                         _selectedVisitVillage =
                             _selectedVisitVillage == v ? null : v;
@@ -2072,48 +2070,3 @@ class _CompletedTodayChip extends StatelessWidget {
   }
 }
 
-class _VisitVillageChip extends StatelessWidget {
-  const _VisitVillageChip({
-    required this.label,
-    required this.isActive,
-    required this.navyColor,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool isActive;
-  final Color navyColor;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
-      child: Semantics(
-        label: isActive ? 'Village filter: $label, selected' : 'Filter by village: $label',
-        button: true,
-        child: GestureDetector(
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: isActive ? navyColor : Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: isActive ? navyColor : AppColors.border,
-              ),
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: isActive ? Colors.white : Theme.of(context).colorScheme.onSurface,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
