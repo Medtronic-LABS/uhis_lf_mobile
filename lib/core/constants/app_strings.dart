@@ -347,6 +347,10 @@ abstract final class AiSettingsStrings {
       'Turn off any AI-generated surface the SK doesn\'t want — each one '
       'still shows the equivalent local, rule-based content instead of '
       'nothing, and skips the network call, saving mobile data.';
+  static const String widgetsResetToDefaults = 'Reset to default';
+  static const String selectAllLabel = 'Select all';
+  static const String selectAllDesc =
+      'Turn every AI widget below on or off at once.';
 
   static const String step1Header = 'Step 1 — Symptoms';
   static const String step1SummaryLabel = 'Visit summary';

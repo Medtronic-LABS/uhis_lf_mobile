@@ -104,14 +104,30 @@ class _VadTuningBody extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                AiSettingsStrings.sectionHeader,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textMuted,
-                  letterSpacing: 0.8,
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    AiSettingsStrings.sectionHeader,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textMuted,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => notifier.resetToDefaults(),
+                    child: const Text(
+                      AiSettingsStrings.widgetsResetToDefaults,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.aiPurpleDark,
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 4),
               _TuningSlider(
@@ -215,19 +231,41 @@ class _AiWidgetTogglesCard extends StatelessWidget {
     final t = togglesNotifier.toggles;
 
     void save(AiFeatureToggles next) => togglesNotifier.update(next);
+    final allEnabled = t.step1SummaryEnabled &&
+        t.step1AsrEnabled &&
+        t.step2AsrEnabled &&
+        t.step3SummaryEnabled &&
+        t.step3ReferralAlertEnabled &&
+        t.step3WhatsAppEnabled;
 
     return _WhiteCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            AiSettingsStrings.widgetsSectionHeader,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textMuted,
-              letterSpacing: 0.8,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                AiSettingsStrings.widgetsSectionHeader,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textMuted,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              GestureDetector(
+                onTap: () => togglesNotifier.resetToDefaults(),
+                child: const Text(
+                  AiSettingsStrings.widgetsResetToDefaults,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.aiPurpleDark,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 6),
           const Text(
@@ -239,6 +277,21 @@ class _AiWidgetTogglesCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
+          _ToggleRow(
+            label: AiSettingsStrings.selectAllLabel,
+            description: AiSettingsStrings.selectAllDesc,
+            value: allEnabled,
+            bold: true,
+            onChanged: (v) => save(AiFeatureToggles(
+              step1SummaryEnabled: v,
+              step1AsrEnabled: v,
+              step2AsrEnabled: v,
+              step3SummaryEnabled: v,
+              step3ReferralAlertEnabled: v,
+              step3WhatsAppEnabled: v,
+            )),
+          ),
+          const Divider(height: 18),
           const _StepHeader(AiSettingsStrings.step1Header),
           _ToggleRow(
             label: AiSettingsStrings.step1SummaryLabel,
@@ -316,12 +369,14 @@ class _ToggleRow extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.isLast = false,
+    this.bold = false,
   });
 
   final String label;
   final String description;
   final bool value;
   final bool isLast;
+  final bool bold;
   final ValueChanged<bool> onChanged;
 
   @override
@@ -337,10 +392,10 @@ class _ToggleRow extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: const TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                  style: TextStyle(
+                    fontSize: bold ? 14.5 : 13.5,
+                    fontWeight: FontWeight.w800,
+                    color: bold ? AppColors.navy : AppColors.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 2),
