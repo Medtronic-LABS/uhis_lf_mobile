@@ -1315,6 +1315,134 @@ class _PregStat extends StatelessWidget {
   }
 }
 
+// ─── Stats Grid ────────────────────────────────────────────────────────────
+
+/// 2-column grid of clinical stat tiles for the currently selected care thread.
+/// Used by NCD (BP, blood sugar), IMCI (doses, weight), and PNC (visit, delivery).
+/// Shows [noDataLabel] when [stats] is empty.
+class _StatsGrid extends StatelessWidget {
+  const _StatsGrid({
+    required this.thread,
+    required this.noDataLabel,
+  });
+
+  final _CareThread thread;
+  final String noDataLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final sw = Stopwatch()..start();
+    final stats = thread.stats;
+
+    late final Widget body;
+    if (stats.isEmpty) {
+      body = Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Text(
+          noDataLabel,
+          style: const TextStyle(
+            fontSize: 13,
+            color: AppColors.textMuted,
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+      );
+    } else {
+      final entries = stats.entries.toList();
+      body = Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: [
+          for (final e in entries)
+            SizedBox(
+              width: (MediaQuery.of(context).size.width - 28 - 10) / 2,
+              child: _StatTile(
+                label: e.key,
+                value: e.value,
+                bg: thread.bg,
+                textColor: thread.textColor,
+              ),
+            ),
+        ],
+      );
+    }
+
+    final result = Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: thread.bg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: thread.textColor.withOpacity(0.2), width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            thread.label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: thread.textColor,
+              letterSpacing: 0.3,
+            ),
+          ),
+          const SizedBox(height: 10),
+          body,
+        ],
+      ),
+    );
+    debugPrint('⏱ [PatientContext] _StatsGrid build in ${sw.elapsedMilliseconds}ms'
+        ' thread=${thread.label} stats=${stats.length}');
+    return result;
+  }
+}
+
+/// Single stat tile within [_StatsGrid].
+class _StatTile extends StatelessWidget {
+  const _StatTile({
+    required this.label,
+    required this.value,
+    required this.bg,
+    required this.textColor,
+  });
+
+  final String label;
+  final String value;
+  final Color bg;
+  final Color textColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: textColor.withOpacity(0.15), width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(fontSize: 10, color: textColor.withOpacity(0.8)),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: textColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Section showing assessment history.
 class _AssessmentsSection extends StatelessWidget {
   const _AssessmentsSection({required this.assessments, this.isLoading = false});
