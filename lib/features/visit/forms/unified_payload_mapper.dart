@@ -460,10 +460,13 @@ abstract final class UnifiedPayloadMapper {
         // Spice-service BpLogDTO field is Boolean — coerce "Yes"/"yes"/true → true.
         bpLog['isRegularSmoker'] = toBool(isRegularSmoker);
       }
-      // Prior diagnosis fields (from history section of the form).
-      final diagBp = d.getValue('diagnosedBP');
+      // Prior diagnosis fields: Flutter form uses isBeforeHtnDiagnosis / medicationFrequencyBp
+      // (both store "Yes"/"No" strings); Android wire names are diagnosedBP / diagnosedBPMedication.
+      final diagBp =
+          d.getValue('diagnosedBP') ?? d.getValue('isBeforeHtnDiagnosis');
       if (diagBp != null) bpLog['diagnosedBP'] = diagBp;
-      final diagBpMed = d.getValue('diagnosedBPMedication');
+      final diagBpMed =
+          d.getValue('diagnosedBPMedication') ?? d.getValue('medicationFrequencyBp');
       if (diagBpMed != null) bpLog['diagnosedBPMedication'] = diagBpMed;
       final cvdRisk = d.getValue('cvdRisk');
       if (cvdRisk != null) bpLog['cvdRisk'] = cvdRisk;
@@ -496,10 +499,13 @@ abstract final class UnifiedPayloadMapper {
       if (glucoseDateTime != null) glucoseLog['glucoseDateTime'] = glucoseDateTime;
       final hba1cDateTime = d.getValue('hba1cDateTime');
       if (hba1cDateTime != null) glucoseLog['hba1cDateTime'] = hba1cDateTime;
-      // Prior diagnosis.
-      final diagGlucose = d.getValue('diagnosedGlucose');
+      // Prior diagnosis: Flutter form uses isBeforeDiabetesDiagnosis / medicationFrequencyBg;
+      // Android wire names are diagnosedGlucose / diagnosedGlucoseMedication.
+      final diagGlucose =
+          d.getValue('diagnosedGlucose') ?? d.getValue('isBeforeDiabetesDiagnosis');
       if (diagGlucose != null) glucoseLog['diagnosedGlucose'] = diagGlucose;
-      final diagGlucoseMed = d.getValue('diagnosedGlucoseMedication');
+      final diagGlucoseMed =
+          d.getValue('diagnosedGlucoseMedication') ?? d.getValue('medicationFrequencyBg');
       if (diagGlucoseMed != null) glucoseLog['diagnosedGlucoseMedication'] = diagGlucoseMed;
     }
 
