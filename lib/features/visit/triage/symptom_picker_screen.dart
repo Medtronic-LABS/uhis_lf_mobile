@@ -12,9 +12,13 @@ import '../../../core/models/programme.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/db/patient_programmes_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
+import '../../patient/followup_repository.dart';
+import '../../patient/vitals_repository.dart';
 import '../../realtime_asr/chief_complaint_matcher.dart';
 import '../../scribe/models/ai_extracted_field.dart';
 import '../../scribe/widgets/ai_scribe_banner.dart';
+import '../briefing/briefing_models.dart';
+import '../briefing/visit_briefing_repository.dart';
 import '../pathway/pathway_engine.dart';
 import 'patient_context_builder.dart';
 import 'programme_grid_sync.dart';
@@ -93,6 +97,9 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   PatientContext? _patientContext;
   bool _isLoading = true;
   String? _error;
+
+  VisitBriefingResponse? _briefingData;
+  bool _briefingLoading = true;
 
   /// Programmes the SK has selected in the inline service grid.
   /// Initialized from the pathway engine on load; SK can toggle freely.
@@ -225,6 +232,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           'enrolledSeed: ${enrolledSeed.map((p) => p.name).join(', ')} '
           'selected: ${_selectedProgrammes.map((p) => p.name).join(', ')}');
       _fireProgrammesLive();
+      _startBriefingFetch(ctx);
     } catch (e, stack) {
       debugPrint('[SymptomPicker] ERROR: $e');
       debugPrint('[SymptomPicker] Stack: $stack');
@@ -233,6 +241,101 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         _error = 'Error loading patient: ${e.toString()}';
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _startBriefingFetch(PatientContext patientCtx) async {
+    if (!mounted) return;
+    try {
+      final vitalsRepo = context.read<VitalsRepository>();
+      final followUpRepo = context.read<FollowUpRepository>();
+      final briefingRepo = context.read<VisitBriefingRepository>();
+
+      final visitsByVisit =
+          await vitalsRepo.recentByVisit(widget.patientId, limit: 5);
+      final followUps =
+          await followUpRepo.openForPatientLocal(widget.patientId);
+
+      Map<String, dynamic>? vitalsMap;
+      if (visitsByVisit.isNotEmpty) {
+        final latest = visitsByVisit.first;
+        final bp = latest.readings
+            .where((r) => r.type == VitalType.bloodPressure)
+            .firstOrNull;
+        final weight =
+            latest.readings.where((r) => r.type == VitalType.weight).firstOrNull;
+        final glucose =
+            latest.readings.where((r) => r.type == VitalType.glucose).firstOrNull;
+        final spo2 =
+            latest.readings.where((r) => r.type == VitalType.spO2).firstOrNull;
+        final bmi =
+            latest.readings.where((r) => r.type == VitalType.bmi).firstOrNull;
+        vitalsMap = {
+          if (bp?.systolic != null)
+            'bloodPressureSystolic': bp!.systolic!.toInt(),
+          if (bp?.diastolic != null)
+            'bloodPressureDiastolic': bp!.diastolic!.toInt(),
+          if (weight?.value != null) 'weight': weight!.value,
+          if (glucose?.value != null) 'glucose': glucose!.value,
+          if (spo2?.value != null) 'spO2': spo2!.value!.toInt(),
+          if (bmi?.value != null) 'bmi': bmi!.value,
+        };
+      }
+
+      final followUpSummaries = followUps.map((f) {
+        final daysOverdue =
+            f.isOverdue ? DateTime.now().difference(f.dueDate).inDays : null;
+        return {
+          'type': f.type.name,
+          'daysOverdue': daysOverdue,
+          'reason': f.reason,
+        };
+      }).toList();
+
+      final risks = <String>[];
+      if (followUps.any((f) => f.isOverdue)) risks.add('missed_followup');
+      final latestBp = visitsByVisit.isNotEmpty
+          ? visitsByVisit.first.readings
+                .where((r) => r.type == VitalType.bloodPressure)
+                .firstOrNull
+          : null;
+      if (latestBp?.systolic != null && latestBp!.systolic! >= 140) {
+        risks.add('elevated_bp');
+      }
+      if (visitsByVisit.length >= 3) risks.add('returning_patient');
+
+      final lastVisit = visitsByVisit.isNotEmpty ? visitsByVisit.first : null;
+
+      final request = <String, dynamic>{
+        'patientId': widget.patientId,
+        if (widget.patientName != null) 'patientName': widget.patientName,
+        if (widget.patientAge != null) 'ageYears': widget.patientAge,
+        if (widget.patientGender != null) 'gender': widget.patientGender,
+        'activeProgrammes':
+            patientCtx.activeProgrammes.map((p) => p.name).toList(),
+        'visitCount': visitsByVisit.length,
+        if (lastVisit != null)
+          'lastVisitDate':
+              lastVisit.date.toIso8601String().split('T').first,
+        if (lastVisit != null) 'lastVisitProgramme': lastVisit.programme,
+        if (vitalsMap != null && vitalsMap.isNotEmpty) 'recentVitals': vitalsMap,
+        'openFollowUps': followUpSummaries,
+        'riskIndicators': risks,
+        if (patientCtx.gestationalWeeks != null)
+          'gestationalWeeks': patientCtx.gestationalWeeks,
+      };
+
+      final data = await briefingRepo.generate(request);
+      if (mounted) {
+        setState(() {
+          _briefingData = data;
+          _briefingLoading = false;
+        });
+      }
+    } on Object catch (e, st) {
+      debugPrint('[Briefing] fetch failed: $e');
+      debugPrint('[Briefing] $st');
+      if (mounted) setState(() => _briefingLoading = false);
     }
   }
 
@@ -530,6 +633,19 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           builder: (context, vm, _) {
             return CustomScrollView(
               slivers: [
+                // AI brief + greet cards — collapsed by default so triage
+                // content is immediately visible; SK expands on demand.
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                    child: _AiBriefingSection(
+                      briefingLoading: _briefingLoading,
+                      briefingData: _briefingData,
+                      patientContext: _patientContext!,
+                    ),
+                  ),
+                ),
+
                 // Section heading directly above the AI Scribe banner.
                 SliverToBoxAdapter(
                   child: Padding(
@@ -1510,6 +1626,401 @@ class _ServiceTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ── AI Briefing Section: Before You Knock + Greet Warmly ─────────────────────
+
+class _AiBriefingSection extends StatelessWidget {
+  const _AiBriefingSection({
+    required this.briefingLoading,
+    required this.briefingData,
+    required this.patientContext,
+  });
+
+  final bool briefingLoading;
+  final VisitBriefingResponse? briefingData;
+  final PatientContext patientContext;
+
+  @override
+  Widget build(BuildContext context) {
+    final isFemale = patientContext.sex == Sex.female;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // 1) Before You Knock — collapsible AI brief card (collapsed by default).
+        _BriefingCard(
+          icon: Icons.psychology_outlined,
+          iconColor: AppColors.navy,
+          title: SymptomPickerStrings.briefCard1Title,
+          initiallyExpanded: false,
+          child: briefingLoading
+              ? const _BriefingLoadingSkeleton(lines: 3)
+              : briefingData == null
+              ? _BriefingFallbackContent(patientContext: patientContext)
+              : _BriefingCard1Content(data: briefingData!),
+        ),
+        const SizedBox(height: 10),
+        // 2) Greet Warmly — navy card with prepared greeting.
+        _GreetWarmlyCard(
+          isFemale: isFemale,
+          loading: briefingLoading,
+          greeting: briefingData?.greeting,
+          fallbackOpeningLine:
+              briefingData?.suggestedDiscussionPoints.openingLine,
+        ),
+      ],
+    );
+  }
+}
+
+/// Collapsible outer shell for the AI brief card.
+class _BriefingCard extends StatefulWidget {
+  const _BriefingCard({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.child,
+    this.initiallyExpanded = false,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final Widget child;
+  final bool initiallyExpanded;
+
+  @override
+  State<_BriefingCard> createState() => _BriefingCardState();
+}
+
+class _BriefingCardState extends State<_BriefingCard> {
+  late bool _expanded;
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = widget.initiallyExpanded;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  Icon(widget.icon, size: 16, color: widget.iconColor),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      widget.title,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.navy,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    _expanded
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down,
+                    size: 18,
+                    color: AppColors.textMuted,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+              child: widget.child,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Card 1 content: Before You Knock ─────────────────────────────────────────
+
+class _BriefingCard1Content extends StatelessWidget {
+  const _BriefingCard1Content({required this.data});
+  final VisitBriefingResponse data;
+
+  static const Color _aiTextColor = AppColors.ancText;
+
+  @override
+  Widget build(BuildContext context) {
+    final headline = data.briefingCard.headline.trim();
+    final firstPoint = data.briefingCard.points.isEmpty
+        ? null
+        : data.briefingCard.points.first.trim();
+    final aiBody = firstPoint != null && firstPoint.isNotEmpty
+        ? '$headline\n$firstPoint'
+        : headline;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFDF2F8),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        aiBody,
+        style: const TextStyle(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w600,
+          height: 1.4,
+          color: _aiTextColor,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Greet Warmly card ─────────────────────────────────────────────────────────
+
+class _GreetWarmlyCard extends StatelessWidget {
+  const _GreetWarmlyCard({
+    required this.isFemale,
+    required this.loading,
+    this.greeting,
+    this.fallbackOpeningLine,
+  });
+
+  final bool isFemale;
+  final bool loading;
+  final GreetingContent? greeting;
+  final String? fallbackOpeningLine;
+
+  static const Color _navyBg = AppColors.navy;
+
+  String _resolveBangla() {
+    final g = greeting;
+    if (g != null && g.bangla.trim().isNotEmpty) return g.bangla.trim();
+    return SymptomPickerStrings.sitWithGreetBanglaFor(isFemale: isFemale);
+  }
+
+  String _resolveEnglish() {
+    final g = greeting;
+    if (g != null && g.english.trim().isNotEmpty) return g.english.trim();
+    if (fallbackOpeningLine != null && fallbackOpeningLine!.trim().isNotEmpty) {
+      return fallbackOpeningLine!.trim();
+    }
+    return SymptomPickerStrings.sitWithGreetEnglishFor(isFemale: isFemale);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bangla = _resolveBangla();
+    final english = _resolveEnglish();
+    final hasAi = greeting != null && !greeting!.isEmpty;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: _navyBg,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '👋 Greet warmly',
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textOnNavy.withValues(alpha: 0.6),
+              letterSpacing: 0.08 * 9,
+            ),
+          ),
+          const SizedBox(height: 5),
+          if (loading && !hasAi)
+            const _GreetLoadingSkeleton()
+          else
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  bangla,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textOnNavy,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '"$english"',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textOnNavy.withValues(alpha: 0.6),
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GreetLoadingSkeleton extends StatelessWidget {
+  const _GreetLoadingSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        final w = c.maxWidth;
+        Widget bar(double fraction, double height) => Container(
+          width: w * fraction,
+          height: height,
+          decoration: BoxDecoration(
+            color: AppColors.textOnNavy.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(4),
+          ),
+        );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            bar(0.85, 18),
+            const SizedBox(height: 8),
+            bar(0.65, 18),
+            const SizedBox(height: 12),
+            bar(0.55, 12),
+          ],
+        );
+      },
+    );
+  }
+}
+
+// ── Shared loading skeleton ───────────────────────────────────────────────────
+
+class _BriefingLoadingSkeleton extends StatelessWidget {
+  const _BriefingLoadingSkeleton({required this.lines});
+  final int lines;
+
+  static const _fractions = [0.9, 0.75, 0.85, 0.6];
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxW = constraints.maxWidth;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: List.generate(
+            lines,
+            (i) => Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              height: 10,
+              width: maxW * _fractions[i % _fractions.length],
+              decoration: BoxDecoration(
+                color: AppColors.border,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Fallback for card 1 when AI is unavailable — shows rule-based context chips.
+class _BriefingFallbackContent extends StatelessWidget {
+  const _BriefingFallbackContent({required this.patientContext});
+  final PatientContext patientContext;
+
+  @override
+  Widget build(BuildContext context) {
+    final ctx = patientContext;
+    final chips = <(String, Color)>[];
+    if (ctx.isPregnant) {
+      chips.add((SymptomPickerStrings.chipPregnant, AppColors.statusWarning));
+    }
+    if (ctx.hasKnownHypertension) {
+      chips.add((SymptomPickerStrings.chipHtn, AppColors.statusCritical));
+    }
+    if (ctx.hasKnownDiabetes) {
+      chips.add((SymptomPickerStrings.chipDm, AppColors.statusInfo));
+    }
+    if (ctx.isTbScreenDue) {
+      chips.add((SymptomPickerStrings.chipTbDue, AppColors.statusSuccess));
+    }
+    if (ctx.isUnder5) {
+      chips.add((SymptomPickerStrings.chipUnder5, AppColors.statusInfo));
+    }
+    if (chips.isEmpty) {
+      chips.add((SymptomPickerStrings.chipRoutine, AppColors.textMuted));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            Icon(Icons.wifi_off, size: 12, color: AppColors.textMuted),
+            SizedBox(width: 4),
+            Text(
+              'AI offline · local context',
+              style: TextStyle(fontSize: 10, color: AppColors.textMuted),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          children: chips
+              .map(
+                (c) => Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: c.$2,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    c.$1,
+                    style: const TextStyle(
+                      color: AppColors.textOnNavy,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+      ],
     );
   }
 }

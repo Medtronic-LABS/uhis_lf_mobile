@@ -643,9 +643,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
     if (!mounted) return;
     if (encounterId != null) {
-      debugPrint('[Dashboard] Starting visit, navigating to briefing with origin=dashboard');
+      debugPrint('[Dashboard] Starting visit, navigating with origin=dashboard');
       context.go(
-        '/patients/visit/$encounterId/briefing?origin=dashboard',
+        '/patients/visit/$encounterId/flow?origin=dashboard',
         extra: {
           'patientId': patientId,
           'patientName': item.patientName,
@@ -699,10 +699,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (!mounted) return;
     if (encounterId != null) {
       debugPrint(
-        '[Dashboard] global search visit started, encounterId=$encounterId — navigating to briefing',
+        '[Dashboard] global search visit started, encounterId=$encounterId',
       );
       context.go(
-        '/patients/visit/$encounterId/briefing?origin=dashboard',
+        '/patients/visit/$encounterId/flow?origin=dashboard',
         extra: {
           'patientId': patientId,
           'patientName': hit.name,
