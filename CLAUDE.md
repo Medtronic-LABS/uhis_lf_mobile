@@ -415,6 +415,53 @@ The `serviceProvided` / `kind` field from the API/DB maps via `Programme.fromStr
 `assessmentDetails` is wrapped under the programme key by `_wrapDetailsForType()`:
 `NCD → {ncd: ...}`, `ANC → {anc: ...}`, `PNC/PNC_MOTHER → {pncMother: ...}`, `PNC_CHILD → {pncChild: ...}`, `TB → {tb: ...}`, `ICCM/IMCI → {iccm: ...}`, `EPI/PWPROFILE → no wrapping`.
 
+## Debug Design — Payload Logging
+
+Every outbound HTTP request body must be logged with `ConsoleLog` **before** the call is made. This allows live payload diffing against the Android SPICE reference without a proxy.
+
+**Import:** `import '../../core/debug/console_log.dart';` (adjust relative path as needed)
+
+**Tag convention:** `[PayloadDebug] <context>` — one of:
+- `[PayloadDebug] login`
+- `[PayloadDebug] sync-fetch`
+- `[PayloadDebug] sync-create`
+- `[PayloadDebug] assessment-history`
+- `[PayloadDebug] assessment-payload`
+- `[PayloadDebug] programme-payload`
+
+**Rules:**
+1. Log the **full body map** using `ConsoleLog.banner(tag, body.toString())` before the HTTP call
+2. Log response status + first 500 chars on success: `ConsoleLog.d('[PayloadDebug] <context> → ${res.statusCode}')`
+3. Log errors via `ConsoleLog.error(tag, error)` — never swallow silently
+4. Never use bare `print()` — always `ConsoleLog`
+5. Guard with `kDebugMode` before production release; leave unguarded during active development
+
+**Where these logs are required** (add if missing):
+- `auth_repository.dart` → login form body
+- `offline_sync_service.dart` → `_fetchBundle()` body, `fetchAssessmentHistory()` body
+- `assessment_repository.dart` → `_batchSync()` create body
+- `local_assessment_dao.dart` → `toApiRequest()` per-assessment output
+- `unified_payload_mapper.dart` → each `ProgrammePayload` from `decompose()`
+
+**Android wire types** (reference for all payload alignment work):
+
+| Flutter assessment type | Android wire string | `assessmentDetails` wrapping |
+|---|---|---|
+| `"NCD"` | `"ncd"` | `{"ncd": {...}}` |
+| `"ANC"` | `"anc"` | **flat — no wrapper** |
+| `"PWPROFILE"` | `"pwProfile"` | flat |
+| `"PNC_MOTHER"` | `"PNC_MOTHER"` | `{"pncMother": {...}}` |
+| `"PNC_NEONATE"` | `"PNC_NEONATE"` | `{"pncNeonatal": {...}, "cbs": {...}}` |
+| `"CHILDHOOD_VISIT"` | `"ChildHood_Visit"` | `{"pncChild": {...}, "cbs": {...}}` |
+| `"PREGNANCY_OUTCOME"` | `"pregnancyOutcome"` | flat |
+| `"ICCM"` | `"iccm"` | `{"iccm": {...}}` |
+| `"EYE_CARE"` | `"eye_care"` | flat |
+| `"CATARACT"` | `"cataract"` | flat |
+| `"FAMILY_PLANNING"` | `"family_planning"` | flat |
+
+**visitNumber** is set only for ANC and PNC_MOTHER encounters; all others → null.  
+**pregnancyEpisodeId** is set for: PWPROFILE, PREGNANCY_OUTCOME, ANC, PNC_MOTHER, CHILDHOOD_VISIT.
+
 ## Engineering standards
 
 All code in this app must satisfy the **Engineering Design Standards** defined in `../../CLAUDE.md` and `../CLAUDE.md`. Key reminders specific to this app:

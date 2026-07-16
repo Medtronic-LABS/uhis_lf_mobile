@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:sqflite/sqflite.dart';
 
+import '../debug/console_log.dart';
 import '../models/risk.dart';
 import '../models/provance_dto.dart';
 import 'app_database.dart';
@@ -220,19 +221,36 @@ class LocalAssessmentEntity {
     final details =
         jsonDecode(assessmentDetails) as Map<String, dynamic>;
 
-    // Mapper already produces the nested structure (bpLog/glucoseLog embedded).
-    // Backend AssessmentDetailsDTO expects programme-specific nesting:
-    // ANC → {"anc": <AncDTO>}, NCD → {"ncd": <NcdDTO>}, etc.
+    // Mapper produces a flat structure; _wrapDetailsForType adds the programme key
+    // required by AssessmentDetailsDTO (e.g. NCD → {"ncd": ...}).
+    // NOTE: ANC is the exception — Android sends ANC details as a flat object,
+    // so _wrapDetailsForType returns it unwrapped (GAP 6b fix).
     final wrappedDetails = _wrapDetailsForType(assessmentType, details);
 
-    // visitNumber — server sequences ANC/PNC visits by this field.
+    // visitNumber — server sequences ANC/PNC/RMNCH visits by this field.
     final visitNum = _extractVisitNumber(assessmentType, details);
 
-    final type = assessmentType.toUpperCase();
+    // Android wire type may differ from Flutter's stored type — e.g. "PNC_CHILD"
+    // is stored in Flutter but Android sends "PNC_NEONATE" on the wire (GAP 6 fix).
+    final wireType = _wireType(assessmentType);
 
-    return {
+    // Pregnancy types that carry a pregnancyEpisodeId in the encounter, matching
+    // Android OfflineSyncRepository.getPregnancyEpisodeId() which includes:
+    // pwProfile, pregnancyOutcome, anc, PNC_MOTHER, ChildHood_Visit.
+    const pregnancyTypes = {
+      'ANC', 'PWPROFILE', 'PW_PROFILE', 'PREGNANCY_OUTCOME', 'PREGNANCYOUTCOME',
+      'PNC_MOTHER', 'PNC', 'PNC_CHILD', 'PNC_NEONATE', 'PNC_NEONATAL',
+      'CHILDHOOD_VISIT', 'CHILD_MENU',
+    };
+    final isPregnancyType = pregnancyTypes.contains(assessmentType.toUpperCase());
+
+    final request = <String, dynamic>{
+      // NOTE(referenceId): Android sends the assessment entity's own numeric DB PK
+      // (entity.id: Long). Flutter's PK is a UUID string, so we send the household
+      // member local integer ID instead — this is a known gap; the server uses it
+      // only as a client-side correlation key in the batch response.
       'referenceId': householdMemberLocalId,
-      'assessmentType': type,
+      'assessmentType': wireType,
       'assessmentDetails': wrappedDetails,
       'villageId': villageId,
       'assessmentDate': createdAt?.toUtc().toIso8601String(),
@@ -251,15 +269,18 @@ class LocalAssessmentEntity {
         'longitude': longitude,
         'startTime': createdAt?.toUtc().toIso8601String(),
         'endTime': updatedAt?.toUtc().toIso8601String(),
+        // All RMNCH types (ANC, PNC_MOTHER, PNC_NEONATE, ChildHood_Visit) carry visitNumber.
         'visitNumber': ?visitNum,
-        if (type == 'ANC' || type == 'PNC' || type == 'PNC_MOTHER' || type == 'PNC_CHILD')
-          'pregnancyEpisodeId': ?pregnancyEpisodeId,
+        if (isPregnancyType) 'pregnancyEpisodeId': ?pregnancyEpisodeId,
         // Android sends customStatus list to track patient state server-side.
         'customStatus': _buildCustomStatus(isReferred, referralStatus),
       },
       if (followUpId != null) 'followUpId': followUpId,
       'updatedAt': updatedAt?.millisecondsSinceEpoch ?? 0,
     };
+
+    ConsoleLog.banner('[PayloadDebug] assessment-payload ($wireType)\n${request.toString()}');
+    return request;
   }
 
   /// Joins a JSON-encoded `List<String>` into the ", "-delimited string format
@@ -277,15 +298,40 @@ class LocalAssessmentEntity {
     return encoded;
   }
 
-  /// Extracts the sequential ANC/PNC visit number from the stored details map.
-  /// Handles both legacy flat format and current nested format.
+  /// Maps Flutter's stored assessment type to the Android wire-format type string.
+  ///
+  /// Android uses different strings than Flutter's internal constants:
+  ///   Flutter "PNC_CHILD" → Android "PNC_NEONATE"
+  ///   Flutter "CHILDHOOD_VISIT" → Android "ChildHood_Visit"
+  ///   Flutter "PWPROFILE" → Android "pwProfile"
+  ///   Flutter "ICCM" / "IMCI" → Android "iccm"
+  ///   Flutter "EYE_CARE" → Android "eye_care"
+  ///   Flutter "CATARACT" → Android "cataract"
+  ///   Flutter "FAMILY_PLANNING" → Android "family_planning"
+  static String _wireType(String assessmentType) {
+    return switch (assessmentType.toUpperCase()) {
+      'PNC_CHILD' || 'PNC_NEONATE' || 'PNC_NEONATAL' => 'PNC_NEONATE',
+      'CHILDHOOD_VISIT' || 'CHILD_MENU' => 'ChildHood_Visit',
+      'PWPROFILE' || 'PW_PROFILE' => 'pwProfile',
+      'PREGNANCY_OUTCOME' || 'PREGNANCYOUTCOME' => 'pregnancyOutcome',
+      'ICCM' || 'IMCI' => 'iccm',
+      'EYE_CARE' => 'eye_care',
+      'CATARACT' => 'cataract',
+      'FAMILY_PLANNING' || 'FP' => 'family_planning',
+      // NCD, ANC, TB, EPI, PNC_MOTHER, PNC — pass through as-is
+      String t => t,
+    };
+  }
+
+  /// Extracts the sequential visit number from the stored details map.
+  /// Android extracts visitNumber for all RMNCH types (ANC, PNC_MOTHER,
+  /// PNC_NEONATE, ChildHood_Visit); all other types return null.
   static int? _extractVisitNumber(String type, Map<String, dynamic> d) {
     final t = type.toUpperCase();
     String? raw;
     if (t == 'ANC') {
       // Top-level visitNo (current mapper output)
       raw = d['visitNo']?.toString();
-      // Flat legacy
       raw ??= d['ancVisitNumber']?.toString();
       // Nested: medicalHistoryPhysicalExamination.ancVisitNumber
       raw ??= (d['medicalHistoryPhysicalExamination'] is Map
@@ -302,6 +348,14 @@ class LocalAssessmentEntity {
           ? ((d['pncMother'] as Map)['visitNo']?.toString() ??
               (d['pncMother'] as Map)['pncVisitNumber']?.toString())
           : null);
+    } else if (t == 'PNC_CHILD' || t == 'PNC_NEONATE' || t == 'PNC_NEONATAL') {
+      // Neonate PNC visit number.
+      raw = d['visitNo']?.toString() ??
+          d['pncNeonateVisitNumber']?.toString() ??
+          d['pncVisitNumber']?.toString();
+    } else if (t == 'CHILDHOOD_VISIT' || t == 'CHILD_MENU') {
+      // Childhood / IMCI visit number.
+      raw = d['visitNo']?.toString() ?? d['childVisitNumber']?.toString();
     }
     if (raw == null) return null;
     return int.tryParse(raw.trim());
@@ -316,13 +370,14 @@ class LocalAssessmentEntity {
     return [s];
   }
 
-  /// Wrap a nested assessment payload under the programme-specific key that
-  /// matches the backend's AssessmentDetailsDTO field names.
+  /// Wrap an assessment payload under the programme-specific key required by
+  /// AssessmentDetailsDTO, matching Android OfflineSyncRepository.getAssessmentDetails().
   ///
-  /// The backend deserializes `assessmentDetails` as AssessmentDetailsDTO,
-  /// which has typed fields per programme (e.g. `AncDTO anc`, `NcdDTO ncd`).
-  /// The mapper already produces the nested sub-object structure; this method
-  /// adds the outer programme-key wrapper required by the DTO.
+  /// Key changes vs earlier implementation:
+  ///   ANC         → NO wrapping (Android sends ANC details as a flat object; GAP 6b)
+  ///   PNC_NEONATE → "pncNeonatal" (not "pncChild"; GAP 6)
+  ///   CHILDHOOD_VISIT → "pncChild"
+  ///   EYE_CARE / CATARACT / FAMILY_PLANNING / TB / EPI → flat (Android pass-through)
   ///
   /// If `details` already contains the programme key (re-entrant call), it is
   /// returned unchanged to avoid double-wrapping.
@@ -331,14 +386,21 @@ class LocalAssessmentEntity {
     Map<String, dynamic> details,
   ) {
     final key = switch (assessmentType.toUpperCase()) {
-      'ANC' => 'anc',
+      // ANC: Android sends assessmentDetails as a flat object (wrap line is
+      // commented out in OfflineSyncRepository.getAssessmentDetails — GAP 6b).
+      'ANC' => null,
       'NCD' => 'ncd',
       'PNC' || 'PNC_MOTHER' => 'pncMother',
-      'PNC_CHILD' || 'PNC_NEONATAL' => 'pncChild',
-      'TB' => 'tb',
-      'ICCM' || 'IMCI' => 'iccm',
+      // Neonate PNC → pncNeonatal (Android's PNCNeonatal key — GAP 6 fix).
+      'PNC_CHILD' || 'PNC_NEONATE' || 'PNC_NEONATAL' => 'pncNeonatal',
+      // Childhood/IMCI visit → pncChild.
+      'CHILDHOOD_VISIT' || 'CHILD_MENU' => 'pncChild',
       'PWPROFILE' || 'PW_PROFILE' => 'pwProfile',
-      'EPI' => null,
+      'PREGNANCY_OUTCOME' || 'PREGNANCYOUTCOME' => 'pregnancyOutcome',
+      // ICCM is the only non-NCD/PNC type that gets wrapped (Android explicit handling).
+      'ICCM' || 'IMCI' => 'iccm',
+      // All others — TB, EPI, EYE_CARE, CATARACT, FAMILY_PLANNING — are flat
+      // pass-through (Android OfflineSyncRepository default branch).
       _ => null,
     };
     if (key == null || details.containsKey(key)) return details;

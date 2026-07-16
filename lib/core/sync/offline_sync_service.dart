@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
+import '../debug/console_log.dart';
 import '../api/endpoints.dart';
 import '../auth/auth_repository.dart';
 import '../auth/user_hierarchy_service.dart';
@@ -322,7 +323,9 @@ class OfflineSyncService extends ChangeNotifier {
       'appVersionCode': AppConfig.appVersionCode,
       if (deviceId.isNotEmpty) 'deviceId': deviceId,
       'appType': AppConfig.appType,
+      'memberIds': <int>[],
     };
+    ConsoleLog.banner('[PayloadDebug] sync-fetch\n${body.toString()}');
     final resp = await _api.dio.post<List<int>>(
       Endpoints.offlineSyncFetch,
       data: body,
@@ -1570,7 +1573,9 @@ class OfflineSyncService extends ChangeNotifier {
       'appVersionName': AppConfig.appVersionName,
       'appVersionCode': AppConfig.appVersionCode,
       if (deviceId.isNotEmpty) 'deviceId': deviceId,
+      'memberIds': <int>[],
     };
+    ConsoleLog.banner('[PayloadDebug] assessment-history\n${body.toString()}');
 
     try {
       final resp = await _api.dio.post(

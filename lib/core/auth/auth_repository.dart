@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../api/api_client.dart';
+import '../debug/console_log.dart';
 import '../api/endpoints.dart';
 import '../config/app_config.dart';
 
@@ -191,14 +192,16 @@ class AuthRepository {
     final hashedPwd = hashPassword(password);
     // ignore: avoid_print
     print('[Auth] Login attempt: user=$username, hash=${hashedPwd.substring(0, 16)}...');
-    
-    // Backend expects application/x-www-form-urlencoded
+
+    // Android sends multipart/form-data (MultipartBody.FORM) — match exactly.
+    final loginBody = FormData.fromMap({
+      'username': username,
+      'password': hashedPwd,
+    });
+    ConsoleLog.banner('[PayloadDebug] login\nusername=$username password=<hashed>');
     final resp = await _api.dio.post(
       Endpoints.login,
-      data: 'username=${Uri.encodeQueryComponent(username)}&password=${Uri.encodeQueryComponent(hashedPwd)}',
-      options: Options(
-        contentType: 'application/x-www-form-urlencoded',
-      ),
+      data: loginBody,
     );
     // ignore: avoid_print
     print('[Auth] Login response: ${resp.statusCode}');
