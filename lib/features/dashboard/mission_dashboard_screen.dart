@@ -29,6 +29,8 @@ import '../../core/widgets/patient_filter_panel.dart';
 import '../referral/referral_repository.dart';
 import 'widgets/dashboard_search_field.dart';
 import '../visit/visit_controller.dart';
+import '../../core/db/patient_programmes_dao.dart';
+import '../../core/mission/programme_reason.dart';
 import '../visit/visit_start_helper.dart';
 import '../visit/widgets/widgets.dart';
 import 'dashboard_repository.dart';
@@ -614,7 +616,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
       return;
     }
-    // Look up member to get referenceId (backend integer PK) and memberId.
+    await _startVisitByPatientId(
+      patientId: patientId,
+      programme: item.primaryProgramme,
+      patientName: item.patientName,
+      patientAge: item.age,
+      householdId: item.householdId,
+      logPrefix: '[Dashboard]',
+    );
+  }
+
+  Future<void> _startVisitFromHit(MemberHit hit) async {
+    final patientId = hit.id;
+    if (patientId == null || patientId.isEmpty) return;
+    debugPrint(
+      '[Dashboard] global search start visit: patientId=$patientId name=${hit.name}',
+    );
+    // Derive the correct programme from the patient's enrolled programmes
+    // rather than hardcoding Programme.ncd.
+    final progDao = context.read<PatientProgrammesDao>();
+    final programmes = await progDao.programmesFor(patientId);
+    final programme = primaryProgrammeOf(programmes);
+    debugPrint('[Dashboard] global search programme resolved: ${programme.name}');
+    await _startVisitByPatientId(
+      patientId: patientId,
+      programme: programme,
+      patientName: hit.name,
+      householdId: hit.householdId,
+      logPrefix: '[Dashboard] global search',
+    );
+  }
+
+  /// Shared visit-start implementation. Looks up the member record, calls
+  /// [startOrResumeVisit], then navigates to the visit flow on success.
+  Future<void> _startVisitByPatientId({
+    required String patientId,
+    required Programme programme,
+    required String? patientName,
+    required String? householdId,
+    int? patientAge,
+    String logPrefix = '[Dashboard]',
+  }) async {
     final memberDao = context.read<MemberDao>();
     final controller = context.read<VisitController>();
     final member = await memberDao.getByPatientId(patientId);
@@ -629,28 +671,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // member-assessment-history pull (scoped to [203, 204, 206]) can find
     // Flutter-submitted assessments. Parent villageId (34) is invisible to it.
     final villageId = member?.subVillageId ?? member?.villageId;
-    debugPrint('[Dashboard] member lookup: patientId=$patientId referenceId=${member?.referenceId} memberId=$memberId villageId=$villageId → householdMemberLocalId=$householdMemberLocalId');
+    debugPrint(
+      '$logPrefix member lookup: patientId=$patientId '
+      'referenceId=${member?.referenceId} memberId=$memberId '
+      'villageId=$villageId → householdMemberLocalId=$householdMemberLocalId',
+    );
     if (!mounted) return;
     final encounterId = await startOrResumeVisit(
       context,
       controller: controller,
       patientId: patientId,
-      programme: item.primaryProgramme,
-      patientName: item.patientName,
-      patientAge: item.age,
-      householdId: item.householdId,
+      programme: programme,
+      patientName: patientName,
+      patientAge: patientAge,
+      householdId: householdId,
     );
     if (!mounted) return;
     if (encounterId != null) {
-      debugPrint('[Dashboard] Starting visit, navigating with origin=dashboard');
+      debugPrint('$logPrefix visit started, navigating with origin=dashboard');
       context.go(
         '/patients/visit/$encounterId/flow?origin=dashboard',
         extra: {
           'patientId': patientId,
-          'patientName': item.patientName,
+          'patientName': patientName,
           'patientGender': member?.gender,
-          'householdId': item.householdId,
-          'patientAge': item.age,
+          'householdId': householdId,
+          'patientAge': patientAge,
           'memberId': memberId,
           'householdMemberLocalId': householdMemberLocalId,
           'villageId': villageId,
@@ -658,63 +704,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          controller.error ?? MissionDashboardStrings.visitStartFailed,
-        ),
-      ),
-    );
-  }
-
-  Future<void> _startVisitFromHit(MemberHit hit) async {
-    final patientId = hit.id;
-    if (patientId == null || patientId.isEmpty) return;
-    debugPrint(
-      '[Dashboard] global search start visit: patientId=$patientId name=${hit.name}',
-    );
-    final memberDao = context.read<MemberDao>();
-    final controller = context.read<VisitController>();
-    final member = await memberDao.getByPatientId(patientId);
-    final householdMemberLocalId =
-        int.tryParse(member?.referenceId ?? '') ??
-        int.tryParse(member?.id ?? '') ??
-        0;
-    final memberId = member?.id;
-    final villageId = member?.subVillageId ?? member?.villageId;
-    debugPrint(
-      '[Dashboard] global search member lookup: memberId=$memberId '
-      'villageId=$villageId householdMemberLocalId=$householdMemberLocalId',
-    );
-    if (!mounted) return;
-    final encounterId = await startOrResumeVisit(
-      context,
-      controller: controller,
-      patientId: patientId,
-      programme: Programme.ncd,
-      patientName: hit.name,
-      householdId: hit.householdId,
-    );
-    if (!mounted) return;
-    if (encounterId != null) {
-      debugPrint(
-        '[Dashboard] global search visit started, encounterId=$encounterId',
-      );
-      context.go(
-        '/patients/visit/$encounterId/flow?origin=dashboard',
-        extra: {
-          'patientId': patientId,
-          'patientName': hit.name,
-          'patientGender': member?.gender,
-          'householdId': hit.householdId,
-          'memberId': memberId,
-          'householdMemberLocalId': householdMemberLocalId,
-          'villageId': villageId,
-        },
-      );
-      return;
-    }
-    debugPrint('[Dashboard] global search visit start failed: ${controller.error}');
+    debugPrint('$logPrefix visit start failed: ${controller.error}');
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -985,6 +975,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           }
 
                           if (queue.isEmpty) {
+                            if (_globalSearchHits.isNotEmpty || _globalSearchBusy) {
+                              return const SizedBox.shrink();
+                            }
                             if (hasFilters) {
                               return _FilterEmptyCard(
                                 onClearFilters: () {
