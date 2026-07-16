@@ -767,7 +767,6 @@ class _PatientContextScreenState
       value: _lightStatusBar,
       child: SafeArea(
       top: false,
-      bottom: false,
       child: Column(
         children: [
           _PatientDetailHeader(
@@ -787,12 +786,7 @@ class _PatientContextScreenState
             child: RefreshIndicator(
               onRefresh: _refresh,
               child: ListView(
-              padding: const EdgeInsets.fromLTRB(
-                14,
-                14,
-                14,
-                AppSpacing.stickyBarClearance,
-              ),
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 20),
               children: [
                 // ── Profile ──────────────────────────────────────────────
                 _SectionLabel(PatientContextStrings.sectionGroupProfile),
@@ -816,22 +810,25 @@ class _PatientContextScreenState
                   patientId: widget.patientId,
                   memberReference: data.memberReference,
                 ),
-
-                // ── Actions ──────────────────────────────────────────────
-                const SizedBox(height: 12),
-                PatientActionsRow(
-                  patientId: widget.patientId,
-                  patientName: data.name,
-                  patientAge: data.age,
-                  patientGender: data.gender,
-                  householdId: data.householdId,
-                  villageId: data.villageId,
-                  memberId: data.memberId,
-                  programmes: data.programmes,
-                  origin: widget.origin,
-                ),
+                const SizedBox(height: 8),
               ],
               ),
+            ),
+          ),
+          // ── Actions (sticky, always visible — not inside ListView to avoid
+          // FAB overlap and gesture-eat when scrolled to maxScrollExtent) ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
+            child: PatientActionsRow(
+              patientId: widget.patientId,
+              patientName: data.name,
+              patientAge: data.age,
+              patientGender: data.gender,
+              householdId: data.householdId,
+              villageId: data.villageId,
+              memberId: data.memberId,
+              programmes: data.programmes,
+              origin: widget.origin,
             ),
           ),
         ],
