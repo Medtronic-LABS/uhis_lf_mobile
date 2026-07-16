@@ -1145,6 +1145,176 @@ class _AiInsightCard extends StatelessWidget {
   }
 }
 
+// ─── Pregnancy Progress Section ────────────────────────────────────────────
+
+/// Pregnancy progress bar + key stats for ANC / PW patients.
+/// Shown only when [snapshot] is non-null (patient has an active pregnancy episode).
+class _PregnancyProgressSection extends StatelessWidget {
+  const _PregnancyProgressSection({
+    required this.snapshot,
+    required this.ancVisitNumber,
+  });
+
+  final PregnancySnapshotRow snapshot;
+  /// Latest ancVisitNumber from assessments, or null if not yet recorded.
+  final String? ancVisitNumber;
+
+  static const _totalAncVisits = 8; // WHO recommended minimum
+
+  @override
+  Widget build(BuildContext context) {
+    final sw = Stopwatch()..start();
+
+    final now = DateTime.now();
+    final lmpDate = snapshot.lmpDate != null
+        ? DateTime.fromMillisecondsSinceEpoch(snapshot.lmpDate!)
+        : null;
+    final eddDate = snapshot.eddDate != null
+        ? DateTime.fromMillisecondsSinceEpoch(snapshot.eddDate!)
+        : null;
+
+    // Gestational age in weeks from LMP
+    final gaWeeks = lmpDate != null ? now.difference(lmpDate).inDays ~/ 7 : null;
+    // Weeks remaining to EDD
+    final weeksLeft = eddDate != null
+        ? eddDate.difference(now).inDays ~/ 7
+        : null;
+    // Progress fraction of 40-week pregnancy
+    final progress = gaWeeks != null ? (gaWeeks / 40.0).clamp(0.0, 1.0) : null;
+
+    final visitsDone = int.tryParse(ancVisitNumber ?? '0') ?? 0;
+    final visitProgress = (visitsDone / _totalAncVisits).clamp(0.0, 1.0);
+
+    final dateFormat = DateFormat('d MMM yyyy');
+
+    final widget = Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.ancSurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.ancBorder, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.favorite_border_rounded, size: 15, color: AppColors.ancText),
+              const SizedBox(width: 6),
+              Text(
+                PatientProfileStrings.pregnancyProgress,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.ancText,
+                ),
+              ),
+              const Spacer(),
+              if (gaWeeks != null)
+                Text(
+                  '${gaWeeks}w GA',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.ancText,
+                  ),
+                ),
+            ],
+          ),
+          if (progress != null) ...[
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 8,
+                backgroundColor: AppColors.ancBorder,
+                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.ancText),
+              ),
+            ),
+            if (weeksLeft != null && weeksLeft > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  '$weeksLeft ${PatientProfileStrings.weeksToGo}',
+                  style: const TextStyle(fontSize: 11, color: AppColors.ancText),
+                ),
+              ),
+          ],
+          const SizedBox(height: 12),
+          // Stats row
+          Row(
+            children: [
+              _PregStat(
+                label: PatientProfileStrings.visitsCompleted,
+                value: '$visitsDone / $_totalAncVisits',
+                progress: visitProgress,
+              ),
+              const SizedBox(width: 12),
+              if (eddDate != null)
+                _PregStat(
+                  label: 'EDD',
+                  value: dateFormat.format(eddDate),
+                ),
+              if (lmpDate != null && eddDate == null) ...[
+                _PregStat(
+                  label: 'LMP',
+                  value: dateFormat.format(lmpDate),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+    debugPrint('⏱ [PatientContext] _PregnancyProgressSection build in ${sw.elapsedMilliseconds}ms'
+        ' gaWeeks=$gaWeeks weeksLeft=$weeksLeft visitsDone=$visitsDone');
+    return widget;
+  }
+}
+
+/// Single stat tile inside the pregnancy progress card.
+class _PregStat extends StatelessWidget {
+  const _PregStat({required this.label, required this.value, this.progress});
+
+  final String label;
+  final String value;
+  final double? progress;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 10, color: AppColors.ancText)),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.ancText,
+            ),
+          ),
+          if (progress != null) ...[
+            const SizedBox(height: 4),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(2),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 4,
+                backgroundColor: AppColors.ancBorder,
+                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.ancText),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 /// Section showing assessment history.
 class _AssessmentsSection extends StatelessWidget {
   const _AssessmentsSection({required this.assessments, this.isLoading = false});
