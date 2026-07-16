@@ -2827,7 +2827,7 @@ class _SameHouseholdStrip extends StatelessWidget {
                 child: Row(
                   children: others.map((m) {
                     final name = m.name ?? PatientContextStrings.unknownMemberName;
-                    final age = _ageFromDob(m.dob);
+                    final age = CalendarDay.ageFromDob(m.dob);
                     // Patient-scoped DAOs key on the national-ID-style
                     // patient_id (e.g. `0390444751459`), not the internal
                     // member.id. Push patientId when present so the
@@ -2859,21 +2859,6 @@ class _SameHouseholdStrip extends StatelessWidget {
     );
   }
 
-  int? _ageFromDob(String? dob) {
-    if (dob == null || dob.isEmpty) return null;
-    try {
-      final birthDate = DateTime.parse(dob);
-      final now = DateTime.now();
-      int age = now.year - birthDate.year;
-      if (now.month < birthDate.month ||
-          (now.month == birthDate.month && now.day < birthDate.day)) {
-        age--;
-      }
-      return age;
-    } catch (_) {
-      return null;
-    }
-  }
 }
 
 /// Individual chip for a household member in the same-household strip.
