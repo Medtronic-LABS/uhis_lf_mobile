@@ -247,9 +247,13 @@ class _PatientContextScreenState
         final date = row.occurredAt == null
             ? DateTime.now()
             : DateTime.fromMillisecondsSinceEpoch(row.occurredAt!);
+        final prog = Programme.fromString(row.kind ?? '');
+        final typeLabel = prog == Programme.unknown
+            ? (row.kind ?? PatientContextStrings.genericAssessmentLabel).toUpperCase()
+            : prog.wireTag;
         out.add(MemberAssessment(
           id: row.id,
-          type: (row.kind ?? PatientContextStrings.genericAssessmentLabel).toUpperCase(),
+          type: typeLabel,
           date: date,
           rawJson: <String, dynamic>{'kind': row.kind, 'raw': row.rawJson},
         ));
@@ -1189,10 +1193,22 @@ class _AssessmentDetailSheet extends StatelessWidget {
   final MemberAssessment assessment;
   final DateFormat dateFormat;
 
+  /// Unpacks the nested `raw` JSON string if the DB stored {kind, raw: "...JSON..."}.
+  Map<String, dynamic> _effectiveRaw() {
+    final outer = assessment.rawJson;
+    final rawStr = outer['raw'];
+    if (rawStr is String && rawStr.isNotEmpty) {
+      try {
+        return Map<String, dynamic>.from(jsonDecode(rawStr) as Map);
+      } catch (_) {}
+    }
+    return outer;
+  }
+
   @override
   Widget build(BuildContext context) {
     final progColors = Theme.of(context).extension<ProgrammeColors>()!;
-    final raw = assessment.rawJson;
+    final raw = _effectiveRaw();
 
     Color typeColor;
     IconData typeIcon;
@@ -1391,7 +1407,7 @@ class _AssessmentDetailSheet extends StatelessWidget {
   }
 
   Widget _buildTypeSpecificInfo(BuildContext context, Color typeColor) {
-    final raw = assessment.rawJson;
+    final raw = _effectiveRaw();
     // assessmentDetails is the nested clinical object from member-assessment-history
     final details = raw['assessmentDetails'] is Map
         ? Map<String, dynamic>.from(raw['assessmentDetails'] as Map)
@@ -1599,6 +1615,61 @@ class _AssessmentDetailSheet extends StatelessWidget {
           const Divider(height: 1, color: AppColors.border),
           const SizedBox(height: 8),
           ...fields.map((f) => _ClinicalFieldRow(field: f)),
+        ],
+      ),
+    );
+  }
+
+  /// Shows any rawJson fields not already rendered in the structured sections.
+  /// Skips nulls, empty strings, known-rendered keys, and deeply-nested objects.
+  Widget _buildRawFieldsDump(Color typeColor) {
+    // Keys already shown in structured sections — skip to avoid duplication.
+    const _knownKeys = {
+      'kind', 'raw',
+      'encounterId', 'id', 'serviceProvided', 'assessmentName', 'type',
+      'visitDate', 'createdAt', 'startTime', 'date', 'visitNumber',
+      'referralStatus', 'referralReason', 'nextFollowUpDate',
+      'householdMemberId', 'memberId', 'latestVisit', 'customStatus',
+      'assessmentDetails', 'observations',
+    };
+    final entries = _effectiveRaw().entries
+        .where((e) =>
+            !_knownKeys.contains(e.key) &&
+            e.value != null &&
+            e.value.toString().isNotEmpty &&
+            e.value.toString() != 'null' &&
+            e.value is! Map &&
+            e.value is! List)
+        .toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+
+    if (entries.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.canvas,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            PatientContextStrings.storedDataTitle,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...entries.map(
+            (e) => _DetailRow(
+              label: e.key,
+              value: e.value.toString(),
+            ),
+          ),
         ],
       ),
     );
