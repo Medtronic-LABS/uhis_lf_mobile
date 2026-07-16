@@ -411,10 +411,14 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
   /// Resolves village name, SS name, and last-visit date for households that
   /// arrive pre-loaded with members (list-screen → detail navigation). Avoids
   /// a redundant full member fetch when the roster is already in hand.
+  /// Resolves village name, SS name, and last-visit date for households that
+  /// arrive pre-loaded with members (list-screen → detail navigation). Avoids
+  /// a redundant full member fetch when the roster is already in hand.
   Future<void> _enrichMeta() async {
     if (!mounted) return;
     final hierarchy = context.read<UserHierarchyService>();
     final memberDao = context.read<MemberDao>();
+    final patientDao = context.read<PatientDao>();
     await hierarchy.prefetch();
 
     // Village ID → human-readable name. Check subVillages first (more specific),
@@ -440,7 +444,20 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
       ssName = _resolveSsName(entity?.shasthyaShebikaId, hierarchy);
     }
 
-    final lastVisitAt = _householdLastVisit(_household.members);
+    // Pre-loaded members have recentServiceAt=null (list screen enriches visit
+    // counts + programmes but not recentServiceAt). Query lastVisitAt directly
+    // from PatientDao across all household member patientIds.
+    final patientIds =
+        _household.members.map((m) => m.patientId).whereType<String>().toList();
+    DateTime? lastVisitAt;
+    if (patientIds.isNotEmpty) {
+      final lastVisits = await patientDao.lastVisitAtForPatients(patientIds);
+      for (final ms in lastVisits.values) {
+        final dt = DateTime.fromMillisecondsSinceEpoch(ms);
+        if (lastVisitAt == null || dt.isAfter(lastVisitAt)) lastVisitAt = dt;
+      }
+    }
+
     ConsoleLog.banner('[HouseholdDetail] _enrichMeta'
         ' village=${villageName ?? rawVillage} ssName=$ssName lastVisit=$lastVisitAt');
 
