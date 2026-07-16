@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -1235,13 +1237,16 @@ class _AssessmentDetailSheet extends StatelessWidget {
   final MemberAssessment assessment;
   final DateFormat dateFormat;
 
-  /// Unpacks the nested `raw` JSON string if the DB stored {kind, raw: "...JSON..."}.
+  /// Unpacks the nested `raw` field stored as {kind, raw: "...JSON..." | Map}.
   Map<String, dynamic> _effectiveRaw() {
     final outer = assessment.rawJson;
-    final rawStr = outer['raw'];
-    if (rawStr is String && rawStr.isNotEmpty) {
+    final rawField = outer['raw'];
+    if (rawField is Map) {
+      return Map<String, dynamic>.from(rawField);
+    }
+    if (rawField is String && rawField.isNotEmpty) {
       try {
-        return Map<String, dynamic>.from(jsonDecode(rawStr) as Map);
+        return Map<String, dynamic>.from(jsonDecode(rawField) as Map);
       } catch (_) {}
     }
     return outer;
