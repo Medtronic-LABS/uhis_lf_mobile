@@ -17,6 +17,7 @@ import 'app/theme_provider.dart';
 import 'core/api/api_client.dart';
 import 'core/api/realtime_asr_service.dart';
 import 'core/preferences/scribe_engine_notifier.dart';
+import 'core/preferences/vad_tuning_notifier.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'core/api/scribe_api_service.dart';
 import 'core/auth/auth_repository.dart';
@@ -469,6 +470,12 @@ class _UhisNextAppState extends State<UhisNextApp>
         ChangeNotifierProvider<ScribeEngineNotifier>(
           create: (_) =>
               ScribeEngineNotifier(const FlutterSecureStorage())..load(),
+        ),
+        // Persisted VadGate tuning (Settings → AI Settings) — bandwidth-saving
+        // realtime-ASR gate thresholds, field-tunable without a rebuild.
+        ChangeNotifierProvider<VadTuningNotifier>(
+          create: (_) =>
+              VadTuningNotifier(const FlutterSecureStorage())..load(),
         ),
         // SK → SS → sub-village hierarchy (session cache, invalidated on logout)
         ChangeNotifierProvider<UserHierarchyService>.value(

@@ -23,10 +23,26 @@ Uint8List _silence(int durationMs) => Uint8List(durationMs * 32);
 int _bytesOf(List<Uint8List> chunks) =>
     chunks.fold(0, (sum, c) => sum + c.length);
 
+/// Builds a [VadGate] with fixed, explicit thresholds — these tests verify
+/// the gate's hysteresis/debounce/floor-adaptation *math* against specific
+/// dBFS values worked out by hand, so they pin the exact parameters that
+/// math depends on rather than whatever AppConfig's tunable defaults
+/// currently are (see vad_gate.dart's own constructor defaults, which are
+/// a separately-tunable field-deployment baseline, not a test fixture).
+VadGate _testGate() => VadGate(
+      enterMarginDb: 12,
+      sustainMarginDb: 7,
+      floorCeilingDbfs: -25,
+      bootstrapDuration: const Duration(milliseconds: 400),
+      debounceDuration: const Duration(milliseconds: 180),
+      hangoverDuration: const Duration(milliseconds: 550),
+      preRollDuration: const Duration(milliseconds: 350),
+    );
+
 void main() {
   group('VadGate', () {
     test('all-zero silence indefinitely → always empty, floor stays finite', () {
-      final gate = VadGate();
+      final gate = _testGate();
       for (var i = 0; i < 50; i++) {
         final result = gate.process(_silence(50));
         expect(result, isEmpty);
@@ -35,20 +51,20 @@ void main() {
     });
 
     test('fresh gate first chunk does not crash with no prior floor history', () {
-      final gate = VadGate();
+      final gate = _testGate();
       expect(() => gate.process(_silence(50)), returnsNormally);
       expect(gate.floorDbfs.isFinite, isTrue);
     });
 
     test('defensive: zero-length and odd-length input do not throw', () {
-      final gate = VadGate();
+      final gate = _testGate();
       expect(() => gate.process(Uint8List(0)), returnsNormally);
       expect(() => gate.process(Uint8List(3)), returnsNormally);
     });
 
     test('silence then sustained tone: empty during debounce, then a byte-exact flush',
         () {
-      final gate = VadGate();
+      final gate = _testGate();
       // Bootstrap with one 400ms all-zero chunk.
       gate.process(_silence(400));
 
@@ -83,7 +99,7 @@ void main() {
 
     test('sustained voice then abrupt silence: non-empty through hangover, then empty',
         () {
-      final gate = VadGate();
+      final gate = _testGate();
       gate.process(_silence(400)); // bootstrap
 
       // Debounce into voice state.
@@ -112,7 +128,7 @@ void main() {
 
     test('energy wavering between sustain and enter thresholds in voice state: no chatter',
         () {
-      final gate = VadGate();
+      final gate = _testGate();
       gate.process(_silence(400)); // bootstrap, floor clamps to -90
 
       for (var i = 0; i < 4; i++) {
@@ -132,7 +148,7 @@ void main() {
 
     test('single loud transient shorter than debounce window never triggers a flip',
         () {
-      final gate = VadGate();
+      final gate = _testGate();
       gate.process(_silence(400)); // bootstrap
 
       final result = gate.process(_tone(dbfs: -15, durationMs: 50));
@@ -147,7 +163,7 @@ void main() {
     });
 
     test('floor adapts upward over sustained moderate "silent" noise', () {
-      final gate = VadGate();
+      final gate = _testGate();
       // Bootstrap floor at -50 dBFS.
       gate.process(_tone(dbfs: -50, durationMs: 400));
       final initialFloor = gate.floorDbfs;
@@ -165,13 +181,13 @@ void main() {
 
     test('marginal chunk that triggers voice against the old floor no longer does once adapted',
         () {
-      final gate = VadGate();
+      final gate = _testGate();
       gate.process(_tone(dbfs: -50, durationMs: 400)); // floor = -50
 
       // -36 dBFS is above the ORIGINAL entry threshold (-50+12=-38).
       // Confirm it would have registered as voice against the original floor
       // by checking a fresh gate bootstrapped identically.
-      final freshGate = VadGate();
+      final freshGate = _testGate();
       freshGate.process(_tone(dbfs: -50, durationMs: 400));
       var triggeredOriginally = false;
       for (var i = 0; i < 4; i++) {
@@ -198,7 +214,7 @@ void main() {
     });
 
     test('floor does not move during a long run of loud voice frames', () {
-      final gate = VadGate();
+      final gate = _testGate();
       gate.process(_silence(400)); // bootstrap, floor clamps to -90
       final floorBefore = gate.floorDbfs;
 
@@ -211,7 +227,7 @@ void main() {
 
     test('floor never exceeds the ceiling clamp even under sustained loud "silent" noise',
         () {
-      final gate = VadGate();
+      final gate = _testGate();
       // Bootstrap just under the ceiling (-25).
       gate.process(_tone(dbfs: -27, durationMs: 400));
       expect(gate.floorDbfs, lessThanOrEqualTo(-25));

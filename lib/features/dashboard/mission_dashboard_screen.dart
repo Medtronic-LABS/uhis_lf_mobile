@@ -34,6 +34,7 @@ import 'mission_dashboard_repository.dart';
 import '../household/enrollment/enrollment_entry_sheet.dart';
 import '../cce/cce_alerts_drawer.dart';
 import '../cce/cce_repository.dart';
+import '../settings/ai_settings_screen.dart';
 import 'sk_performance_screen.dart';
 
 /// AI Mission Dashboard — the operational command center for the SK.
@@ -978,6 +979,13 @@ class _SettingsMenu extends StatelessWidget {
               );
               if (chosen != null) await locale.setLanguage(chosen);
               break;
+            case 'ai_settings':
+              Navigator.of(ctx).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const AiSettingsScreen(),
+                ),
+              );
+              break;
             case 'logout':
               final confirmLogout = await showDialog<bool>(
                 context: ctx,
@@ -1071,6 +1079,15 @@ class _SettingsMenu extends StatelessWidget {
                     ? SettingsStrings.bangla
                     : SettingsStrings.english,
               ),
+            ),
+          ),
+          PopupMenuItem(
+            value: 'ai_settings',
+            child: _SettingsRow(
+              emoji: '🤖',
+              chipColor: AppColors.aiSurfaceStart,
+              title: SettingsStrings.aiSettings,
+              subtitle: SettingsStrings.aiSettingsSubtitle,
             ),
           ),
           PopupMenuItem(

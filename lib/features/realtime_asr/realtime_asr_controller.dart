@@ -8,6 +8,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../core/api/realtime_asr_service.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/preferences/vad_tuning_notifier.dart';
 import '../scribe/form_field_schema_builder.dart';
 import '../scribe/models/ai_extracted_field.dart';
 import '../scribe/scribe_permission_service.dart';
@@ -29,10 +30,32 @@ class RealtimeAsrController extends ChangeNotifier {
   RealtimeAsrController({
     required RealtimeAsrService service,
     required ScribePermissionService permissionService,
+    VadTuningNotifier? vadTuning,
   })  : _service = service,
-        _perm = permissionService;
+        _perm = permissionService,
+        _vadTuning = vadTuning;
 
   final RealtimeAsrService _service;
+  // Nullable: callers that don't provide one (tests, a widget tree without
+  // the provider registered) get VadGate's own built-in defaults instead of
+  // a crash — same "degrade to defaults, never throw" stance as
+  // VadTuningNotifier.load() itself.
+  final VadTuningNotifier? _vadTuning;
+
+  VadGate _buildVadGate() {
+    final cfg = _vadTuning?.config;
+    if (cfg == null) return VadGate();
+    return VadGate(
+      enterMarginDb: cfg.enterMarginDb,
+      sustainMarginDb: cfg.sustainMarginDb,
+      floorCeilingDbfs: cfg.floorCeilingDbfs,
+      floorAlpha: cfg.floorAlpha,
+      bootstrapDuration: Duration(milliseconds: cfg.bootstrapMs),
+      debounceDuration: Duration(milliseconds: cfg.debounceMs),
+      hangoverDuration: Duration(milliseconds: cfg.hangoverMs),
+      preRollDuration: Duration(milliseconds: cfg.preRollMs),
+    );
+  }
   final ScribePermissionService _perm;
   final AudioRecorder _recorder = AudioRecorder();
 
@@ -154,7 +177,7 @@ class RealtimeAsrController extends ChangeNotifier {
     _chunkCount = 0;
     _chunkBytes = 0;
     _recentAmplitudes.clear();
-    _vadGate = VadGate();
+    _vadGate = _buildVadGate();
     _silentSinceLastTick = false;
     _state = RealtimeAsrState.connecting;
     notifyListeners();

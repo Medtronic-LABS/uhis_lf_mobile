@@ -220,6 +220,54 @@ class AppConfig {
   // It must be read from SharedPreferences / SecureStorage and managed by
   // a dedicated ConsentRepository (TODO: wire in a future sprint).
 
+  // ── VAD gate tuning (realtime ASR bandwidth-saving gate) ──────────────────
+  //
+  // Factory-default values for VadGate's constructor params — the floor an
+  // on-device [VadTuningNotifier] override falls back to, and what its
+  // "reset to defaults" action restores. Deliberately more permissive
+  // (lower entry bar, lower noise-floor ceiling, longer hangover) than the
+  // gate's own original in-code defaults: this app's field population is
+  // rural CHWs with variable/soft vocal volume and unpredictable ambient
+  // noise, and the gate's own stated design principle is "bias toward false
+  // accepts over false rejects" — a dropped chunk of real speech is
+  // unrecoverable and invisible to the SK, unlike a little extra silence.
+  //
+  // TODO(remote-config): once a server-driven config API exists, it should
+  // slot in as a third tier ahead of these — VadTuningNotifier's persisted
+  // value, then these AppConfig defaults, then (future) a fetched remote
+  // default — without restructuring either layer.
+  static double get vadEnterMarginDb =>
+      double.tryParse(const String.fromEnvironment('VAD_ENTER_MARGIN_DB')) ??
+      9;
+
+  static double get vadSustainMarginDb =>
+      double.tryParse(
+        const String.fromEnvironment('VAD_SUSTAIN_MARGIN_DB'),
+      ) ??
+      6;
+
+  static double get vadFloorCeilingDbfs =>
+      double.tryParse(
+        const String.fromEnvironment('VAD_FLOOR_CEILING_DBFS'),
+      ) ??
+      -35;
+
+  static double get vadFloorAlpha =>
+      double.tryParse(const String.fromEnvironment('VAD_FLOOR_ALPHA')) ??
+      0.08;
+
+  static int get vadBootstrapMs =>
+      int.tryParse(const String.fromEnvironment('VAD_BOOTSTRAP_MS')) ?? 500;
+
+  static int get vadDebounceMs =>
+      int.tryParse(const String.fromEnvironment('VAD_DEBOUNCE_MS')) ?? 180;
+
+  static int get vadHangoverMs =>
+      int.tryParse(const String.fromEnvironment('VAD_HANGOVER_MS')) ?? 700;
+
+  static int get vadPreRollMs =>
+      int.tryParse(const String.fromEnvironment('VAD_PREROLL_MS')) ?? 350;
+
   /// Feature flag: use the uhis_form JSON-driven renderer instead of the
   /// hardcoded [SectionRegistry]. Set via `--dart-define=USE_DYNAMIC_FORMS=true`.
   static const bool useDynamicForms = bool.fromEnvironment(

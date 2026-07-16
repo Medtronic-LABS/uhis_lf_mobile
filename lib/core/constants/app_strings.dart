@@ -269,6 +269,78 @@ abstract final class SettingsStrings {
       AppLocale.isBangla ? 'ভাষা পছন্দ' : 'Language preference';
   static const String english = 'English';
   static const String bangla = 'বাংলা (Bangla)';
+
+  // ── AI Settings row ───────────────────────────────────────────────────
+  static String get aiSettings =>
+      AppLocale.isBangla ? 'এআই সেটিংস' : 'AI Settings';
+  static String get aiSettingsSubtitle => AppLocale.isBangla
+      ? 'ভয়েস শনাক্তকরণ (VAD) টিউনিং'
+      : 'Voice detection (VAD) tuning';
+}
+
+/// AI Settings sub-page — realtime-ASR VAD gate tuning UI. An internal/ops
+/// tool (data-cost tuning for field conditions), not part of the CHW visit
+/// flow, so English-only for now rather than the dual-language getter
+/// pattern used for clinical-workflow copy elsewhere in this file.
+abstract final class AiSettingsStrings {
+  AiSettingsStrings._();
+
+  static const String title = 'AI Settings';
+  static const String appBarSubtitle = 'Realtime ASR — voice detection tuning';
+  static const String sectionHeader = 'Voice activity gate (VAD)';
+  static const String sectionDescription =
+      'Controls which mic audio is worth sending to the server during a '
+      'live scribe session — saves mobile data, since the CHW pays for '
+      'their own connection. A gate that is too strict can silently drop '
+      'real speech from a quiet speaker; too loose sends more silence than '
+      'necessary. Changes apply to the next recording session.';
+  static const String resetToDefaults = 'Reset to defaults';
+  static const String resetConfirmation = 'Tuning reset to factory defaults.';
+  static const String savedConfirmation = 'Tuning saved.';
+
+  static const String enterMarginLabel = 'Entry sensitivity';
+  static const String enterMarginDesc =
+      'How many dB above the room\'s noise floor a sound must be to start '
+      'being treated as speech. Lower = more sensitive to quiet speakers, '
+      'but more likely to also pick up background noise.';
+
+  static const String sustainMarginLabel = 'Sustain sensitivity';
+  static const String sustainMarginDesc =
+      'Lower bar used to *stay* in speech mode once started, so a natural '
+      'dip in volume mid-sentence doesn\'t cut the recording. Should stay '
+      'below entry sensitivity.';
+
+  static const String floorCeilingLabel = 'Noise floor ceiling';
+  static const String floorCeilingDesc =
+      'Caps how high the "background noise" estimate is allowed to climb '
+      'in a loud room. Lower ceiling = easier for a quiet speaker to be '
+      'heard over noisy surroundings.';
+
+  static const String floorAlphaLabel = 'Noise floor adaptation speed';
+  static const String floorAlphaDesc =
+      'How quickly the background-noise estimate adjusts to the room. '
+      'Higher = adapts faster to a changing environment.';
+
+  static const String bootstrapLabel = 'Startup calibration window';
+  static const String bootstrapDesc =
+      'How long at the very start of a recording is assumed silent, to '
+      'measure the room\'s baseline noise. Longer reduces the risk of an '
+      'immediate opening sentence skewing that baseline.';
+
+  static const String debounceLabel = 'Speech confirmation window';
+  static const String debounceDesc =
+      'How long a sound must stay above the entry threshold before it\'s '
+      'confirmed as real speech (filters out a single click or cough).';
+
+  static const String hangoverLabel = 'Trailing silence window';
+  static const String hangoverDesc =
+      'How long to keep recording after volume drops, to bridge a natural '
+      'pause between words or sentences without cutting them apart.';
+
+  static const String preRollLabel = 'Pre-speech buffer';
+  static const String preRollDesc =
+      'How much audio just before speech is confirmed gets included '
+      'anyway, so the very first word isn\'t clipped.';
 }
 
 /// Real-Time ASR screen — live streaming transcription + live clinical
