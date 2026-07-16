@@ -138,7 +138,7 @@ lib/
 | Visit flow (triage → assessment → recommendation) | `/patients/visit/:visitId/flow` (name `visit-flow`) | Yes |
 | Tasks / referrals | `/tasks` | Yes |
 | Task detail | `/tasks/:id` | Yes |
-| Assistant tab (placeholder) | `/assistant` | Yes |
+| Assistant tab (AI Scribe) | `/assistant` | Yes |
 | Form gallery | `/gallery` (dev duplicate: `/dev/form-gallery`, kDebugMode) | Yes |
 | Teleconsult | `/teleconsult` | Yes |
 | Counselling | `/counselling` | Yes |
@@ -265,6 +265,155 @@ Pre-visit briefing cards shown inside `SymptomPickerScreen` (the "What symptoms 
 - `CdsRules.evaluate(fieldValues, activePathways, cdssOutput?)` → `List<CdsAlert>`
 - `SectionedAssessmentScreen` — 3-step form: Triage → Assessment → Review & Submit
 - Programme enum values: `imci`, `anc`, `pnc`, `ncd`, `tb`, `epi`, `nutrition`, `familyPlanning`, `cataract`, `eyeCare`, `unknown`
+
+## Assessment / Visit Data Model
+
+This section documents the canonical payload shapes so you can build or fix assessment display without reading the Android reference each time.
+
+### Where data comes from
+
+| Source | Endpoint | Stored in Flutter as |
+|---|---|---|
+| History timeline | `POST /offline-service/offline-sync/member-assessment-history` | `AssessmentHistoryItem` (in-memory model, not DB) |
+| FHIR detail | `GET /fhir-server/fhir/Observation?encounter=Encounter/{encounterId}` | `FhirObservation` list |
+| Locally-created assessments (offline) | Written by form → synced via `POST /offline-service/offline-sync/create` | `LocalAssessmentEntity` in `local_assessments` table |
+| Patient context view (reads both) | `_localAssessmentsFor()` + `getMemberAssessments()` | `MemberAssessment` list fed to `_AssessmentDetailSheet` |
+
+### API response — `member-assessment-history`
+
+Each element in the response array maps to `AssessmentHistoryItem`:
+
+```json
+{
+  "householdMemberId": "FHIR-member-id",
+  "encounterId": "FHIR-encounter-id",
+  "visitDate": 1750000000000,          // epoch ms
+  "serviceProvided": "NCD",            // see programme types below
+  "referralStatus": "Recovered",       // Referred | OnTreatment | Recovered
+  "referralReason": "High BP",
+  "nextFollowUpDate": 1752000000000,   // epoch ms, nullable
+  "isLatestVisit": true,
+  "customStatus": ["Referred"],        // string array; may be empty
+  "observations": {                    // flat map — see fields below
+    "bp": "130/85",
+    "bg": "7.2",
+    "bgType": "FBS",
+    "height": "162",
+    "weight": "58"
+  }
+}
+```
+
+### `observations` flat map — all possible fields (from Android `MemberAssessmentObservations`)
+
+| Field | Programmes | Example |
+|---|---|---|
+| `bp` | NCD, ANC, all | `"130/85"` (systolic/diastolic as string) |
+| `bg` | NCD | `"7.2"` (mmol/L) |
+| `bgType` | NCD | `"FBS"`, `"RBS"`, `"PPBS"` |
+| `height` | All | `"162"` (cm) |
+| `weight` | All | `"58"` (kg) |
+| `hemoglobin` | ANC | `"11.2"` (g/dL) |
+| `fundalHeight` | ANC | `"28"` (cm) |
+| `gravida` | ANC | `"2"` |
+| `parity` | ANC | `"1"` |
+| `ancVisitNumber` | ANC | `"3"` |
+| `pncVisitNumber` | PNC | `"1"` |
+| `modeOfDelivery` | PNC | `"Normal"`, `"C-Section"` |
+| `anyComplicationsDuringDelivery` | PNC | `"Yes"` / `"No"` |
+| `complicationsDuringDelivery` | PNC | free text |
+| `familyPlanningMethods` | FP | `"Oral Contraceptive Pill"` |
+| `desireForChildrenInFuture` | FP | `"Yes"` / `"No"` |
+| `numberOfLivingChildren` | FP, PNC | `"2"` |
+| `heartAttack` | NCD | `"Yes"` / `"No"` |
+| `stroke` | NCD | `"Yes"` / `"No"` |
+| `kidneyDisease` | NCD | `"Yes"` / `"No"` |
+| `copd` | NCD | `"Yes"` / `"No"` |
+| `confirmDiagnosis` | NCD | `"Hypertension"` |
+| `ancVisitsOtherProviders` | ANC | `"2"` |
+| `pregnancyEpisodeId` | ANC, PNC | FHIR episode ID string |
+
+### Local assessment DB — `local_assessments` table
+
+Matches Android's `AssessmentEntity`. `assessment_details` stores the raw form JSON (flat, not enveloped).
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | TEXT PK | Local UUID |
+| `assessment_type` | TEXT | `NCD`, `ANC`, `PNC`, `PNC_CHILD`, `TB`, `ICCM`, `EPI`, `PWPROFILE` |
+| `assessment_details` | TEXT | JSON string of all form fields — programme-specific, flat |
+| `other_details` | TEXT? | JSON summary blob (optional) |
+| `referral_status` | TEXT | `Referred`, `OnTreatment`, `Recovered` |
+| `sync_status` | TEXT | `pending`, `synced`, `networkError` |
+
+### The `{kind, raw}` envelope — why it exists and how to unpack it
+
+`AssessmentDao` (the older DB table for remote-synced assessments) stores two columns: `kind` (type string) and `raw_json` (JSON string). When `_localAssessmentsFor()` maps these to `MemberAssessment`, it packages them as:
+
+```dart
+rawJson: {'kind': row.kind, 'raw': row.rawJson}   // row.rawJson is a JSON string
+```
+
+`_AssessmentDetailSheet._effectiveRaw()` unpacks it:
+
+```dart
+Map<String, dynamic> _effectiveRaw() {
+  final r = widget.assessment.rawJson['raw'];
+  if (r is String) return jsonDecode(r) as Map<String, dynamic>;  // ← normal case
+  if (r is Map)   return Map<String, dynamic>.from(r);
+  return widget.assessment.rawJson;
+}
+```
+
+**Always call `_effectiveRaw()` instead of `widget.assessment.rawJson` directly** when reading clinical fields inside `_AssessmentDetailSheet`. The outer map only contains `kind` and `raw` — all clinical data is inside `raw`.
+
+### Programme type strings → `Programme` enum
+
+The `serviceProvided` / `kind` field from the API/DB maps via `Programme.fromString()`:
+
+| Wire string | `Programme` | Clinical fields to show |
+|---|---|---|
+| `NCD`, `NCDMEDICALREVIEW` | `Programme.ncd` | bp, bg, bgType, confirmDiagnosis, stroke, heartAttack |
+| `ANC` | `Programme.anc` | bp, hemoglobin, fundalHeight, ancVisitNumber, weight |
+| `PNC`, `PNC_MOTHER` | `Programme.pnc` | modeOfDelivery, complications, pncVisitNumber |
+| `PNC_CHILD`, `PNC_NEONATAL` | `Programme.pnc` | weight, any neonatal fields |
+| `TB` | `Programme.tb` | confirmDiagnosis, customStatus |
+| `ICCM`, `IMCI` | `Programme.imci` | symptoms, danger signs |
+| `EPI` | `Programme.epi` | vaccine name, dose |
+| `PWPROFILE`, `PW_PROFILE` | `Programme.anc` | gravida, parity, ancVisitsOtherProviders |
+| `FP` | `Programme.familyPlanning` | familyPlanningMethods, desireForChildren |
+
+### Assessment create payload (upload to server)
+
+```json
+{
+  "referenceId": 12345,           // householdMemberLocalId (integer)
+  "assessmentType": "NCD",
+  "assessmentDetails": {          // wrapped under programme key: {"ncd": {...form fields...}}
+    "ncd": { ...flat form fields... }
+  },
+  "villageId": 67,
+  "assessmentDate": "2026-07-17T08:00:00.000Z",
+  "patientStatus": "Recovered",
+  "referredReasons": "High BP, Diabetes",   // comma-joined string, NOT array
+  "encounter": {
+    "householdId": "HH-uuid",
+    "memberId": "FHIR-member-id",
+    "referred": false,
+    "patientId": "patient-fhir-id",
+    "provenance": { "organizationId": 1, "spiceUserId": 2, "userId": 3 },
+    "latitude": 23.7,
+    "longitude": 90.4,
+    "startTime": "2026-07-17T08:00:00.000Z",
+    "endTime": "2026-07-17T08:30:00.000Z",
+    "visitNumber": 3,              // ANC/PNC only
+    "customStatus": ["Recovered"]  // always a list
+  }
+}
+```
+
+`assessmentDetails` is wrapped under the programme key by `_wrapDetailsForType()`:
+`NCD → {ncd: ...}`, `ANC → {anc: ...}`, `PNC/PNC_MOTHER → {pncMother: ...}`, `PNC_CHILD → {pncChild: ...}`, `TB → {tb: ...}`, `ICCM/IMCI → {iccm: ...}`, `EPI/PWPROFILE → no wrapping`.
 
 ## Engineering standards
 
