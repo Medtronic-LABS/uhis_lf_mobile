@@ -95,7 +95,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Full unfiltered queue — filter/search applied synchronously from this cache.
   List<MissionQueueItem> _baseQueue = const [];
 
-  /// Today's actionable visit count for the ✦ AI sorted badge.
+  /// Today's actionable visit count for the ✦ Sorted badge.
   /// Always derived from [_baseQueue] with upcoming dropped — never from the
   /// currently applied village/need/search filter (those only shrink the list).
   int _todayVisitCount = 0;
