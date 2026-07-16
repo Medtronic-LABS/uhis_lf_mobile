@@ -22,7 +22,9 @@ import '../../core/db/local_dashboard_repository.dart';
 import '../../core/debug/console_log.dart';
 import '../../core/models/dashboard_tier.dart';
 import '../../core/models/mission_queue_item.dart';
+import '../../core/models/programme.dart';
 import '../../core/models/risk.dart';
+import '../search/member_search_repository.dart';
 import '../../core/widgets/patient_filter_panel.dart';
 import '../referral/referral_repository.dart';
 import 'widgets/dashboard_search_field.dart';
@@ -83,6 +85,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Set<NeedFilter> _selectedNeeds = const {};
   Set<NeedFilter> _availableNeeds = const {};
   String _searchQuery = '';
+
+  // Global member search (patients NOT in the priority queue).
+  List<MemberHit> _globalSearchHits = const [];
+  bool _globalSearchBusy = false;
+  Timer? _globalSearchDebounce;
 
   // Full unfiltered queue — filter/search applied synchronously from this cache.
   List<MissionQueueItem> _baseQueue = const [];
@@ -149,6 +156,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void dispose() {
+    _globalSearchDebounce?.cancel();
     _missionRepo?.changes.removeListener(_onMissionChanges);
     super.dispose();
   }
@@ -387,6 +395,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _selectedVillageChipName = null;
     _searchQuery = '';
     _queueRevealCount = _kQueuePageSize;
+    _globalSearchHits = const [];
+    _globalSearchDebounce?.cancel();
+  }
+
+  void _runGlobalSearch(String q) {
+    _globalSearchDebounce?.cancel();
+    if (q.trim().length < 2) {
+      setState(() {
+        _globalSearchHits = const [];
+        _globalSearchBusy = false;
+      });
+      return;
+    }
+    setState(() => _globalSearchBusy = true);
+    _globalSearchDebounce = Timer(const Duration(milliseconds: 400), () async {
+      if (!mounted) return;
+      try {
+        final repo = context.read<MemberSearchRepository>();
+        final result = await repo.search(query: q.trim());
+        if (!mounted) return;
+        final queueIds = _baseQueue
+            .map((i) => i.patientId)
+            .whereType<String>()
+            .toSet();
+        final hits = result.matches
+            .where((h) => h.id != null && !queueIds.contains(h.id))
+            .toList();
+        debugPrint(
+          '[Dashboard] global search "$q" → ${result.matches.length} total, '
+          '${hits.length} not in queue',
+        );
+        setState(() {
+          _globalSearchHits = hits;
+          _globalSearchBusy = false;
+        });
+      } catch (e) {
+        debugPrint('[Dashboard] global search error: $e');
+        if (mounted) setState(() => _globalSearchBusy = false);
+      }
+    });
   }
 
   /// Re-apply current filters to the cached base queue synchronously.
@@ -618,6 +666,63 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Future<void> _startVisitFromHit(MemberHit hit) async {
+    final patientId = hit.id;
+    if (patientId == null || patientId.isEmpty) return;
+    debugPrint(
+      '[Dashboard] global search start visit: patientId=$patientId name=${hit.name}',
+    );
+    final memberDao = context.read<MemberDao>();
+    final controller = context.read<VisitController>();
+    final member = await memberDao.getByPatientId(patientId);
+    final householdMemberLocalId =
+        int.tryParse(member?.referenceId ?? '') ??
+        int.tryParse(member?.id ?? '') ??
+        0;
+    final memberId = member?.id;
+    final villageId = member?.subVillageId ?? member?.villageId;
+    debugPrint(
+      '[Dashboard] global search member lookup: memberId=$memberId '
+      'villageId=$villageId householdMemberLocalId=$householdMemberLocalId',
+    );
+    if (!mounted) return;
+    final encounterId = await startOrResumeVisit(
+      context,
+      controller: controller,
+      patientId: patientId,
+      programme: Programme.ncd,
+      patientName: hit.name,
+      householdId: hit.householdId,
+    );
+    if (!mounted) return;
+    if (encounterId != null) {
+      debugPrint(
+        '[Dashboard] global search visit started, encounterId=$encounterId',
+      );
+      context.go(
+        '/patients/visit/$encounterId/flow?origin=dashboard',
+        extra: {
+          'patientId': patientId,
+          'patientName': hit.name,
+          'patientGender': member?.gender,
+          'householdId': hit.householdId,
+          'memberId': memberId,
+          'householdMemberLocalId': householdMemberLocalId,
+          'villageId': villageId,
+        },
+      );
+      return;
+    }
+    debugPrint('[Dashboard] global search visit start failed: ${controller.error}');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          controller.error ?? MissionDashboardStrings.visitStartFailed,
+        ),
+      ),
+    );
+  }
+
   void _navigateToFirstQueueItem() async {
     // Navigate to Tasks screen (Visits tab)
     if (mounted) context.push('/tasks');
@@ -662,6 +767,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   _queueRevealCount = _kQueuePageSize;
                 });
                 _applyFilters();
+                _runGlobalSearch(q);
               },
             ),
             // Referral alert strip — sits between header/search and village tabs
@@ -729,8 +835,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     final hasMore = revealed < queue.length;
                     final bodyCount =
                         waiting || queue.isEmpty ? 1 : revealed;
-                    final itemCount =
-                        headerCount + bodyCount + (hasMore ? 1 : 0);
+
+                    // Global search section — patients not in today's queue.
+                    final globalHits = _searchQuery.length >= 2
+                        ? _globalSearchHits
+                        : const <MemberHit>[];
+                    final showGlobalSection = _searchQuery.length >= 2 &&
+                        (_globalSearchBusy || globalHits.isNotEmpty);
+                    final globalItemCount = showGlobalSection
+                        ? (1 + (_globalSearchBusy ? 1 : globalHits.length))
+                        : 0;
+
+                    final itemCount = headerCount +
+                        bodyCount +
+                        (hasMore ? 1 : 0) +
+                        globalItemCount;
 
                     return NotificationListener<ScrollNotification>(
                       onNotification: (n) {
@@ -796,6 +915,58 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             );
                           }
                           if (index == 3) return const SizedBox(height: 10);
+
+                          // Global search items follow all queue items.
+                          final totalQueueEnd = headerCount +
+                              bodyCount +
+                              (hasMore ? 1 : 0);
+                          if (showGlobalSection && index >= totalQueueEnd) {
+                            final globalIndex = index - totalQueueEnd;
+                            if (globalIndex == 0) {
+                              return Padding(
+                                padding: const EdgeInsets.fromLTRB(0, 16, 0, 8),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.search,
+                                      size: 16,
+                                      color: Color(0xFF6B7280),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    const Text(
+                                      'Search results — not in today\'s queue',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF6B7280),
+                                      ),
+                                    ),
+                                    if (_globalSearchBusy) ...[
+                                      const SizedBox(width: 8),
+                                      const SizedBox(
+                                        width: 12,
+                                        height: 12,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 1.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              );
+                            }
+                            if (_globalSearchBusy) {
+                              return const SizedBox.shrink();
+                            }
+                            final hit = globalHits[globalIndex - 1];
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: _GlobalSearchResultCard(
+                                hit: hit,
+                                onStartVisit: () => _startVisitFromHit(hit),
+                              ),
+                            );
+                          }
 
                           if (waiting) {
                             return const Padding(
@@ -1747,6 +1918,77 @@ class _NotificationBellState extends State<_NotificationBell>
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _GlobalSearchResultCard extends StatelessWidget {
+  const _GlobalSearchResultCard({
+    required this.hit,
+    required this.onStartVisit,
+  });
+
+  final MemberHit hit;
+  final VoidCallback onStartVisit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: const Color(0xFFEFF6FF),
+            child: Text(
+              hit.name?.isNotEmpty == true
+                  ? hit.name![0].toUpperCase()
+                  : '?',
+              style: const TextStyle(
+                color: Color(0xFF1D4ED8),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  hit.name ?? 'Unknown',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+                if (hit.gender != null)
+                  Text(
+                    hit.gender!,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF6B7280),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          FilledButton.tonal(
+            onPressed: onStartVisit,
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text('Start Visit', style: TextStyle(fontSize: 12)),
+          ),
+        ],
       ),
     );
   }

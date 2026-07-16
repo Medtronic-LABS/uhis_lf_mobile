@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -20,6 +22,7 @@ import '../../core/widgets/mockup_svg_icons.dart';
 import '../../core/widgets/patient_filter_panel.dart';
 import '../dashboard/dashboard_repository.dart';
 import '../dashboard/mission_dashboard_repository.dart';
+import '../search/member_search_repository.dart';
 import '../visit/widgets/mission_queue_card.dart';
 import 'household_detail_screen.dart';
 
@@ -42,6 +45,11 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
   // Search
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+
+  // Member search results — replaces household-card filtering when query >= 2 chars.
+  List<MemberHit> _memberSearchHits = const [];
+  bool _memberSearchBusy = false;
+  Timer? _memberSearchDebounce;
 
   // patientId -> queue item, so a household's flagged member (if any) can be
   // rendered with its real urgency badge/status via MissionQueueCard.
@@ -91,9 +99,39 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
 
   @override
   void dispose() {
+    _memberSearchDebounce?.cancel();
     _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _runMemberSearch(String q) {
+    _memberSearchDebounce?.cancel();
+    if (q.length < 2) {
+      setState(() {
+        _memberSearchHits = const [];
+        _memberSearchBusy = false;
+      });
+      debugPrint('[HouseholdList] search cleared');
+      return;
+    }
+    setState(() => _memberSearchBusy = true);
+    _memberSearchDebounce = Timer(const Duration(milliseconds: 350), () async {
+      if (!mounted) return;
+      try {
+        final repo = context.read<MemberSearchRepository>();
+        final result = await repo.search(query: q);
+        debugPrint('[HouseholdList] member search "$q" → ${result.matches.length} hits');
+        if (!mounted) return;
+        setState(() {
+          _memberSearchHits = result.matches;
+          _memberSearchBusy = false;
+        });
+      } catch (e) {
+        debugPrint('[HouseholdList] member search error: $e');
+        if (mounted) setState(() => _memberSearchBusy = false);
+      }
+    });
   }
 
   void _loadData() {
@@ -344,6 +382,9 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
                               ),
                             );
                           }
+                          if (_searchQuery.length >= 2) {
+                            return _buildMemberSearchResults(context);
+                          }
                           return _buildHouseholdsList(context, items);
                         },
                       ),
@@ -352,6 +393,50 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildMemberSearchResults(BuildContext context) {
+    if (_memberSearchBusy) {
+      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+    }
+    if (_memberSearchHits.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.search_off, size: 48, color: Theme.of(context).colorScheme.outline),
+            const SizedBox(height: 12),
+            Text(HouseholdListStrings.noMembers, style: Theme.of(context).textTheme.bodyLarge),
+          ],
+        ),
+      );
+    }
+    debugPrint('[HouseholdList] rendering ${_memberSearchHits.length} member search results');
+    return ListView.separated(
+      controller: _scrollController,
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 80),
+      itemCount: _memberSearchHits.length,
+      separatorBuilder: (context, _) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        final hit = _memberSearchHits[index];
+        return _MemberSearchResultTile(
+          hit: hit,
+          onTap: () {
+            final id = hit.id;
+            if (id == null || id.isEmpty) return;
+            debugPrint('[HouseholdList] search result tap: id=$id name=${hit.name}');
+            context.push('/patients/$id?origin=household', extra: {
+              'id': hit.id,
+              'name': hit.name,
+              'gender': hit.gender,
+              'phoneNumber': hit.phone,
+              'idCode': hit.nid,
+              'householdId': hit.householdId,
+            });
+          },
+        );
+      },
     );
   }
 
@@ -448,8 +533,11 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
                 Expanded(
                   child: TextField(
                     controller: _searchController,
-                    onChanged: (v) =>
-                        setState(() => _searchQuery = v.trim().toLowerCase()),
+                    onChanged: (v) {
+                      final q = v.trim();
+                      setState(() => _searchQuery = q.toLowerCase());
+                      _runMemberSearch(q);
+                    },
                     style: const TextStyle(
                       fontFamily: 'NunitoSans',
                       fontSize: 14,
@@ -484,7 +572,10 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
                   GestureDetector(
                     onTap: () {
                       _searchController.clear();
-                      setState(() => _searchQuery = '');
+                      setState(() {
+                        _searchQuery = '';
+                        _memberSearchHits = const [];
+                      });
                     },
                     child: const Icon(
                       Icons.clear,
@@ -1429,6 +1520,73 @@ class _MemberInfo {
       programmes: member.programmes,
       ancVisitCount: member.ancVisitCount,
       pncVisitCount: member.pncVisitCount,
+    );
+  }
+}
+
+class _MemberSearchResultTile extends StatelessWidget {
+  const _MemberSearchResultTile({required this.hit, required this.onTap});
+
+  final MemberHit hit;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE5E7EB)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: const Color(0xFFEFF6FF),
+              child: Text(
+                hit.name?.isNotEmpty == true
+                    ? hit.name![0].toUpperCase()
+                    : '?',
+                style: const TextStyle(
+                  color: Color(0xFF1D4ED8),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    hit.name ?? 'Unknown',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  Text(
+                    [
+                      if (hit.gender != null) hit.gender!,
+                      if (hit.phone != null) hit.phone!,
+                    ].join(' · '),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF6B7280),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: Color(0xFF9CA3AF), size: 20),
+          ],
+        ),
+      ),
     );
   }
 }
