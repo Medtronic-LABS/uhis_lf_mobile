@@ -30,7 +30,9 @@ import 'patient_repository.dart';
 import 'recent_vitals_section.dart';
 import '../assistant/patient_ai_sheet.dart';
 import 'contact_sheet.dart';
+import '../../core/db/pregnancy_snapshot_dao.dart';
 import '../../core/widgets/skeleton.dart';
+import 'vitals_repository.dart';
 
 /// Combined data type that can hold either a local patient or remote member.
 class PatientOrMemberData {
@@ -43,6 +45,8 @@ class PatientOrMemberData {
     this.recentVisits = const [],
     this.memberId,
     this.householdName,
+    this.vitalHistory = const [],
+    this.pregnancySnapshot,
   });
 
   final PatientWithProgrammes? localPatient;
@@ -50,6 +54,14 @@ class PatientOrMemberData {
   final String? householdName;
   final Set<Programme> programmes;
   final List<MemberAssessment> remoteAssessments;
+
+  /// Per-visit vitals history from local SQLite (offline-first). Used for
+  /// spark bar trend charts on the care threads profile card.
+  final List<VisitVitals> vitalHistory;
+
+  /// Pregnancy snapshot (LMP, EDD, risk flags) from local SQLite. Null when
+  /// the patient has no pregnancy episode stored.
+  final PregnancySnapshotRow? pregnancySnapshot;
 
   /// Locally-cached assessments — union of EncounterDao history,
   /// synced AssessmentDao rows, and sync-pending LocalAssessmentDao
@@ -127,6 +139,8 @@ class PatientOrMemberData {
     List<MemberAssessment>? remoteAssessments,
     List<PatientVisit>? recentVisits,
     String? householdName,
+    List<VisitVitals>? vitalHistory,
+    PregnancySnapshotRow? pregnancySnapshot,
   }) {
     return PatientOrMemberData(
       localPatient: localPatient,
@@ -137,6 +151,8 @@ class PatientOrMemberData {
       recentVisits: recentVisits ?? this.recentVisits,
       memberId: memberId,
       householdName: householdName ?? this.householdName,
+      vitalHistory: vitalHistory ?? this.vitalHistory,
+      pregnancySnapshot: pregnancySnapshot ?? this.pregnancySnapshot,
     );
   }
 }
@@ -352,6 +368,8 @@ class _PatientContextScreenState
     final memberRepo = context.read<MemberDetailRepository>();
     final patientRepo = context.read<PatientRepository>();
     final syncSvc = context.read<OfflineSyncService>();
+    final vitalsRepo = context.read<VitalsRepository>();
+    final pregnancyDao = context.read<PregnancySnapshotDao>();
 
     final t0 = Stopwatch()..start();
     // Phase 1: all local reads in parallel — returns instantly from SQLite.
@@ -360,11 +378,17 @@ class _PatientContextScreenState
       patientRepo.byId(widget.patientId),
       _localAssessmentsFor(widget.patientId),
       syncSvc.lastSyncedAt(),
+      vitalsRepo.recentByVisit(widget.patientId).catchError((_) => <VisitVitals>[]),
+      pregnancyDao.byPatient(widget.patientId).catchError((_) => null),
     ]);
     final resolvedMemberId = phase1[0] as String?;
     final localPatient = phase1[1] as PatientWithProgrammes?;
     final localAssessments = phase1[2] as List<MemberAssessment>;
     final lastSync = phase1[3] as DateTime?;
+    final vitalHistory = phase1[4] as List<VisitVitals>;
+    final pregnancySnapshot = phase1[5] as PregnancySnapshotRow?;
+    debugPrint('⏱ [PatientContext] phase1 total=${t0.elapsedMilliseconds}ms'
+        ' vitals=${vitalHistory.length} pregnancy=${pregnancySnapshot != null}');
     final syncAge = lastSync != null ? DateTime.now().difference(lastSync) : null;
     // Skip remote assessment fetch when a full sync completed within the last
     // 30 minutes — the local DB already has everything the server would return.
@@ -426,6 +450,8 @@ class _PatientContextScreenState
         programmes: localPatient.programmes,
         localAssessments: localAssessments,
         memberId: resolvedMemberId,
+        vitalHistory: vitalHistory,
+        pregnancySnapshot: pregnancySnapshot,
       );
       if (mounted) {
         setState(() {
@@ -506,6 +532,8 @@ class _PatientContextScreenState
         localAssessments: localAssessments,
         memberId: resolvedMemberId,
         householdName: await _householdName(member.householdId),
+        vitalHistory: vitalHistory,
+        pregnancySnapshot: pregnancySnapshot,
       );
     }
 
@@ -578,6 +606,8 @@ class _PatientContextScreenState
         localAssessments: localAssessmentsList,
         memberId: resolvedMemberId,
         householdName: await _householdName(data['householdId']?.toString()),
+        vitalHistory: vitalHistory,
+        pregnancySnapshot: pregnancySnapshot,
       );
     }
 
