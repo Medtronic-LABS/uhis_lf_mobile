@@ -400,7 +400,10 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
   }
 
   Future<void> _fetchMembers() async {
-    if (_loadingMembers) return;
+    // Guard only blocks concurrent re-fetches triggered by pull-to-refresh
+    // while a fetch is already running. The initState path sets _loadingMembers
+    // synchronously BEFORE calling here, so we must not bail on that case.
+    if (_loadingMembers && _household.members.isNotEmpty) return;
     setState(() {
       _loadingMembers = true;
       _loadError = null;
