@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../core/clinical/assessment_thresholds.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/preferences/ai_feature_toggles_notifier.dart';
 import '../../../core/theme/app_theme.dart';
 import '../widgets/form_fields/radio_form_field.dart';
 import 'canonical_visit_data.dart';
@@ -309,7 +310,8 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             // live-first mode. When the programme mix supports auto-fill
             // (NCD/ANC), extractions come back as form_fill and are written
             // straight into the form through the validated prefill gate.
-            if (AppConfig.scribeEnabled)
+            if (AppConfig.scribeEnabled &&
+                context.watch<AiFeatureTogglesNotifier>().toggles.step2AsrEnabled)
               Padding(
                 padding: const EdgeInsets.fromLTRB(
                   AppSpacing.xxxl, AppSpacing.xl, AppSpacing.xxxl, 0),
