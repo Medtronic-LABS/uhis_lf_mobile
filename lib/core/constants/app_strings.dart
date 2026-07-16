@@ -341,6 +341,44 @@ abstract final class AiSettingsStrings {
   static const String preRollDesc =
       'How much audio just before speech is confirmed gets included '
       'anyway, so the very first word isn\'t clipped.';
+
+  static const String widgetsSectionHeader = 'AI widgets';
+  static const String widgetsSectionDescription =
+      'Turn off any AI-generated surface the SK doesn\'t want — each one '
+      'still shows the equivalent local, rule-based content instead of '
+      'nothing, and skips the network call, saving mobile data.';
+  static const String widgetsResetToDefaults = 'Reset to default';
+  static const String selectAllLabel = 'Select all';
+  static const String selectAllDesc =
+      'Turn every AI widget below on or off at once.';
+
+  static const String step1Header = 'Step 1 — Symptoms';
+  static const String step1SummaryLabel = 'Visit summary';
+  static const String step1SummaryDesc =
+      'The "Before You Knock" briefing cards shown before symptom entry.';
+  static const String step1AsrLabel = 'Voice symptom capture';
+  static const String step1AsrDesc =
+      'AI Scribe voice capture that pre-ticks symptom cards from what the '
+      'SK says.';
+
+  static const String step2Header = 'Step 2 — Assessment form';
+  static const String step2AsrLabel = 'Voice form fill';
+  static const String step2AsrDesc =
+      'AI Scribe voice capture that fills in the vitals and clinical form '
+      'fields.';
+
+  static const String step3Header = 'Step 3 — Recommendation';
+  static const String step3SummaryLabel = 'Visit summary & recommendations';
+  static const String step3SummaryDesc =
+      'The AI-generated visit summary, next actions, counselling, and '
+      'follow-up plan.';
+  static const String step3ReferralAlertLabel = 'Danger sign / referral alert';
+  static const String step3ReferralAlertDesc =
+      'The alert card that flags danger signs and recommends a referral.';
+  static const String step3WhatsAppLabel = 'WhatsApp draft';
+  static const String step3WhatsAppDesc =
+      'The pre-written WhatsApp message summarising the visit for the '
+      'patient.';
 }
 
 /// Real-Time ASR screen — live streaming transcription + live clinical
