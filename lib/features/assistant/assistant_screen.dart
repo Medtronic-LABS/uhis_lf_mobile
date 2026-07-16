@@ -34,12 +34,12 @@ class AssistantScreen extends StatelessWidget {
             indicatorColor: Colors.white,
             indicatorWeight: 2.5,
             labelStyle: TextStyle(
-              fontFamily: 'NunitoSans',
+              fontFamily: AppFonts.body,
               fontSize: 13,
               fontWeight: FontWeight.w700,
             ),
             unselectedLabelStyle: TextStyle(
-              fontFamily: 'NunitoSans',
+              fontFamily: AppFonts.body,
               fontSize: 13,
               fontWeight: FontWeight.w500,
             ),
@@ -230,7 +230,7 @@ class _EmptyState extends StatelessWidget {
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF0F172A),
+              color: AppColors.canvasDark,
               letterSpacing: -0.4,
             ),
           ),
@@ -370,7 +370,7 @@ class _MessageBubble extends StatelessWidget {
               child: Text(
                 message.text,
                 style: TextStyle(
-                  color: isUser ? Colors.white : const Color(0xFF0F172A),
+                  color: isUser ? Colors.white : AppColors.canvasDark,
                   fontSize: 14,
                   height: 1.5,
                 ),
@@ -588,14 +588,14 @@ class _ErrorBanner extends StatelessWidget {
       child: Row(
         children: [
           const Icon(Icons.error_outline_rounded,
-              size: 18, color: Color(0xFFDC2626)),
+              size: 18, color: AppColors.slaOverdueText),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               message,
               style: const TextStyle(
                 fontSize: 13,
-                color: Color(0xFFDC2626),
+                color: AppColors.slaOverdueText,
               ),
             ),
           ),
@@ -604,7 +604,7 @@ class _ErrorBanner extends StatelessWidget {
             child: const Text(
               AssistantStrings.retryLabel,
               style: TextStyle(
-                color: Color(0xFFDC2626),
+                color: AppColors.slaOverdueText,
                 fontWeight: FontWeight.w600,
               ),
             ),

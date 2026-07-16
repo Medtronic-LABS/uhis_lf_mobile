@@ -1060,7 +1060,7 @@ class _GestationalAgeCard extends StatelessWidget {
                     RichText(
                       text: TextSpan(
                         style: const TextStyle(
-                          fontFamily: 'Nunito',
+                          fontFamily: AppFonts.display,
                           color: _navy,
                           height: 1,
                         ),
@@ -3569,7 +3569,7 @@ class _InfoLabelField extends StatelessWidget {
               Text(
                 hasValue ? value! : UnifiedFormStrings.autoComputedPlaceholder,
                 style: const TextStyle(
-                  fontFamily: 'Nunito',
+                  fontFamily: AppFonts.display,
                   fontWeight: FontWeight.w800,
                   fontSize: 16,
                   color: AppColors.navy,
@@ -3848,7 +3848,7 @@ class _SubmitBar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(AppRadius.button),
               ),
               textStyle: const TextStyle(
-                fontFamily: 'Nunito',
+                fontFamily: AppFonts.display,
                 fontSize: 15,
                 fontWeight: FontWeight.w800,
               ),

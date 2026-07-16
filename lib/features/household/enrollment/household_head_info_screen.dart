@@ -202,7 +202,7 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
             title: const Text(
               'Household Head',
               style: TextStyle(
-                fontFamily: 'Nunito',
+                fontFamily: AppFonts.display,
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
                 color: Colors.white,

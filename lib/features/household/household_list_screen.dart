@@ -445,7 +445,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
                       setState(() => _searchQuery = v.trim().toLowerCase());
                     },
                     style: const TextStyle(
-                      fontFamily: 'NunitoSans',
+                      fontFamily: AppFonts.body,
                       fontSize: 14,
                     ),
                     decoration: InputDecoration(
@@ -455,7 +455,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
                       // fontSize matches the Home dashboard's own search bar
                       // hint (DashboardSearchField, fontSize: 14).
                       hintStyle: TextStyle(
-                        fontFamily: 'NunitoSans',
+                        fontFamily: AppFonts.body,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                         color: AppColors.textMuted,
@@ -849,7 +849,7 @@ class _HouseholdCard extends StatelessWidget {
                           Text(
                             title,
                             style: const TextStyle(
-                              fontFamily: 'Nunito',
+                              fontFamily: AppFonts.display,
                               fontWeight: FontWeight.w800,
                               fontSize: 12,
                               color: AppColors.navy,
@@ -1030,8 +1030,8 @@ class _OtherMemberRow extends StatelessWidget {
               alignment: Alignment.center,
               child: Text(
                 memberInitials(member.name),
-                style: TextStyle(
-                  fontFamily: 'Nunito',
+                style: const TextStyle(
+                  fontFamily: AppFonts.display,
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
                   color: AppColors.textMuted,
