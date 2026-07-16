@@ -1443,6 +1443,162 @@ class _StatTile extends StatelessWidget {
   }
 }
 
+// ─── Spark Bar Chart ───────────────────────────────────────────────────────
+
+/// Lightweight bar-chart sparkline rendered as a [Row] of [Container] widgets.
+/// No additional packages — satisfies the "no new packages" constraint.
+///
+/// Supports two series (e.g. systolic + diastolic) when [secondValues] is set.
+class _SparkBarChart extends StatelessWidget {
+  const _SparkBarChart({
+    required this.values,
+    required this.barColor,
+    this.secondValues,
+    this.secondBarColor,
+    this.label,
+    this.maxHeight = 48,
+    this.barWidth = 6,
+    this.barSpacing = 3,
+  });
+
+  final List<double> values;
+  final Color barColor;
+  final List<double>? secondValues;
+  final Color? secondBarColor;
+  final String? label;
+  final double maxHeight;
+  final double barWidth;
+  final double barSpacing;
+
+  @override
+  Widget build(BuildContext context) {
+    final sw = Stopwatch()..start();
+    if (values.isEmpty) {
+      final empty = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (label != null)
+            Text(label!, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+          const SizedBox(height: 4),
+          Text(
+            PatientProfileStrings.noVitalsYet,
+            style: const TextStyle(fontSize: 11, color: AppColors.textMuted, fontStyle: FontStyle.italic),
+          ),
+        ],
+      );
+      debugPrint('⏱ [PatientContext] _SparkBarChart build in ${sw.elapsedMilliseconds}ms (empty)');
+      return empty;
+    }
+
+    final second = secondValues ?? const [];
+    final allVals = [...values, ...second];
+    final maxVal = allVals.reduce((a, b) => a > b ? a : b);
+    final minVal = allVals.reduce((a, b) => a < b ? a : b);
+    final range = (maxVal - minVal).clamp(1.0, double.infinity);
+
+    double barH(double v) => ((v - minVal) / range * maxHeight).clamp(4.0, maxHeight);
+
+    final result = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (label != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(label!, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+          ),
+        SizedBox(
+          height: maxHeight,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (int i = 0; i < values.length; i++) ...[
+                if (i > 0) SizedBox(width: barSpacing),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (second.isNotEmpty && i < second.length)
+                      Container(
+                        width: barWidth,
+                        height: barH(second[i]),
+                        decoration: BoxDecoration(
+                          color: (secondBarColor ?? AppColors.textMuted).withOpacity(0.5),
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
+                        ),
+                      ),
+                    Container(
+                      width: barWidth,
+                      height: barH(values[i]),
+                      decoration: BoxDecoration(
+                        color: barColor,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+    debugPrint('⏱ [PatientContext] _SparkBarChart build in ${sw.elapsedMilliseconds}ms'
+        ' bars=${values.length} dual=${second.isNotEmpty}');
+    return result;
+  }
+}
+
+/// Extracts BP spark chart from visit vitals history. Returns null if no BP data.
+_SparkBarChart? _buildBpSparkChart(List<VisitVitals> history) {
+  final systolics = <double>[];
+  final diastolics = <double>[];
+  for (final visit in history) {
+    for (final r in visit.readings) {
+      if (r.type == VitalType.bloodPressure) {
+        final sys = r.systolic?.toDouble();
+        final dia = r.diastolic?.toDouble();
+        if (sys != null && dia != null) {
+          systolics.add(sys);
+          diastolics.add(dia);
+          break;
+        }
+      }
+    }
+  }
+  if (systolics.isEmpty) return null;
+  return _SparkBarChart(
+    values: systolics,
+    barColor: AppColors.ancText,
+    secondValues: diastolics,
+    secondBarColor: AppColors.ancBorder,
+    label: 'BP trend (systolic/diastolic)',
+  );
+}
+
+/// Extracts weight/growth spark chart from visit vitals history. Returns null if no weight data.
+_SparkBarChart? _buildWeightSparkChart(List<VisitVitals> history) {
+  final weights = <double>[];
+  for (final visit in history) {
+    for (final r in visit.readings) {
+      if (r.type == VitalType.weight) {
+        final w = r.value?.toDouble();
+        if (w != null) {
+          weights.add(w);
+          break;
+        }
+      }
+    }
+  }
+  if (weights.isEmpty) return null;
+  return _SparkBarChart(
+    values: weights,
+    barColor: AppColors.aiPurpleDark,
+    label: PatientProfileStrings.growthTrend,
+  );
+}
+
 /// Section showing assessment history.
 class _AssessmentsSection extends StatelessWidget {
   const _AssessmentsSection({required this.assessments, this.isLoading = false});
