@@ -332,7 +332,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
             title: const Text(
               'Enroll Household',
               style: TextStyle(
-                fontFamily: 'Nunito',
+                fontFamily: AppFonts.display,
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
                 color: Colors.white,

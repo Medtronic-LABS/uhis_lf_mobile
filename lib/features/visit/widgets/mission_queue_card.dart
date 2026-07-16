@@ -134,7 +134,7 @@ class MissionQueueCard extends StatelessWidget {
                                   Text(
                                     _ageGender(item.age, item.genderInitial),
                                     style: const TextStyle(
-                                      fontFamily: 'NunitoSans',
+                                      fontFamily: AppFonts.body,
                                       fontSize: 11.5,
                                       fontWeight: FontWeight.w800,
                                       color: Color(0xFF111827),
@@ -283,7 +283,7 @@ class MissionReasonBadge extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          fontFamily: 'NunitoSans',
+          fontFamily: AppFonts.body,
           fontSize: 10,
           fontWeight: FontWeight.w700,
           color: fg,
@@ -417,7 +417,7 @@ class PatientBadgeRow extends StatelessWidget {
                         child: Text(
                           badgeLabel,
                           style: TextStyle(
-                            fontFamily: 'NunitoSans',
+                            fontFamily: AppFonts.body,
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
                             color: badgeFg,

@@ -107,7 +107,7 @@ class _LeaderboardCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF1B2B5E), Color(0xFF2D3F7A)],
+          colors: [AppColors.navy, AppColors.navyMid],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -165,7 +165,7 @@ class _LeaderboardCard extends StatelessWidget {
                     TextSpan(
                       text: '$ptGap pts',
                       style: const TextStyle(
-                        color: Color(0xFFFFD700),
+                        color: AppColors.tagGold,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
@@ -196,11 +196,11 @@ class _LeaderboardRow extends StatelessWidget {
     };
 
     final avatarBg = switch (entry.rank) {
-      1 => const Color(0xFFFFD700),
+      1 => AppColors.tagGold,
       2 => const Color(0xFFC0C0C0),
       _ => entry.isCurrentUser
-          ? const Color(0xFFE8356D)
-          : const Color(0xFF6B63D4),
+          ? AppColors.pink
+          : AppColors.aiPurple,
     };
     final avatarFg = switch (entry.rank) {
       1 => const Color(0xFF78350F),
@@ -222,7 +222,7 @@ class _LeaderboardRow extends StatelessWidget {
             textAlign: TextAlign.center,
             style: TextStyle(
               color: isTop2 || entry.isCurrentUser
-                  ? const Color(0xFFFFD700)
+                  ? AppColors.tagGold
                   : Colors.white54,
               fontWeight: FontWeight.w800,
               fontSize: isTop2 ? 17 : 12,
@@ -239,7 +239,7 @@ class _LeaderboardRow extends StatelessWidget {
             shape: BoxShape.circle,
             color: avatarBg,
             border: entry.isCurrentUser
-                ? Border.all(color: const Color(0xFFFFD700), width: 2)
+                ? Border.all(color: AppColors.tagGold, width: 2)
                 : null,
           ),
           alignment: Alignment.center,
@@ -264,7 +264,7 @@ class _LeaderboardRow extends StatelessWidget {
                   Text(
                     entry.name,
                     style: const TextStyle(
-                      color: Color(0xE6FFFFFF),
+                      color: AppColors.onDarkHigh,
                       fontWeight: FontWeight.w600,
                       fontSize: 12,
                     ),
@@ -352,7 +352,7 @@ class _VideoModuleCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE5E7EB), width: 1.5),
+            border: Border.all(color: AppColors.border, width: 1.5),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x12000000),
@@ -433,8 +433,8 @@ class _VideoThumbnail extends StatelessWidget {
                 backgroundColor: Colors.transparent,
                 valueColor: AlwaysStoppedAnimation<Color>(
                   isCompleted
-                      ? const Color(0xFF10B981)
-                      : const Color(0xFFE8356D),
+                      ? AppColors.statusSuccess
+                      : AppColors.pink,
                 ),
               ),
             ),
@@ -444,14 +444,14 @@ class _VideoThumbnail extends StatelessWidget {
   }
 
   List<Color> _gradientFor(CoachingModule m) {
-    if (m.isLocked) return const [Color(0xFF1F2937), Color(0xFF4B5563)];
+    if (m.isLocked) return const [AppColors.textStrong, AppColors.textMid];
     return switch (m.domain) {
-      CoachingDomain.imci => const [Color(0xFF7F1D1D), Color(0xFFEF4444)],
-      CoachingDomain.ncd => const [Color(0xFF022C22), Color(0xFF10B981)],
-      CoachingDomain.anc => const [Color(0xFF831843), Color(0xFFEC4899)],
+      CoachingDomain.imci => const [AppColors.rangeCrisis, AppColors.statusCritical],
+      CoachingDomain.ncd => const [Color(0xFF022C22), AppColors.statusSuccess],
+      CoachingDomain.anc => const [AppColors.ancHeader, Color(0xFFEC4899)],
       CoachingDomain.tb => const [Color(0xFF0C2340), Color(0xFF1D4ED8)],
-      CoachingDomain.epi => const [Color(0xFF1E3A5F), Color(0xFF0EA5E9)],
-      CoachingDomain.nutrition => const [Color(0xFF3B1F00), Color(0xFFF59E0B)],
+      CoachingDomain.epi => const [Color(0xFF1E3A5F), AppColors.statusInfo],
+      CoachingDomain.nutrition => const [Color(0xFF3B1F00), AppColors.statusWarning],
     };
   }
 }
@@ -477,15 +477,15 @@ class _PlayButton extends StatelessWidget {
 
     if (isLocked) {
       bgColor = Colors.white24;
-      iconColor = const Color(0xFF9CA3AF);
+      iconColor = AppColors.textDisabled;
       icon = Icons.lock_rounded;
     } else if (isPlaying) {
-      bgColor = const Color(0xFFE8356D);
-      iconColor = const Color(0xFFE8356D);
+      bgColor = AppColors.pink;
+      iconColor = AppColors.pink;
       icon = Icons.pause_rounded;
     } else if (isCompleted) {
       bgColor = Colors.white;
-      iconColor = const Color(0xFF10B981);
+      iconColor = AppColors.statusSuccess;
       icon = Icons.play_arrow_rounded;
     } else {
       bgColor = Colors.white;
@@ -512,12 +512,12 @@ class _PlayButton extends StatelessWidget {
   }
 
   Color _domainPlayColor(CoachingDomain d) => switch (d) {
-        CoachingDomain.imci => const Color(0xFFEF4444),
-        CoachingDomain.ncd => const Color(0xFF10B981),
+        CoachingDomain.imci => AppColors.statusCritical,
+        CoachingDomain.ncd => AppColors.statusSuccess,
         CoachingDomain.anc => const Color(0xFFEC4899),
         CoachingDomain.tb => const Color(0xFF1D4ED8),
-        CoachingDomain.epi => const Color(0xFF0EA5E9),
-        CoachingDomain.nutrition => const Color(0xFFF59E0B),
+        CoachingDomain.epi => AppColors.statusInfo,
+        CoachingDomain.nutrition => AppColors.statusWarning,
       };
 }
 
@@ -578,7 +578,7 @@ class _VideoCardBody extends StatelessWidget {
             style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF1A1A2E),
+              color: AppColors.textPrimary,
             ),
           ),
           const SizedBox(height: 3),
@@ -586,7 +586,7 @@ class _VideoCardBody extends StatelessWidget {
             children: [
               Text(
                 '${module.estimatedMinutes} ${CoachingStrings.minLabel}',
-                style: const TextStyle(fontSize: 11, color: Color(0xFF6B7280)),
+                style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
               ),
               const SizedBox(width: 8),
               _PillBadge(module: module),
@@ -616,20 +616,20 @@ class _PillBadge extends StatelessWidget {
       label = n != null
           ? TrainingStrings.pillUnlockAfter(n)
           : TrainingStrings.pillLocked;
-      bg = const Color(0xFFF3F4F6);
-      fg = const Color(0xFF9CA3AF);
+      bg = AppColors.progressTrack;
+      fg = AppColors.textDisabled;
     } else if (module.isCompleted) {
       label = TrainingStrings.pillDonePoints(module.pointsEarned);
-      bg = const Color(0xFFD1FAE5);
-      fg = const Color(0xFF065F46);
+      bg = AppColors.statusSuccessSurface;
+      fg = AppColors.statusSuccessText;
     } else if (module.triggerReason != null) {
       label = TrainingStrings.pillTriggered(module.triggerReason!);
-      bg = const Color(0xFFDBEAFE);
-      fg = const Color(0xFF1E40AF);
+      bg = AppColors.tagBlueSurface;
+      fg = AppColors.tagBlueText;
     } else {
       label = TrainingStrings.pillNew;
-      bg = const Color(0xFFDBEAFE);
-      fg = const Color(0xFF1E40AF);
+      bg = AppColors.tagBlueSurface;
+      fg = AppColors.tagBlueText;
     }
 
     return Flexible(
@@ -683,7 +683,7 @@ class _MonthlyProgressCard extends StatelessWidget {
             style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF1A1A2E),
+              color: AppColors.textPrimary,
             ),
           ),
           const SizedBox(height: 10),
@@ -693,21 +693,21 @@ class _MonthlyProgressCard extends StatelessWidget {
                 child: _StatCell(
                   value: '${stats.videosWatched}',
                   label: TrainingStrings.statVideos,
-                  color: const Color(0xFF6B63D4),
+                  color: AppColors.aiPurple,
                 ),
               ),
               Expanded(
                 child: _StatCell(
                   value: '${stats.pointsEarned}',
                   label: TrainingStrings.statPoints,
-                  color: const Color(0xFFE8356D),
+                  color: AppColors.pink,
                 ),
               ),
               Expanded(
                 child: _StatCell(
                   value: '${stats.dayStreak}',
                   label: TrainingStrings.statStreak,
-                  color: const Color(0xFF10B981),
+                  color: AppColors.statusSuccess,
                 ),
               ),
             ],
@@ -747,7 +747,7 @@ class _StatCell extends StatelessWidget {
           textAlign: TextAlign.center,
           style: const TextStyle(
             fontSize: 10,
-            color: Color(0xFF6B7280),
+            color: AppColors.textMuted,
           ),
         ),
       ],
@@ -769,7 +769,7 @@ class _SectionLabel extends StatelessWidget {
       style: const TextStyle(
         fontSize: 11,
         fontWeight: FontWeight.w700,
-        color: Color(0xFF6B7280),
+        color: AppColors.textMuted,
         letterSpacing: 0.07 * 11,
       ),
     );

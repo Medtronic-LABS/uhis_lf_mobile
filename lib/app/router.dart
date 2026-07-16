@@ -812,7 +812,7 @@ class _SplashScreenState extends State<_SplashScreen>
                 child: const Text(
                   LockStrings.aponSushashthya,
                   style: TextStyle(
-                    fontFamily: 'Nunito',
+                    fontFamily: AppFonts.display,
                     fontSize: 26,
                     fontWeight: FontWeight.w900,
                     color: Colors.white,
