@@ -394,10 +394,12 @@ class RealtimeAsrController extends ChangeNotifier {
         final symptomsData =
             (msg['data'] as Map<String, dynamic>?) ?? const {};
         _fields = RealtimeClinicalFields.fromJson(symptomsData);
-        // The backend does not yet support the form_fill mode — it always
-        // returns "symptoms".  When Step 2 form-fill mode is active (schema
-        // set), convert the symptoms response into a FormPrefillResult so
-        // the banner can still pre-fill the form fields.
+        // Confirmed live: a deployed ai-service with an assessmentType set
+        // returns "form_fill" (handled below), so this branch is a legacy
+        // fallback for older-deployed backends that still only speak
+        // "symptoms". When Step 2 form-fill mode is active (schema set),
+        // convert the symptoms response into a FormPrefillResult so the
+        // banner can still pre-fill the form fields.
         if (_formSchema != null && _formSchema!.isNotEmpty) {
           _formFill = _symptomsToFormFill(_fields!);
         }
@@ -434,8 +436,9 @@ class RealtimeAsrController extends ChangeNotifier {
 
   /// Converts a [RealtimeClinicalFields] (returned by the server as
   /// `"type":"symptoms"`) into a [FormPrefillResult] that Step 2 can apply
-  /// directly to form fields — used when the backend does not support
-  /// `form_fill` mode and falls back to the standard symptoms response.
+  /// directly to form fields — legacy fallback for an older-deployed
+  /// backend that hasn't rolled out `form_fill` mode yet and always
+  /// returns the standard symptoms response instead.
   ///
   /// Structured fields (from the server's typed response):
   ///   - `bpLogDetails` → `[{systolic, diastolic}]` list
