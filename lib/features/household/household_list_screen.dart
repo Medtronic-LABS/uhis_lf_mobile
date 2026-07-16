@@ -1039,7 +1039,7 @@ class _OtherMemberRow extends StatelessWidget {
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                color: isHighlighted ? AppColors.aiBorder : AppColors.progressTrack,
+                color: isHighlighted ? AppColors.statusWarning : AppColors.progressTrack,
                 shape: BoxShape.circle,
               ),
               alignment: Alignment.center,
@@ -1049,7 +1049,7 @@ class _OtherMemberRow extends StatelessWidget {
                   fontFamily: 'Nunito',
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
-                  color: isHighlighted ? AppColors.navy : AppColors.textMuted,
+                  color: isHighlighted ? AppColors.statusWarningText : AppColors.textMuted,
                 ),
               ),
             ),
@@ -1063,7 +1063,7 @@ class _OtherMemberRow extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 12.5,
                       fontWeight: isHighlighted ? FontWeight.w800 : FontWeight.w700,
-                      color: isHighlighted ? AppColors.aiPurpleDark : AppColors.textPrimary,
+                      color: isHighlighted ? AppColors.statusWarningText : AppColors.textPrimary,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1485,9 +1485,9 @@ class _SearchMatchHighlight extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.aiSurfaceStart,
+        color: AppColors.statusWarningSurface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.aiBorder, width: 1),
+        border: Border.all(color: AppColors.statusWarning, width: 1),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       child: child,
