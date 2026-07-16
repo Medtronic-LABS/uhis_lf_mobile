@@ -343,9 +343,9 @@ class _PatientContextScreenState
     return fallback;
   }
 
-  Future<PatientOrMemberData> _fetchData() async {
+  Future<PatientOrMemberData> _fetchData({bool forceRemote = false}) async {
     final t0 = Stopwatch()..start();
-    ConsoleLog.banner('[PatientCtx] open patientId=${widget.patientId}');
+    ConsoleLog.banner('[PatientCtx] open patientId=${widget.patientId} forceRemote=$forceRemote');
 
     // Capture context-bound objects synchronously before any await to avoid
     // use_build_context_synchronously linter warnings.
@@ -367,10 +367,10 @@ class _PatientContextScreenState
     final syncAge = lastSync != null ? DateTime.now().difference(lastSync) : null;
     // Skip remote assessment fetch when a full sync completed within the last
     // 30 minutes — the local DB already has everything the server would return.
-    final skipRemote = syncAge != null && syncAge.inMinutes < 30;
+    final skipRemote = !forceRemote && syncAge != null && syncAge.inMinutes < 30;
     ConsoleLog.banner('[PatientCtx] phase1 local=${t0.elapsedMilliseconds}ms'
         ' localPatient=${localPatient != null} localAssessments=${localAssessments.length}'
-        ' syncAge=${syncAge?.inMinutes ?? '?'}min skipRemote=$skipRemote');
+        ' syncAge=${syncAge?.inMinutes ?? '?'}min forceRemote=$forceRemote skipRemote=$skipRemote');
 
     if (localPatient != null) {
       // ignore: avoid_print
@@ -589,19 +589,22 @@ class _PatientContextScreenState
   }
 
   Future<void> _refresh() async {
+    ConsoleLog.banner('[PatientCtx] manual refresh — bypassing staleness gate');
     setState(() {
       _refreshing = true;
       _localSnapshot = null;
       _remoteLoading = false;
     });
     try {
-      final data = await _fetchData();
+      final data = await _fetchData(forceRemote: true);
+      ConsoleLog.banner('[PatientCtx] manual refresh done — assessments=${data.assessments.length}');
       if (!mounted) return;
       setState(() => _future = Future.value(data));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(PatientContextStrings.refreshDone)),
       );
-    } catch (_) {
+    } catch (e) {
+      ConsoleLog.banner('[PatientCtx] manual refresh failed: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(PatientContextStrings.refreshFailed)),
@@ -1965,7 +1968,7 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
             borderRadius: BorderRadius.circular(14),
             boxShadow: AppShadows.householdCard,
           ),
-          padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
+          padding: const EdgeInsets.fromLTRB(14, 4, 14, 6),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -2610,7 +2613,7 @@ class _PatientDetailHeader extends StatelessWidget {
 
   Widget _buildHeaderChip(BuildContext context, _HeaderChip c) {
     final chip = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: c.onTap != null ? 0.22 : 0.15),
         borderRadius: BorderRadius.circular(12),
@@ -2623,12 +2626,17 @@ class _PatientDetailHeader extends StatelessWidget {
         children: [
           Icon(c.icon, size: 12, color: Colors.white70),
           const SizedBox(width: 4),
-          Text(
-            c.label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 110),
+            child: Text(
+              c.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
