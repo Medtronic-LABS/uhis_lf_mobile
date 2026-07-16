@@ -21,6 +21,7 @@ import '../../core/widgets/header_icon_button.dart';
 import '../dashboard/dashboard_repository.dart';
 import '../dashboard/mission_dashboard_repository.dart';
 import '../visit/widgets/mission_queue_card.dart';
+import '../../core/debug/console_log.dart';
 
 /// Full details of a household member for display.
 class HouseholdMemberData {
@@ -363,6 +364,8 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
     // "0 members" (the no-`extra` entry point from the Patient Context
     // screen's "Same household" strip always lands here with an empty list).
     _loadingMembers = _household.members.isEmpty && _household.id != null;
+    ConsoleLog.banner('[HouseholdDetail] initState id=${_household.id}'
+        ' members=${_household.members.length} loadingMembers=$_loadingMembers');
     // Auto-fetch members if not provided (defer to avoid setState in initState)
     if (_household.members.isEmpty && _household.id != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -403,7 +406,12 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
     // Guard only blocks concurrent re-fetches triggered by pull-to-refresh
     // while a fetch is already running. The initState path sets _loadingMembers
     // synchronously BEFORE calling here, so we must not bail on that case.
-    if (_loadingMembers && _household.members.isNotEmpty) return;
+    ConsoleLog.banner('[HouseholdDetail] _fetchMembers enter'
+        ' loadingMembers=$_loadingMembers existingMembers=${_household.members.length}');
+    if (_loadingMembers && _household.members.isNotEmpty) {
+      ConsoleLog.banner('[HouseholdDetail] _fetchMembers guard skip — already loading with data');
+      return;
+    }
     setState(() {
       _loadingMembers = true;
       _loadError = null;
@@ -411,12 +419,16 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
 
     final householdId = _household.id;
     if (householdId == null) {
+      ConsoleLog.banner('[HouseholdDetail] _fetchMembers abort — householdId null');
       setState(() {
         _loadError = HouseholdDetailStrings.householdIdNotAvailable;
         _loadingMembers = false;
       });
       return;
     }
+
+    ConsoleLog.banner('[HouseholdDetail] _fetchMembers householdId=$householdId — querying local DB');
+    final t0 = Stopwatch()..start();
 
     try {
       final memberDao = context.read<MemberDao>();
@@ -428,6 +440,7 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
       await hierarchy.prefetch();
 
       final localMembers = await memberDao.getByHouseholdId(householdId);
+      ConsoleLog.banner('[HouseholdDetail] localDB=${t0.elapsedMilliseconds}ms localMembers=${localMembers.length}');
 
       if (localMembers.isNotEmpty && mounted) {
         final base = localMembers.map(HouseholdMemberData.fromEntity).toList();
@@ -445,6 +458,7 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
           members: enriched,
           householdId: householdId,
         );
+        ConsoleLog.banner('[HouseholdDetail] local path enriched=${enriched.length} total=${t0.elapsedMilliseconds}ms');
         if (!mounted) return;
         setState(() {
           _household = HouseholdDetailData(
@@ -469,8 +483,10 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
       // enrichment as the local-cache path — otherwise a household with no
       // local cache yet (first sync) would silently show an unbadged,
       // service-history-less roster with no indication anything is missing.
+      ConsoleLog.banner('[HouseholdDetail] localMembers empty — falling back to API');
       final householdData = await repo.getHouseholdById(householdId);
 
+      ConsoleLog.banner('[HouseholdDetail] API response=${householdData != null ? "ok" : "null"} elapsed=${t0.elapsedMilliseconds}ms');
       if (householdData != null && mounted) {
         final updated = HouseholdDetailData.fromJson(householdData);
         final enriched = await _enrichMembers(
@@ -489,6 +505,7 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
           members: enriched,
           householdId: householdId,
         );
+        ConsoleLog.banner('[HouseholdDetail] API path enriched=${enriched.length} total=${t0.elapsedMilliseconds}ms');
         if (!mounted) return;
         setState(() {
           _household = HouseholdDetailData(
@@ -511,12 +528,14 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
           _loadingMembers = false;
         });
       } else if (mounted) {
+        ConsoleLog.banner('[HouseholdDetail] API returned null and localMembers empty — showing noMembers error');
         setState(() {
           _loadError = HouseholdDetailStrings.noMembers;
           _loadingMembers = false;
         });
       }
     } catch (e) {
+      ConsoleLog.banner('[HouseholdDetail] _fetchMembers error: $e elapsed=${t0.elapsedMilliseconds}ms');
       if (mounted) {
         setState(() {
           _loadError = e.toString();
