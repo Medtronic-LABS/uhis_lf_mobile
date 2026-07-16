@@ -756,6 +756,9 @@ abstract final class PatientContextStrings {
       ? 'পরিবারকে কল করার সুবিধা শীঘ্রই আসছে'
       : 'Call household coming soon';
 
+  static String get storedDataTitle =>
+      AppLocale.isBangla ? 'সংরক্ষিত তথ্য' : 'Stored data';
+
   // ── HTML detail composition ──────────────────────────────────────────────
   static String get backToWorklist =>
       AppLocale.isBangla ? 'ওয়ার্কলিস্টে ফিরে যান' : 'Back to worklist';
