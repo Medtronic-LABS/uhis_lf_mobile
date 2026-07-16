@@ -1005,6 +1005,84 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
   return threads;
 }
 
+// ─── Care Thread Chip Row ──────────────────────────────────────────────────
+
+/// Horizontally scrollable row of thread chips — one pill per active clinical
+/// pathway. Tapping a chip scrolls the parent to the matching stats card
+/// (handled by the parent via [onThreadSelected]).
+class _CareThreadChipRow extends StatelessWidget {
+  const _CareThreadChipRow({
+    required this.threads,
+    required this.selected,
+    required this.onThreadSelected,
+  });
+
+  final List<_CareThread> threads;
+  final int selected;
+  final ValueChanged<int> onThreadSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final sw = Stopwatch()..start();
+    final result = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            PatientProfileStrings.activeCareThreads,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textMid,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ),
+        SizedBox(
+          height: 34,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: threads.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (context, i) {
+              final t = threads[i];
+              final isSelected = i == selected;
+              return GestureDetector(
+                onTap: () => onThreadSelected(i),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isSelected ? t.textColor : t.bg,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: t.textColor.withOpacity(isSelected ? 0 : 0.35),
+                      width: 1,
+                    ),
+                  ),
+                  child: Text(
+                    t.label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: isSelected ? AppColors.cardSurface : t.textColor,
+                      height: 1.2,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+    debugPrint('⏱ [PatientContext] _CareThreadChipRow build in ${sw.elapsedMilliseconds}ms'
+        ' (${threads.length} chips, selected=$selected)');
+    return result;
+  }
+}
+
 /// Section showing assessment history.
 class _AssessmentsSection extends StatelessWidget {
   const _AssessmentsSection({required this.assessments, this.isLoading = false});
