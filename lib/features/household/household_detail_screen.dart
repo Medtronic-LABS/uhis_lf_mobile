@@ -341,6 +341,7 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[HouseholdDetailScreen] mounted householdId=${widget.household.id}');
     // Derive household name from head if not available
     final derivedName = _deriveHouseholdName(
       existingName: widget.household.name,

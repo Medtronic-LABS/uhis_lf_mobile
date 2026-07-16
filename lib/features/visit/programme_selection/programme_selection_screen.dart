@@ -46,6 +46,7 @@ class _ProgrammeSelectionScreenState extends State<ProgrammeSelectionScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[ProgrammeSelectionScreen] mounted');
     _vm = ProgrammeSelectionViewModel(
       repository: context.read<ProgrammeRecommendationRepository>(),
       request: widget.request,

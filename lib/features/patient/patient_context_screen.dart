@@ -173,6 +173,7 @@ class _PatientContextScreenState
   @override
   void initState() {
     super.initState();
+    debugPrint('[PatientContextScreen] mounted');
     // Initialize directly without setState since widget isn't mounted yet
     _future = _fetchData();
   }

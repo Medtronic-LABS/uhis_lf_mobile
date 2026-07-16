@@ -51,6 +51,12 @@ class NewPatientVisitScreen extends StatefulWidget {
 
 class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
   bool _pwSelected = false;
+
+  @override
+  void initState() {
+    super.initState();
+    debugPrint('[NewPatientVisitScreen] mounted patientId=${widget.patientId}');
+  }
   final Set<_Svc> _selectedSvcs = {};
   final Set<String> _selectedSymptoms = {};
   String _searchQuery = '';

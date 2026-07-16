@@ -18,6 +18,12 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   bool _busy = false;
 
+  @override
+  void initState() {
+    super.initState();
+    debugPrint('[OnboardingScreen] mounted');
+  }
+
   Future<void> _setupSecurity() async {
     setState(() => _busy = true);
     final auth = context.read<AuthState>();

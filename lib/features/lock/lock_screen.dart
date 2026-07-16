@@ -29,6 +29,7 @@ class _LockScreenState extends State<LockScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[LockScreen] mounted');
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadSummary();
       _checkConnectivity();

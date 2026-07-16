@@ -48,6 +48,7 @@ class _VisitBriefingScreenState extends State<VisitBriefingScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[VisitBriefingScreen] mounted visitId=${widget.visitId}');
     _briefingFuture = _fetchBriefing();
   }
 

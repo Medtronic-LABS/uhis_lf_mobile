@@ -157,6 +157,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[VisitFlowScreen] mounted visitId=${widget.visitId} patientId=${widget.patientId} initialStep=${widget.initialStep}');
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Always load — even when patientName is supplied we still need DOB + age
       // for the smart age label (months for infants). ??-guards inside prevent

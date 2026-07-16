@@ -43,6 +43,7 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
   @override
   void initState() {
     super.initState();
+    debugPrint('[SyncProgressScreen] mounted');
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),

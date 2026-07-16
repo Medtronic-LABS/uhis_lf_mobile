@@ -109,6 +109,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[MissionDashboardScreen] mounted');
     _reloadStats();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;

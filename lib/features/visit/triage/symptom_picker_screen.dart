@@ -116,6 +116,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[SymptomPickerScreen] mounted encounterId=${widget.encounterId} patientId=${widget.patientId}');
     // Defer to after first frame to ensure context is available
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadPatientContext();
@@ -455,8 +456,14 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // When hosted by VisitFlowScreen (onAdvance set) the wrapper owns the
+    // patient + step header, so we drop our own AppBar to avoid two stacked
+    // headers. Standalone route entry keeps the navy 3-step header.
+    final bool embedded = widget.onAdvance != null;
 
     if (_isLoading) {
+      // Embedded: return bare content area to avoid nested Scaffold overlay.
+      if (embedded) return const SizedBox.expand();
       return Scaffold(
         appBar: AppBar(title: Text(TriageStrings.pickerTitle)),
         body: const SizedBox.shrink(),
@@ -464,48 +471,45 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     }
 
     if (_error != null || _viewModel == null) {
-      return Scaffold(
-        appBar: AppBar(title: Text(TriageStrings.pickerTitle)),
-        body: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const SizedBox(height: 48),
-                Icon(
-                  Icons.error_outline,
-                  size: 48,
-                  color: theme.colorScheme.error,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  _error ?? 'Failed to load patient context',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 16),
-                FilledButton(
-                  onPressed: () {
-                    setState(() {
-                      _isLoading = true;
-                      _error = null;
-                    });
-                    _loadPatientContext();
-                  },
-                  child: const Text(TriageStrings.retryButton),
-                ),
-              ],
-            ),
+      final errorBody = SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const SizedBox(height: 48),
+              Icon(
+                Icons.error_outline,
+                size: 48,
+                color: theme.colorScheme.error,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                _error ?? 'Failed to load patient context',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () {
+                  setState(() {
+                    _isLoading = true;
+                    _error = null;
+                  });
+                  _loadPatientContext();
+                },
+                child: const Text(TriageStrings.retryButton),
+              ),
+            ],
           ),
         ),
       );
+      if (embedded) return errorBody;
+      return Scaffold(
+        appBar: AppBar(title: Text(TriageStrings.pickerTitle)),
+        body: errorBody,
+      );
     }
-
-    // When hosted by VisitFlowScreen (onAdvance set) the wrapper owns the
-    // patient + step header, so we drop our own AppBar to avoid two stacked
-    // headers. Standalone route entry keeps the navy 3-step header.
-    final bool embedded = widget.onAdvance != null;
 
     return ChangeNotifierProvider<TriageViewModel>.value(
       value: _viewModel!,

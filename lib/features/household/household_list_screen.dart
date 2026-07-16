@@ -60,6 +60,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[HouseholdListScreen] mounted');
     // Defer loading until after first frame when context is available.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {

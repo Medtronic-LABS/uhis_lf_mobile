@@ -99,6 +99,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
   @override
   void initState() {
     super.initState();
+    debugPrint('[ReferralListScreen] mounted');
     _tabController = TabController(length: 2, vsync: this);
     // Defer to didChangeDependencies where context is valid
   }

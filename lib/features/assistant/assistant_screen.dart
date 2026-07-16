@@ -398,6 +398,7 @@ class _TypingIndicatorState extends State<_TypingIndicator>
   @override
   void initState() {
     super.initState();
+    debugPrint('[AssistantScreen] mounted');
     _ctrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),

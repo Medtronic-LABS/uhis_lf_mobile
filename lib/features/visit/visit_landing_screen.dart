@@ -57,6 +57,7 @@ class _VisitLandingScreenState extends State<VisitLandingScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[VisitLandingScreen] mounted');
     _loadData();
   }
 

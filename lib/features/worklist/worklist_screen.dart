@@ -33,6 +33,7 @@ class _WorklistViewState extends State<WorklistView> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[WorklistScreen] mounted');
     _repo = context.read<WorklistRepository>();
     _sync = context.read<OfflineSyncService>();
     // Initialize directly without setState since widget isn't mounted yet

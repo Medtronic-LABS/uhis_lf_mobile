@@ -26,6 +26,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[LoginScreen] mounted');
     final auth = context.read<AuthState>();
     final last = auth.username;
     if (last != null) {

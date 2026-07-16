@@ -110,6 +110,12 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
       widget.activatedPathways != null && widget.activatedPathways!.isNotEmpty;
 
   @override
+  void initState() {
+    super.initState();
+    debugPrint('[VisitFormScreen] mounted visitId=${widget.visitId}');
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_scribeInitialized) {
