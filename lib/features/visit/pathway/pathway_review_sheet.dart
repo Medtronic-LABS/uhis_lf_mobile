@@ -87,6 +87,7 @@ class _PathwayReviewSheetState extends State<PathwayReviewSheet> {
     switch (programme) {
       case Programme.imci:
         return PathwayStrings.programmeImci;
+      case Programme.pw:
       case Programme.anc:
         return PathwayStrings.programmeAnc;
       case Programme.pnc:
@@ -366,6 +367,7 @@ class _PathwayReviewSheetState extends State<PathwayReviewSheet> {
     switch (programme) {
       case Programme.imci:
         return Icons.child_care;
+      case Programme.pw:
       case Programme.anc:
         return Icons.pregnant_woman;
       case Programme.pnc:
@@ -450,6 +452,7 @@ class _ManualProgrammeSheet extends StatelessWidget {
     switch (programme) {
       case Programme.imci:
         return PathwayStrings.programmeImci;
+      case Programme.pw:
       case Programme.anc:
         return PathwayStrings.programmeAnc;
       case Programme.pnc:
@@ -477,6 +480,7 @@ class _ManualProgrammeSheet extends StatelessWidget {
     switch (programme) {
       case Programme.imci:
         return Icons.child_care;
+      case Programme.pw:
       case Programme.anc:
         return Icons.pregnant_woman;
       case Programme.pnc:

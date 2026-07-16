@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../referral_api_service.dart';
+import '../../../app/theme.dart';
+import '../../../core/widgets/empty_state_card.dart';
 
 /// Panel for viewing and adding notes/comments to a referral.
 class NotesPanel extends StatefulWidget {
@@ -183,41 +185,16 @@ class _NotesPanelState extends State<NotesPanel> {
   }
 
   Widget _buildEmptyState(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Center(
+    return const Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: scheme.surfaceContainerLow,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.chat_bubble_outline_rounded,
-                size: 48,
-                color: scheme.outline,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No Notes Yet',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            Text(
+        padding: EdgeInsets.all(32),
+        child: EmptyStateCard(
+          icon: Icons.chat_bubble_outline_rounded,
+          iconColor: AppColors.textMuted,
+          iconBg: AppColors.border,
+          title: 'No Notes Yet',
+          subtitle:
               'Add notes to track communication and updates for this referral.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: scheme.outline,
-                  ),
-            ),
-          ],
         ),
       ),
     );

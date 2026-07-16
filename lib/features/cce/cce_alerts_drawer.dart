@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/theme.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/widgets/empty_state_card.dart';
 import '../../core/db/household_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../referral/referral_repository.dart';
@@ -252,24 +253,14 @@ class _EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(32),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.check_circle_outline_rounded,
-              size: 56, color: AppColors.statusSuccess),
-          const SizedBox(height: 16),
-          const Text(
-            CceStrings.emptyTitle,
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            CceStrings.emptyBody,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-                fontSize: 13, color: AppColors.textMuted, height: 1.4),
-          ),
-        ],
+      child: Center(
+        child: EmptyStateCard(
+          icon: Icons.check_circle_outline_rounded,
+          iconColor: AppColors.statusSuccess,
+          iconBg: AppColors.statusSuccess.withValues(alpha: 0.1),
+          title: CceStrings.emptyTitle,
+          subtitle: CceStrings.emptyBody,
+        ),
       ),
     );
   }
