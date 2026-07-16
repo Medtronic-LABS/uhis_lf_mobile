@@ -1019,6 +1019,11 @@
             "id": "glucoseType",
             "fieldName": "Type of Investigation",
             "isMandatory": false
+          },
+          {
+            "id": "hba1c",
+            "fieldName": "HbA1c (%)",
+            "isMandatory": false
           }
         ]
       },

@@ -114,6 +114,8 @@ class NcdReferralEvaluator {
     if (bg >= bgOrangeLowMmol) return NcdRiskBand.orange;
     if (bg >= bgYellowHighMmol) return NcdRiskBand.yellowHigh;
     if (fbs != null && fbs >= fbsYellowLowMmol) return NcdRiskBand.yellowLow;
+    // Bangladesh spec: RBS ≥ 11.1 mmol/L → CC referral (yellowHigh), not just monitor.
+    if (rbs != null && rbs >= ncdUncontrolledRbs) return NcdRiskBand.yellowHigh;
     if (rbs != null && rbs > rbsGreenHighMmol) return NcdRiskBand.yellowLow;
     return NcdRiskBand.green;
   }
@@ -345,7 +347,7 @@ class PncReferralEvaluator {
       urgent.add('Severe anaemia (Hb <8 g/dL)');
     }
 
-    // High blood sugar: FBS ≥ 7.0 or RBS ≥ 11.1 mmol/L
+    // High blood sugar: FBS ≥ 7.0 or RBS ≥ 11.1 mmol/L (known DM/GDM thresholds)
     final highFbs =
         fastingGlucoseMmol != null && fastingGlucoseMmol >= pncFbsHighMmol;
     final highRbs =
@@ -396,6 +398,16 @@ class PncReferralEvaluator {
     // Known DM/GDM ON treatment
     if (hasKnownDmGdm == true && onDmTreatment == true) {
       nonUrgent.add('Diabetes on treatment');
+    }
+
+    // Suspected diabetes in women without known DM/GDM:
+    // FBS ≥ 5.1 or RBS ≥ 8.5 mmol/L — Bangladesh UHIS Phase 1 spec, #3.
+    if (hasKnownDmGdm != true) {
+      final suspectedFbs = fastingGlucoseMmol != null &&
+          fastingGlucoseMmol >= ancFbsDiabetesMmol;
+      final suspectedRbs =
+          randomGlucoseMmol != null && randomGlucoseMmol >= ancRbsDiabetesMmol;
+      if (suspectedFbs || suspectedRbs) nonUrgent.add('Suspected diabetes (FBS≥5.1 or RBS≥8.5)');
     }
 
     return PncReferralResult(
