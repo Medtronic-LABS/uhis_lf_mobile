@@ -144,15 +144,8 @@ class _PatientActionsRowState extends State<PatientActionsRow> {
     final theme = Theme.of(context);
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          PatientContextStrings.actionsTitle,
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 12),
         Row(
           children: [
             Expanded(
@@ -171,39 +164,32 @@ class _PatientActionsRowState extends State<PatientActionsRow> {
                 ),
               ),
             ),
+            const SizedBox(width: 8),
+            OutlinedButton.icon(
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(PatientContextStrings.callComingSoon),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.phone),
+              label: Text(PatientContextStrings.callHousehold),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
+            ),
           ],
         ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _openReferralSheet,
-                icon: const Icon(Icons.send),
-                label: const Text(ReferralStrings.actionOpenReferral),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(44),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(PatientContextStrings.callComingSoon),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.phone),
-                label: Text(PatientContextStrings.callHousehold),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(44),
-                ),
-              ),
-            ),
-          ],
+        const SizedBox(height: 6),
+        TextButton.icon(
+          onPressed: _openReferralSheet,
+          icon: const Icon(Icons.send, size: 16),
+          label: const Text(ReferralStrings.actionOpenReferral),
+          style: TextButton.styleFrom(
+            foregroundColor: theme.colorScheme.onSurfaceVariant,
+            textStyle: const TextStyle(fontSize: 13),
+          ),
         ),
       ],
     );

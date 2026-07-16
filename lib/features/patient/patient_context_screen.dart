@@ -1157,6 +1157,10 @@ class _AssessmentTile extends StatelessWidget {
         typeIcon = Icons.assignment;
     }
 
+    final visitLabel = assessment.visitNumber != null
+        ? '${assessment.type}  ·  Visit ${assessment.visitNumber}'
+        : assessment.type;
+
     return Semantics(
       label: PatientContextStrings.viewAssessmentSemantics(
         assessment.type,
@@ -1168,57 +1172,27 @@ class _AssessmentTile extends StatelessWidget {
       onTap: () => _showAssessmentDetail(context),
       borderRadius: BorderRadius.circular(8),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: typeColor.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(typeIcon, size: 20, color: typeColor),
-            ),
-            const SizedBox(width: 12),
+            Icon(typeIcon, size: 18, color: typeColor),
+            const SizedBox(width: 10),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: typeColor.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          assessment.type,
-                          style: TextStyle(
-                            color: typeColor,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 10,
-                          ),
-                        ),
-                      ),
-                      if (assessment.visitNumber != null) ...[
-                        const SizedBox(width: 6),
-                        Text(
-                          PatientContextStrings.visitNumberLabel(assessment.visitNumber!),
-                          style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    dateFormat.format(assessment.date),
-                    style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-                  ),
-                ],
+              child: Text(
+                visitLabel,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: typeColor,
+                ),
               ),
             ),
-            const Icon(Icons.chevron_right, color: AppColors.textMuted),
+            Text(
+              dateFormat.format(assessment.date),
+              style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+            ),
+            const SizedBox(width: 4),
+            const Icon(Icons.chevron_right, size: 16, color: AppColors.textMuted),
           ],
         ),
       ),
