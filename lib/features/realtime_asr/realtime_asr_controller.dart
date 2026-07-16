@@ -14,6 +14,7 @@ import '../scribe/scribe_permission_service.dart';
 import 'models/realtime_clinical_fields.dart';
 import 'realtime_asr_channel_io.dart'
     if (dart.library.html) 'realtime_asr_channel_web.dart';
+import 'vad_gate.dart';
 
 enum RealtimeAsrState { idle, connecting, listening, stopping, error }
 
@@ -55,6 +56,18 @@ class RealtimeAsrController extends ChangeNotifier {
   // validated working.
   static const int _stuckWindowSize = 40;
   final List<int> _recentAmplitudes = [];
+
+  // Gates silence/noise out of the audio sent to the server — saves mobile
+  // bandwidth and server ASR/LLM cost on the low-connectivity, low-end
+  // devices this app targets. See VadGate's own doc comment for the
+  // algorithm and tuning rationale.
+  VadGate _vadGate = VadGate();
+
+  // Set whenever a chunk was gated out (VadGate returned nothing to send)
+  // since the last auto-extract tick — tells that tick to also send a
+  // {"type":"ping"} keepalive, since a long silence now means genuinely no
+  // audio traffic flows, which previously never happened on this connection.
+  bool _silentSinceLastTick = false;
 
   WebSocketChannel? _channel;
   StreamSubscription<Uint8List>? _audioSub;
@@ -141,6 +154,8 @@ class RealtimeAsrController extends ChangeNotifier {
     _chunkCount = 0;
     _chunkBytes = 0;
     _recentAmplitudes.clear();
+    _vadGate = VadGate();
+    _silentSinceLastTick = false;
     _state = RealtimeAsrState.connecting;
     notifyListeners();
 
@@ -163,6 +178,10 @@ class RealtimeAsrController extends ChangeNotifier {
         onError: (Object e) {
           debugPrint('[RealtimeASR] websocket error: $e');
           _setError('Connection error: $e');
+          // A socket error leaves the mic stream and auto-extract timer
+          // running against a dead channel unless torn down here too — same
+          // leak as an unexpected close (see _onSocketDone).
+          unawaited(_teardown());
         },
       );
 
@@ -187,7 +206,17 @@ class RealtimeAsrController extends ChangeNotifier {
       _state = RealtimeAsrState.listening;
       notifyListeners();
 
-      _autoExtractTimer = Timer.periodic(_autoExtractInterval, (_) => extractNow());
+      _autoExtractTimer = Timer.periodic(_autoExtractInterval, (_) {
+        // A gap in "audio" frames is new behaviour now that VadGate withholds
+        // silence — send a lightweight keepalive so a long quiet stretch in
+        // the visit can't be mistaken by any idle-connection timeout
+        // (server or proxy) for a dead client.
+        if (_silentSinceLastTick) {
+          _send({'type': 'ping'});
+        }
+        _silentSinceLastTick = true;
+        extractNow();
+      });
     } catch (e, st) {
       debugPrint('[RealtimeASR] start() failed: $e\n$st');
       _setError('Could not start real-time ASR: $e');
@@ -292,15 +321,25 @@ class RealtimeAsrController extends ChangeNotifier {
         '${_chunkBytes ~/ 1024}KB total, peak amplitude=$amp/32767)',
       );
     }
+    // Must run on every raw chunk, unconditionally, before VAD gating below —
+    // this diagnostic exists to catch a mic stuck on a constant (including
+    // constant-silent) value; gating first would let VadGate classify a
+    // stuck-silent mic as ordinary silence, starving this detector of the
+    // samples it needs to ever fire.
     _trackStuckAmplitude(amp);
 
-    final wav = _wrapPcm16Wav(pcm, sampleRate: 16000);
-    _send({
-      'type': 'audio',
-      'data': base64Encode(wav),
-      'encoding': 'audio/wav',
-      'sample_rate': 16000,
-    });
+    final toSend = _vadGate.process(pcm);
+    if (toSend.isEmpty) return;
+    _silentSinceLastTick = false;
+    for (final chunk in toSend) {
+      final wav = _wrapPcm16Wav(chunk, sampleRate: 16000);
+      _send({
+        'type': 'audio',
+        'data': base64Encode(wav),
+        'encoding': 'audio/wav',
+        'sample_rate': 16000,
+      });
+    }
   }
 
   void _trackStuckAmplitude(int amp) {
@@ -732,6 +771,11 @@ class RealtimeAsrController extends ChangeNotifier {
   void _onSocketDone() {
     debugPrint('[RealtimeASR] websocket closed (state was $_state)');
     if (_state == RealtimeAsrState.listening || _state == RealtimeAsrState.connecting) {
+      // An unexpected close (network blip, server restart) must stop the mic
+      // and auto-extract timer here, not just flip the reported state —
+      // otherwise both keep running against a dead channel while the banner
+      // shows idle and looks tappable again.
+      unawaited(_teardown());
       _state = RealtimeAsrState.idle;
       notifyListeners();
     }
@@ -756,6 +800,8 @@ class RealtimeAsrController extends ChangeNotifier {
   }
 
   Future<void> _teardown() async {
+    _autoExtractTimer?.cancel();
+    _autoExtractTimer = null;
     await _audioSub?.cancel();
     _audioSub = null;
     try {

@@ -9,6 +9,8 @@
 /// Spec: leapfrog-setup/designs/dashboard-prioritization.md
 library;
 
+import '../time/calendar_day.dart';
+
 /// Dashboard priority tier. Ordered most-urgent → least-urgent.
 enum DashboardTier {
   /// Strong-driver hit (red-flag, SLA breach, high-risk pregnancy gap,
@@ -46,5 +48,33 @@ enum DashboardTier {
     if (daysToDue <= 0) return DashboardTier.dueToday;
     if (daysToDue <= 7) return DashboardTier.thisWeek;
     return DashboardTier.upcoming;
+  }
+
+  /// Schedule bucket from [dueAt] using **calendar** days (not wall-clock).
+  static DashboardTier fromDueAt(DateTime? dueAt, {DateTime? now}) {
+    if (dueAt == null) return DashboardTier.upcoming;
+    return fromDaysToDue(CalendarDay.daysBetween(now ?? DateTime.now(), dueAt));
+  }
+
+  /// Tasks → Visits tier chips.
+  ///
+  /// - [critical] / [overdue]: match clinical [itemTier] (includes promotions).
+  /// - [dueToday] / [thisWeek] / [upcoming]: match date schedule from [dueAt]
+  ///   so e.g. due-in-1–7 still hits **This week** even when promoted to critical.
+  static bool matchesVisitFilter({
+    required DashboardTier filter,
+    required DashboardTier itemTier,
+    required DateTime? dueAt,
+    DateTime? now,
+  }) {
+    switch (filter) {
+      case DashboardTier.critical:
+      case DashboardTier.overdue:
+        return itemTier == filter;
+      case DashboardTier.dueToday:
+      case DashboardTier.thisWeek:
+      case DashboardTier.upcoming:
+        return fromDueAt(dueAt, now: now) == filter;
+    }
   }
 }

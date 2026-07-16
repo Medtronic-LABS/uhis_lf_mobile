@@ -577,8 +577,25 @@ class _ReferralListScreenState extends State<ReferralListScreen>
         } else if (_visitTierFilter == null) {
           queue = villageFiltered;
         } else {
+          final filter = _visitTierFilter!;
+          final dateBased = filter == DashboardTier.dueToday ||
+              filter == DashboardTier.thisWeek ||
+              filter == DashboardTier.upcoming;
           queue = villageFiltered
-              .where((item) => item.tier == _visitTierFilter)
+              .where((item) {
+                // Date chips keep completed-today patients whose next due
+                // still falls in that window (Done cards). Critical/Overdue
+                // chips stay actionable-only.
+                if (!dateBased &&
+                    _completedPatientIds.contains(item.patientId)) {
+                  return false;
+                }
+                return DashboardTier.matchesVisitFilter(
+                  filter: filter,
+                  itemTier: item.tier,
+                  dueAt: item.dueAt,
+                );
+              })
               .toList();
         }
 
@@ -689,11 +706,27 @@ class _ReferralListScreenState extends State<ReferralListScreen>
   Widget _buildVisitTierChipRow(List<MissionQueueItem> allQueue) {
     final scheme = Theme.of(context).colorScheme;
     
-    // Count items per tier (excluding completed)
-    final pendingQueue = allQueue.where((item) => !_completedPatientIds.contains(item.patientId)).toList();
+    // Critical/Overdue counts = pending only (clinical).
+    // Today / This week / Upcoming = date schedule (includes visited-today
+    // with next due still in that window).
+    final pendingQueue = allQueue
+        .where((item) => !_completedPatientIds.contains(item.patientId))
+        .toList();
     final counts = <DashboardTier?, int>{null: pendingQueue.length};
     for (final tier in DashboardTier.values) {
-      counts[tier] = pendingQueue.where((item) => item.tier == tier).length;
+      final dateBased = tier == DashboardTier.dueToday ||
+          tier == DashboardTier.thisWeek ||
+          tier == DashboardTier.upcoming;
+      final pool = dateBased ? allQueue : pendingQueue;
+      counts[tier] = pool
+          .where(
+            (item) => DashboardTier.matchesVisitFilter(
+              filter: tier,
+              itemTier: item.tier,
+              dueAt: item.dueAt,
+            ),
+          )
+          .length;
     }
     final completedCount = _completedPatientIds.length;
     

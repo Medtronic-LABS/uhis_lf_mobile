@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../constants/app_strings.dart';
+import '../models/dashboard_tier.dart';
 import '../models/mission_queue_item.dart';
 import '../models/programme.dart';
 import '../theme/app_theme.dart';
@@ -20,6 +21,7 @@ enum NeedFilter {
   childImmunisation,
   ncd,
   eyeCare,
+  thisWeek,
   missedFollowUp,
   pendingReferral,
   homeVisit,
@@ -39,6 +41,8 @@ extension NeedFilterHelpers on NeedFilter {
         return MissionDashboardStrings.needNcd;
       case NeedFilter.eyeCare:
         return MissionDashboardStrings.needEyeCare;
+      case NeedFilter.thisWeek:
+        return MissionDashboardStrings.needThisWeek;
       case NeedFilter.missedFollowUp:
         return MissionDashboardStrings.needMissedFollowUp;
       case NeedFilter.pendingReferral:
@@ -63,6 +67,8 @@ extension NeedFilterHelpers on NeedFilter {
         return '💊';
       case NeedFilter.eyeCare:
         return '👁️';
+      case NeedFilter.thisWeek:
+        return '📅';
       case NeedFilter.missedFollowUp:
         return '⏰';
       case NeedFilter.pendingReferral:
@@ -82,6 +88,7 @@ extension NeedFilterHelpers on NeedFilter {
       case NeedFilter.childImmunisation: return AppColors.statusWarning;
       case NeedFilter.ncd:               return AppColors.catNcdBorder;
       case NeedFilter.eyeCare:           return AppColors.infoAccent;
+      case NeedFilter.thisWeek:          return AppColors.statusWarning;
       case NeedFilter.missedFollowUp:    return AppColors.textMuted;
       case NeedFilter.pendingReferral:   return AppColors.catReferralBorder;
       case NeedFilter.homeVisit:         return AppColors.statusSuccess;
@@ -99,6 +106,7 @@ extension NeedFilterHelpers on NeedFilter {
       // #EFF6FF == AppColors.childSurface — value shared with the programme
       // "child" token, not semantically related to eye care.
       case NeedFilter.eyeCare:           return AppColors.childSurface;
+      case NeedFilter.thisWeek:          return AppColors.statusWarningSurface;
       case NeedFilter.missedFollowUp:    return AppColors.catMissedSurface;
       // #F5F3FF == AppColors.pncSurface — value shared with the programme
       // "PNC" token, not semantically related to referrals.
@@ -115,8 +123,12 @@ extension NeedFilterHelpers on NeedFilter {
         return item.priority == MissionPriority.critical ||
             item.priority == MissionPriority.high;
       case NeedFilter.ancMnch:
-        return item.programmes
-            .any((p) => p == Programme.anc || p == Programme.pnc);
+        // PWPROFILE is pregnancy enrolment (anc+pw flow) — must match ANC/MNCH
+        // or PW-only patients never appear when the SK selects this chip (#158).
+        return item.programmes.any(
+          (p) =>
+              p == Programme.anc || p == Programme.pnc || p == Programme.pw,
+        );
       case NeedFilter.childImmunisation:
         // PILOT-SCOPE v1: imci only (epi not in pilot).
         return item.programmes.contains(Programme.imci);
@@ -125,6 +137,9 @@ extension NeedFilterHelpers on NeedFilter {
       case NeedFilter.eyeCare:
         return item.programmes
             .any((p) => p == Programme.eyeCare || p == Programme.cataract);
+      case NeedFilter.thisWeek:
+        // Calendar schedule 1–7 days out — not clinical tier (may be critical).
+        return DashboardTier.fromDueAt(item.dueAt) == DashboardTier.thisWeek;
       case NeedFilter.missedFollowUp:
         return item.daysOverdue != null && item.daysOverdue! > 0;
       case NeedFilter.pendingReferral:
@@ -146,7 +161,9 @@ Set<NeedFilter> computeAvailableNeeds(List<MissionQueueItem> items) {
         item.priority == MissionPriority.high) {
       available.add(NeedFilter.highRisk);
     }
-    if (item.programmes.any((p) => p == Programme.anc || p == Programme.pnc)) {
+    if (item.programmes.any(
+      (p) => p == Programme.anc || p == Programme.pnc || p == Programme.pw,
+    )) {
       available.add(NeedFilter.ancMnch);
     }
     if (item.programmes.contains(Programme.imci)) {
@@ -159,6 +176,9 @@ Set<NeedFilter> computeAvailableNeeds(List<MissionQueueItem> items) {
     // if (item.programmes.any((p) => p == Programme.eyeCare || p == Programme.cataract)) {
     //   available.add(NeedFilter.eyeCare);
     // }
+    if (DashboardTier.fromDueAt(item.dueAt) == DashboardTier.thisWeek) {
+      available.add(NeedFilter.thisWeek);
+    }
     if (item.daysOverdue != null && item.daysOverdue! > 0) {
       available.add(NeedFilter.missedFollowUp);
     }
@@ -174,6 +194,217 @@ Set<NeedFilter> computeAvailableNeeds(List<MissionQueueItem> items) {
     }
   }
   return available;
+}
+
+/// Programme-category need chips (ANC/MNCH, child, NCD, eye).
+bool isProgrammeNeedFilter(NeedFilter need) {
+  switch (need) {
+    case NeedFilter.ancMnch:
+    case NeedFilter.childImmunisation:
+    case NeedFilter.ncd:
+    case NeedFilter.eyeCare:
+      return true;
+    case NeedFilter.highRisk:
+    case NeedFilter.thisWeek:
+    case NeedFilter.missedFollowUp:
+    case NeedFilter.pendingReferral:
+    case NeedFilter.homeVisit:
+    case NeedFilter.facilityReferral:
+      return false;
+  }
+}
+
+/// Schedule chips (This week) — keep completed-today so due-in-1–7 Done
+/// patients still appear under the filter.
+bool isScheduleNeedFilter(NeedFilter need) => need == NeedFilter.thisWeek;
+
+/// Apply village / need / search filters to a mission queue.
+///
+/// When a programme or schedule need chip is selected:
+/// - [upcoming] patients are kept (#158 / This week)
+/// - completed-today patients are kept (done on cards) so e.g. Yasmeen
+///   (due tomorrow, visited today) is not missing
+/// - completed-today are restacked **after** still-open visits
+///
+/// Otherwise upcoming + completed-today are dropped — the unfiltered dashboard
+/// only shows actionable Today / Overdue / This week.
+List<MissionQueueItem> filterMissionQueue({
+  required List<MissionQueueItem> queue,
+  String? village,
+  Set<NeedFilter> selectedNeeds = const {},
+  String searchQuery = '',
+  Set<String> completedPatientIds = const {},
+}) {
+  var result = List<MissionQueueItem>.from(queue);
+  final stages = <String>['in=${result.length}'];
+
+  final keepExpanded = selectedNeeds.any(isProgrammeNeedFilter) ||
+      selectedNeeds.any(isScheduleNeedFilter);
+
+  if (!keepExpanded) {
+    result = result
+        .where((i) => i.tier != DashboardTier.upcoming)
+        .toList(growable: false);
+    stages.add('afterUpcomingDrop=${result.length}');
+
+    if (completedPatientIds.isNotEmpty) {
+      result = result
+          .where(
+            (i) =>
+                i.patientId == null ||
+                !completedPatientIds.contains(i.patientId),
+          )
+          .toList(growable: false);
+      stages.add('afterCompletedDrop=${result.length}');
+    }
+  } else {
+    stages.add('upcoming+completedKept(needChip)');
+  }
+
+  final chipVillage = village?.trim();
+  if (chipVillage != null && chipVillage.isNotEmpty) {
+    final needle = chipVillage.toLowerCase();
+    result = result
+        .where((i) => (i.village?.trim().toLowerCase() ?? '') == needle)
+        .toList();
+    stages.add('afterVillage("$chipVillage")=${result.length}');
+  }
+
+  if (selectedNeeds.isNotEmpty) {
+    result = result
+        .where((item) => selectedNeeds.any((need) => need.matches(item)))
+        .toList();
+    stages.add(
+      'afterNeeds([${selectedNeeds.map((n) => n.name).join(",")}])='
+      '${result.length}',
+    );
+  }
+
+  final q = searchQuery.trim().toLowerCase();
+  if (q.isNotEmpty) {
+    result = result
+        .where(
+          (i) =>
+              i.patientName.toLowerCase().contains(q) ||
+              (i.phoneNumber?.contains(q) ?? false) ||
+              (i.nid?.toLowerCase().contains(q) ?? false),
+        )
+        .toList();
+    stages.add('afterSearch="$q"=${result.length}');
+  }
+
+  // Open visits first (existing priority order), completed-today at bottom.
+  if (keepExpanded && completedPatientIds.isNotEmpty) {
+    final open = <MissionQueueItem>[];
+    final done = <MissionQueueItem>[];
+    for (final i in result) {
+      final isDone =
+          i.patientId != null && completedPatientIds.contains(i.patientId);
+      if (isDone) {
+        done.add(i);
+      } else {
+        open.add(i);
+      }
+    }
+    if (done.isNotEmpty) {
+      result = [...open, ...done];
+      stages.add('doneAtBottom(open=${open.length},done=${done.length})');
+    }
+  }
+
+  assert(() {
+    final needLabels = selectedNeeds.isEmpty
+        ? '(none)'
+        : selectedNeeds.map((n) => n.name).join(',');
+    debugPrint(
+      '[Dashboard filter] village=${chipVillage ?? "(all)"} '
+      'needs=[$needLabels] search="${searchQuery.trim()}"',
+    );
+    debugPrint('[Dashboard filter] ${stages.join(" → ")}');
+    debugPrint(
+      '[Dashboard filter] kept: '
+      '${result.take(12).map((i) {
+        final done = i.patientId != null &&
+            completedPatientIds.contains(i.patientId);
+        return '${i.patientName}[${i.priorityCode}]'
+            '/${i.programmes.map((p) => p.name).join("+")}'
+            '/v=${i.village ?? "-"}'
+            '${done ? "/DONE" : ""}';
+      }).join(" | ")}'
+      '${result.length > 12 ? " | …+${result.length - 12}" : ""}',
+    );
+
+    for (final probe in const [
+      'Yasmeen',
+      'Raaajasri',
+      'Teena',
+      'Nazmeen',
+      'Jakir',
+    ]) {
+      MissionQueueItem? item;
+      for (final i in queue) {
+        if (i.patientName == probe) {
+          item = i;
+          break;
+        }
+      }
+      if (item == null) {
+        debugPrint('[Dashboard filter] probe $probe → not in base queue');
+        continue;
+      }
+      final drop = <String>[];
+      final done = item.patientId != null &&
+          completedPatientIds.contains(item.patientId);
+      if (!keepExpanded && item.tier == DashboardTier.upcoming) {
+        drop.add('upcoming-tier');
+      }
+      if (!keepExpanded && done) {
+        drop.add('completedToday');
+      }
+      if (chipVillage != null &&
+          chipVillage.isNotEmpty &&
+          (item.village?.trim().toLowerCase() ?? '') !=
+              chipVillage.toLowerCase()) {
+        drop.add('village("${item.village}"≠"$chipVillage")');
+      }
+      if (selectedNeeds.isNotEmpty) {
+        final needHits = <String>[];
+        var any = false;
+        for (final n in selectedNeeds) {
+          final hit = n.matches(item);
+          needHits.add('${n.name}=${hit ? "Y" : "N"}');
+          if (hit) any = true;
+        }
+        if (!any) {
+          drop.add(
+            'needs(${needHits.join(",")}; '
+            'prog=${item.programmes.map((p) => p.name).join("+")})',
+          );
+        }
+      }
+      if (q.isNotEmpty &&
+          !item.patientName.toLowerCase().contains(q) &&
+          !(item.phoneNumber?.contains(q) ?? false) &&
+          !(item.nid?.toLowerCase().contains(q) ?? false)) {
+        drop.add('search');
+      }
+      if (drop.isEmpty) {
+        debugPrint(
+          '[Dashboard filter] probe $probe → KEEP '
+          '[${item.priorityCode}] v=${item.village} '
+          'prog=${item.programmes.map((p) => p.name).join("+")}'
+          '${done ? " DONE-today" : ""}',
+        );
+      } else {
+        debugPrint(
+          '[Dashboard filter] probe $probe → DROP ${drop.join("; ")}',
+        );
+      }
+    }
+    return true;
+  }());
+
+  return result;
 }
 
 /// Village option: [value] used for selection logic, [label] shown in the tab.

@@ -136,28 +136,125 @@ void main() {
     });
 
     test(
-      'composite tiebreak: same tier, higher unsuccessfulAttempts ranks first',
+      'stable tiebreak: same tier/band/modifier falls back to alphabetical name',
       () {
-        final highAttempts = _entry(
+        final first = _entry(
           patientId: 'p-hi',
           age: 35,
           nextDueAt: today.add(const Duration(days: 3)),
         );
-        final lowAttempts = _entry(
+        final second = _entry(
           patientId: 'p-lo',
           age: 35,
           nextDueAt: today.add(const Duration(days: 3)),
         );
         final input = MissionInputData(
-          worklistEntries: [lowAttempts, highAttempts],
+          worklistEntries: [second, first],
           unsuccessfulAttemptsByPatientId: const {'p-hi': 2, 'p-lo': 0},
         );
         final queue = service.computeTieredQueue(input);
+        // 'p-hi' < 'p-lo' alphabetically — name is the final stable sort key
         expect(queue.first.patientId, 'p-hi');
         expect(queue[1].patientId, 'p-lo');
-        // Both in same tier
         expect(queue.first.tier, DashboardTier.thisWeek);
-        expect(queue[1].tier, DashboardTier.thisWeek);
+      },
+    );
+
+    test(
+      'longer overdue ranks higher within same band regardless of modifier',
+      () {
+        final moreOverdue = _entry(
+          patientId: 'late',
+          modifier: Modifier.none,
+          nextDueAt: today.subtract(const Duration(days: 7)),
+        );
+        final lessOverdue = _entry(
+          patientId: 'near',
+          modifier: Modifier.none,
+          nextDueAt: today.subtract(const Duration(days: 2)),
+        );
+        final input = MissionInputData(
+          worklistEntries: [lessOverdue, moreOverdue],
+        );
+        final queue = service.computeTieredQueue(input);
+        expect(queue.first.patientId, 'late');
+        expect(queue[1].patientId, 'near');
+      },
+    );
+
+    test(
+      'modifier order: a before b before none within same band',
+      () {
+        final modNone = _entry(patientId: 'none', modifier: Modifier.none);
+        final modB = _entry(patientId: 'modB', modifier: Modifier.b);
+        final modA = _entry(patientId: 'modA', modifier: Modifier.a);
+        final input = MissionInputData(
+          worklistEntries: [modNone, modB, modA],
+        );
+        final queue = service.computeTieredQueue(input);
+        expect(queue.map((q) => q.patientId).toList(), ['modA', 'modB', 'none']);
+      },
+    );
+
+    test(
+      'pregnant ranks above non-pregnant within same band and modifier (spec §2.8 step 3)',
+      () {
+        final pregnant = _entry(
+          patientId: 'preg',
+          programmes: const {Programme.anc},
+        );
+        final notPregnant = _entry(patientId: 'npreg');
+        final input = MissionInputData(
+          worklistEntries: [notPregnant, pregnant],
+        );
+        final queue = service.computeTieredQueue(input);
+        expect(queue.first.patientId, 'preg');
+      },
+    );
+
+    test(
+      'critical-driver patient (0d overdue) sorts before regular overdue patient',
+      () {
+        // Real-device bug: Baby 1 of Raani (critical, 0d) was after sdsdsdf
+        // (dueToday, 1d overdue) because overdueCmp fired before tierCmp.
+        final criticalDriver = _entry(
+          patientId: 'neonate',
+          nextDueAt: DateTime.now().add(const Duration(days: 3)),
+        );
+        final regularOverdue = _entry(
+          patientId: 'overdue',
+          nextDueAt: DateTime.now().subtract(const Duration(days: 1)),
+        );
+        final input = MissionInputData(
+          worklistEntries: [regularOverdue, criticalDriver],
+          neonatePatientIds: const {'neonate'},
+        );
+        final queue = service.computeTieredQueue(input);
+        expect(queue.first.patientId, 'neonate');
+        expect(queue.first.tier, DashboardTier.critical);
+        expect(queue[1].patientId, 'overdue');
+      },
+    );
+
+    test(
+      'isPregnant=true sorts before isPregnant=false within same band/modifier',
+      () {
+        // Real-device bug: pregCmp was (b ? 0 : 1).compareTo(a ? 0 : 1) — inverted,
+        // so non-pregnant NCD patients clustered before pregnant ANC patients.
+        final pregnantPatient = _entry(
+          patientId: 'preg-ncd',
+          programmes: const {Programme.ncd},
+        );
+        final notPregnant = _entry(
+          patientId: 'npreg-ncd',
+          programmes: const {Programme.ncd},
+        );
+        final input = MissionInputData(
+          worklistEntries: [notPregnant, pregnantPatient],
+          pregnantPatientIds: const {'preg-ncd'},
+        );
+        final queue = service.computeTieredQueue(input);
+        expect(queue.first.patientId, 'preg-ncd');
       },
     );
 

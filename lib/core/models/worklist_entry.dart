@@ -68,4 +68,7 @@ class WorklistEntry {
   /// persisted in the SQLite `risk_score` column. Pregnancy and other
   /// tie-breakers are applied separately by the repository.
   int get sortRank => sortRankFor(band, modifier);
+
+  /// Spec priority code for debug logs (`1a`, `2b`, `3`, `4`).
+  String get priorityCode => priorityCodeFor(band, modifier);
 }

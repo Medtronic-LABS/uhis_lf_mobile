@@ -21,8 +21,10 @@ import '../models/risk.dart';
 import '../models/sla.dart';
 import '../models/worklist_entry.dart';
 import '../models/referral.dart';
+import '../time/calendar_day.dart';
 import 'mission_pregnancy_facts.dart';
 import 'programme_reason.dart' as shared;
+import '../debug/console_log.dart';
 
 /// Input data for computing mission brief and queue.
 class MissionInputData {
@@ -538,7 +540,7 @@ class MissionDashboardService {
       drivers.add('pregnancy');
     }
     if (entry.nextDueAt != null) {
-      final overdueDays = now.difference(entry.nextDueAt!).inDays;
+      final overdueDays = CalendarDay.daysBetween(entry.nextDueAt!, now);
       if (overdueDays > 0) {
         drivers.add('overdue:$overdueDays');
       }
@@ -565,11 +567,12 @@ class MissionDashboardService {
       programmes: entry.programmes,
       reason: reason,
       daysOverdue: entry.nextDueAt != null
-          ? now.difference(entry.nextDueAt!).inDays.clamp(0, 999)
+          ? CalendarDay.daysBetween(entry.nextDueAt!, now).clamp(0, 999)
           : null,
       dueAt: entry.nextDueAt,
       aiInsight: aiInsight,
       aiDrivers: drivers,
+      clinicalReasons: entry.reasons,
       availableActions: [
         MissionAction.openCase,
         MissionAction.scheduleVisit,
@@ -854,7 +857,7 @@ class MissionDashboardService {
     // Date-based tier (null-safe: missing dueAt → upcoming).
     final daysToDue = dueAt == null
         ? null
-        : _atStartOfDay(dueAt).difference(_atStartOfDay(now)).inDays;
+        : CalendarDay.daysBetween(now, dueAt);
     final dateTier = DashboardTier.fromDaysToDue(daysToDue);
 
     if (drivers.isNotEmpty) {
@@ -903,10 +906,9 @@ class MissionDashboardService {
       final base = _worklistToQueueItem(entry, now, input);
       // When nextDueAt was null but we inferred a due date, patch it into
       // the queue item so the card shows the correct "due" / "overdue" label.
-      final inferredDueAt =
-          entry.nextDueAt == null ? effectiveDueAt : null;
-      final inferredDaysOverdue = inferredDueAt != null
-          ? now.difference(inferredDueAt).inDays.clamp(0, 999)
+      final stampedDueAt = entry.nextDueAt ?? effectiveDueAt;
+      final stampedDaysOverdue = stampedDueAt != null
+          ? CalendarDay.daysBetween(stampedDueAt, now).clamp(0, 999)
           : null;
       candidates.add(base.copyWith(
         // sortRankFor encodes the full 1a→1b→1→2a→…→4 sequence so
@@ -918,8 +920,10 @@ class MissionDashboardService {
         band: effectiveBand,
         modifier: entry.modifier,
         isPregnant: isPregnant,
-        dueAt: inferredDueAt,
-        daysOverdue: inferredDaysOverdue,
+        // Always stamp calendar due — required for This week need/tier chips
+        // (due-in-1–7).
+        dueAt: stampedDueAt,
+        daysOverdue: stampedDaysOverdue,
       ));
     }
 
@@ -966,17 +970,36 @@ class MissionDashboardService {
     }
 
     // Primary sort: band ASC (Band 1 first).
-    // Secondary sort: PRD §2.8 within-band order via compareInBand.
+    // Secondary sort: PRD §2.8 within-band order via compareInBand
+    // (a → b → none, pregnant, overdue).
     final result = <MissionQueueItem>[...byPid.values, ...nonPatient];
-    result.sort((a, b) {
-      final bandCmp = a.band.index.compareTo(b.band.index);
-      if (bandCmp != 0) return bandCmp;
-      return MissionQueueItem.compareInBand(a, b);
-    });
+    result.sort(MissionQueueItem.compareByPriority);
+
+    assert(() {
+      final codes = result.map((q) => q.priorityCode);
+      ConsoleLog.banner('[Dashboard queue] ${result.length} items:');
+      ConsoleLog.banner('  spec:     $kPrioritySortSpecLegend');
+      ConsoleLog.banner('  chain:    ${prioritySortChain(codes)}');
+      ConsoleLog.banner('  compact:  ${prioritySortChainCompact(codes)}');
+      for (var i = 0; i < result.length; i++) {
+        final q = result[i];
+        final progs = q.programmes.map((p) => p.name).join(',');
+        final overdue = (q.daysOverdue != null && q.daysOverdue! > 0)
+            ? ' | overdue: ${q.daysOverdue}d'
+            : '';
+        final why = q.clinicalReasons.isNotEmpty
+            ? ' | why: ${q.clinicalReasons.first}'
+            : '';
+        ConsoleLog.banner(
+          '  ${i + 1}. [${q.priorityCode}] ${q.patientName}'
+          ' | prog: $progs | tier: ${q.tier.name}'
+          '${q.isPregnant ? " | pregnant" : ""}'
+          '$overdue$why',
+        );
+      }
+      return true;
+    }());
+
     return result;
   }
-
-  /// Truncates a [DateTime] to local-midnight so `daysToDue` math ignores
-  /// the wall-clock offset.
-  DateTime _atStartOfDay(DateTime dt) => DateTime(dt.year, dt.month, dt.day);
 }
