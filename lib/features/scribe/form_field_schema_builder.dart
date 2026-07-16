@@ -6,6 +6,7 @@
 library;
 
 import '../../core/models/programme.dart';
+import '../visit/forms/form_config.dart';
 
 /// Field type for the AI scribe extraction contract.
 enum FieldType {
@@ -93,355 +94,106 @@ abstract final class FormFieldSchemaBuilder {
   /// Build the combined schema for a list of programme name strings.
   ///
   /// Deduplicates fields that appear in multiple programmes (e.g. `systolic`
-  /// shared by ANC and PNC-mother).
-  static List<FormFieldSchema> forProgrammeNames(List<String> names) {
+  /// shared by ANC and NCD). [config] defaults to the loaded [FormConfig]
+  /// singleton; overridable for unit tests that don't load real assets.
+  static List<FormFieldSchema> forProgrammeNames(
+    List<String> names, {
+    FormConfig? config,
+  }) {
+    final resolvedConfig = config ?? FormConfig.instance;
     final seen = <String>{};
     final result = <FormFieldSchema>[];
     for (final name in names) {
-      final p = Programme.fromString(name);
-      for (final field in _forProgramme(p)) {
+      for (final field in _forProgramme(name, resolvedConfig)) {
         if (seen.add(field.fieldId)) result.add(field);
       }
     }
     return result;
   }
 
-  /// Build schema for a single [Programme].
-  static List<FormFieldSchema> _forProgramme(Programme programme) {
-    switch (programme) {
-      case Programme.ncd:
-        return _ncd;
-      case Programme.anc:
-        return _anc;
-      case Programme.pnc:
-        return _pncMother;
-      case Programme.imci:
-        return _imci;
-      case Programme.tb:
-        return _tb;
-      default:
-        return const [];
+  /// Fields that are extractable despite not being their own literal
+  /// fieldRef in `layout_manifests.json` — a companion value the SAME
+  /// rendered widget also writes (mirrors leapfrog-ai-service's
+  /// `KNOWN_DUAL_SIBLING_EXTRAS`, verified the same way: `glucoseType`'s
+  /// `_BloodGlucoseEntryField` widget writes both `glucoseType` and
+  /// `glucose` on every manual entry — see unified_form_screen.dart's
+  /// `_BloodGlucoseEntryField`).
+  static const _knownDualSiblingExtras = <String, Set<String>>{
+    'ncd': {'glucose'},
+  };
+
+  /// Widget hints that carry no directly extractable value (composite,
+  /// label-only, or container widgets) — mirrors leapfrog-ai-service's
+  /// `SKIP_WIDGET_HINTS`. `unknown` catches hints this app's [WidgetHint]
+  /// enum doesn't recognize (e.g. a plain CardView container).
+  static const _skipWidgetHints = {
+    WidgetHint.textLabel,
+    WidgetHint.infoLabel,
+    WidgetHint.dateField,
+    WidgetHint.pregnancyProfile,
+    WidgetHint.bloodGlucose,
+    WidgetHint.unknown,
+  };
+
+  /// Build schema for a single formType string (e.g. `'ncd'`, `'anc'`).
+  ///
+  /// v1 scope is NCD and ANC only — mirrors [assessmentTypeFor]'s own gate.
+  /// Every other formType (pncMother, pncChild, imci, tb, ...) returns an
+  /// empty list even though `config.forms` may have real layout data for
+  /// them; [assessmentTypeFor] never emits those names today (PNC's
+  /// mother-only-extraction risk is exactly why), so this stays an explicit
+  /// allow-list rather than silently supporting them the moment a future
+  /// caller passes one directly.
+  static List<FormFieldSchema> _forProgramme(String formType, FormConfig config) {
+    if (formType != 'ncd' && formType != 'anc') return const [];
+
+    final sections = config.forms[formType] ?? const [];
+    final inputTypeById = <String, int>{
+      for (final section in sections)
+        for (final ref in section.fieldRefs) ref.id: ref.inputType,
+    };
+    final extras = _knownDualSiblingExtras[formType] ?? const {};
+
+    final result = <FormFieldSchema>[];
+    for (final field in config.fields.values) {
+      if (!field.programmeIds.contains(formType)) continue;
+      if (!inputTypeById.containsKey(field.id) && !extras.contains(field.id)) {
+        continue;
+      }
+      final schema = _buildFieldSchema(field, inputTypeById[field.id]);
+      if (schema != null) result.add(schema);
     }
+    result.sort((a, b) => a.fieldId.compareTo(b.fieldId));
+    return result;
   }
 
-  // ── NCD ─────────────────────────────────────────────────────────────────
+  /// Maps a [FieldDef] (+ its layout `inputType`, when it has a real
+  /// fieldRef) to the AI-extraction contract. Returns null for
+  /// composite/label-only widgets that carry no directly extractable value.
+  static FormFieldSchema? _buildFieldSchema(FieldDef field, int? inputType) {
+    if (_skipWidgetHints.contains(field.widgetHint)) return null;
 
-  static const _ncd = [
-    FormFieldSchema(
-      fieldId: 'systolic',
-      type: FieldType.integer,
-      label: 'Systolic Blood Pressure',
-      unit: 'mmHg',
-      clinicalContext: 'Upper number in blood pressure reading',
-    ),
-    FormFieldSchema(
-      fieldId: 'diastolic',
-      type: FieldType.integer,
-      label: 'Diastolic Blood Pressure',
-      unit: 'mmHg',
-      clinicalContext: 'Lower number in blood pressure reading',
-    ),
-    FormFieldSchema(
-      fieldId: 'pulse',
-      type: FieldType.integer,
-      label: 'Pulse / Heart Rate',
-      unit: 'per minute',
-    ),
-    FormFieldSchema(
-      fieldId: 'height',
-      type: FieldType.decimal,
-      label: 'Height',
-      unit: 'cm',
-    ),
-    FormFieldSchema(
-      fieldId: 'weight',
-      type: FieldType.decimal,
-      label: 'Weight',
-      unit: 'kg',
-    ),
-    FormFieldSchema(
-      fieldId: 'glucose',
-      type: FieldType.decimal,
-      label: 'Blood Glucose',
-      unit: 'mmol/L',
-      clinicalContext: 'Blood sugar reading',
-    ),
-    FormFieldSchema(
-      fieldId: 'glucoseType',
-      type: FieldType.enumType,
-      label: 'Glucose Test Type',
-      allowedValues: ['rbs', 'fbs', 'ppbs'],
-      description: 'rbs=random, fbs=fasting, ppbs=post-prandial',
-    ),
-    FormFieldSchema(
-      fieldId: 'hba1c',
-      type: FieldType.decimal,
-      label: 'HbA1c',
-      unit: '%',
-      clinicalContext: '3-month average blood sugar',
-    ),
-    FormFieldSchema(
-      fieldId: 'isRegularSmoker',
-      type: FieldType.boolean,
-      label: 'Regular Smoker / Tobacco User',
-    ),
-    FormFieldSchema(
-      fieldId: 'hasSymptoms',
-      type: FieldType.enumType,
-      label: 'Has Symptoms Since Last Visit',
-      allowedValues: ['Yes', 'No'],
-    ),
-    FormFieldSchema(
-      fieldId: 'ncdSymptoms',
-      type: FieldType.enumType,
-      label: 'NCD Symptoms',
-      allowedValues: [
-        'Headache',
-        'Chest Pain',
-        'Weakness',
-        'Numbness',
-        'Excessive Thirst',
-        'Breathlessness',
-        'Fatigue',
-        'Blurred Vision',
-        'Swelling of Feet',
-      ],
-      description: 'Multiple values allowed',
-    ),
-    FormFieldSchema(
-      fieldId: 'compliance',
-      type: FieldType.enumType,
-      label: 'Medication Compliance',
-      allowedValues: ['Yes', 'No', 'Partial'],
-    ),
-    FormFieldSchema(
-      fieldId: 'newWorseningSymptoms',
-      type: FieldType.string,
-      label: 'New or Worsening Symptoms (free text)',
-    ),
-  ];
+    FieldType type;
+    List<String>? allowedValues;
+    if (field.options.isNotEmpty) {
+      type = FieldType.enumType;
+      allowedValues = field.options.map((o) => o.name).toList();
+    } else if (inputType == 3) {
+      // FieldRef.inputType: 3 = number (integer).
+      type = FieldType.integer;
+    } else if (inputType == 2 || field.widgetHint == WidgetHint.numeric) {
+      // FieldRef.inputType: 2 = numberDecimal.
+      type = FieldType.decimal;
+    } else {
+      type = FieldType.string;
+    }
 
-  // ── ANC ─────────────────────────────────────────────────────────────────
-
-  static const _anc = [
-    FormFieldSchema(
-      fieldId: 'systolic',
-      type: FieldType.integer,
-      label: 'Systolic Blood Pressure',
-      unit: 'mmHg',
-    ),
-    FormFieldSchema(
-      fieldId: 'diastolic',
-      type: FieldType.integer,
-      label: 'Diastolic Blood Pressure',
-      unit: 'mmHg',
-    ),
-    FormFieldSchema(
-      fieldId: 'pulse',
-      type: FieldType.integer,
-      label: 'Pulse',
-      unit: 'per minute',
-    ),
-    FormFieldSchema(
-      fieldId: 'temperature',
-      type: FieldType.decimal,
-      label: 'Temperature',
-      unit: '°F',
-    ),
-    FormFieldSchema(
-      fieldId: 'weight',
-      type: FieldType.decimal,
-      label: 'Weight',
-      unit: 'kg',
-    ),
-    FormFieldSchema(
-      fieldId: 'height',
-      type: FieldType.decimal,
-      label: 'Height',
-      unit: 'cm',
-    ),
-    FormFieldSchema(
-      fieldId: 'hemoglobin',
-      type: FieldType.decimal,
-      label: 'Haemoglobin (Hb)',
-      unit: 'g/dL',
-      clinicalContext: 'Blood haemoglobin level',
-    ),
-    FormFieldSchema(
-      fieldId: 'fundalHeight',
-      type: FieldType.decimal,
-      label: 'Fundal Height',
-      unit: 'cm',
-    ),
-    FormFieldSchema(
-      fieldId: 'bloodSugarFasting',
-      type: FieldType.decimal,
-      label: 'Fasting Blood Sugar',
-      unit: 'mmol/L',
-    ),
-    FormFieldSchema(
-      fieldId: 'bloodSugarRandom',
-      type: FieldType.decimal,
-      label: 'Random Blood Sugar',
-      unit: 'mmol/L',
-    ),
-    FormFieldSchema(
-      fieldId: 'fetalMovement',
-      type: FieldType.enumType,
-      label: 'Fetal Movement',
-      allowedValues: ['normal', 'lessThanUsual', 'notFelt'],
-    ),
-    FormFieldSchema(
-      fieldId: 'ancDangerSigns',
-      type: FieldType.enumType,
-      label: 'ANC Danger Signs',
-      allowedValues: [
-        'Vaginal bleeding',
-        'Leaking fluid from vagina',
-        'Regular / painful contractions',
-        'Headache / blurred vision / facial swelling',
-        'Severe epigastric pain',
-        'Fever / burning while urinating',
-        'Reduced fetal movements',
-        'None of these',
-      ],
-      description: 'Multiple values allowed',
-    ),
-    FormFieldSchema(
-      fieldId: 'urinarySugar',
-      type: FieldType.enumType,
-      label: 'Urinary Sugar',
-      allowedValues: ['Absent', 'Present'],
-    ),
-    FormFieldSchema(
-      fieldId: 'urinaryAlbumin',
-      type: FieldType.enumType,
-      label: 'Urinary Albumin / Protein',
-      allowedValues: ['Absent', 'Present'],
-    ),
-  ];
-
-  // ── PNC Mother ───────────────────────────────────────────────────────────
-
-  static const _pncMother = [
-    FormFieldSchema(
-      fieldId: 'systolic',
-      type: FieldType.integer,
-      label: 'Systolic Blood Pressure',
-      unit: 'mmHg',
-    ),
-    FormFieldSchema(
-      fieldId: 'diastolic',
-      type: FieldType.integer,
-      label: 'Diastolic Blood Pressure',
-      unit: 'mmHg',
-    ),
-    FormFieldSchema(
-      fieldId: 'pulse',
-      type: FieldType.integer,
-      label: 'Pulse',
-      unit: 'per minute',
-    ),
-    FormFieldSchema(
-      fieldId: 'temperature',
-      type: FieldType.decimal,
-      label: 'Temperature',
-      unit: '°F',
-    ),
-    FormFieldSchema(
-      fieldId: 'weight',
-      type: FieldType.decimal,
-      label: 'Weight',
-      unit: 'kg',
-    ),
-    FormFieldSchema(
-      fieldId: 'hemoglobin',
-      type: FieldType.decimal,
-      label: 'Haemoglobin (Hb)',
-      unit: 'g/dL',
-    ),
-    FormFieldSchema(
-      fieldId: 'fastingBloodSugar',
-      type: FieldType.decimal,
-      label: 'Fasting Blood Sugar',
-      unit: 'mmol/L',
-    ),
-    FormFieldSchema(
-      fieldId: 'randomBloodSugar',
-      type: FieldType.decimal,
-      label: 'Random Blood Sugar',
-      unit: 'mmol/L',
-    ),
-    FormFieldSchema(
-      fieldId: 'postpartumDangerSigns',
-      type: FieldType.enumType,
-      label: 'Postpartum Danger Signs',
-      allowedValues: [
-        'Excessive bleeding',
-        'Fever',
-        'Severe headache',
-        'Breast pain/redness',
-        'Wound infection',
-      ],
-      description: 'Multiple values allowed',
-    ),
-    FormFieldSchema(
-      fieldId: 'edema',
-      type: FieldType.enumType,
-      label: 'Oedema / Swelling',
-      allowedValues: ['Present', 'Absent'],
-    ),
-  ];
-
-  // ── IMCI / Child ─────────────────────────────────────────────────────────
-
-  static const _imci = [
-    FormFieldSchema(
-      fieldId: 'temperature',
-      type: FieldType.decimal,
-      label: 'Temperature',
-      unit: '°F',
-    ),
-    FormFieldSchema(
-      fieldId: 'weight',
-      type: FieldType.decimal,
-      label: 'Weight',
-      unit: 'kg',
-    ),
-    FormFieldSchema(
-      fieldId: 'respiratoryRate',
-      type: FieldType.integer,
-      label: 'Respiratory Rate',
-      unit: 'breaths per minute',
-    ),
-    FormFieldSchema(
-      fieldId: 'childBreastFeeding',
-      type: FieldType.enumType,
-      label: 'Is Child Breastfeeding',
-      allowedValues: ['Yes', 'No'],
-    ),
-    FormFieldSchema(
-      fieldId: 'anyIllness',
-      type: FieldType.enumType,
-      label: 'Any Illness / Complication',
-      allowedValues: ['Yes', 'No'],
-    ),
-  ];
-
-  // ── TB ───────────────────────────────────────────────────────────────────
-
-  static const _tb = [
-    FormFieldSchema(
-      fieldId: 'weight',
-      type: FieldType.decimal,
-      label: 'Weight',
-      unit: 'kg',
-    ),
-    FormFieldSchema(
-      fieldId: 'temperature',
-      type: FieldType.decimal,
-      label: 'Temperature',
-      unit: '°F',
-    ),
-  ];
+    return FormFieldSchema(
+      fieldId: field.id,
+      type: type,
+      label: field.label,
+      unit: field.unitMeasurement,
+      allowedValues: allowedValues,
+    );
+  }
 }
