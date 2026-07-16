@@ -76,12 +76,6 @@ class ScribeController extends ChangeNotifier {
   static const Duration _pollTimeout = Duration(seconds: 90);
   static const int _maxConsecutivePollErrors = 5;
 
-  /// Max time to wait for the native recorder to finalize the captured file
-  /// after stop() is issued. audio_waveforms' stop() Future can hang on Android
-  /// even though the native writer finalizes the file shortly after, so we poll
-  /// the file for finalization instead of trusting the Future alone.
-  static const Duration _recorderFinalizeTimeout = Duration(seconds: 12);
-
   DateTime? _pollStartedAt;
   int _consecutivePollErrors = 0;
   bool _pollInFlight = false;
@@ -630,43 +624,6 @@ class ScribeController extends ChangeNotifier {
     return path;
   }
 
-  /// Polls [path] until the file is finalized (WAV header / MP4 trailer present)
-  /// and the byte size is stable, or [_recorderFinalizeTimeout] elapses. Returns
-  /// the path when finalized, otherwise null.
-  Future<String?> _awaitFinalizedRecording(String? path) async {
-    if (path == null) return null;
-    final file = File(path);
-    final deadline = DateTime.now().add(_recorderFinalizeTimeout);
-    var lastSize = -1;
-    var stableHits = 0;
-
-    while (DateTime.now().isBefore(deadline)) {
-      if (file.existsSync()) {
-        final size = file.lengthSync();
-        final hasTrailer = size > 0 && await _isRecordingFinalized(file);
-        if (hasTrailer && size == lastSize) {
-          stableHits++;
-          if (stableHits >= 2) {
-            debugPrint('[AIScribe] recording finalized ($size bytes)');
-            return path;
-          }
-        } else {
-          stableHits = 0;
-        }
-        lastSize = size;
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 250));
-    }
-
-    final exists = file.existsSync();
-    final size = exists ? file.lengthSync() : 0;
-    debugPrint(
-      '[AIScribe] recording NOT finalized before deadline '
-      '(exists=$exists size=$size) — refusing to upload truncated audio',
-    );
-    return null;
-  }
-
   /// True when the recording has been finalized and is decodable.
   ///
   /// - WAV: the `RIFF`/`WAVE` header is written only when stop() patches the
@@ -675,51 +632,6 @@ class ScribeController extends ChangeNotifier {
   ///
   /// A file lacking the relevant marker is still being written (or truncated)
   /// and must not be uploaded.
-  Future<bool> _isRecordingFinalized(File file) async {
-    RandomAccessFile? raf;
-    try {
-      final len = file.lengthSync();
-      if (len < 44) return false;
-      raf = await file.open();
-
-      // WAV head check.
-      await raf.setPosition(0);
-      final head = await raf.read(64);
-      final hasRiff = _containsMarker(head, const [0x52, 0x49, 0x46, 0x46]); // RIFF
-      final hasWave = _containsMarker(head, const [0x57, 0x41, 0x56, 0x45]); // WAVE
-      if (hasRiff && hasWave) return true;
-
-      // MP4/M4A tail check.
-      const tailWindow = 256 * 1024;
-      final start = len > tailWindow ? len - tailWindow : 0;
-      await raf.setPosition(start);
-      final tail = await raf.read(len - start);
-      return _containsMarker(tail, const [0x6d, 0x6f, 0x6f, 0x76]); // moov
-    } catch (e) {
-      debugPrint('[AIScribe] finalize check failed: $e');
-      return false;
-    } finally {
-      try {
-        await raf?.close();
-      } catch (_) {}
-    }
-  }
-
-  bool _containsMarker(List<int> haystack, List<int> needle) {
-    if (needle.isEmpty || haystack.length < needle.length) return false;
-    for (var i = 0; i + needle.length <= haystack.length; i++) {
-      var matched = true;
-      for (var j = 0; j < needle.length; j++) {
-        if (haystack[i + j] != needle[j]) {
-          matched = false;
-          break;
-        }
-      }
-      if (matched) return true;
-    }
-    return false;
-  }
-
   void _startPolling(String jobId) {
     final interval = _currentMode == ScribeMode.triage ? _triagePollInterval : _pollInterval;
     debugPrint('[AIScribe] Starting to poll job: $jobId (interval=${interval.inMilliseconds}ms)');

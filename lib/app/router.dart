@@ -583,42 +583,6 @@ GoRouter buildRouter(AuthState auth) {
       ),
 
       // ─────────────────────────────────────────────────────────────────────
-      // Legacy routes (for backward compatibility)
-      // ─────────────────────────────────────────────────────────────────────
-      GoRoute(
-        path: '/dashboard',
-        redirect: (_, _) => '/home',
-      ),
-      GoRoute(
-        path: '/households',
-        redirect: (_, _) => '/patients/households',
-      ),
-      GoRoute(
-        path: '/households/:id',
-        redirect: (_, state) => '/patients/household/${state.pathParameters['id']}',
-      ),
-      GoRoute(
-        path: '/members',
-        redirect: (_, _) => '/patients',
-      ),
-      GoRoute(
-        path: '/referrals',
-        redirect: (_, _) => '/tasks',
-      ),
-      GoRoute(
-        path: '/patient/:id',
-        redirect: (_, state) => '/patients/${state.pathParameters['id']}',
-      ),
-      GoRoute(
-        path: '/patient/:id/referrals',
-        redirect: (_, state) => '/tasks/${state.pathParameters['id']}',
-      ),
-      GoRoute(
-        path: '/household/:id',
-        redirect: (_, state) => '/patients/household/${state.pathParameters['id']}',
-      ),
-
-      // ─────────────────────────────────────────────────────────────────────
       // Dev-only routes (debug builds)
       // ─────────────────────────────────────────────────────────────────────
       if (kDebugMode)
