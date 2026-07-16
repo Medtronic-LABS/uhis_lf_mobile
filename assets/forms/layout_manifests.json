@@ -1046,9 +1046,42 @@
         "title": "Biometrics",
         "fieldRefs": [
           {
+            "id": "height",
+            "fieldName": "Height (cm)",
+            "inputType": 8192,
+            "isMandatory": false
+          },
+          {
             "id": "weight",
             "fieldName": "Weight (kg)",
             "inputType": 8192,
+            "isMandatory": false
+          },
+          "bmi"
+        ]
+      },
+      {
+        "sectionId": "symptomsLog",
+        "title": "Symptoms & Compliance",
+        "fieldRefs": [
+          {
+            "id": "compliance",
+            "fieldName": "Medication compliance",
+            "isMandatory": false
+          },
+          {
+            "id": "hasSymptoms",
+            "fieldName": "Has symptoms",
+            "isMandatory": false
+          },
+          {
+            "id": "ncdSymptoms",
+            "fieldName": "NCD symptoms",
+            "isMandatory": false
+          },
+          {
+            "id": "newWorseningSymptoms",
+            "fieldName": "New or worsening symptoms",
             "isMandatory": false
           }
         ]

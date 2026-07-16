@@ -373,10 +373,9 @@ class LocalAssessmentEntity {
   /// Wrap an assessment payload under the programme-specific key required by
   /// AssessmentDetailsDTO, matching Android OfflineSyncRepository.getAssessmentDetails().
   ///
-  /// Key changes vs earlier implementation:
-  ///   ANC         → NO wrapping (Android sends ANC details as a flat object; GAP 6b)
-  ///   PNC_NEONATE → "pncNeonatal" (not "pncChild"; GAP 6)
-  ///   CHILDHOOD_VISIT → "pncChild"
+  ///   ANC         → flat (Android sends ANC details unwrapped — GAP 6b fix)
+  ///   PNC_NEONATE → {"pncNeonatal": {...}, "cbs": {}} (CBS sibling required by Android)
+  ///   CHILDHOOD_VISIT → {"pncChild": {...}, "cbs": {}} (CBS sibling required by Android)
   ///   EYE_CARE / CATARACT / FAMILY_PLANNING / TB / EPI → flat (Android pass-through)
   ///
   /// If `details` already contains the programme key (re-entrant call), it is
@@ -385,16 +384,26 @@ class LocalAssessmentEntity {
     String assessmentType,
     Map<String, dynamic> details,
   ) {
-    final key = switch (assessmentType.toUpperCase()) {
+    final t = assessmentType.toUpperCase();
+
+    // PNC_NEONATE and CHILDHOOD_VISIT require a "cbs" sibling alongside the
+    // programme wrapper — Android OfflineSyncRepository.getAssessmentDetails()
+    // always inserts an empty/populated CBS map for both types.
+    if (t == 'PNC_CHILD' || t == 'PNC_NEONATE' || t == 'PNC_NEONATAL') {
+      if (details.containsKey('pncNeonatal')) return details;
+      return {'pncNeonatal': details, 'cbs': <String, dynamic>{}};
+    }
+    if (t == 'CHILDHOOD_VISIT' || t == 'CHILD_MENU') {
+      if (details.containsKey('pncChild')) return details;
+      return {'pncChild': details, 'cbs': <String, dynamic>{}};
+    }
+
+    final key = switch (t) {
       // ANC: Android sends assessmentDetails as a flat object (wrap line is
       // commented out in OfflineSyncRepository.getAssessmentDetails — GAP 6b).
       'ANC' => null,
       'NCD' => 'ncd',
       'PNC' || 'PNC_MOTHER' => 'pncMother',
-      // Neonate PNC → pncNeonatal (Android's PNCNeonatal key — GAP 6 fix).
-      'PNC_CHILD' || 'PNC_NEONATE' || 'PNC_NEONATAL' => 'pncNeonatal',
-      // Childhood/IMCI visit → pncChild.
-      'CHILDHOOD_VISIT' || 'CHILD_MENU' => 'pncChild',
       'PWPROFILE' || 'PW_PROFILE' => 'pwProfile',
       'PREGNANCY_OUTCOME' || 'PREGNANCYOUTCOME' => 'pregnancyOutcome',
       // ICCM is the only non-NCD/PNC type that gets wrapped (Android explicit handling).
