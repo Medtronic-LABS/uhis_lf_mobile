@@ -1599,6 +1599,433 @@ _SparkBarChart? _buildWeightSparkChart(List<VisitVitals> history) {
   );
 }
 
+// ─── Combined Timeline ─────────────────────────────────────────────────────
+
+/// Scrollable vertical timeline of all care events (assessments).
+/// Events are already sorted newest-first via [PatientOrMemberData.assessments].
+class _CombinedTimeline extends StatelessWidget {
+  const _CombinedTimeline({required this.assessments, required this.isLoading});
+
+  final List<MemberAssessment> assessments;
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    final sw = Stopwatch()..start();
+
+    late final Widget body;
+    if (assessments.isEmpty && isLoading) {
+      body = const _TimelineShimmer();
+    } else if (assessments.isEmpty) {
+      body = Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Text(
+          PatientProfileStrings.noVitalsYet,
+          style: const TextStyle(fontSize: 13, color: AppColors.textMuted, fontStyle: FontStyle.italic),
+        ),
+      );
+    } else {
+      body = ListView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: assessments.length,
+        itemBuilder: (context, i) => _TimelineRow(
+          assessment: assessments[i],
+          isLast: i == assessments.length - 1,
+        ),
+      );
+    }
+
+    final result = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Text(
+            PatientProfileStrings.careHistory,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ),
+        body,
+      ],
+    );
+    debugPrint('⏱ [PatientContext] _CombinedTimeline build in ${sw.elapsedMilliseconds}ms'
+        ' events=${assessments.length} loading=$isLoading');
+    return result;
+  }
+}
+
+/// Single row in the combined timeline — dot + connector + event card.
+class _TimelineRow extends StatelessWidget {
+  const _TimelineRow({required this.assessment, required this.isLast});
+
+  final MemberAssessment assessment;
+  final bool isLast;
+
+  static const _dotSize = 10.0;
+  static const _lineWidth = 2.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final prog = Programme.fromString(assessment.type);
+    final progColors = Theme.of(context).extension<ProgrammeColors>()!;
+    final dotColor = progColors.of(prog);
+    final dateStr = DateFormat('d MMM yyyy').format(assessment.date);
+    final label = assessment.visitNumber != null
+        ? '${assessment.type} — Visit ${assessment.visitNumber}'
+        : assessment.type;
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Dot + vertical connector
+          SizedBox(
+            width: 24,
+            child: Column(
+              children: [
+                Container(
+                  width: _dotSize,
+                  height: _dotSize,
+                  decoration: BoxDecoration(
+                    color: dotColor,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.cardSurface, width: 2),
+                  ),
+                ),
+                if (!isLast)
+                  Expanded(
+                    child: Container(
+                      width: _lineWidth,
+                      color: AppColors.border,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Event card
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
+              child: _PendingEventCard(
+                label: label,
+                dateStr: dateStr,
+                status: assessment.status,
+                notes: assessment.notes,
+                assessment: assessment,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Card shown for each timeline event — label, date, status chip, tap-to-expand.
+class _PendingEventCard extends StatelessWidget {
+  const _PendingEventCard({
+    required this.label,
+    required this.dateStr,
+    required this.assessment,
+    this.status,
+    this.notes,
+  });
+
+  final String label;
+  final String dateStr;
+  final String? status;
+  final String? notes;
+  final MemberAssessment assessment;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => _TimelineEventSheet.show(context, assessment),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        decoration: BoxDecoration(
+          color: AppColors.cardSurface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.border, width: 1),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    dateStr,
+                    style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                  ),
+                  if (notes != null && notes!.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      notes!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, color: AppColors.textMid),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (status != null)
+              _StatusChip(status: status!),
+            const SizedBox(width: 4),
+            const Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.textMuted),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Small coloured status chip (Referred / OnTreatment / Recovered).
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({required this.status});
+
+  final String status;
+
+  static const _colors = <String, Color>{
+    'referred': AppColors.statusCritical,
+    'ontreatment': AppColors.statusWarning,
+    'recovered': AppColors.statusSuccess,
+  };
+
+  static const _bgColors = <String, Color>{
+    'referred': AppColors.statusCriticalSurface,
+    'ontreatment': AppColors.statusWarningSurface,
+    'recovered': AppColors.statusSuccessSurface,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final key = status.toLowerCase().replaceAll(' ', '');
+    final color = _colors[key] ?? AppColors.textMuted;
+    final bg = _bgColors[key] ?? AppColors.border;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        status,
+        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color),
+      ),
+    );
+  }
+}
+
+/// Shimmer placeholder shown while timeline data is loading.
+class _TimelineShimmer extends StatelessWidget {
+  const _TimelineShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: List.generate(3, (i) => Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Container(
+          height: 58,
+          decoration: BoxDecoration(
+            color: AppColors.border,
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      )),
+    );
+  }
+}
+
+// ─── Timeline Event Sheet ──────────────────────────────────────────────────
+
+/// Bottom sheet expanding a care-thread timeline event into full clinical detail.
+/// Unpacks the rawJson envelope via [_unpackRaw] to surface clinical fields.
+class _TimelineEventSheet extends StatelessWidget {
+  const _TimelineEventSheet({required this.assessment});
+
+  final MemberAssessment assessment;
+
+  static void show(BuildContext context, MemberAssessment assessment) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _TimelineEventSheet(assessment: assessment),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sw = Stopwatch()..start();
+    final raw = _unpackRaw(assessment.rawJson);
+    final dateFormat = DateFormat('d MMMM yyyy · h:mm a');
+    final progColors = Theme.of(context).extension<ProgrammeColors>()!;
+    final prog = Programme.fromString(assessment.type);
+    final typeColor = progColors.of(prog);
+
+    final entries = <MapEntry<String, String>>[];
+    void addIfPresent(String key, String label) {
+      final v = raw[key];
+      if (v != null && v.toString().isNotEmpty) {
+        entries.add(MapEntry(label, v.toString()));
+      }
+    }
+    addIfPresent('bp', 'BP');
+    addIfPresent('bg', 'Blood glucose');
+    addIfPresent('bgType', 'Glucose type');
+    addIfPresent('weight', 'Weight (kg)');
+    addIfPresent('height', 'Height (cm)');
+    addIfPresent('hemoglobin', 'Hb (g/dL)');
+    addIfPresent('fundalHeight', 'Fundal height (cm)');
+    addIfPresent('gravida', 'Gravida');
+    addIfPresent('parity', 'Parity');
+    addIfPresent('ancVisitNumber', 'ANC visit no.');
+    addIfPresent('pncVisitNumber', 'PNC visit no.');
+    addIfPresent('modeOfDelivery', 'Mode of delivery');
+    addIfPresent('confirmDiagnosis', 'Diagnosis');
+    addIfPresent('familyPlanningMethods', 'FP method');
+
+    final result = DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.6,
+      maxChildSize: 0.92,
+      minChildSize: 0.4,
+      builder: (_, scrollCtrl) => Column(
+        children: [
+          Container(
+            width: 40,
+            height: 4,
+            margin: const EdgeInsets.only(top: 12, bottom: 8),
+            decoration: BoxDecoration(
+              color: AppColors.border,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(color: typeColor, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    assessment.visitNumber != null
+                        ? '${assessment.type} — Visit ${assessment.visitNumber}'
+                        : assessment.type,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: typeColor,
+                    ),
+                  ),
+                ),
+                if (assessment.status != null) _StatusChip(status: assessment.status!),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                dateFormat.format(assessment.date),
+                style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          Expanded(
+            child: ListView(
+              controller: scrollCtrl,
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+              children: [
+                if (entries.isEmpty)
+                  Text(
+                    PatientProfileStrings.noVitalsYet,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textMuted,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  )
+                else
+                  ...entries.map(
+                    (e) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: 140,
+                            child: Text(
+                              e.key,
+                              style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              e.value,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (assessment.notes != null && assessment.notes!.isNotEmpty) ...[
+                  const Divider(height: 24),
+                  const Text(
+                    'Notes',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textMid),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    assessment.notes!,
+                    style: const TextStyle(fontSize: 13, color: AppColors.textPrimary, height: 1.5),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+    debugPrint('⏱ [PatientContext] _TimelineEventSheet build in ${sw.elapsedMilliseconds}ms'
+        ' type=${assessment.type} fields=${entries.length}');
+    return result;
+  }
+}
+
 /// Section showing assessment history.
 class _AssessmentsSection extends StatelessWidget {
   const _AssessmentsSection({required this.assessments, this.isLoading = false});
