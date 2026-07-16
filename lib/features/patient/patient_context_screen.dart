@@ -1083,6 +1083,68 @@ class _CareThreadChipRow extends StatelessWidget {
   }
 }
 
+// ─── AI Insight Card ───────────────────────────────────────────────────────
+
+/// Inline card showing the locally-computed patient AI summary. Content comes
+/// from [PatientAiContext.summary] — no async call, always available offline.
+/// Falls back to a muted unavailable message when the summary is empty.
+class _AiInsightCard extends StatelessWidget {
+  const _AiInsightCard({required this.summary});
+
+  final String summary;
+
+  @override
+  Widget build(BuildContext context) {
+    final sw = Stopwatch()..start();
+    final isEmpty = summary.trim().isEmpty;
+    final widget = Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.aiSurfaceStart, AppColors.aiSurfaceEnd],
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.aiBorder, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.auto_awesome_rounded, size: 14, color: AppColors.aiPurpleDark),
+              const SizedBox(width: 6),
+              Text(
+                PatientProfileStrings.aiInsight,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.aiPurpleDark,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            isEmpty ? PatientProfileStrings.aiInsightUnavailable : summary,
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.5,
+              color: isEmpty ? AppColors.textMuted : AppColors.textStrong,
+              fontStyle: isEmpty ? FontStyle.italic : FontStyle.normal,
+            ),
+          ),
+        ],
+      ),
+    );
+    debugPrint('⏱ [PatientContext] _AiInsightCard build in ${sw.elapsedMilliseconds}ms');
+    return widget;
+  }
+}
+
 /// Section showing assessment history.
 class _AssessmentsSection extends StatelessWidget {
   const _AssessmentsSection({required this.assessments, this.isLoading = false});
