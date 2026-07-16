@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:local_auth/error_codes.dart' as auth_error;
 import 'package:local_auth_android/local_auth_android.dart';
+import 'package:local_auth_darwin/local_auth_darwin.dart';
 
 import '../config/app_config.dart';
 import '../constants/app_strings.dart';
@@ -66,11 +67,16 @@ class BiometricService {
           useErrorDialogs: true,
           sensitiveTransaction: true,
         ),
-        authMessages: const [
-          AndroidAuthMessages(
-            signInTitle: BiometricStrings.promptTitle,
-            cancelButton: BiometricStrings.cancelButton,
-          ),
+        authMessages: [
+          if (defaultTargetPlatform == TargetPlatform.android)
+            const AndroidAuthMessages(
+              signInTitle: BiometricStrings.promptTitle,
+              cancelButton: BiometricStrings.cancelButton,
+            ),
+          if (defaultTargetPlatform == TargetPlatform.iOS)
+            const IOSAuthMessages(
+              cancelButton: BiometricStrings.cancelButton,
+            ),
         ],
       );
       debugPrint('[BiometricService] Authentication result: $result');
