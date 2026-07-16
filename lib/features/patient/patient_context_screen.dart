@@ -858,6 +858,152 @@ class _PatientContextScreenState
   }
 }
 
+// ─── Care Thread model ─────────────────────────────────────────────────────
+
+/// One active clinical pathway shown as a chip + stats card on the context screen.
+class _CareThread {
+  const _CareThread({
+    required this.programme,
+    required this.label,
+    required this.bg,
+    required this.textColor,
+    this.stats = const {},
+  });
+
+  final Programme programme;
+  final String label;
+  final Color bg;
+  final Color textColor;
+  /// Key → display value pairs shown in the stats row under each thread.
+  final Map<String, String> stats;
+}
+
+/// Unpacks the `{kind, raw}` envelope written by AssessmentDao so that
+/// clinical fields (bp, bg, ancVisitNumber, …) are accessible at the top level.
+Map<String, dynamic> _unpackRaw(Map<String, dynamic> rawJson) {
+  final r = rawJson['raw'];
+  if (r is String) return jsonDecode(r) as Map<String, dynamic>;
+  if (r is Map) return Map<String, dynamic>.from(r);
+  return rawJson;
+}
+
+/// Derives the ordered list of active care threads from local data.
+/// Reads only what is already in [data] — no async calls, no new endpoints.
+/// Debug timing is emitted to console so per-thread cost is visible in logs.
+List<_CareThread> _deriveThreads(PatientOrMemberData data) {
+  final sw = Stopwatch()..start();
+  final threads = <_CareThread>[];
+
+  MemberAssessment? latestOf(Programme prog) => data.assessments
+      .where((a) => Programme.fromString(a.type) == prog)
+      .firstOrNull;
+
+  // ANC / Pregnancy
+  if (data.programmes.contains(Programme.anc)) {
+    final latest = latestOf(Programme.anc);
+    final raw = latest != null ? _unpackRaw(latest.rawJson) : const <String, dynamic>{};
+    final stats = <String, String>{};
+    final snap = data.pregnancySnapshot;
+    if (snap?.eddDate != null) {
+      final weeksLeft =
+          DateTime.fromMillisecondsSinceEpoch(snap!.eddDate!).difference(DateTime.now()).inDays ~/ 7;
+      if (weeksLeft > 0) stats[PatientProfileStrings.weeksToGo] = '$weeksLeft';
+    }
+    final visitNum = raw['ancVisitNumber'] as String?;
+    if (visitNum != null) stats[PatientProfileStrings.visitsCompleted] = visitNum;
+    threads.add(_CareThread(
+      programme: Programme.anc,
+      label: CareThreadStrings.anc,
+      bg: AppColors.ancSurface,
+      textColor: AppColors.ancText,
+      stats: stats,
+    ));
+  }
+
+  // NCD — split into HTN and blood-sugar threads when readings are available
+  if (data.programmes.contains(Programme.ncd)) {
+    final latest = latestOf(Programme.ncd);
+    final raw = latest != null ? _unpackRaw(latest.rawJson) : const <String, dynamic>{};
+    final bp = raw['bp'] as String?;
+    threads.add(_CareThread(
+      programme: Programme.ncd,
+      label: CareThreadStrings.htn,
+      bg: AppColors.ncdSurface,
+      textColor: AppColors.ncdText,
+      stats: bp != null ? {PatientProfileStrings.bpTarget: bp} : {},
+    ));
+    final bg = raw['bg'] as String?;
+    if (bg != null) {
+      final bgType = raw['bgType'] as String?;
+      threads.add(_CareThread(
+        programme: Programme.ncd,
+        label: CareThreadStrings.sugar,
+        bg: AppColors.statusInfoSurface,
+        textColor: AppColors.threadInfoText,
+        stats: {PatientProfileStrings.bloodSugar: '$bg${bgType != null ? ' ($bgType)' : ''}'},
+      ));
+    }
+  }
+
+  // PNC — postnatal recovery
+  if (data.programmes.contains(Programme.pnc)) {
+    final latest = latestOf(Programme.pnc);
+    final raw = latest != null ? _unpackRaw(latest.rawJson) : const <String, dynamic>{};
+    final pncVisit = raw['pncVisitNumber'] as String?;
+    final deliveryMode = raw['modeOfDelivery'] as String?;
+    threads.add(_CareThread(
+      programme: Programme.pnc,
+      label: CareThreadStrings.pnc,
+      bg: AppColors.pncSurface,
+      textColor: AppColors.pncText,
+      stats: {
+        if (pncVisit != null) PatientProfileStrings.pncVisitsDone: pncVisit,
+        if (deliveryMode != null) PatientProfileStrings.delivery: deliveryMode,
+      },
+    ));
+  }
+
+  // IMCI — immunization + growth monitoring
+  if (data.programmes.contains(Programme.imci)) {
+    threads.add(const _CareThread(
+      programme: Programme.imci,
+      label: CareThreadStrings.imm,
+      bg: AppColors.threadImmBg,
+      textColor: AppColors.tbText,
+    ));
+    threads.add(const _CareThread(
+      programme: Programme.imci,
+      label: CareThreadStrings.growth,
+      bg: AppColors.pncSurface,
+      textColor: AppColors.aiPurpleDark,
+    ));
+  }
+
+  // TB — general enrollment
+  if (data.programmes.contains(Programme.tb)) {
+    threads.add(const _CareThread(
+      programme: Programme.tb,
+      label: CareThreadStrings.general,
+      bg: AppColors.tbSurface,
+      textColor: AppColors.tbText,
+    ));
+  }
+
+  // Fallback when no programme is active
+  if (threads.isEmpty) {
+    threads.add(const _CareThread(
+      programme: Programme.unknown,
+      label: CareThreadStrings.general,
+      bg: AppColors.threadGeneralBg,
+      textColor: AppColors.textMid,
+    ));
+  }
+
+  debugPrint(
+    '⏱ [PatientContext] _deriveThreads ${threads.length} threads in ${sw.elapsedMilliseconds}ms',
+  );
+  return threads;
+}
 
 /// Section showing assessment history.
 class _AssessmentsSection extends StatelessWidget {
