@@ -156,7 +156,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
 
   Future<void> _loadConfig() async {
     try {
-      final cfg = await FormConfig.load(rootBundle);
+      final cfg = await FormConfig.loadAndCache(rootBundle);
       if (mounted) setState(() { _config = cfg; _configLoading = false; });
     } catch (e, st) {
       debugPrint('[UnifiedForm] FormConfig.load failed: $e\n$st');
