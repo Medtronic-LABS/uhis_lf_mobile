@@ -973,6 +973,29 @@ abstract final class PatientProfileStrings {
   static const String notAvailable = '—';
   static const String dialFailed = 'Could not open the dialer';
   static const String mapsOpenFailed = 'Could not open maps';
+
+  static const String activeCareThreads = 'Active care threads';
+  static const String aiInsight = 'AI Insight';
+  static const String pregnancyProgress = 'Pregnancy progress';
+  static const String careHistory = 'Care history';
+  static const String noVitalsYet = 'No vitals recorded yet';
+  static const String vitalsConfirmAtVisit = "Confirm at today's visit";
+  static const String weeksToGo = 'weeks to go';
+  static const String visitsCompleted = 'Visits completed';
+  static const String enrolled = 'Enrolled';
+  static const String dosesCompleted = 'Doses completed';
+  static const String dosesOverdue = 'Doses overdue';
+  static const String growthTrend = 'Growth trend';
+  static const String bpTarget = 'BP target';
+  static const String lastCheckup = 'Last check-up';
+  static const String medicationAdherence = 'Medication adherence';
+  static const String bloodSugar = 'Blood sugar (fasting)';
+  static const String pncVisitsDone = 'PNC visits done';
+  static const String delivery = 'Delivery';
+  static const String newbornAge = 'Newborn age';
+  static const String breastfeeding = 'Breastfeeding';
+  static const String aiInsightUnavailable =
+      'AI insight unavailable — check patient record manually';
 }
 
 abstract final class ContactSheetStrings {
@@ -5187,4 +5210,21 @@ abstract final class PatientAiStrings {
     'What should I do this visit?',
     'Is a referral needed?',
   ];
+}
+
+abstract final class CareThreadStrings {
+  CareThreadStrings._();
+
+  static const String anc = 'ANC / Pregnancy';
+  static const String bp = 'Pre-eclampsia watch';
+  static const String sugar = 'Blood sugar';
+  static const String htn = 'Hypertension';
+  static const String imm = 'Immunization';
+  static const String growth = 'Growth monitoring';
+  static const String pnc = 'Postnatal recovery';
+  static const String newborn = 'Newborn care';
+  static const String general = 'General enrollment';
+  static const String illness = 'Past illness';
+  static const String highrisk = 'High-risk pregnancy';
+  static const String csection = 'Emergency C-section';
 }
