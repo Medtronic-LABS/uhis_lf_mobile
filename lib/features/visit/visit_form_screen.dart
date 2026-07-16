@@ -7,14 +7,12 @@ import 'package:provider/provider.dart';
 
 import '../../core/api/scribe_api_service.dart';
 import '../../core/constants/app_strings.dart';
-import '../../core/theme/app_theme.dart';
 import '../../core/db/encounter_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
 import '../../core/db/pregnancy_snapshot_dao.dart';
 import '../../core/models/programme.dart';
-import '../dashboard/mission_dashboard_repository.dart';
 import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
 import '../scribe/scribe_session.dart';
@@ -24,7 +22,6 @@ import 'pathway/pathway_engine.dart';
 import 'assessment_repository.dart';
 import 'forms/unified_form_notifier.dart';
 import 'forms/unified_form_screen.dart';
-import 'triage/patient_context_builder.dart';
 import 'visit_controller.dart';
 import 'visit_session.dart';
 
@@ -130,9 +127,6 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     super.dispose();
   }
 
-  String get _returnPath =>
-      widget.origin == 'dashboard' ? '/' : '/tasks';
-
   bool get _referralRecommended => _sectionedReferralTriggered;
 
   int _nextDueForProgramme(Programme programme, DateTime now) {
@@ -188,52 +182,6 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
       }
     }
     return Programme.unknown;
-  }
-
-  // ── Pathway reconstruction ─────────────────────────────────────────────────
-
-  List<ActivatedPathway> _buildPathways() {
-    return widget.activatedPathways!
-        .map(Programme.fromString)
-        .where((p) => p != Programme.unknown)
-        .map((p) => ActivatedPathway(
-              programme: p,
-              priority: _programmePriority(p),
-              confidence: 1.0,
-              trigger: PathwayTrigger.manual,
-              rationaleKey: 'pathwayManualRationale',
-            ))
-        .toList();
-  }
-
-  int _programmePriority(Programme p) {
-    switch (p) {
-      case Programme.imci:
-        return 10;
-      case Programme.anc:
-        return 20;
-      case Programme.pnc:
-        return 25;
-      case Programme.tb:
-        return 30;
-      case Programme.ncd:
-        return 40;
-      default:
-        return 50;
-    }
-  }
-
-  PatientContext _buildPatientContext() {
-    final pathwayNames = widget.activatedPathways ?? const [];
-    final hasAnc = pathwayNames.contains(Programme.anc.name) ||
-        pathwayNames.contains(Programme.pnc.name);
-    return PatientContext(
-      patientId: widget.patientId ?? '',
-      ageMonths: (widget.patientAge ?? 0) * 12,
-      sex: hasAnc ? Sex.female : Sex.unknown,
-      isPregnant: pathwayNames.contains(Programme.anc.name),
-      gestationalWeeks: widget.gestationalWeeks,
-    );
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────
@@ -508,92 +456,5 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     }
   }
 
-  // ── Dialogs ────────────────────────────────────────────────────────────────
-  // Kept for non-sectioned fallback mode; sectioned visits navigate to
-  // VisitCompleteScreen instead.
-
-  // ignore: unused_element
-  void _showCompletionDialog(BuildContext ctx) {
-    final theme = Theme.of(ctx);
-    final programmes = widget.activatedPathways ?? [];
-    final label = programmes.isEmpty
-        ? 'Assessment'
-        : programmes
-            .map((p) => Programme.fromString(p))
-            .where((p) => p != Programme.unknown)
-            .map((p) => p.wireTag.toUpperCase())
-            .toSet()
-            .join(' + ');
-
-    showDialog<void>(
-      context: ctx,
-      barrierDismissible: false,
-      builder: (dlgCtx) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(
-              _referralRecommended ? Icons.warning : Icons.check_circle,
-              color: _referralRecommended
-                  ? theme.colorScheme.error
-                  : AppColors.statusSuccess,
-            ),
-            const SizedBox(width: 12),
-            const Text('Assessment Complete'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('$label assessment saved.'),
-            if (_referralRecommended) ...[
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.errorContainer,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.warning,
-                        color: theme.colorScheme.onErrorContainer),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Referral recommended based on findings.',
-                        style: TextStyle(
-                          color: theme.colorScheme.onErrorContainer,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-        actions: [
-          if (_referralRecommended)
-            OutlinedButton(
-              onPressed: () {
-                Navigator.pop(dlgCtx);
-                ctx.read<MissionDashboardRepository>().clearCache();
-                ctx.go(_returnPath);
-              },
-              child: const Text('Create Referral'),
-            ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(dlgCtx);
-              ctx.read<MissionDashboardRepository>().clearCache();
-              ctx.go(_returnPath);
-            },
-            child: const Text('Done'),
-          ),
-        ],
-      ),
-    );
-  }
 
 }

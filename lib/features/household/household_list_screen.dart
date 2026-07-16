@@ -17,6 +17,7 @@ import '../../core/models/mission_queue_item.dart';
 import '../../core/sync/offline_sync_service.dart';
 import '../../core/widgets/header_icon_button.dart';
 import '../../core/widgets/mockup_svg_icons.dart';
+import '../../core/widgets/empty_state_card.dart';
 import '../../core/widgets/patient_filter_panel.dart';
 import '../dashboard/dashboard_repository.dart';
 import '../dashboard/mission_dashboard_repository.dart';
@@ -324,24 +325,14 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
                           final items = snapshot.data ?? [];
                           if (items.isEmpty) {
                             return Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.people_outline,
-                                    size: 64,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.outline,
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    HouseholdListStrings.noMembers,
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodyLarge,
-                                  ),
-                                ],
+                              child: Padding(
+                                padding: const EdgeInsets.all(32),
+                                child: EmptyStateCard(
+                                  icon: Icons.people_outline,
+                                  iconColor: AppColors.textMuted,
+                                  iconBg: AppColors.border,
+                                  title: HouseholdListStrings.noMembers,
+                                ),
                               ),
                             );
                           }
@@ -454,7 +445,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
                       setState(() => _searchQuery = v.trim().toLowerCase());
                     },
                     style: const TextStyle(
-                      fontFamily: 'NunitoSans',
+                      fontFamily: AppFonts.body,
                       fontSize: 14,
                     ),
                     decoration: InputDecoration(
@@ -464,7 +455,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
                       // fontSize matches the Home dashboard's own search bar
                       // hint (DashboardSearchField, fontSize: 14).
                       hintStyle: TextStyle(
-                        fontFamily: 'NunitoSans',
+                        fontFamily: AppFonts.body,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                         color: AppColors.textMuted,
@@ -562,20 +553,14 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
 
     if (filteredItems.isEmpty) {
       return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.search_off,
-              size: 64,
-              color: Theme.of(context).colorScheme.outline,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              HouseholdListStrings.noMembers,
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: EmptyStateCard(
+            icon: Icons.search_off,
+            iconColor: AppColors.textMuted,
+            iconBg: AppColors.border,
+            title: HouseholdListStrings.noMembers,
+          ),
         ),
       );
     }
@@ -864,7 +849,7 @@ class _HouseholdCard extends StatelessWidget {
                           Text(
                             title,
                             style: const TextStyle(
-                              fontFamily: 'Nunito',
+                              fontFamily: AppFonts.display,
                               fontWeight: FontWeight.w800,
                               fontSize: 12,
                               color: AppColors.navy,
@@ -1045,8 +1030,8 @@ class _OtherMemberRow extends StatelessWidget {
               alignment: Alignment.center,
               child: Text(
                 memberInitials(member.name),
-                style: TextStyle(
-                  fontFamily: 'Nunito',
+                style: const TextStyle(
+                  fontFamily: AppFonts.display,
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
                   color: AppColors.textMuted,

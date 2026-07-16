@@ -138,7 +138,7 @@ lib/
 | Visit flow (triage → assessment → recommendation) | `/patients/visit/:visitId/flow` (name `visit-flow`) | Yes |
 | Tasks / referrals | `/tasks` | Yes |
 | Task detail | `/tasks/:id` | Yes |
-| Assistant tab (placeholder) | `/map` | Yes |
+| Assistant tab (placeholder) | `/assistant` | Yes |
 | Form gallery | `/gallery` (dev duplicate: `/dev/form-gallery`, kDebugMode) | Yes |
 | Teleconsult | `/teleconsult` | Yes |
 | Counselling | `/counselling` | Yes |

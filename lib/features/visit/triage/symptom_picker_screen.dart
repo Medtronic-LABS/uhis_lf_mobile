@@ -100,7 +100,6 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
 
   VisitBriefingResponse? _briefingData;
   bool _briefingLoading = true;
-  int? _ancVisitCount;
 
   /// Programmes the SK has selected in the inline service grid.
   /// Initialized from the pathway engine on load; SK can toggle freely.
@@ -339,7 +338,6 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         setState(() {
           _briefingData = data;
           _briefingLoading = false;
-          _ancVisitCount = visitsByVisit.length;
         });
       }
     } on Object catch (e, st) {
@@ -912,124 +910,6 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
 
 }
 
-// ── ANC Visit Summary Chip ────────────────────────────────────────────────────
-//
-// Spec §4.1: Read-only strip at the top of Step 1 for ANC patients.
-// Shows: patient name · ANC visit number · gestational week · parity · key trend.
-// Sits flush edge-to-edge so it reads as a contextual header, not a card.
-
-class _AncVisitSummaryChip extends StatelessWidget {
-  const _AncVisitSummaryChip({
-    required this.patientContext,
-    this.patientName,
-    this.visitCount,
-  });
-
-  final PatientContext patientContext;
-  final String? patientName;
-
-  /// Total completed visits for this patient — loaded from vitals history.
-  /// Null while the briefing fetch is in flight.
-  final int? visitCount;
-
-  String? get _keyTrend {
-    final facts = patientContext.pregnancyFacts;
-    if (patientContext.lastBpSystolic != null &&
-        patientContext.lastBpSystolic! >= 140) {
-      return ComposerStrings.ancSummaryBpElevated;
-    }
-    if (facts == null) return null;
-    if (facts.isNearTermAnc) return ComposerStrings.ancSummaryNearTerm;
-    if (facts.highRiskPregnantWoman) return ComposerStrings.ancSummaryHighRisk;
-    if (facts.hasGapsInAnc) return ComposerStrings.ancSummaryAncGap;
-    return null;
-  }
-
-  Color get _trendColor {
-    final facts = patientContext.pregnancyFacts;
-    if (patientContext.lastBpSystolic != null &&
-        patientContext.lastBpSystolic! >= 140) {
-      return AppColors.statusCritical;
-    }
-    if (facts?.isNearTermAnc == true) return AppColors.statusWarning;
-    if (facts?.highRiskPregnantWoman == true) return AppColors.statusCritical;
-    if (facts?.hasGapsInAnc == true) return AppColors.statusWarning;
-    return AppColors.textMuted;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final ga = patientContext.gestationalWeeks;
-    final g = patientContext.gravida;
-    final p = patientContext.para;
-    final trend = _keyTrend;
-
-    return Container(
-      color: AppColors.ancSurface,
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-      child: Row(
-        children: [
-          // Pill chips — GA · parity · key trend
-          Wrap(
-            spacing: 5,
-            children: [
-              if (ga != null)
-                _SummaryPill(
-                  label: '$ga ${ComposerStrings.ancSummaryGaUnit}',
-                  color: AppColors.ancText,
-                  surface: AppColors.ancBorder,
-                ),
-              if (g != null && p != null)
-                _SummaryPill(
-                  label: ComposerStrings.ancSummaryParity(g, p),
-                  color: AppColors.ancText,
-                  surface: AppColors.ancBorder,
-                ),
-              if (trend != null)
-                _SummaryPill(
-                  label: trend,
-                  color: Colors.white,
-                  surface: _trendColor,
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryPill extends StatelessWidget {
-  const _SummaryPill({
-    required this.label,
-    required this.color,
-    required this.surface,
-  });
-
-  final String label;
-  final Color color;
-  final Color surface;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: surface,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-          color: color,
-        ),
-      ),
-    );
-  }
-}
-
 // ── AI Briefing Section: 3 stacked cards ─────────────────────────────────────
 
 class _AiBriefingSection extends StatelessWidget {
@@ -1538,10 +1418,6 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
         final searchPool = _query.length >= _secondaryThreshold
             ? vm.applicableVocabCodes
             : defaultCodes;
-
-        // Whether the enrolled-programme filter is active for this patient.
-        final hasEnrolledFilter =
-            vm.patientContext.activeProgrammes.isNotEmpty;
 
         // Determine which sections to show in the grid.
         // Searching → one flat headerless section of matches. Otherwise →

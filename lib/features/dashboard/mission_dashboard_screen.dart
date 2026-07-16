@@ -1599,7 +1599,7 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner>
                               child: Text(
                                 total > 99 ? '99+' : '$total',
                                 style: const TextStyle(
-                                  fontFamily: 'Nunito',
+                                  fontFamily: AppFonts.display,
                                   fontSize: 9,
                                   fontWeight: FontWeight.w800,
                                   color: Colors.white,
@@ -1632,7 +1632,7 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner>
                         child: Text(
                           MissionDashboardStrings.referralAlertsLabel,
                           style: const TextStyle(
-                            fontFamily: 'NunitoSans',
+                            fontFamily: AppFonts.body,
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
                             color: Colors.white,
@@ -1920,7 +1920,7 @@ class _NotificationBellState extends State<_NotificationBell>
                           child: Text(
                             count > 9 ? '9+' : '$count',
                             style: const TextStyle(
-                              fontFamily: 'Nunito',
+                              fontFamily: AppFonts.display,
                               fontSize: 9,
                               fontWeight: FontWeight.w800,
                               color: Colors.white,
