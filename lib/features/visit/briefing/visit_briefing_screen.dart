@@ -21,6 +21,8 @@ class VisitBriefingScreen extends StatefulWidget {
     this.patientGender,
     this.householdId,
     this.memberId,
+    this.villageId,
+    this.householdMemberLocalId,
     this.programmes = const {},
     this.origin,
   });
@@ -32,6 +34,8 @@ class VisitBriefingScreen extends StatefulWidget {
   final String? patientGender;
   final String? householdId;
   final String? memberId;
+  final String? villageId;
+  final int? householdMemberLocalId;
   final Set<Programme> programmes;
   final String? origin;
 
@@ -48,7 +52,7 @@ class _VisitBriefingScreenState extends State<VisitBriefingScreen> {
   @override
   void initState() {
     super.initState();
-    debugPrint('[VisitBriefingScreen] mounted visitId=${widget.visitId}');
+    debugPrint('[VisitBriefingScreen] mounted encounterId=${widget.encounterId}');
     _briefingFuture = _fetchBriefing();
   }
 
@@ -159,9 +163,12 @@ class _VisitBriefingScreenState extends State<VisitBriefingScreen> {
       extra: {
         'patientId': widget.patientId,
         'patientName': widget.patientName,
+        'patientGender': widget.patientGender,
         'memberId': widget.memberId,
         'householdId': widget.householdId,
         'patientAge': widget.patientAge,
+        'villageId': widget.villageId,
+        'householdMemberLocalId': widget.householdMemberLocalId,
       },
     );
   }
