@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../../app/theme.dart';
 import '../../core/auth/user_hierarchy_service.dart';
+import '../../core/debug/console_log.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/app_database.dart';
 import '../../core/db/assessment_dao.dart';

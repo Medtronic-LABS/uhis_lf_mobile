@@ -347,6 +347,7 @@ class _PatientContextScreenState
     final patientRepo = context.read<PatientRepository>();
     final syncSvc = context.read<OfflineSyncService>();
 
+    final t0 = Stopwatch()..start();
     // Phase 1: all local reads in parallel — returns instantly from SQLite.
     final phase1 = await Future.wait([
       _resolveEncounterMemberId(),
