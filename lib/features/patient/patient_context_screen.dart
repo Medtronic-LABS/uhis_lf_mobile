@@ -7,6 +7,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/theme.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/debug/console_log.dart';
+import '../../core/models/dashboard_tier.dart';
+import '../../core/time/calendar_day.dart';
 import '../../core/widgets/empty_state_card.dart';
 import '../../core/widgets/header_icon_button.dart';
 import '../../core/widgets/phi_screen.dart';
@@ -347,6 +350,48 @@ class _PatientContextScreenState
     if (localPatient != null) {
       // ignore: avoid_print
       print('[PatientContextScreen] Found local patient: ${localPatient.patient.name}');
+      assert(() {
+        final p = localPatient.patient;
+        final band = p.riskBand ?? Band.band4;
+        final modifier = p.riskModifier ?? Modifier.none;
+        final code = '${band.wireTag.replaceFirst('band', '')}'
+            '${modifier == Modifier.none ? '' : modifier.wireTag}';
+        final progs = localPatient.programmes.map((pr) => pr.name).join(',');
+        final now = DateTime.now();
+        final overdueDays = p.nextDueAt != null
+            ? CalendarDay
+                .daysBetween(
+                  DateTime.fromMillisecondsSinceEpoch(p.nextDueAt!),
+                  now,
+                )
+                .clamp(0, 999)
+            : null;
+        final tier = p.nextDueAt != null
+            ? DashboardTier.fromDueAt(
+                DateTime.fromMillisecondsSinceEpoch(p.nextDueAt!),
+                now: now,
+              )
+            : DashboardTier.upcoming;
+        final overdueTag =
+            (overdueDays != null && overdueDays > 0) ? ' | overdue: ${overdueDays}d' : '';
+        final pregnant = localPatient.programmes.contains(Programme.anc);
+        ConsoleLog.banner(
+          '[Patient opened] [$code] ${p.name ?? widget.patientId}'
+          ' | prog: $progs | tier: ${tier.name}'
+          '${pregnant ? " | pregnant" : ""}'
+          '$overdueTag'
+          ' | sortRank: ${sortRankFor(band, modifier)}',
+        );
+        if (p.riskReasons.isNotEmpty) {
+          ConsoleLog.banner('  Why $code:');
+          for (final r in p.riskReasons) {
+            ConsoleLog.banner('    • $r');
+          }
+        } else {
+          ConsoleLog.banner('  Why $code: (no clinical reasons stored)');
+        }
+        return true;
+      }());
 
       // Scope history query to the patient's own village — falling back to all
       // assigned villages when villageId is null. Previously used
@@ -2038,11 +2083,13 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
     final lastDate = lastMs != null ? DateTime.fromMillisecondsSinceEpoch(lastMs) : null;
     final nextDate = nextMs != null ? DateTime.fromMillisecondsSinceEpoch(nextMs) : null;
 
-    final isOverdue = nextDate != null && nextDate.isBefore(now);
-    final overdueDays = isOverdue ? now.difference(nextDate).inDays : 0;
-    final dueSoonDays = (!isOverdue && nextDate != null)
-        ? nextDate.difference(now).inDays
-        : null;
+    // Compare calendar dates only — wall-clock difference truncates (e.g.
+    // next due midnight tomorrow vs evening today ⇒ 0 days, not 1).
+    final daysToDue =
+        nextDate == null ? null : CalendarDay.daysBetween(now, nextDate);
+    final isOverdue = daysToDue != null && daysToDue < 0;
+    final overdueDays = (daysToDue != null && daysToDue < 0) ? -daysToDue : 0;
+    final dueSoonDays = (daysToDue != null && daysToDue >= 0) ? daysToDue : null;
 
     Color headerColor = scheme.primary;
     if (isOverdue) headerColor = AppColors.statusCritical;

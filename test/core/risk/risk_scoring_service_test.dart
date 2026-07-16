@@ -152,6 +152,63 @@ void main() {
       expect(assessment.modifier, Modifier.a);
     });
 
+    test('ANC moderate anaemia Hb 7.0 → band2', () {
+      final assessment = service.score(const PatientFacts(
+        patientId: 'anc-hb7',
+        ageYears: 28,
+        programmes: <Programme>{Programme.anc},
+        vitals: ClinicalVitals(hemoglobin: 7.0),
+      ));
+      expect(assessment.band, Band.band2);
+      expect(
+        assessment.reasons.any((r) => r.toLowerCase().contains('anaemia')),
+        isTrue,
+      );
+    });
+
+    test('ANC enrolled without abnormal findings → band4, not no-programme',
+        () {
+      final assessment = service.score(const PatientFacts(
+        patientId: 'anc-ok',
+        ageYears: 25,
+        programmes: <Programme>{Programme.anc},
+      ));
+      expect(assessment.band, Band.band4);
+      expect(
+        assessment.reasons.any((r) => r.toLowerCase().contains('no programme')),
+        isFalse,
+      );
+      expect(
+        assessment.reasons.any((r) => r.toLowerCase().contains('anc')),
+        isTrue,
+      );
+    });
+
+    test('NCD enrolled without abnormal findings → band4, not no-programme',
+        () {
+      final assessment = service.score(const PatientFacts(
+        patientId: 'ncd-ok',
+        ageYears: 40,
+        programmes: <Programme>{Programme.ncd},
+      ));
+      expect(assessment.band, Band.band4);
+      expect(
+        assessment.reasons.any((r) => r.toLowerCase().contains('no programme')),
+        isFalse,
+      );
+    });
+
+    test('ANC overdue nextDueAt → modifier b', () {
+      final assessment = service.score(PatientFacts(
+        patientId: 'anc-due',
+        ageYears: 25,
+        programmes: const <Programme>{Programme.anc},
+        nextDueAt: DateTime.now().subtract(const Duration(days: 5)),
+        vitals: const ClinicalVitals(),
+      ));
+      expect(assessment.modifier, Modifier.b);
+    });
+
     test('ANC overdue ANC visit → modifier b on band4', () {
       final assessment = service.score(const PatientFacts(
         patientId: 'anc9',

@@ -19,9 +19,10 @@ import '../../core/db/household_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/local_dashboard_repository.dart';
+import '../../core/debug/console_log.dart';
 import '../../core/models/dashboard_tier.dart';
 import '../../core/models/mission_queue_item.dart';
-import '../../core/models/programme.dart';
+import '../../core/models/risk.dart';
 import '../../core/widgets/patient_filter_panel.dart';
 import '../referral/referral_repository.dart';
 import 'widgets/dashboard_search_field.dart';
@@ -81,11 +82,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _selectedVillageChipName;
   Set<NeedFilter> _selectedNeeds = const {};
   Set<NeedFilter> _availableNeeds = const {};
-  Set<Programme> _selectedProgrammes = const {};
   String _searchQuery = '';
 
   // Full unfiltered queue — filter/search applied synchronously from this cache.
   List<MissionQueueItem> _baseQueue = const [];
+
+  /// Today's actionable visit count for the ✦ AI sorted badge.
+  /// Always derived from [_baseQueue] with upcoming dropped — never from the
+  /// currently applied village/need/search filter (those only shrink the list).
+  int _todayVisitCount = 0;
+  bool _todayCountLoading = true;
+
+  /// How many queue cards are currently painted. Grows on scroll (§ lazy load).
+  /// Full clinical order stays in `_queueFuture` — we only window the widgets.
+  static const int _kQueuePageSize = 15;
+  int _queueRevealCount = _kQueuePageSize;
 
   @override
   void initState() {
@@ -227,6 +238,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() {
       // Increment version to force FutureBuilder rebuild
       _refreshVersion++;
+      _queueRevealCount = _kQueuePageSize;
+      _todayCountLoading = true;
       debugPrint('[Dashboard] Loading mission data, version=$_refreshVersion');
       // Load completed patient IDs and filter queue to exclude them
       _queueFuture = _loadFilteredQueue(missionRepo, encounterDao);
@@ -240,33 +253,71 @@ class _DashboardScreenState extends State<DashboardScreen> {
   ) async {
     final completedIds = await encounterDao.completedTodayPatientIds();
 
-    // Persist completed IDs so card rendering can mark them done.
-    if (mounted) {
-      // ignore: use_build_context_synchronously
-      setState(() => _completedIds = completedIds);
-    }
+    // Persist completed IDs so filtering + card "done" state use the same set.
+    // Assign before loadQueue so any concurrent filter apply sees them;
+    // setState after so the first paint also marks DONE correctly.
+    _completedIds = completedIds;
 
     final rawQueue = await missionRepo.loadQueue(limit: 500);
 
-    // A visit completed today is done — it must not occupy a dashboard slot,
-    // count toward the visits-today total, or seed the need-filter chips.
-    // completedIds comes from EncounterDao (updated the instant a visit is
-    // submitted, offline-safe); this is the only reliable "done today" signal
-    // — MissionInputData.completedTodayPatientIds lags until the next sync.
-    //
-    // Upcoming-tier items (due >7 days out, or no due date) are excluded
-    // here too — the dashboard only ever shows Today/Overdue/This week.
-    // Filtered here (not in the shared classifier) so the Tasks screen,
-    // which reads the same loadQueue() result, is unaffected.
-    final queue = rawQueue
-        .where((i) =>
-            i.tier != DashboardTier.upcoming &&
-            (completedIds.isEmpty ||
-                i.patientId == null || !completedIds.contains(i.patientId)))
-        .toList(growable: false);
+    // Keep completed-today patients in the cache so programme filters can still
+    // show them (done state) in clinical priority order. Unfiltered dashboard
+    // drops them inside filterMissionQueue().
+    final queue = rawQueue;
 
-    // Cache filtered base queue so filters can be re-applied synchronously
+    assert(() {
+      final villages = <String, int>{};
+      for (final i in rawQueue) {
+        final v = i.village?.trim().isNotEmpty == true
+            ? i.village!.trim()
+            : '(null)';
+        villages[v] = (villages[v] ?? 0) + 1;
+      }
+      debugPrint(
+        '[Dashboard filter] baseLoad raw=${rawQueue.length} '
+        'completedToday=${completedIds.length}',
+      );
+      debugPrint(
+        '[Dashboard filter] baseLoad villages: '
+        '${villages.entries.map((e) => "${e.key}=${e.value}").join(", ")}',
+      );
+      for (final probe in const [
+        'Yasmeen',
+        'Raaajasri',
+        'Teena',
+        'Nazmeen',
+        'Jakir',
+      ]) {
+        MissionQueueItem? hit;
+        for (final i in rawQueue) {
+          if (i.patientName == probe) {
+            hit = i;
+            break;
+          }
+        }
+        if (hit == null) {
+          debugPrint(
+            '[Dashboard filter] baseLoad probe $probe → ABSENT from loadQueue',
+          );
+          continue;
+        }
+        final done = hit.patientId != null &&
+            completedIds.contains(hit.patientId);
+        final sched = DashboardTier.fromDueAt(hit.dueAt);
+        debugPrint(
+          '[Dashboard filter] baseLoad probe $probe → '
+          '[${hit.priorityCode}] v=${hit.village} '
+          'prog=${hit.programmes.map((p) => p.name).join("+")} '
+          'tier=${hit.tier.name} due=${hit.dueAt} sched=${sched.name} '
+          '${done ? "COMPLETED-today(kept-in-base)" : "actionable"}',
+        );
+      }
+      return true;
+    }());
+
+    // Cache full queue so filters can be re-applied synchronously
     // without a repository round-trip on every chip tap.
+    final todayCount = _countTodaysActionable(queue, completedIds);
     _baseQueue = queue;
 
     // Extract distinct village labels for inline chips
@@ -284,36 +335,58 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         _inlineVillages = allVillageLabels;
         _availableNeeds = availableNeeds;
+        _todayVisitCount = todayCount;
+        _todayCountLoading = false;
       });
     }
 
+    assert(() {
+      debugPrint(
+        '[Dashboard filter] todayBadge=$todayCount '
+        '(base=${queue.length}, excl. upcoming; '
+        'activeFilters '
+        'village=${_selectedVillageChipName ?? "(all)"} '
+        'needs=[${_selectedNeeds.map((n) => n.name).join(",")}] '
+        '— badge ignores these)',
+      );
+      return true;
+    }());
+
     return _buildFilteredList(queue);
+  }
+
+  /// Visits that belong on the unfiltered "today" dashboard — not upcoming
+  /// and not already completed today.
+  static int _countTodaysActionable(
+    List<MissionQueueItem> queue,
+    Set<String> completedIds,
+  ) {
+    return queue
+        .where(
+          (i) =>
+              i.tier != DashboardTier.upcoming &&
+              (i.patientId == null || !completedIds.contains(i.patientId)),
+        )
+        .length;
   }
 
   /// Apply all active filters (village, need category, search query) to [queue]
   /// and return the matching subset. Pure — reads current filter state fields.
   List<MissionQueueItem> _buildFilteredList(List<MissionQueueItem> queue) {
-    var result = queue;
+    return filterMissionQueue(
+      queue: queue,
+      village: _selectedVillageChipName,
+      selectedNeeds: _selectedNeeds,
+      searchQuery: _searchQuery,
+      completedPatientIds: _completedIds,
+    );
+  }
 
-    final chipVillage = _selectedVillageChipName;
-    if (chipVillage != null) {
-      result = result.where((i) => i.village?.trim() == chipVillage).toList();
-    }
-
-    if (_selectedNeeds.isNotEmpty) {
-      result = result.where(_needMatches).toList();
-    }
-
-    final q = _searchQuery.trim().toLowerCase();
-    if (q.isNotEmpty) {
-      result = result.where((i) =>
-        i.patientName.toLowerCase().contains(q) ||
-        (i.phoneNumber?.contains(q) ?? false) ||
-        (i.nid?.toLowerCase().contains(q) ?? false)
-      ).toList();
-    }
-
-    return result;
+  void _clearFilters() {
+    _selectedNeeds = const {};
+    _selectedVillageChipName = null;
+    _searchQuery = '';
+    _queueRevealCount = _kQueuePageSize;
   }
 
   /// Re-apply current filters to the cached base queue synchronously.
@@ -329,7 +402,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
     setState(() {
       _refreshVersion++;
+      _queueRevealCount = _kQueuePageSize;
       _queueFuture = Future.value(_buildFilteredList(_baseQueue));
+    });
+  }
+
+  /// Expand the painted window when the SK scrolls near the end of the list.
+  void _maybeRevealMore(int total) {
+    if (!mounted || total <= _queueRevealCount) return;
+    setState(() {
+      _queueRevealCount =
+          (_queueRevealCount + _kQueuePageSize).clamp(0, total);
     });
   }
 
@@ -432,6 +515,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// prototype's "Visit now" — single tap drops the SK into triage.
   /// Falls back to opening the patient detail when the visit can't start.
   Future<void> _startVisitFromQueue(MissionQueueItem item) async {
+    assert(() {
+      final code = '${item.band.wireTag.replaceFirst('band', '')}'
+          '${item.modifier == Modifier.none ? '' : item.modifier.wireTag}';
+      final progs = item.programmes.map((p) => p.name).join(',');
+      final overdueTag = (item.daysOverdue != null && item.daysOverdue! > 0)
+          ? ' | overdue: ${item.daysOverdue}d'
+          : '';
+      final driversTag =
+          item.drivers.isNotEmpty ? ' | drivers: ${item.drivers.join(",")}' : '';
+      ConsoleLog.banner(
+        '[Patient selected] [$code] ${item.patientName}'
+        ' | prog: $progs | tier: ${item.tier.name}'
+        '${item.isPregnant ? " | pregnant" : ""}'
+        '$overdueTag$driversTag'
+        ' | sortRank: ${item.priorityScore}',
+      );
+      if (item.clinicalReasons.isNotEmpty) {
+        ConsoleLog.banner('  Why $code:');
+        for (final r in item.clinicalReasons) {
+          ConsoleLog.banner('    • $r');
+        }
+      } else {
+        ConsoleLog.banner('  Why $code: (no clinical reasons stored)');
+      }
+      return true;
+    }());
     final patientId = item.patientId;
     if (patientId != null && _completedIds.contains(patientId)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -514,11 +623,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (mounted) context.push('/tasks');
   }
 
-  bool _needMatches(MissionQueueItem item) {
-    if (_selectedNeeds.isEmpty) return true;
-    return _selectedNeeds.any((need) => need.matches(item));
-  }
-
   @override
   Widget build(BuildContext context) {
     // Check if a refresh is pending (e.g., assessment completed while on another tab)
@@ -553,7 +657,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               notificationCount: _notificationCount,
               onNotificationTap: () => CceAlertsDrawer.show(context),
               onSearchChanged: (q) {
-                setState(() => _searchQuery = q);
+                setState(() {
+                  _searchQuery = q;
+                  _queueRevealCount = _kQueuePageSize;
+                });
                 _applyFilters();
               },
             ),
@@ -567,156 +674,178 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Expanded(
               child: RefreshIndicator(
                 onRefresh: _refresh,
-                child: ListView(
-                  physics: const ClampingScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
-                  children: [
-                    PatientFilterPanel(
-                      villages: _inlineVillages
-                          .map((name) => (value: name, label: name))
-                          .toList(),
-                      selectedVillageValue: _selectedVillageChipName,
-                      onVillageSelected: (name) {
-                        setState(() => _selectedVillageChipName = name);
-                        _applyFilters();
-                      },
-                      availableNeeds: _availableNeeds,
-                      selectedNeeds: _selectedNeeds,
-                      onNeedToggled: (need) {
-                        setState(() {
-                          final updated = Set<NeedFilter>.from(_selectedNeeds);
-                          if (updated.contains(need)) {
-                            updated.remove(need);
-                          } else {
-                            updated.add(need);
-                          }
-                          _selectedNeeds = updated;
-                        });
-                        _applyFilters();
-                      },
-                    ),
-                    const SizedBox(height: 6),
-                    FutureBuilder<List<MissionQueueItem>>(
-                      key: ValueKey('queue_$_refreshVersion'),
-                      future: _queueFuture,
-                      builder: (context, snap) {
-                        if (snap.connectionState == ConnectionState.waiting) {
-                          return const SizedBox.shrink();
+                child: FutureBuilder<List<MissionQueueItem>>(
+                  key: ValueKey('queue_$_refreshVersion'),
+                  future: _queueFuture,
+                  builder: (context, snap) {
+                    final waiting =
+                        snap.connectionState == ConnectionState.waiting &&
+                            _baseQueue.isEmpty;
+                    final queue = snap.data ?? const <MissionQueueItem>[];
+
+                    assert(() {
+                      if (waiting || queue.isEmpty) return true;
+                      final codes = queue.map((q) => q.priorityCode);
+                      ConsoleLog.banner(
+                        '[Dashboard UI] ${queue.length} visits (spec §2.8 lazy):',
+                      );
+                      ConsoleLog.banner(
+                        '  spec:     $kPrioritySortSpecLegend',
+                      );
+                      ConsoleLog.banner(
+                        '  chain:    ${prioritySortChain(codes)}',
+                      );
+                      ConsoleLog.banner(
+                        '  compact:  ${prioritySortChainCompact(codes)}',
+                      );
+                      final preview = queue.length > 12 ? 12 : queue.length;
+                      for (var i = 0; i < preview; i++) {
+                        final q = queue[i];
+                        ConsoleLog.banner(
+                          '  ${i + 1}. [${q.priorityCode}] ${q.patientName}'
+                          ' | tier: ${q.tier.name}'
+                          '${q.isPregnant ? " | pregnant" : ""}',
+                        );
+                      }
+                      if (queue.length > preview) {
+                        ConsoleLog.banner(
+                          '  … +${queue.length - preview} more (scroll)',
+                        );
+                      }
+                      return true;
+                    }());
+
+                    // Headers: filter panel, spacer, visits title, spacer.
+                    // Then empty-state OR a reveal-window of queue cards.
+                    const headerCount = 4;
+                    final hasFilters = _selectedNeeds.isNotEmpty ||
+                        _selectedVillageChipName != null ||
+                        _searchQuery.isNotEmpty;
+                    final revealed = queue.isEmpty
+                        ? 0
+                        : (_queueRevealCount < queue.length
+                            ? _queueRevealCount
+                            : queue.length);
+                    final hasMore = revealed < queue.length;
+                    final bodyCount =
+                        waiting || queue.isEmpty ? 1 : revealed;
+                    final itemCount =
+                        headerCount + bodyCount + (hasMore ? 1 : 0);
+
+                    return NotificationListener<ScrollNotification>(
+                      onNotification: (n) {
+                        if (n.metrics.pixels >=
+                            n.metrics.maxScrollExtent - 240) {
+                          _maybeRevealMore(queue.length);
                         }
-                        final queue = snap.data ?? const [];
-                        if (queue.isEmpty) {
-                          final hasFilters = _selectedNeeds.isNotEmpty ||
-                              _selectedProgrammes.isNotEmpty ||
-                              _selectedVillageChipName != null ||
-                              _searchQuery.isNotEmpty;
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _TodaysVisitsHeader(
-                                queueFuture: _queueFuture,
-                                onTap: _navigateToFirstQueueItem,
+                        return false;
+                      },
+                      child: ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(
+                          parent: ClampingScrollPhysics(),
+                        ),
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+                        itemCount: itemCount,
+                        itemBuilder: (context, index) {
+                          if (index == 0) {
+                            return PatientFilterPanel(
+                              villages: _inlineVillages
+                                  .map((name) => (value: name, label: name))
+                                  .toList(),
+                              selectedVillageValue: _selectedVillageChipName,
+                              onVillageSelected: (name) {
+                                debugPrint(
+                                  '[Dashboard filter] village tap → '
+                                  '${name ?? "(all)"}',
+                                );
+                                setState(() {
+                                  _selectedVillageChipName = name;
+                                  _queueRevealCount = _kQueuePageSize;
+                                });
+                                _applyFilters();
+                              },
+                              availableNeeds: _availableNeeds,
+                              selectedNeeds: _selectedNeeds,
+                              onNeedToggled: (need) {
+                                setState(() {
+                                  final updated =
+                                      Set<NeedFilter>.from(_selectedNeeds);
+                                  if (updated.contains(need)) {
+                                    updated.remove(need);
+                                  } else {
+                                    updated.add(need);
+                                  }
+                                  _selectedNeeds = updated;
+                                  _queueRevealCount = _kQueuePageSize;
+                                  debugPrint(
+                                    '[Dashboard filter] need tap → '
+                                    '${need.name} '
+                                    'now=[${updated.map((n) => n.name).join(",")}]',
+                                  );
+                                });
+                                _applyFilters();
+                              },
+                            );
+                          }
+                          if (index == 1) return const SizedBox(height: 6);
+                          if (index == 2) {
+                            return _TodaysVisitsHeader(
+                              visitCount: _todayVisitCount,
+                              loading: _todayCountLoading || waiting,
+                              onTap: _navigateToFirstQueueItem,
+                            );
+                          }
+                          if (index == 3) return const SizedBox(height: 10);
+
+                          if (waiting) {
+                            return const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 32),
+                              child: Center(
+                                child: SizedBox(
+                                  width: 28,
+                                  height: 28,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                  ),
+                                ),
                               ),
-                              const SizedBox(height: 10),
-                              if (hasFilters)
-                                _FilterEmptyCard(
-                                  onClearFilters: () {
-                                    setState(() {
-                                      _selectedNeeds = const {};
-                                      _selectedProgrammes = const {};
-                                      _selectedVillageChipName = null;
-                                      _searchQuery = '';
-                                    });
-                                    _applyFilters();
-                                  },
-                                )
-                              else
-                                _EmptyVisitsCard(),
-                            ],
-                          );
-                        }
-                        // 5-tier model: top 8 cards genuinely *mixed* across
-                        // tiers per spec
-                        // (leapfrog-setup/designs/dashboard-prioritization.md).
-                        // Pure rank-ASC sort lets the top tier hog all 8 slots
-                        // when ≥8 patients exist there, so the SK never sees
-                        // the per-tier CTA variety (Visit today / Plan visit /
-                        // Schedule). Round-robin: guarantee 1 slot per
-                        // non-empty tier in rank order, then top up the
-                        // remainder rank-ASC while capping any single tier at
-                        // [maxPerTier].
-                        const visibleLimit = 8;
-                        const minPerTier = 1;
-                        const maxPerTier = 3;
-
-                        final byTier =
-                            <DashboardTier, List<MissionQueueItem>>{};
-                        for (final item in queue) {
-                          (byTier[item.tier] ??= <MissionQueueItem>[])
-                              .add(item);
-                        }
-
-                        final visible = <MissionQueueItem>[];
-                        final perTierUsed = <DashboardTier, int>{
-                          for (final t in DashboardTier.values) t: 0,
-                        };
-
-                        // Pass 1 — guarantee [minPerTier] per non-empty tier,
-                        // walking tiers in rank order.
-                        for (final t in DashboardTier.values) {
-                          if (t == DashboardTier.upcoming) continue;
-                          final list = byTier[t] ?? const <MissionQueueItem>[];
-                          for (var i = 0;
-                              i < list.length && i < minPerTier;
-                              i++) {
-                            if (visible.length >= visibleLimit) break;
-                            visible.add(list[i]);
-                            perTierUsed[t] = (perTierUsed[t] ?? 0) + 1;
+                            );
                           }
-                          if (visible.length >= visibleLimit) break;
-                        }
 
-                        // Pass 2 — fill remaining slots rank-ASC, capped at
-                        // [maxPerTier] per tier so urgency variety stays
-                        // visible.
-                        for (final t in DashboardTier.values) {
-                          if (t == DashboardTier.upcoming) continue;
-                          final list = byTier[t] ?? const <MissionQueueItem>[];
-                          while (visible.length < visibleLimit &&
-                              (perTierUsed[t] ?? 0) < maxPerTier &&
-                              (perTierUsed[t] ?? 0) < list.length) {
-                            visible.add(list[perTierUsed[t]!]);
-                            perTierUsed[t] = (perTierUsed[t] ?? 0) + 1;
-                          }
-                          if (visible.length >= visibleLimit) break;
-                        }
-
-                        // Restore tier-rank ordering for inline tier-header
-                        // rendering. Within-tier order stays composite-DESC.
-                        visible.sort((a, b) {
-                          final c = a.tier.rank.compareTo(b.tier.rank);
-                          if (c != 0) return c;
-                          return MissionQueueItem.compareInTier(a, b);
-                        });
-
-                        final overflow = queue.length - visible.length;
-                        // Overflow's dominant tier = first remaining item
-                        // (queue is rank-ASC sorted upstream).
-                        DashboardTier? overflowTier;
-                        if (overflow > 0) {
-                          final visibleSet = visible.toSet();
-                          for (final q in queue) {
-                            if (!visibleSet.contains(q)) {
-                              overflowTier = q.tier;
-                              break;
+                          if (queue.isEmpty) {
+                            if (hasFilters) {
+                              return _FilterEmptyCard(
+                                onClearFilters: () {
+                                  setState(() {
+                                    _clearFilters();
+                                  });
+                                  _applyFilters();
+                                },
+                              );
                             }
+                            return _EmptyVisitsCard();
                           }
-                        }
 
-                        final widgets = <Widget>[];
-                        for (final item in visible) {
+                          final queueIndex = index - headerCount;
+                          if (queueIndex >= revealed) {
+                            return const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 16),
+                              child: Center(
+                                child: SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
+
+                          final item = queue[queueIndex];
                           final done = item.patientId != null &&
                               _completedIds.contains(item.patientId);
-                          widgets.add(Padding(
+                          return Padding(
                             padding: const EdgeInsets.only(bottom: 8),
                             child: MissionQueueCard(
                               item: item,
@@ -725,35 +854,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               onTap: () => _startVisitFromQueue(item),
                               onAction: () => _startVisitFromQueue(item),
                             ),
-                          ));
-                        }
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _TodaysVisitsHeader(
-                                queueFuture: _queueFuture,
-                                onTap: _navigateToFirstQueueItem,
-                              ),
-                            const SizedBox(height: 10),
-                            ...widgets,
-                            if (overflow > 0)
-                              _MoreVisitsLink(
-                                count: overflow,
-                                tier: overflowTier,
-                                onTap: () {
-                                  // HouseholdListScreen no longer supports
-                                  // tier filtering (removed for parity with
-                                  // the v13 mockup's single household list),
-                                  // so this always lands on the unfiltered
-                                  // Patients tab now.
-                                  context.go('/patients');
-                                },
-                              ),
-                          ],
-                        );
-                      },
-                    ),
-                  ],
+                          );
+                        },
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
@@ -1362,9 +1467,16 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner>
 }
 
 class _TodaysVisitsHeader extends StatelessWidget {
-  const _TodaysVisitsHeader({this.queueFuture, this.onTap});
+  const _TodaysVisitsHeader({
+    required this.visitCount,
+    required this.loading,
+    this.onTap,
+  });
 
-  final Future<List<MissionQueueItem>>? queueFuture;
+  /// Unfiltered today's actionable visits (upcoming excluded). Independent of
+  /// village / need / search chips so the badge stays honest while filtering.
+  final int visitCount;
+  final bool loading;
   final VoidCallback? onTap;
 
   @override
@@ -1382,98 +1494,30 @@ class _TodaysVisitsHeader extends StatelessWidget {
               style: AppTextStyles.worklistRowLabel,
             ),
           ),
-          if (queueFuture != null)
-            FutureBuilder<List<MissionQueueItem>>(
-              future: queueFuture,
-              builder: (context, snap) {
-                final count = snap.data?.length ?? 0;
-                final loading = snap.connectionState == ConnectionState.waiting;
-                final label = loading
-                    ? MissionDashboardStrings.aiSortedBadge
-                    : '${MissionDashboardStrings.aiSortedBadge} $count visits today';
-                return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: aiTokens.surface,
-                    borderRadius: BorderRadius.circular(AppRadius.rxIcon),
-                  ),
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: aiTokens.primary,
-                    ),
-                  ),
-                );
-              },
-            )
-          else
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: aiTokens.surface,
-                borderRadius: BorderRadius.circular(AppRadius.rxIcon),
-              ),
-              child: Text(
-                MissionDashboardStrings.aiSortedBadge,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: aiTokens.primary,
-                ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: aiTokens.surface,
+              borderRadius: BorderRadius.circular(AppRadius.rxIcon),
+            ),
+            child: Text(
+              loading
+                  ? MissionDashboardStrings.aiSortedBadge
+                  : MissionDashboardStrings.aiSortedVisitsToday(visitCount),
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: aiTokens.primary,
               ),
             ),
+          ),
         ],
       ),
     );
   }
 }
 
-/// Tail link beneath the priority visit list — matches the prototype's
-/// "+ N more visits today" affordance and deep-links into the full worklist
-/// pre-filtered by the dominant overflow tier.
-class _MoreVisitsLink extends StatelessWidget {
-  const _MoreVisitsLink({
-    required this.count,
-    required this.onTap,
-    this.tier,
-  });
-
-  final int count;
-  final DashboardTier? tier;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Semantics(
-        label: 'View $count more visits',
-        button: true,
-        child: InkWell(
-        key: const Key('dashboard_more_visits_tap'),
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(LeapfrogColors.radiusMd),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          alignment: Alignment.center,
-          child: Text(
-            MissionDashboardStrings.moreVisits(count),
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              color: Theme.of(context).extension<LeapfrogColors>()!.brandNavy,
-            ),
-          ),
-        ),
-        ),
-      ),
-    );
-  }
-}
-
+/// Empty card shown when there are no visits for today.
 class _EmptyVisitsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {

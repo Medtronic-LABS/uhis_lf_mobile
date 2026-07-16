@@ -10,6 +10,7 @@ import '../../core/auth/auth_repository.dart';
 import '../../core/config/app_config.dart';
 import '../../core/db/assessment_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
+import '../../core/models/json_read.dart';
 import '../../core/models/provance_dto.dart';
 import '../patient/followup_call_service.dart';
 import 'forms/vitals_trend.dart';
@@ -508,8 +509,8 @@ class AssessmentRepository extends ChangeNotifier {
         }
       }
 
-      // Try ISO date strings under common LMP field names.
-      for (final key in const [
+      // ISO strings or epoch millis (int / numeric string) under common keys.
+      final lmp = JsonRead.firstDateTime(flat, const [
         'lmpDate',
         'lastMenstrualPeriod',
         'lastMenstrualPeriodDate',
@@ -517,17 +518,8 @@ class AssessmentRepository extends ChangeNotifier {
         'lmpValue',
         'menstrualDate',
         'lastPeriodDate',
-      ]) {
-        final v = flat[key];
-        if (v is String && v.isNotEmpty) {
-          final d = DateTime.tryParse(v);
-          if (d != null) return d;
-        }
-        // Some backends send epoch millis.
-        if (v is num && v > 1_000_000_000) {
-          return DateTime.fromMillisecondsSinceEpoch(v.toInt());
-        }
-      }
+      ]);
+      if (lmp != null) return lmp;
 
       // Fallback: derive LMP from gestational weeks.
       for (final key in const [

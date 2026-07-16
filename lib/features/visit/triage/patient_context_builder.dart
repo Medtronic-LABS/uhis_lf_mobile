@@ -7,6 +7,7 @@ import '../../../core/db/patient_dao.dart';
 import '../../../core/db/patient_programmes_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
 import '../../../core/mission/mission_pregnancy_facts.dart';
+import '../../../core/models/json_read.dart';
 import '../../../core/models/programme.dart';
 import '../immunisation/epi_schedule_engine.dart';
 
@@ -348,12 +349,14 @@ class PatientContextBuilder {
       if (json['gestationalWeeks'] != null) {
         return (json['gestationalWeeks'] as num).toInt();
       }
-      // Calculate from LMP if available
-      if (json['lmpDate'] != null) {
-        final lmp = DateTime.tryParse(json['lmpDate'] as String);
-        if (lmp != null) {
-          return DateTime.now().difference(lmp).inDays ~/ 7;
-        }
+      // Calculate from LMP if available (ISO string or epoch ms).
+      final lmp = JsonRead.firstDateTime(json, const [
+        'lmpDate',
+        'lastMenstrualPeriod',
+        'lmp',
+      ]);
+      if (lmp != null) {
+        return DateTime.now().difference(lmp).inDays ~/ 7;
       }
     } catch (_) {}
     return null;

@@ -21,6 +21,7 @@ import '../briefing/briefing_models.dart';
 import '../briefing/visit_briefing_repository.dart';
 import '../pathway/pathway_engine.dart';
 import 'patient_context_builder.dart';
+import 'programme_grid_sync.dart';
 import 'visit_step_header.dart';
 import 'triage_view_model.dart';
 
@@ -109,6 +110,11 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   /// engine — rendered with the ✦ sparkle in the card.
   final Set<Programme> _pathwayActivatedProgrammes = {};
 
+  /// Programmes the SK explicitly turned off this visit. Pathway sync must
+  /// not resurrect these — otherwise deselecting NCD (etc.) is immediately
+  /// undone when symptoms/AI refresh pathway activation.
+  final Set<Programme> _skDismissedProgrammes = {};
+
   /// PW meta-flag — gates ANC. Auto-true when patient is known pregnant.
   bool _isPW = false;
 
@@ -195,6 +201,14 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       debugPrint('[SymptomPicker] Success! Setting up view model...');
       final vm = TriageViewModel(patientContext: ctx);
       final pathwaySet = vm.activatedPathways.map((p) => p.programme).toSet();
+      final isPw =
+          ctx.isPregnant || ctx.activeProgrammes.contains(Programme.anc);
+      final isDelivery = ctx.isPostpartum;
+      final enrolledSeed = ProgrammeGridSync.applicableEnrolledSeed(
+        enrolled: ctx.activeProgrammes.toSet(),
+        isPregnant: ctx.isPregnant,
+        isPostpartum: ctx.isPostpartum,
+      );
       vm.addListener(_syncPathwaysToServiceGrid);
       setState(() {
         _patientContext = ctx;
@@ -202,17 +216,21 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         _selectedProgrammes
           ..clear()
           ..addAll(pathwaySet)
-          // Enrolled programmes are always included in the visit regardless
-          // of pathway activation — seed them at load so the grid reflects it.
-          ..addAll(ctx.activeProgrammes);
+          // Only seed enrolled programmes that apply to *this* visit state
+          // (e.g. skip enrolled PNC while still pregnant). SK can still add
+          // or remove cards after load.
+          ..addAll(enrolledSeed);
         _pathwayActivatedProgrammes
           ..clear()
           ..addAll(pathwaySet);
-        _isPW = ctx.isPregnant || ctx.activeProgrammes.contains(Programme.anc);
-        _isDelivery = ctx.isPostpartum;
+        _isPW = isPw;
+        _isDelivery = isDelivery;
         _isLoading = false;
       });
-      debugPrint('[SymptomPicker] Load complete — pathway programmes: ${pathwaySet.map((p) => p.name).join(', ')}');
+      debugPrint(
+          '[SymptomPicker] Load complete — pathway programmes: ${pathwaySet.map((p) => p.name).join(', ')} '
+          'enrolledSeed: ${enrolledSeed.map((p) => p.name).join(', ')} '
+          'selected: ${_selectedProgrammes.map((p) => p.name).join(', ')}');
       _fireProgrammesLive();
       _startBriefingFetch(ctx);
     } catch (e, stack) {
@@ -337,14 +355,19 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
 
   /// Keeps [_selectedProgrammes] and [_pathwayActivatedProgrammes] in sync
   /// with the pathway engine whenever symptoms change (AI Scribe pre-tick or
-  /// manual selection). Only ever adds — never removes a programme the SK
-  /// manually deselected.
+  /// manual selection). Only adds newly activated programmes — never removes
+  /// an SK selection, and never resurrects a programme in
+  /// [_skDismissedProgrammes].
   void _syncPathwaysToServiceGrid() {
     if (!mounted) return;
     final vm = _viewModel;
     if (vm == null) return;
     final activated = vm.allPathways.map((p) => p.programme).toSet();
-    final unseen = activated.difference(_selectedProgrammes);
+    final unseen = ProgrammeGridSync.additionsFromPathways(
+      activated: activated,
+      selected: _selectedProgrammes,
+      dismissedBySk: _skDismissedProgrammes,
+    );
     if (unseen.isNotEmpty) {
       setState(() {
         _selectedProgrammes.addAll(unseen);
@@ -401,7 +424,9 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     if (vm == null || _patientContext == null) return;
 
     debugPrint(
-      '[SymptomPicker] Continue tapped — ${vm.activatedPathways.length} pathways: ${vm.activatedPathways.map((p) => p.programme.name).join(', ')}',
+      '[SymptomPicker] Continue tapped — ${vm.activatedPathways.length} pathways: '
+      '${vm.activatedPathways.map((p) => p.programme.name).join(', ')} | '
+      'selected programmes: ${_selectedProgrammes.map((p) => p.name).join(', ')}',
     );
 
     // Guard: only block when there is truly no programme context —
@@ -729,8 +754,10 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                           setState(() {
                             if (selected) {
                               _selectedProgrammes.add(programme);
+                              _skDismissedProgrammes.remove(programme);
                             } else {
                               _selectedProgrammes.remove(programme);
+                              _skDismissedProgrammes.add(programme);
                             }
                           });
                           _fireProgrammesLive();
@@ -738,14 +765,40 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                         onPWToggle: (selected) {
                           setState(() {
                             _isPW = selected;
-                            if (!selected) _selectedProgrammes.remove(Programme.anc);
+                            if (!selected) {
+                              _selectedProgrammes.remove(Programme.anc);
+                              _selectedProgrammes.remove(Programme.pw);
+                              _skDismissedProgrammes.add(Programme.anc);
+                              _skDismissedProgrammes.add(Programme.pw);
+                            } else {
+                              _skDismissedProgrammes.remove(Programme.anc);
+                              _skDismissedProgrammes.remove(Programme.pw);
+                              _selectedProgrammes.add(Programme.pw);
+                              // Turning PW on surfaces enrolled/pathway ANC.
+                              if (_patientContext!.activeProgrammes
+                                      .contains(Programme.anc) ||
+                                  _pathwayActivatedProgrammes
+                                      .contains(Programme.anc)) {
+                                _selectedProgrammes.add(Programme.anc);
+                              }
+                            }
                           });
                           _fireProgrammesLive();
                         },
                         onDeliveryToggle: (selected) {
                           setState(() {
                             _isDelivery = selected;
-                            if (!selected) _selectedProgrammes.remove(Programme.pnc);
+                            if (!selected) {
+                              _selectedProgrammes.remove(Programme.pnc);
+                              _skDismissedProgrammes.add(Programme.pnc);
+                            } else {
+                              _skDismissedProgrammes.remove(Programme.pnc);
+                              // Delivery unlocks PNC — include enrolled PNC.
+                              if (_patientContext!.activeProgrammes
+                                  .contains(Programme.pnc)) {
+                                _selectedProgrammes.add(Programme.pnc);
+                              }
+                            }
                           });
                           _fireProgrammesLive();
                         },
@@ -1850,7 +1903,7 @@ class _InlineServiceSelector extends StatelessWidget {
   final Set<Programme> pathwayProgrammes;
 
   /// Programmes the patient is already enrolled in from past visits.
-  /// These cards are shown in a distinct "enrolled" style and are not toggleable.
+  /// Cards show an "Enrolled" badge; they remain selectable for this visit.
   final Set<Programme> enrolledProgrammes;
 
   final bool isPW;
@@ -1893,25 +1946,14 @@ class _InlineServiceSelector extends StatelessWidget {
   }
 
   void _handleTap(BuildContext context, _ServiceCardDef card) {
-    // Enrolled cards are not toggleable — they are always part of this visit.
-    final isPwEnrolled =
-        card.isPW && enrolledProgrammes.contains(Programme.anc);
-    final isProgrammeEnrolled =
-        card.programme != null && enrolledProgrammes.contains(card.programme);
-    if (isPwEnrolled || isProgrammeEnrolled) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(
-          content: Text('Already enrolled in ${card.label} — included in this visit'),
-          duration: const Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-        ));
-      return;
-    }
-    if (_isLocked(card)) {
+    // Lock only blocks *adding* when the PW/Delivery gate is closed.
+    // Already-selected cards can always be deselected (e.g. enrolled PNC that
+    // was seeded incorrectly, or pathway ANC the SK does not want this visit).
+    final alreadySelected = _isCardSelected(card);
+    if (_isLocked(card) && !alreadySelected) {
       final hint = card.programme == Programme.anc
-          ? 'Select "PW" first to unlock ANC'
-          : 'Select "Delivery" first to unlock PNC';
+          ? TriageStrings.pwHint
+          : TriageStrings.deliveryHint;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(
@@ -1944,7 +1986,7 @@ class _InlineServiceSelector extends StatelessWidget {
         Row(
           children: [
             const Text(
-              '✦ Eligible services',
+              TriageStrings.eligibleServicesHeader,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
@@ -1959,7 +2001,7 @@ class _InlineServiceSelector extends StatelessWidget {
                 borderRadius: BorderRadius.circular(20),
               ),
               child: const Text(
-                'Age & gender based',
+                TriageStrings.eligibleServicesTag,
                 style: TextStyle(
                   fontSize: 9.5,
                   fontWeight: FontWeight.w700,
@@ -2013,45 +2055,34 @@ class _ServiceTile extends StatelessWidget {
   final bool isLocked;
 
   /// Patient is already enrolled in this programme from past visits.
-  /// Card renders in a distinct "enrolled" style and tapping shows a hint.
+  /// Shows an "Enrolled" badge; the card remains selectable for this visit.
   final bool isEnrolled;
 
   final bool isPathwaySuggested;
   final VoidCallback onTap;
 
-  static const _enrolledBg = Color(0xFFF3F4F6);
-  static const _enrolledBorder = Color(0xFFD1D5DB);
-  static const _enrolledText = Color(0xFF6B7280);
   static const _enrolledBadgeBg = Color(0xFFE5E7EB);
+  static const _enrolledBadgeText = Color(0xFF6B7280);
 
   @override
   Widget build(BuildContext context) {
-    final Color bg;
-    final Color borderColor;
-    final double borderWidth;
-    final Color labelColor;
-
-    if (isEnrolled) {
-      bg = _enrolledBg;
-      borderColor = _enrolledBorder;
-      borderWidth = 1.5;
-      labelColor = _enrolledText;
-    } else {
-      bg = Colors.white;
-      borderColor = isSelected ? AppColors.navy : const Color(0xFFE5E7EB);
-      borderWidth = isSelected ? 1.5 : 1;
-      labelColor = isLocked
-          ? AppColors.navy.withValues(alpha: 0.55)
-          : AppColors.navy;
-    }
+    final Color bg = Colors.white;
+    final Color borderColor =
+        isSelected ? AppColors.navy : const Color(0xFFE5E7EB);
+    final double borderWidth = isSelected ? 1.5 : 1;
+    final Color labelColor = isLocked
+        ? AppColors.navy.withValues(alpha: 0.55)
+        : AppColors.navy;
 
     return Semantics(
       button: true,
       selected: isSelected,
-      enabled: !isLocked && !isEnrolled,
+      enabled: !isLocked,
       label: isEnrolled
-          ? 'Already enrolled ${def.label}'
-          : '${isSelected ? 'Deselect' : 'Select'} ${def.label}',
+          ? TriageStrings.enrolledProgrammeA11y(def.label)
+          : (isSelected
+              ? TriageStrings.deselectProgrammeA11y(def.label)
+              : TriageStrings.selectProgrammeA11y(def.label)),
       child: GestureDetector(
         onTap: onTap,
         child: Opacity(
@@ -2073,7 +2104,7 @@ class _ServiceTile extends StatelessWidget {
             child: Stack(
               children: [
                 // ✦ sparkle — pathway-engine suggested
-                if (isPathwaySuggested && isSelected && !isEnrolled)
+                if (isPathwaySuggested && isSelected)
                   Positioned(
                     top: 5,
                     left: 6,
@@ -2085,7 +2116,7 @@ class _ServiceTile extends StatelessWidget {
                       ),
                     ),
                   ),
-                // Checkmark / enrolled indicator circle
+                // Checkmark — follows visit selection, not enrolment alone
                 Positioned(
                   top: 5,
                   right: 6,
@@ -2095,27 +2126,19 @@ class _ServiceTile extends StatelessWidget {
                     height: 16,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: isEnrolled
-                          ? _enrolledBorder
-                          : isSelected
-                          ? AppColors.navy
-                          : Colors.transparent,
+                      color: isSelected ? AppColors.navy : Colors.transparent,
                       border: Border.all(
-                        color: isEnrolled
-                            ? _enrolledBorder
-                            : isSelected
+                        color: isSelected
                             ? AppColors.navy
                             : const Color(0xFFD1D5DB),
                         width: 1.5,
                       ),
                     ),
-                    child: (isSelected || isEnrolled)
-                        ? Icon(
+                    child: isSelected
+                        ? const Icon(
                             Icons.check_rounded,
                             size: 10,
-                            color: isEnrolled
-                                ? _enrolledText
-                                : Colors.white,
+                            color: Colors.white,
                           )
                         : null,
                   ),
@@ -2145,11 +2168,11 @@ class _ServiceTile extends StatelessWidget {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: const Text(
-                            'Enrolled',
+                            TriageStrings.enrolledBadge,
                             style: TextStyle(
                               fontSize: 8,
                               fontWeight: FontWeight.w700,
-                              color: _enrolledText,
+                              color: _enrolledBadgeText,
                             ),
                           ),
                         ),

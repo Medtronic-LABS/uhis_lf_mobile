@@ -108,9 +108,8 @@ class MissionDashboardRepository {
   }
 
   /// Load the prioritized mission queue using the 5-tier model.
-  /// Returns items tagged with [DashboardTier], sorted by tier then
-  /// composite score. Phase 3 dashboard consumes this; Phase 4
-  /// wires the `+ N more` deep-link onto `/patients?tier=...`.
+  /// Returns items tagged with [DashboardTier], sorted by band+modifier
+  /// (§2.8: `1a → … → 4`). Phase 3 dashboard consumes this.
   Future<List<MissionQueueItem>> loadQueue({int? limit}) async {
     final input = await _loadInputData();
     final tiered = _service.computeTieredQueue(input);
