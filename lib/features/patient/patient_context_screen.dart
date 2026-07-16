@@ -785,8 +785,12 @@ class _PatientContextScreenState
                 AppSpacing.stickyBarClearance,
               ),
               children: [
+                // ── Profile ──────────────────────────────────────────────
+                _SectionLabel(PatientContextStrings.sectionGroupProfile),
                 _PatientProfileCard(data: data),
-                const SizedBox(height: 10),
+
+                // ── Clinical ─────────────────────────────────────────────
+                _SectionLabel(PatientContextStrings.sectionGroupClinical),
                 _AssessmentsSection(
                   assessments: data.assessments,
                   isLoading: remoteLoading,
@@ -796,12 +800,16 @@ class _PatientContextScreenState
                   patientId: data.patientId ?? widget.patientId,
                   memberReference: data.memberReference,
                 ),
-                const SizedBox(height: 10),
+
+                // ── Care Plan ────────────────────────────────────────────
+                _SectionLabel(PatientContextStrings.sectionGroupCarePlan),
                 OpenFollowupsSection(
                   patientId: widget.patientId,
                   memberReference: data.memberReference,
                 ),
-                const SizedBox(height: 10),
+
+                // ── Actions ──────────────────────────────────────────────
+                const SizedBox(height: 20),
                 PatientActionsRow(
                   patientId: widget.patientId,
                   patientName: data.name,
@@ -824,6 +832,34 @@ class _PatientContextScreenState
   }
 }
 
+
+/// Thin divider with a label used to separate content groups on the patient screen.
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.label);
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 20, bottom: 8),
+      child: Row(
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textMuted,
+              letterSpacing: 1.1,
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Expanded(child: Divider(thickness: 1, height: 1)),
+        ],
+      ),
+    );
+  }
+}
 
 /// Section showing assessment history.
 class _AssessmentsSection extends StatelessWidget {
@@ -1072,6 +1108,10 @@ class _AssessmentTile extends StatelessWidget {
   final DateFormat dateFormat;
 
   void _showAssessmentDetail(BuildContext context) {
+    ConsoleLog.banner('[AssessmentDetail] open id=${assessment.id}'
+        ' type=${assessment.type} date=${assessment.date}'
+        ' rawKeys=${assessment.rawJson.keys.toList()}'
+        ' rawJson=${assessment.rawJson}');
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1381,6 +1421,9 @@ class _AssessmentDetailSheet extends StatelessWidget {
                     const SizedBox(height: 24),
                     // Assessment type specific info
                     _buildTypeSpecificInfo(context, typeColor),
+                    const SizedBox(height: 16),
+                    // Raw stored fields — shows everything not already rendered above
+                    _buildRawFieldsDump(typeColor),
                     const SizedBox(height: 32),
                   ],
                 ),
@@ -1607,6 +1650,61 @@ class _AssessmentDetailSheet extends StatelessWidget {
   }
 }
 
+  /// Shows any rawJson fields not already rendered in the structured sections.
+  /// Skips nulls, empty strings, known-rendered keys, and deeply-nested objects.
+  Widget _buildRawFieldsDump(Color typeColor) {
+    // Keys already shown in structured sections — skip to avoid duplication.
+    const _knownKeys = {
+      'encounterId', 'id', 'serviceProvided', 'assessmentName', 'type',
+      'visitDate', 'createdAt', 'startTime', 'date', 'visitNumber',
+      'referralStatus', 'referralReason', 'nextFollowUpDate',
+      'householdMemberId', 'memberId', 'latestVisit', 'customStatus',
+      'assessmentDetails', 'observations',
+    };
+    final entries = assessment.rawJson.entries
+        .where((e) =>
+            !_knownKeys.contains(e.key) &&
+            e.value != null &&
+            e.value.toString().isNotEmpty &&
+            e.value.toString() != 'null' &&
+            e.value is! Map &&
+            e.value is! List)
+        .toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+
+    if (entries.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.canvas,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            PatientContextStrings.storedDataTitle,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...entries.map(
+            (e) => _DetailRow(
+              label: e.key,
+              value: e.value.toString(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ClinicalField {
   const _ClinicalField(this.label, this.value, {this.icon, this.urgent = false});
   final String label;
@@ -1710,7 +1808,6 @@ class _PatientProfileCard extends StatefulWidget {
 }
 
 class _PatientProfileCardState extends State<_PatientProfileCard> {
-  bool _expanded = false;
 
   Future<void> _openContact() async {
     if (!mounted) return;
@@ -1819,27 +1916,6 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
 
     String? boolLabel(bool v) => v ? PatientProfileStrings.yes : null;
 
-    final collapsed = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (d.nationalId != null)
-          buildRow(PatientProfileStrings.labelNid, d.nationalId,
-              icon: Icons.badge_outlined,
-              onTap: () => setState(() => _expanded = true)),
-        if (d.dateOfBirth != null)
-          buildRow(PatientProfileStrings.labelDob, _formatDob(d.dateOfBirth),
-              icon: Icons.cake_outlined),
-        if (d.phoneNumber != null)
-          buildRow(PatientProfileStrings.labelPhone, d.phoneNumber,
-              icon: Icons.phone_outlined,
-              onTap: _openContact),
-        if (d.villageName != null)
-          buildRow(PatientProfileStrings.labelVillage, d.villageName,
-              icon: Icons.location_on_outlined,
-              onTap: () => _openMaps(d.villageName!)),
-      ],
-    );
-
     final full = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1898,37 +1974,7 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  const Icon(Icons.person_pin_outlined, color: AppColors.navy, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    PatientProfileStrings.profileTitle,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const Spacer(),
-                  TextButton(
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(0, 32),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    onPressed: () => setState(() => _expanded = !_expanded),
-                    child: Text(
-                      _expanded
-                          ? PatientProfileStrings.hide
-                          : PatientProfileStrings.showMore,
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              _expanded ? full : collapsed,
+              full,
             ],
           ),
         ),

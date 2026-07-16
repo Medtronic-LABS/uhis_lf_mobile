@@ -773,6 +773,17 @@ abstract final class PatientContextStrings {
   static String get allAssessmentsTitle =>
       AppLocale.isBangla ? 'সব মূল্যায়ন' : 'All assessments';
 
+  static String get storedDataTitle =>
+      AppLocale.isBangla ? 'সংরক্ষিত তথ্য' : 'Stored data';
+
+  // ── Section group labels ──────────────────────────────────────────────
+  static String get sectionGroupProfile =>
+      AppLocale.isBangla ? 'প্রোফাইল' : 'Profile';
+  static String get sectionGroupClinical =>
+      AppLocale.isBangla ? 'ক্লিনিক্যাল' : 'Clinical';
+  static String get sectionGroupCarePlan =>
+      AppLocale.isBangla ? 'কেয়ার প্ল্যান' : 'Care Plan';
+
   // ── Header ────────────────────────────────────────────────────────────
   static String get urgentBadge => AppLocale.isBangla ? 'জরুরি' : 'URGENT';
   static String ageLabel(int age) =>
