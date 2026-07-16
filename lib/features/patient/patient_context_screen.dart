@@ -18,6 +18,7 @@ import '../../core/db/encounter_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/household_dao.dart';
 import '../../core/db/member_dao.dart' show MemberDao, HouseholdMemberEntity;
+import '../../core/sync/offline_sync_service.dart';
 import '../../core/models/programme.dart';
 import '../../core/models/risk.dart';
 import 'member_detail_repository.dart';
@@ -344,20 +345,26 @@ class _PatientContextScreenState
     // use_build_context_synchronously linter warnings.
     final memberRepo = context.read<MemberDetailRepository>();
     final patientRepo = context.read<PatientRepository>();
+    final syncSvc = context.read<OfflineSyncService>();
 
     // Phase 1: all local reads in parallel — returns instantly from SQLite.
-    // _resolveEncounterMemberId, patientRepo.byId, and _localAssessmentsFor are
-    // all independent; running them concurrently cuts wait to max(calls) not sum.
     final phase1 = await Future.wait([
       _resolveEncounterMemberId(),
       patientRepo.byId(widget.patientId),
       _localAssessmentsFor(widget.patientId),
+      syncSvc.lastSyncedAt(),
     ]);
     final resolvedMemberId = phase1[0] as String?;
     final localPatient = phase1[1] as PatientWithProgrammes?;
     final localAssessments = phase1[2] as List<MemberAssessment>;
+    final lastSync = phase1[3] as DateTime?;
+    final syncAge = lastSync != null ? DateTime.now().difference(lastSync) : null;
+    // Skip remote assessment fetch when a full sync completed within the last
+    // 30 minutes — the local DB already has everything the server would return.
+    final skipRemote = syncAge != null && syncAge.inMinutes < 30;
     ConsoleLog.banner('[PatientCtx] phase1 local=${t0.elapsedMilliseconds}ms'
-        ' localPatient=${localPatient != null} localAssessments=${localAssessments.length}');
+        ' localPatient=${localPatient != null} localAssessments=${localAssessments.length}'
+        ' syncAge=${syncAge?.inMinutes ?? '?'}min skipRemote=$skipRemote');
 
     if (localPatient != null) {
       // ignore: avoid_print
@@ -422,10 +429,20 @@ class _PatientContextScreenState
       ConsoleLog.banner('[PatientCtx] rendered local at ${t0.elapsedMilliseconds}ms'
           ' — ${localAssessments.length} local assessments');
 
-      // Phase 2: remote assessments + householdName in parallel (background).
-      // getRecentVisits() removed — recentVisits field has no render consumers.
-      ConsoleLog.banner('[PatientCtx] phase2 start — remote assessments + householdName');
+      // Phase 2: householdName (always local) + remote assessments (skipped
+      // when sync is fresh — avoids a ~900ms round-trip for data already in DB).
       final tPhase2 = Stopwatch()..start();
+      List<MemberAssessment> remoteAssessments = const [];
+      if (skipRemote) {
+        ConsoleLog.banner('[PatientCtx] phase2 skip remote (sync ${syncAge!.inMinutes}min ago) — householdName only');
+        final householdName = await _householdName(localPatient.patient.householdId);
+        if (mounted) setState(() => _remoteLoading = false);
+        ConsoleLog.banner('[PatientCtx] phase2 done=${tPhase2.elapsedMilliseconds}ms'
+            ' remoteSkipped=true total=${t0.elapsedMilliseconds}ms');
+        return localOnly.copyWith(householdName: householdName);
+      }
+
+      ConsoleLog.banner('[PatientCtx] phase2 start — remote assessments + householdName');
       final phase2 = await Future.wait([
         memberRepo
             .getMemberAssessments(
@@ -437,7 +454,7 @@ class _PatientContextScreenState
             .catchError((_) => <MemberAssessment>[]),
         _householdName(localPatient.patient.householdId),
       ]);
-      final remoteAssessments = phase2[0] as List<MemberAssessment>;
+      remoteAssessments = phase2[0] as List<MemberAssessment>;
       final householdName = phase2[1] as String?;
       ConsoleLog.banner('[PatientCtx] phase2 done=${tPhase2.elapsedMilliseconds}ms'
           ' remoteAssessments=${remoteAssessments.length}'
