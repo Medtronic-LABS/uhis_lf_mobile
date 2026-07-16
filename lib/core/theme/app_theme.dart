@@ -119,6 +119,14 @@ abstract final class AppColors {
   static const Color pncText      = Color(0xFF4C1D95);
   static const Color pncBorder    = Color(0xFFC4B5FD);
   static const Color pncSurface   = Color(0xFFF5F3FF);
+  // Care-thread supplement (reuse existing where hex matches)
+  // threadGrowthText  → aiPurpleDark (0xFF3D3599)
+  // threadImmText     → tbText       (0xFF065F46)
+  // threadSugarBg     → statusInfoSurface (0xFFE0F2FE)
+  // threadGeneralText → textMid      (0xFF4B5563)
+  static const Color threadInfoText   = Color(0xFF075985); // info-blue text (sugar/newborn)
+  static const Color threadGeneralBg  = Color(0xFFF3F4F6); // neutral grey bg (general enrolment)
+  static const Color threadImmBg      = Color(0xFFECFDF5); // immunization surface (≠ tbSurface)
 
   // dark-mode programme
   static const Color ancTextDark  = Color(0xFFF9A8D4);
