@@ -247,9 +247,13 @@ class _PatientContextScreenState
         final date = row.occurredAt == null
             ? DateTime.now()
             : DateTime.fromMillisecondsSinceEpoch(row.occurredAt!);
+        final prog = Programme.fromString(row.kind ?? '');
+        final typeLabel = prog == Programme.unknown
+            ? (row.kind ?? PatientContextStrings.genericAssessmentLabel).toUpperCase()
+            : prog.wireTag;
         out.add(MemberAssessment(
           id: row.id,
-          type: (row.kind ?? PatientContextStrings.genericAssessmentLabel).toUpperCase(),
+          type: typeLabel,
           date: date,
           rawJson: <String, dynamic>{'kind': row.kind, 'raw': row.rawJson},
         ));
@@ -1231,10 +1235,22 @@ class _AssessmentDetailSheet extends StatelessWidget {
   final MemberAssessment assessment;
   final DateFormat dateFormat;
 
+  /// Unpacks the nested `raw` JSON string if the DB stored {kind, raw: "...JSON..."}.
+  Map<String, dynamic> _effectiveRaw() {
+    final outer = assessment.rawJson;
+    final rawStr = outer['raw'];
+    if (rawStr is String && rawStr.isNotEmpty) {
+      try {
+        return Map<String, dynamic>.from(jsonDecode(rawStr) as Map);
+      } catch (_) {}
+    }
+    return outer;
+  }
+
   @override
   Widget build(BuildContext context) {
     final progColors = Theme.of(context).extension<ProgrammeColors>()!;
-    final raw = assessment.rawJson;
+    final raw = _effectiveRaw();
 
     Color typeColor;
     IconData typeIcon;
@@ -1436,7 +1452,7 @@ class _AssessmentDetailSheet extends StatelessWidget {
   }
 
   Widget _buildTypeSpecificInfo(BuildContext context, Color typeColor) {
-    final raw = assessment.rawJson;
+    final raw = _effectiveRaw();
     // assessmentDetails is the nested clinical object from member-assessment-history
     final details = raw['assessmentDetails'] is Map
         ? Map<String, dynamic>.from(raw['assessmentDetails'] as Map)
@@ -1654,13 +1670,14 @@ class _AssessmentDetailSheet extends StatelessWidget {
   Widget _buildRawFieldsDump(Color typeColor) {
     // Keys already shown in structured sections — skip to avoid duplication.
     const _knownKeys = {
+      'kind', 'raw',
       'encounterId', 'id', 'serviceProvided', 'assessmentName', 'type',
       'visitDate', 'createdAt', 'startTime', 'date', 'visitNumber',
       'referralStatus', 'referralReason', 'nextFollowUpDate',
       'householdMemberId', 'memberId', 'latestVisit', 'customStatus',
       'assessmentDetails', 'observations',
     };
-    final entries = assessment.rawJson.entries
+    final entries = _effectiveRaw().entries
         .where((e) =>
             !_knownKeys.contains(e.key) &&
             e.value != null &&
