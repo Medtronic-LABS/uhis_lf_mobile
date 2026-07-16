@@ -96,6 +96,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
     super.dispose();
   }
 
+
   void _loadData() {
     final householdDao = context.read<HouseholdDao>();
     final memberDao = context.read<MemberDao>();
@@ -355,6 +356,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
     );
   }
 
+
   /// Households matching the selected village tab (search is applied
   /// per-item in [_buildHouseholdsList] since it also needs the member list).
   List<_HouseholdItem> _filterByVillage(List<_HouseholdItem> items) {
@@ -448,8 +450,9 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
                 Expanded(
                   child: TextField(
                     controller: _searchController,
-                    onChanged: (v) =>
-                        setState(() => _searchQuery = v.trim().toLowerCase()),
+                    onChanged: (v) {
+                      setState(() => _searchQuery = v.trim().toLowerCase());
+                    },
                     style: const TextStyle(
                       fontFamily: 'NunitoSans',
                       fontSize: 14,
@@ -484,7 +487,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
                   GestureDetector(
                     onTap: () {
                       _searchController.clear();
-                      setState(() => _searchQuery = '');
+                      setState(() { _searchQuery = ''; });
                     },
                     child: const Icon(
                       Icons.clear,
@@ -589,6 +592,12 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
         final primary = _primaryMember(item);
         final others = item.members.where((m) => m != primary).toList();
         final id = item.id ?? '';
+        final q = _searchQuery;
+        final highlightPrimary = q.isNotEmpty &&
+            (primary.name?.toLowerCase().contains(q) ?? false);
+        debugPrint(
+          '[HouseholdList] card ${item.householdNo}: primary=${primary.name} highlightPrimary=$highlightPrimary query="$q"',
+        );
         return _HouseholdCard(
           item: item,
           villageDisplayName: _villageDisplayName(item.village),
@@ -596,6 +605,8 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
             context,
             _MemberInfo.fromMember(primary, item),
           ),
+          highlightPrimary: highlightPrimary,
+          searchQuery: q,
           primaryRelation: _displayRelation(primary.relation),
           otherMembers: others,
           isExpanded: _expandedHouseholdIds.contains(id),
@@ -763,6 +774,8 @@ class _HouseholdCard extends StatelessWidget {
     required this.item,
     required this.villageDisplayName,
     required this.primaryMemberRow,
+    this.highlightPrimary = false,
+    this.searchQuery = '',
     this.primaryRelation,
     required this.otherMembers,
     required this.isExpanded,
@@ -774,6 +787,13 @@ class _HouseholdCard extends StatelessWidget {
   final _HouseholdItem item;
   final String? villageDisplayName;
   final Widget primaryMemberRow;
+
+  /// Whether the primary member row should be highlighted (name matches query).
+  final bool highlightPrimary;
+
+  /// Active search query — used to highlight matching other members and
+  /// auto-expand the panel when a non-primary member matches.
+  final String searchQuery;
 
   /// The primary member's relation to the household head (e.g. "Husband"),
   /// or null when not shown (blank, or the member IS the head/self).
@@ -904,58 +924,74 @@ class _HouseholdCard extends StatelessWidget {
             ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14),
-            child: primaryMemberRow,
+            child: highlightPrimary
+                ? _SearchMatchHighlight(child: primaryMemberRow)
+                : primaryMemberRow,
           ),
           if (otherMembers.isNotEmpty) ...[
-            InkWell(
-              onTap: onToggleExpanded,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      HouseholdListStrings.otherMembersToggle(
-                        otherMembers.length,
-                      ),
-                      style: const TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.aiPurple,
+            Builder(builder: (context) {
+              final anyOtherMatches = searchQuery.isNotEmpty &&
+                  otherMembers.any(
+                    (m) => m.name?.toLowerCase().contains(searchQuery) ?? false,
+                  );
+              final showExpanded = isExpanded || anyOtherMatches;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  InkWell(
+                    onTap: onToggleExpanded,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            HouseholdListStrings.otherMembersToggle(
+                              otherMembers.length,
+                            ),
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.aiPurple,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          AnimatedRotation(
+                            turns: showExpanded ? 0.5 : 0,
+                            duration: const Duration(milliseconds: 200),
+                            child: MockupIcons.chevronDown(),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 5),
-                    AnimatedRotation(
-                      turns: isExpanded ? 0.5 : 0,
-                      duration: const Duration(milliseconds: 200),
-                      child: MockupIcons.chevronDown(),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            AnimatedCrossFade(
-              firstChild: const SizedBox(width: double.infinity),
-              secondChild: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Divider(height: 1, color: AppColors.progressTrack),
-                    for (final other in otherMembers)
-                      _OtherMemberRow(
-                        member: other,
-                        onTap: () => onMemberTap(other),
+                  ),
+                  AnimatedCrossFade(
+                    firstChild: const SizedBox(width: double.infinity),
+                    secondChild: Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Divider(height: 1, color: AppColors.progressTrack),
+                          for (final other in otherMembers)
+                            _OtherMemberRow(
+                              member: other,
+                              isHighlighted: searchQuery.isNotEmpty &&
+                                  (other.name?.toLowerCase().contains(searchQuery) ?? false),
+                              onTap: () => onMemberTap(other),
+                            ),
+                        ],
                       ),
-                  ],
-                ),
-              ),
-              crossFadeState: isExpanded
-                  ? CrossFadeState.showSecond
-                  : CrossFadeState.showFirst,
-              duration: const Duration(milliseconds: 200),
-              sizeCurve: Curves.easeOut,
-            ),
+                    ),
+                    crossFadeState: showExpanded
+                        ? CrossFadeState.showSecond
+                        : CrossFadeState.showFirst,
+                    duration: const Duration(milliseconds: 200),
+                    sizeCurve: Curves.easeOut,
+                  ),
+                ],
+              );
+            }),
           ],
         ],
       ),
@@ -970,10 +1006,15 @@ class _HouseholdCard extends StatelessWidget {
 /// opens it — real capability shouldn't regress just because the mockup
 /// couldn't demonstrate it.
 class _OtherMemberRow extends StatelessWidget {
-  const _OtherMemberRow({required this.member, required this.onTap});
+  const _OtherMemberRow({
+    required this.member,
+    required this.onTap,
+    this.isHighlighted = false,
+  });
 
   final _HouseholdMember member;
   final VoidCallback onTap;
+  final bool isHighlighted;
 
   @override
   Widget build(BuildContext context) {
@@ -987,8 +1028,9 @@ class _OtherMemberRow extends StatelessWidget {
       if (ageGender.isNotEmpty) ageGender,
     ].whereType<String>().join(' · ');
 
-    return InkWell(
+    final row = InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(
@@ -996,14 +1038,14 @@ class _OtherMemberRow extends StatelessWidget {
             Container(
               width: 32,
               height: 32,
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: AppColors.progressTrack,
                 shape: BoxShape.circle,
               ),
               alignment: Alignment.center,
               child: Text(
                 memberInitials(member.name),
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: 'Nunito',
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
@@ -1018,9 +1060,9 @@ class _OtherMemberRow extends StatelessWidget {
                 children: [
                   Text(
                     member.name ?? HouseholdListStrings.unnamedMember,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: isHighlighted ? FontWeight.w800 : FontWeight.w700,
                       color: AppColors.textPrimary,
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -1056,6 +1098,7 @@ class _OtherMemberRow extends StatelessWidget {
         ),
       ),
     );
+    return isHighlighted ? _SearchMatchHighlight(child: row) : row;
   }
 
   static int? _ageFromDob(String? dob) {
@@ -1429,6 +1472,24 @@ class _MemberInfo {
       programmes: member.programmes,
       ancVisitCount: member.ancVisitCount,
       pncVisitCount: member.pncVisitCount,
+    );
+  }
+}
+
+/// Light blue tint wrapper for a member row that matches the current search query.
+class _SearchMatchHighlight extends StatelessWidget {
+  const _SearchMatchHighlight({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.statusWarning, width: 1.5),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: child,
     );
   }
 }
