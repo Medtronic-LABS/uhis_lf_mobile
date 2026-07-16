@@ -801,7 +801,7 @@ class _PatientContextScreenState
                   assessments: data.assessments,
                   isLoading: remoteLoading,
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 6),
                 RecentVitalsSection(
                   patientId: data.patientId ?? widget.patientId,
                   memberReference: data.memberReference,
@@ -815,7 +815,7 @@ class _PatientContextScreenState
                 ),
 
                 // ── Actions ──────────────────────────────────────────────
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
                 PatientActionsRow(
                   patientId: widget.patientId,
                   patientName: data.name,
@@ -847,7 +847,7 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 20, bottom: 8),
+      padding: const EdgeInsets.only(top: 12, bottom: 4),
       child: Row(
         children: [
           Text(
@@ -951,7 +951,7 @@ class _AssessmentsSection extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
       decoration: BoxDecoration(
         color: AppColors.cardSurface,
         borderRadius: BorderRadius.circular(14),
@@ -979,9 +979,9 @@ class _AssessmentsSection extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          const Divider(height: 1, color: AppColors.border),
           const SizedBox(height: 8),
+          const Divider(height: 1, color: AppColors.border),
+          const SizedBox(height: 4),
           ...assessments.take(5).map((a) => _AssessmentTile(
                 assessment: a,
                 dateFormat: dateFormat,
@@ -1066,7 +1066,7 @@ class _AllAssessmentsSheet extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
               child: Row(
                 children: [
                   Text(
@@ -1836,7 +1836,7 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
         {IconData? icon, VoidCallback? onTap}) {
       if (value == null || value.isEmpty) return const SizedBox.shrink();
       final row = Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1886,7 +1886,7 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.only(top: 10, bottom: 4),
+            padding: const EdgeInsets.only(top: 8, bottom: 2),
             child: Text(
               title,
               style: const TextStyle(
@@ -1965,7 +1965,7 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
             borderRadius: BorderRadius.circular(14),
             boxShadow: AppShadows.householdCard,
           ),
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1973,7 +1973,7 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
             ],
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 6),
         if (d.programmes.isEmpty)
           _NoServicesCard(
             patientId: d.patientId ?? '',
@@ -1989,7 +1989,7 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
               borderRadius: BorderRadius.circular(14),
               boxShadow: AppShadows.householdCard,
             ),
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -2031,7 +2031,7 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 6),
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
@@ -2056,20 +2056,20 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
           ),
         // ── Clinical Risk ────────────────────────────────────────────────
         if (d.riskBand != null) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           _buildRiskCard(scheme),
         ],
 
         // ── Scheduling / Next Due ─────────────────────────────────────────
         if (d.localPatient?.patient.nextDueAt != null ||
             d.localPatient?.patient.lastVisitAt != null) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           _buildNextDueCard(scheme),
         ],
 
         // ── Last Vitals ───────────────────────────────────────────────────
         if (vitals != null) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           _buildVitalsCard(context, scheme, vitals),
         ],
       ],
@@ -2108,7 +2108,7 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -2204,7 +2204,7 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
