@@ -1648,7 +1648,6 @@ class _AssessmentDetailSheet extends StatelessWidget {
       ),
     );
   }
-}
 
   /// Shows any rawJson fields not already rendered in the structured sections.
   /// Skips nulls, empty strings, known-rendered keys, and deeply-nested objects.
