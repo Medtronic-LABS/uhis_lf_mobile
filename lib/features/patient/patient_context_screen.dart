@@ -12,7 +12,6 @@ import '../../core/constants/app_strings.dart';
 import '../../core/debug/console_log.dart';
 import '../../core/models/dashboard_tier.dart';
 import '../../core/time/calendar_day.dart';
-import '../../core/widgets/empty_state_card.dart';
 import '../../core/widgets/header_icon_button.dart';
 import '../../core/widgets/phi_screen.dart';
 import '../../core/db/assessment_dao.dart';
@@ -27,7 +26,6 @@ import 'member_detail_repository.dart';
 import 'open_followups_section.dart';
 import 'patient_actions_row.dart';
 import 'patient_repository.dart';
-import 'recent_vitals_section.dart';
 import '../assistant/patient_ai_sheet.dart';
 import 'contact_sheet.dart';
 import '../../core/db/pregnancy_snapshot_dao.dart';
@@ -185,6 +183,9 @@ class _PatientContextScreenState
   bool _refreshing = false;
   PatientOrMemberData? _localSnapshot;
   bool _remoteLoading = false;
+  /// Index of the currently selected care-thread chip. Drives [_StatsGrid] and
+  /// spark chart selection. Reset to 0 whenever threads are re-derived.
+  int _selectedThread = 0;
 
   @override
   void initState() {
@@ -783,76 +784,146 @@ class _PatientContextScreenState
     );
   }
   Widget _buildContent(PatientOrMemberData data, {required bool remoteLoading}) {
-    // Spec §2.8.3: Band 1 (Severe) and Band 2 (Moderate) are "urgent"
-    // for context-screen styling purposes — both push the patient to
-    // the same-day visit list.
-    final isUrgent = data.riskBand == Band.band1 ||
-        data.riskBand == Band.band2;
+    final t0 = Stopwatch()..start();
+    final isUrgent = data.riskBand == Band.band1 || data.riskBand == Band.band2;
+
+    final threads = _deriveThreads(data);
+    // Clamp selected index if threads shrunk after a refresh
+    final safeSelected = _selectedThread.clamp(0, threads.length - 1);
+    final selectedThread = threads[safeSelected];
+
+    // ANC / PW pregnancy snapshot (non-null only for active pregnancy)
+    final snap = data.pregnancySnapshot;
+    final isAnc = data.programmes.contains(Programme.anc);
+
+    // Latest ANC visit number for pregnancy bar
+    final latestAncVisit = data.assessments
+        .where((a) => Programme.fromString(a.type) == Programme.anc)
+        .firstOrNull;
+    final ancVisitNum = latestAncVisit != null
+        ? (_unpackRaw(latestAncVisit.rawJson)['ancVisitNumber'] as String?)
+        : null;
+
+    // Spark charts for the selected thread
+    final bpChart = _buildBpSparkChart(data.vitalHistory);
+    final weightChart = _buildWeightSparkChart(data.vitalHistory);
+
+    // AI context summary (pure local, synchronous)
+    final aiCtx = _aiContext(data);
+
+    debugPrint('⏱ [PatientContext] _buildContent setup in ${t0.elapsedMilliseconds}ms'
+        ' threads=${threads.length} selected=$safeSelected snap=${snap != null}');
+
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: _lightStatusBar,
       child: SafeArea(
-      top: false,
-      bottom: false,
-      child: Column(
-        children: [
-          _PatientDetailHeader(
-            data: data,
-            isUrgent: isUrgent,
-            refreshing: _refreshing,
-            onBack: () => Navigator.of(context).maybePop(),
-            onRefresh: _refreshing ? null : _refresh,
-          ),
-          // Same-household strip per spec Phase 5
-          if (data.householdId != null)
-            _SameHouseholdStrip(
-              currentPatientId: widget.patientId,
-              householdId: data.householdId!,
+        top: false,
+        bottom: false,
+        child: Column(
+          children: [
+            _PatientDetailHeader(
+              data: data,
+              isUrgent: isUrgent,
+              refreshing: _refreshing,
+              onBack: () => Navigator.of(context).maybePop(),
+              onRefresh: _refreshing ? null : _refresh,
             ),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: _refresh,
-              child: ListView(
-              padding: const EdgeInsets.fromLTRB(
-                14,
-                14,
-                14,
-                AppSpacing.stickyBarClearance,
+            if (data.householdId != null)
+              _SameHouseholdStrip(
+                currentPatientId: widget.patientId,
+                householdId: data.householdId!,
               ),
-              children: [
-                _PatientProfileCard(data: data),
-                const SizedBox(height: 10),
-                _AssessmentsSection(
-                  assessments: data.assessments,
-                  isLoading: remoteLoading,
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _refresh,
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(14, 14, 14, AppSpacing.stickyBarClearance),
+                  children: [
+                    // Patient identity card
+                    _PatientProfileCard(data: data),
+                    const SizedBox(height: 14),
+
+                    // ── Care thread chip row ──────────────────────────────
+                    _CareThreadChipRow(
+                      threads: threads,
+                      selected: safeSelected,
+                      onThreadSelected: (i) => setState(() => _selectedThread = i),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // ── AI Insight card ───────────────────────────────────
+                    _AiInsightCard(summary: aiCtx.summary),
+                    const SizedBox(height: 12),
+
+                    // ── Pregnancy progress (ANC / PW only) ───────────────
+                    if (isAnc && snap != null) ...[
+                      _PregnancyProgressSection(
+                        snapshot: snap,
+                        ancVisitNumber: ancVisitNum,
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+
+                    // ── Stats grid for selected thread ────────────────────
+                    _StatsGrid(
+                      thread: selectedThread,
+                      noDataLabel: PatientProfileStrings.noVitalsYet,
+                    ),
+                    const SizedBox(height: 12),
+
+                    // ── Spark charts (BP + growth) ────────────────────────
+                    if (bpChart != null || weightChart != null)
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: AppColors.cardSurface,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            if (bpChart != null) Expanded(child: bpChart),
+                            if (bpChart != null && weightChart != null)
+                              const SizedBox(width: 16),
+                            if (weightChart != null) Expanded(child: weightChart),
+                          ],
+                        ),
+                      ),
+                    if (bpChart != null || weightChart != null) const SizedBox(height: 12),
+
+                    // ── Combined care history timeline ────────────────────
+                    _CombinedTimeline(
+                      assessments: data.assessments,
+                      isLoading: remoteLoading,
+                    ),
+                    const SizedBox(height: 12),
+
+                    // ── Open follow-ups ───────────────────────────────────
+                    OpenFollowupsSection(
+                      patientId: widget.patientId,
+                      memberReference: data.memberReference,
+                    ),
+                    const SizedBox(height: 10),
+
+                    // ── Action row ────────────────────────────────────────
+                    PatientActionsRow(
+                      patientId: widget.patientId,
+                      patientName: data.name,
+                      patientAge: data.age,
+                      patientGender: data.gender,
+                      householdId: data.householdId,
+                      villageId: data.villageId,
+                      memberId: data.memberId,
+                      programmes: data.programmes,
+                      origin: widget.origin,
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 10),
-                RecentVitalsSection(
-                  patientId: data.patientId ?? widget.patientId,
-                  memberReference: data.memberReference,
-                ),
-                const SizedBox(height: 10),
-                OpenFollowupsSection(
-                  patientId: widget.patientId,
-                  memberReference: data.memberReference,
-                ),
-                const SizedBox(height: 10),
-                PatientActionsRow(
-                  patientId: widget.patientId,
-                  patientName: data.name,
-                  patientAge: data.age,
-                  patientGender: data.gender,
-                  householdId: data.householdId,
-                  villageId: data.villageId,
-                  memberId: data.memberId,
-                  programmes: data.programmes,
-                  origin: widget.origin,
-                ),
-              ],
               ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
@@ -2023,946 +2094,6 @@ class _TimelineEventSheet extends StatelessWidget {
     debugPrint('⏱ [PatientContext] _TimelineEventSheet build in ${sw.elapsedMilliseconds}ms'
         ' type=${assessment.type} fields=${entries.length}');
     return result;
-  }
-}
-
-/// Section showing assessment history.
-class _AssessmentsSection extends StatelessWidget {
-  const _AssessmentsSection({required this.assessments, this.isLoading = false});
-
-  final List<MemberAssessment> assessments;
-  final bool isLoading;
-
-  @override
-  Widget build(BuildContext context) {
-    final dateFormat = DateFormat('MMM d, yyyy · h:mm a');
-
-    if (assessments.isEmpty && isLoading) {
-      // Remote fetch still in flight and no local assessments yet — show shimmer.
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.cardSurface,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: AppShadows.householdCard,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.assignment_outlined, color: AppColors.navy),
-                const SizedBox(width: 8),
-                Text(
-                  PatientContextStrings.sectionRecentVisits,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            const _AssessmentShimmerRow(),
-            const SizedBox(height: 8),
-            const _AssessmentShimmerRow(),
-          ],
-        ),
-      );
-    }
-
-    if (assessments.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.cardSurface,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: AppShadows.householdCard,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.assignment_outlined, color: AppColors.navy),
-                const SizedBox(width: 8),
-                Text(
-                  PatientContextStrings.sectionRecentVisits,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            EmptyStateCard(
-              icon: Icons.history_outlined,
-              iconColor: AppColors.textMuted,
-              iconBg: AppColors.progressTrack,
-              title: PatientContextStrings.noAssessmentsYet,
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.cardSurface,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: AppShadows.householdCard,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.assignment_outlined, color: AppColors.navy),
-              const SizedBox(width: 8),
-              Text(
-                PatientContextStrings.sectionRecentVisits,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                PatientContextStrings.assessmentsTotal(assessments.length),
-                style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          const Divider(height: 1, color: AppColors.border),
-          const SizedBox(height: 8),
-          ...assessments.take(5).map((a) => _AssessmentTile(
-                assessment: a,
-                dateFormat: dateFormat,
-              )),
-          if (assessments.length > 5)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Center(
-                child: TextButton(
-                  onPressed: () {
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
-                      builder: (_) => _AllAssessmentsSheet(
-                        assessments: assessments,
-                        dateFormat: dateFormat,
-                      ),
-                    );
-                  },
-                  child: Text(
-                    PatientContextStrings.viewAllAssessments(assessments.length),
-                  ),
-                ),
-              ),
-            ),
-          if (isLoading)
-            const Padding(
-              padding: EdgeInsets.only(top: 8),
-              child: _AssessmentShimmerRow(),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AssessmentShimmerRow extends StatelessWidget {
-  const _AssessmentShimmerRow();
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 64,
-      decoration: BoxDecoration(
-        color: AppColors.border.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(8),
-      ),
-    );
-  }
-}
-
-/// Bottom sheet listing all assessments — shown when the SK taps "View all N assessments".
-class _AllAssessmentsSheet extends StatelessWidget {
-  const _AllAssessmentsSheet({
-    required this.assessments,
-    required this.dateFormat,
-  });
-
-  final List<MemberAssessment> assessments;
-  final DateFormat dateFormat;
-
-  @override
-  Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.7,
-      minChildSize: 0.4,
-      maxChildSize: 0.95,
-      builder: (context, scrollController) => Container(
-        decoration: const BoxDecoration(
-          color: AppColors.cardSurface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-        ),
-        child: Column(
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.border,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: Row(
-                children: [
-                  Text(
-                    PatientContextStrings.allAssessmentsTitle,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    PatientContextStrings.assessmentsTotal(assessments.length),
-                    style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1, color: AppColors.border),
-            Expanded(
-              child: ListView.builder(
-                controller: scrollController,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                itemCount: assessments.length,
-                itemBuilder: (context, index) => _AssessmentTile(
-                  assessment: assessments[index],
-                  dateFormat: dateFormat,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AssessmentTile extends StatelessWidget {
-  const _AssessmentTile({
-    required this.assessment,
-    required this.dateFormat,
-  });
-
-  final MemberAssessment assessment;
-  final DateFormat dateFormat;
-
-  void _showAssessmentDetail(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => _AssessmentDetailSheet(
-        assessment: assessment,
-        dateFormat: dateFormat,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final progColors = Theme.of(context).extension<ProgrammeColors>()!;
-
-    Color typeColor;
-    IconData typeIcon;
-    switch (assessment.type) {
-      case 'ANC':
-        typeColor = progColors.of(Programme.anc);
-        typeIcon = Icons.pregnant_woman;
-        break;
-      case 'IMCI':
-        typeColor = progColors.of(Programme.imci);
-        typeIcon = Icons.child_care;
-        break;
-      case 'NCD':
-        typeColor = progColors.of(Programme.ncd);
-        typeIcon = Icons.monitor_heart_outlined;
-        break;
-      case 'TB':
-        typeColor = progColors.of(Programme.tb);
-        typeIcon = Icons.healing;
-        break;
-      default:
-        typeColor = AppColors.navy;
-        typeIcon = Icons.assignment;
-    }
-
-    return Semantics(
-      label: PatientContextStrings.viewAssessmentSemantics(
-        assessment.type,
-        dateFormat.format(assessment.date),
-      ),
-      button: true,
-      child: InkWell(
-      key: const Key('patient_assessment_row_tap'),
-      onTap: () => _showAssessmentDetail(context),
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: typeColor.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(typeIcon, size: 20, color: typeColor),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: typeColor.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          assessment.type,
-                          style: TextStyle(
-                            color: typeColor,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 10,
-                          ),
-                        ),
-                      ),
-                      if (assessment.visitNumber != null) ...[
-                        const SizedBox(width: 6),
-                        Text(
-                          PatientContextStrings.visitNumberLabel(assessment.visitNumber!),
-                          style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    dateFormat.format(assessment.date),
-                    style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right, color: AppColors.textMuted),
-          ],
-        ),
-      ),
-      ),
-    );
-  }
-}
-
-/// Bottom sheet showing assessment details.
-class _AssessmentDetailSheet extends StatelessWidget {
-  const _AssessmentDetailSheet({
-    required this.assessment,
-    required this.dateFormat,
-  });
-
-  final MemberAssessment assessment;
-  final DateFormat dateFormat;
-
-  /// Unpacks the nested `raw` field stored as {kind, raw: "...JSON..." | Map}.
-  Map<String, dynamic> _effectiveRaw() {
-    final outer = assessment.rawJson;
-    final rawField = outer['raw'];
-    if (rawField is Map) {
-      return Map<String, dynamic>.from(rawField);
-    }
-    if (rawField is String && rawField.isNotEmpty) {
-      try {
-        return Map<String, dynamic>.from(jsonDecode(rawField) as Map);
-      } catch (_) {}
-    }
-    return outer;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final progColors = Theme.of(context).extension<ProgrammeColors>()!;
-    final raw = _effectiveRaw();
-
-    Color typeColor;
-    IconData typeIcon;
-    switch (assessment.type) {
-      case 'ANC':
-        typeColor = progColors.of(Programme.anc);
-        typeIcon = Icons.pregnant_woman;
-        break;
-      case 'IMCI':
-        typeColor = progColors.of(Programme.imci);
-        typeIcon = Icons.child_care;
-        break;
-      case 'NCD':
-        typeColor = progColors.of(Programme.ncd);
-        typeIcon = Icons.monitor_heart_outlined;
-        break;
-      case 'TB':
-        typeColor = progColors.of(Programme.tb);
-        typeIcon = Icons.healing;
-        break;
-      default:
-        typeColor = AppColors.navy;
-        typeIcon = Icons.assignment;
-    }
-
-    // Extract useful fields from rawJson
-    final serviceProvided = raw['serviceProvided']?.toString();
-    final referralStatus = raw['referralStatus']?.toString();
-    final referralReason = raw['referralReason']?.toString();
-    final nextFollowUpDate = raw['nextFollowUpDate']?.toString();
-    final memberId = raw['householdMemberId']?.toString();
-    final encounterId = raw['encounterId']?.toString();
-    final latestVisit = raw['latestVisit'] == true;
-    final customStatus = raw['customStatus'] as List<dynamic>?;
-
-    return DraggableScrollableSheet(
-      initialChildSize: 0.6,
-      minChildSize: 0.3,
-      maxChildSize: 0.9,
-      builder: (context, scrollController) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: AppColors.cardSurface,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: Column(
-            children: [
-              // Drag handle
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 12),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              // Header
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: typeColor.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(typeIcon, size: 28, color: typeColor),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: typeColor.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  assessment.type,
-                                  style: TextStyle(
-                                    color: typeColor,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                              if (latestVisit) ...[
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.statusSuccess.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    PatientContextStrings.latestBadge,
-                                    style: const TextStyle(
-                                      color: AppColors.statusSuccess,
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 10,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            PatientContextStrings.visitOnLabel(dateFormat.format(assessment.date)),
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: PatientContextStrings.close,
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 24),
-              // Content
-              Expanded(
-                child: ListView(
-                  controller: scrollController,
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  children: [
-                    _DetailRow(
-                      label: PatientContextStrings.serviceLabel,
-                      value: serviceProvided ?? assessment.type,
-                    ),
-                    if (assessment.visitNumber != null)
-                      _DetailRow(
-                        label: PatientContextStrings.visitNumberFieldLabel,
-                        value: '${assessment.visitNumber}',
-                      ),
-                    if (encounterId != null)
-                      _DetailRow(label: PatientContextStrings.encounterIdLabel, value: encounterId),
-                    if (memberId != null)
-                      _DetailRow(label: PatientContextStrings.memberIdLabel, value: memberId),
-                    if (referralStatus != null && referralStatus.isNotEmpty)
-                      _DetailRow(
-                        label: PatientContextStrings.referralStatusLabel,
-                        value: referralStatus,
-                        valueColor: referralStatus.toLowerCase() == 'referred' ? AppColors.statusWarning : null,
-                      ),
-                    if (referralReason != null && referralReason.isNotEmpty)
-                      _DetailRow(label: PatientContextStrings.referralReasonLabel, value: referralReason),
-                    if (nextFollowUpDate != null && nextFollowUpDate.isNotEmpty)
-                      _DetailRow(label: PatientContextStrings.nextFollowUpLabel, value: nextFollowUpDate),
-                    if (customStatus != null && customStatus.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      Text(
-                        PatientContextStrings.statusIndicatorsTitle,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: customStatus.map((s) => Chip(
-                          label: Text(s.toString()),
-                          backgroundColor: typeColor.withValues(alpha: 0.1),
-                          labelStyle: TextStyle(color: typeColor, fontSize: 12),
-                        )).toList(),
-                      ),
-                    ],
-                    const SizedBox(height: 24),
-                    // Assessment type specific info
-                    _buildTypeSpecificInfo(context, typeColor),
-                    const SizedBox(height: 32),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildTypeSpecificInfo(BuildContext context, Color typeColor) {
-    final raw = _effectiveRaw();
-    // assessmentDetails is the nested clinical object from member-assessment-history
-    final details = raw['assessmentDetails'] is Map
-        ? Map<String, dynamic>.from(raw['assessmentDetails'] as Map)
-        : <String, dynamic>{};
-    // observations is the vitals snapshot keyed by the server (bp, weight, height, bg, bgType,
-    // hemoglobin, ancVisitNumber, pncVisitNumber, fundalHeight, gravida, parity …)
-    final obs = raw['observations'] is Map
-        ? Map<String, dynamic>.from(raw['observations'] as Map)
-        : <String, dynamic>{};
-
-    // Lookup priority: assessmentDetails → observations → rawJson top-level
-    double? num_(String key) {
-      Object? v = details[key] ?? obs[key] ?? raw[key];
-      if (v is num) return v.toDouble();
-      if (v is String) return double.tryParse(v);
-      return null;
-    }
-
-    String? str_(String key) {
-      final v = details[key] ?? obs[key] ?? raw[key];
-      if (v == null) return null;
-      final s = v.toString().trim();
-      return s.isEmpty || s == 'null' ? null : s;
-    }
-
-    bool? bool_(String key) {
-      final v = details[key] ?? obs[key] ?? raw[key];
-      if (v is bool) return v;
-      if (v == true || v == 1 || v == 'true' || v == 'YES') return true;
-      if (v == false || v == 0 || v == 'false' || v == 'NO') return false;
-      return null;
-    }
-
-    // Parse "systolic/diastolic" string (server observations['bp'] format e.g. "120/80")
-    (double, double)? parseBpString(String? s) {
-      if (s == null) return null;
-      final parts = s.split('/');
-      if (parts.length != 2) return null;
-      final sys = double.tryParse(parts[0].trim());
-      final dia = double.tryParse(parts[1].trim());
-      if (sys == null || dia == null) return null;
-      return (sys, dia);
-    }
-
-    final fields = <_ClinicalField>[];
-
-    switch (assessment.type) {
-      case 'NCD':
-        // BP: try numeric fields first, then obs['bp'] string
-        var sys = num_('avgSystolic') ?? num_('systolicBp') ?? num_('systolic');
-        var dia = num_('avgDiastolic') ?? num_('diastolicBp') ?? num_('diastolic');
-        if (sys == null || dia == null) {
-          final parsed = parseBpString(str_('bp'));
-          if (parsed != null) { sys = parsed.$1; dia = parsed.$2; }
-        }
-        if (sys != null && dia != null) {
-          fields.add(_ClinicalField(PatientContextStrings.bloodPressureLabel, '${sys.toInt()}/${dia.toInt()} mmHg',
-              icon: Icons.favorite, urgent: sys >= 140 || dia >= 90));
-        }
-        final glucose = num_('glucoseValue') ?? num_('bloodGlucose') ?? num_('bg');
-        final glucoseType = str_('glucoseType') ?? str_('bgType');
-        if (glucose != null) {
-          final label = PatientContextStrings.glucoseLabel(glucoseType?.toLowerCase());
-          fields.add(_ClinicalField(label, '${glucose.toStringAsFixed(1)} mg/dL',
-              icon: Icons.bloodtype, urgent: glucose > 200));
-        }
-        final height = num_('height'); final weight = num_('weight'); final bmi = num_('bmi');
-        if (height != null) fields.add(_ClinicalField(PatientContextStrings.heightLabel, '${height.toInt()} cm', icon: Icons.straighten));
-        if (weight != null) fields.add(_ClinicalField(PatientContextStrings.weightLabel, '${weight.toStringAsFixed(1)} kg', icon: Icons.monitor_weight));
-        if (bmi != null) fields.add(_ClinicalField(PatientContextStrings.bmiLabel, bmi.toStringAsFixed(1), icon: Icons.calculate));
-        final hb = num_('hemoglobin');
-        if (hb != null) {
-          fields.add(_ClinicalField(PatientContextStrings.haemoglobinLabel, '${hb.toStringAsFixed(1)} g/dL',
-              icon: Icons.opacity, urgent: hb < 10.0));
-        }
-        final smoker = bool_('isRegularSmoker') ?? bool_('isSmoking');
-        if (smoker != null) fields.add(_ClinicalField(PatientContextStrings.smokingLabel, smoker ? PatientContextStrings.yes : PatientContextStrings.no, icon: Icons.smoking_rooms));
-        final alcohol = bool_('isDrinkingAlcohol') ?? bool_('alcoholConsumption');
-        if (alcohol != null) fields.add(_ClinicalField(PatientContextStrings.alcoholLabel, alcohol ? PatientContextStrings.yes : PatientContextStrings.no, icon: Icons.local_bar));
-
-      case 'ANC':
-        final ancVisit = str_('ancVisitNumber');
-        if (ancVisit != null) fields.add(_ClinicalField(PatientContextStrings.ancVisitLabel, ancVisit, icon: Icons.calendar_today));
-        final ga = num_('gestationalAge') ?? num_('gestationAge');
-        if (ga != null) fields.add(_ClinicalField(PatientContextStrings.gestationalAgeLabel, '${ga.toInt()} weeks', icon: Icons.calendar_month));
-        final gravida = str_('gravida');
-        final parity = str_('parity');
-        if (gravida != null || parity != null) {
-          fields.add(_ClinicalField(PatientContextStrings.gravidaParityLabel, 'G${gravida ?? '?'} P${parity ?? '?'}', icon: Icons.child_friendly));
-        }
-        final fetuses = num_('noOfFetus') ?? num_('numberOfFetus');
-        if (fetuses != null && fetuses > 1) fields.add(_ClinicalField(PatientContextStrings.fetusesLabel, fetuses.toInt().toString(), icon: Icons.group));
-        final fh = num_('fundalHeight');
-        if (fh != null) fields.add(_ClinicalField(PatientContextStrings.fundalHeightLabel, '${fh.toStringAsFixed(1)} cm', icon: Icons.height));
-        // BP: try numeric fields first, then obs['bp'] string
-        var sys = num_('avgSystolic') ?? num_('systolicBp');
-        var dia = num_('avgDiastolic') ?? num_('diastolicBp');
-        if (sys == null || dia == null) {
-          final parsed = parseBpString(str_('bp'));
-          if (parsed != null) { sys = parsed.$1; dia = parsed.$2; }
-        }
-        if (sys != null && dia != null) {
-          fields.add(_ClinicalField(PatientContextStrings.bloodPressureLabel, '${sys.toInt()}/${dia.toInt()} mmHg',
-              icon: Icons.favorite, urgent: sys >= 140 || dia >= 90));
-        }
-        final weight = num_('weight');
-        if (weight != null) fields.add(_ClinicalField(PatientContextStrings.weightLabel, '${weight.toStringAsFixed(1)} kg', icon: Icons.monitor_weight));
-        final hb = num_('hemoglobin');
-        if (hb != null) {
-          fields.add(_ClinicalField(PatientContextStrings.haemoglobinLabel, '${hb.toStringAsFixed(1)} g/dL',
-              icon: Icons.opacity, urgent: hb < 10.0));
-        }
-        final glucose = num_('bg') ?? num_('glucoseValue') ?? num_('bloodGlucose');
-        final glucoseType = str_('bgType') ?? str_('glucoseType');
-        if (glucose != null) {
-          final label = PatientContextStrings.glucoseLabel(glucoseType?.toLowerCase());
-          fields.add(_ClinicalField(label, '${glucose.toStringAsFixed(1)} mg/dL', icon: Icons.bloodtype));
-        }
-        final fetalMovement = bool_('fetalMovement') ?? bool_('isFetalMovementNormal');
-        if (fetalMovement != null) {
-          fields.add(_ClinicalField(PatientContextStrings.fetalMovementLabel, fetalMovement ? PatientContextStrings.normal : PatientContextStrings.abnormal,
-              icon: Icons.waves, urgent: fetalMovement == false));
-        }
-
-      case 'PNC':
-        final pncVisit = str_('pncVisitNumber');
-        if (pncVisit != null) fields.add(_ClinicalField(PatientContextStrings.pncVisitLabel, pncVisit, icon: Icons.calendar_today));
-        // BP: try numeric fields first, then obs['bp'] string
-        var sys = num_('avgSystolic') ?? num_('systolicBp');
-        var dia = num_('avgDiastolic') ?? num_('diastolicBp');
-        if (sys == null || dia == null) {
-          final parsed = parseBpString(str_('bp'));
-          if (parsed != null) { sys = parsed.$1; dia = parsed.$2; }
-        }
-        if (sys != null && dia != null) {
-          fields.add(_ClinicalField(PatientContextStrings.bloodPressureLabel, '${sys.toInt()}/${dia.toInt()} mmHg',
-              icon: Icons.favorite, urgent: sys >= 140 || dia >= 90));
-        }
-        final weight = num_('weight');
-        if (weight != null) fields.add(_ClinicalField(PatientContextStrings.weightLabel, '${weight.toStringAsFixed(1)} kg', icon: Icons.monitor_weight));
-        final hb = num_('hemoglobin');
-        if (hb != null) {
-          fields.add(_ClinicalField(PatientContextStrings.haemoglobinLabel, '${hb.toStringAsFixed(1)} g/dL',
-              icon: Icons.opacity, urgent: hb < 10.0));
-        }
-        final breastfeeding = bool_('isBreastfeeding') ?? bool_('breastfeeding');
-        if (breastfeeding != null) fields.add(_ClinicalField(PatientContextStrings.breastfeedingLabel, breastfeeding ? PatientContextStrings.yes : PatientContextStrings.no, icon: Icons.child_friendly));
-
-      case 'IMCI':
-        final height = num_('height'); final weight = num_('weight'); final muac = num_('muac');
-        if (height != null) fields.add(_ClinicalField(PatientContextStrings.heightLabel, '${height.toInt()} cm', icon: Icons.straighten));
-        if (weight != null) fields.add(_ClinicalField(PatientContextStrings.weightLabel, '${weight.toStringAsFixed(1)} kg', icon: Icons.monitor_weight));
-        if (muac != null) {
-          fields.add(_ClinicalField(PatientContextStrings.muacLabel, '${muac.toStringAsFixed(1)} cm', icon: Icons.straighten,
-              urgent: muac < 12.5));
-        }
-        final temp = num_('temperature') ?? num_('temp');
-        if (temp != null) {
-          fields.add(_ClinicalField(PatientContextStrings.temperatureLabel, '${temp.toStringAsFixed(1)} °C', icon: Icons.thermostat,
-              urgent: temp >= 38.5));
-        }
-        final diagnosis = str_('childDiagnosis') ?? str_('diagnosis') ?? str_('classification');
-        if (diagnosis != null) fields.add(_ClinicalField(PatientContextStrings.diagnosisLabel, diagnosis, icon: Icons.medical_information));
-
-      case 'TB':
-        final cough = num_('coughDuration') ?? num_('durationOfCough');
-        if (cough != null) fields.add(_ClinicalField(PatientContextStrings.coughDurationLabel, '${cough.toInt()} days', icon: Icons.air));
-        final diabetic = bool_('isDiabetic') ?? bool_('hasDiabetes');
-        if (diabetic != null) fields.add(_ClinicalField(PatientContextStrings.diabetesLabel, diabetic ? PatientContextStrings.yes : PatientContextStrings.no, icon: Icons.bloodtype));
-        final smoking = bool_('isSmoking') ?? bool_('isRegularSmoker');
-        if (smoking != null) fields.add(_ClinicalField(PatientContextStrings.smokingLabel, smoking ? PatientContextStrings.yes : PatientContextStrings.no, icon: Icons.smoking_rooms));
-        final contact = bool_('hasTbContact') ?? bool_('tbContact');
-        if (contact != null) {
-          fields.add(_ClinicalField(PatientContextStrings.tbContactLabel, contact ? PatientContextStrings.yes : PatientContextStrings.no, icon: Icons.people,
-              urgent: contact == true));
-        }
-    }
-
-    if (fields.isEmpty) return const SizedBox.shrink();
-
-    final (label, icon) = switch (assessment.type) {
-      'NCD'  => (PatientContextStrings.ncdFindingsTitle, Icons.monitor_heart_outlined),
-      'ANC'  => (PatientContextStrings.ancFindingsTitle, Icons.pregnant_woman),
-      'PNC'  => (PatientContextStrings.pncFindingsTitle, Icons.child_friendly),
-      'IMCI' => (PatientContextStrings.childHealthFindingsTitle, Icons.child_care),
-      'TB'   => (PatientContextStrings.tbFindingsTitle, Icons.air),
-      _      => (PatientContextStrings.clinicalFindingsTitle, Icons.assignment),
-    };
-
-    return Container(
-      decoration: BoxDecoration(
-        color: typeColor.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            Icon(icon, color: typeColor, size: 18),
-            const SizedBox(width: 8),
-            Text(label, style: TextStyle(color: typeColor, fontWeight: FontWeight.w600)),
-          ]),
-          const SizedBox(height: 12),
-          const Divider(height: 1, color: AppColors.border),
-          const SizedBox(height: 8),
-          ...fields.map((f) => _ClinicalFieldRow(field: f)),
-        ],
-      ),
-    );
-  }
-
-  /// Shows any rawJson fields not already rendered in the structured sections.
-  /// Skips nulls, empty strings, known-rendered keys, and deeply-nested objects.
-  Widget _buildRawFieldsDump(Color typeColor) {
-    // Keys already shown in structured sections — skip to avoid duplication.
-    const _knownKeys = {
-      'kind', 'raw',
-      'encounterId', 'id', 'serviceProvided', 'assessmentName', 'type',
-      'visitDate', 'createdAt', 'startTime', 'date', 'visitNumber',
-      'referralStatus', 'referralReason', 'nextFollowUpDate',
-      'householdMemberId', 'memberId', 'latestVisit', 'customStatus',
-      'assessmentDetails', 'observations',
-    };
-    final entries = _effectiveRaw().entries
-        .where((e) =>
-            !_knownKeys.contains(e.key) &&
-            e.value != null &&
-            e.value.toString().isNotEmpty &&
-            e.value.toString() != 'null' &&
-            e.value is! Map &&
-            e.value is! List)
-        .toList()
-      ..sort((a, b) => a.key.compareTo(b.key));
-
-    if (entries.isEmpty) return const SizedBox.shrink();
-
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.canvas,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            PatientContextStrings.storedDataTitle,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          ...entries.map(
-            (e) => _DetailRow(
-              label: e.key,
-              value: e.value.toString(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ClinicalField {
-  const _ClinicalField(this.label, this.value, {this.icon, this.urgent = false});
-  final String label;
-  final String value;
-  final IconData? icon;
-  final bool urgent;
-}
-
-class _ClinicalFieldRow extends StatelessWidget {
-  const _ClinicalFieldRow({required this.field});
-  final _ClinicalField field;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = field.urgent ? AppColors.statusCritical : AppColors.textMuted;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-      child: Row(
-        children: [
-          if (field.icon != null)
-            Icon(field.icon, size: 16, color: color.withValues(alpha: 0.7))
-          else
-            const SizedBox(width: 16),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 130,
-            child: Text(field.label,
-                style: const TextStyle(fontSize: 13, color: AppColors.textMuted)),
-          ),
-          Expanded(
-            child: Text(
-              field.value,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: field.urgent ? AppColors.statusCritical : AppColors.textPrimary,
-              ),
-            ),
-          ),
-          if (field.urgent)
-            const Icon(Icons.warning_amber_rounded, size: 14, color: AppColors.statusWarning),
-        ],
-      ),
-    );
-  }
-}
-
-class _DetailRow extends StatelessWidget {
-  const _DetailRow({
-    required this.label,
-    required this.value,
-    this.valueColor,
-  });
-
-  final String label;
-  final String value;
-  final Color? valueColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 14),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: valueColor ?? AppColors.textPrimary,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 
