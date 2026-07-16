@@ -17,6 +17,7 @@ import '../../core/models/mission_queue_item.dart';
 import '../../core/sync/offline_sync_service.dart';
 import '../../core/widgets/header_icon_button.dart';
 import '../../core/widgets/mockup_svg_icons.dart';
+import '../../core/time/calendar_day.dart';
 import '../../core/widgets/empty_state_card.dart';
 import '../../core/widgets/patient_filter_panel.dart';
 import '../dashboard/dashboard_repository.dart';
@@ -1004,7 +1005,7 @@ class _OtherMemberRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ageGender = [
-      if (member.dateOfBirth != null) '${_ageFromDob(member.dateOfBirth)}',
+      if (member.dateOfBirth != null) '${CalendarDay.ageFromDob(member.dateOfBirth)}',
       if (member.gender != null) member.gender,
     ].whereType<String>().join('/');
     final subtitle = [
@@ -1086,20 +1087,6 @@ class _OtherMemberRow extends StatelessWidget {
     return isHighlighted ? _SearchMatchHighlight(child: row) : row;
   }
 
-  static int? _ageFromDob(String? dob) {
-    if (dob == null) return null;
-    try {
-      final d = DateTime.parse(dob);
-      final now = DateTime.now();
-      var age = now.year - d.year;
-      if (now.month < d.month || (now.month == d.month && now.day < d.day)) {
-        age--;
-      }
-      return age;
-    } catch (_) {
-      return null;
-    }
-  }
 }
 
 class _HouseholdItem {

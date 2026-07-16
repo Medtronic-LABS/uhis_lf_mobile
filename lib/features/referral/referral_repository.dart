@@ -15,6 +15,7 @@ import '../../core/notifications/channel_registry.dart';
 import '../../core/notifications/repeat_scheduler.dart';
 import '../../core/sla/priority_scorer.dart';
 import '../../core/sla/sla_evaluator.dart';
+import '../../core/time/calendar_day.dart';
 
 /// View-model + lifecycle owner for referrals. UI consumes [load] / [counts]
 /// / [watchChanges] only — never touches DAOs or the engines directly.
@@ -279,7 +280,7 @@ class ReferralRepository {
     required List<FollowUpRow> followUps,
     required DateTime now,
   }) {
-    final ageYears = patient?.age ?? _ageFromDob(patient?.dob);
+    final ageYears = patient?.age ?? CalendarDay.ageFromDob(patient?.dob);
     final isPregnancy = programmes.contains(Programme.anc);
     final isEmergency = r.slaTier == SlaTier.emergency;
 
@@ -370,19 +371,6 @@ class ReferralRepository {
     return drivers.isEmpty
         ? 'Open referral needs your attention.'
         : drivers;
-  }
-
-  static int? _ageFromDob(String? dob) {
-    if (dob == null || dob.isEmpty) return null;
-    final parsed = DateTime.tryParse(dob);
-    if (parsed == null) return null;
-    final now = DateTime.now();
-    var years = now.year - parsed.year;
-    if (now.month < parsed.month ||
-        (now.month == parsed.month && now.day < parsed.day)) {
-      years -= 1;
-    }
-    return years < 0 ? 0 : years;
   }
 
   /// Seeds comprehensive demo referral data matching the SLA monitoring spec.
