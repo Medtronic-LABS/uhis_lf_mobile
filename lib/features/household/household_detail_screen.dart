@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../../app/theme.dart';
 import '../../core/auth/user_hierarchy_service.dart';
+import '../../core/debug/console_log.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/app_database.dart';
 import '../../core/db/assessment_dao.dart';
@@ -368,6 +369,12 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _fetchMembers();
       });
+    } else if (_household.members.isNotEmpty) {
+      // Members pre-loaded from list screen — run lightweight meta enrichment
+      // so village name, SS name, and last-visit are resolved without a full fetch.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _enrichMeta();
+      });
     }
     // Queue membership is independent of member enrichment (may load slower,
     // may fail offline) — fetched unconditionally so badges also appear when
@@ -399,8 +406,82 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
     } catch (_) {}
   }
 
+  /// Resolves village name, SS name, and last-visit date for households that
+  /// arrive pre-loaded with members (list-screen → detail navigation). Avoids
+  /// a redundant full member fetch when the roster is already in hand.
+  /// Resolves village name, SS name, and last-visit date for households that
+  /// arrive pre-loaded with members (list-screen → detail navigation). Avoids
+  /// a redundant full member fetch when the roster is already in hand.
+  Future<void> _enrichMeta() async {
+    if (!mounted) return;
+    final hierarchy = context.read<UserHierarchyService>();
+    final memberDao = context.read<MemberDao>();
+    final patientDao = context.read<PatientDao>();
+    await hierarchy.prefetch();
+
+    // Village ID → human-readable name. Check subVillages first (more specific),
+    // then fall back to top-level villages.
+    final rawVillage = _household.village;
+    final villageName = rawVillage == null
+        ? null
+        : hierarchy.subVillages
+                ?.where((sv) => sv.id == rawVillage)
+                .firstOrNull
+                ?.name ??
+            hierarchy.villages
+                ?.where((v) => v.id == rawVillage)
+                .firstOrNull
+                ?.name;
+
+    // SS name from first member's DB entity (pre-loaded HouseholdMemberData
+    // doesn't carry shasthyaShebikaId — must re-query).
+    String? ssName;
+    final firstId = _household.members.firstOrNull?.id;
+    if (firstId != null) {
+      final entity = await memberDao.getById(firstId);
+      ssName = _resolveSsName(entity?.shasthyaShebikaId, hierarchy);
+    }
+
+    // Pre-loaded members have recentServiceAt=null (list screen enriches visit
+    // counts + programmes but not recentServiceAt). Query lastVisitAt directly
+    // from PatientDao across all household member patientIds.
+    final patientIds =
+        _household.members.map((m) => m.patientId).whereType<String>().toList();
+    DateTime? lastVisitAt;
+    if (patientIds.isNotEmpty) {
+      final lastVisits = await patientDao.lastVisitAtForPatients(patientIds);
+      for (final ms in lastVisits.values) {
+        final dt = DateTime.fromMillisecondsSinceEpoch(ms);
+        if (lastVisitAt == null || dt.isAfter(lastVisitAt)) lastVisitAt = dt;
+      }
+    }
+
+    ConsoleLog.banner('[HouseholdDetail] _enrichMeta'
+        ' village=${villageName ?? rawVillage} ssName=$ssName lastVisit=$lastVisitAt');
+
+    if (!mounted) return;
+    setState(() {
+      _household = HouseholdDetailData(
+        id: _household.id,
+        name: _household.name,
+        householdNo: _household.householdNo,
+        village: villageName ?? _household.village,
+        subVillage: _household.subVillage,
+        memberCount: _household.memberCount,
+        latitude: _household.latitude,
+        longitude: _household.longitude,
+        members: _household.members,
+        ssName: ssName,
+        lastVisitAt: lastVisitAt,
+      );
+    });
+  }
+
   Future<void> _fetchMembers() async {
-    if (_loadingMembers) return;
+    // Guard only blocks concurrent re-fetches triggered by pull-to-refresh
+    // while a fetch is already running. The initState path sets _loadingMembers
+    // synchronously BEFORE calling here, so we must not bail on that case.
+    if (_loadingMembers && _household.members.isNotEmpty) return;
     setState(() {
       _loadingMembers = true;
       _loadError = null;

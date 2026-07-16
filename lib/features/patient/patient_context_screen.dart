@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -18,6 +20,7 @@ import '../../core/db/encounter_dao.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/household_dao.dart';
 import '../../core/db/member_dao.dart' show MemberDao, HouseholdMemberEntity;
+import '../../core/sync/offline_sync_service.dart';
 import '../../core/models/programme.dart';
 import '../../core/models/risk.dart';
 import 'member_detail_repository.dart';
@@ -119,6 +122,23 @@ class PatientOrMemberData {
     if (id.startsWith('RelatedPerson/')) return id;
     return 'RelatedPerson/$id';
   }
+
+  PatientOrMemberData copyWith({
+    List<MemberAssessment>? remoteAssessments,
+    List<PatientVisit>? recentVisits,
+    String? householdName,
+  }) {
+    return PatientOrMemberData(
+      localPatient: localPatient,
+      remoteMember: remoteMember,
+      programmes: programmes,
+      localAssessments: localAssessments,
+      remoteAssessments: remoteAssessments ?? this.remoteAssessments,
+      recentVisits: recentVisits ?? this.recentVisits,
+      memberId: memberId,
+      householdName: householdName ?? this.householdName,
+    );
+  }
 }
 
 /// Patient/Member Context Screen — shows health details when tapping on a
@@ -147,6 +167,8 @@ class _PatientContextScreenState
     extends PhiScreenState<PatientContextScreen> {
   Future<PatientOrMemberData>? _future;
   bool _refreshing = false;
+  PatientOrMemberData? _localSnapshot;
+  bool _remoteLoading = false;
 
   @override
   void initState() {
@@ -227,9 +249,13 @@ class _PatientContextScreenState
         final date = row.occurredAt == null
             ? DateTime.now()
             : DateTime.fromMillisecondsSinceEpoch(row.occurredAt!);
+        final prog = Programme.fromString(row.kind ?? '');
+        final typeLabel = prog == Programme.unknown
+            ? (row.kind ?? PatientContextStrings.genericAssessmentLabel).toUpperCase()
+            : prog.wireTag;
         out.add(MemberAssessment(
           id: row.id,
-          type: (row.kind ?? PatientContextStrings.genericAssessmentLabel).toUpperCase(),
+          type: typeLabel,
           date: date,
           rawJson: <String, dynamic>{'kind': row.kind, 'raw': row.rawJson},
         ));
@@ -268,18 +294,6 @@ class _PatientContextScreenState
     // ignore: avoid_print
     print('[PatientContextScreen] localAssessmentsFor total=${out.length}');
     return out;
-  }
-
-  /// Returns 'RelatedPerson/<id>' only when [id] is a numeric backend PK
-  /// (< 10^10, i.e. a real server-assigned integer). FHIR patient IDs like
-  /// '07007104021868' are 14-digit numbers that parse as int but are NOT
-  /// backend member PKs — returning them would cause [getRecentVisits] to
-  /// filter out every assessment-history row. Returning null instead tells
-  /// [getRecentVisits] to skip client-side member filtering.
-  String? _numericMemberRef(String id) {
-    final n = int.tryParse(id);
-    if (n == null || n >= 10000000000) return null; // not a backend PK
-    return 'RelatedPerson/$id';
   }
 
   /// Resolves the numeric server-assigned member referenceId required by the
@@ -337,13 +351,28 @@ class _PatientContextScreenState
     // use_build_context_synchronously linter warnings.
     final memberRepo = context.read<MemberDetailRepository>();
     final patientRepo = context.read<PatientRepository>();
+    final syncSvc = context.read<OfflineSyncService>();
 
-    // Resolve encounter.memberId once — shared by all three code paths below.
-    // The FHIR mapper needs the numeric server-assigned referenceId, not the FHIR ID.
-    final resolvedMemberId = await _resolveEncounterMemberId();
+    final t0 = Stopwatch()..start();
+    // Phase 1: all local reads in parallel — returns instantly from SQLite.
+    final phase1 = await Future.wait([
+      _resolveEncounterMemberId(),
+      patientRepo.byId(widget.patientId),
+      _localAssessmentsFor(widget.patientId),
+      syncSvc.lastSyncedAt(),
+    ]);
+    final resolvedMemberId = phase1[0] as String?;
+    final localPatient = phase1[1] as PatientWithProgrammes?;
+    final localAssessments = phase1[2] as List<MemberAssessment>;
+    final lastSync = phase1[3] as DateTime?;
+    final syncAge = lastSync != null ? DateTime.now().difference(lastSync) : null;
+    // Skip remote assessment fetch when a full sync completed within the last
+    // 30 minutes — the local DB already has everything the server would return.
+    final skipRemote = syncAge != null && syncAge.inMinutes < 30;
+    ConsoleLog.banner('[PatientCtx] phase1 local=${t0.elapsedMilliseconds}ms'
+        ' localPatient=${localPatient != null} localAssessments=${localAssessments.length}'
+        ' syncAge=${syncAge?.inMinutes ?? '?'}min skipRemote=$skipRemote');
 
-    // First try local patient database
-    final localPatient = await patientRepo.byId(widget.patientId);
     if (localPatient != null) {
       // ignore: avoid_print
       print('[PatientContextScreen] Found local patient: ${localPatient.patient.name}');
@@ -390,44 +419,56 @@ class _PatientContextScreenState
         return true;
       }());
 
-      // Scope history query to the patient's own village — falling back to all
-      // assigned villages when villageId is null. Previously used
-      // subVillageIds.first which silently excluded patients in other villages.
-      // ignore: avoid_print
-      print('[PatientContextScreen] Fetching assessments from remote API with villageId: ${localPatient.patient.villageId}...');
-      final assessments = await memberRepo.getMemberAssessments(
-        widget.patientId,
-        villageId: localPatient.patient.villageId,
-        patientAge: localPatient.patient.age,
-        patientGender: localPatient.patient.gender,
-      );
-      // ignore: avoid_print
-      print('[PatientContextScreen] Found ${assessments.length} remote assessments');
-      
-      // Fetch recent visits — use numeric backend member PK so the client-side
-      // filter in getRecentVisits matches householdMemberId from the API.
-      final patientIdForVisits = localPatient.patient.patientId ?? widget.patientId;
-      final memberRef = _numericMemberRef(resolvedMemberId);
-      // ignore: avoid_print
-      print('[PatientContextScreen] Fetching recent visits for patient: $patientIdForVisits, member: $memberRef, householdId: ${localPatient.patient.householdId}');
-      final visits = await memberRepo.getRecentVisits(
-        patientIdForVisits,
-        memberReference: memberRef,
-        householdId: localPatient.patient.householdId,
-      );
-      // ignore: avoid_print
-      print('[PatientContextScreen] Found ${visits.length} recent visits');
-      
-      final localAssessments =
-          await _localAssessmentsFor(widget.patientId);
-      return PatientOrMemberData(
+      // Build local-only snapshot and surface it immediately so the screen
+      // renders with cached data while the remote enrichment runs.
+      final localOnly = PatientOrMemberData(
         localPatient: localPatient,
         programmes: localPatient.programmes,
-        remoteAssessments: assessments,
         localAssessments: localAssessments,
-        recentVisits: visits,
         memberId: resolvedMemberId,
-        householdName: await _householdName(localPatient.patient.householdId),
+      );
+      if (mounted) {
+        setState(() {
+          _localSnapshot = localOnly;
+          _remoteLoading = true;
+        });
+      }
+
+      // Phase 2: householdName (always local) + remote assessments (skipped
+      // when sync is fresh — avoids a ~900ms round-trip for data already in DB).
+      final tPhase2 = Stopwatch()..start();
+      List<MemberAssessment> remoteAssessments = const [];
+      if (skipRemote) {
+        ConsoleLog.banner('[PatientCtx] phase2 skip remote (sync ${syncAge!.inMinutes}min ago) — householdName only');
+        final householdName = await _householdName(localPatient.patient.householdId);
+        if (mounted) setState(() => _remoteLoading = false);
+        ConsoleLog.banner('[PatientCtx] phase2 done=${tPhase2.elapsedMilliseconds}ms'
+            ' remoteSkipped=true total=${t0.elapsedMilliseconds}ms');
+        return localOnly.copyWith(householdName: householdName);
+      }
+
+      ConsoleLog.banner('[PatientCtx] phase2 start — remote assessments + householdName');
+      final phase2 = await Future.wait([
+        memberRepo
+            .getMemberAssessments(
+              widget.patientId,
+              villageId: localPatient.patient.villageId,
+              patientAge: localPatient.patient.age,
+              patientGender: localPatient.patient.gender,
+            )
+            .catchError((_) => <MemberAssessment>[]),
+        _householdName(localPatient.patient.householdId),
+      ]);
+      remoteAssessments = phase2[0] as List<MemberAssessment>;
+      final householdName = phase2[1] as String?;
+      // ignore: avoid_print
+      print('[PatientContextScreen] Found ${remoteAssessments.length} remote assessments');
+
+      if (mounted) setState(() => _remoteLoading = false);
+
+      return localOnly.copyWith(
+        remoteAssessments: remoteAssessments,
+        householdName: householdName,
       );
     }
 
@@ -458,26 +499,11 @@ class _PatientContextScreenState
         }
       }
       
-      // Fetch recent visits — use numeric backend member PK so the client-side
-      // filter in getRecentVisits matches householdMemberId from the API.
-      final patientIdForVisits = member.patientId ?? widget.patientId;
-      final memberRef = _numericMemberRef(resolvedMemberId);
-      // ignore: avoid_print
-      print('[PatientContextScreen] Fetching recent visits for patient: $patientIdForVisits, member: $memberRef, householdId: ${member.householdId}');
-      final visits = await memberRepo.getRecentVisits(
-        patientIdForVisits,
-        memberReference: memberRef,
-        householdId: member.householdId,
-      );
-      // ignore: avoid_print
-      print('[PatientContextScreen] Found ${visits.length} recent visits');
-      
       final localAssessments = await _localAssessmentsFor(widget.patientId);
       return PatientOrMemberData(
         remoteMember: member,
         programmes: progs,
         localAssessments: localAssessments,
-        recentVisits: visits,
         memberId: resolvedMemberId,
         householdName: await _householdName(member.householdId),
       );
@@ -532,27 +558,6 @@ class _PatientContextScreenState
         }
       }
       
-      // Try to fetch recent visits but don't fail if API is unavailable
-      List<PatientVisit> visits = [];
-      try {
-        final patientIdForVisits = data['patientId'] as String? ?? widget.patientId;
-        // Use numeric backend member PK so the client-side filter matches.
-        final memberRef = _numericMemberRef(resolvedMemberId);
-        final householdIdForVisits = data['householdId']?.toString();
-        // ignore: avoid_print
-        print('[PatientContextScreen] Fetching recent visits for patient: $patientIdForVisits, member: $memberRef, householdId: $householdIdForVisits');
-        visits = await memberRepo.getRecentVisits(
-          patientIdForVisits,
-          memberReference: memberRef,
-          householdId: householdIdForVisits,
-        );
-        // ignore: avoid_print
-        print('[PatientContextScreen] Found ${visits.length} recent visits');
-      } catch (e) {
-        // ignore: avoid_print
-        print('[PatientContextScreen] Failed to fetch recent visits: $e (continuing with basic info)');
-      }
-      
       final localAssessmentsList =
           await _localAssessmentsFor(widget.patientId);
       return PatientOrMemberData(
@@ -571,7 +576,6 @@ class _PatientContextScreenState
         programmes: progs,
         remoteAssessments: assessments,
         localAssessments: localAssessmentsList,
-        recentVisits: visits,
         memberId: resolvedMemberId,
         householdName: await _householdName(data['householdId']?.toString()),
       );
@@ -583,7 +587,11 @@ class _PatientContextScreenState
   }
 
   Future<void> _refresh() async {
-    setState(() => _refreshing = true);
+    setState(() {
+      _refreshing = true;
+      _localSnapshot = null;
+      _remoteLoading = false;
+    });
     try {
       final data = await _fetchData();
       if (!mounted) return;
@@ -690,6 +698,11 @@ class _PatientContextScreenState
         future: _future,
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
+            final local = _localSnapshot;
+            if (local != null && local.hasData) {
+              // Local DB data is ready — render immediately; remote still loading.
+              return _buildContent(local, remoteLoading: _remoteLoading);
+            }
             return AnnotatedRegion<SystemUiOverlayStyle>(
               value: _lightStatusBar,
               child: SafeArea(
@@ -734,76 +747,82 @@ class _PatientContextScreenState
               ),
             );
           }
-          // Spec §2.8.3: Band 1 (Severe) and Band 2 (Moderate) are "urgent"
-          // for context-screen styling purposes — both push the patient to
-          // the same-day visit list.
-          final isUrgent = data.riskBand == Band.band1 ||
-              data.riskBand == Band.band2;
-          return AnnotatedRegion<SystemUiOverlayStyle>(
-            value: _lightStatusBar,
-            child: SafeArea(
-            top: false,
-            bottom: false,
-            child: Column(
+          return _buildContent(data, remoteLoading: false);
+        },
+      ),
+    );
+  }
+  Widget _buildContent(PatientOrMemberData data, {required bool remoteLoading}) {
+    // Spec §2.8.3: Band 1 (Severe) and Band 2 (Moderate) are "urgent"
+    // for context-screen styling purposes — both push the patient to
+    // the same-day visit list.
+    final isUrgent = data.riskBand == Band.band1 ||
+        data.riskBand == Band.band2;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: _lightStatusBar,
+      child: SafeArea(
+      top: false,
+      bottom: false,
+      child: Column(
+        children: [
+          _PatientDetailHeader(
+            data: data,
+            isUrgent: isUrgent,
+            refreshing: _refreshing,
+            onBack: () => Navigator.of(context).maybePop(),
+            onRefresh: _refreshing ? null : _refresh,
+          ),
+          // Same-household strip per spec Phase 5
+          if (data.householdId != null)
+            _SameHouseholdStrip(
+              currentPatientId: widget.patientId,
+              householdId: data.householdId!,
+            ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _refresh,
+              child: ListView(
+              padding: const EdgeInsets.fromLTRB(
+                14,
+                14,
+                14,
+                AppSpacing.stickyBarClearance,
+              ),
               children: [
-                _PatientDetailHeader(
-                  data: data,
-                  isUrgent: isUrgent,
-                  refreshing: _refreshing,
-                  onBack: () => Navigator.of(context).maybePop(),
-                  onRefresh: _refreshing ? null : _refresh,
+                _PatientProfileCard(data: data),
+                const SizedBox(height: 10),
+                _AssessmentsSection(
+                  assessments: data.assessments,
+                  isLoading: remoteLoading,
                 ),
-                // Same-household strip per spec Phase 5
-                if (data.householdId != null)
-                  _SameHouseholdStrip(
-                    currentPatientId: widget.patientId,
-                    householdId: data.householdId!,
-                  ),
-                Expanded(
-                  child: RefreshIndicator(
-                    onRefresh: _refresh,
-                    child: ListView(
-                    padding: const EdgeInsets.fromLTRB(
-                      14,
-                      14,
-                      14,
-                      AppSpacing.stickyBarClearance,
-                    ),
-                    children: [
-                      _PatientProfileCard(data: data),
-                      const SizedBox(height: 10),
-                      _AssessmentsSection(assessments: data.assessments),
-                      const SizedBox(height: 10),
-                      RecentVitalsSection(
-                        patientId: data.patientId ?? widget.patientId,
-                        memberReference: data.memberReference,
-                      ),
-                      const SizedBox(height: 10),
-                      OpenFollowupsSection(
-                        patientId: widget.patientId,
-                        memberReference: data.memberReference,
-                      ),
-                      const SizedBox(height: 10),
-                      PatientActionsRow(
-                        patientId: widget.patientId,
-                        patientName: data.name,
-                        patientAge: data.age,
-                        patientGender: data.gender,
-                        householdId: data.householdId,
-                        villageId: data.villageId,
-                        memberId: data.memberId,
-                        programmes: data.programmes,
-                        origin: widget.origin,
-                      ),
-                    ],
-                    ),
-                  ),
+                const SizedBox(height: 10),
+                RecentVitalsSection(
+                  patientId: data.patientId ?? widget.patientId,
+                  memberReference: data.memberReference,
+                ),
+                const SizedBox(height: 10),
+                OpenFollowupsSection(
+                  patientId: widget.patientId,
+                  memberReference: data.memberReference,
+                ),
+                const SizedBox(height: 10),
+                PatientActionsRow(
+                  patientId: widget.patientId,
+                  patientName: data.name,
+                  patientAge: data.age,
+                  patientGender: data.gender,
+                  householdId: data.householdId,
+                  villageId: data.villageId,
+                  memberId: data.memberId,
+                  programmes: data.programmes,
+                  origin: widget.origin,
                 ),
               ],
+              ),
             ),
-            ),
-          );
-        },
+          ),
+        ],
+      ),
       ),
     );
   }
@@ -812,13 +831,49 @@ class _PatientContextScreenState
 
 /// Section showing assessment history.
 class _AssessmentsSection extends StatelessWidget {
-  const _AssessmentsSection({required this.assessments});
+  const _AssessmentsSection({required this.assessments, this.isLoading = false});
 
   final List<MemberAssessment> assessments;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
     final dateFormat = DateFormat('MMM d, yyyy · h:mm a');
+
+    if (assessments.isEmpty && isLoading) {
+      // Remote fetch still in flight and no local assessments yet — show shimmer.
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.cardSurface,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: AppShadows.householdCard,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.assignment_outlined, color: AppColors.navy),
+                const SizedBox(width: 8),
+                Text(
+                  PatientContextStrings.sectionRecentVisits,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const _AssessmentShimmerRow(),
+            const SizedBox(height: 8),
+            const _AssessmentShimmerRow(),
+          ],
+        ),
+      );
+    }
 
     if (assessments.isEmpty) {
       return Container(
@@ -915,7 +970,26 @@ class _AssessmentsSection extends StatelessWidget {
                 ),
               ),
             ),
+          if (isLoading)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: _AssessmentShimmerRow(),
+            ),
         ],
+      ),
+    );
+  }
+}
+
+class _AssessmentShimmerRow extends StatelessWidget {
+  const _AssessmentShimmerRow();
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 64,
+      decoration: BoxDecoration(
+        color: AppColors.border.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(8),
       ),
     );
   }
@@ -1121,10 +1195,25 @@ class _AssessmentDetailSheet extends StatelessWidget {
   final MemberAssessment assessment;
   final DateFormat dateFormat;
 
+  /// Unpacks the nested `raw` field stored as {kind, raw: "...JSON..." | Map}.
+  Map<String, dynamic> _effectiveRaw() {
+    final outer = assessment.rawJson;
+    final rawField = outer['raw'];
+    if (rawField is Map) {
+      return Map<String, dynamic>.from(rawField);
+    }
+    if (rawField is String && rawField.isNotEmpty) {
+      try {
+        return Map<String, dynamic>.from(jsonDecode(rawField) as Map);
+      } catch (_) {}
+    }
+    return outer;
+  }
+
   @override
   Widget build(BuildContext context) {
     final progColors = Theme.of(context).extension<ProgrammeColors>()!;
-    final raw = assessment.rawJson;
+    final raw = _effectiveRaw();
 
     Color typeColor;
     IconData typeIcon;
@@ -1323,7 +1412,7 @@ class _AssessmentDetailSheet extends StatelessWidget {
   }
 
   Widget _buildTypeSpecificInfo(BuildContext context, Color typeColor) {
-    final raw = assessment.rawJson;
+    final raw = _effectiveRaw();
     // assessmentDetails is the nested clinical object from member-assessment-history
     final details = raw['assessmentDetails'] is Map
         ? Map<String, dynamic>.from(raw['assessmentDetails'] as Map)
@@ -1531,6 +1620,61 @@ class _AssessmentDetailSheet extends StatelessWidget {
           const Divider(height: 1, color: AppColors.border),
           const SizedBox(height: 8),
           ...fields.map((f) => _ClinicalFieldRow(field: f)),
+        ],
+      ),
+    );
+  }
+
+  /// Shows any rawJson fields not already rendered in the structured sections.
+  /// Skips nulls, empty strings, known-rendered keys, and deeply-nested objects.
+  Widget _buildRawFieldsDump(Color typeColor) {
+    // Keys already shown in structured sections — skip to avoid duplication.
+    const _knownKeys = {
+      'kind', 'raw',
+      'encounterId', 'id', 'serviceProvided', 'assessmentName', 'type',
+      'visitDate', 'createdAt', 'startTime', 'date', 'visitNumber',
+      'referralStatus', 'referralReason', 'nextFollowUpDate',
+      'householdMemberId', 'memberId', 'latestVisit', 'customStatus',
+      'assessmentDetails', 'observations',
+    };
+    final entries = _effectiveRaw().entries
+        .where((e) =>
+            !_knownKeys.contains(e.key) &&
+            e.value != null &&
+            e.value.toString().isNotEmpty &&
+            e.value.toString() != 'null' &&
+            e.value is! Map &&
+            e.value is! List)
+        .toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+
+    if (entries.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.canvas,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            PatientContextStrings.storedDataTitle,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...entries.map(
+            (e) => _DetailRow(
+              label: e.key,
+              value: e.value.toString(),
+            ),
+          ),
         ],
       ),
     );
