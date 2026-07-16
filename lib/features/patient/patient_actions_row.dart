@@ -176,7 +176,7 @@ class _PatientActionsRowState extends State<PatientActionsRow> {
               icon: const Icon(Icons.phone),
               label: Text(PatientContextStrings.callHousehold),
               style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
+                minimumSize: const Size(0, 48),
               ),
             ),
           ],
