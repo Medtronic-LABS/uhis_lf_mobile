@@ -1,3 +1,4 @@
+import '../../../core/clinical/referral_evaluator.dart';
 import '../../../core/debug/console_log.dart';
 import 'canonical_visit_data.dart';
 
@@ -303,6 +304,32 @@ abstract final class UnifiedPayloadMapper {
     final visitNo = d.getValue('ancVisitNumber') ?? d.getValue('visitNo');
     final bmiCategory = d.getValue('bmiCategory');
 
+    // Compute ANC care gaps (mirrors Android ANCAssessmentEvaluator.evaluateGapsInANC).
+    int? toInt(dynamic v) {
+      if (v is int) return v;
+      if (v is double) return v.toInt();
+      if (v is String) return int.tryParse(v);
+      return null;
+    }
+
+    final gestationalWeeks = asNum(
+      d.getValue('gestationalAge') ?? d.getValue('gestationalWeeks'),
+    );
+    final gapsResult = AncReferralEvaluator.evaluateGaps(
+      gestationalAgeWeeks: gestationalWeeks,
+      ttTdCompleted: d.getValue('ttTdCompleted') as String?,
+      ultrasound: d.getValue('ultrasound') as String?,
+      ancFromMedicalDoctor: d.getValue('ancFromMedicalDoctor') as String?,
+      facilityIdentifiedForDelivery:
+          d.getValue('facilityIdentifiedForDelivery') as String?,
+      ifaTotalConsumed: toInt(ifaConsumed),
+      calciumTotalConsumed: toInt(calciumConsumed),
+      ancVisitCount: toInt(visitNo),
+    );
+
+    final summary = <String, dynamic>{};
+    if (gapsResult.hasGaps) summary['gapsInAnc'] = gapsResult.gaps;
+
     return {
       if (visitNo != null) 'visitNo': visitNo,
       if (bmiCategory != null) 'bmiCategory': bmiCategory,
@@ -311,6 +338,7 @@ abstract final class UnifiedPayloadMapper {
       'dangerSignsRiskIdentification': dangerSigns,
       if (vaccination.isNotEmpty) 'vaccinationAndSupplements': vaccination,
       if (birthPrep.isNotEmpty) 'ancServicesBirthPreparedness': birthPrep,
+      if (summary.isNotEmpty) 'summary': summary,
     };
   }
 

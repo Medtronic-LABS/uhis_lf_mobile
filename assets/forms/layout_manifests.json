@@ -667,10 +667,24 @@
         ]
       },
       {
-        "sectionId": "birthPreparedness",
-        "title": "Birth Preparedness",
+        "sectionId": "ancServicesBirthPreparedness",
+        "title": "ANC Services & Birth Preparedness",
         "fieldRefs": [
-          "deliveryFacilityType"
+          {
+            "id": "ancFromMedicalDoctor",
+            "fieldName": "ANC from medical doctor",
+            "isMandatory": false
+          },
+          {
+            "id": "ultrasound",
+            "fieldName": "Ultrasound",
+            "isMandatory": false
+          },
+          {
+            "id": "facilityIdentifiedForDelivery",
+            "fieldName": "Facility identified for delivery",
+            "isMandatory": false
+          }
         ]
       }
     ]
