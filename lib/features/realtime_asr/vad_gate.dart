@@ -17,18 +17,22 @@ import 'dart:typed_data';
 /// `RealtimeAsrController`'s doc comments), so `bytesPerMs` (32 at 16kHz
 /// mono PCM16) is what converts a chunk's `pcm.length` into elapsed time.
 class VadGate {
+  // Defaults mirror AppConfig's vad* getters (lib/core/config/app_config.dart)
+  // — kept in sync manually; AppConfig is the tunable/overridable source of
+  // truth, these are just the bare-constructor fallback for callers (tests,
+  // the field's placeholder value) that don't go through config at all.
   VadGate({
-    this.enterMarginDb = 12,
-    this.sustainMarginDb = 7,
-    this.floorCeilingDbfs = -25,
+    this.enterMarginDb = 9,
+    this.sustainMarginDb = 6,
+    this.floorCeilingDbfs = -35,
     this.floorAlpha = 0.08,
     Duration? bootstrapDuration,
     Duration? debounceDuration,
     Duration? hangoverDuration,
     Duration? preRollDuration,
-  })  : bootstrapDuration = bootstrapDuration ?? const Duration(milliseconds: 400),
+  })  : bootstrapDuration = bootstrapDuration ?? const Duration(milliseconds: 500),
         debounceDuration = debounceDuration ?? const Duration(milliseconds: 180),
-        hangoverDuration = hangoverDuration ?? const Duration(milliseconds: 550),
+        hangoverDuration = hangoverDuration ?? const Duration(milliseconds: 700),
         preRollDuration = preRollDuration ?? const Duration(milliseconds: 350);
 
   static const int _bytesPerMs = 32; // 16000 Hz * 2 bytes * 1 channel / 1000
