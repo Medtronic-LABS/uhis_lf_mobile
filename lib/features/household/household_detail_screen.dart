@@ -368,6 +368,12 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _fetchMembers();
       });
+    } else if (_household.members.isNotEmpty) {
+      // Members pre-loaded from list screen — run lightweight meta enrichment
+      // so village name, SS name, and last-visit are resolved without a full fetch.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _enrichMeta();
+      });
     }
     // Queue membership is independent of member enrichment (may load slower,
     // may fail offline) — fetched unconditionally so badges also appear when
@@ -397,6 +403,60 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
       }
       setState(() => _queueItems = queueMap);
     } catch (_) {}
+  }
+
+  /// Resolves village name, SS name, and last-visit date for households that
+  /// arrive pre-loaded with members (list-screen → detail navigation). Avoids
+  /// a redundant full member fetch when the roster is already in hand.
+  Future<void> _enrichMeta() async {
+    if (!mounted) return;
+    final hierarchy = context.read<UserHierarchyService>();
+    final memberDao = context.read<MemberDao>();
+    await hierarchy.prefetch();
+
+    // Village ID → human-readable name. Check subVillages first (more specific),
+    // then fall back to top-level villages.
+    final rawVillage = _household.village;
+    final villageName = rawVillage == null
+        ? null
+        : hierarchy.subVillages
+                ?.where((sv) => sv.id == rawVillage)
+                .firstOrNull
+                ?.name ??
+            hierarchy.villages
+                ?.where((v) => v.id == rawVillage)
+                .firstOrNull
+                ?.name;
+
+    // SS name from first member's DB entity (pre-loaded HouseholdMemberData
+    // doesn't carry shasthyaShebikaId — must re-query).
+    String? ssName;
+    final firstId = _household.members.firstOrNull?.id;
+    if (firstId != null) {
+      final entity = await memberDao.getById(firstId);
+      ssName = _resolveSsName(entity?.shasthyaShebikaId, hierarchy);
+    }
+
+    final lastVisitAt = _householdLastVisit(_household.members);
+    ConsoleLog.banner('[HouseholdDetail] _enrichMeta'
+        ' village=${villageName ?? rawVillage} ssName=$ssName lastVisit=$lastVisitAt');
+
+    if (!mounted) return;
+    setState(() {
+      _household = HouseholdDetailData(
+        id: _household.id,
+        name: _household.name,
+        householdNo: _household.householdNo,
+        village: villageName ?? _household.village,
+        subVillage: _household.subVillage,
+        memberCount: _household.memberCount,
+        latitude: _household.latitude,
+        longitude: _household.longitude,
+        members: _household.members,
+        ssName: ssName,
+        lastVisitAt: lastVisitAt,
+      );
+    });
   }
 
   Future<void> _fetchMembers() async {
