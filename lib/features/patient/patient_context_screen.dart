@@ -337,8 +337,8 @@ class _PatientContextScreenState
   }
 
   Future<PatientOrMemberData> _fetchData() async {
-    // ignore: avoid_print
-    print('[PatientContextScreen] _fetchData for patientId: ${widget.patientId}');
+    final t0 = Stopwatch()..start();
+    ConsoleLog.banner('[PatientCtx] open patientId=${widget.patientId}');
 
     // Capture context-bound objects synchronously before any await to avoid
     // use_build_context_synchronously linter warnings.
@@ -356,6 +356,8 @@ class _PatientContextScreenState
     final resolvedMemberId = phase1[0] as String?;
     final localPatient = phase1[1] as PatientWithProgrammes?;
     final localAssessments = phase1[2] as List<MemberAssessment>;
+    ConsoleLog.banner('[PatientCtx] phase1 local=${t0.elapsedMilliseconds}ms'
+        ' localPatient=${localPatient != null} localAssessments=${localAssessments.length}');
 
     if (localPatient != null) {
       // ignore: avoid_print
@@ -417,11 +419,13 @@ class _PatientContextScreenState
           _remoteLoading = true;
         });
       }
+      ConsoleLog.banner('[PatientCtx] rendered local at ${t0.elapsedMilliseconds}ms'
+          ' — ${localAssessments.length} local assessments');
 
       // Phase 2: remote assessments + householdName in parallel (background).
       // getRecentVisits() removed — recentVisits field has no render consumers.
-      // ignore: avoid_print
-      print('[PatientContextScreen] Fetching remote assessments + householdName in parallel...');
+      ConsoleLog.banner('[PatientCtx] phase2 start — remote assessments + householdName');
+      final tPhase2 = Stopwatch()..start();
       final phase2 = await Future.wait([
         memberRepo
             .getMemberAssessments(
@@ -435,8 +439,9 @@ class _PatientContextScreenState
       ]);
       final remoteAssessments = phase2[0] as List<MemberAssessment>;
       final householdName = phase2[1] as String?;
-      // ignore: avoid_print
-      print('[PatientContextScreen] Found ${remoteAssessments.length} remote assessments');
+      ConsoleLog.banner('[PatientCtx] phase2 done=${tPhase2.elapsedMilliseconds}ms'
+          ' remoteAssessments=${remoteAssessments.length}'
+          ' total=${t0.elapsedMilliseconds}ms');
 
       if (mounted) setState(() => _remoteLoading = false);
 
