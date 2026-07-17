@@ -466,7 +466,7 @@ class _PatientContextScreenState
       final tPhase2 = Stopwatch()..start();
       List<MemberAssessment> remoteAssessments = const [];
       if (skipRemote) {
-        ConsoleLog.banner('[PatientCtx] phase2 skip remote (sync ${syncAge?.inMinutes}min ago) — householdName only');
+        ConsoleLog.banner('[PatientCtx] phase2 skip remote (sync ${syncAge!.inMinutes}min ago) — householdName only');
         final householdName = await _householdName(localPatient.patient.householdId);
         if (mounted) setState(() => _remoteLoading = false);
         ConsoleLog.banner('[PatientCtx] phase2 done=${tPhase2.elapsedMilliseconds}ms'
@@ -904,7 +904,7 @@ class _PatientContextScreenState
 
                     // ── Combined care history timeline ────────────────────
                     _CombinedTimeline(
-                      assessments: data.assessments,
+                      entries: _buildTimelineEntries(data),
                       isLoading: remoteLoading,
                     ),
                     const SizedBox(height: 12),
@@ -958,6 +958,284 @@ class _CareThread {
   final Color textColor;
   final String icon;
   final Map<String, String> stats;
+}
+
+// ─── Timeline Entry model ──────────────────────────────────────────────────
+
+/// A display-ready timeline entry derived from a [MemberAssessment] or a
+/// rule-based synthesis (pending action, enrollment, past illness, etc.).
+class _TimelineEntry {
+  const _TimelineEntry({
+    required this.emoji,
+    required this.title,
+    required this.relativeDate,
+    required this.category,
+    required this.date,
+    this.description,
+    this.isPending = false,
+    this.programme,
+    this.source,
+  });
+
+  final String emoji;
+  final String title;
+  final String relativeDate;
+  final String category;
+  final DateTime date;
+  final String? description;
+  final bool isPending;
+  final Programme? programme;
+  /// Original assessment for tap-to-detail; null for synthetic entries.
+  final MemberAssessment? source;
+}
+
+// ─── Timeline synthesis helpers ────────────────────────────────────────────
+
+/// Human-readable relative date from [date] to now.
+String _relativeDate(DateTime date) {
+  final diff = DateTime.now().difference(date);
+  if (diff.inDays == 0) return 'Today';
+  if (diff.inDays == 1) return 'Yesterday';
+  if (diff.inDays < 7) return '${diff.inDays} days ago';
+  if (diff.inDays < 14) return '1 week ago';
+  if (diff.inDays < 60) {
+    final w = (diff.inDays / 7).round();
+    return '$w week${w > 1 ? 's' : ''} ago';
+  }
+  if (diff.inDays < 365) {
+    final m = (diff.inDays / 30.5).round();
+    return '$m month${m > 1 ? 's' : ''} ago';
+  }
+  final yrs = diff.inDays ~/ 365;
+  final rem = diff.inDays - yrs * 365;
+  final mos = (rem / 30.5).round();
+  if (mos == 0) return '$yrs yr${yrs > 1 ? 's' : ''} ago';
+  return '$yrs yr${yrs > 1 ? 's' : ''} $mos mo ago';
+}
+
+/// Convert a single [MemberAssessment] into a display [_TimelineEntry].
+_TimelineEntry _assessmentToEntry(MemberAssessment a) {
+  final raw = _normalizeRaw(a.rawJson);
+  final prog = Programme.fromString(a.type);
+  final relDate = _relativeDate(a.date);
+
+  // Flatten diagnosis + notes for keyword matching
+  final dx = (raw['confirmDiagnosis'] as String? ?? '').toLowerCase();
+  final notesLower = (a.notes ?? '').toLowerCase();
+  final combined = '$dx $notesLower';
+
+  String emoji;
+  String title;
+  String category;
+  String? description;
+
+  switch (prog) {
+    case Programme.anc:
+    case Programme.pw:
+      emoji = '🤰';
+      final vn = raw['ancVisitNumber']?.toString();
+      title = vn != null && vn.isNotEmpty ? 'ANC Visit $vn' : 'ANC Checkup';
+      category = 'ANC / Pregnancy';
+      final parts = <String>[];
+      final bp = raw['bp']?.toString();
+      if (bp != null) parts.add('BP $bp');
+      final hb = raw['hemoglobin']?.toString();
+      if (hb != null) parts.add('Hb $hb g/dL');
+      final wt = raw['weight']?.toString();
+      if (wt != null) parts.add('Weight $wt kg');
+      description = parts.isEmpty ? null : parts.join(' · ');
+
+    case Programme.pnc:
+      final delivery = raw['modeOfDelivery']?.toString() ?? '';
+      final isCs = delivery.toLowerCase().contains('caesar') ||
+          delivery.toLowerCase().contains('section') ||
+          delivery.toLowerCase().contains('c-section');
+      emoji = isCs ? '🏥' : '🤱';
+      title = isCs ? 'Emergency C-section' : 'Delivered baby';
+      category = isCs ? 'Emergency C-section' : 'Normal delivery';
+      final pv = raw['pncVisitNumber']?.toString();
+      if (pv != null && delivery.isEmpty) {
+        emoji = '🤱';
+        title = 'PNC Visit $pv';
+        category = 'Postnatal care';
+      }
+      final babyWt = raw['babyBirthWeight']?.toString() ??
+          raw['birthWeight']?.toString();
+      final place = raw['deliveryPlace']?.toString();
+      final descParts = <String>[
+        if (delivery.isNotEmpty) delivery,
+        if (place != null && place.isNotEmpty) 'at $place',
+        if (babyWt != null) 'baby $babyWt kg',
+      ];
+      description = descParts.isEmpty ? null : descParts.join(' · ');
+
+    case Programme.ncd:
+      emoji = '❤️';
+      title = 'NCD Checkup';
+      if (dx.contains('diabetes') || dx.contains('sugar') || dx.contains('dm')) {
+        category = 'Blood sugar management';
+        emoji = '🩸';
+      } else if (dx.contains('hypertension') || dx.contains('htn')) {
+        category = 'Hypertension management';
+      } else {
+        category = 'NCD Follow-up';
+      }
+      final bpNcd = raw['bp']?.toString();
+      final bgNcd = raw['bg']?.toString();
+      final bgType = raw['bgType']?.toString();
+      final ncdParts = <String>[
+        if (bpNcd != null) 'BP $bpNcd',
+        if (bgNcd != null) 'Glucose $bgNcd${bgType != null ? ' ($bgType)' : ''}',
+      ];
+      description = ncdParts.isEmpty ? null : ncdParts.join(' · ');
+
+    case Programme.imci:
+      emoji = '👶';
+      title = 'Child health visit';
+      category = 'IMCI / Child care';
+      final vaccines = raw['receivedVaccine']?.toString() ?? '';
+      final wtImci = raw['weight']?.toString();
+      final imciParts = <String>[
+        if (wtImci != null) 'Weight $wtImci kg',
+        if (vaccines.isNotEmpty) 'Vaccines: $vaccines',
+      ];
+      description = imciParts.isEmpty ? null : imciParts.join(' · ');
+
+    case Programme.tb:
+      emoji = '🫁';
+      title = 'TB follow-up';
+      category = 'TB Programme';
+      description = dx.isNotEmpty ? 'Dx: $dx' : null;
+
+    default:
+      // Keyword-based illness detection for general/unknown programmes
+      if (combined.contains('malaria')) {
+        emoji = '🦟';
+        title = 'Malaria — treated';
+        category = 'Past illness';
+        description = 'Tested positive, completed antimalarial course';
+      } else if (combined.contains('diarrhea') || combined.contains('diarrhoea') || combined.contains('vomit')) {
+        emoji = '🤢';
+        title = 'Severe diarrhea & vomiting — treated';
+        category = 'Past illness';
+        description = 'Treated with ORS & antibiotics, fully recovered';
+      } else if (combined.contains('fever')) {
+        emoji = '🌡️';
+        title = 'Fever — treated';
+        category = 'Past illness';
+        description = dx.isNotEmpty ? dx : null;
+      } else {
+        emoji = '📝';
+        title = prog == Programme.unknown ? 'General visit' : prog.displayName;
+        category = 'General';
+        description = a.notes?.isNotEmpty == true ? a.notes : null;
+      }
+  }
+
+  return _TimelineEntry(
+    emoji: emoji,
+    title: title,
+    relativeDate: relDate,
+    category: category,
+    date: a.date,
+    description: description,
+    programme: prog,
+    source: a,
+  );
+}
+
+/// Derives an optional rule-based "today" pending entry to pin at top of timeline.
+/// Rules evaluated (in priority order):
+///   1. ANC: rising systolic (>5 mmHg from prior visit) or systolic ≥ 130 → BP recheck
+///   2. IMCI: no assessment in last 60 days → "Child visit overdue"
+///   3. NCD: no assessment in last 30 days → "Follow-up overdue"
+_TimelineEntry? _derivePendingEntry(PatientOrMemberData data) {
+  final ancVisits = data.assessments
+      .where((a) => Programme.fromString(a.type) == Programme.anc)
+      .toList();
+
+  if (ancVisits.isNotEmpty) {
+    final latestRaw = _normalizeRaw(ancVisits.first.rawJson);
+    final bpStr = latestRaw['bp']?.toString() ?? '';
+    final sysStr = bpStr.split('/').firstOrNull ?? '';
+    final sys = int.tryParse(sysStr);
+
+    bool rising = false;
+    if (ancVisits.length >= 2) {
+      final prevRaw = _normalizeRaw(ancVisits[1].rawJson);
+      final prevBp = prevRaw['bp']?.toString() ?? '';
+      final prevSys = int.tryParse(prevBp.split('/').firstOrNull ?? '');
+      if (sys != null && prevSys != null) rising = sys - prevSys > 5;
+    }
+
+    if (sys != null && (sys >= 130 || rising)) {
+      return _TimelineEntry(
+        emoji: '📍',
+        title: 'BP recheck due',
+        relativeDate: 'Today',
+        category: 'Pre-eclampsia watch',
+        date: DateTime.now(),
+        description: 'Rising trend flagged — check urine protein & danger signs',
+        isPending: true,
+        programme: Programme.anc,
+      );
+    }
+  }
+
+  final imciVisits = data.assessments
+      .where((a) => Programme.fromString(a.type) == Programme.imci)
+      .toList();
+  if (imciVisits.isNotEmpty) {
+    final daysSince = DateTime.now().difference(imciVisits.first.date).inDays;
+    if (daysSince >= 60) {
+      return _TimelineEntry(
+        emoji: '📍',
+        title: 'Child visit overdue',
+        relativeDate: 'Today',
+        category: 'IMCI / Child care',
+        date: DateTime.now(),
+        description: 'Last child health visit was $daysSince days ago — check growth & vaccines',
+        isPending: true,
+        programme: Programme.imci,
+      );
+    }
+  }
+
+  final ncdVisits = data.assessments
+      .where((a) => Programme.fromString(a.type) == Programme.ncd)
+      .toList();
+  if (ncdVisits.isNotEmpty) {
+    final daysSince = DateTime.now().difference(ncdVisits.first.date).inDays;
+    if (daysSince >= 30) {
+      return _TimelineEntry(
+        emoji: '📍',
+        title: 'Follow-up overdue',
+        relativeDate: 'Today',
+        category: 'NCD Follow-up',
+        date: DateTime.now(),
+        description: 'NCD follow-up due — last visit $daysSince days ago',
+        isPending: true,
+        programme: Programme.ncd,
+      );
+    }
+  }
+
+  return null;
+}
+
+/// Builds the full display timeline from [data.assessments] + rule-based entries.
+/// Returns newest-first (pending entry at index 0, oldest at end).
+List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
+  final entries = <_TimelineEntry>[];
+
+  final pending = _derivePendingEntry(data);
+  if (pending != null) entries.add(pending);
+
+  for (final a in data.assessments) {
+    entries.add(_assessmentToEntry(a));
+  }
+
+  return entries;
 }
 
 /// Unpacks the `{kind, raw}` envelope written by AssessmentDao so that
@@ -1059,69 +1337,6 @@ Map<String, dynamic> _normalizeRaw(Map<String, dynamic> rawJson) {
   return out;
 }
 
-/// Extracts up to 4 key clinical sub-items from an assessment's raw JSON
-/// for display as branch rows beneath the timeline card.
-List<String> _extractBranches(MemberAssessment assessment) {
-  final raw = _normalizeRaw(assessment.rawJson);
-  final prog = Programme.fromString(assessment.type);
-  final out = <String>[];
-
-  void add(String key, String label, {String? unit}) {
-    final v = raw[key];
-    final s = v?.toString() ?? '';
-    if (s.isEmpty || s == 'null') return;
-    out.add('$label: $s${unit != null ? ' $unit' : ''}');
-  }
-
-  switch (prog) {
-    case Programme.ncd:
-      add('bp', 'BP');
-      final bg = raw['bg']?.toString() ?? '';
-      final bgType = raw['bgType']?.toString() ?? '';
-      if (bg.isNotEmpty) out.add('Glucose: $bg${bgType.isNotEmpty ? ' ($bgType)' : ''}');
-      add('confirmDiagnosis', 'Dx');
-      add('ncdSymptomsMedication', 'Med');
-    case Programme.anc:
-      add('bp', 'BP');
-      add('weight', 'Wt', unit: 'kg');
-      add('hemoglobin', 'Hb', unit: 'g/dL');
-      final vn = raw['ancVisitNumber']?.toString() ?? '';
-      if (vn.isNotEmpty) out.add('Visit $vn');
-    case Programme.pw:
-      add('gravida', 'Gravida');
-      add('parity', 'Parity');
-    case Programme.pnc:
-      add('modeOfDelivery', 'Delivery');
-      add('anyComplicationsDuringDelivery', 'Complications');
-      final pv = raw['pncVisitNumber']?.toString() ?? '';
-      if (pv.isNotEmpty) out.add('PNC Visit $pv');
-    case Programme.imci:
-      add('anyIllness', 'Illness');
-      add('receivedVaccine', 'Vaccines');
-      add('childBreastFeeding', 'Breastfeeding');
-    case Programme.tb:
-      add('confirmDiagnosis', 'Dx');
-      add('has_cough', 'Cough');
-      add('has_fever', 'Fever');
-    case Programme.familyPlanning:
-      add('familyPlanningMethods', 'Method');
-      add('numberOfLivingChildren', 'Children');
-    case Programme.eyeCare:
-    case Programme.cataract:
-      add('eyeTestOutcome', 'Outcome');
-      add('eyeDisease', 'Eye disease');
-      add('referPlace', 'Referred');
-    default:
-      add('bp', 'BP');
-      add('weight', 'Wt', unit: 'kg');
-      add('confirmDiagnosis', 'Dx');
-  }
-
-  final ref = raw['referralStatus']?.toString() ?? '';
-  if (ref.isNotEmpty) out.add('Referral: $ref');
-
-  return out.take(4).toList();
-}
 
 /// Derives the ordered list of active care threads from local data.
 /// Reads only what is already in [data] — no async calls, no new endpoints.
@@ -2304,15 +2519,15 @@ _SparkBarChart? _buildWeightSparkChart(List<VisitVitals> history) {
 
 // ─── Combined Timeline ─────────────────────────────────────────────────────
 
-/// Scrollable vertical timeline of all care events (assessments).
-/// Events are already sorted newest-first via [PatientOrMemberData.assessments].
+/// Scrollable vertical timeline of rule-synthesised care events.
+/// [entries] are newest-first (pending at top, oldest at bottom).
 class _CombinedTimeline extends StatefulWidget {
   const _CombinedTimeline({
-    required this.assessments,
+    required this.entries,
     required this.isLoading,
   });
 
-  final List<MemberAssessment> assessments;
+  final List<_TimelineEntry> entries;
   final bool isLoading;
 
   @override
@@ -2326,19 +2541,21 @@ class _CombinedTimelineState extends State<_CombinedTimeline> {
   Widget build(BuildContext context) {
     final sw = Stopwatch()..start();
 
-    // Unique programmes present in the assessment list (stable insertion order)
+    // Unique non-null programmes present in entry list (stable insertion order)
     final seenProgs = <Programme>[];
-    for (final a in widget.assessments) {
-      final p = Programme.fromString(a.type);
-      if (p != Programme.unknown && !seenProgs.contains(p)) seenProgs.add(p);
+    for (final e in widget.entries) {
+      final p = e.programme;
+      if (p != null && p != Programme.unknown && !seenProgs.contains(p)) {
+        seenProgs.add(p);
+      }
     }
 
     final filtered = _filter == null
-        ? widget.assessments
-        : widget.assessments.where((a) => Programme.fromString(a.type) == _filter).toList();
+        ? widget.entries
+        : widget.entries.where((e) => e.programme == _filter).toList();
 
     late final Widget body;
-    if (widget.assessments.isEmpty && widget.isLoading) {
+    if (widget.entries.isEmpty && widget.isLoading) {
       body = const _TimelineShimmer();
     } else if (filtered.isEmpty) {
       body = Padding(
@@ -2351,11 +2568,9 @@ class _CombinedTimelineState extends State<_CombinedTimeline> {
     } else {
       final rows = <Widget>[];
       for (int i = 0; i < filtered.length; i++) {
-        // DESC sort: i=0 is newest (CURRENT), i=length-1 is oldest (no line below)
-        rows.add(_TimelineRow(
-          assessment: filtered[i],
+        rows.add(_TimelineEntryRow(
+          entry: filtered[i],
           isLast: i == filtered.length - 1,
-          isLatest: i == 0,
         ));
       }
       body = Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows);
@@ -2364,11 +2579,11 @@ class _CombinedTimelineState extends State<_CombinedTimeline> {
     final result = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          PatientProfileStrings.careHistory,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+        const Text(
+          'CARE HISTORY',
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textMuted, letterSpacing: 0.8),
         ),
-        // Filter chips — only shown when >1 programme in the list
+        // Filter chips — only shown when >1 programme
         if (seenProgs.length > 1) ...[
           const SizedBox(height: 8),
           SizedBox(
@@ -2399,7 +2614,7 @@ class _CombinedTimelineState extends State<_CombinedTimeline> {
       ],
     );
     debugPrint('⏱ [PatientContext] _CombinedTimeline build in ${sw.elapsedMilliseconds}ms'
-        ' events=${widget.assessments.length} filtered=${filtered.length} loading=${widget.isLoading}');
+        ' total=${widget.entries.length} filtered=${filtered.length} loading=${widget.isLoading}');
     return result;
   }
 }
@@ -2440,80 +2655,73 @@ class _TimelineFilterChip extends StatelessWidget {
   }
 }
 
-/// Single row in the combined timeline — dot + connector + event card.
-class _TimelineRow extends StatelessWidget {
-  const _TimelineRow({
-    required this.assessment,
-    required this.isLast,
-    this.isLatest = false,
-  });
+/// Single row in the combined timeline — emoji dot + connector + entry card.
+class _TimelineEntryRow extends StatelessWidget {
+  const _TimelineEntryRow({required this.entry, required this.isLast});
 
-  final MemberAssessment assessment;
+  final _TimelineEntry entry;
   final bool isLast;
-  final bool isLatest;
 
-  static const _dotSize = 10.0;
+  static const _dotSize = 34.0;
   static const _lineWidth = 2.0;
+
+  Color _dotBg(Programme? p) {
+    switch (p) {
+      case Programme.anc:
+      case Programme.pw:
+        return AppColors.ancSurface;
+      case Programme.ncd:
+        return AppColors.statusWarningSurface;
+      case Programme.imci:
+        return AppColors.threadImmBg;
+      case Programme.pnc:
+        return const Color(0xFFE0F2FE);
+      case Programme.tb:
+        return const Color(0xFFECFDF5);
+      default:
+        return AppColors.threadGeneralBg;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final prog = Programme.fromString(assessment.type);
-    final progColors = Theme.of(context).extension<ProgrammeColors>()!;
-    final dotColor = progColors.of(prog);
-    final dateStr = DateFormat('d MMM yyyy').format(assessment.date);
-    final label = assessment.visitNumber != null
-        ? '${prog.displayName} — Visit ${assessment.visitNumber}'
-        : prog.displayName;
-    final branches = _extractBranches(assessment);
-
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Dot + vertical connector
+          // Emoji circle + vertical connector
           SizedBox(
-            width: 24,
+            width: 38,
             child: Column(
               children: [
                 Container(
                   width: _dotSize,
                   height: _dotSize,
                   decoration: BoxDecoration(
-                    color: dotColor,
+                    color: entry.isPending
+                        ? AppColors.statusWarningSurface
+                        : _dotBg(entry.programme),
                     shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.cardSurface, width: 2),
+                    border: Border.all(color: AppColors.border, width: 1),
+                  ),
+                  child: Center(
+                    child: Text(entry.emoji, style: const TextStyle(fontSize: 16)),
                   ),
                 ),
                 if (!isLast)
                   Expanded(
-                    child: Container(
-                      width: _lineWidth,
-                      color: AppColors.border,
+                    child: Center(
+                      child: Container(width: _lineWidth, color: AppColors.border),
                     ),
                   ),
               ],
             ),
           ),
           const SizedBox(width: 10),
-          // Event card + branch sub-items
           Expanded(
             child: Padding(
-              padding: EdgeInsets.only(bottom: isLast ? 0 : 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _PendingEventCard(
-                    label: label,
-                    dateStr: dateStr,
-                    status: assessment.status,
-                    notes: assessment.notes,
-                    assessment: assessment,
-                    isLatest: isLatest,
-                  ),
-                  if (branches.isNotEmpty)
-                    _BranchList(branches: branches, dotColor: dotColor),
-                ],
-              ),
+              padding: EdgeInsets.only(bottom: isLast ? 0 : 14),
+              child: _TimelineEntryCard(entry: entry),
             ),
           ),
         ],
@@ -2522,95 +2730,81 @@ class _TimelineRow extends StatelessWidget {
   }
 }
 
-/// Card shown for each timeline event — label, date, status chip, tap-to-expand.
-/// [isLatest] gives the most-recent card amber highlight ("today's action" pattern).
-class _PendingEventCard extends StatelessWidget {
-  const _PendingEventCard({
-    required this.label,
-    required this.dateStr,
-    required this.assessment,
-    this.status,
-    this.notes,
-    this.isLatest = false,
-  });
+/// Rich card for a single [_TimelineEntry]: title + category + relative date + description.
+class _TimelineEntryCard extends StatelessWidget {
+  const _TimelineEntryCard({required this.entry});
 
-  final String label;
-  final String dateStr;
-  final String? status;
-  final String? notes;
-  final MemberAssessment assessment;
-  final bool isLatest;
+  final _TimelineEntry entry;
 
   @override
   Widget build(BuildContext context) {
+    final isPending = entry.isPending;
     return GestureDetector(
-      onTap: () => _TimelineEventSheet.show(context, assessment),
+      behavior: HitTestBehavior.opaque,
+      onTap: entry.source != null
+          ? () => _TimelineEventSheet.show(context, entry.source!)
+          : null,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
         decoration: BoxDecoration(
-          color: isLatest ? AppColors.statusWarningSurface : AppColors.cardSurface,
-          borderRadius: BorderRadius.circular(10),
+          color: isPending ? AppColors.statusWarningSurface : AppColors.cardSurface,
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isLatest ? AppColors.statusWarning : AppColors.border,
-            width: isLatest ? 1.5 : 1,
+            color: isPending ? AppColors.statusWarning : AppColors.border,
+            width: isPending ? 1.5 : 1,
           ),
         ),
-        child: Row(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (isLatest)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 3),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.statusWarning,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: const Text(
-                          'CURRENT',
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.cardSurface,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
-                    ),
-                  Text(
-                    label,
-                    style: const TextStyle(
+            // Title row + relative date
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    entry.title,
+                    style: TextStyle(
                       fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w700,
+                      color: isPending ? AppColors.statusWarningDark : AppColors.textPrimary,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    dateStr,
-                    style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-                  ),
-                  if (notes != null && notes!.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      notes!,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12, color: AppColors.textMid),
-                    ),
-                  ],
-                ],
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  entry.relativeDate,
+                  style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            // Category sub-label
+            Text(
+              entry.category,
+              style: const TextStyle(
+                fontSize: 11,
+                color: AppColors.textMuted,
+                fontStyle: FontStyle.italic,
               ),
             ),
-            if (status != null)
-              _StatusChip(status: status!),
-            const SizedBox(width: 4),
-            const Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.textMuted),
+            // Description (vitals/narrative)
+            if (entry.description != null && entry.description!.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                entry.description!,
+                style: const TextStyle(fontSize: 12, height: 1.5, color: AppColors.textMid),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+            if (entry.source != null) ...[
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.textMuted.withValues(alpha: 0.6)),
+              ),
+            ],
           ],
         ),
       ),
@@ -2618,57 +2812,6 @@ class _PendingEventCard extends StatelessWidget {
   }
 }
 
-/// Branch sub-item rows rendered below a timeline card — the "+-- label: value" pattern
-/// from the v15 patient-journey wireframe. Shows up to 4 key clinical data points.
-class _BranchList extends StatelessWidget {
-  const _BranchList({required this.branches, required this.dotColor});
-
-  final List<String> branches;
-  final Color dotColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 10, top: 4, bottom: 2),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (int i = 0; i < branches.length; i++)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 3),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    i == branches.length - 1 ? 'L--' : '+--',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: dotColor.withValues(alpha: 0.55),
-                      fontWeight: FontWeight.w600,
-                      height: 1.4,
-                    ),
-                  ),
-                  const SizedBox(width: 5),
-                  Expanded(
-                    child: Text(
-                      branches[i],
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textMid,
-                        height: 1.4,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
 
 
 /// Small coloured status chip (Referred / OnTreatment / Recovered).
