@@ -183,9 +183,6 @@ class _PatientContextScreenState
   bool _refreshing = false;
   PatientOrMemberData? _localSnapshot;
   bool _remoteLoading = false;
-  /// Index of the currently selected care-thread chip. Drives [_StatsGrid] and
-  /// spark chart selection. Reset to 0 whenever threads are re-derived.
-  int _selectedThread = 0;
 
   @override
   void initState() {
@@ -788,9 +785,6 @@ class _PatientContextScreenState
     final isUrgent = data.riskBand == Band.band1 || data.riskBand == Band.band2;
 
     final threads = _deriveThreads(data);
-    // Clamp selected index if threads shrunk after a refresh
-    final safeSelected = _selectedThread.clamp(0, threads.length - 1);
-    final selectedThread = threads[safeSelected];
 
     // ANC / PW pregnancy snapshot (non-null only for active pregnancy)
     final snap = data.pregnancySnapshot;
@@ -811,7 +805,7 @@ class _PatientContextScreenState
     final aiCtx = _aiContext(data);
 
     debugPrint('⏱ [PatientContext] _buildContent setup in ${t0.elapsedMilliseconds}ms'
-        ' threads=${threads.length} selected=$safeSelected snap=${snap != null}');
+        ' threads=${threads.length} snap=${snap != null}');
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: _lightStatusBar,
@@ -861,11 +855,7 @@ class _PatientContextScreenState
                     const SizedBox(height: 12),
 
                     // ── Active care threads ───────────────────────────────
-                    _CareThreadChipRow(
-                      threads: threads,
-                      selected: safeSelected,
-                      onThreadSelected: (i) => setState(() => _selectedThread = i),
-                    ),
+                    _CareThreadChipRow(threads: threads),
                     const SizedBox(height: 12),
 
                     // ── Combined health history ───────────────────────────
@@ -1505,19 +1495,12 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
 
 // ─── Care Thread Chip Row ──────────────────────────────────────────────────
 
-/// Horizontally scrollable row of thread chips — one pill per active clinical
-/// pathway. Tapping a chip scrolls the parent to the matching stats card
-/// (handled by the parent via [onThreadSelected]).
+/// Wrapping row of thread chips — one pill per active clinical pathway.
+/// Display-only (not tappable).
 class _CareThreadChipRow extends StatelessWidget {
-  const _CareThreadChipRow({
-    required this.threads,
-    required this.selected,
-    required this.onThreadSelected,
-  });
+  const _CareThreadChipRow({required this.threads});
 
   final List<_CareThread> threads;
-  final int selected;
-  final ValueChanged<int> onThreadSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -1537,46 +1520,33 @@ class _CareThreadChipRow extends StatelessWidget {
             ),
           ),
         ),
-        SizedBox(
-          height: 34,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: threads.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
-            itemBuilder: (context, i) {
-              final t = threads[i];
-              final isSelected = i == selected;
-              return GestureDetector(
-                onTap: () => onThreadSelected(i),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: isSelected ? t.textColor : t.bg,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: t.textColor.withOpacity(isSelected ? 0 : 0.35),
-                      width: 1,
-                    ),
-                  ),
-                  child: Text(
-                    t.icon.isEmpty ? t.label : '${t.icon} ${t.label}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: isSelected ? AppColors.cardSurface : t.textColor,
-                      height: 1.2,
-                    ),
-                  ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: threads.map((t) {
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                color: t.textColor,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                t.label.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.cardSurface,
+                  letterSpacing: 0.6,
+                  height: 1.2,
                 ),
-              );
-            },
-          ),
+              ),
+            );
+          }).toList(),
         ),
       ],
     );
     debugPrint('⏱ [PatientContext] _CareThreadChipRow build in ${sw.elapsedMilliseconds}ms'
-        ' (${threads.length} chips, selected=$selected)');
+        ' (${threads.length} chips)');
     return result;
   }
 }
