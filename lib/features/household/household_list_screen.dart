@@ -22,7 +22,7 @@ import '../../core/widgets/empty_state_card.dart';
 import '../../core/widgets/patient_filter_panel.dart';
 import '../dashboard/dashboard_repository.dart';
 import '../dashboard/mission_dashboard_repository.dart';
-import '../visit/widgets/mission_queue_card.dart';
+import '../visit/widgets/mission_queue_card.dart' show programmeBadgeColors;
 import 'household_detail_screen.dart';
 
 /// The Patients tab — a single household-card list matching the v13
@@ -664,32 +664,14 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
     );
   }
 
-  /// Shared member-row widget: a `MissionQueueCard` (embedded/flush, no own
-  /// card chrome) when the member has an active mission-queue entry, else a
-  /// plain `PatientBadgeRow`.
+  /// Member row matching the v14 wireframe: always uses [_WireframeMemberRow]
+  /// so the layout is consistent regardless of whether the member has a queue
+  /// entry. The status dot (Today / Overdue / This week) is derived from the
+  /// queue item's tier when one exists.
   Widget _buildMemberRow(BuildContext context, _MemberInfo member) {
     final pid = member.patientId ?? member.id;
     final queueItem = pid != null ? _queueItems[pid] : null;
-    if (queueItem != null) {
-      return MissionQueueCard(
-        item: queueItem,
-        compact: true,
-        embedded: true,
-        onTap: () {
-          final navId = queueItem.patientId;
-          if (navId != null &&
-              navId.isNotEmpty &&
-              navId != 'household' &&
-              navId != 'households') {
-            context.go(
-              '/patients/$navId',
-              extra: {'name': queueItem.patientName},
-            );
-          }
-        },
-      );
-    }
-    return PatientBadgeRow(
+    return _WireframeMemberRow(
       name: member.name,
       age: member.age,
       gender: member.gender,
@@ -699,6 +681,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
       pncVisitCount: member.pncVisitCount,
       householdNo: member.householdNo,
       householdName: member.householdName,
+      tier: queueItem?.tier,
       onTap: () => _navigateToMemberDetail(context, member),
     );
   }
@@ -1462,6 +1445,198 @@ class _SearchMatchHighlight extends StatelessWidget {
       ),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       child: child,
+    );
+  }
+}
+
+/// Member row that matches the v14 wireframe `renderHouseholds` member item:
+/// name + age/gender + programme badge baseline-aligned (Wrap), address on the
+/// next line, phone below that, and a [_TierStatusPill] on the right when the
+/// member has an active queue entry.
+class _WireframeMemberRow extends StatelessWidget {
+  const _WireframeMemberRow({
+    required this.name,
+    required this.onTap,
+    this.age,
+    this.gender,
+    this.phoneNumber,
+    this.programmes = const {},
+    this.ancVisitCount = 0,
+    this.pncVisitCount = 0,
+    this.householdNo,
+    this.householdName,
+    this.tier,
+  });
+
+  final String? name;
+  final int? age;
+  final String? gender;
+  final String? phoneNumber;
+  final Set<Programme> programmes;
+  final int ancVisitCount;
+  final int pncVisitCount;
+  final String? householdNo;
+  final String? householdName;
+  final DashboardTier? tier;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final badgeLabel = programmeReason(
+      programmes: programmes,
+      ancVisitCount: ancVisitCount,
+      pncVisitCount: pncVisitCount,
+    );
+    final (badgeBg, badgeFg) = programmeBadgeColors(primaryProgrammeOf(programmes));
+
+    final address = [
+      householdNo != null ? 'House #$householdNo' : null,
+      householdName,
+    ].whereType<String>().join(', ');
+
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 6,
+                    runSpacing: 3,
+                    children: [
+                      Text(
+                        name ?? CommonStrings.unnamed,
+                        style: AppTextStyles.worklistPatientName,
+                      ),
+                      if (age != null || gender != null)
+                        Text(
+                          [
+                            if (age != null) '$age',
+                            if (gender != null)
+                              gender!.substring(0, 1).toUpperCase(),
+                          ].join('/'),
+                          style: AppTextStyles.worklistPatientMeta,
+                        ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: badgeBg,
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: Text(
+                          badgeLabel,
+                          style: TextStyle(
+                            fontFamily: AppFonts.body,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: badgeFg,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (address.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        address,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.worklistAddress.copyWith(
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ),
+                  if (phoneNumber != null && phoneNumber!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        phoneNumber!,
+                        style: AppTextStyles.worklistPhone.copyWith(
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (tier != null && tier != DashboardTier.upcoming) ...[
+              const SizedBox(width: 8),
+              _TierStatusPill(tier: tier!),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Dot + label status indicator matching the wireframe's `.v-status` element.
+/// Palette is taken directly from the v14 prototype JS data object
+/// (`statusColor` / `dotColor` per tier).
+class _TierStatusPill extends StatelessWidget {
+  const _TierStatusPill({required this.tier});
+  final DashboardTier tier;
+
+  static const _kTodayText    = Color(0xFF059669);
+  static const _kTodayDot     = Color(0xFF10B981);
+  static const _kOverdueText  = Color(0xFFDC2626);
+  static const _kOverdueDot   = Color(0xFFEF4444);
+  static const _kThisWeekText = Color(0xFFB45309);
+  static const _kThisWeekDot  = Color(0xFFF59E0B);
+
+  @override
+  Widget build(BuildContext context) {
+    final String label;
+    final Color textColor;
+    final Color dotColor;
+    if (tier == DashboardTier.critical || tier == DashboardTier.overdue) {
+      label = MissionDashboardStrings.tierLabelOverdue;
+      textColor = _kOverdueText;
+      dotColor = _kOverdueDot;
+    } else if (tier == DashboardTier.dueToday) {
+      label = WorklistStrings.urgencyToday;
+      textColor = _kTodayText;
+      dotColor = _kTodayDot;
+    } else if (tier == DashboardTier.thisWeek) {
+      label = WorklistStrings.urgencyThisWeek;
+      textColor = _kThisWeekText;
+      dotColor = _kThisWeekDot;
+    } else {
+      return const SizedBox.shrink();
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: dotColor,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: AppTextStyles.worklistStatusPill.copyWith(color: textColor),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
