@@ -810,7 +810,6 @@ class _PatientContextScreenState
 
     // Spark charts for the selected thread
     final bpChart = _buildBpSparkChart(data.vitalHistory);
-    final weightChart = _buildWeightSparkChart(data.vitalHistory);
 
     // AI context summary (pure local, synchronous)
     final aiCtx = _aiContext(data);
@@ -889,19 +888,6 @@ class _PatientContextScreenState
                         ),
                       ),
                     if (bpChart != null) const SizedBox(height: 12),
-                    if (weightChart != null)
-                      _VitalTrendCard(
-                        sectionLabel: 'GROWTH TREND',
-                        chart: weightChart,
-                        onTap: () => _showCardDetail(
-                          context,
-                          title: 'Growth trend',
-                          icon: Icons.show_chart_rounded,
-                          iconColor: AppColors.tbText,
-                          body: _VitalTrendDetail(vitalHistory: data.vitalHistory),
-                        ),
-                      ),
-                    if (weightChart != null) const SizedBox(height: 12),
 
                     // ── Combined care history timeline ────────────────────
                     _CombinedTimeline(
@@ -2447,147 +2433,6 @@ class _BpLinePainter extends CustomPainter {
       old.systolics != systolics || old.diastolics != diastolics;
 }
 
-// ─── Spark Bar Chart ───────────────────────────────────────────────────────
-
-/// Lightweight bar-chart sparkline for single-series trend data (e.g. weight).
-/// Uses LayoutBuilder so each visit slot gets equal width — no label overlap.
-class _SparkBarChart extends StatelessWidget {
-  const _SparkBarChart({
-    required this.values,
-    required this.barColor,
-    this.label,
-    this.axisLabels,
-    this.trendNote,
-    this.maxHeight = 64,
-    this.barWidth = 8,
-    this.barSpacing = 4,
-  });
-
-  final List<double> values;
-  final Color barColor;
-  final String? label;
-  final List<String>? axisLabels;
-  final String? trendNote;
-  final double maxHeight;
-  final double barWidth;
-  final double barSpacing;
-
-  @override
-  Widget build(BuildContext context) {
-    if (values.isEmpty) {
-      return Text(
-        PatientProfileStrings.noVitalsYet,
-        style: const TextStyle(fontSize: 11, color: AppColors.textMuted, fontStyle: FontStyle.italic),
-      );
-    }
-
-    final maxVal = values.reduce((a, b) => a > b ? a : b);
-    final minVal = values.reduce((a, b) => a < b ? a : b);
-    final range = (maxVal - minVal).clamp(1.0, double.infinity);
-    double barH(double v) => ((v - minVal) / range * maxHeight).clamp(6.0, maxHeight);
-
-    String valLabel(double v) =>
-        v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (label != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Text(label!, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMid)),
-          ),
-        // Bars + labels in a single LayoutBuilder so each slot gets fair width
-        LayoutBuilder(builder: (ctx, bc) {
-          final slotW = bc.maxWidth / values.length;
-          final bW = (slotW * 0.45).clamp(6.0, 24.0);
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Bar row
-              SizedBox(
-                height: maxHeight,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    for (int i = 0; i < values.length; i++)
-                      SizedBox(
-                        width: slotW,
-                        child: Align(
-                          alignment: Alignment.bottomCenter,
-                          child: Container(
-                            width: bW,
-                            height: barH(values[i]),
-                            decoration: BoxDecoration(
-                              color: barColor,
-                              borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 4),
-              // Value labels — full slot width, centered
-              Row(
-                children: [
-                  for (int i = 0; i < values.length; i++)
-                    SizedBox(
-                      width: slotW,
-                      child: Text(
-                        valLabel(values[i]),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textMid,
-                          fontFeatures: [FontFeature.tabularFigures()],
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              // Axis labels
-              if (axisLabels != null && axisLabels!.isNotEmpty) ...[
-                const SizedBox(height: 1),
-                Row(
-                  children: [
-                    for (int i = 0; i < values.length; i++)
-                      SizedBox(
-                        width: slotW,
-                        child: Text(
-                          i < axisLabels!.length ? axisLabels![i] : '',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(fontSize: 9, color: AppColors.textMuted),
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ],
-          );
-        }),
-        if (trendNote != null) ...[
-          const SizedBox(height: 6),
-          Text(
-            trendNote!,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: trendNote!.startsWith('↑')
-                  ? AppColors.statusCritical
-                  : trendNote!.startsWith('↓')
-                      ? AppColors.statusSuccess
-                      : AppColors.textMuted,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
 
 /// Extracts BP line chart from visit vitals history. Returns null if <2 valid readings.
 _BpLineChart? _buildBpSparkChart(List<VisitVitals> history) {
@@ -2626,38 +2471,6 @@ _BpLineChart? _buildBpSparkChart(List<VisitVitals> history) {
   );
 }
 
-/// Extracts weight/growth spark chart from visit vitals history. Returns null if no weight data.
-_SparkBarChart? _buildWeightSparkChart(List<VisitVitals> history) {
-  final weights = <double>[];
-  for (final visit in history) {
-    for (final r in visit.readings) {
-      if (r.type == VitalType.weight) {
-        final w = r.value?.toDouble();
-        if (w != null) {
-          weights.add(w);
-          break;
-        }
-      }
-    }
-  }
-  if (weights.isEmpty) return null;
-
-  String? trend;
-  if (weights.length >= 2) {
-    final diff = weights.last - weights[weights.length - 2];
-    if (diff > 0.3) trend = '↑ Gaining weight';
-    else if (diff < -0.3) trend = '↓ Weight loss — monitor';
-    else trend = '→ Stable';
-  }
-
-  return _SparkBarChart(
-    values: weights,
-    barColor: AppColors.tbText,
-    label: PatientProfileStrings.growthTrend,
-    axisLabels: List.generate(weights.length, (i) => 'V${i + 1}'),
-    trendNote: trend,
-  );
-}
 
 // ─── Combined Timeline ─────────────────────────────────────────────────────
 
@@ -2677,29 +2490,14 @@ class _CombinedTimeline extends StatefulWidget {
 }
 
 class _CombinedTimelineState extends State<_CombinedTimeline> {
-  Programme? _filter; // null = All
-
   @override
   Widget build(BuildContext context) {
     final sw = Stopwatch()..start();
 
-    // Unique non-null programmes present in entry list (stable insertion order)
-    final seenProgs = <Programme>[];
-    for (final e in widget.entries) {
-      final p = e.programme;
-      if (p != null && p != Programme.unknown && !seenProgs.contains(p)) {
-        seenProgs.add(p);
-      }
-    }
-
-    final filtered = _filter == null
-        ? widget.entries
-        : widget.entries.where((e) => e.programme == _filter).toList();
-
     late final Widget body;
     if (widget.entries.isEmpty && widget.isLoading) {
       body = const _TimelineShimmer();
-    } else if (filtered.isEmpty) {
+    } else if (widget.entries.isEmpty) {
       body = Padding(
         padding: const EdgeInsets.symmetric(vertical: 16),
         child: Text(
@@ -2709,10 +2507,10 @@ class _CombinedTimelineState extends State<_CombinedTimeline> {
       );
     } else {
       final rows = <Widget>[];
-      for (int i = 0; i < filtered.length; i++) {
+      for (int i = 0; i < widget.entries.length; i++) {
         rows.add(_TimelineEntryRow(
-          entry: filtered[i],
-          isLast: i == filtered.length - 1,
+          entry: widget.entries[i],
+          isLast: i == widget.entries.length - 1,
         ));
       }
       body = Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows);
@@ -2725,77 +2523,16 @@ class _CombinedTimelineState extends State<_CombinedTimeline> {
           'CARE HISTORY',
           style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textMuted, letterSpacing: 0.8),
         ),
-        // Filter chips — only shown when >1 programme
-        if (seenProgs.length > 1) ...[
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 28,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                _TimelineFilterChip(
-                  label: 'All',
-                  isActive: _filter == null,
-                  onTap: () => setState(() => _filter = null),
-                ),
-                for (final p in seenProgs)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 6),
-                    child: _TimelineFilterChip(
-                      label: p.displayName,
-                      isActive: _filter == p,
-                      onTap: () => setState(() => _filter = _filter == p ? null : p),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
         const SizedBox(height: 10),
         body,
       ],
     );
     debugPrint('⏱ [PatientContext] _CombinedTimeline build in ${sw.elapsedMilliseconds}ms'
-        ' total=${widget.entries.length} filtered=${filtered.length} loading=${widget.isLoading}');
+        ' total=${widget.entries.length} loading=${widget.isLoading}');
     return result;
   }
 }
 
-/// Small pill chip used as filter control above the care history timeline.
-class _TimelineFilterChip extends StatelessWidget {
-  const _TimelineFilterChip({required this.label, required this.isActive, required this.onTap});
-
-  final String label;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: isActive ? AppColors.navy : AppColors.cardSurface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isActive ? AppColors.navy : AppColors.border,
-            width: 1,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: isActive ? AppColors.textOnNavy : AppColors.textMid,
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 /// Single row in the combined timeline — emoji dot + connector + entry card.
 class _TimelineEntryRow extends StatelessWidget {
