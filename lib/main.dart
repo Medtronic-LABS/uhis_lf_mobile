@@ -287,8 +287,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     try {
       await _notifications.initialize();
       await _repeatScheduler.rehydrateOnBoot();
-      // NOTE: Demo referral seeding moved to dashboard_screen.dart
-      // to run after login when user context is available
+
     } catch (e, st) {
       // Notifications are a non-critical surface; failure should not block
       // app startup. Surface to console for now; once a telemetry sink lands
