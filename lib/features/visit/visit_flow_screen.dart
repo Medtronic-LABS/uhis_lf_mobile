@@ -647,6 +647,7 @@ class _Step1Symptoms extends StatelessWidget {
     this.origin,
     this.onProgrammesSelected,
     this.onProgrammesLive,
+    this.onDeliverySelected,
   });
 
   final String encounterId;
@@ -672,6 +673,9 @@ class _Step1Symptoms extends StatelessWidget {
   /// Fired on every service card toggle — drives the Step 1 header badge live.
   final ValueChanged<Set<Programme>>? onProgrammesLive;
 
+  /// Fired just before [onAdvance] with whether the SK confirmed a delivery visit.
+  final ValueChanged<bool>? onDeliverySelected;
+
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider<ScribeController>(
@@ -692,6 +696,7 @@ class _Step1Symptoms extends StatelessWidget {
         onSymptomsConfirmed: onSymptomsConfirmed,
         onProgrammesSelected: onProgrammesSelected,
         onProgrammesLive: onProgrammesLive,
+        onDeliverySelected: onDeliverySelected,
       ),
     );
   }
