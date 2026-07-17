@@ -1587,18 +1587,11 @@ class _SparkBarChart extends StatelessWidget {
             children: [
               for (int i = 0; i < values.length; i++) ...[
                 if (i > 0) SizedBox(width: barSpacing),
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                // Bars for this x-position — side by side, aligned to bottom
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (second.isNotEmpty && i < second.length)
-                      Container(
-                        width: barWidth,
-                        height: barH(second[i]),
-                        decoration: BoxDecoration(
-                          color: (secondBarColor ?? AppColors.textMuted).withOpacity(0.5),
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
-                        ),
-                      ),
                     Container(
                       width: barWidth,
                       height: barH(values[i]),
@@ -1607,6 +1600,17 @@ class _SparkBarChart extends StatelessWidget {
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
                       ),
                     ),
+                    if (second.isNotEmpty && i < second.length) ...[
+                      const SizedBox(width: 1),
+                      Container(
+                        width: barWidth,
+                        height: barH(second[i]),
+                        decoration: BoxDecoration(
+                          color: (secondBarColor ?? AppColors.textMuted).withOpacity(0.7),
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ],
