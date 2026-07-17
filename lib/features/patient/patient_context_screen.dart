@@ -853,14 +853,12 @@ class _PatientContextScreenState
                       ),
                       const SizedBox(height: 12),
                     ],
-                    // Stats grid — hidden for ANC when pregnancy card is shown
-                    if (!isAnc || snap == null) ...[
-                      _StatsGrid(
-                        threads: threads,
-                        noDataLabel: PatientProfileStrings.noVitalsYet,
-                      ),
-                      const SizedBox(height: 12),
-                    ],
+                    // Stats grid — shown for all programmes
+                    _StatsGrid(
+                      threads: threads,
+                      noDataLabel: PatientProfileStrings.noVitalsYet,
+                    ),
+                    const SizedBox(height: 12),
 
                     // ── Active care threads ───────────────────────────────
                     _CareThreadChipRow(
@@ -1323,13 +1321,31 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
     final raw = latest != null ? _normalizeRaw(latest.rawJson) : const <String, dynamic>{};
     final stats = <String, String>{};
     final snap = data.pregnancySnapshot;
+
     if (snap?.eddDate != null) {
       final weeksLeft =
           DateTime.fromMillisecondsSinceEpoch(snap!.eddDate!).difference(DateTime.now()).inDays ~/ 7;
-      if (weeksLeft > 0) stats[PatientProfileStrings.weeksToGo] = '$weeksLeft';
+      if (weeksLeft > 0) stats[PatientProfileStrings.weeksToGo] = '$weeksLeft wks';
     }
     final visitNum = raw['ancVisitNumber'] as String?;
-    if (visitNum != null) stats[PatientProfileStrings.visitsCompleted] = visitNum;
+    if (visitNum != null && visitNum.isNotEmpty) stats[PatientProfileStrings.visitsCompleted] = visitNum;
+    final ancBp = raw['bp'] as String?;
+    if (ancBp != null && ancBp.isNotEmpty) stats['Last BP'] = '$ancBp mmHg';
+    final hb = raw['hemoglobin'] as String?;
+    if (hb != null && hb.isNotEmpty) stats['Haemoglobin'] = '$hb g/dL';
+    final ancWeight = raw['weight'] as String?;
+    if (ancWeight != null && ancWeight.isNotEmpty) stats['Weight'] = '$ancWeight kg';
+    final g = raw['gravida'] as String?;
+    final p = raw['parity'] as String?;
+    if (g != null && g.isNotEmpty && p != null && p.isNotEmpty) stats['Gravida / Parity'] = 'G$g P$p';
+    if (latest != null) {
+      final days = DateTime.now().difference(latest.date).inDays;
+      stats['Last check-up'] = days == 0 ? 'Today' : days == 1 ? 'Yesterday' : '$days days ago';
+    }
+    final ancTotal =
+        data.assessments.where((a) => Programme.fromString(a.type) == Programme.anc).length;
+    if (ancTotal > 0) stats['Total visits'] = '$ancTotal';
+
     threads.add(_CareThread(
       programme: Programme.anc,
       label: CareThreadStrings.anc,
@@ -1444,14 +1460,29 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
     ));
   }
 
-  // TB — general enrollment
+  // TB — with latest assessment stats
   if (data.programmes.contains(Programme.tb)) {
-    threads.add(const _CareThread(
+    final latest = latestOf(Programme.tb);
+    final raw = latest != null ? _normalizeRaw(latest.rawJson) : const <String, dynamic>{};
+    final dx = (raw['confirmDiagnosis'] as String?)?.trim();
+    final tbTotal =
+        data.assessments.where((a) => Programme.fromString(a.type) == Programme.tb).length;
+    String? lastCheckup;
+    if (latest != null) {
+      final days = DateTime.now().difference(latest.date).inDays;
+      lastCheckup = days == 0 ? 'Today' : days == 1 ? 'Yesterday' : '$days days ago';
+    }
+    threads.add(_CareThread(
       programme: Programme.tb,
       label: CareThreadStrings.general,
       icon: '🫁',
       bg: AppColors.tbSurface,
       textColor: AppColors.tbText,
+      stats: {
+        if (dx != null && dx.isNotEmpty) 'Diagnosis': dx,
+        if (tbTotal > 0) 'Total visits': '$tbTotal',
+        if (lastCheckup != null) 'Last check-up': lastCheckup,
+      },
     ));
   }
 
