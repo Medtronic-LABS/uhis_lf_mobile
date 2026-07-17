@@ -37,7 +37,7 @@ abstract final class ProgrammeGridSync {
         case Programme.unknown:
           return false;
         default:
-          return true;
+          return false;
       }
     }).toSet();
   }
