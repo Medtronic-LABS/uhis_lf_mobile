@@ -617,7 +617,8 @@ class _PatientContextScreenState
   Future<void> _refresh() async {
     setState(() {
       _refreshing = true;
-      _localSnapshot = null;
+      // Keep _localSnapshot so the existing content stays visible
+      // during the pull-to-refresh; skeleton only shows on cold load.
       _remoteLoading = false;
     });
     try {
@@ -3462,37 +3463,14 @@ class _PatientDetailHeader extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                    Builder(builder: (ctx) {
-                      final band = data.riskBand;
-                      if (band == null || band == Band.band4) return const SizedBox.shrink();
-                      final (label, color) = switch (band) {
-                        Band.band1 => ('● SEVERE RISK', AppColors.statusCriticalDark),
-                        Band.band2 => ('● OVERDUE', AppColors.statusWarningDark),
-                        Band.band3 => ('● MONITORING', const Color(0xFF93C5FD)),
-                        _ => ('', Colors.transparent),
-                      };
-                      if (label.isEmpty) return const SizedBox.shrink();
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text(
-                          label,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            color: color,
-                            letterSpacing: 0.4,
-                          ),
-                        ),
-                      );
-                    }),
                   ],
                 ),
               ),
-              if (isUrgent)
+              if (isUrgent) ...[
+                const SizedBox(width: 6),
                 Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 8, vertical: 3),
-                  margin: const EdgeInsets.only(left: 4),
                   decoration: BoxDecoration(
                     color: tokens.statusCritical,
                     borderRadius: BorderRadius.circular(5),
@@ -3507,6 +3485,8 @@ class _PatientDetailHeader extends StatelessWidget {
                     ),
                   ),
                 ),
+              ],
+              const SizedBox(width: 8),
               HeaderIconButton(
                 icon: Icons.cloud_download_outlined,
                 tooltip: PatientContextStrings.refresh,
