@@ -1453,6 +1453,11 @@ class _PregnancyProgressSection extends StatelessWidget {
   // Bangladesh national ANC protocol: 4 focused visits
   static const _totalAncVisits = 4;
 
+  // Trimester bar segment colors — visual rendering only
+  static const _colorT1 = Color(0xFFBFB0F5); // lavender  (T1: 0–13 wks)
+  static const _colorT2 = Color(0xFFF4B8C8); // pink/mauve (T2: 14–27 wks)
+  static const _colorT3 = Color(0xFFFFD97D); // amber/gold  (T3: 28–40 wks)
+
   @override
   Widget build(BuildContext context) {
     final sw = Stopwatch()..start();
@@ -1467,181 +1472,12 @@ class _PregnancyProgressSection extends StatelessWidget {
 
     final gaWeeks = lmpDate != null ? now.difference(lmpDate).inDays ~/ 7 : null;
     final weeksLeft = eddDate != null ? eddDate.difference(now).inDays ~/ 7 : null;
-    final progress = gaWeeks != null ? (gaWeeks / 40.0).clamp(0.0, 1.0) : null;
+    final progress = gaWeeks != null ? (gaWeeks / 40.0).clamp(0.0, 1.0) : 0.0;
     final visitsDone = int.tryParse(ancVisitNumber ?? '0') ?? 0;
-    final visitProgress = (visitsDone / _totalAncVisits).clamp(0.0, 1.0);
 
     final dateFormat = DateFormat('d MMM yyyy');
 
-    // G/P/A code string
-    final g = gravida ?? '?';
-    final p = parity ?? '?';
-    final gpaCode = 'G$g P$p A0';
-
-    final widget = Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.ancSurface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.ancBorder, width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header row: icon + title + Wk XX ▾
-          Row(
-            children: [
-              const Icon(Icons.favorite_border_rounded, size: 15, color: AppColors.ancText),
-              const SizedBox(width: 6),
-              Text(
-                PatientProfileStrings.pregnancyProgress,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.ancText,
-                ),
-              ),
-              const Spacer(),
-              if (gaWeeks != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.ancText.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    'Wk $gaWeeks ▾',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.ancText,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          if (lmpDate != null || eddDate != null) ...[
-            const SizedBox(height: 8),
-            // LMP + EDD on one row
-            Row(
-              children: [
-                if (lmpDate != null)
-                  Text(
-                    'LMP: ${dateFormat.format(lmpDate)}',
-                    style: const TextStyle(fontSize: 11, color: AppColors.ancText),
-                  ),
-                if (lmpDate != null && eddDate != null) ...[
-                  const SizedBox(width: 12),
-                  const Text('·', style: TextStyle(fontSize: 11, color: AppColors.ancText)),
-                  const SizedBox(width: 12),
-                ],
-                if (eddDate != null)
-                  Expanded(
-                    child: Text(
-                      'EDD: ${dateFormat.format(eddDate)}',
-                      style: const TextStyle(fontSize: 11, color: AppColors.ancText),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-              ],
-            ),
-          ],
-          if (weeksLeft != null || gravida != null) ...[
-            const SizedBox(height: 2),
-            Text(
-              [
-                if (weeksLeft != null && weeksLeft > 0) '~$weeksLeft ${PatientProfileStrings.weeksToGo}',
-                gpaCode,
-              ].join('  ·  '),
-              style: const TextStyle(fontSize: 11, color: AppColors.ancText),
-            ),
-          ],
-          if (progress != null) ...[
-            const SizedBox(height: 10),
-            // Custom progress bar with tick marker at current week position
-            LayoutBuilder(
-              builder: (_, bc) {
-                final pct = progress;
-                final fillW = (bc.maxWidth * pct).clamp(0.0, bc.maxWidth);
-                return SizedBox(
-                  height: 14,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      // Background bar
-                      Positioned(
-                        top: 2, left: 0, right: 0,
-                        child: Container(
-                          height: 10,
-                          decoration: BoxDecoration(
-                            color: AppColors.ancBorder,
-                            borderRadius: BorderRadius.circular(5),
-                          ),
-                        ),
-                      ),
-                      // Fill
-                      Positioned(
-                        top: 2, left: 0,
-                        child: Container(
-                          width: fillW,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            color: AppColors.ancText,
-                            borderRadius: BorderRadius.only(
-                              topLeft: const Radius.circular(5),
-                              bottomLeft: const Radius.circular(5),
-                              topRight: pct >= 1.0 ? const Radius.circular(5) : Radius.zero,
-                              bottomRight: pct >= 1.0 ? const Radius.circular(5) : Radius.zero,
-                            ),
-                          ),
-                        ),
-                      ),
-                      // Tick marker
-                      if (fillW > 2)
-                        Positioned(
-                          left: fillW - 2,
-                          top: 0,
-                          child: Container(
-                            width: 4,
-                            height: 14,
-                            decoration: BoxDecoration(
-                              color: AppColors.navy,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ],
-          const SizedBox(height: 12),
-          // Stats row: Visits done | Next visit info
-          Row(
-            children: [
-              _PregStat(
-                label: PatientProfileStrings.visitsCompleted,
-                value: '$visitsDone / $_totalAncVisits',
-                progress: visitProgress,
-              ),
-              const SizedBox(width: 12),
-              _PregStat(
-                label: 'Next visit',
-                value: visitsDone < _totalAncVisits
-                    ? 'ANC ${visitsDone + 1} due'
-                    : 'All visits done',
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-    debugPrint('⏱ [PatientContext] _PregnancyProgressSection build in ${sw.elapsedMilliseconds}ms'
-        ' gaWeeks=$gaWeeks weeksLeft=$weeksLeft visitsDone=$visitsDone gravida=$gravida parity=$parity');
-
-    return GestureDetector(
+    final card = GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => _showCardDetail(
         context,
@@ -1672,52 +1508,175 @@ class _PregnancyProgressSection extends StatelessWidget {
           ],
         ),
       ),
-      child: widget,
-    );
-  }
-}
-
-/// Single stat tile inside the pregnancy progress card.
-class _PregStat extends StatelessWidget {
-  const _PregStat({required this.label, required this.value, this.progress});
-
-  final String label;
-  final String value;
-  final double? progress;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: const TextStyle(fontSize: 10, color: AppColors.ancText)),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: AppColors.ancText,
-            ),
-          ),
-          if (progress != null) ...[
-            const SizedBox(height: 4),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(2),
-              child: LinearProgressIndicator(
-                value: progress,
-                minHeight: 4,
-                backgroundColor: AppColors.ancBorder,
-                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.ancText),
-              ),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+        decoration: BoxDecoration(
+          color: AppColors.cardSurface,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.navy.withValues(alpha: 0.07),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
           ],
-        ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // "~X weeks to go" headline
+            if (weeksLeft != null && weeksLeft > 0)
+              Text(
+                '~$weeksLeft ${PatientProfileStrings.weeksToGo}',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            // Space for floating Wk pill above bar
+            const SizedBox(height: 28),
+            // Three-color trimester bar with floating week pill + tick
+            LayoutBuilder(
+              builder: (_, bc) {
+                final tickX = (bc.maxWidth * progress).clamp(2.0, bc.maxWidth - 2.0);
+                const pillW = 56.0;
+                final pillLeft = (tickX - pillW / 2).clamp(0.0, bc.maxWidth - pillW);
+
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    // Segmented bar
+                    SizedBox(
+                      height: 12,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: const Row(
+                          children: [
+                            // T1: 0–13 wks (13/40)
+                            Expanded(flex: 13, child: ColoredBox(color: _colorT1)),
+                            // T2: 14–27 wks (14/40)
+                            Expanded(flex: 14, child: ColoredBox(color: _colorT2)),
+                            // T3: 28–40 wks (13/40)
+                            Expanded(flex: 13, child: ColoredBox(color: _colorT3)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    // Vertical tick at current week
+                    Positioned(
+                      left: tickX - 1,
+                      top: -4,
+                      child: Container(
+                        width: 2,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          color: AppColors.navy,
+                          borderRadius: BorderRadius.circular(1),
+                        ),
+                      ),
+                    ),
+                    // Floating "Wk X" pill above bar
+                    if (gaWeeks != null)
+                      Positioned(
+                        left: pillLeft,
+                        top: -28,
+                        child: Container(
+                          width: pillW,
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: AppColors.navy,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'Wk $gaWeeks',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textOnNavy,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            // LMP (left) / EDD (right) label+date pairs
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                if (lmpDate != null)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'LMP',
+                        style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        dateFormat.format(lmpDate),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  const SizedBox.shrink(),
+                if (eddDate != null)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      const Text(
+                        'EDD',
+                        style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        dateFormat.format(eddDate),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ],
+        ),
       ),
+    );
+
+    debugPrint('⏱ [PatientContext] _PregnancyProgressSection build in ${sw.elapsedMilliseconds}ms'
+        ' gaWeeks=$gaWeeks weeksLeft=$weeksLeft visitsDone=$visitsDone');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'PREGNANCY SNAPSHOT',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textMuted,
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(height: 8),
+        card,
+      ],
     );
   }
 }
+
 
 // ─── Stats Grid ────────────────────────────────────────────────────────────
 
