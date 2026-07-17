@@ -984,6 +984,68 @@ Map<String, dynamic> _unpackRaw(Map<String, dynamic> rawJson) {
   return rawJson;
 }
 
+/// Extends [_unpackRaw] by mapping local-form field names to the canonical API
+/// observation keys used by [_deriveThreads] and [_TimelineEventSheet].
+///
+/// Local encounters store BP as separate `systolic`/`diastolic` integers and
+/// glucose as `glucoseValue` (mmol/L) + `glucoseType` string. The server's
+/// `member-assessment-history` response uses `bp` ("sys/dia" string) and `bg`
+/// (numeric string) + `bgType` ("FBS"/"RBS"/"PPBS"). This function fills the
+/// canonical keys when the form-format keys are present and the canonical ones
+/// are absent, so callers can use a single key set regardless of data origin.
+Map<String, dynamic> _normalizeRaw(Map<String, dynamic> rawJson) {
+  final raw = _unpackRaw(rawJson);
+  final out = Map<String, dynamic>.from(raw);
+
+  // BP → "systolic/diastolic" string under key 'bp'
+  if ((out['bp'] as String?) == null) {
+    int? sys = () {
+      final v = raw['systolic'] ?? raw['bloodPressureSystolic'] ?? raw['avgSystolic'];
+      if (v is num) return v.toInt();
+      if (v is String) return int.tryParse(v);
+      return null;
+    }();
+    if (sys == null) {
+      final log = raw['bpLogDetails'];
+      if (log is List && log.isNotEmpty && log.first is Map) {
+        final first = log.first as Map;
+        final s = first['systolic'];
+        sys = s is num ? s.toInt() : (s is String ? int.tryParse(s) : null);
+      }
+    }
+    if (sys != null) {
+      final dv = raw['diastolic'] ?? raw['bloodPressureDiastolic'] ?? raw['avgDiastolic'];
+      int? dia;
+      if (dv is num) {
+        dia = dv.toInt();
+      } else if (dv is String) {
+        dia = int.tryParse(dv);
+      }
+      if (dia != null) out['bp'] = '$sys/$dia';
+    }
+  }
+
+  // Glucose → 'bg' (value string) + 'bgType' ("FBS"/"RBS"/"PPBS")
+  if ((out['bg'] as String?) == null) {
+    final glu = raw['glucoseValue'];
+    if (glu != null) {
+      out['bg'] = glu.toString();
+      if (out['bgType'] == null) {
+        final gt = (raw['glucoseType'] as String?)?.toLowerCase();
+        out['bgType'] = gt == 'fasting'
+            ? 'FBS'
+            : gt == 'random'
+                ? 'RBS'
+                : gt == 'postprandial'
+                    ? 'PPBS'
+                    : gt?.toUpperCase();
+      }
+    }
+  }
+
+  return out;
+}
+
 /// Derives the ordered list of active care threads from local data.
 /// Reads only what is already in [data] — no async calls, no new endpoints.
 /// Debug timing is emitted to console so per-thread cost is visible in logs.
@@ -998,7 +1060,7 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
   // ANC / Pregnancy
   if (data.programmes.contains(Programme.anc)) {
     final latest = latestOf(Programme.anc);
-    final raw = latest != null ? _unpackRaw(latest.rawJson) : const <String, dynamic>{};
+    final raw = latest != null ? _normalizeRaw(latest.rawJson) : const <String, dynamic>{};
     final stats = <String, String>{};
     final snap = data.pregnancySnapshot;
     if (snap?.eddDate != null) {
@@ -1020,7 +1082,7 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
   // NCD — split into HTN and blood-sugar threads when readings are available
   if (data.programmes.contains(Programme.ncd)) {
     final latest = latestOf(Programme.ncd);
-    final raw = latest != null ? _unpackRaw(latest.rawJson) : const <String, dynamic>{};
+    final raw = latest != null ? _normalizeRaw(latest.rawJson) : const <String, dynamic>{};
     final bp = raw['bp'] as String?;
     threads.add(_CareThread(
       programme: Programme.ncd,
@@ -1045,7 +1107,7 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
   // PNC — postnatal recovery
   if (data.programmes.contains(Programme.pnc)) {
     final latest = latestOf(Programme.pnc);
-    final raw = latest != null ? _unpackRaw(latest.rawJson) : const <String, dynamic>{};
+    final raw = latest != null ? _normalizeRaw(latest.rawJson) : const <String, dynamic>{};
     final pncVisit = raw['pncVisitNumber'] as String?;
     final deliveryMode = raw['modeOfDelivery'] as String?;
     threads.add(_CareThread(
@@ -2224,7 +2286,7 @@ class _TimelineEventSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sw = Stopwatch()..start();
-    final raw = _unpackRaw(assessment.rawJson);
+    final raw = _normalizeRaw(assessment.rawJson);
     final dateFormat = DateFormat('d MMMM yyyy · h:mm a');
     final progColors = Theme.of(context).extension<ProgrammeColors>()!;
     final prog = Programme.fromString(assessment.type);
