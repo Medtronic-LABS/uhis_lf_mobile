@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -808,9 +807,6 @@ class _PatientContextScreenState
     final gravida = ancRaw['gravida']?.toString();
     final parity = ancRaw['parity']?.toString();
 
-    // Spark charts for the selected thread
-    final bpChart = _buildBpSparkChart(data.vitalHistory);
-
     // AI context summary (pure local, synchronous)
     final aiCtx = _aiContext(data);
 
@@ -842,19 +838,12 @@ class _PatientContextScreenState
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(14, 14, 14, AppSpacing.stickyBarClearance),
                   children: [
-                    // ── Care thread chip row ──────────────────────────────
-                    _CareThreadChipRow(
-                      threads: threads,
-                      selected: safeSelected,
-                      onThreadSelected: (i) => setState(() => _selectedThread = i),
-                    ),
-                    const SizedBox(height: 12),
-
                     // ── AI Insight card ───────────────────────────────────
                     _AiInsightCard(summary: aiCtx.summary),
                     const SizedBox(height: 12),
 
-                    // ── Pregnancy progress (ANC / PW only) ───────────────
+                    // ── Snapshot cards ────────────────────────────────────
+                    // Pregnancy progress (ANC / PW only)
                     if (isAnc && snap != null) ...[
                       _PregnancyProgressSection(
                         snapshot: snap,
@@ -864,8 +853,7 @@ class _PatientContextScreenState
                       ),
                       const SizedBox(height: 12),
                     ],
-
-                    // ── Stats grid — hidden for ANC when pregnancy card is shown ──
+                    // Stats grid — hidden for ANC when pregnancy card is shown
                     if (!isAnc || snap == null) ...[
                       _StatsGrid(
                         thread: selectedThread,
@@ -874,22 +862,15 @@ class _PatientContextScreenState
                       const SizedBox(height: 12),
                     ],
 
-                    // ── Spark charts (BP + growth) — separate full-width cards ──
-                    if (bpChart != null)
-                      _VitalTrendCard(
-                        sectionLabel: 'BLOOD PRESSURE TREND',
-                        chart: bpChart,
-                        onTap: () => _showCardDetail(
-                          context,
-                          title: 'Blood pressure trend',
-                          icon: Icons.show_chart_rounded,
-                          iconColor: AppColors.navy,
-                          body: _VitalTrendDetail(vitalHistory: data.vitalHistory),
-                        ),
-                      ),
-                    if (bpChart != null) const SizedBox(height: 12),
+                    // ── Active care threads ───────────────────────────────
+                    _CareThreadChipRow(
+                      threads: threads,
+                      selected: safeSelected,
+                      onThreadSelected: (i) => setState(() => _selectedThread = i),
+                    ),
+                    const SizedBox(height: 12),
 
-                    // ── Combined care history timeline ────────────────────
+                    // ── Combined health history ───────────────────────────
                     _CombinedTimeline(
                       entries: _buildTimelineEntries(data),
                       isLoading: remoteLoading,
@@ -2096,385 +2077,9 @@ class _DetailRow extends StatelessWidget {
   }
 }
 
-/// Full vital trend table shown in the chart detail sheet.
-class _VitalTrendDetail extends StatelessWidget {
-  const _VitalTrendDetail({required this.vitalHistory});
-  final List<VisitVitals> vitalHistory;
-
-  @override
-  Widget build(BuildContext context) {
-    if (vitalHistory.isEmpty) {
-      return const Text('No vitals recorded yet.',
-          style: TextStyle(fontSize: 14, color: AppColors.textMuted, fontStyle: FontStyle.italic));
-    }
-    final dateFormat = DateFormat('d MMM yyyy');
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final visit in vitalHistory) ...[
-          Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF9FAFB),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFE5E7EB)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${visit.programme} — ${dateFormat.format(visit.date)}',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textStrong),
-                ),
-                const SizedBox(height: 8),
-                for (final r in visit.readings)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Row(children: [
-                      Text(_vitalLabel(r.type), style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
-                      const Spacer(),
-                      Text(_vitalValue(r), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textStrong)),
-                    ]),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  String _vitalLabel(VitalType t) => switch (t) {
-    VitalType.bloodPressure => 'Blood pressure',
-    VitalType.glucose => 'Blood glucose',
-    VitalType.weight => 'Weight',
-    VitalType.height => 'Height',
-    VitalType.temperature => 'Temperature',
-    VitalType.spO2 => 'SpO₂',
-    VitalType.respiratoryRate => 'Respiratory rate',
-    VitalType.muac => 'MUAC',
-    VitalType.bmi => 'BMI',
-  };
-
-  String _vitalValue(VitalReading r) {
-    if (r.type == VitalType.bloodPressure) {
-      return '${r.systolic?.toInt() ?? '—'}/${r.diastolic?.toInt() ?? '—'} mmHg';
-    }
-    final v = r.value;
-    final u = r.unit ?? '';
-    return v != null ? '${v.toStringAsFixed(1)} $u'.trim() : '—';
-  }
-}
-
-// ─── Vital Trend Card ─────────────────────────────────────────────────────
-
-/// Full-width tappable card for a single vital trend chart.
-/// Each chart type (BP, growth) gets its own card so it can breathe.
-class _VitalTrendCard extends StatelessWidget {
-  const _VitalTrendCard({
-    required this.sectionLabel,
-    required this.chart,
-    required this.onTap,
-  });
-
-  final String sectionLabel;
-  final Widget chart;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          sectionLabel,
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textMuted,
-            letterSpacing: 0.8,
-          ),
-        ),
-        const SizedBox(height: 8),
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onTap,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-            decoration: BoxDecoration(
-              color: AppColors.cardSurface,
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.navy.withValues(alpha: 0.06),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: chart,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ─── BP Line Chart (CustomPainter) ────────────────────────────────────────
-
-/// Connected-dot line chart for BP trend. Two series: systolic (navy) +
-/// diastolic (navyMid). Faint threshold lines at 140/90 mmHg.
-/// Values drawn on-canvas directly above each dot pair.
-class _BpLineChart extends StatelessWidget {
-  const _BpLineChart({
-    required this.systolics,
-    required this.diastolics,
-    required this.labels,
-    this.trendNote,
-  });
-
-  final List<double> systolics;
-  final List<double> diastolics;
-  final List<String> labels;
-  final String? trendNote;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Legend
-        Row(
-          children: [
-            Container(
-              width: 8, height: 8,
-              decoration: const BoxDecoration(color: AppColors.navy, shape: BoxShape.circle),
-            ),
-            const SizedBox(width: 4),
-            const Text('Systolic', style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
-            const SizedBox(width: 12),
-            Container(
-              width: 8, height: 8,
-              decoration: BoxDecoration(color: AppColors.navyMid.withValues(alpha: 0.8), shape: BoxShape.circle),
-            ),
-            const SizedBox(width: 4),
-            const Text('Diastolic', style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
-          ],
-        ),
-        const SizedBox(height: 10),
-        // Canvas chart
-        LayoutBuilder(
-          builder: (ctx, bc) => SizedBox(
-            width: bc.maxWidth,
-            height: 120,
-            child: CustomPaint(
-              size: Size(bc.maxWidth, 120),
-              painter: _BpLinePainter(
-                systolics: systolics,
-                diastolics: diastolics,
-                labels: labels,
-              ),
-            ),
-          ),
-        ),
-        // Trend note
-        if (trendNote != null) ...[
-          const SizedBox(height: 6),
-          Text(
-            trendNote!,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: trendNote!.startsWith('↑')
-                  ? AppColors.statusCritical
-                  : trendNote!.startsWith('↓')
-                      ? AppColors.statusSuccess
-                      : AppColors.textMuted,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _BpLinePainter extends CustomPainter {
-  const _BpLinePainter({
-    required this.systolics,
-    required this.diastolics,
-    required this.labels,
-  });
-
-  final List<double> systolics;
-  final List<double> diastolics;
-  final List<String> labels;
-
-  // Vertical layout constants
-  static const _topPad = 24.0;   // space for value labels above top dot
-  static const _botPad = 18.0;   // space for visit label below chart
-  static const _sidePad = 26.0;  // horizontal margin keeps dots off edge
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final n = systolics.length;
-    if (n == 0) return;
-
-    final chartH = size.height - _topPad - _botPad;
-    final allVals = [...systolics, ...diastolics];
-    final rawMin = allVals.reduce((a, b) => a < b ? a : b);
-    final rawMax = allVals.reduce((a, b) => a > b ? a : b);
-    final minVal = (rawMin - 14).clamp(0.0, double.infinity);
-    final maxVal = rawMax + 14;
-    final range = (maxVal - minVal).clamp(1.0, double.infinity);
-
-    double xPos(int i) {
-      if (n == 1) return size.width / 2;
-      return _sidePad + i * ((size.width - _sidePad * 2) / (n - 1));
-    }
-
-    double yPos(double v) => _topPad + (1.0 - (v - minVal) / range) * chartH;
-
-    // Faint clinical threshold lines (pre-hypertension boundary)
-    final threshPaint = Paint()
-      ..color = const Color(0xFFE53E3E).withValues(alpha: 0.16)
-      ..strokeWidth = 1;
-    for (final t in [140.0, 90.0]) {
-      if (t > minVal && t < maxVal) {
-        canvas.drawLine(Offset(0, yPos(t)), Offset(size.width, yPos(t)), threshPaint);
-      }
-    }
-
-    // Lines between dots
-    final sysPaint = Paint()
-      ..color = AppColors.navy
-      ..strokeWidth = 2
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-    final diaPaint = Paint()
-      ..color = AppColors.navyMid.withValues(alpha: 0.75)
-      ..strokeWidth = 1.5
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
-    for (int i = 0; i < n - 1; i++) {
-      canvas.drawLine(Offset(xPos(i), yPos(systolics[i])),
-          Offset(xPos(i + 1), yPos(systolics[i + 1])), sysPaint);
-      canvas.drawLine(Offset(xPos(i), yPos(diastolics[i])),
-          Offset(xPos(i + 1), yPos(diastolics[i + 1])), diaPaint);
-    }
-
-    // Dots + value labels per visit
-    final sysDot = Paint()..color = AppColors.navy..style = PaintingStyle.fill;
-    final sysBorder = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 1.5
-      ..style = PaintingStyle.stroke;
-    final diaDot = Paint()..color = AppColors.navyMid..style = PaintingStyle.fill;
-
-    for (int i = 0; i < n; i++) {
-      final px = xPos(i);
-      final sysY = yPos(systolics[i]);
-      final diaY = yPos(diastolics[i]);
-
-      // Value label: sys (bold navy) / dia (lighter) stacked, centered on x
-      final tp = TextPainter(
-        text: TextSpan(children: [
-          TextSpan(
-            text: '${systolics[i].toStringAsFixed(0)}\n',
-            style: const TextStyle(
-              fontSize: 9.5, color: AppColors.navy,
-              fontWeight: FontWeight.w700, height: 1.25,
-            ),
-          ),
-          TextSpan(
-            text: diastolics[i].toStringAsFixed(0),
-            style: TextStyle(
-              fontSize: 9, height: 1.25,
-              color: AppColors.navyMid.withValues(alpha: 0.85),
-            ),
-          ),
-        ]),
-        textAlign: TextAlign.center,
-        textDirection: ui.TextDirection.ltr,
-      )..layout(maxWidth: 44);
-      tp.paint(canvas, Offset(
-        (px - tp.width / 2).clamp(0.0, size.width - tp.width),
-        sysY - tp.height - 6,
-      ));
-
-      // Systolic dot (larger, white border so it pops off line)
-      canvas.drawCircle(Offset(px, sysY), 5, sysDot);
-      canvas.drawCircle(Offset(px, sysY), 5, sysBorder);
-
-      // Diastolic dot (smaller, no border)
-      canvas.drawCircle(Offset(px, diaY), 3.5, diaDot);
-
-      // Visit axis label below chart
-      final vl = TextPainter(
-        text: TextSpan(
-          text: i < labels.length ? labels[i] : '',
-          style: const TextStyle(fontSize: 9, color: AppColors.textMuted),
-        ),
-        textAlign: TextAlign.center,
-        textDirection: ui.TextDirection.ltr,
-      )..layout(maxWidth: 44);
-      vl.paint(canvas, Offset(
-        (px - vl.width / 2).clamp(0.0, size.width - vl.width),
-        size.height - _botPad + 4,
-      ));
-    }
-  }
-
-  @override
-  bool shouldRepaint(_BpLinePainter old) =>
-      old.systolics != systolics || old.diastolics != diastolics;
-}
-
-
-/// Extracts BP line chart from visit vitals history. Returns null if <2 valid readings.
-_BpLineChart? _buildBpSparkChart(List<VisitVitals> history) {
-  final systolics = <double>[];
-  final diastolics = <double>[];
-  for (final visit in history) {
-    for (final r in visit.readings) {
-      if (r.type == VitalType.bloodPressure) {
-        final sys = r.systolic?.toDouble();
-        final dia = r.diastolic?.toDouble();
-        // Physiological bounds: systolic 30–250 mmHg, diastolic 20–150 mmHg
-        if (sys != null && dia != null &&
-            sys >= 30 && sys <= 250 &&
-            dia >= 20 && dia <= 150) {
-          systolics.add(sys);
-          diastolics.add(dia);
-          break;
-        }
-      }
-    }
-  }
-  if (systolics.length < 2) return null;
-
-  final diff = systolics.last - systolics[systolics.length - 2];
-  final trend = diff > 5
-      ? '↑ Rising — monitor closely'
-      : diff < -5
-          ? '↓ Improving'
-          : '→ Stable';
-
-  return _BpLineChart(
-    systolics: systolics,
-    diastolics: diastolics,
-    labels: List.generate(systolics.length, (i) => 'V${i + 1}'),
-    trendNote: trend,
-  );
-}
-
-
 // ─── Combined Timeline ─────────────────────────────────────────────────────
 
-/// Scrollable vertical timeline of rule-synthesised care events.
+// _BpLineChart removed
 /// [entries] are newest-first (pending at top, oldest at bottom).
 class _CombinedTimeline extends StatefulWidget {
   const _CombinedTimeline({
