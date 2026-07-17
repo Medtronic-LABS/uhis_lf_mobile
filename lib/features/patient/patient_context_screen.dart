@@ -873,20 +873,18 @@ class _PatientContextScreenState
 
                     // ── Spark charts (BP + growth) ────────────────────────
                     if (bpChart != null || weightChart != null)
-                      Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(14),
-                          onTap: () => _showCardDetail(
-                            context,
-                            title: 'Vital trends',
-                            icon: Icons.show_chart_rounded,
-                            iconColor: AppColors.textStrong,
-                            body: _VitalTrendDetail(
-                              vitalHistory: data.vitalHistory,
-                            ),
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => _showCardDetail(
+                          context,
+                          title: 'Vital trends',
+                          icon: Icons.show_chart_rounded,
+                          iconColor: AppColors.textStrong,
+                          body: _VitalTrendDetail(
+                            vitalHistory: data.vitalHistory,
                           ),
-                          child: Container(
+                        ),
+                        child: Container(
                             padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
                               color: AppColors.cardSurface,
@@ -918,7 +916,6 @@ class _PatientContextScreenState
                             ),
                           ),
                         ),
-                      ),
                     if (bpChart != null || weightChart != null) const SizedBox(height: 12),
 
                     // ── Combined care history timeline ────────────────────
@@ -1216,12 +1213,10 @@ class _AiInsightCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final sw = Stopwatch()..start();
     final isEmpty = summary.trim().isEmpty;
-    final card = Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: () => _showDetail(context),
-        child: Container(
+    final card = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _showDetail(context),
+      child: Container(
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
           decoration: BoxDecoration(
@@ -1268,7 +1263,6 @@ class _AiInsightCard extends StatelessWidget {
             ],
           ),
         ),
-      ),
     );
     debugPrint('⏱ [PatientContext] _AiInsightCard build in ${sw.elapsedMilliseconds}ms');
     return card;
@@ -1400,41 +1394,38 @@ class _PregnancyProgressSection extends StatelessWidget {
     debugPrint('⏱ [PatientContext] _PregnancyProgressSection build in ${sw.elapsedMilliseconds}ms'
         ' gaWeeks=$gaWeeks weeksLeft=$weeksLeft visitsDone=$visitsDone');
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: () => _showCardDetail(
-          context,
-          title: PatientProfileStrings.pregnancyProgress,
-          icon: Icons.favorite_border_rounded,
-          iconColor: AppColors.ancText,
-          body: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (lmpDate != null)
-                _DetailRow(label: 'LMP', value: dateFormat.format(lmpDate)),
-              if (eddDate != null)
-                _DetailRow(label: 'EDD', value: dateFormat.format(eddDate)),
-              if (gaWeeks != null)
-                _DetailRow(label: 'Gestational age', value: '$gaWeeks weeks'),
-              if (weeksLeft != null)
-                _DetailRow(label: 'Weeks remaining', value: '$weeksLeft weeks'),
-              _DetailRow(
-                label: PatientProfileStrings.visitsCompleted,
-                value: '$visitsDone / $_totalAncVisits',
-              ),
-              if (snapshot.facts.highRiskPregnantWoman)
-                _DetailRow(label: 'Risk', value: 'High risk — elevated BP or other flag'),
-              if (snapshot.facts.hasGapsInAnc)
-                _DetailRow(label: 'ANC gaps', value: 'Missed visits detected'),
-              if (snapshot.facts.isNearTermAnc)
-                _DetailRow(label: 'Near term', value: 'Approaching EDD — monitor closely'),
-            ],
-          ),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _showCardDetail(
+        context,
+        title: PatientProfileStrings.pregnancyProgress,
+        icon: Icons.favorite_border_rounded,
+        iconColor: AppColors.ancText,
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (lmpDate != null)
+              _DetailRow(label: 'LMP', value: dateFormat.format(lmpDate)),
+            if (eddDate != null)
+              _DetailRow(label: 'EDD', value: dateFormat.format(eddDate)),
+            if (gaWeeks != null)
+              _DetailRow(label: 'Gestational age', value: '$gaWeeks weeks'),
+            if (weeksLeft != null)
+              _DetailRow(label: 'Weeks remaining', value: '$weeksLeft weeks'),
+            _DetailRow(
+              label: PatientProfileStrings.visitsCompleted,
+              value: '$visitsDone / $_totalAncVisits',
+            ),
+            if (snapshot.facts.highRiskPregnantWoman)
+              _DetailRow(label: 'Risk', value: 'High risk — elevated BP or other flag'),
+            if (snapshot.facts.hasGapsInAnc)
+              _DetailRow(label: 'ANC gaps', value: 'Missed visits detected'),
+            if (snapshot.facts.isNearTermAnc)
+              _DetailRow(label: 'Near term', value: 'Approaching EDD — monitor closely'),
+          ],
         ),
-        child: widget,
       ),
+      child: widget,
     );
   }
 }
@@ -1583,60 +1574,57 @@ class _StatTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: () => _showCardDetail(
-          context,
-          title: label,
-          iconColor: textColor,
-          body: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w800,
-                  color: textColor,
-                ),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _showCardDetail(
+        context,
+        title: label,
+        iconColor: textColor,
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w800,
+                color: textColor,
               ),
-              if (note != null) ...[
-                const SizedBox(height: 12),
-                Text(
-                  note!,
-                  style: const TextStyle(fontSize: 14, height: 1.5, color: AppColors.textMuted),
-                ),
-              ],
+            ),
+            if (note != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                note!,
+                style: const TextStyle(fontSize: 14, height: 1.5, color: AppColors.textMuted),
+              ),
             ],
-          ),
+          ],
         ),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: AppColors.cardSurface,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: textColor.withOpacity(0.15), width: 1),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(fontSize: 10, color: textColor.withOpacity(0.8)),
+      ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.cardSurface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: textColor.withOpacity(0.15), width: 1),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(fontSize: 10, color: textColor.withOpacity(0.8)),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: textColor,
               ),
-              const SizedBox(height: 2),
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: textColor,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
