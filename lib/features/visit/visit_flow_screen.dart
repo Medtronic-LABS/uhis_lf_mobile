@@ -267,6 +267,10 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   /// after the SK deselected every programme.
   bool _programmesExplicitlyChosen = false;
 
+  /// True when the SK confirmed a delivery visit in Step 1. Gates whether
+  /// the pregnancyOutcome form sections are included in Step 2.
+  bool _isDeliveryVisit = false;
+
   /// Live programmes from Step 1 service card selection — drives header badge
   /// before the SK advances. Updated on every card toggle via [onProgrammesLive].
   Set<Programme> _step1LiveProgrammes = {};
@@ -397,6 +401,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
             _confirmedProgrammes = programmes;
             _programmesExplicitlyChosen = true;
           },
+          onDeliverySelected: (isDelivery) {
+            _isDeliveryVisit = isDelivery;
+          },
           onProgrammesLive: (programmes) {
             setState(() => _step1LiveProgrammes = programmes);
           },
@@ -464,6 +471,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           sicknessDuration: _sicknessDuration,
           otherSymptoms: _otherSymptoms,
           seedProgrammes: _confirmedProgrammes,
+          isDeliveryVisit: _isDeliveryVisit,
           origin: widget.origin,
           onAdvance: (programme, referral, reasons) {
             setState(() {
@@ -709,6 +717,7 @@ class _Step2VitalsForm extends StatelessWidget {
     this.enrolledProgrammes = const {},
     this.confirmedSymptoms = const [],
     this.aiPickedSymptoms = const {},
+    this.isDeliveryVisit = false,
   });
 
   final String visitId;
@@ -722,6 +731,7 @@ class _Step2VitalsForm extends StatelessWidget {
   final List<String>? pathwayNames;
   final String? triageNotes;
   final String? origin;
+  final bool isDeliveryVisit;
   /// Enrolled programmes from the patient record — used to order sections.
   final Set<Programme> enrolledProgrammes;
   /// Symptom codes selected in Step 1.
@@ -746,6 +756,7 @@ class _Step2VitalsForm extends StatelessWidget {
       patientAge: patientAge,
       gestationalWeeks: gestationalWeeks,
       activatedPathways: pathwayNames,
+      isDeliveryVisit: isDeliveryVisit,
       triageNotes: triageNotes,
       origin: origin,
       enrolledProgrammes: enrolledProgrammes,
@@ -863,6 +874,7 @@ class _Step2ProgrammesThenForm extends StatefulWidget {
     this.gestationalWeeks,
     this.isPostpartum = false,
     this.postpartumWeeks,
+    this.isDeliveryVisit = false,
     this.origin,
   });
 
@@ -878,6 +890,7 @@ class _Step2ProgrammesThenForm extends StatefulWidget {
   final int? gestationalWeeks;
   final bool isPostpartum;
   final int? postpartumWeeks;
+  final bool isDeliveryVisit;
   final Set<String> confirmedSymptoms;
   /// Subset of [confirmedSymptoms] pre-selected by the AI Scribe.
   final Set<String> aiPickedSymptoms;
@@ -1011,6 +1024,7 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
           .where((p) => p != Programme.unknown)
           .map((p) => p.name)
           .toList(),
+      isDeliveryVisit: widget.isDeliveryVisit,
       triageNotes: widget.otherSymptoms,
       origin: widget.origin,
       enrolledProgrammes: _currentProgrammes,

@@ -313,9 +313,11 @@ abstract final class UnifiedSectionRules {
       return activeFormTypes.contains('anc');
     }
 
-    // pregnancyOutcome: always shown when pncMother is active.
+    // pregnancyOutcome: only shown when the SK confirmed a delivery visit
+    // (isDeliveryVisit=true in VisitFormScreen → 'pregnancyOutcome' added to
+    // activeFormTypes by _toFormTypes). Never shown on routine PNC visits.
     if (id == 'pregnancyOutcome') {
-      return activeFormTypes.contains('pncMother');
+      return activeFormTypes.contains('pregnancyOutcome');
     }
 
     // pncChild / pncNeonatal: child alive field must be 'yes'.
