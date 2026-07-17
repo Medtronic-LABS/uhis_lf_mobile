@@ -858,6 +858,9 @@ class _PatientContextScreenState
                       statusLabel: statusLabel,
                       statusBg: statusBg,
                       statusFg: statusFg,
+                      riskBand: data.riskBand,
+                      riskModifier: data.riskModifier,
+                      riskReasons: data.riskReasons,
                     ),
                     const SizedBox(height: 12),
 
@@ -1587,28 +1590,133 @@ class _AiInsightCard extends StatelessWidget {
     this.statusLabel,
     this.statusBg = Colors.transparent,
     this.statusFg = Colors.white,
+    this.riskBand,
+    this.riskModifier,
+    this.riskReasons = const [],
   });
 
   final String summary;
   final String? statusLabel;
   final Color statusBg;
   final Color statusFg;
+  final Band? riskBand;
+  final Modifier? riskModifier;
+  final List<String> riskReasons;
+
+  static (String, Color, Color) _bandMeta(Band b) => switch (b) {
+        Band.band1 => ('Band 1 — Severe risk', AppColors.statusCriticalSurface, AppColors.statusCriticalText),
+        Band.band2 => ('Band 2 — Moderate risk', AppColors.statusWarningSurface, AppColors.statusWarningText),
+        Band.band3 => ('Band 3 — Mild risk', const Color(0xFFEFF6FF), AppColors.navy),
+        Band.band4 => ('Band 4 — Routine', const Color(0xFFF3F4F6), AppColors.textMuted),
+      };
 
   void _showDetail(BuildContext context) {
     final isEmpty = summary.trim().isEmpty;
+    final hasBand = riskBand != null && riskBand != Band.band4;
+
     _showCardDetail(
       context,
       title: PatientProfileStrings.aiInsight,
       icon: Icons.auto_awesome_rounded,
       iconColor: AppColors.aiPurpleDark,
-      body: Text(
-        isEmpty ? PatientProfileStrings.aiInsightUnavailable : summary,
-        style: TextStyle(
-          fontSize: 14,
-          height: 1.6,
-          color: isEmpty ? AppColors.textMuted : AppColors.textStrong,
-          fontStyle: isEmpty ? FontStyle.italic : FontStyle.normal,
-        ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Clinical priority block ───────────────────────────────────────
+          if (hasBand) ...[
+            const Text(
+              'CLINICAL PRIORITY',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textMuted,
+                letterSpacing: 0.8,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Builder(builder: (ctx) {
+              final (label, bg, fg) = _bandMeta(riskBand!);
+              return Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: bg,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(label,
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: fg)),
+                  ),
+                  if (riskModifier != null && riskModifier != Modifier.none)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF3F4F6),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        riskModifier == Modifier.a
+                            ? '+a  Additional clinical risk'
+                            : '+b  Follow-up overdue',
+                        style: const TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textMid),
+                      ),
+                    ),
+                ],
+              );
+            }),
+            if (riskReasons.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Text(
+                'WHY',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textMuted,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ...riskReasons.map((r) => Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          margin: const EdgeInsets.only(top: 6, right: 8),
+                          width: 5,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            color: AppColors.textMid,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(r,
+                              style: const TextStyle(
+                                  fontSize: 13, height: 1.5, color: AppColors.textStrong)),
+                        ),
+                      ],
+                    ),
+                  )),
+            ],
+            const SizedBox(height: 16),
+            const Divider(height: 1),
+            const SizedBox(height: 16),
+          ],
+          // ── AI summary ───────────────────────────────────────────────────
+          Text(
+            isEmpty ? PatientProfileStrings.aiInsightUnavailable : summary,
+            style: TextStyle(
+              fontSize: 14,
+              height: 1.6,
+              color: isEmpty ? AppColors.textMuted : AppColors.textStrong,
+              fontStyle: isEmpty ? FontStyle.italic : FontStyle.normal,
+            ),
+          ),
+        ],
       ),
     );
   }
