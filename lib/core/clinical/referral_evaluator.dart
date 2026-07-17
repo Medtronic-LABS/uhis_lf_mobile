@@ -49,6 +49,17 @@ class AncReferralResult {
   bool get isReferralRequired => isEmergencyReferral || isNonEmergencyReferral;
 }
 
+/// ANC care-gap summary (mirrors Android ANCAssessmentEvaluator.evaluateGapsInANC).
+///
+/// Carried in [AncSummary.gapsInAnc] and sent in the offline-sync payload
+/// so the server can display gap flags without re-evaluating client logic.
+class AncGapsResult {
+  const AncGapsResult({this.gaps = const []});
+
+  final List<String> gaps;
+  bool get hasGaps => gaps.isNotEmpty;
+}
+
 class PncReferralResult {
   const PncReferralResult({
     this.urgentConditions = const [],
@@ -114,6 +125,8 @@ class NcdReferralEvaluator {
     if (bg >= bgOrangeLowMmol) return NcdRiskBand.orange;
     if (bg >= bgYellowHighMmol) return NcdRiskBand.yellowHigh;
     if (fbs != null && fbs >= fbsYellowLowMmol) return NcdRiskBand.yellowLow;
+    // Bangladesh spec: RBS ≥ 11.1 mmol/L → CC referral (yellowHigh), not just monitor.
+    if (rbs != null && rbs >= ncdUncontrolledRbs) return NcdRiskBand.yellowHigh;
     if (rbs != null && rbs > rbsGreenHighMmol) return NcdRiskBand.yellowLow;
     return NcdRiskBand.green;
   }
@@ -278,6 +291,82 @@ class AncReferralEvaluator {
     );
   }
 
+  /// Evaluates 8 ANC care-gap conditions from the form data.
+  ///
+  /// Mirrors Android `ANCAssessmentEvaluator.evaluateGapsInANC()`.
+  /// Returns [AncGapsResult] whose [AncGapsResult.gaps] list is written into
+  /// `summary.gapsInAnc` in the offline-sync payload.
+  ///
+  /// [ifaTotalConsumed] and [calciumTotalConsumed] are only checked when
+  /// non-null — absence means the field wasn't filled in, not that zero were
+  /// consumed, matching Android's `isViewVisible` guard.
+  static AncGapsResult evaluateGaps({
+    double? gestationalAgeWeeks,
+    String? ttTdCompleted,
+    String? ultrasound,
+    String? ancFromMedicalDoctor,
+    int? ifaTotalConsumed,
+    int? calciumTotalConsumed,
+    String? facilityIdentifiedForDelivery,
+    int? ancVisitCount,
+  }) {
+    final gaps = <String>[];
+    final ga = gestationalAgeWeeks ?? 0.0;
+
+    // 1. TT/TD incomplete > 20 gestational weeks.
+    if (ga > ancGestationalAgeWeek20) {
+      final completed = ttTdCompleted?.toLowerCase();
+      if (completed == null || completed.isEmpty || completed == 'no') {
+        gaps.add('TT vaccination incomplete (>20 weeks)');
+      }
+    }
+
+    // 2. Ultrasound not done > 36 weeks.
+    if (ultrasound != null &&
+        ultrasound.toLowerCase() == 'notdone' &&
+        ga > ancGestationalAgeWeek36) {
+      gaps.add('USG not done (>36 weeks)');
+    }
+
+    // 3. No ANC from medical doctor > 36 weeks.
+    if (ancFromMedicalDoctor != null &&
+        ancFromMedicalDoctor.toLowerCase() == 'no' &&
+        ga > ancGestationalAgeWeek36) {
+      gaps.add('ANC with doctor not done (>36 weeks)');
+    }
+
+    // 4. Fewer than 3 ANC visits completed by 36 weeks.
+    if (ancVisitCount != null &&
+        ancVisitCount < ancMinVisitsRequired &&
+        ga >= ancGestationalAgeWeek36) {
+      gaps.add('Less than 3 ANCs completed by 36 weeks');
+    }
+
+    // 5. Inadequate IFA tablet consumption (< 30).
+    if (ifaTotalConsumed != null &&
+        ifaTotalConsumed < ancTabletConsumptionMin) {
+      gaps.add('Inadequate IFA consumption (<$ancTabletConsumptionMin tablets)');
+    }
+
+    // 6. Inadequate Calcium tablet consumption (< 30).
+    if (calciumTotalConsumed != null &&
+        calciumTotalConsumed < ancTabletConsumptionMin) {
+      gaps.add('Inadequate Calcium consumption (<$ancTabletConsumptionMin tablets)');
+    }
+
+    // 7. Delivery facility not yet identified.
+    if (facilityIdentifiedForDelivery?.toLowerCase() == 'notidentified') {
+      gaps.add('Delivery facility not identified');
+    }
+
+    // 8. Planned home delivery.
+    if (facilityIdentifiedForDelivery?.toLowerCase() == 'homedelivery') {
+      gaps.add('Planned home delivery');
+    }
+
+    return AncGapsResult(gaps: gaps);
+  }
+
   static bool _isPresent(String? value) {
     if (value == null) return false;
     final v = value.toLowerCase();
@@ -345,7 +434,7 @@ class PncReferralEvaluator {
       urgent.add('Severe anaemia (Hb <8 g/dL)');
     }
 
-    // High blood sugar: FBS ≥ 7.0 or RBS ≥ 11.1 mmol/L
+    // High blood sugar: FBS ≥ 7.0 or RBS ≥ 11.1 mmol/L (known DM/GDM thresholds)
     final highFbs =
         fastingGlucoseMmol != null && fastingGlucoseMmol >= pncFbsHighMmol;
     final highRbs =
@@ -396,6 +485,16 @@ class PncReferralEvaluator {
     // Known DM/GDM ON treatment
     if (hasKnownDmGdm == true && onDmTreatment == true) {
       nonUrgent.add('Diabetes on treatment');
+    }
+
+    // Suspected diabetes in women without known DM/GDM:
+    // FBS ≥ 5.1 or RBS ≥ 8.5 mmol/L — Bangladesh UHIS Phase 1 spec, #3.
+    if (hasKnownDmGdm != true) {
+      final suspectedFbs = fastingGlucoseMmol != null &&
+          fastingGlucoseMmol >= ancFbsDiabetesMmol;
+      final suspectedRbs =
+          randomGlucoseMmol != null && randomGlucoseMmol >= ancRbsDiabetesMmol;
+      if (suspectedFbs || suspectedRbs) nonUrgent.add('Suspected diabetes (FBS≥5.1 or RBS≥8.5)');
     }
 
     return PncReferralResult(

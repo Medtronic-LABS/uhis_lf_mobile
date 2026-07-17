@@ -121,3 +121,13 @@ const double cvdVeryLowRisk = 5.0;
 const double cvdLowRisk = 10.0;
 const double cvdMediumRisk = 20.0;
 const double cvdMediumHighRisk = 30.0;
+
+// ── ANC gap thresholds (matches Android AssessmentDefinedParams) ──
+// TT/TD gap: incomplete vaccination after 20 gestational weeks.
+const double ancGestationalAgeWeek20 = 20.0;
+// USG / doctor-visit / ANC-count gap: evaluated at 36 weeks.
+const double ancGestationalAgeWeek36 = 36.0;
+// Minimum ANC visits required by 36 weeks before flagging as a gap.
+const int ancMinVisitsRequired = 3;
+// Minimum tablet doses consumed (IFA / Calcium) to not flag as inadequate.
+const int ancTabletConsumptionMin = 30;

@@ -10162,5 +10162,373 @@
         "id": "Present"
       }
     ]
+  },
+  "chiefComplaint": {
+    "id": "chiefComplaint",
+    "label": "Chief Complaint",
+    "widgetHint": "EditText",
+    "family": "iccm",
+    "orderId": 1,
+    "isMandatory": true,
+    "isEnabled": true,
+    "visibility": "visible",
+    "hint": "Describe the main complaint",
+    "inputType": "text",
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ]
+  },
+  "presentingSymptoms": {
+    "id": "presentingSymptoms",
+    "label": "Presenting Symptoms",
+    "widgetHint": "EditText",
+    "family": "iccm",
+    "orderId": 2,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "hint": "Describe symptoms",
+    "inputType": "text",
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ]
+  },
+  "convulsions": {
+    "id": "convulsions",
+    "label": "Convulsions",
+    "widgetHint": "SingleSelectionView",
+    "family": "iccm",
+    "orderId": 3,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "isBooleanAnswer": true,
+    "optionType": "boolean",
+    "optionsList": [
+      {
+        "id": true,
+        "name": "Yes"
+      },
+      {
+        "id": false,
+        "name": "No"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ]
+  },
+  "unconscious": {
+    "id": "unconscious",
+    "label": "Unconscious / Lethargic",
+    "widgetHint": "SingleSelectionView",
+    "family": "iccm",
+    "orderId": 4,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "isBooleanAnswer": true,
+    "optionType": "boolean",
+    "optionsList": [
+      {
+        "id": true,
+        "name": "Yes"
+      },
+      {
+        "id": false,
+        "name": "No"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ]
+  },
+  "unableToFeedOrDrink": {
+    "id": "unableToFeedOrDrink",
+    "label": "Unable to Feed or Drink",
+    "widgetHint": "SingleSelectionView",
+    "family": "iccm",
+    "orderId": 5,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "isBooleanAnswer": true,
+    "optionType": "boolean",
+    "optionsList": [
+      {
+        "id": true,
+        "name": "Yes"
+      },
+      {
+        "id": false,
+        "name": "No"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ]
+  },
+  "stridor": {
+    "id": "stridor",
+    "label": "Stridor",
+    "widgetHint": "SingleSelectionView",
+    "family": "iccm",
+    "orderId": 6,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "isBooleanAnswer": true,
+    "optionType": "boolean",
+    "optionsList": [
+      {
+        "id": true,
+        "name": "Yes"
+      },
+      {
+        "id": false,
+        "name": "No"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ]
+  },
+  "chestIndrawing": {
+    "id": "chestIndrawing",
+    "label": "Chest Indrawing",
+    "widgetHint": "SingleSelectionView",
+    "family": "iccm",
+    "orderId": 7,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "isBooleanAnswer": true,
+    "optionType": "boolean",
+    "optionsList": [
+      {
+        "id": true,
+        "name": "Yes"
+      },
+      {
+        "id": false,
+        "name": "No"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ]
+  },
+  "vomitingEverything": {
+    "id": "vomitingEverything",
+    "label": "Vomiting Everything",
+    "widgetHint": "SingleSelectionView",
+    "family": "iccm",
+    "orderId": 8,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "isBooleanAnswer": true,
+    "optionType": "boolean",
+    "optionsList": [
+      {
+        "id": true,
+        "name": "Yes"
+      },
+      {
+        "id": false,
+        "name": "No"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ]
+  },
+  "respiratoryRate": {
+    "id": "respiratoryRate",
+    "label": "Respiratory Rate (breaths/min)",
+    "widgetHint": "EditText",
+    "family": "iccm",
+    "orderId": 9,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "hint": "Enter number",
+    "inputType": "number",
+    "unitMeasurement": "bpm",
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ]
+  },
+  "muac": {
+    "id": "muac",
+    "label": "MUAC (Mid-Upper Arm Circumference)",
+    "widgetHint": "EditText",
+    "family": "iccm",
+    "orderId": 10,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "hint": "Enter number",
+    "inputType": "decimal",
+    "unitMeasurement": "cm",
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ]
+  },
+  "iccmClassification": {
+    "id": "iccmClassification",
+    "label": "ICCM Classification",
+    "widgetHint": "Spinner",
+    "family": "iccm",
+    "orderId": 11,
+    "isMandatory": true,
+    "isEnabled": true,
+    "visibility": "visible",
+    "errorMessage": "Please select a classification",
+    "optionsList": [
+      {
+        "id": "dangerSigns",
+        "name": "Danger Signs Present"
+      },
+      {
+        "id": "pneumonia",
+        "name": "Pneumonia"
+      },
+      {
+        "id": "diarrhea",
+        "name": "Diarrhea"
+      },
+      {
+        "id": "malaria",
+        "name": "Malaria"
+      },
+      {
+        "id": "malnutrition",
+        "name": "Malnutrition"
+      },
+      {
+        "id": "noClassification",
+        "name": "No Classification"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ]
+  },
+  "severity": {
+    "id": "severity",
+    "label": "Severity",
+    "widgetHint": "Spinner",
+    "family": "iccm",
+    "orderId": 12,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "optionsList": [
+      {
+        "id": "mild",
+        "name": "Mild"
+      },
+      {
+        "id": "moderate",
+        "name": "Moderate"
+      },
+      {
+        "id": "severe",
+        "name": "Severe"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ]
+  },
+  "treatmentPrescribed": {
+    "id": "treatmentPrescribed",
+    "label": "Treatment Prescribed",
+    "widgetHint": "EditText",
+    "family": "iccm",
+    "orderId": 13,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "hint": "Describe treatment",
+    "inputType": "text",
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ]
+  },
+  "referralRequired": {
+    "id": "referralRequired",
+    "label": "Referral Required",
+    "widgetHint": "SingleSelectionView",
+    "family": "iccm",
+    "orderId": 14,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "isBooleanAnswer": true,
+    "optionType": "boolean",
+    "optionsList": [
+      {
+        "id": true,
+        "name": "Yes"
+      },
+      {
+        "id": false,
+        "name": "No"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "iccm",
+        "workflowName": "ICCM"
+      }
+    ],
+    "condition": [
+      {
+        "eq": true,
+        "targetId": "referralFacility",
+        "visibility": "visible"
+      }
+    ]
   }
 }

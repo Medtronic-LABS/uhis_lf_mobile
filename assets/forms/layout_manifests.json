@@ -667,10 +667,24 @@
         ]
       },
       {
-        "sectionId": "birthPreparedness",
-        "title": "Birth Preparedness",
+        "sectionId": "ancServicesBirthPreparedness",
+        "title": "ANC Services & Birth Preparedness",
         "fieldRefs": [
-          "deliveryFacilityType"
+          {
+            "id": "ancFromMedicalDoctor",
+            "fieldName": "ANC from medical doctor",
+            "isMandatory": false
+          },
+          {
+            "id": "ultrasound",
+            "fieldName": "Ultrasound",
+            "isMandatory": false
+          },
+          {
+            "id": "facilityIdentifiedForDelivery",
+            "fieldName": "Facility identified for delivery",
+            "isMandatory": false
+          }
         ]
       }
     ]
@@ -1019,6 +1033,11 @@
             "id": "glucoseType",
             "fieldName": "Type of Investigation",
             "isMandatory": false
+          },
+          {
+            "id": "hba1c",
+            "fieldName": "HbA1c (%)",
+            "isMandatory": false
           }
         ]
       },
@@ -1027,9 +1046,42 @@
         "title": "Biometrics",
         "fieldRefs": [
           {
+            "id": "height",
+            "fieldName": "Height (cm)",
+            "inputType": 8192,
+            "isMandatory": false
+          },
+          {
             "id": "weight",
             "fieldName": "Weight (kg)",
             "inputType": 8192,
+            "isMandatory": false
+          },
+          "bmi"
+        ]
+      },
+      {
+        "sectionId": "symptomsLog",
+        "title": "Symptoms & Compliance",
+        "fieldRefs": [
+          {
+            "id": "compliance",
+            "fieldName": "Medication compliance",
+            "isMandatory": false
+          },
+          {
+            "id": "hasSymptoms",
+            "fieldName": "Has symptoms",
+            "isMandatory": false
+          },
+          {
+            "id": "ncdSymptoms",
+            "fieldName": "NCD symptoms",
+            "isMandatory": false
+          },
+          {
+            "id": "newWorseningSymptoms",
+            "fieldName": "New or worsening symptoms",
             "isMandatory": false
           }
         ]
@@ -1253,6 +1305,58 @@
             "isMandatory": true,
             "id": "qrCode"
           }
+        ]
+      }
+    ]
+  },
+  {
+    "formType": "iccm",
+    "workflowName": "ICCM",
+    "sections": [
+      {
+        "sectionId": "iccmPresentation",
+        "title": "Presenting Complaint",
+        "fieldRefs": [
+          { "isMandatory": true,  "id": "chiefComplaint" },
+          { "isMandatory": false, "id": "presentingSymptoms" }
+        ]
+      },
+      {
+        "sectionId": "iccmDangerSigns",
+        "title": "Danger Signs",
+        "fieldRefs": [
+          { "isMandatory": false, "id": "convulsions" },
+          { "isMandatory": false, "id": "unconscious" },
+          { "isMandatory": false, "id": "unableToFeedOrDrink" },
+          { "isMandatory": false, "id": "stridor" },
+          { "isMandatory": false, "id": "chestIndrawing" },
+          { "isMandatory": false, "id": "vomitingEverything" }
+        ]
+      },
+      {
+        "sectionId": "iccmVitals",
+        "title": "Vitals",
+        "fieldRefs": [
+          { "isMandatory": false, "id": "temperature" },
+          { "isMandatory": false, "id": "respiratoryRate" },
+          { "isMandatory": false, "id": "muac" }
+        ]
+      },
+      {
+        "sectionId": "iccmClassification",
+        "title": "Classification",
+        "fieldRefs": [
+          { "isMandatory": true,  "id": "iccmClassification" },
+          { "isMandatory": false, "id": "severity" }
+        ]
+      },
+      {
+        "sectionId": "iccmTreatment",
+        "title": "Treatment & Referral",
+        "fieldRefs": [
+          { "isMandatory": false, "id": "treatmentPrescribed" },
+          { "isMandatory": false, "id": "referralRequired" },
+          { "isMandatory": false, "id": "referralFacility" }
         ]
       }
     ]

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/debug/console_log.dart';
 import '../../core/api/endpoints.dart' show Endpoints;
 import '../../core/auth/auth_repository.dart';
 import '../../core/config/app_config.dart';
@@ -213,7 +214,7 @@ class AssessmentRepository extends ChangeNotifier {
       }
     }
 
-    debugPrint('[AssessmentSync] requestId: $requestId  tenantId: ${_api.tenantIdAsNum}  appType: ${AppConfig.appType}  syncMode: $syncMode');
+    debugPrint('[AssessmentSync] requestId: $requestId  appType: ${AppConfig.appType}  syncMode: $syncMode');
     debugPrint('[AssessmentSync] assessments[${assessmentPayloads.length}]:');
     for (var i = 0; i < assessmentPayloads.length; i++) {
       final a = assessmentPayloads[i];
@@ -259,7 +260,6 @@ class AssessmentRepository extends ChangeNotifier {
     // receives the full contract shape Android sends.
     final request = {
       'requestId': requestId,
-      'tenantId': _api.tenantIdAsNum,
       'appVersionName': AppConfig.appVersionName,
       'appVersionCode': AppConfig.appVersionCode,
       'appType': AppConfig.appType,
@@ -274,6 +274,7 @@ class AssessmentRepository extends ChangeNotifier {
       'rxBuddies': <Map<String, dynamic>>[],
     };
 
+    ConsoleLog.banner('[PayloadDebug] sync-create\n${request.toString()}');
     debugPrint('[AssessmentSync] POST ${Endpoints.offlineSyncCreate}');
     try {
       final response = await _api.dio.post<Map<String, dynamic>>(

@@ -70,22 +70,20 @@ abstract final class PathwayThresholds {
   static const int neonateMaxAgeMonths = 2;
 
   /// Maximum age for ICCM/IMCI classification (months, exclusive).
-  /// Source: WHO IMCI 2014
-  static const int imciMaxAgeMonths = 60;
+  /// Source: Bangladesh UHIS Phase 1 spec — 0–24 months (not WHO IMCI 5-year cap)
+  static const int imciMaxAgeMonths = 24;
 
   /// Minimum age for adult NCD screening (months).
-  /// Source: WHO PEN
-  static const int adultMinAgeMonths = 216; // 18 years
+  /// Source: Bangladesh UHIS Phase 1 spec — NCD & Eye Care eligibility ≥ 30 years
+  static const int adultMinAgeMonths = 360; // 30 years
 
   /// Minimum age for pediatric HTN screening if known HTN (months).
   /// Source: WHO PEN / AAP Guidelines
   static const int pediatricHtnMinAgeMonths = 60; // 5 years
 
-  /// Minimum biologically plausible age for pregnancy / ANC / PNC (months).
-  /// 10 years (120 months) is the WHO lower bound for reproductive risk.
-  /// Prevents corrupted `isPregnant=true` flags on infants/toddlers from
-  /// activating ANC or PNC forms.
-  static const int reproductiveMinAgeMonths = 120; // 10 years
+  /// Minimum age for FP and maternal health programmes (months).
+  /// Source: Bangladesh UHIS Phase 1 spec — FP & Maternal Health: female ≥ 14 years
+  static const int reproductiveMinAgeMonths = 168; // 14 years
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PNC WINDOW
