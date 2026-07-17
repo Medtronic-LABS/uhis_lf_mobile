@@ -259,6 +259,16 @@
     "clinicalWorkflowId": 102,
     "sections": [
       {
+        "sectionId": "outcomeType",
+        "title": "Outcome type",
+        "fieldRefs": [
+          {
+            "fieldName": "Outcome type",
+            "id": "deliveryOutcomeType"
+          }
+        ]
+      },
+      {
         "sectionId": "maternalDeath",
         "title": "Maternal Death",
         "fieldRefs": [
@@ -345,6 +355,38 @@
             "fieldName": "Complications during delivery",
             "isMandatory": false,
             "id": "complicationsDuringDelivery"
+          }
+        ]
+      },
+      {
+        "sectionId": "newbornDetails",
+        "title": "Newborn details",
+        "fieldRefs": [
+          {
+            "fieldName": "Is the baby alive?",
+            "isMandatory": false,
+            "id": "babyAlive"
+          },
+          {
+            "fieldName": "Sex",
+            "isMandatory": false,
+            "id": "babySex"
+          },
+          {
+            "fieldName": "Birth weight (kg)",
+            "inputType": 2,
+            "isMandatory": false,
+            "id": "birthWeight"
+          },
+          {
+            "fieldName": "Essential newborn care",
+            "isMandatory": false,
+            "id": "essentialNewbornCare"
+          },
+          {
+            "fieldName": "Cause of neonatal death",
+            "isMandatory": false,
+            "id": "neonatalDeathCause"
           }
         ]
       },
@@ -1317,46 +1359,94 @@
         "sectionId": "iccmPresentation",
         "title": "Presenting Complaint",
         "fieldRefs": [
-          { "isMandatory": true,  "id": "chiefComplaint" },
-          { "isMandatory": false, "id": "presentingSymptoms" }
+          {
+            "isMandatory": true,
+            "id": "chiefComplaint"
+          },
+          {
+            "isMandatory": false,
+            "id": "presentingSymptoms"
+          }
         ]
       },
       {
         "sectionId": "iccmDangerSigns",
         "title": "Danger Signs",
         "fieldRefs": [
-          { "isMandatory": false, "id": "convulsions" },
-          { "isMandatory": false, "id": "unconscious" },
-          { "isMandatory": false, "id": "unableToFeedOrDrink" },
-          { "isMandatory": false, "id": "stridor" },
-          { "isMandatory": false, "id": "chestIndrawing" },
-          { "isMandatory": false, "id": "vomitingEverything" }
+          {
+            "isMandatory": false,
+            "id": "convulsions"
+          },
+          {
+            "isMandatory": false,
+            "id": "unconscious"
+          },
+          {
+            "isMandatory": false,
+            "id": "unableToFeedOrDrink"
+          },
+          {
+            "isMandatory": false,
+            "id": "stridor"
+          },
+          {
+            "isMandatory": false,
+            "id": "chestIndrawing"
+          },
+          {
+            "isMandatory": false,
+            "id": "vomitingEverything"
+          }
         ]
       },
       {
         "sectionId": "iccmVitals",
         "title": "Vitals",
         "fieldRefs": [
-          { "isMandatory": false, "id": "temperature" },
-          { "isMandatory": false, "id": "respiratoryRate" },
-          { "isMandatory": false, "id": "muac" }
+          {
+            "isMandatory": false,
+            "id": "temperature"
+          },
+          {
+            "isMandatory": false,
+            "id": "respiratoryRate"
+          },
+          {
+            "isMandatory": false,
+            "id": "muac"
+          }
         ]
       },
       {
         "sectionId": "iccmClassification",
         "title": "Classification",
         "fieldRefs": [
-          { "isMandatory": true,  "id": "iccmClassification" },
-          { "isMandatory": false, "id": "severity" }
+          {
+            "isMandatory": true,
+            "id": "iccmClassification"
+          },
+          {
+            "isMandatory": false,
+            "id": "severity"
+          }
         ]
       },
       {
         "sectionId": "iccmTreatment",
         "title": "Treatment & Referral",
         "fieldRefs": [
-          { "isMandatory": false, "id": "treatmentPrescribed" },
-          { "isMandatory": false, "id": "referralRequired" },
-          { "isMandatory": false, "id": "referralFacility" }
+          {
+            "isMandatory": false,
+            "id": "treatmentPrescribed"
+          },
+          {
+            "isMandatory": false,
+            "id": "referralRequired"
+          },
+          {
+            "isMandatory": false,
+            "id": "referralFacility"
+          }
         ]
       }
     ]

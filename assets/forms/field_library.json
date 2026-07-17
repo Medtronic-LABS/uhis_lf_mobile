@@ -10530,5 +10530,407 @@
         "visibility": "visible"
       }
     ]
+  },
+  "deliveryOutcomeType": {
+    "id": "deliveryOutcomeType",
+    "label": "Outcome type",
+    "widgetHint": "RadioGroup",
+    "fieldName": "Outcome type",
+    "family": "pregnancyOutcome",
+    "orderId": 0,
+    "isMandatory": true,
+    "isEnabled": true,
+    "visibility": "visible",
+    "titleCulture": "ফলাফলের ধরন",
+    "options": [
+      {
+        "id": "maternalDeath",
+        "name": "Maternal Death"
+      },
+      {
+        "id": "abortion",
+        "name": "Abortion"
+      },
+      {
+        "id": "liveBirth",
+        "name": "Live birth"
+      },
+      {
+        "id": "stillbirth",
+        "name": "Stillbirth"
+      }
+    ],
+    "condition": [
+      {
+        "eqList": [
+          "liveBirth",
+          "stillbirth"
+        ],
+        "targetId": "timeOfDeath",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "liveBirth",
+          "stillbirth"
+        ],
+        "targetId": "gestationMonthAtDeath",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "liveBirth",
+          "stillbirth"
+        ],
+        "targetId": "causeOfDeath",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "liveBirth",
+          "stillbirth",
+          "maternalDeath"
+        ],
+        "targetId": "gestationMonthAtAbortion",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "liveBirth",
+          "stillbirth",
+          "maternalDeath"
+        ],
+        "targetId": "typeOfAbortion",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "deliveryOutcome",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "liveBirthNumbers",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "stillbirthNumbers",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "placeOfDelivery",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "dateOfDelivery",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "modeOfDelivery",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "birthAttendant",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "anyComplicationsDuringDelivery",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "complicationsDuringDelivery",
+        "visibility": "gone"
+      },
+      {
+        "eq": "liveBirth",
+        "targetId": "babyAlive",
+        "visibility": "visible"
+      },
+      {
+        "eq": "liveBirth",
+        "targetId": "babySex",
+        "visibility": "visible"
+      },
+      {
+        "eq": "liveBirth",
+        "targetId": "birthWeight",
+        "visibility": "visible"
+      },
+      {
+        "eq": "liveBirth",
+        "targetId": "essentialNewbornCare",
+        "visibility": "visible"
+      },
+      {
+        "eqList": [
+          "stillbirth",
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "babyAlive",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "stillbirth",
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "babySex",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "stillbirth",
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "birthWeight",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "stillbirth",
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "essentialNewbornCare",
+        "visibility": "gone"
+      },
+      {
+        "eqList": [
+          "stillbirth",
+          "maternalDeath",
+          "abortion"
+        ],
+        "targetId": "neonatalDeathCause",
+        "visibility": "gone"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "pregnancyOutcome",
+        "workflowId": 102,
+        "workflowName": "Pregnancy Outcome"
+      }
+    ]
+  },
+  "babyAlive": {
+    "id": "babyAlive",
+    "label": "Is the baby alive?",
+    "widgetHint": "SingleSelectionView",
+    "fieldName": "Is the baby alive",
+    "family": "newbornDetails",
+    "orderId": 1,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "gone",
+    "titleCulture": "শিশু কি জীবিত?",
+    "options": [
+      {
+        "id": "yes",
+        "name": "Yes"
+      },
+      {
+        "id": "no",
+        "name": "No"
+      }
+    ],
+    "condition": [
+      {
+        "eq": "no",
+        "targetId": "neonatalDeathCause",
+        "visibility": "visible"
+      },
+      {
+        "eq": "yes",
+        "targetId": "neonatalDeathCause",
+        "visibility": "gone"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "pregnancyOutcome",
+        "workflowId": 102,
+        "workflowName": "Pregnancy Outcome"
+      }
+    ]
+  },
+  "babySex": {
+    "id": "babySex",
+    "label": "Sex",
+    "widgetHint": "RadioGroup",
+    "fieldName": "Baby sex",
+    "family": "newbornDetails",
+    "orderId": 2,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "gone",
+    "titleCulture": "লিঙ্গ",
+    "options": [
+      {
+        "id": "male",
+        "name": "Male"
+      },
+      {
+        "id": "female",
+        "name": "Female"
+      },
+      {
+        "id": "other",
+        "name": "Other"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "pregnancyOutcome",
+        "workflowId": 102,
+        "workflowName": "Pregnancy Outcome"
+      }
+    ]
+  },
+  "birthWeight": {
+    "id": "birthWeight",
+    "label": "Birth weight (kg)",
+    "widgetHint": "EditText",
+    "fieldName": "Birth weight",
+    "family": "newbornDetails",
+    "orderId": 3,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "gone",
+    "inputType": 2,
+    "titleCulture": "জন্ম ওজন (কেজি)",
+    "programmes": [
+      {
+        "id": "pregnancyOutcome",
+        "workflowId": 102,
+        "workflowName": "Pregnancy Outcome"
+      }
+    ]
+  },
+  "essentialNewbornCare": {
+    "id": "essentialNewbornCare",
+    "label": "Essential newborn care",
+    "widgetHint": "DialogCheckbox",
+    "fieldName": "Essential newborn care",
+    "family": "newbornDetails",
+    "orderId": 4,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "gone",
+    "titleCulture": "অত্যাবশ্যকীয় নবজাতক যত্ন",
+    "options": [
+      {
+        "id": "driedWrappedWarm",
+        "name": "Dried, wrapped & kept warm immediately"
+      },
+      {
+        "id": "breastfeedingInitiated",
+        "name": "Breastfeeding initiated within 1 hour"
+      },
+      {
+        "id": "breathingNormal",
+        "name": "Breathing normally, no danger signs"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "pregnancyOutcome",
+        "workflowId": 102,
+        "workflowName": "Pregnancy Outcome"
+      }
+    ]
+  },
+  "neonatalDeathCause": {
+    "id": "neonatalDeathCause",
+    "label": "Cause of neonatal death",
+    "widgetHint": "DialogCheckbox",
+    "fieldName": "Cause of neonatal death",
+    "family": "newbornDetails",
+    "orderId": 5,
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "gone",
+    "titleCulture": "নবজাতক মৃত্যুর কারণ",
+    "options": [
+      {
+        "id": "asphyxia",
+        "name": "Asphyxia"
+      },
+      {
+        "id": "lowTemperature",
+        "name": "Abnormally low temperature"
+      },
+      {
+        "id": "lowBirthWeight",
+        "name": "Low birth weight"
+      },
+      {
+        "id": "convulsions",
+        "name": "Convulsions"
+      },
+      {
+        "id": "prematureBirth",
+        "name": "Premature birth"
+      },
+      {
+        "id": "sepsis",
+        "name": "Sepsis / umbilical sepsis"
+      },
+      {
+        "id": "pneumonia",
+        "name": "Pneumonia"
+      },
+      {
+        "id": "congenitalAnomaly",
+        "name": "Congenital anomaly"
+      },
+      {
+        "id": "unknown",
+        "name": "Unknown"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "pregnancyOutcome",
+        "workflowId": 102,
+        "workflowName": "Pregnancy Outcome"
+      }
+    ]
   }
 }
