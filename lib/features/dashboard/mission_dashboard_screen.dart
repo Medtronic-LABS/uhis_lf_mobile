@@ -68,7 +68,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Cached reference to mission repository for change listening.
   MissionDashboardRepository? _missionRepo;
   bool _missionListenerAdded = false;
-  bool _demoSeeded = false;
   
   // Flag to track if data needs refresh when widget becomes visible.
   bool _pendingRefresh = false;
@@ -130,15 +129,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (!_missionListenerAdded) {
       _missionListenerAdded = true;
       _missionRepo!.changes.addListener(_onMissionChanges);
-    }
-    // Debug builds only: seed the 3 wireframe CCE scenarios once so the
-    // Care Coordination Alerts drawer has data to demo. Never runs in
-    // release, so real users never see fabricated referrals.
-    if (kDebugMode && !_demoSeeded) {
-      _demoSeeded = true;
-      context.read<ReferralRepository>().seedDemoDataIfEmpty().then((_) {
-        if (mounted) _refreshNotificationCount();
-      });
     }
     _refreshNotificationCount();
   }
