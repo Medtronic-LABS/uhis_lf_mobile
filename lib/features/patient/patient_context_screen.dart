@@ -984,54 +984,82 @@ Map<String, dynamic> _unpackRaw(Map<String, dynamic> rawJson) {
   return rawJson;
 }
 
-/// Extends [_unpackRaw] by mapping local-form field names to the canonical API
-/// observation keys used by [_deriveThreads] and [_TimelineEventSheet].
+/// Normalises a rawJson map so clinical fields are accessible at the top level,
+/// regardless of which of three storage formats the assessment used:
 ///
-/// Local encounters store BP as separate `systolic`/`diastolic` integers and
-/// glucose as `glucoseValue` (mmol/L) + `glucoseType` string. The server's
-/// `member-assessment-history` response uses `bp` ("sys/dia" string) and `bg`
-/// (numeric string) + `bgType` ("FBS"/"RBS"/"PPBS"). This function fills the
-/// canonical keys when the form-format keys are present and the canonical ones
-/// are absent, so callers can use a single key set regardless of data origin.
+/// 1. API format (AssessmentDao / member-assessment-history): the unpacked map
+///    is the full API response object; clinical fields live under the nested
+///    `observations` key — e.g. `raw['observations']['bp']` = "148/90".
+/// 2. Local-form format (LocalEncounterDao): vitals spread flat at the top level
+///    but under form-specific keys: `systolic`, `diastolic`, `glucoseValue`.
+/// 3. NCD bpLog format: `bpLog.avgSystolic` / `glucoseLog.glucose`.
+///
+/// After normalisation, callers read `out['bp']`, `out['bg']`, `out['bgType']`
+/// regardless of origin. The merge uses putIfAbsent so explicit top-level keys
+/// always win over sub-map values.
 Map<String, dynamic> _normalizeRaw(Map<String, dynamic> rawJson) {
   final raw = _unpackRaw(rawJson);
   final out = Map<String, dynamic>.from(raw);
 
-  // BP → "systolic/diastolic" string under key 'bp'
+  // Step 1 — flatten 'observations' and 'assessmentDetails' sub-maps (API format).
+  for (final subKey in const ['observations', 'assessmentDetails']) {
+    final sub = raw[subKey];
+    if (sub is Map) {
+      for (final e in sub.entries) {
+        out.putIfAbsent(e.key.toString(), () => e.value);
+      }
+    }
+  }
+
+  // Step 2 — map NCD bpLog / glucoseLog nested keys (local-form format).
+  final bpLog = raw['bpLog'];
+  if (bpLog is Map) {
+    out.putIfAbsent('avgSystolic', () => bpLog['avgSystolic']);
+    out.putIfAbsent('avgDiastolic', () => bpLog['avgDiastolic']);
+  }
+  final gLog = raw['glucoseLog'];
+  if (gLog is Map) {
+    out.putIfAbsent('glucoseValue', () => gLog['glucose']);
+    out.putIfAbsent('glucoseType', () => gLog['glucoseType']);
+  }
+
+  // Step 3 — synthesise canonical 'bp' ("sys/dia" string) if missing.
   if ((out['bp'] as String?) == null) {
-    int? sys = () {
-      final v = raw['systolic'] ?? raw['bloodPressureSystolic'] ?? raw['avgSystolic'];
-      if (v is num) return v.toInt();
-      if (v is String) return int.tryParse(v);
-      return null;
-    }();
+    int? sys;
+    int? dia;
+    for (final k in const ['systolic', 'bloodPressureSystolic', 'avgSystolic']) {
+      final v = out[k];
+      if (v is num) { sys = v.toInt(); break; }
+      if (v is String) { sys = int.tryParse(v); if (sys != null) break; }
+    }
     if (sys == null) {
-      final log = raw['bpLogDetails'];
+      // bpLogDetails: [{systolic: x, diastolic: y}]
+      final log = out['bpLogDetails'];
       if (log is List && log.isNotEmpty && log.first is Map) {
         final first = log.first as Map;
         final s = first['systolic'];
         sys = s is num ? s.toInt() : (s is String ? int.tryParse(s) : null);
+        final d = first['diastolic'];
+        dia = d is num ? d.toInt() : (d is String ? int.tryParse(d) : null);
       }
     }
-    if (sys != null) {
-      final dv = raw['diastolic'] ?? raw['bloodPressureDiastolic'] ?? raw['avgDiastolic'];
-      int? dia;
-      if (dv is num) {
-        dia = dv.toInt();
-      } else if (dv is String) {
-        dia = int.tryParse(dv);
+    if (dia == null) {
+      for (final k in const ['diastolic', 'bloodPressureDiastolic', 'avgDiastolic']) {
+        final v = out[k];
+        if (v is num) { dia = v.toInt(); break; }
+        if (v is String) { dia = int.tryParse(v); if (dia != null) break; }
       }
-      if (dia != null) out['bp'] = '$sys/$dia';
     }
+    if (sys != null && dia != null) out['bp'] = '$sys/$dia';
   }
 
-  // Glucose → 'bg' (value string) + 'bgType' ("FBS"/"RBS"/"PPBS")
+  // Step 4 — synthesise canonical 'bg' (value string) + 'bgType' if missing.
   if ((out['bg'] as String?) == null) {
-    final glu = raw['glucoseValue'];
+    final glu = out['glucoseValue'] ?? out['glucose'] ?? out['bloodGlucose'];
     if (glu != null) {
       out['bg'] = glu.toString();
       if (out['bgType'] == null) {
-        final gt = (raw['glucoseType'] as String?)?.toLowerCase();
+        final gt = (out['glucoseType'] as String?)?.toLowerCase();
         out['bgType'] = gt == 'fasting'
             ? 'FBS'
             : gt == 'random'
