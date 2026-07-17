@@ -7,6 +7,12 @@ class Endpoints {
   static const String login = '/auth-service/session';
   static const String logout = '/auth-service/logout';
 
+  // ── User service: password recovery ──────────────────────────────────────
+  /// Request a password reset email. `{client}` is the platform identifier
+  /// (e.g. `mobile`). Server sends a link to the registered email address.
+  static String forgotPassword(String email) =>
+      '/user-service/user/forgot-password/$email/mobile';
+
   // ── Spice: static data ────────────────────────────────────────────────────
   /// Returns user hierarchy: villages, subVillages, workflowIds, facilities.
   static const String staticUserData = '/spice-service/static-data/user-data';

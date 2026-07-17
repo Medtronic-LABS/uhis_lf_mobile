@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/auth/user_hierarchy_service.dart';
+import '../../../core/db/member_dao.dart';
+import '../../../core/debug/console_log.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_strings.dart';
 import 'enrollment_controller.dart';
@@ -238,7 +240,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
     _ageCtrl.text = age.toString();
   }
 
-  void _handleContinue(EnrollmentController controller) {
+  Future<void> _handleContinue(EnrollmentController controller) async {
     // Guarantee a valid sub-village even if the SK never opened the dropdown.
     // Android scopes member/assessment sync to sub-village IDs, so a household
     // enrolled with an empty sub-village (→ 0) is invisible in the Spice app.
@@ -313,7 +315,45 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
       return;
     }
 
-    context.push('/household/enrollment/success');
+    // Dedup check: warn if head's NID already exists in local members table.
+    final headNid = _idNumberCtrl.text.trim();
+    if (headNid.isNotEmpty) {
+      final existing =
+          await context.read<MemberDao>().getByNationalId(headNid);
+      if (existing != null && mounted) {
+        ConsoleLog.warn(
+            '[Enrollment] possible duplicate head, existing FHIR id: ${existing.fhirId}');
+        final proceed = await showDialog<bool>(
+          context: context,
+          builder: (dlgCtx) => AlertDialog(
+            title: const Text(EnrollmentStrings.duplicateTitle),
+            content: Text(
+              '${EnrollmentStrings.duplicateBody}\n\n${existing.name ?? headNid}',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dlgCtx).pop(false),
+                child: const Text(EnrollmentStrings.cancel),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(dlgCtx).pop(false);
+                  context.push('/patients/${existing.id}');
+                },
+                child: const Text(EnrollmentStrings.duplicateViewRecord),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dlgCtx).pop(true),
+                child: const Text(EnrollmentStrings.duplicateContinue),
+              ),
+            ],
+          ),
+        );
+        if (proceed != true || !mounted) return;
+      }
+    }
+
+    if (mounted) context.push('/household/enrollment/success');
   }
 
   @override

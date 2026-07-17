@@ -62,6 +62,24 @@ abstract final class LoginStrings {
   static String get fromLockBanner => AppLocale.isBangla
       ? 'বায়োমেট্রিক বাতিল করা হয়েছে — পাসওয়ার্ড দিয়ে সাইন ইন করুন।'
       : 'Biometric cancelled — sign in with password.';
+  static String get offlineUsePinHint =>
+      'No internet connection. Use your PIN to continue working.';
+  static String get forgotPassword =>
+      AppLocale.isBangla ? 'পাসওয়ার্ড ভুলে গেছেন?' : 'Forgot password?';
+  static String get forgotPasswordTitle =>
+      AppLocale.isBangla ? 'পাসওয়ার্ড রিসেট করুন' : 'Reset password';
+  static String get forgotPasswordHint =>
+      AppLocale.isBangla
+          ? 'আপনার নিবন্ধিত ইমেল ঠিকানা লিখুন'
+          : 'Enter your registered email address';
+  static String get forgotPasswordSend =>
+      AppLocale.isBangla ? 'রিসেট লিংক পাঠান' : 'Send reset link';
+  static String get forgotPasswordSuccess =>
+      AppLocale.isBangla
+          ? 'পাসওয়ার্ড রিসেট লিংক পাঠানো হয়েছে। আপনার ইমেল চেক করুন।'
+          : 'Password reset link sent. Check your email.';
+  static String get emailLabel =>
+      AppLocale.isBangla ? 'ইমেল' : 'Email';
 }
 
 /// Lock / unlock screen + mid-session lock barrier.
@@ -276,6 +294,7 @@ abstract final class SettingsStrings {
   static String get aiSettingsSubtitle => AppLocale.isBangla
       ? 'ভয়েস শনাক্তকরণ (VAD) টিউনিং'
       : 'Voice detection (VAD) tuning';
+
 }
 
 /// AI Settings sub-page — realtime-ASR VAD gate tuning UI. An internal/ops
@@ -465,6 +484,7 @@ abstract final class PinStrings {
   static String createTitle(int len) => 'Create a $len-digit PIN';
   static String enterTitle(int len) => 'Enter your $len-digit PIN';
   static String usePin(int len) => 'Use $len-digit PIN';
+  static const String usePinShort = 'Use PIN';
   static String attemptsRemaining(int n) => '$n attempts remaining';
 }
 
@@ -1264,6 +1284,21 @@ abstract final class ReferralStrings {
   static const String locateOpenMapsSubtitle = 'View location on map';
   static const String locateGetDirections = 'Get Directions';
   static const String locateGetDirectionsSubtitle = 'Navigate to patient';
+
+  // ── Record outcome sheet ─────────────────────────────────────────────────
+  static const String recordOutcomeTitle = 'Record outcome';
+  static const String recordOutcomeSubtitle =
+      'Update the current status of this referral';
+  static const String outcomeReferred = 'Still referred';
+  static const String outcomeReferredSubtitle = 'Patient not yet arrived at facility';
+  static const String outcomeOnTreatment = 'On treatment';
+  static const String outcomeOnTreatmentSubtitle = 'Patient arrived and treatment started';
+  static const String outcomeRecovered = 'Recovered';
+  static const String outcomeRecoveredSubtitle = 'Treatment complete, patient discharged';
+  static const String outcomeDeceased = 'Deceased';
+  static const String outcomeDeceasedSubtitle = 'Patient passed away';
+  static const String outcomeUpdated = 'Status updated';
+  static const String outcomeUpdateFailed = 'Could not update status — please try again';
 }
 
 /// AI Mission Dashboard strings (Screen 2 redesign).
@@ -1929,6 +1964,8 @@ abstract final class ScribeStrings {
       'Recording produced no output. Please record again.';
   static const String noSpeechDetected =
       'No speech detected — please speak closer to the microphone and try again.';
+  static const String recordingStartFailed =
+      'Could not start recording. Check microphone permissions and try again.';
 }
 
 /// AI Scribe inline banner strings (replaces FAB labels for the new single-form layout).
@@ -4682,6 +4719,14 @@ abstract final class EnrollmentStrings {
   static const String detailLabelHouseNo = 'House No.';
   static const String detailLabelVillage = 'Village';
   static const String detailLabelTotalMembers = 'Total Members';
+
+  // ── Duplicate detection ───────────────────────────────────────────────
+  static const String duplicateTitle = 'Patient already registered';
+  static const String duplicateBody =
+      'A member with this ID is already in your records. '
+      'Registering again may create a duplicate.';
+  static const String duplicateViewRecord = 'View record';
+  static const String duplicateContinue = 'Continue anyway';
 }
 
 /// Visit landing screen — patient header, last-seen line, household co-flags,

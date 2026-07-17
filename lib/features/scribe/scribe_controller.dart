@@ -8,6 +8,7 @@ import 'package:record/record.dart';
 
 import '../../core/api/scribe_api_service.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/errors/domain_exceptions.dart';
 import '../visit/triage/ai_scribe_triage_vocab.dart';
 import '../visit/triage/triage_transcript_matcher.dart';
 import 'form_field_schema_builder.dart';
@@ -152,7 +153,7 @@ class ScribeController extends ChangeNotifier {
     } catch (e) {
       _session = ScribeSession(
         state: ScribeState.error,
-        errorMessage: 'Could not start recording: $e',
+        errorMessage: ScribeStrings.recordingStartFailed,
       );
       notifyListeners();
     }
@@ -239,7 +240,7 @@ class ScribeController extends ChangeNotifier {
     } catch (e) {
       _session = ScribeSession(
         state: ScribeState.error,
-        errorMessage: 'Could not start recording: $e',
+        errorMessage: ScribeStrings.recordingStartFailed,
       );
       notifyListeners();
     }
@@ -327,7 +328,7 @@ class ScribeController extends ChangeNotifier {
 
       _startPolling(jobId);
     } catch (e) {
-      _setError('Upload failed: $e');
+      _setError(NetworkErrorMapper.friendly(e));
     } finally {
       // Clean up local audio file — audio lives on the service S3, not device.
       try {
@@ -346,7 +347,7 @@ class ScribeController extends ChangeNotifier {
       _session = _session.copyWith(state: ScribeState.accepted);
       notifyListeners();
     } catch (e) {
-      _setError('Accept failed: $e');
+      _setError(NetworkErrorMapper.friendly(e));
     }
   }
 
@@ -358,7 +359,7 @@ class ScribeController extends ChangeNotifier {
       _session = _session.copyWith(state: ScribeState.rejected);
       notifyListeners();
     } catch (e) {
-      _setError('Reject failed: $e');
+      _setError(NetworkErrorMapper.friendly(e));
     }
   }
 
@@ -894,7 +895,7 @@ class ScribeController extends ChangeNotifier {
       notifyListeners();
       _startPolling(jobId);
     } catch (e) {
-      _setError('Retry failed: $e');
+      _setError(NetworkErrorMapper.friendly(e));
     }
   }
 

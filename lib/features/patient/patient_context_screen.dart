@@ -798,7 +798,20 @@ class _PatientContextScreenState
     final ancRaw = latestAncVisit != null
         ? _normalizeRaw(latestAncVisit.rawJson)
         : const <String, dynamic>{};
-    final ancVisitNum = ancRaw['ancVisitNumber']?.toString();
+    // Multi-path lookup mirrors LocalAssessmentDao._extractVisitNumber for ANC.
+    final ancCount = data.assessments
+        .where((a) => Programme.fromString(a.type) == Programme.anc)
+        .length;
+    final ancVisitNum = ancRaw['ancVisitNumber']?.toString()
+        ?? ancRaw['visitNo']?.toString()
+        ?? (ancRaw['medicalHistoryPhysicalExamination'] is Map
+            ? (ancRaw['medicalHistoryPhysicalExamination'] as Map)['ancVisitNumber']?.toString()
+            : null)
+        ?? (ancRaw['anc'] is Map
+            ? (ancRaw['anc'] as Map)['ancVisitNumber']?.toString()
+            : null)
+        // Fallback: count of ANC assessments when no explicit visit number field.
+        ?? (ancCount > 0 ? '$ancCount' : null);
     final gravida = ancRaw['gravida']?.toString();
     final parity = ancRaw['parity']?.toString();
 
@@ -861,6 +874,7 @@ class _PatientContextScreenState
                       riskBand: data.riskBand,
                       riskModifier: data.riskModifier,
                       riskReasons: data.riskReasons,
+                      lastAssessedDate: data.assessments.isNotEmpty ? data.assessments.first.date : null,
                     ),
                     const SizedBox(height: 12),
 
@@ -878,6 +892,7 @@ class _PatientContextScreenState
                     // Stats grid — shown for all programmes
                     _StatsGrid(
                       threads: threads,
+                      assessments: data.assessments,
                       noDataLabel: PatientProfileStrings.noVitalsYet,
                     ),
                     const SizedBox(height: 12),
@@ -927,13 +942,14 @@ class _PatientContextScreenState
 
 /// One active clinical pathway shown as a chip + stats card on the context screen.
 class _CareThread {
-  const _CareThread({
+  _CareThread({
     required this.programme,
     required this.label,
     required this.bg,
     required this.textColor,
     this.icon = '',
     this.stats = const {},
+    this.checkupDate,
   });
 
   final Programme programme;
@@ -942,6 +958,8 @@ class _CareThread {
   final Color textColor;
   final String icon;
   final Map<String, String> stats;
+  /// Date of the latest assessment for this thread's programme.
+  final DateTime? checkupDate;
 }
 
 // ─── Timeline Entry model ──────────────────────────────────────────────────
@@ -1356,13 +1374,9 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
     final g = raw['gravida'] as String?;
     final p = raw['parity'] as String?;
     if (g != null && g.isNotEmpty && p != null && p.isNotEmpty) stats['Gravida / Parity'] = 'G$g P$p';
-    if (latest != null) {
-      final days = DateTime.now().difference(latest.date).inDays;
-      stats['Last check-up'] = days == 0 ? 'Today' : days == 1 ? 'Yesterday' : '$days days ago';
-    }
     final ancTotal =
         data.assessments.where((a) => Programme.fromString(a.type) == Programme.anc).length;
-    if (ancTotal > 0) stats['Total visits'] = '$ancTotal';
+    if (ancTotal > 0) stats['ANC visits'] = '$ancTotal';
 
     threads.add(_CareThread(
       programme: Programme.anc,
@@ -1371,6 +1385,7 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
       bg: AppColors.ancSurface,
       textColor: AppColors.ancText,
       stats: stats,
+      checkupDate: latest?.date,
     ));
   }
 
@@ -1382,12 +1397,6 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
     final dx = (raw['confirmDiagnosis'] as String?)?.trim();
     final ncdTotal = data.assessments.where((a) => Programme.fromString(a.type) == Programme.ncd).length;
 
-    String? lastCheckup;
-    if (latest != null) {
-      final days = DateTime.now().difference(latest.date).inDays;
-      lastCheckup = days == 0 ? 'Today' : days == 1 ? 'Yesterday' : '$days days ago';
-    }
-
     threads.add(_CareThread(
       programme: Programme.ncd,
       label: CareThreadStrings.htn,
@@ -1396,10 +1405,10 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
       textColor: AppColors.ncdText,
       stats: {
         if (bp != null && bp.isNotEmpty) 'Last BP': '$bp mmHg',
-        if (lastCheckup != null) 'Last check-up': lastCheckup,
-        if (ncdTotal > 0) 'Total visits': '$ncdTotal',
+        if (ncdTotal > 0) 'NCD visits': '$ncdTotal',
         if (dx != null && dx.isNotEmpty) 'Diagnosis': dx,
       },
+      checkupDate: latest?.date,
     ));
 
     final bg = raw['bg'] as String?;
@@ -1425,11 +1434,6 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
     final deliveryMode = raw['modeOfDelivery'] as String?;
     final complications = raw['anyComplicationsDuringDelivery'] as String?;
     final livingChildren = raw['numberOfLivingChildren'] as String?;
-    String? lastCheckup;
-    if (latest != null) {
-      final days = DateTime.now().difference(latest.date).inDays;
-      lastCheckup = days == 0 ? 'Today' : '$days days ago';
-    }
     threads.add(_CareThread(
       programme: Programme.pnc,
       label: CareThreadStrings.pnc,
@@ -1441,8 +1445,8 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
         if (deliveryMode != null) 'Delivery': deliveryMode,
         if (complications?.toLowerCase() == 'yes') 'Complications': 'Yes',
         if (livingChildren != null) 'Living children': livingChildren,
-        if (lastCheckup != null) 'Last check-up': lastCheckup,
       },
+      checkupDate: latest?.date,
     ));
   }
 
@@ -1452,11 +1456,6 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
     final raw = latest != null ? _normalizeRaw(latest.rawJson) : const <String, dynamic>{};
     final weight = raw['weight'] as String?;
     final imciTotal = data.assessments.where((a) => Programme.fromString(a.type) == Programme.imci).length;
-    String? lastVisit;
-    if (latest != null) {
-      final days = DateTime.now().difference(latest.date).inDays;
-      lastVisit = days == 0 ? 'Today' : days == 1 ? 'Yesterday' : '$days days ago';
-    }
     threads.add(_CareThread(
       programme: Programme.imci,
       label: CareThreadStrings.imm,
@@ -1465,11 +1464,11 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
       textColor: AppColors.tbText,
       stats: {
         if (weight != null) 'Last weight': '$weight kg',
-        if (imciTotal > 0) 'Visits': '$imciTotal',
-        if (lastVisit != null) 'Last visit': lastVisit,
+        if (imciTotal > 0) 'IMCI visits': '$imciTotal',
       },
+      checkupDate: latest?.date,
     ));
-    threads.add(const _CareThread(
+    threads.add(_CareThread(
       programme: Programme.imci,
       label: CareThreadStrings.growth,
       icon: '📈',
@@ -1485,11 +1484,6 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
     final dx = (raw['confirmDiagnosis'] as String?)?.trim();
     final tbTotal =
         data.assessments.where((a) => Programme.fromString(a.type) == Programme.tb).length;
-    String? lastCheckup;
-    if (latest != null) {
-      final days = DateTime.now().difference(latest.date).inDays;
-      lastCheckup = days == 0 ? 'Today' : days == 1 ? 'Yesterday' : '$days days ago';
-    }
     threads.add(_CareThread(
       programme: Programme.tb,
       label: CareThreadStrings.general,
@@ -1498,15 +1492,15 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
       textColor: AppColors.tbText,
       stats: {
         if (dx != null && dx.isNotEmpty) 'Diagnosis': dx,
-        if (tbTotal > 0) 'Total visits': '$tbTotal',
-        if (lastCheckup != null) 'Last check-up': lastCheckup,
+        if (tbTotal > 0) 'TB visits': '$tbTotal',
       },
+      checkupDate: latest?.date,
     ));
   }
 
   // Fallback when no programme is active
   if (threads.isEmpty) {
-    threads.add(const _CareThread(
+    threads.add(_CareThread(
       programme: Programme.unknown,
       label: CareThreadStrings.general,
       icon: '🏥',
@@ -1593,6 +1587,7 @@ class _AiInsightCard extends StatelessWidget {
     this.riskBand,
     this.riskModifier,
     this.riskReasons = const [],
+    this.lastAssessedDate,
   });
 
   final String summary;
@@ -1602,6 +1597,7 @@ class _AiInsightCard extends StatelessWidget {
   final Band? riskBand;
   final Modifier? riskModifier;
   final List<String> riskReasons;
+  final DateTime? lastAssessedDate;
 
   static (String, Color, Color) _bandMeta(Band b) => switch (b) {
         Band.band1 => ('Band 1 — Severe risk', AppColors.statusCriticalSurface, AppColors.statusCriticalText),
@@ -1698,6 +1694,17 @@ class _AiInsightCard extends StatelessWidget {
                               style: const TextStyle(
                                   fontSize: 13, height: 1.5, color: AppColors.textStrong)),
                         ),
+                        if (lastAssessedDate != null) ...[
+                          const SizedBox(width: 8),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 3),
+                            child: Text(
+                              _relativeDate(lastAssessedDate!),
+                              style: const TextStyle(
+                                  fontSize: 11, color: AppColors.textMuted, height: 1.5),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   )),
@@ -2055,20 +2062,315 @@ class _PregnancyProgressSection extends StatelessWidget {
 /// Collects stats from ALL active threads so clinicians see the full snapshot
 /// without having to switch thread chips.
 class _StatsGrid extends StatelessWidget {
-  const _StatsGrid({required this.threads, required this.noDataLabel});
+  const _StatsGrid({
+    required this.threads,
+    required this.assessments,
+    required this.noDataLabel,
+  });
 
   final List<_CareThread> threads;
+  final List<MemberAssessment> assessments;
   final String noDataLabel;
+
+  // Maps a stat label to the rawJson field name + display unit.
+  static const Map<String, (String field, String suffix)> _fieldMap = {
+    'Last BP': ('bp', ' mmHg'),
+    'Haemoglobin': ('hemoglobin', ' g/dL'),
+    'Weight': ('weight', ' kg'),
+    'Last weight': ('weight', ' kg'),
+    'Diagnosis': ('confirmDiagnosis', ''),
+    'Delivery': ('modeOfDelivery', ''),
+    'PNC visits': ('pncVisitNumber', ''),
+    'Living children': ('numberOfLivingChildren', ''),
+    'Visits completed': ('ancVisitNumber', ''),
+    'Gravida / Parity': ('_gravida_parity', ''),
+  };
+
+  List<(DateTime date, String display, MemberAssessment assessment)> _extractHistory(
+      String label) {
+    final fieldEntry = label.startsWith('Blood sugar')
+        ? ('bg', ' mg/dL')
+        : _fieldMap[label];
+    if (fieldEntry == null) return const [];
+
+    final (field, suffix) = fieldEntry;
+    final result = <(DateTime, String, MemberAssessment)>[];
+
+    for (final a in assessments) {
+      final raw = _normalizeRaw(a.rawJson);
+      if (field == '_gravida_parity') {
+        final g = raw['gravida'] as String?;
+        final p = raw['parity'] as String?;
+        if (g != null && p != null && g.isNotEmpty && p.isNotEmpty) {
+          result.add((a.date, 'G$g P$p', a));
+        }
+      } else {
+        final v = raw[field] as String?;
+        if (v != null && v.isNotEmpty) {
+          result.add((a.date, '$v$suffix', a));
+        }
+      }
+    }
+    return result;
+  }
+
+  List<(DateTime date, String display, MemberAssessment assessment)>
+      _extractVisitHistory(List<MapEntry<String, String>> visitEntries) {
+    final progNames = visitEntries
+        .map((e) => e.key.replaceAll(' visits', '').toLowerCase())
+        .toSet();
+    final entries = <(DateTime, String, MemberAssessment)>[];
+    for (final a in assessments) {
+      final progName = Programme.fromString(a.type).name.toLowerCase();
+      if (progNames.contains(progName)) {
+        final raw = _normalizeRaw(a.rawJson);
+        final visitNum =
+            raw['ancVisitNumber'] as String? ?? raw['pncVisitNumber'] as String?;
+        final progLabel = a.type.toUpperCase();
+        final suffix = visitNum != null ? '  #$visitNum' : '';
+        entries.add((a.date, '$progLabel$suffix', a));
+      }
+    }
+    return entries;
+  }
+
+  void _showStatHistory(
+    BuildContext context,
+    String label,
+    List<(DateTime date, String display, MemberAssessment assessment)> history,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.55,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        builder: (_, scrollCtrl) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.navy,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${history.length} record${history.length == 1 ? '' : 's'}  ·  tap to open visit',
+                    style:
+                        const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView.separated(
+                controller: scrollCtrl,
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
+                itemCount: history.length,
+                separatorBuilder: (_, __) =>
+                    const Divider(height: 1, indent: 48),
+                itemBuilder: (_, i) {
+                  final (date, display, assessment) = history[i];
+                  final rel = _relativeDate(date);
+                  final full =
+                      '${date.day} ${_monthAbbr(date.month)} ${date.year}';
+                  final prog = Programme.fromString(assessment.type);
+                  final (progBg, progFg) = _progBadgeColors(prog);
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () => _TimelineEventSheet.show(sheetCtx, assessment),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(full,
+                                        style: const TextStyle(
+                                            fontSize: 12,
+                                            color: AppColors.textMuted)),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: progBg,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        assessment.type.toUpperCase(),
+                                        style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                            color: progFg,
+                                            letterSpacing: 0.4),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(display,
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.navy,
+                                    )),
+                              ],
+                            ),
+                          ),
+                          Text(rel,
+                              style: const TextStyle(
+                                  fontSize: 12, color: AppColors.textMuted)),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.chevron_right_rounded,
+                              size: 18, color: AppColors.textMuted),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCheckupHistory(BuildContext context) {
+    final withDates = threads.where((t) => t.checkupDate != null).toList()
+      ..sort((a, b) => b.checkupDate!.compareTo(a.checkupDate!));
+    if (withDates.isEmpty) return;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.45,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        builder: (_, ctrl) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+              child: const Text(
+                'Check-up history',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.navy,
+                ),
+              ),
+            ),
+            Expanded(
+              child: ListView.separated(
+                controller: ctrl,
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+                itemCount: withDates.length,
+                separatorBuilder: (_, __) =>
+                    const Divider(height: 1, indent: 48),
+                itemBuilder: (_, i) {
+                  final t = withDates[i];
+                  final rel = _relativeDate(t.checkupDate!);
+                  final fullDate =
+                      '${t.checkupDate!.day} ${_monthAbbr(t.checkupDate!.month)} ${t.checkupDate!.year}';
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: t.bg,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          alignment: Alignment.center,
+                          child:
+                              Text(t.icon, style: const TextStyle(fontSize: 18)),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(t.label,
+                                  style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textStrong)),
+                              Text(fullDate,
+                                  style: const TextStyle(
+                                      fontSize: 12, color: AppColors.textMuted)),
+                            ],
+                          ),
+                        ),
+                        Text(rel,
+                            style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.navy)),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final sw = Stopwatch()..start();
-    final allStats = <MapEntry<String, String>>[];
+    final raw = <MapEntry<String, String>>[];
     for (final t in threads) {
-      allStats.addAll(t.stats.entries);
+      raw.addAll(t.stats.entries);
     }
 
-    if (allStats.isEmpty) {
+    // Derive single last-check-up entry from threads (newest across all programmes).
+    final threadsWithDate = threads.where((t) => t.checkupDate != null).toList()
+      ..sort((a, b) => b.checkupDate!.compareTo(a.checkupDate!));
+    final latestThread = threadsWithDate.isNotEmpty ? threadsWithDate.first : null;
+
+    // Merge all "* visits" keys into one combined tile.
+    final visitEntries = raw.where((e) => e.key.endsWith(' visits')).toList();
+    final displayStats = raw.where((e) => !e.key.endsWith(' visits')).toList();
+    if (visitEntries.isNotEmpty) {
+      final combinedValue = visitEntries.map((e) {
+        final prog = e.key.replaceAll(' visits', '');
+        return '$prog  ${e.value}';
+      }).join('\n');
+      displayStats.add(MapEntry('Visits', combinedValue));
+    }
+
+    final hasStats = displayStats.isNotEmpty || latestThread != null;
+    if (!hasStats) {
       debugPrint('⏱ [PatientContext] _StatsGrid 0ms (no stats)');
       return const SizedBox.shrink();
     }
@@ -2091,26 +2393,66 @@ class _StatsGrid extends StatelessWidget {
           spacing: 10,
           runSpacing: 10,
           children: [
-            for (final e in allStats)
+            for (final e in displayStats)
               SizedBox(
                 width: slotW,
-                child: _StatTile(label: e.key, value: e.value),
+                child: Builder(builder: (ctx) {
+                  if (e.key == 'Visits') {
+                    // Combined visits tile — show assessment dates on tap.
+                    final hist = _extractVisitHistory(visitEntries);
+                    return GestureDetector(
+                      onTap: hist.isNotEmpty
+                          ? () => _showStatHistory(ctx, 'Visit history', hist)
+                          : null,
+                      child: _StatTile(
+                        label: e.key,
+                        value: e.value,
+                        hasHistory: hist.isNotEmpty,
+                      ),
+                    );
+                  }
+                  final hist = _extractHistory(e.key);
+                  return GestureDetector(
+                    onTap: hist.isNotEmpty
+                        ? () => _showStatHistory(ctx, e.key, hist)
+                        : null,
+                    child: _StatTile(
+                      label: e.key,
+                      value: e.value,
+                      hasHistory: hist.isNotEmpty,
+                    ),
+                  );
+                }),
+              ),
+            // Single tappable last-check-up tile (newest programme's date).
+            if (latestThread != null)
+              SizedBox(
+                width: slotW,
+                child: GestureDetector(
+                  onTap: () => _showCheckupHistory(context),
+                  child: _LastCheckupTile(
+                    thread: latestThread,
+                    hasHistory: threadsWithDate.length > 1,
+                  ),
+                ),
               ),
           ],
         ),
       ],
     );
-    debugPrint('⏱ [PatientContext] _StatsGrid ${sw.elapsedMilliseconds}ms stats=${allStats.length}');
+    debugPrint('⏱ [PatientContext] _StatsGrid ${sw.elapsedMilliseconds}ms stats=${displayStats.length}');
     return result;
   }
 }
 
 /// White stat card: muted label (11 px) + large bold navy value (18 px).
+/// When [hasHistory] is true, shows a history icon and the card responds to tap.
 class _StatTile extends StatelessWidget {
-  const _StatTile({required this.label, required this.value});
+  const _StatTile({required this.label, required this.value, this.hasHistory = false});
 
   final String label;
   final String value;
+  final bool hasHistory;
 
   @override
   Widget build(BuildContext context) {
@@ -2130,22 +2472,31 @@ class _StatTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              color: AppColors.textMuted,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ),
+              if (hasHistory)
+                const Icon(Icons.history_rounded, size: 13, color: AppColors.textMuted),
+            ],
           ),
           const SizedBox(height: 6),
           Text(
             value,
-            style: const TextStyle(
-              fontSize: 18,
+            style: TextStyle(
+              fontSize: value.contains('\n') ? 14 : 18,
               fontWeight: FontWeight.w700,
               color: AppColors.navy,
-              height: 1.2,
+              height: value.contains('\n') ? 1.6 : 1.2,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
         ],
@@ -2153,6 +2504,84 @@ class _StatTile extends StatelessWidget {
     );
   }
 }
+
+/// Tappable last-check-up tile showing the most recent programme and date.
+/// A small "history" chevron appears when more than one programme has data.
+class _LastCheckupTile extends StatelessWidget {
+  const _LastCheckupTile({required this.thread, required this.hasHistory});
+
+  final _CareThread thread;
+  final bool hasHistory;
+
+  @override
+  Widget build(BuildContext context) {
+    final rel = _relativeDate(thread.checkupDate!);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      decoration: BoxDecoration(
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.navy.withValues(alpha: 0.06),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text(
+                'Last check-up',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textMuted,
+                ),
+              ),
+              const Spacer(),
+              if (hasHistory)
+                const Icon(Icons.history_rounded, size: 14, color: AppColors.textMuted),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            rel,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: AppColors.navy,
+              height: 1.2,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            thread.label,
+            style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Returns (background, foreground) colors for a programme badge pill.
+(Color, Color) _progBadgeColors(Programme prog) => switch (prog) {
+      Programme.anc => (AppColors.ancSurface, AppColors.ancText),
+      Programme.ncd => (AppColors.ncdSurface, AppColors.ncdText),
+      Programme.pnc => (AppColors.pncSurface, AppColors.pncText),
+      Programme.tb => (AppColors.tbSurface, AppColors.tbText),
+      Programme.imci => (AppColors.threadImmBg, AppColors.tbText),
+      _ => (const Color(0xFFF3F4F6), AppColors.textMid),
+    };
+
+String _monthAbbr(int month) => const [
+      '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ][month];
 
 // ─── Shared card-detail helpers ────────────────────────────────────────────
 

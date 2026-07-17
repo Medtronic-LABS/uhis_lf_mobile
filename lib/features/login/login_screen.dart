@@ -62,9 +62,32 @@ class _LoginScreenState extends State<LoginScreen> {
       // Go to sync screen to download data before showing dashboard
       context.go('/sync');
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(auth.error ?? LoginStrings.loginFailed)),
-      );
+      final msg = auth.error ?? LoginStrings.loginFailed;
+      final isOffline = msg.contains('internet') || msg.contains('timed out');
+      final hasPinOrBio = auth.pinEnabled ||
+          (auth.biometricEnabled && auth.biometricAvailable);
+      if (isOffline && hasPinOrBio) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(LoginStrings.offlineUsePinHint),
+            duration: const Duration(seconds: 6),
+            action: SnackBarAction(
+              label: auth.pinEnabled ? PinStrings.usePinShort : LoginStrings.useDeviceUnlock,
+              onPressed: () {
+                if (auth.pinEnabled) {
+                  context.go('/pin-unlock');
+                } else {
+                  context.go('/lock');
+                }
+              },
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg)),
+        );
+      }
     }
   }
 
@@ -222,6 +245,15 @@ class _LoginScreenState extends State<LoginScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : Text(LoginStrings.signIn),
+                    ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: busy
+                            ? null
+                            : () => context.push('/forgot-password'),
+                        child: Text(LoginStrings.forgotPassword),
+                      ),
                     ),
                     // Medtronic Labs branding + logo temporarily hidden.
                     // const SizedBox(height: 48),

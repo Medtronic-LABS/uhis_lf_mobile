@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/api/api_repository.dart';
+import '../../../core/db/member_dao.dart';
+import '../../../core/debug/console_log.dart';
 import '../../../core/models/patient.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_strings.dart';
@@ -20,6 +22,8 @@ import 'widgets/enrollment_sticky_bar.dart';
 
 /// Screen for adding a new household member.
 ///
+enum _DuplicateAction { viewRecord, continueAnyway, cancel }
+
 /// Redesigned with numbered questions (Q1–Q9), sticky bottom CTA.
 /// NID scan is a purple gradient CTA button; after mock scan a green
 /// confirmation chip appears and name/DOB/gender fields are auto-filled.
@@ -190,7 +194,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
     );
   }
 
-  void _handleSaveMember(EnrollmentController controller) {
+  Future<void> _handleSaveMember(EnrollmentController controller) async {
     if (_nameCtrl.text.isEmpty || _gender == null || _maritalStatus == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -201,13 +205,29 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
       return;
     }
 
+    final nid = _brnCtrl.text.trim();
+    if (nid.isNotEmpty) {
+      final existing =
+          await context.read<MemberDao>().getByNationalId(nid);
+      if (existing != null && mounted) {
+        ConsoleLog.warn(
+            '[Enrollment] possible duplicate, existing FHIR id: ${existing.fhirId}');
+        final action = await _showDuplicateDialog(
+          existingId: existing.id,
+          existingName: existing.name ?? nid,
+        );
+        if (!mounted) return;
+        if (action == _DuplicateAction.cancel) return;
+      }
+    }
+
     final member = HouseholdMember(
       name: _nameCtrl.text,
       age: int.tryParse(_ageCtrl.text) ?? 0,
       gender: _gender!,
       dateOfBirth: _dobCtrl.text,
       idType: _nidScanned ? 'NID' : 'BRN',
-      idNumber: _brnCtrl.text.isNotEmpty ? _brnCtrl.text : null,
+      idNumber: nid.isNotEmpty ? nid : null,
       mobileNumber: _mobileNotAvailable ? null : _mobileCtrl.text,
       mobileAvailable: !_mobileNotAvailable,
       maritalStatus: _maritalStatus!,
@@ -220,6 +240,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
 
     controller.addMember(member);
 
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Member added successfully'),
@@ -228,6 +249,42 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
     );
 
     context.pop();
+  }
+
+  Future<_DuplicateAction> _showDuplicateDialog({
+    required String existingId,
+    required String existingName,
+  }) async {
+    final result = await showDialog<_DuplicateAction>(
+      context: context,
+      builder: (dlgCtx) => AlertDialog(
+        title: const Text(EnrollmentStrings.duplicateTitle),
+        content: Text(
+          '${EnrollmentStrings.duplicateBody}\n\n$existingName',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () =>
+                Navigator.of(dlgCtx).pop(_DuplicateAction.viewRecord),
+            child: const Text(EnrollmentStrings.duplicateViewRecord),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.of(dlgCtx).pop(_DuplicateAction.continueAnyway),
+            child: const Text(EnrollmentStrings.duplicateContinue),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(dlgCtx).pop(_DuplicateAction.cancel),
+            child: const Text(EnrollmentStrings.cancel),
+          ),
+        ],
+      ),
+    );
+    if (result == _DuplicateAction.viewRecord && mounted) {
+      context.push('/patients/$existingId');
+    }
+    return result ?? _DuplicateAction.cancel;
   }
 
   @override

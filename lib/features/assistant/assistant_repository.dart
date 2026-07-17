@@ -10,6 +10,7 @@ import 'package:dio/dio.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
 import '../../core/config/app_config.dart';
+import '../../core/errors/domain_exceptions.dart';
 import 'assistant_models.dart';
 
 class AssistantRepository {
@@ -72,7 +73,7 @@ class AssistantRepository {
       return AssistantAnswer(text: answer, actions: actions);
     } on DioException catch (e) {
       throw AssistantException(
-        e.message ?? 'Network error',
+        NetworkErrorMapper.friendly(e),
         statusCode: e.response?.statusCode,
       );
     }
