@@ -62,6 +62,24 @@ abstract final class LoginStrings {
   static String get fromLockBanner => AppLocale.isBangla
       ? 'বায়োমেট্রিক বাতিল করা হয়েছে — পাসওয়ার্ড দিয়ে সাইন ইন করুন।'
       : 'Biometric cancelled — sign in with password.';
+  static String get offlineUsePinHint =>
+      'No internet connection. Use your PIN to continue working.';
+  static String get forgotPassword =>
+      AppLocale.isBangla ? 'পাসওয়ার্ড ভুলে গেছেন?' : 'Forgot password?';
+  static String get forgotPasswordTitle =>
+      AppLocale.isBangla ? 'পাসওয়ার্ড রিসেট করুন' : 'Reset password';
+  static String get forgotPasswordHint =>
+      AppLocale.isBangla
+          ? 'আপনার নিবন্ধিত ইমেল ঠিকানা লিখুন'
+          : 'Enter your registered email address';
+  static String get forgotPasswordSend =>
+      AppLocale.isBangla ? 'রিসেট লিংক পাঠান' : 'Send reset link';
+  static String get forgotPasswordSuccess =>
+      AppLocale.isBangla
+          ? 'পাসওয়ার্ড রিসেট লিংক পাঠানো হয়েছে। আপনার ইমেল চেক করুন।'
+          : 'Password reset link sent. Check your email.';
+  static String get emailLabel =>
+      AppLocale.isBangla ? 'ইমেল' : 'Email';
 }
 
 /// Lock / unlock screen + mid-session lock barrier.
@@ -276,6 +294,7 @@ abstract final class SettingsStrings {
   static String get aiSettingsSubtitle => AppLocale.isBangla
       ? 'ভয়েস শনাক্তকরণ (VAD) টিউনিং'
       : 'Voice detection (VAD) tuning';
+
 }
 
 /// AI Settings sub-page — realtime-ASR VAD gate tuning UI. An internal/ops
@@ -465,6 +484,7 @@ abstract final class PinStrings {
   static String createTitle(int len) => 'Create a $len-digit PIN';
   static String enterTitle(int len) => 'Enter your $len-digit PIN';
   static String usePin(int len) => 'Use $len-digit PIN';
+  static const String usePinShort = 'Use PIN';
   static String attemptsRemaining(int n) => '$n attempts remaining';
 }
 
@@ -973,6 +993,29 @@ abstract final class PatientProfileStrings {
   static const String notAvailable = '—';
   static const String dialFailed = 'Could not open the dialer';
   static const String mapsOpenFailed = 'Could not open maps';
+
+  static const String activeCareThreads = 'Active care threads';
+  static const String aiInsight = 'AI Insight';
+  static const String pregnancyProgress = 'Pregnancy progress';
+  static const String careHistory = 'Care history';
+  static const String noVitalsYet = 'No vitals recorded yet';
+  static const String vitalsConfirmAtVisit = "Confirm at today's visit";
+  static const String weeksToGo = 'weeks to go';
+  static const String visitsCompleted = 'Visits completed';
+  static const String enrolled = 'Enrolled';
+  static const String dosesCompleted = 'Doses completed';
+  static const String dosesOverdue = 'Doses overdue';
+  static const String growthTrend = 'Growth trend';
+  static const String bpTarget = 'BP target';
+  static const String lastCheckup = 'Last check-up';
+  static const String medicationAdherence = 'Medication adherence';
+  static const String bloodSugar = 'Blood sugar (fasting)';
+  static const String pncVisitsDone = 'PNC visits done';
+  static const String delivery = 'Delivery';
+  static const String newbornAge = 'Newborn age';
+  static const String breastfeeding = 'Breastfeeding';
+  static const String aiInsightUnavailable =
+      'AI insight unavailable — check patient record manually';
 }
 
 abstract final class ContactSheetStrings {
@@ -1241,6 +1284,21 @@ abstract final class ReferralStrings {
   static const String locateOpenMapsSubtitle = 'View location on map';
   static const String locateGetDirections = 'Get Directions';
   static const String locateGetDirectionsSubtitle = 'Navigate to patient';
+
+  // ── Record outcome sheet ─────────────────────────────────────────────────
+  static const String recordOutcomeTitle = 'Record outcome';
+  static const String recordOutcomeSubtitle =
+      'Update the current status of this referral';
+  static const String outcomeReferred = 'Still referred';
+  static const String outcomeReferredSubtitle = 'Patient not yet arrived at facility';
+  static const String outcomeOnTreatment = 'On treatment';
+  static const String outcomeOnTreatmentSubtitle = 'Patient arrived and treatment started';
+  static const String outcomeRecovered = 'Recovered';
+  static const String outcomeRecoveredSubtitle = 'Treatment complete, patient discharged';
+  static const String outcomeDeceased = 'Deceased';
+  static const String outcomeDeceasedSubtitle = 'Patient passed away';
+  static const String outcomeUpdated = 'Status updated';
+  static const String outcomeUpdateFailed = 'Could not update status — please try again';
 }
 
 /// AI Mission Dashboard strings (Screen 2 redesign).
@@ -1906,6 +1964,8 @@ abstract final class ScribeStrings {
       'Recording produced no output. Please record again.';
   static const String noSpeechDetected =
       'No speech detected — please speak closer to the microphone and try again.';
+  static const String recordingStartFailed =
+      'Could not start recording. Check microphone permissions and try again.';
 }
 
 /// AI Scribe inline banner strings (replaces FAB labels for the new single-form layout).
@@ -4659,6 +4719,14 @@ abstract final class EnrollmentStrings {
   static const String detailLabelHouseNo = 'House No.';
   static const String detailLabelVillage = 'Village';
   static const String detailLabelTotalMembers = 'Total Members';
+
+  // ── Duplicate detection ───────────────────────────────────────────────
+  static const String duplicateTitle = 'Patient already registered';
+  static const String duplicateBody =
+      'A member with this ID is already in your records. '
+      'Registering again may create a duplicate.';
+  static const String duplicateViewRecord = 'View record';
+  static const String duplicateContinue = 'Continue anyway';
 }
 
 /// Visit landing screen — patient header, last-seen line, household co-flags,
@@ -5187,4 +5255,21 @@ abstract final class PatientAiStrings {
     'What should I do this visit?',
     'Is a referral needed?',
   ];
+}
+
+abstract final class CareThreadStrings {
+  CareThreadStrings._();
+
+  static const String anc = 'ANC / Pregnancy';
+  static const String bp = 'Pre-eclampsia watch';
+  static const String sugar = 'Blood sugar';
+  static const String htn = 'Hypertension';
+  static const String imm = 'Immunization';
+  static const String growth = 'Growth monitoring';
+  static const String pnc = 'Postnatal recovery';
+  static const String newborn = 'Newborn care';
+  static const String general = 'General enrollment';
+  static const String illness = 'Past illness';
+  static const String highrisk = 'High-risk pregnancy';
+  static const String csection = 'Emergency C-section';
 }

@@ -366,6 +366,19 @@ class MemberDao {
     return HouseholdMemberEntity.fromDb(rows.first);
   }
 
+  /// Get member by national ID (LOCAL query, no network).
+  Future<HouseholdMemberEntity?> getByNationalId(String nid) async {
+    if (nid.trim().isEmpty) return null;
+    final rows = await _db.db.query(
+      AppDatabase.tableMembers,
+      where: 'national_id = ?',
+      whereArgs: [nid.trim()],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return HouseholdMemberEntity.fromDb(rows.first);
+  }
+
   /// Search members by name (LOCAL query, no network).
   Future<List<HouseholdMemberEntity>> searchByName(String query, {int limit = 50}) async {
     final rows = await _db.db.query(

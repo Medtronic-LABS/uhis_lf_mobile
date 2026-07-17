@@ -4,6 +4,7 @@ import 'package:flutter/scheduler.dart';
 import '../config/app_config.dart';
 import '../constants/app_strings.dart';
 import '../debug/console_log.dart';
+import '../errors/domain_exceptions.dart';
 import 'auth_repository.dart';
 import 'biometric_service.dart';
 
@@ -120,7 +121,7 @@ class AuthState extends ChangeNotifier {
       _locked = false;
       return true;
     } catch (e) {
-      _error = e.toString();
+      _error = NetworkErrorMapper.friendly(e);
       _status = AuthStatus.signedOut;
       return false;
     } finally {
@@ -149,7 +150,7 @@ class AuthState extends ChangeNotifier {
       _locked = false;
       return true;
     } catch (e) {
-      _error = e.toString();
+      _error = NetworkErrorMapper.friendly(e);
       return false;
     } finally {
       _busy = false;
@@ -237,7 +238,7 @@ class AuthState extends ChangeNotifier {
       _locked = false;
       return true;
     } catch (e) {
-      _error = e.toString();
+      _error = NetworkErrorMapper.friendly(e);
       return false;
     } finally {
       _busy = false;

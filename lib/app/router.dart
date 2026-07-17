@@ -14,6 +14,7 @@ import '../features/household/household_detail_screen.dart';
 import '../features/household/household_list_screen.dart';
 import '../features/lock/lock_screen.dart';
 import '../features/login/login_screen.dart';
+import '../features/login/forgot_password_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
 import '../features/patient/patient_context_screen.dart';
 import '../features/pin/pin_setup_screen.dart';
@@ -63,6 +64,7 @@ GoRouter buildRouter(AuthState auth) {
           return loc == '/' ? null : '/';
         case AuthStatus.signedOut:
           if (!auth.splashReady && loc == '/') return null;
+          if (loc == '/forgot-password') return null;
           if (auth.reentryEnabled) {
             // Cold-start or post-expiry with biometric or PIN still enrolled.
             // Bounce login attempts back through /lock unless user explicitly
@@ -118,6 +120,10 @@ GoRouter buildRouter(AuthState auth) {
       GoRoute(
         path: '/lock',
         builder: (_, _) => const LockScreen(),
+      ),
+      GoRoute(
+        path: '/forgot-password',
+        builder: (_, _) => const ForgotPasswordScreen(),
       ),
       GoRoute(
         path: '/onboarding',
