@@ -47,6 +47,7 @@ class SymptomPickerScreen extends StatefulWidget {
     this.onSymptomsConfirmed,
     this.onProgrammesSelected,
     this.onProgrammesLive,
+    this.onDeliverySelected,
   });
 
   final String encounterId;
@@ -87,6 +88,10 @@ class SymptomPickerScreen extends StatefulWidget {
   /// Fired on every service-card toggle so the host can update the visit
   /// header badge in real time without waiting for the SK to tap Continue.
   final ValueChanged<Set<Programme>>? onProgrammesLive;
+
+  /// Fired just before [onAdvance] with whether the SK confirmed a delivery
+  /// visit. When true, the host includes the pregnancyOutcome form sections.
+  final ValueChanged<bool>? onDeliverySelected;
 
   @override
   State<SymptomPickerScreen> createState() => _SymptomPickerScreenState();
@@ -533,6 +538,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     if (onAdvance != null) {
       if (!(_patientContext?.isUnder5 ?? false)) {
         widget.onProgrammesSelected?.call(Set.unmodifiable(_selectedProgrammes));
+        widget.onDeliverySelected?.call(_isDelivery);
       }
       widget.onSymptomsConfirmed?.call(
         vm.selectedSymptoms,

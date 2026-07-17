@@ -45,6 +45,7 @@ class VisitFormScreen extends StatefulWidget {
     this.patientAge,
     this.gestationalWeeks,
     this.activatedPathways,
+    this.isDeliveryVisit = false,
     this.triageNotes,
     this.origin,
     this.onAdvance,
@@ -64,6 +65,10 @@ class VisitFormScreen extends StatefulWidget {
 
   /// Programme name strings from triage. Non-empty ⇒ sectioned assessment.
   final List<String>? activatedPathways;
+
+  /// When true, pregnancyOutcome sections are included alongside PNC sections.
+  /// Set only when the SK explicitly confirmed a delivery visit in Step 1.
+  final bool isDeliveryVisit;
 
   /// Free-text extra symptoms the SK entered in Step 1 not in the symptom list.
   final String? triageNotes;
@@ -249,7 +254,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     bool embedded,
   ) {
     final rawPathways = widget.activatedPathways ?? const [];
-    final formTypes = _toFormTypes(rawPathways);
+    final formTypes = _toFormTypes(rawPathways, isDelivery: widget.isDeliveryVisit);
     final enrolledFormTypes = _toFormTypes(
       widget.enrolledProgrammes
           .where((p) => p != Programme.unknown)
@@ -302,7 +307,10 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
   /// - `ncd`  → `ncd` (unchanged)
   /// - `imci` → `iccm` (no manifest yet; harmlessly ignored by form engine)
   /// - others → passed through unchanged
-  static List<String> _toFormTypes(List<String> programmeNames) {
+  static List<String> _toFormTypes(
+    List<String> programmeNames, {
+    bool isDelivery = false,
+  }) {
     // For ANC-only and NCD-only visits, omit commonVitals from activeFormTypes
     // — vitals fields are embedded directly in programme sections so the
     // clinical workflow order is preserved (ANC: Pregnancy → Physical → Lab →
@@ -315,7 +323,13 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     for (final p in programmeNames) {
       switch (p) {
         case 'pnc':
-          out.addAll(['pncMother', 'pncChild', 'pregnancyOutcome']);
+          // pregnancyOutcome sections only appear when SK explicitly selected
+          // the Delivery chip — not on routine postnatal care visits.
+          out.addAll([
+            'pncMother',
+            'pncChild',
+            if (isDelivery) 'pregnancyOutcome',
+          ]);
         case 'imci':
           out.add('iccm');
         case 'pw':
