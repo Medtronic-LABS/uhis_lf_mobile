@@ -466,7 +466,7 @@ class _PatientContextScreenState
       final tPhase2 = Stopwatch()..start();
       List<MemberAssessment> remoteAssessments = const [];
       if (skipRemote) {
-        ConsoleLog.banner('[PatientCtx] phase2 skip remote (sync ${syncAge!.inMinutes}min ago) — householdName only');
+        ConsoleLog.banner('[PatientCtx] phase2 skip remote (sync ${syncAge?.inMinutes}min ago) — householdName only');
         final householdName = await _householdName(localPatient.patient.householdId);
         if (mounted) setState(() => _remoteLoading = false);
         ConsoleLog.banner('[PatientCtx] phase2 done=${tPhase2.elapsedMilliseconds}ms'
@@ -796,13 +796,16 @@ class _PatientContextScreenState
     final snap = data.pregnancySnapshot;
     final isAnc = data.programmes.contains(Programme.anc);
 
-    // Latest ANC visit number for pregnancy bar
+    // Latest ANC assessment — visit number + gravida/parity for pregnancy bar
     final latestAncVisit = data.assessments
         .where((a) => Programme.fromString(a.type) == Programme.anc)
         .firstOrNull;
-    final ancVisitNum = latestAncVisit != null
-        ? (_unpackRaw(latestAncVisit.rawJson)['ancVisitNumber'] as String?)
-        : null;
+    final ancRaw = latestAncVisit != null
+        ? _normalizeRaw(latestAncVisit.rawJson)
+        : const <String, dynamic>{};
+    final ancVisitNum = ancRaw['ancVisitNumber']?.toString();
+    final gravida = ancRaw['gravida']?.toString();
+    final parity = ancRaw['parity']?.toString();
 
     // Spark charts for the selected thread
     final bpChart = _buildBpSparkChart(data.vitalHistory);
@@ -839,10 +842,6 @@ class _PatientContextScreenState
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(14, 14, 14, AppSpacing.stickyBarClearance),
                   children: [
-                    // Patient identity card
-                    _PatientProfileCard(data: data),
-                    const SizedBox(height: 14),
-
                     // ── Care thread chip row ──────────────────────────────
                     _CareThreadChipRow(
                       threads: threads,
@@ -860,6 +859,8 @@ class _PatientContextScreenState
                       _PregnancyProgressSection(
                         snapshot: snap,
                         ancVisitNumber: ancVisitNum,
+                        gravida: gravida,
+                        parity: parity,
                       ),
                       const SizedBox(height: 12),
                     ],
@@ -965,6 +966,7 @@ class _CareThread {
     required this.label,
     required this.bg,
     required this.textColor,
+    this.icon = '',
     this.stats = const {},
   });
 
@@ -972,7 +974,7 @@ class _CareThread {
   final String label;
   final Color bg;
   final Color textColor;
-  /// Key → display value pairs shown in the stats row under each thread.
+  final String icon;
   final Map<String, String> stats;
 }
 
@@ -1166,6 +1168,7 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
     threads.add(_CareThread(
       programme: Programme.anc,
       label: CareThreadStrings.anc,
+      icon: '🤰',
       bg: AppColors.ancSurface,
       textColor: AppColors.ancText,
       stats: stats,
@@ -1180,6 +1183,7 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
     threads.add(_CareThread(
       programme: Programme.ncd,
       label: CareThreadStrings.htn,
+      icon: '❤️',
       bg: AppColors.ncdSurface,
       textColor: AppColors.ncdText,
       stats: bp != null ? {PatientProfileStrings.bpTarget: bp} : {},
@@ -1190,6 +1194,7 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
       threads.add(_CareThread(
         programme: Programme.ncd,
         label: CareThreadStrings.sugar,
+        icon: '🩸',
         bg: AppColors.statusInfoSurface,
         textColor: AppColors.threadInfoText,
         stats: {PatientProfileStrings.bloodSugar: '$bg${bgType != null ? ' ($bgType)' : ''}'},
@@ -1206,6 +1211,7 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
     threads.add(_CareThread(
       programme: Programme.pnc,
       label: CareThreadStrings.pnc,
+      icon: '🤱',
       bg: AppColors.pncSurface,
       textColor: AppColors.pncText,
       stats: {
@@ -1220,12 +1226,14 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
     threads.add(const _CareThread(
       programme: Programme.imci,
       label: CareThreadStrings.imm,
+      icon: '💉',
       bg: AppColors.threadImmBg,
       textColor: AppColors.tbText,
     ));
     threads.add(const _CareThread(
       programme: Programme.imci,
       label: CareThreadStrings.growth,
+      icon: '📈',
       bg: AppColors.pncSurface,
       textColor: AppColors.aiPurpleDark,
     ));
@@ -1236,6 +1244,7 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
     threads.add(const _CareThread(
       programme: Programme.tb,
       label: CareThreadStrings.general,
+      icon: '🫁',
       bg: AppColors.tbSurface,
       textColor: AppColors.tbText,
     ));
@@ -1246,6 +1255,7 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
     threads.add(const _CareThread(
       programme: Programme.unknown,
       label: CareThreadStrings.general,
+      icon: '🏥',
       bg: AppColors.threadGeneralBg,
       textColor: AppColors.textMid,
     ));
@@ -1314,7 +1324,7 @@ class _CareThreadChipRow extends StatelessWidget {
                     ),
                   ),
                   child: Text(
-                    t.label,
+                    t.icon.isEmpty ? t.label : '${t.icon} ${t.label}',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -1400,7 +1410,7 @@ class _AiInsightCard extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  const Icon(Icons.expand_more_rounded, size: 16, color: AppColors.aiPurpleDark),
+                  const Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.aiPurpleDark),
                 ],
               ),
               const SizedBox(height: 8),
@@ -1432,13 +1442,17 @@ class _PregnancyProgressSection extends StatelessWidget {
   const _PregnancyProgressSection({
     required this.snapshot,
     required this.ancVisitNumber,
+    this.gravida,
+    this.parity,
   });
 
   final PregnancySnapshotRow snapshot;
-  /// Latest ancVisitNumber from assessments, or null if not yet recorded.
   final String? ancVisitNumber;
+  final String? gravida;
+  final String? parity;
 
-  static const _totalAncVisits = 8; // WHO recommended minimum
+  // Bangladesh national ANC protocol: 4 focused visits
+  static const _totalAncVisits = 4;
 
   @override
   Widget build(BuildContext context) {
@@ -1452,19 +1466,18 @@ class _PregnancyProgressSection extends StatelessWidget {
         ? DateTime.fromMillisecondsSinceEpoch(snapshot.eddDate!)
         : null;
 
-    // Gestational age in weeks from LMP
     final gaWeeks = lmpDate != null ? now.difference(lmpDate).inDays ~/ 7 : null;
-    // Weeks remaining to EDD
-    final weeksLeft = eddDate != null
-        ? eddDate.difference(now).inDays ~/ 7
-        : null;
-    // Progress fraction of 40-week pregnancy
+    final weeksLeft = eddDate != null ? eddDate.difference(now).inDays ~/ 7 : null;
     final progress = gaWeeks != null ? (gaWeeks / 40.0).clamp(0.0, 1.0) : null;
-
     final visitsDone = int.tryParse(ancVisitNumber ?? '0') ?? 0;
     final visitProgress = (visitsDone / _totalAncVisits).clamp(0.0, 1.0);
 
     final dateFormat = DateFormat('d MMM yyyy');
+
+    // G/P/A code string
+    final g = gravida ?? '?';
+    final p = parity ?? '?';
+    final gpaCode = 'G$g P$p A0';
 
     final widget = Container(
       padding: const EdgeInsets.all(16),
@@ -1476,6 +1489,7 @@ class _PregnancyProgressSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header row: icon + title + Wk XX ▾
           Row(
             children: [
               const Icon(Icons.favorite_border_rounded, size: 15, color: AppColors.ancText),
@@ -1490,38 +1504,122 @@ class _PregnancyProgressSection extends StatelessWidget {
               ),
               const Spacer(),
               if (gaWeeks != null)
-                Text(
-                  '${gaWeeks}w GA',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.ancText,
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.ancText.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    'Wk $gaWeeks ▾',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.ancText,
+                    ),
                   ),
                 ),
             ],
           ),
+          if (lmpDate != null || eddDate != null) ...[
+            const SizedBox(height: 8),
+            // LMP + EDD on one row
+            Row(
+              children: [
+                if (lmpDate != null)
+                  Text(
+                    'LMP: ${dateFormat.format(lmpDate)}',
+                    style: const TextStyle(fontSize: 11, color: AppColors.ancText),
+                  ),
+                if (lmpDate != null && eddDate != null) ...[
+                  const SizedBox(width: 12),
+                  const Text('·', style: TextStyle(fontSize: 11, color: AppColors.ancText)),
+                  const SizedBox(width: 12),
+                ],
+                if (eddDate != null)
+                  Expanded(
+                    child: Text(
+                      'EDD: ${dateFormat.format(eddDate)}',
+                      style: const TextStyle(fontSize: 11, color: AppColors.ancText),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+            ),
+          ],
+          if (weeksLeft != null || gravida != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              [
+                if (weeksLeft != null && weeksLeft > 0) '~$weeksLeft ${PatientProfileStrings.weeksToGo}',
+                gpaCode,
+              ].join('  ·  '),
+              style: const TextStyle(fontSize: 11, color: AppColors.ancText),
+            ),
+          ],
           if (progress != null) ...[
             const SizedBox(height: 10),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: progress,
-                minHeight: 8,
-                backgroundColor: AppColors.ancBorder,
-                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.ancText),
-              ),
+            // Custom progress bar with tick marker at current week position
+            LayoutBuilder(
+              builder: (_, bc) {
+                final pct = progress;
+                final fillW = (bc.maxWidth * pct).clamp(0.0, bc.maxWidth);
+                return SizedBox(
+                  height: 14,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      // Background bar
+                      Positioned(
+                        top: 2, left: 0, right: 0,
+                        child: Container(
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: AppColors.ancBorder,
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                        ),
+                      ),
+                      // Fill
+                      Positioned(
+                        top: 2, left: 0,
+                        child: Container(
+                          width: fillW,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: AppColors.ancText,
+                            borderRadius: BorderRadius.only(
+                              topLeft: const Radius.circular(5),
+                              bottomLeft: const Radius.circular(5),
+                              topRight: pct >= 1.0 ? const Radius.circular(5) : Radius.zero,
+                              bottomRight: pct >= 1.0 ? const Radius.circular(5) : Radius.zero,
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Tick marker
+                      if (fillW > 2)
+                        Positioned(
+                          left: fillW - 2,
+                          top: 0,
+                          child: Container(
+                            width: 4,
+                            height: 14,
+                            decoration: BoxDecoration(
+                              color: AppColors.navy,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
             ),
-            if (weeksLeft != null && weeksLeft > 0)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  '$weeksLeft ${PatientProfileStrings.weeksToGo}',
-                  style: const TextStyle(fontSize: 11, color: AppColors.ancText),
-                ),
-              ),
           ],
           const SizedBox(height: 12),
-          // Stats row
+          // Stats row: Visits done | Next visit info
           Row(
             children: [
               _PregStat(
@@ -1530,24 +1628,19 @@ class _PregnancyProgressSection extends StatelessWidget {
                 progress: visitProgress,
               ),
               const SizedBox(width: 12),
-              if (eddDate != null)
-                _PregStat(
-                  label: 'EDD',
-                  value: dateFormat.format(eddDate),
-                ),
-              if (lmpDate != null && eddDate == null) ...[
-                _PregStat(
-                  label: 'LMP',
-                  value: dateFormat.format(lmpDate),
-                ),
-              ],
+              _PregStat(
+                label: 'Next visit',
+                value: visitsDone < _totalAncVisits
+                    ? 'ANC ${visitsDone + 1} due'
+                    : 'All visits done',
+              ),
             ],
           ),
         ],
       ),
     );
     debugPrint('⏱ [PatientContext] _PregnancyProgressSection build in ${sw.elapsedMilliseconds}ms'
-        ' gaWeeks=$gaWeeks weeksLeft=$weeksLeft visitsDone=$visitsDone');
+        ' gaWeeks=$gaWeeks weeksLeft=$weeksLeft visitsDone=$visitsDone gravida=$gravida parity=$parity');
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -1646,38 +1739,28 @@ class _StatsGrid extends StatelessWidget {
     final sw = Stopwatch()..start();
     final stats = thread.stats;
 
-    late final Widget body;
     if (stats.isEmpty) {
-      body = Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Text(
-          noDataLabel,
-          style: const TextStyle(
-            fontSize: 13,
-            color: AppColors.textMuted,
-            fontStyle: FontStyle.italic,
-          ),
-        ),
-      );
-    } else {
-      final entries = stats.entries.toList();
-      body = Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        children: [
-          for (final e in entries)
-            SizedBox(
-              width: (MediaQuery.of(context).size.width - 28 - 10) / 2,
-              child: _StatTile(
-                label: e.key,
-                value: e.value,
-                bg: thread.bg,
-                textColor: thread.textColor,
-              ),
-            ),
-        ],
-      );
+      debugPrint('⏱ [PatientContext] _StatsGrid build 0ms thread=${thread.label} stats=0 (hidden)');
+      return const SizedBox.shrink();
     }
+
+    final entries = stats.entries.toList();
+    final body = Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        for (final e in entries)
+          SizedBox(
+            width: (MediaQuery.of(context).size.width - 28 - 10) / 2,
+            child: _StatTile(
+              label: e.key,
+              value: e.value,
+              bg: thread.bg,
+              textColor: thread.textColor,
+            ),
+          ),
+      ],
+    );
 
     final result = Container(
       width: double.infinity,
@@ -1685,7 +1768,7 @@ class _StatsGrid extends StatelessWidget {
       decoration: BoxDecoration(
         color: thread.bg,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: thread.textColor.withOpacity(0.2), width: 1),
+        border: Border.all(color: thread.textColor.withValues(alpha: 0.2), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1953,6 +2036,10 @@ class _SparkBarChart extends StatelessWidget {
     this.secondValues,
     this.secondBarColor,
     this.label,
+    this.legendLabel,
+    this.secondLegendLabel,
+    this.axisLabels,
+    this.trendNote,
     this.maxHeight = 48,
     this.barWidth = 6,
     this.barSpacing = 3,
@@ -1963,6 +2050,10 @@ class _SparkBarChart extends StatelessWidget {
   final List<double>? secondValues;
   final Color? secondBarColor;
   final String? label;
+  final String? legendLabel;
+  final String? secondLegendLabel;
+  final List<String>? axisLabels;
+  final String? trendNote;
   final double maxHeight;
   final double barWidth;
   final double barSpacing;
@@ -1996,15 +2087,41 @@ class _SparkBarChart extends StatelessWidget {
 
     double barH(double v) => ((v - minVal) / range * maxHeight).clamp(4.0, maxHeight);
 
+    final isDual = second.isNotEmpty;
+    final showLegend = legendLabel != null;
+    final hasAxisLabels = axisLabels != null && axisLabels!.isNotEmpty;
+
     final result = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
+        // Section label
         if (label != null)
           Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Text(label!, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(
+              label!,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMid),
+            ),
           ),
+        // Legend row
+        if (showLegend) ...[
+          Row(
+            children: [
+              Container(width: 8, height: 8, decoration: BoxDecoration(color: barColor, shape: BoxShape.circle)),
+              const SizedBox(width: 4),
+              Text(legendLabel!, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+              if (isDual && secondLegendLabel != null) ...[
+                const SizedBox(width: 10),
+                Container(width: 8, height: 8, decoration: BoxDecoration(color: secondBarColor ?? AppColors.textMuted, shape: BoxShape.circle)),
+                const SizedBox(width: 4),
+                Text(secondLegendLabel!, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+              ],
+            ],
+          ),
+          const SizedBox(height: 6),
+        ],
+        // Bars
         SizedBox(
           height: maxHeight,
           child: Row(
@@ -2013,7 +2130,6 @@ class _SparkBarChart extends StatelessWidget {
             children: [
               for (int i = 0; i < values.length; i++) ...[
                 if (i > 0) SizedBox(width: barSpacing),
-                // Bars for this x-position — side by side, aligned to bottom
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   mainAxisSize: MainAxisSize.min,
@@ -2026,13 +2142,13 @@ class _SparkBarChart extends StatelessWidget {
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
                       ),
                     ),
-                    if (second.isNotEmpty && i < second.length) ...[
+                    if (isDual && i < second.length) ...[
                       const SizedBox(width: 1),
                       Container(
                         width: barWidth,
                         height: barH(second[i]),
                         decoration: BoxDecoration(
-                          color: (secondBarColor ?? AppColors.textMuted).withOpacity(0.7),
+                          color: (secondBarColor ?? AppColors.textMuted).withValues(alpha: 0.7),
                           borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
                         ),
                       ),
@@ -2043,10 +2159,70 @@ class _SparkBarChart extends StatelessWidget {
             ],
           ),
         ),
+        // Value labels
+        const SizedBox(height: 3),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (int i = 0; i < values.length; i++) ...[
+              if (i > 0) SizedBox(width: barSpacing),
+              SizedBox(
+                width: isDual ? barWidth * 2 + 1 : barWidth,
+                child: Text(
+                  isDual && i < second.length
+                      ? '${values[i].toStringAsFixed(0)}/${second[i].toStringAsFixed(0)}'
+                      : values[i].toStringAsFixed(values[i] == values[i].roundToDouble() ? 0 : 1),
+                  style: const TextStyle(
+                    fontSize: 9,
+                    color: AppColors.textMuted,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                  overflow: TextOverflow.visible,
+                ),
+              ),
+            ],
+          ],
+        ),
+        // Axis labels
+        if (hasAxisLabels) ...[
+          const SizedBox(height: 2),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (int i = 0; i < values.length; i++) ...[
+                if (i > 0) SizedBox(width: barSpacing),
+                SizedBox(
+                  width: isDual ? barWidth * 2 + 1 : barWidth,
+                  child: Text(
+                    i < axisLabels!.length ? axisLabels![i] : '',
+                    style: const TextStyle(fontSize: 9, color: AppColors.textMuted),
+                    overflow: TextOverflow.visible,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+        // Trend note
+        if (trendNote != null) ...[
+          const SizedBox(height: 5),
+          Text(
+            trendNote!,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: trendNote!.startsWith('↑')
+                  ? AppColors.statusCritical
+                  : trendNote!.startsWith('↓')
+                      ? AppColors.statusSuccess
+                      : AppColors.textMuted,
+            ),
+          ),
+        ],
       ],
     );
     debugPrint('⏱ [PatientContext] _SparkBarChart build in ${sw.elapsedMilliseconds}ms'
-        ' bars=${values.length} dual=${second.isNotEmpty}');
+        ' bars=${values.length} dual=$isDual');
     return result;
   }
 }
@@ -2069,12 +2245,25 @@ _SparkBarChart? _buildBpSparkChart(List<VisitVitals> history) {
     }
   }
   if (systolics.isEmpty) return null;
+
+  String? trend;
+  if (systolics.length >= 2) {
+    final diff = systolics.last - systolics[systolics.length - 2];
+    if (diff > 5) trend = '↑ Rising — monitor closely';
+    else if (diff < -5) trend = '↓ Improving';
+    else trend = '→ Stable';
+  }
+
   return _SparkBarChart(
     values: systolics,
-    barColor: AppColors.ancText,
+    barColor: AppColors.navy,
     secondValues: diastolics,
-    secondBarColor: AppColors.ancBorder,
-    label: 'BP trend (systolic/diastolic)',
+    secondBarColor: AppColors.navyMid,
+    label: 'Blood pressure (mmHg)',
+    legendLabel: 'Systolic',
+    secondLegendLabel: 'Diastolic',
+    axisLabels: List.generate(systolics.length, (i) => 'V${i + 1}'),
+    trendNote: trend,
   );
 }
 
@@ -2093,10 +2282,21 @@ _SparkBarChart? _buildWeightSparkChart(List<VisitVitals> history) {
     }
   }
   if (weights.isEmpty) return null;
+
+  String? trend;
+  if (weights.length >= 2) {
+    final diff = weights.last - weights[weights.length - 2];
+    if (diff > 0.3) trend = '↑ Gaining weight';
+    else if (diff < -0.3) trend = '↓ Weight loss — monitor';
+    else trend = '→ Stable';
+  }
+
   return _SparkBarChart(
     values: weights,
-    barColor: AppColors.aiPurpleDark,
+    barColor: AppColors.tbText,
     label: PatientProfileStrings.growthTrend,
+    axisLabels: List.generate(weights.length, (i) => 'V${i + 1}'),
+    trendNote: trend,
   );
 }
 
@@ -2104,7 +2304,7 @@ _SparkBarChart? _buildWeightSparkChart(List<VisitVitals> history) {
 
 /// Scrollable vertical timeline of all care events (assessments).
 /// Events are already sorted newest-first via [PatientOrMemberData.assessments].
-class _CombinedTimeline extends StatelessWidget {
+class _CombinedTimeline extends StatefulWidget {
   const _CombinedTimeline({
     required this.assessments,
     required this.isLoading,
@@ -2116,13 +2316,31 @@ class _CombinedTimeline extends StatelessWidget {
   final String? aiSummary;
 
   @override
+  State<_CombinedTimeline> createState() => _CombinedTimelineState();
+}
+
+class _CombinedTimelineState extends State<_CombinedTimeline> {
+  Programme? _filter; // null = All
+
+  @override
   Widget build(BuildContext context) {
     final sw = Stopwatch()..start();
 
+    // Unique programmes present in the assessment list (stable insertion order)
+    final seenProgs = <Programme>[];
+    for (final a in widget.assessments) {
+      final p = Programme.fromString(a.type);
+      if (p != Programme.unknown && !seenProgs.contains(p)) seenProgs.add(p);
+    }
+
+    final filtered = _filter == null
+        ? widget.assessments
+        : widget.assessments.where((a) => Programme.fromString(a.type) == _filter).toList();
+
     late final Widget body;
-    if (assessments.isEmpty && isLoading) {
+    if (widget.assessments.isEmpty && widget.isLoading) {
       body = const _TimelineShimmer();
-    } else if (assessments.isEmpty) {
+    } else if (filtered.isEmpty) {
       body = Padding(
         padding: const EdgeInsets.symmetric(vertical: 16),
         child: Text(
@@ -2131,42 +2349,94 @@ class _CombinedTimeline extends StatelessWidget {
         ),
       );
     } else {
-      final hasAi = aiSummary != null && aiSummary!.isNotEmpty && assessments.length >= 2;
+      final hasAi = widget.aiSummary != null && widget.aiSummary!.isNotEmpty && filtered.length >= 2;
       final rows = <Widget>[];
-      for (int i = 0; i < assessments.length; i++) {
-        final isLast = i == assessments.length - 1;
-        // Inject AI insight node immediately before the last (CURRENT) assessment.
+      for (int i = 0; i < filtered.length; i++) {
+        final isLast = i == filtered.length - 1;
         if (isLast && hasAi) {
-          rows.add(_AiInsightTimelineNode(summary: aiSummary!));
+          rows.add(_AiInsightTimelineNode(summary: widget.aiSummary!));
         }
-        rows.add(_TimelineRow(assessment: assessments[i], isLast: isLast));
+        rows.add(_TimelineRow(assessment: filtered[i], isLast: isLast));
       }
-      body = Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: rows,
-      );
+      body = Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows);
     }
 
     final result = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Text(
-            PatientProfileStrings.careHistory,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
+        Text(
+          PatientProfileStrings.careHistory,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+        ),
+        // Filter chips — only shown when >1 programme in the list
+        if (seenProgs.length > 1) ...[
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 28,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                _TimelineFilterChip(
+                  label: 'All',
+                  isActive: _filter == null,
+                  onTap: () => setState(() => _filter = null),
+                ),
+                for (final p in seenProgs)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 6),
+                    child: _TimelineFilterChip(
+                      label: p.displayName,
+                      isActive: _filter == p,
+                      onTap: () => setState(() => _filter = _filter == p ? null : p),
+                    ),
+                  ),
+              ],
             ),
           ),
-        ),
+        ],
+        const SizedBox(height: 10),
         body,
       ],
     );
     debugPrint('⏱ [PatientContext] _CombinedTimeline build in ${sw.elapsedMilliseconds}ms'
-        ' events=${assessments.length} loading=$isLoading');
+        ' events=${widget.assessments.length} filtered=${filtered.length} loading=${widget.isLoading}');
     return result;
+  }
+}
+
+/// Small pill chip used as filter control above the care history timeline.
+class _TimelineFilterChip extends StatelessWidget {
+  const _TimelineFilterChip({required this.label, required this.isActive, required this.onTap});
+
+  final String label;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isActive ? AppColors.navy : AppColors.cardSurface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isActive ? AppColors.navy : AppColors.border,
+            width: 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: isActive ? AppColors.textOnNavy : AppColors.textMid,
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -3613,6 +3883,29 @@ class _PatientDetailHeader extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
+                    Builder(builder: (ctx) {
+                      final band = data.riskBand;
+                      if (band == null || band == Band.band4) return const SizedBox.shrink();
+                      final (label, color) = switch (band) {
+                        Band.band1 => ('● SEVERE RISK', AppColors.statusCriticalDark),
+                        Band.band2 => ('● OVERDUE', AppColors.statusWarningDark),
+                        Band.band3 => ('● MONITORING', const Color(0xFF93C5FD)),
+                        _ => ('', Colors.transparent),
+                      };
+                      if (label.isEmpty) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: color,
+                            letterSpacing: 0.4,
+                          ),
+                        ),
+                      );
+                    }),
                   ],
                 ),
               ),
