@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -2235,190 +2236,67 @@ class _VitalTrendCard extends StatelessWidget {
   }
 }
 
-// ─── Spark Bar Chart ───────────────────────────────────────────────────────
+// ─── BP Line Chart (CustomPainter) ────────────────────────────────────────
 
-/// Lightweight bar-chart sparkline rendered as a [Row] of [Container] widgets.
-/// No additional packages — satisfies the "no new packages" constraint.
-///
-/// Supports two series (e.g. systolic + diastolic) when [secondValues] is set.
-class _SparkBarChart extends StatelessWidget {
-  const _SparkBarChart({
-    required this.values,
-    required this.barColor,
-    this.secondValues,
-    this.secondBarColor,
-    this.label,
-    this.legendLabel,
-    this.secondLegendLabel,
-    this.axisLabels,
+/// Connected-dot line chart for BP trend. Two series: systolic (navy) +
+/// diastolic (navyMid). Faint threshold lines at 140/90 mmHg.
+/// Values drawn on-canvas directly above each dot pair.
+class _BpLineChart extends StatelessWidget {
+  const _BpLineChart({
+    required this.systolics,
+    required this.diastolics,
+    required this.labels,
     this.trendNote,
-    this.maxHeight = 64,
-    this.barWidth = 8,
-    this.barSpacing = 4,
   });
 
-  final List<double> values;
-  final Color barColor;
-  final List<double>? secondValues;
-  final Color? secondBarColor;
-  final String? label;
-  final String? legendLabel;
-  final String? secondLegendLabel;
-  final List<String>? axisLabels;
+  final List<double> systolics;
+  final List<double> diastolics;
+  final List<String> labels;
   final String? trendNote;
-  final double maxHeight;
-  final double barWidth;
-  final double barSpacing;
 
   @override
   Widget build(BuildContext context) {
-    final sw = Stopwatch()..start();
-    if (values.isEmpty) {
-      final empty = Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (label != null)
-            Text(label!, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
-          const SizedBox(height: 4),
-          Text(
-            PatientProfileStrings.noVitalsYet,
-            style: const TextStyle(fontSize: 11, color: AppColors.textMuted, fontStyle: FontStyle.italic),
-          ),
-        ],
-      );
-      debugPrint('⏱ [PatientContext] _SparkBarChart build in ${sw.elapsedMilliseconds}ms (empty)');
-      return empty;
-    }
-
-    final second = secondValues ?? const [];
-    final allVals = [...values, ...second];
-    final maxVal = allVals.reduce((a, b) => a > b ? a : b);
-    final minVal = allVals.reduce((a, b) => a < b ? a : b);
-    final range = (maxVal - minVal).clamp(1.0, double.infinity);
-
-    double barH(double v) => ((v - minVal) / range * maxHeight).clamp(4.0, maxHeight);
-
-    final isDual = second.isNotEmpty;
-    final showLegend = legendLabel != null;
-    final hasAxisLabels = axisLabels != null && axisLabels!.isNotEmpty;
-
-    final result = Column(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Section label
-        if (label != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Text(
-              label!,
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMid),
-            ),
-          ),
-        // Legend row
-        if (showLegend) ...[
-          Row(
-            children: [
-              Container(width: 8, height: 8, decoration: BoxDecoration(color: barColor, shape: BoxShape.circle)),
-              const SizedBox(width: 4),
-              Text(legendLabel!, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
-              if (isDual && secondLegendLabel != null) ...[
-                const SizedBox(width: 10),
-                Container(width: 8, height: 8, decoration: BoxDecoration(color: secondBarColor ?? AppColors.textMuted, shape: BoxShape.circle)),
-                const SizedBox(width: 4),
-                Text(secondLegendLabel!, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
-              ],
-            ],
-          ),
-          const SizedBox(height: 6),
-        ],
-        // Bars
-        SizedBox(
-          height: maxHeight,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (int i = 0; i < values.length; i++) ...[
-                if (i > 0) SizedBox(width: barSpacing),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: barWidth,
-                      height: barH(values[i]),
-                      decoration: BoxDecoration(
-                        color: barColor,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
-                      ),
-                    ),
-                    if (isDual && i < second.length) ...[
-                      const SizedBox(width: 1),
-                      Container(
-                        width: barWidth,
-                        height: barH(second[i]),
-                        decoration: BoxDecoration(
-                          color: (secondBarColor ?? AppColors.textMuted).withValues(alpha: 0.7),
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ],
-            ],
-          ),
-        ),
-        // Value labels
-        const SizedBox(height: 3),
+        // Legend
         Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            for (int i = 0; i < values.length; i++) ...[
-              if (i > 0) SizedBox(width: barSpacing),
-              SizedBox(
-                width: isDual ? barWidth * 2 + 1 : barWidth,
-                child: Text(
-                  isDual && i < second.length
-                      ? '${values[i].toStringAsFixed(0)}/${second[i].toStringAsFixed(0)}'
-                      : values[i].toStringAsFixed(values[i] == values[i].roundToDouble() ? 0 : 1),
-                  style: const TextStyle(
-                    fontSize: 9,
-                    color: AppColors.textMuted,
-                    fontFeatures: [FontFeature.tabularFigures()],
-                  ),
-                  softWrap: false,
-                  overflow: TextOverflow.visible,
-                ),
-              ),
-            ],
+            Container(
+              width: 8, height: 8,
+              decoration: const BoxDecoration(color: AppColors.navy, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 4),
+            const Text('Systolic', style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
+            const SizedBox(width: 12),
+            Container(
+              width: 8, height: 8,
+              decoration: BoxDecoration(color: AppColors.navyMid.withValues(alpha: 0.8), shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 4),
+            const Text('Diastolic', style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
           ],
         ),
-        // Axis labels
-        if (hasAxisLabels) ...[
-          const SizedBox(height: 2),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (int i = 0; i < values.length; i++) ...[
-                if (i > 0) SizedBox(width: barSpacing),
-                SizedBox(
-                  width: isDual ? barWidth * 2 + 1 : barWidth,
-                  child: Text(
-                    i < axisLabels!.length ? axisLabels![i] : '',
-                    style: const TextStyle(fontSize: 9, color: AppColors.textMuted),
-                    overflow: TextOverflow.visible,
-                  ),
-                ),
-              ],
-            ],
+        const SizedBox(height: 10),
+        // Canvas chart
+        LayoutBuilder(
+          builder: (ctx, bc) => SizedBox(
+            width: bc.maxWidth,
+            height: 120,
+            child: CustomPaint(
+              size: Size(bc.maxWidth, 120),
+              painter: _BpLinePainter(
+                systolics: systolics,
+                diastolics: diastolics,
+                labels: labels,
+              ),
+            ),
           ),
-        ],
+        ),
         // Trend note
         if (trendNote != null) ...[
-          const SizedBox(height: 5),
+          const SizedBox(height: 6),
           Text(
             trendNote!,
             style: TextStyle(
@@ -2434,14 +2312,285 @@ class _SparkBarChart extends StatelessWidget {
         ],
       ],
     );
-    debugPrint('⏱ [PatientContext] _SparkBarChart build in ${sw.elapsedMilliseconds}ms'
-        ' bars=${values.length} dual=$isDual');
-    return result;
   }
 }
 
-/// Extracts BP spark chart from visit vitals history. Returns null if no BP data.
-_SparkBarChart? _buildBpSparkChart(List<VisitVitals> history) {
+class _BpLinePainter extends CustomPainter {
+  const _BpLinePainter({
+    required this.systolics,
+    required this.diastolics,
+    required this.labels,
+  });
+
+  final List<double> systolics;
+  final List<double> diastolics;
+  final List<String> labels;
+
+  // Vertical layout constants
+  static const _topPad = 24.0;   // space for value labels above top dot
+  static const _botPad = 18.0;   // space for visit label below chart
+  static const _sidePad = 26.0;  // horizontal margin keeps dots off edge
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final n = systolics.length;
+    if (n == 0) return;
+
+    final chartH = size.height - _topPad - _botPad;
+    final allVals = [...systolics, ...diastolics];
+    final rawMin = allVals.reduce((a, b) => a < b ? a : b);
+    final rawMax = allVals.reduce((a, b) => a > b ? a : b);
+    final minVal = (rawMin - 14).clamp(0.0, double.infinity);
+    final maxVal = rawMax + 14;
+    final range = (maxVal - minVal).clamp(1.0, double.infinity);
+
+    double xPos(int i) {
+      if (n == 1) return size.width / 2;
+      return _sidePad + i * ((size.width - _sidePad * 2) / (n - 1));
+    }
+
+    double yPos(double v) => _topPad + (1.0 - (v - minVal) / range) * chartH;
+
+    // Faint clinical threshold lines (pre-hypertension boundary)
+    final threshPaint = Paint()
+      ..color = const Color(0xFFE53E3E).withValues(alpha: 0.16)
+      ..strokeWidth = 1;
+    for (final t in [140.0, 90.0]) {
+      if (t > minVal && t < maxVal) {
+        canvas.drawLine(Offset(0, yPos(t)), Offset(size.width, yPos(t)), threshPaint);
+      }
+    }
+
+    // Lines between dots
+    final sysPaint = Paint()
+      ..color = AppColors.navy
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    final diaPaint = Paint()
+      ..color = AppColors.navyMid.withValues(alpha: 0.75)
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    for (int i = 0; i < n - 1; i++) {
+      canvas.drawLine(Offset(xPos(i), yPos(systolics[i])),
+          Offset(xPos(i + 1), yPos(systolics[i + 1])), sysPaint);
+      canvas.drawLine(Offset(xPos(i), yPos(diastolics[i])),
+          Offset(xPos(i + 1), yPos(diastolics[i + 1])), diaPaint);
+    }
+
+    // Dots + value labels per visit
+    final sysDot = Paint()..color = AppColors.navy..style = PaintingStyle.fill;
+    final sysBorder = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+    final diaDot = Paint()..color = AppColors.navyMid..style = PaintingStyle.fill;
+
+    for (int i = 0; i < n; i++) {
+      final px = xPos(i);
+      final sysY = yPos(systolics[i]);
+      final diaY = yPos(diastolics[i]);
+
+      // Value label: sys (bold navy) / dia (lighter) stacked, centered on x
+      final tp = TextPainter(
+        text: TextSpan(children: [
+          TextSpan(
+            text: '${systolics[i].toStringAsFixed(0)}\n',
+            style: const TextStyle(
+              fontSize: 9.5, color: AppColors.navy,
+              fontWeight: FontWeight.w700, height: 1.25,
+            ),
+          ),
+          TextSpan(
+            text: diastolics[i].toStringAsFixed(0),
+            style: TextStyle(
+              fontSize: 9, height: 1.25,
+              color: AppColors.navyMid.withValues(alpha: 0.85),
+            ),
+          ),
+        ]),
+        textAlign: TextAlign.center,
+        textDirection: ui.TextDirection.ltr,
+      )..layout(maxWidth: 44);
+      tp.paint(canvas, Offset(
+        (px - tp.width / 2).clamp(0.0, size.width - tp.width),
+        sysY - tp.height - 6,
+      ));
+
+      // Systolic dot (larger, white border so it pops off line)
+      canvas.drawCircle(Offset(px, sysY), 5, sysDot);
+      canvas.drawCircle(Offset(px, sysY), 5, sysBorder);
+
+      // Diastolic dot (smaller, no border)
+      canvas.drawCircle(Offset(px, diaY), 3.5, diaDot);
+
+      // Visit axis label below chart
+      final vl = TextPainter(
+        text: TextSpan(
+          text: i < labels.length ? labels[i] : '',
+          style: const TextStyle(fontSize: 9, color: AppColors.textMuted),
+        ),
+        textAlign: TextAlign.center,
+        textDirection: ui.TextDirection.ltr,
+      )..layout(maxWidth: 44);
+      vl.paint(canvas, Offset(
+        (px - vl.width / 2).clamp(0.0, size.width - vl.width),
+        size.height - _botPad + 4,
+      ));
+    }
+  }
+
+  @override
+  bool shouldRepaint(_BpLinePainter old) =>
+      old.systolics != systolics || old.diastolics != diastolics;
+}
+
+// ─── Spark Bar Chart ───────────────────────────────────────────────────────
+
+/// Lightweight bar-chart sparkline for single-series trend data (e.g. weight).
+/// Uses LayoutBuilder so each visit slot gets equal width — no label overlap.
+class _SparkBarChart extends StatelessWidget {
+  const _SparkBarChart({
+    required this.values,
+    required this.barColor,
+    this.label,
+    this.axisLabels,
+    this.trendNote,
+    this.maxHeight = 64,
+    this.barWidth = 8,
+    this.barSpacing = 4,
+  });
+
+  final List<double> values;
+  final Color barColor;
+  final String? label;
+  final List<String>? axisLabels;
+  final String? trendNote;
+  final double maxHeight;
+  final double barWidth;
+  final double barSpacing;
+
+  @override
+  Widget build(BuildContext context) {
+    if (values.isEmpty) {
+      return Text(
+        PatientProfileStrings.noVitalsYet,
+        style: const TextStyle(fontSize: 11, color: AppColors.textMuted, fontStyle: FontStyle.italic),
+      );
+    }
+
+    final maxVal = values.reduce((a, b) => a > b ? a : b);
+    final minVal = values.reduce((a, b) => a < b ? a : b);
+    final range = (maxVal - minVal).clamp(1.0, double.infinity);
+    double barH(double v) => ((v - minVal) / range * maxHeight).clamp(6.0, maxHeight);
+
+    String valLabel(double v) =>
+        v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (label != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(label!, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMid)),
+          ),
+        // Bars + labels in a single LayoutBuilder so each slot gets fair width
+        LayoutBuilder(builder: (ctx, bc) {
+          final slotW = bc.maxWidth / values.length;
+          final bW = (slotW * 0.45).clamp(6.0, 24.0);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Bar row
+              SizedBox(
+                height: maxHeight,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    for (int i = 0; i < values.length; i++)
+                      SizedBox(
+                        width: slotW,
+                        child: Align(
+                          alignment: Alignment.bottomCenter,
+                          child: Container(
+                            width: bW,
+                            height: barH(values[i]),
+                            decoration: BoxDecoration(
+                              color: barColor,
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 4),
+              // Value labels — full slot width, centered
+              Row(
+                children: [
+                  for (int i = 0; i < values.length; i++)
+                    SizedBox(
+                      width: slotW,
+                      child: Text(
+                        valLabel(values[i]),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textMid,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              // Axis labels
+              if (axisLabels != null && axisLabels!.isNotEmpty) ...[
+                const SizedBox(height: 1),
+                Row(
+                  children: [
+                    for (int i = 0; i < values.length; i++)
+                      SizedBox(
+                        width: slotW,
+                        child: Text(
+                          i < axisLabels!.length ? axisLabels![i] : '',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 9, color: AppColors.textMuted),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ],
+          );
+        }),
+        if (trendNote != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            trendNote!,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: trendNote!.startsWith('↑')
+                  ? AppColors.statusCritical
+                  : trendNote!.startsWith('↓')
+                      ? AppColors.statusSuccess
+                      : AppColors.textMuted,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Extracts BP line chart from visit vitals history. Returns null if <2 valid readings.
+_BpLineChart? _buildBpSparkChart(List<VisitVitals> history) {
   final systolics = <double>[];
   final diastolics = <double>[];
   for (final visit in history) {
@@ -2460,26 +2609,19 @@ _SparkBarChart? _buildBpSparkChart(List<VisitVitals> history) {
       }
     }
   }
-  // Need ≥2 valid points for a meaningful trend line
   if (systolics.length < 2) return null;
 
-  String? trend;
-  if (systolics.length >= 2) {
-    final diff = systolics.last - systolics[systolics.length - 2];
-    if (diff > 5) trend = '↑ Rising — monitor closely';
-    else if (diff < -5) trend = '↓ Improving';
-    else trend = '→ Stable';
-  }
+  final diff = systolics.last - systolics[systolics.length - 2];
+  final trend = diff > 5
+      ? '↑ Rising — monitor closely'
+      : diff < -5
+          ? '↓ Improving'
+          : '→ Stable';
 
-  return _SparkBarChart(
-    values: systolics,
-    barColor: AppColors.navy,
-    secondValues: diastolics,
-    secondBarColor: AppColors.navyMid,
-    label: 'Blood pressure (mmHg)',
-    legendLabel: 'Systolic',
-    secondLegendLabel: 'Diastolic',
-    axisLabels: List.generate(systolics.length, (i) => 'V${i + 1}'),
+  return _BpLineChart(
+    systolics: systolics,
+    diastolics: diastolics,
+    labels: List.generate(systolics.length, (i) => 'V${i + 1}'),
     trendNote: trend,
   );
 }
