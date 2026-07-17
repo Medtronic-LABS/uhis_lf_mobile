@@ -872,52 +872,33 @@ class _PatientContextScreenState
                     ),
                     const SizedBox(height: 12),
 
-                    // ── Spark charts (BP + growth) ────────────────────────
-                    if (bpChart != null || weightChart != null)
-                      GestureDetector(
-                        behavior: HitTestBehavior.opaque,
+                    // ── Spark charts (BP + growth) — separate full-width cards ──
+                    if (bpChart != null)
+                      _VitalTrendCard(
+                        sectionLabel: 'BLOOD PRESSURE TREND',
+                        chart: bpChart,
                         onTap: () => _showCardDetail(
                           context,
-                          title: 'Vital trends',
+                          title: 'Blood pressure trend',
                           icon: Icons.show_chart_rounded,
-                          iconColor: AppColors.textStrong,
-                          body: _VitalTrendDetail(
-                            vitalHistory: data.vitalHistory,
-                          ),
+                          iconColor: AppColors.navy,
+                          body: _VitalTrendDetail(vitalHistory: data.vitalHistory),
                         ),
-                        child: Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: AppColors.cardSurface,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: AppColors.border),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(children: [
-                                  const Icon(Icons.show_chart_rounded, size: 14, color: AppColors.textMuted),
-                                  const SizedBox(width: 6),
-                                  const Text('Vital trends',
-                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textMuted)),
-                                  const Spacer(),
-                                  const Icon(Icons.expand_more_rounded, size: 16, color: AppColors.textMuted),
-                                ]),
-                                const SizedBox(height: 10),
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    if (bpChart != null) Expanded(child: bpChart),
-                                    if (bpChart != null && weightChart != null)
-                                      const SizedBox(width: 16),
-                                    if (weightChart != null) Expanded(child: weightChart),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
+                      ),
+                    if (bpChart != null) const SizedBox(height: 12),
+                    if (weightChart != null)
+                      _VitalTrendCard(
+                        sectionLabel: 'GROWTH TREND',
+                        chart: weightChart,
+                        onTap: () => _showCardDetail(
+                          context,
+                          title: 'Growth trend',
+                          icon: Icons.show_chart_rounded,
+                          iconColor: AppColors.tbText,
+                          body: _VitalTrendDetail(vitalHistory: data.vitalHistory),
                         ),
-                    if (bpChart != null || weightChart != null) const SizedBox(height: 12),
+                      ),
+                    if (weightChart != null) const SizedBox(height: 12),
 
                     // ── Combined care history timeline ────────────────────
                     _CombinedTimeline(
@@ -1981,6 +1962,61 @@ class _VitalTrendDetail extends StatelessWidget {
   }
 }
 
+// ─── Vital Trend Card ─────────────────────────────────────────────────────
+
+/// Full-width tappable card for a single vital trend chart.
+/// Each chart type (BP, growth) gets its own card so it can breathe.
+class _VitalTrendCard extends StatelessWidget {
+  const _VitalTrendCard({
+    required this.sectionLabel,
+    required this.chart,
+    required this.onTap,
+  });
+
+  final String sectionLabel;
+  final Widget chart;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          sectionLabel,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textMuted,
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(height: 8),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+            decoration: BoxDecoration(
+              color: AppColors.cardSurface,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.navy.withValues(alpha: 0.06),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: chart,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 // ─── Spark Bar Chart ───────────────────────────────────────────────────────
 
 /// Lightweight bar-chart sparkline rendered as a [Row] of [Container] widgets.
@@ -1998,9 +2034,9 @@ class _SparkBarChart extends StatelessWidget {
     this.secondLegendLabel,
     this.axisLabels,
     this.trendNote,
-    this.maxHeight = 48,
-    this.barWidth = 6,
-    this.barSpacing = 3,
+    this.maxHeight = 64,
+    this.barWidth = 8,
+    this.barSpacing = 4,
   });
 
   final List<double> values;
@@ -2307,8 +2343,12 @@ class _CombinedTimelineState extends State<_CombinedTimeline> {
     } else {
       final rows = <Widget>[];
       for (int i = 0; i < filtered.length; i++) {
-        final isLast = i == filtered.length - 1;
-        rows.add(_TimelineRow(assessment: filtered[i], isLast: isLast));
+        // DESC sort: i=0 is newest (CURRENT), i=length-1 is oldest (no line below)
+        rows.add(_TimelineRow(
+          assessment: filtered[i],
+          isLast: i == filtered.length - 1,
+          isLatest: i == 0,
+        ));
       }
       body = Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows);
     }
@@ -2394,10 +2434,15 @@ class _TimelineFilterChip extends StatelessWidget {
 
 /// Single row in the combined timeline — dot + connector + event card.
 class _TimelineRow extends StatelessWidget {
-  const _TimelineRow({required this.assessment, required this.isLast});
+  const _TimelineRow({
+    required this.assessment,
+    required this.isLast,
+    this.isLatest = false,
+  });
 
   final MemberAssessment assessment;
   final bool isLast;
+  final bool isLatest;
 
   static const _dotSize = 10.0;
   static const _lineWidth = 2.0;
@@ -2455,7 +2500,7 @@ class _TimelineRow extends StatelessWidget {
                     status: assessment.status,
                     notes: assessment.notes,
                     assessment: assessment,
-                    isLatest: isLast,
+                    isLatest: isLatest,
                   ),
                   if (branches.isNotEmpty)
                     _BranchList(branches: branches, dotColor: dotColor),
@@ -2617,110 +2662,6 @@ class _BranchList extends StatelessWidget {
   }
 }
 
-/// AI Insight node shown inline in the timeline — appears between the
-/// penultimate assessment and the CURRENT (most recent) card.
-class _AiInsightTimelineNode extends StatelessWidget {
-  const _AiInsightTimelineNode({required this.summary});
-
-  final String summary;
-
-  static const _dotSize = 10.0;
-  static const _lineWidth = 2.0;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Purple dot + connector that continues to CURRENT card below
-            SizedBox(
-              width: 24,
-              child: Column(
-                children: [
-                  Container(
-                    width: _dotSize,
-                    height: _dotSize,
-                    decoration: BoxDecoration(
-                      color: AppColors.aiPurple,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.cardSurface, width: 2),
-                    ),
-                  ),
-                  Expanded(
-                    child: Container(
-                      width: _lineWidth,
-                      color: AppColors.border,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 10),
-            // Insight card — lavender gradient, ✦ icon
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(12, 9, 12, 10),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [AppColors.aiSurfaceStart, AppColors.aiSurfaceEnd],
-                  ),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.aiBorder, width: 1),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      '✶',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: AppColors.aiPurple,
-                        height: 1.3,
-                      ),
-                    ),
-                    const SizedBox(width: 7),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'AI Insight',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.aiPurple,
-                              letterSpacing: 0.3,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            summary,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.aiPurpleDark,
-                              height: 1.45,
-                            ),
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 /// Small coloured status chip (Referred / OnTreatment / Recovered).
 class _StatusChip extends StatelessWidget {
