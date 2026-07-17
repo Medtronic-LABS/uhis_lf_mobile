@@ -922,6 +922,7 @@ class _PatientContextScreenState
                     _CombinedTimeline(
                       assessments: data.assessments,
                       isLoading: remoteLoading,
+                      aiSummary: aiCtx.summary,
                     ),
                     const SizedBox(height: 12),
 
@@ -1072,6 +1073,70 @@ Map<String, dynamic> _normalizeRaw(Map<String, dynamic> rawJson) {
   }
 
   return out;
+}
+
+/// Extracts up to 4 key clinical sub-items from an assessment's raw JSON
+/// for display as branch rows beneath the timeline card.
+List<String> _extractBranches(MemberAssessment assessment) {
+  final raw = _normalizeRaw(assessment.rawJson);
+  final prog = Programme.fromString(assessment.type);
+  final out = <String>[];
+
+  void add(String key, String label, {String? unit}) {
+    final v = raw[key];
+    final s = v?.toString() ?? '';
+    if (s.isEmpty || s == 'null') return;
+    out.add('$label: $s${unit != null ? ' $unit' : ''}');
+  }
+
+  switch (prog) {
+    case Programme.ncd:
+      add('bp', 'BP');
+      final bg = raw['bg']?.toString() ?? '';
+      final bgType = raw['bgType']?.toString() ?? '';
+      if (bg.isNotEmpty) out.add('Glucose: $bg${bgType.isNotEmpty ? ' ($bgType)' : ''}');
+      add('confirmDiagnosis', 'Dx');
+      add('ncdSymptomsMedication', 'Med');
+    case Programme.anc:
+      add('bp', 'BP');
+      add('weight', 'Wt', unit: 'kg');
+      add('hemoglobin', 'Hb', unit: 'g/dL');
+      final vn = raw['ancVisitNumber']?.toString() ?? '';
+      if (vn.isNotEmpty) out.add('Visit $vn');
+    case Programme.pw:
+      add('gravida', 'Gravida');
+      add('parity', 'Parity');
+    case Programme.pnc:
+      add('modeOfDelivery', 'Delivery');
+      add('anyComplicationsDuringDelivery', 'Complications');
+      final pv = raw['pncVisitNumber']?.toString() ?? '';
+      if (pv.isNotEmpty) out.add('PNC Visit $pv');
+    case Programme.imci:
+      add('anyIllness', 'Illness');
+      add('receivedVaccine', 'Vaccines');
+      add('childBreastFeeding', 'Breastfeeding');
+    case Programme.tb:
+      add('confirmDiagnosis', 'Dx');
+      add('has_cough', 'Cough');
+      add('has_fever', 'Fever');
+    case Programme.familyPlanning:
+      add('familyPlanningMethods', 'Method');
+      add('numberOfLivingChildren', 'Children');
+    case Programme.eyeCare:
+    case Programme.cataract:
+      add('eyeTestOutcome', 'Outcome');
+      add('eyeDisease', 'Eye disease');
+      add('referPlace', 'Referred');
+    default:
+      add('bp', 'BP');
+      add('weight', 'Wt', unit: 'kg');
+      add('confirmDiagnosis', 'Dx');
+  }
+
+  final ref = raw['referralStatus']?.toString() ?? '';
+  if (ref.isNotEmpty) out.add('Referral: $ref');
+
+  return out.take(4).toList();
 }
 
 /// Derives the ordered list of active care threads from local data.
@@ -2040,10 +2105,15 @@ _SparkBarChart? _buildWeightSparkChart(List<VisitVitals> history) {
 /// Scrollable vertical timeline of all care events (assessments).
 /// Events are already sorted newest-first via [PatientOrMemberData.assessments].
 class _CombinedTimeline extends StatelessWidget {
-  const _CombinedTimeline({required this.assessments, required this.isLoading});
+  const _CombinedTimeline({
+    required this.assessments,
+    required this.isLoading,
+    this.aiSummary,
+  });
 
   final List<MemberAssessment> assessments;
   final bool isLoading;
+  final String? aiSummary;
 
   @override
   Widget build(BuildContext context) {
@@ -2061,14 +2131,19 @@ class _CombinedTimeline extends StatelessWidget {
         ),
       );
     } else {
-      body = ListView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: assessments.length,
-        itemBuilder: (context, i) => _TimelineRow(
-          assessment: assessments[i],
-          isLast: i == assessments.length - 1,
-        ),
+      final hasAi = aiSummary != null && aiSummary!.isNotEmpty && assessments.length >= 2;
+      final rows = <Widget>[];
+      for (int i = 0; i < assessments.length; i++) {
+        final isLast = i == assessments.length - 1;
+        // Inject AI insight node immediately before the last (CURRENT) assessment.
+        if (isLast && hasAi) {
+          rows.add(_AiInsightTimelineNode(summary: aiSummary!));
+        }
+        rows.add(_TimelineRow(assessment: assessments[i], isLast: isLast));
+      }
+      body = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: rows,
       );
     }
 
@@ -2112,8 +2187,9 @@ class _TimelineRow extends StatelessWidget {
     final dotColor = progColors.of(prog);
     final dateStr = DateFormat('d MMM yyyy').format(assessment.date);
     final label = assessment.visitNumber != null
-        ? '${assessment.type} — Visit ${assessment.visitNumber}'
-        : assessment.type;
+        ? '${prog.displayName} — Visit ${assessment.visitNumber}'
+        : prog.displayName;
+    final branches = _extractBranches(assessment);
 
     return IntrinsicHeight(
       child: Row(
@@ -2144,16 +2220,24 @@ class _TimelineRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          // Event card
+          // Event card + branch sub-items
           Expanded(
             child: Padding(
-              padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
-              child: _PendingEventCard(
-                label: label,
-                dateStr: dateStr,
-                status: assessment.status,
-                notes: assessment.notes,
-                assessment: assessment,
+              padding: EdgeInsets.only(bottom: isLast ? 0 : 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _PendingEventCard(
+                    label: label,
+                    dateStr: dateStr,
+                    status: assessment.status,
+                    notes: assessment.notes,
+                    assessment: assessment,
+                    isLatest: isLast,
+                  ),
+                  if (branches.isNotEmpty)
+                    _BranchList(branches: branches, dotColor: dotColor),
+                ],
               ),
             ),
           ),
@@ -2164,6 +2248,7 @@ class _TimelineRow extends StatelessWidget {
 }
 
 /// Card shown for each timeline event — label, date, status chip, tap-to-expand.
+/// [isLatest] gives the most-recent card amber highlight ("today's action" pattern).
 class _PendingEventCard extends StatelessWidget {
   const _PendingEventCard({
     required this.label,
@@ -2171,6 +2256,7 @@ class _PendingEventCard extends StatelessWidget {
     required this.assessment,
     this.status,
     this.notes,
+    this.isLatest = false,
   });
 
   final String label;
@@ -2178,6 +2264,7 @@ class _PendingEventCard extends StatelessWidget {
   final String? status;
   final String? notes;
   final MemberAssessment assessment;
+  final bool isLatest;
 
   @override
   Widget build(BuildContext context) {
@@ -2186,9 +2273,12 @@ class _PendingEventCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
         decoration: BoxDecoration(
-          color: AppColors.cardSurface,
+          color: isLatest ? AppColors.statusWarningSurface : AppColors.cardSurface,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.border, width: 1),
+          border: Border.all(
+            color: isLatest ? AppColors.statusWarning : AppColors.border,
+            width: isLatest ? 1.5 : 1,
+          ),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2197,6 +2287,26 @@ class _PendingEventCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (isLatest)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 3),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.statusWarning,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'CURRENT',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.cardSurface,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ),
                   Text(
                     label,
                     style: const TextStyle(
@@ -2226,6 +2336,163 @@ class _PendingEventCard extends StatelessWidget {
               _StatusChip(status: status!),
             const SizedBox(width: 4),
             const Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.textMuted),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Branch sub-item rows rendered below a timeline card — the "+-- label: value" pattern
+/// from the v15 patient-journey wireframe. Shows up to 4 key clinical data points.
+class _BranchList extends StatelessWidget {
+  const _BranchList({required this.branches, required this.dotColor});
+
+  final List<String> branches;
+  final Color dotColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 10, top: 4, bottom: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (int i = 0; i < branches.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 3),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    i == branches.length - 1 ? 'L--' : '+--',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: dotColor.withValues(alpha: 0.55),
+                      fontWeight: FontWeight.w600,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      branches[i],
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textMid,
+                        height: 1.4,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// AI Insight node shown inline in the timeline — appears between the
+/// penultimate assessment and the CURRENT (most recent) card.
+class _AiInsightTimelineNode extends StatelessWidget {
+  const _AiInsightTimelineNode({required this.summary});
+
+  final String summary;
+
+  static const _dotSize = 10.0;
+  static const _lineWidth = 2.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Purple dot + connector that continues to CURRENT card below
+            SizedBox(
+              width: 24,
+              child: Column(
+                children: [
+                  Container(
+                    width: _dotSize,
+                    height: _dotSize,
+                    decoration: BoxDecoration(
+                      color: AppColors.aiPurple,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppColors.cardSurface, width: 2),
+                    ),
+                  ),
+                  Expanded(
+                    child: Container(
+                      width: _lineWidth,
+                      color: AppColors.border,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            // Insight card — lavender gradient, ✦ icon
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(12, 9, 12, 10),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [AppColors.aiSurfaceStart, AppColors.aiSurfaceEnd],
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.aiBorder, width: 1),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '✶',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.aiPurple,
+                        height: 1.3,
+                      ),
+                    ),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'AI Insight',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.aiPurple,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            summary,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.aiPurpleDark,
+                              height: 1.45,
+                            ),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),
