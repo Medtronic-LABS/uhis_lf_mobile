@@ -2327,20 +2327,89 @@ class _TimelineEventSheet extends StatelessWidget {
         entries.add(MapEntry(label, v.toString()));
       }
     }
+    // ── Vitals (all programmes) ────────────────────────────────────────────
     addIfPresent('bp', 'BP');
     addIfPresent('bg', 'Blood glucose');
     addIfPresent('bgType', 'Glucose type');
+    addIfPresent('bmi', 'BMI');
+    addIfPresent('cvdRisk', 'CVD risk');
     addIfPresent('weight', 'Weight (kg)');
     addIfPresent('height', 'Height (cm)');
+
+    // ── NCD ────────────────────────────────────────────────────────────────
+    addIfPresent('confirmDiagnosis', 'Diagnosis');
+    addIfPresent('ncdSymptoms', 'Symptoms');
+    addIfPresent('ncdSymptomsMedication', 'Taking medication');
+    addIfPresent('heartAttack', 'Heart attack history');
+    addIfPresent('stroke', 'Stroke history');
+    addIfPresent('kidneyDisease', 'Kidney disease');
+    addIfPresent('copd', 'COPD');
+
+    // ── ANC ────────────────────────────────────────────────────────────────
     addIfPresent('hemoglobin', 'Hb (g/dL)');
     addIfPresent('fundalHeight', 'Fundal height (cm)');
     addIfPresent('gravida', 'Gravida');
     addIfPresent('parity', 'Parity');
     addIfPresent('ancVisitNumber', 'ANC visit no.');
+    addIfPresent('highRiskPregnantWoman', 'High risk');
+    addIfPresent('gapsInAnc', 'ANC gaps');
+    addIfPresent('dangerSignsDuringPregnancy', 'Danger signs');
+    addIfPresent('referralFacility', 'Referred to');
+    addIfPresent('followUpVisit', 'Follow-up visit');
+
+    // ── PNC ────────────────────────────────────────────────────────────────
     addIfPresent('pncVisitNumber', 'PNC visit no.');
     addIfPresent('modeOfDelivery', 'Mode of delivery');
-    addIfPresent('confirmDiagnosis', 'Diagnosis');
+    addIfPresent('anyComplicationsDuringDelivery', 'Complications');
+    addIfPresent('complicationsDuringDelivery', 'Complication details');
+    addIfPresent('numberOfLivingChildren', 'Living children');
+    addIfPresent('motherCare', 'Postnatal care');
+    addIfPresent('newbornCare', 'Newborn care');
+
+    // ── TB ─────────────────────────────────────────────────────────────────
+    addIfPresent('has_cough', 'Cough');
+    addIfPresent('had_tb_before', 'Cough >2 weeks');
+    addIfPresent('has_night_sweats', 'Night sweats');
+    addIfPresent('has_fever', 'Fever');
+    addIfPresent('has_weight_loss', 'Weight loss');
+
+    // ── IMCI / childhood ──────────────────────────────────────────────────
+    addIfPresent('anyIllness', 'Illness/complication');
+    addIfPresent('childIllnessType', 'Complication type');
+    addIfPresent('receivedVaccine', 'Vaccines received');
+    addIfPresent('childBreastFeeding', 'Breastfeeding');
+    addIfPresent('dewormingMedicine', 'Deworming');
+    addIfPresent('childReferral', 'Referral made');
+    addIfPresent('childReferralFacilityType', 'Refer to');
+
+    // ── Eye care / cataract ───────────────────────────────────────────────
+    addIfPresent('eyeTestOutcome', 'Eye test outcome');
+    addIfPresent('eyeDisease', 'Eye disease');
+    addIfPresent('glassPower', 'Glass power');
+    addIfPresent('haveTheGlassesBeenSold', 'Glasses sold');
+    addIfPresent('typeOfGlass', 'Glass type');
+    addIfPresent('typeOfFrame', 'Frame type');
+    addIfPresent('firstTimeUser', 'First time user');
+    addIfPresent('referPlace', 'Refer to');
+    addIfPresent('patientReferredForOperation', 'Referred for operation');
+    addIfPresent('operationName', 'Operation');
+    addIfPresent('pseudophakiaPostCataractSurgery', 'Post-surgery status');
+    addIfPresent('ncdServiceProvided', 'NCD service provided');
+
+    // ── FP ─────────────────────────────────────────────────────────────────
     addIfPresent('familyPlanningMethods', 'FP method');
+    addIfPresent('desireForChildrenInFuture', 'Desire for children');
+
+    // ── Referral (all programmes) ─────────────────────────────────────────
+    addIfPresent('referralStatus', 'Referral status');
+    addIfPresent('referralReason', 'Referral reason');
+
+    // ── customStatus list → join as string ────────────────────────────────
+    final cs = raw['customStatus'];
+    if (cs is List && cs.isNotEmpty) {
+      final joined = cs.map((e) => e.toString()).join(', ');
+      if (joined.isNotEmpty) entries.add(MapEntry('Status', joined));
+    }
 
     final result = DraggableScrollableSheet(
       expand: false,
