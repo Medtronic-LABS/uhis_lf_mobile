@@ -173,21 +173,6 @@ class ReferralDao {
     );
   }
 
-  /// Clear all demo referrals (IDs starting with 'ref-demo-')
-  Future<int> clearDemoData() async {
-    // Clear demo status events
-    await _db.db.delete(
-      AppDatabase.tableReferralStatusEvents,
-      where: "referral_id LIKE 'ref-demo-%'",
-    );
-    // Clear demo referrals
-    final deleted = await _db.db.delete(
-      AppDatabase.tableReferrals,
-      where: "id LIKE 'ref-demo-%'",
-    );
-    return deleted;
-  }
-
   // ── Status events (append-only audit log) ────────────────────────────────
 
   Future<void> appendStatusEvent(ReferralStatusEventRow event) async {
