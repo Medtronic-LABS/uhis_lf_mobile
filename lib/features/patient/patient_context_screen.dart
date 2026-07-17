@@ -856,7 +856,7 @@ class _PatientContextScreenState
                     // Stats grid — hidden for ANC when pregnancy card is shown
                     if (!isAnc || snap == null) ...[
                       _StatsGrid(
-                        thread: selectedThread,
+                        threads: threads,
                         noDataLabel: PatientProfileStrings.noVitalsYet,
                       ),
                       const SizedBox(height: 12),
@@ -1340,29 +1340,45 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
     ));
   }
 
-  // NCD — split into HTN and blood-sugar threads when readings are available
+  // NCD — HTN + optional blood-sugar thread
   if (data.programmes.contains(Programme.ncd)) {
     final latest = latestOf(Programme.ncd);
     final raw = latest != null ? _normalizeRaw(latest.rawJson) : const <String, dynamic>{};
     final bp = raw['bp'] as String?;
+    final dx = (raw['confirmDiagnosis'] as String?)?.trim();
+    final ncdTotal = data.assessments.where((a) => Programme.fromString(a.type) == Programme.ncd).length;
+
+    String? lastCheckup;
+    if (latest != null) {
+      final days = DateTime.now().difference(latest.date).inDays;
+      lastCheckup = days == 0 ? 'Today' : days == 1 ? 'Yesterday' : '$days days ago';
+    }
+
     threads.add(_CareThread(
       programme: Programme.ncd,
       label: CareThreadStrings.htn,
       icon: '❤️',
       bg: AppColors.ncdSurface,
       textColor: AppColors.ncdText,
-      stats: bp != null ? {PatientProfileStrings.bpTarget: bp} : {},
+      stats: {
+        if (bp != null && bp.isNotEmpty) 'Last BP': '$bp mmHg',
+        if (lastCheckup != null) 'Last check-up': lastCheckup,
+        if (ncdTotal > 0) 'Total visits': '$ncdTotal',
+        if (dx != null && dx.isNotEmpty) 'Diagnosis': dx,
+      },
     ));
+
     final bg = raw['bg'] as String?;
-    if (bg != null) {
-      final bgType = raw['bgType'] as String?;
+    if (bg != null && bg.isNotEmpty) {
+      final bgType = (raw['bgType'] as String?)?.trim();
+      final bgLabel = (bgType != null && bgType.isNotEmpty) ? 'Blood sugar ($bgType)' : 'Blood sugar';
       threads.add(_CareThread(
         programme: Programme.ncd,
         label: CareThreadStrings.sugar,
         icon: '🩸',
         bg: AppColors.statusInfoSurface,
         textColor: AppColors.threadInfoText,
-        stats: {PatientProfileStrings.bloodSugar: '$bg${bgType != null ? ' ($bgType)' : ''}'},
+        stats: {bgLabel: '$bg mg/dL'},
       ));
     }
   }
@@ -1373,6 +1389,13 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
     final raw = latest != null ? _normalizeRaw(latest.rawJson) : const <String, dynamic>{};
     final pncVisit = raw['pncVisitNumber'] as String?;
     final deliveryMode = raw['modeOfDelivery'] as String?;
+    final complications = raw['anyComplicationsDuringDelivery'] as String?;
+    final livingChildren = raw['numberOfLivingChildren'] as String?;
+    String? lastCheckup;
+    if (latest != null) {
+      final days = DateTime.now().difference(latest.date).inDays;
+      lastCheckup = days == 0 ? 'Today' : '$days days ago';
+    }
     threads.add(_CareThread(
       programme: Programme.pnc,
       label: CareThreadStrings.pnc,
@@ -1380,20 +1403,37 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
       bg: AppColors.pncSurface,
       textColor: AppColors.pncText,
       stats: {
-        if (pncVisit != null) PatientProfileStrings.pncVisitsDone: pncVisit,
-        if (deliveryMode != null) PatientProfileStrings.delivery: deliveryMode,
+        if (pncVisit != null) 'PNC visits': pncVisit,
+        if (deliveryMode != null) 'Delivery': deliveryMode,
+        if (complications?.toLowerCase() == 'yes') 'Complications': 'Yes',
+        if (livingChildren != null) 'Living children': livingChildren,
+        if (lastCheckup != null) 'Last check-up': lastCheckup,
       },
     ));
   }
 
   // IMCI — immunization + growth monitoring
   if (data.programmes.contains(Programme.imci)) {
-    threads.add(const _CareThread(
+    final latest = latestOf(Programme.imci);
+    final raw = latest != null ? _normalizeRaw(latest.rawJson) : const <String, dynamic>{};
+    final weight = raw['weight'] as String?;
+    final imciTotal = data.assessments.where((a) => Programme.fromString(a.type) == Programme.imci).length;
+    String? lastVisit;
+    if (latest != null) {
+      final days = DateTime.now().difference(latest.date).inDays;
+      lastVisit = days == 0 ? 'Today' : days == 1 ? 'Yesterday' : '$days days ago';
+    }
+    threads.add(_CareThread(
       programme: Programme.imci,
       label: CareThreadStrings.imm,
       icon: '💉',
       bg: AppColors.threadImmBg,
       textColor: AppColors.tbText,
+      stats: {
+        if (weight != null) 'Last weight': '$weight kg',
+        if (imciTotal > 0) 'Visits': '$imciTotal',
+        if (lastVisit != null) 'Last visit': lastVisit,
+      },
     ));
     threads.add(const _CareThread(
       programme: Programme.imci,
@@ -1850,145 +1890,104 @@ class _PregnancyProgressSection extends StatelessWidget {
 /// 2-column grid of clinical stat tiles for the currently selected care thread.
 /// Used by NCD (BP, blood sugar), IMCI (doses, weight), and PNC (visit, delivery).
 /// Shows [noDataLabel] when [stats] is empty.
+/// "AT A GLANCE" section — 2-column grid of neutral stat cards.
+/// Collects stats from ALL active threads so clinicians see the full snapshot
+/// without having to switch thread chips.
 class _StatsGrid extends StatelessWidget {
-  const _StatsGrid({
-    required this.thread,
-    required this.noDataLabel,
-  });
+  const _StatsGrid({required this.threads, required this.noDataLabel});
 
-  final _CareThread thread;
+  final List<_CareThread> threads;
   final String noDataLabel;
 
   @override
   Widget build(BuildContext context) {
     final sw = Stopwatch()..start();
-    final stats = thread.stats;
+    final allStats = <MapEntry<String, String>>[];
+    for (final t in threads) {
+      allStats.addAll(t.stats.entries);
+    }
 
-    if (stats.isEmpty) {
-      debugPrint('⏱ [PatientContext] _StatsGrid build 0ms thread=${thread.label} stats=0 (hidden)');
+    if (allStats.isEmpty) {
+      debugPrint('⏱ [PatientContext] _StatsGrid 0ms (no stats)');
       return const SizedBox.shrink();
     }
 
-    final entries = stats.entries.toList();
-    final body = Wrap(
-      spacing: 10,
-      runSpacing: 10,
+    final slotW = (MediaQuery.of(context).size.width - 28 - 10) / 2;
+    final result = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final e in entries)
-          SizedBox(
-            width: (MediaQuery.of(context).size.width - 28 - 10) / 2,
-            child: _StatTile(
-              label: e.key,
-              value: e.value,
-              bg: thread.bg,
-              textColor: thread.textColor,
-            ),
+        const Text(
+          'AT A GLANCE',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textMuted,
+            letterSpacing: 0.8,
           ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            for (final e in allStats)
+              SizedBox(
+                width: slotW,
+                child: _StatTile(label: e.key, value: e.value),
+              ),
+          ],
+        ),
       ],
     );
+    debugPrint('⏱ [PatientContext] _StatsGrid ${sw.elapsedMilliseconds}ms stats=${allStats.length}');
+    return result;
+  }
+}
 
-    final result = Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
+/// White stat card: muted label (11 px) + large bold navy value (18 px).
+class _StatTile extends StatelessWidget {
+  const _StatTile({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
       decoration: BoxDecoration(
-        color: thread.bg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: thread.textColor.withValues(alpha: 0.2), width: 1),
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.navy.withValues(alpha: 0.06),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            thread.label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: thread.textColor,
-              letterSpacing: 0.3,
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textMuted,
             ),
           ),
-          const SizedBox(height: 10),
-          body,
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: AppColors.navy,
+              height: 1.2,
+            ),
+          ),
         ],
-      ),
-    );
-    debugPrint('⏱ [PatientContext] _StatsGrid build in ${sw.elapsedMilliseconds}ms'
-        ' thread=${thread.label} stats=${stats.length}');
-    return result;
-  }
-}
-
-/// Single stat tile within [_StatsGrid].
-class _StatTile extends StatelessWidget {
-  const _StatTile({
-    required this.label,
-    required this.value,
-    required this.bg,
-    required this.textColor,
-    this.note,
-  });
-
-  final String label;
-  final String value;
-  final Color bg;
-  final Color textColor;
-  /// Optional extra clinical note shown in the detail sheet only.
-  final String? note;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => _showCardDetail(
-        context,
-        title: label,
-        iconColor: textColor,
-        body: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w800,
-                color: textColor,
-              ),
-            ),
-            if (note != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                note!,
-                style: const TextStyle(fontSize: 14, height: 1.5, color: AppColors.textMuted),
-              ),
-            ],
-          ],
-        ),
-      ),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: AppColors.cardSurface,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: textColor.withOpacity(0.15), width: 1),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: TextStyle(fontSize: 10, color: textColor.withOpacity(0.8)),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: textColor,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
