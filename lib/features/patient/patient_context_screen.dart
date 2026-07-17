@@ -3695,7 +3695,7 @@ class _SameHouseholdStrip extends StatelessWidget {
                         isCurrent: m.id == currentPatientId ||
                             m.patientId == currentPatientId,
                         onTap: () {
-                          context.push('/patient/$navId');
+                          context.push('/patients/$navId');
                         },
                       ),
                     );
