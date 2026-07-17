@@ -923,7 +923,6 @@ class _PatientContextScreenState
                     _CombinedTimeline(
                       assessments: data.assessments,
                       isLoading: remoteLoading,
-                      aiSummary: aiCtx.summary,
                     ),
                     const SizedBox(height: 12),
 
@@ -2308,12 +2307,10 @@ class _CombinedTimeline extends StatefulWidget {
   const _CombinedTimeline({
     required this.assessments,
     required this.isLoading,
-    this.aiSummary,
   });
 
   final List<MemberAssessment> assessments;
   final bool isLoading;
-  final String? aiSummary;
 
   @override
   State<_CombinedTimeline> createState() => _CombinedTimelineState();
@@ -2349,13 +2346,9 @@ class _CombinedTimelineState extends State<_CombinedTimeline> {
         ),
       );
     } else {
-      final hasAi = widget.aiSummary != null && widget.aiSummary!.isNotEmpty && filtered.length >= 2;
       final rows = <Widget>[];
       for (int i = 0; i < filtered.length; i++) {
         final isLast = i == filtered.length - 1;
-        if (isLast && hasAi) {
-          rows.add(_AiInsightTimelineNode(summary: widget.aiSummary!));
-        }
         rows.add(_TimelineRow(assessment: filtered[i], isLast: isLast));
       }
       body = Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows);
