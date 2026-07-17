@@ -865,12 +865,14 @@ class _PatientContextScreenState
                       const SizedBox(height: 12),
                     ],
 
-                    // ── Stats grid for selected thread ────────────────────
-                    _StatsGrid(
-                      thread: selectedThread,
-                      noDataLabel: PatientProfileStrings.noVitalsYet,
-                    ),
-                    const SizedBox(height: 12),
+                    // ── Stats grid — hidden for ANC when pregnancy card is shown ──
+                    if (!isAnc || snap == null) ...[
+                      _StatsGrid(
+                        thread: selectedThread,
+                        noDataLabel: PatientProfileStrings.noVitalsYet,
+                      ),
+                      const SizedBox(height: 12),
+                    ],
 
                     // ── Spark charts (BP + growth) — separate full-width cards ──
                     if (bpChart != null)
@@ -1527,19 +1529,20 @@ class _PregnancyProgressSection extends StatelessWidget {
                 return Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    // Segmented bar
+                    // Segmented bar — explicit width so Expanded children get bounded width
                     SizedBox(
+                      width: bc.maxWidth,
                       height: 12,
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(6),
-                        child: const Row(
+                        child: Row(
                           children: [
                             // T1: 0–13 wks (13/40)
-                            Expanded(flex: 13, child: ColoredBox(color: _colorT1)),
+                            Expanded(flex: 13, child: Container(color: _colorT1)),
                             // T2: 14–27 wks (14/40)
-                            Expanded(flex: 14, child: ColoredBox(color: _colorT2)),
+                            Expanded(flex: 14, child: Container(color: _colorT2)),
                             // T3: 28–40 wks (13/40)
-                            Expanded(flex: 13, child: ColoredBox(color: _colorT3)),
+                            Expanded(flex: 13, child: Container(color: _colorT3)),
                           ],
                         ),
                       ),
@@ -2171,6 +2174,7 @@ class _SparkBarChart extends StatelessWidget {
                     color: AppColors.textMuted,
                     fontFeatures: [FontFeature.tabularFigures()],
                   ),
+                  softWrap: false,
                   overflow: TextOverflow.visible,
                 ),
               ),
@@ -2230,7 +2234,10 @@ _SparkBarChart? _buildBpSparkChart(List<VisitVitals> history) {
       if (r.type == VitalType.bloodPressure) {
         final sys = r.systolic?.toDouble();
         final dia = r.diastolic?.toDouble();
-        if (sys != null && dia != null) {
+        // Physiological bounds: systolic 30–250 mmHg, diastolic 20–150 mmHg
+        if (sys != null && dia != null &&
+            sys >= 30 && sys <= 250 &&
+            dia >= 20 && dia <= 150) {
           systolics.add(sys);
           diastolics.add(dia);
           break;
@@ -2238,7 +2245,8 @@ _SparkBarChart? _buildBpSparkChart(List<VisitVitals> history) {
       }
     }
   }
-  if (systolics.isEmpty) return null;
+  // Need ≥2 valid points for a meaningful trend line
+  if (systolics.length < 2) return null;
 
   String? trend;
   if (systolics.length >= 2) {
