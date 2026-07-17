@@ -873,21 +873,50 @@ class _PatientContextScreenState
 
                     // ── Spark charts (BP + growth) ────────────────────────
                     if (bpChart != null || weightChart != null)
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: AppColors.cardSurface,
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
                           borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: AppColors.border),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            if (bpChart != null) Expanded(child: bpChart),
-                            if (bpChart != null && weightChart != null)
-                              const SizedBox(width: 16),
-                            if (weightChart != null) Expanded(child: weightChart),
-                          ],
+                          onTap: () => _showCardDetail(
+                            context,
+                            title: 'Vital trends',
+                            icon: Icons.show_chart_rounded,
+                            iconColor: AppColors.textStrong,
+                            body: _VitalTrendDetail(
+                              vitalHistory: data.vitalHistory,
+                            ),
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: AppColors.cardSurface,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: AppColors.border),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(children: [
+                                  const Icon(Icons.show_chart_rounded, size: 14, color: AppColors.textMuted),
+                                  const SizedBox(width: 6),
+                                  const Text('Vital trends',
+                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textMuted)),
+                                  const Spacer(),
+                                  const Icon(Icons.expand_more_rounded, size: 16, color: AppColors.textMuted),
+                                ]),
+                                const SizedBox(height: 10),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    if (bpChart != null) Expanded(child: bpChart),
+                                    if (bpChart != null && weightChart != null)
+                                      const SizedBox(width: 16),
+                                    if (weightChart != null) Expanded(child: weightChart),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     if (bpChart != null || weightChart != null) const SizedBox(height: 12),
@@ -1164,55 +1193,85 @@ class _AiInsightCard extends StatelessWidget {
 
   final String summary;
 
+  void _showDetail(BuildContext context) {
+    final isEmpty = summary.trim().isEmpty;
+    _showCardDetail(
+      context,
+      title: PatientProfileStrings.aiInsight,
+      icon: Icons.auto_awesome_rounded,
+      iconColor: AppColors.aiPurpleDark,
+      body: Text(
+        isEmpty ? PatientProfileStrings.aiInsightUnavailable : summary,
+        style: TextStyle(
+          fontSize: 14,
+          height: 1.6,
+          color: isEmpty ? AppColors.textMuted : AppColors.textStrong,
+          fontStyle: isEmpty ? FontStyle.italic : FontStyle.normal,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final sw = Stopwatch()..start();
     final isEmpty = summary.trim().isEmpty;
-    final widget = Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.aiSurfaceStart, AppColors.aiSurfaceEnd],
-        ),
+    final card = Material(
+      color: Colors.transparent,
+      child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.aiBorder, width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+        onTap: () => _showDetail(context),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppColors.aiSurfaceStart, AppColors.aiSurfaceEnd],
+            ),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.aiBorder, width: 1),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.auto_awesome_rounded, size: 14, color: AppColors.aiPurpleDark),
-              const SizedBox(width: 6),
+              Row(
+                children: [
+                  const Icon(Icons.auto_awesome_rounded, size: 14, color: AppColors.aiPurpleDark),
+                  const SizedBox(width: 6),
+                  Text(
+                    PatientProfileStrings.aiInsight,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.aiPurpleDark,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                  const Spacer(),
+                  const Icon(Icons.expand_more_rounded, size: 16, color: AppColors.aiPurpleDark),
+                ],
+              ),
+              const SizedBox(height: 8),
               Text(
-                PatientProfileStrings.aiInsight,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.aiPurpleDark,
-                  letterSpacing: 0.3,
+                isEmpty ? PatientProfileStrings.aiInsightUnavailable : summary,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.5,
+                  color: isEmpty ? AppColors.textMuted : AppColors.textStrong,
+                  fontStyle: isEmpty ? FontStyle.italic : FontStyle.normal,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            isEmpty ? PatientProfileStrings.aiInsightUnavailable : summary,
-            style: TextStyle(
-              fontSize: 13,
-              height: 1.5,
-              color: isEmpty ? AppColors.textMuted : AppColors.textStrong,
-              fontStyle: isEmpty ? FontStyle.italic : FontStyle.normal,
-            ),
-          ),
-        ],
+        ),
       ),
     );
     debugPrint('⏱ [PatientContext] _AiInsightCard build in ${sw.elapsedMilliseconds}ms');
-    return widget;
+    return card;
   }
 }
 
@@ -1340,7 +1399,43 @@ class _PregnancyProgressSection extends StatelessWidget {
     );
     debugPrint('⏱ [PatientContext] _PregnancyProgressSection build in ${sw.elapsedMilliseconds}ms'
         ' gaWeeks=$gaWeeks weeksLeft=$weeksLeft visitsDone=$visitsDone');
-    return widget;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => _showCardDetail(
+          context,
+          title: PatientProfileStrings.pregnancyProgress,
+          icon: Icons.favorite_border_rounded,
+          iconColor: AppColors.ancText,
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (lmpDate != null)
+                _DetailRow(label: 'LMP', value: dateFormat.format(lmpDate)),
+              if (eddDate != null)
+                _DetailRow(label: 'EDD', value: dateFormat.format(eddDate)),
+              if (gaWeeks != null)
+                _DetailRow(label: 'Gestational age', value: '$gaWeeks weeks'),
+              if (weeksLeft != null)
+                _DetailRow(label: 'Weeks remaining', value: '$weeksLeft weeks'),
+              _DetailRow(
+                label: PatientProfileStrings.visitsCompleted,
+                value: '$visitsDone / $_totalAncVisits',
+              ),
+              if (snapshot.facts.highRiskPregnantWoman)
+                _DetailRow(label: 'Risk', value: 'High risk — elevated BP or other flag'),
+              if (snapshot.facts.hasGapsInAnc)
+                _DetailRow(label: 'ANC gaps', value: 'Missed visits detected'),
+              if (snapshot.facts.isNearTermAnc)
+                _DetailRow(label: 'Near term', value: 'Approaching EDD — monitor closely'),
+            ],
+          ),
+        ),
+        child: widget,
+      ),
+    );
   }
 }
 
@@ -1476,41 +1571,229 @@ class _StatTile extends StatelessWidget {
     required this.value,
     required this.bg,
     required this.textColor,
+    this.note,
   });
 
   final String label;
   final String value;
   final Color bg;
   final Color textColor;
+  /// Optional extra clinical note shown in the detail sheet only.
+  final String? note;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.cardSurface,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: textColor.withOpacity(0.15), width: 1),
+        onTap: () => _showCardDetail(
+          context,
+          title: label,
+          iconColor: textColor,
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  color: textColor,
+                ),
+              ),
+              if (note != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  note!,
+                  style: const TextStyle(fontSize: 14, height: 1.5, color: AppColors.textMuted),
+                ),
+              ],
+            ],
+          ),
+        ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppColors.cardSurface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: textColor.withOpacity(0.15), width: 1),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(fontSize: 10, color: textColor.withOpacity(0.8)),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: textColor,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
-      child: Column(
+    );
+  }
+}
+
+// ─── Shared card-detail helpers ────────────────────────────────────────────
+
+/// Shows a titled bottom sheet with arbitrary [body] content.
+/// Used by AI insight, pregnancy section, stat tiles, and vital chart.
+void _showCardDetail(
+  BuildContext context, {
+  required String title,
+  IconData? icon,
+  Color? iconColor,
+  required Widget body,
+}) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => DraggableScrollableSheet(
+      initialChildSize: 0.55,
+      minChildSize: 0.35,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (ctx, ctrl) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 12),
+            Container(width: 40, height: 4,
+                decoration: BoxDecoration(color: const Color(0xFFE5E7EB), borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(children: [
+                if (icon != null) ...[
+                  Icon(icon, size: 18, color: iconColor ?? AppColors.textStrong),
+                  const SizedBox(width: 8),
+                ],
+                Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textStrong)),
+              ]),
+            ),
+            const SizedBox(height: 12),
+            const Divider(height: 1),
+            Expanded(
+              child: SingleChildScrollView(
+                controller: ctrl,
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+                child: body,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// Labelled row used inside card detail sheets.
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: TextStyle(fontSize: 10, color: textColor.withOpacity(0.8)),
+          SizedBox(
+            width: 140,
+            child: Text(label, style: const TextStyle(fontSize: 13, color: AppColors.textMuted, fontWeight: FontWeight.w600)),
           ),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: textColor,
-            ),
+          Expanded(
+            child: Text(value, style: const TextStyle(fontSize: 13, color: AppColors.textStrong, fontWeight: FontWeight.w700)),
           ),
         ],
       ),
     );
+  }
+}
+
+/// Full vital trend table shown in the chart detail sheet.
+class _VitalTrendDetail extends StatelessWidget {
+  const _VitalTrendDetail({required this.vitalHistory});
+  final List<VisitVitals> vitalHistory;
+
+  @override
+  Widget build(BuildContext context) {
+    if (vitalHistory.isEmpty) {
+      return const Text('No vitals recorded yet.',
+          style: TextStyle(fontSize: 14, color: AppColors.textMuted, fontStyle: FontStyle.italic));
+    }
+    final dateFormat = DateFormat('d MMM yyyy');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final visit in vitalHistory) ...[
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF9FAFB),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${visit.programme} — ${dateFormat.format(visit.date)}',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textStrong),
+                ),
+                const SizedBox(height: 8),
+                for (final r in visit.readings)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(children: [
+                      Text(_vitalLabel(r.type), style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                      const Spacer(),
+                      Text(_vitalValue(r), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textStrong)),
+                    ]),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  String _vitalLabel(VitalType t) => switch (t) {
+    VitalType.bloodPressure => 'Blood pressure',
+    VitalType.glucose => 'Blood glucose',
+    VitalType.weight => 'Weight',
+    VitalType.height => 'Height',
+    VitalType.temperature => 'Temperature',
+    VitalType.spO2 => 'SpO₂',
+    VitalType.respiratoryRate => 'Respiratory rate',
+    VitalType.muac => 'MUAC',
+    VitalType.bmi => 'BMI',
+  };
+
+  String _vitalValue(VitalReading r) {
+    if (r.type == VitalType.bloodPressure) {
+      return '${r.systolic?.toInt() ?? '—'}/${r.diastolic?.toInt() ?? '—'} mmHg';
+    }
+    final v = r.value;
+    final u = r.unit ?? '';
+    return v != null ? '${v.toStringAsFixed(1)} $u'.trim() : '—';
   }
 }
 
