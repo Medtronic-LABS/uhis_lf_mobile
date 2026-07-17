@@ -804,6 +804,25 @@ class _PatientContextScreenState
     // AI context summary (pure local, synchronous)
     final aiCtx = _aiContext(data);
 
+    // Status badge — overdue takes priority over risk band
+    final pendingEntry = _derivePendingEntry(data);
+    String? statusLabel;
+    Color statusBg = Colors.transparent;
+    Color statusFg = Colors.white;
+    if (pendingEntry != null) {
+      statusLabel = 'OVERDUE';
+      statusBg = AppColors.statusCritical;
+    } else if (data.riskBand == Band.band1) {
+      statusLabel = 'CRITICAL';
+      statusBg = AppColors.statusCritical;
+    } else if (data.riskBand == Band.band2) {
+      statusLabel = 'HIGH RISK';
+      statusBg = AppColors.statusWarning;
+    } else if (data.riskBand == Band.band3) {
+      statusLabel = 'MONITORING';
+      statusBg = AppColors.navy;
+    }
+
     debugPrint('⏱ [PatientContext] _buildContent setup in ${t0.elapsedMilliseconds}ms'
         ' threads=${threads.length} snap=${snap != null}');
 
@@ -833,7 +852,12 @@ class _PatientContextScreenState
                   padding: const EdgeInsets.fromLTRB(14, 14, 14, AppSpacing.stickyBarClearance),
                   children: [
                     // ── AI Insight card ───────────────────────────────────
-                    _AiInsightCard(summary: aiCtx.summary),
+                    _AiInsightCard(
+                      summary: aiCtx.summary,
+                      statusLabel: statusLabel,
+                      statusBg: statusBg,
+                      statusFg: statusFg,
+                    ),
                     const SizedBox(height: 12),
 
                     // ── Snapshot cards ────────────────────────────────────
@@ -1557,9 +1581,17 @@ class _CareThreadChipRow extends StatelessWidget {
 /// from [PatientAiContext.summary] — no async call, always available offline.
 /// Falls back to a muted unavailable message when the summary is empty.
 class _AiInsightCard extends StatelessWidget {
-  const _AiInsightCard({required this.summary});
+  const _AiInsightCard({
+    required this.summary,
+    this.statusLabel,
+    this.statusBg = Colors.transparent,
+    this.statusFg = Colors.white,
+  });
 
   final String summary;
+  final String? statusLabel;
+  final Color statusBg;
+  final Color statusFg;
 
   void _showDetail(BuildContext context) {
     final isEmpty = summary.trim().isEmpty;
@@ -1616,6 +1648,25 @@ class _AiInsightCard extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
+                  if (statusLabel != null) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: statusBg,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        statusLabel!,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: statusFg,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   const Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.aiPurpleDark),
                 ],
               ),
