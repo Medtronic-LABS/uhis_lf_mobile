@@ -5257,6 +5257,38 @@ abstract final class PatientAiStrings {
   ];
 }
 
+abstract final class ConsentStrings {
+  ConsentStrings._();
+
+  static const String title = 'Data Collection Consent';
+  static const String subtitle = 'Apon Sushashthya Health Programme';
+  static const String introText =
+      'Before we register this household, we need your permission to collect and '
+      'use health information for the purpose of providing community healthcare services.';
+  static const String section1Title = 'What we collect';
+  static const String section1Body =
+      'We collect names, ages, health conditions, visit records, and contact details '
+      'of household members enrolled in the UHIS Leapfrog programme.';
+  static const String section2Title = 'How we use it';
+  static const String section2Body =
+      'Information is used by trained health workers to provide follow-up care, '
+      'track programme outcomes, and improve community health services. '
+      'It is never shared with third parties outside the programme.';
+  static const String section3Title = 'Your rights';
+  static const String section3Body =
+      'You may withdraw consent at any time by contacting your village health worker. '
+      'Data will be retained as required by national health regulations.';
+  static const String checkboxLabel =
+      'I have read and understood the above. I give consent for health data '
+      'collection for members of this household.';
+  static const String confirmButton = 'I Agree';
+  static const String declineButton = 'Decline';
+  static const String declineWarning =
+      'Without consent, household registration cannot be completed.';
+  static const String declineConfirm = 'Cancel registration';
+  static const String declineCancel = 'Go back';
+}
+
 abstract final class CareThreadStrings {
   CareThreadStrings._();
 

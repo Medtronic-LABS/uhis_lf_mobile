@@ -130,7 +130,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
         _cameraController = controller;
         _cameraReady = true;
       });
-      _autoScanTimer = Timer.periodic(const Duration(milliseconds: 1800), (_) {
+      _autoScanTimer = Timer.periodic(const Duration(milliseconds: 3500), (_) {
         if (mounted &&
             !_isScanning &&
             _cameraReady &&
@@ -334,7 +334,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
         _cameraController = controller;
         _cameraReady = true;
       });
-      _autoScanTimer = Timer.periodic(const Duration(milliseconds: 1800), (_) {
+      _autoScanTimer = Timer.periodic(const Duration(milliseconds: 3500), (_) {
         if (mounted && !_isScanning && _cameraReady) _handleCapture();
       });
     } on CameraException catch (e) {
