@@ -1778,6 +1778,9 @@ const _kAllServiceCards = [
   _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '👶', label: 'PNC',      programme: Programme.pnc),
   _ServiceCardDef(kind: _ServiceCardKind.general,   emoji: '🩺', label: 'General'),
   _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '💊', label: 'NCD',      programme: Programme.ncd),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🫁', label: 'TB',       programme: Programme.tb),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '👁️', label: 'Eye Care', programme: Programme.eyeCare),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🔬', label: 'Cataract', programme: Programme.cataract),
   _ServiceCardDef(kind: _ServiceCardKind.delivery,  emoji: '🚼', label: 'Delivery'),
 ];
 
@@ -1821,6 +1824,7 @@ class _InlineServiceSelector extends StatelessWidget {
             return ctx.isFemale && ctx.ageYears >= 15;
           }
           if (p == Programme.pnc) return ctx.isFemale;
+          if (p == Programme.eyeCare || p == Programme.cataract) return true;
           return ctx.ageYears >= 15; // NCD, TB
         case _ServiceCardKind.general:
           return ctx.ageYears >= 15;

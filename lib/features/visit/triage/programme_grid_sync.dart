@@ -36,8 +36,16 @@ abstract final class ProgrammeGridSync {
           return isPostpartum;
         case Programme.unknown:
           return false;
-        default:
-          return false;
+        // Non-maternal programmes are always applicable when enrolled.
+        case Programme.ncd:
+        case Programme.tb:
+        case Programme.familyPlanning:
+        case Programme.cataract:
+        case Programme.eyeCare:
+        case Programme.epi:
+        case Programme.imci:
+        case Programme.nutrition:
+          return true;
       }
     }).toSet();
   }

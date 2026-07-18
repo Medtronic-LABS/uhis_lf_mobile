@@ -875,13 +875,11 @@ class OfflineSyncService extends ChangeNotifier {
         _truthy(raw['isHypertensive'])) {
       out.add(Programme.ncd);
     }
-    // PILOT-SCOPE v1: TB enrolment signal disabled — TB not in pilot.
-    // To restore: un-comment the block below and add Programme.tb to kPilotProgrammes.
-    // if (_truthy(raw['isTbEnrolled']) ||
-    //     _truthy(raw['presumptiveTb']) ||
-    //     raw['presumptiveTbNo'] != null) {
-    //   out.add(Programme.tb);
-    // }
+    if (_truthy(raw['isTbEnrolled']) ||
+        _truthy(raw['presumptiveTb']) ||
+        raw['presumptiveTbNo'] != null) {
+      out.add(Programme.tb);
+    }
     final age = JsonRead.firstInt(raw, const ['age']);
     if (age != null && age < 5) out.add(Programme.imci);
     return out;

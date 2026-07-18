@@ -939,13 +939,7 @@ class _AddProgrammeSheet extends StatelessWidget {
   final ProgrammeSelectionViewModel vm;
   final ValueChanged<Programme> onAdded;
 
-  /// Programmes a user can manually add.
-  /// PILOT-SCOPE v1: limited to pilot programmes only (imci / anc / pnc / ncd).
-  /// To restore: replace with the full list below, or filter via `p.isPilot`.
-  // Full list for post-pilot restore:
-  // Programme.anc, Programme.pnc, Programme.ncd, Programme.tb, Programme.imci,
-  // Programme.epi, Programme.nutrition, Programme.familyPlanning,
-  // Programme.cataract, Programme.eyeCare,
+  /// Programmes a user can manually add — all programmes now in kPilotProgrammes.
   static final List<Programme> _allProgrammes = Programme.kPilotProgrammes
       .toList()
     ..sort((a, b) => a.name.compareTo(b.name));
