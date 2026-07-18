@@ -1364,7 +1364,8 @@ class AppDatabase {
           'CREATE INDEX IF NOT EXISTS idx_rx_buddy_date ON $tableRxBuddyCheckins(check_date DESC)');
       await addIdx26(
           'CREATE INDEX IF NOT EXISTS idx_rx_buddy_sync ON $tableRxBuddyCheckins(sync_status)');
-
+    }
+    if (from < 27) {
       // v27 — delivery_date_millis on pregnancy snapshot so postpartum state
       // survives across visits without waiting for a server re-sync.
       Future<void> addCol27(String ddl) async {
