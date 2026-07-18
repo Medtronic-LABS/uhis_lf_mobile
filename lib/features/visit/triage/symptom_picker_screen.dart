@@ -793,17 +793,31 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                           setState(() {
                             _isDelivery = selected;
                             if (!selected) {
+                              // Delivery deselected → remove PNC, restore ANC/PW
+                              // if patient is still pregnant (PregnancyCohortRules: no delivery).
                               _selectedProgrammes.remove(Programme.pnc);
                               _skDismissedProgrammes.add(Programme.pnc);
-                            } else {
-                              _skDismissedProgrammes.remove(Programme.pnc);
-                              // Delivery unlocks PNC — include enrolled PNC.
-                              if (_patientContext!.activeProgrammes
-                                  .contains(Programme.pnc)) {
-                                _selectedProgrammes.add(Programme.pnc);
+                              if (_isPW) {
+                                _skDismissedProgrammes.remove(Programme.anc);
+                                _skDismissedProgrammes.remove(Programme.pw);
+                                _selectedProgrammes.add(Programme.anc);
+                                if (_patientContext!.activeProgrammes.contains(Programme.pw)) {
+                                  _selectedProgrammes.add(Programme.pw);
+                                }
                               }
+                            } else {
+                              // Delivery selected → ANC/PW no longer relevant
+                              // (Android: dateOfDelivery set → ANC hidden, PNC shown).
+                              _selectedProgrammes.remove(Programme.anc);
+                              _selectedProgrammes.remove(Programme.pw);
+                              _skDismissedProgrammes.add(Programme.anc);
+                              _skDismissedProgrammes.add(Programme.pw);
+                              _skDismissedProgrammes.remove(Programme.pnc);
+                              _selectedProgrammes.add(Programme.pnc);
                             }
                           });
+                          debugPrint('[DeliveryGate] chip toggled: selected=$selected '
+                              'programmes=${_selectedProgrammes.map((p) => p.name).join(', ')}');
                           _fireProgrammesLive();
                         },
                       ),
