@@ -206,7 +206,10 @@ class PatientContextBuilder {
     // Fetch pregnancy facts if available
     final pregnancyMap = await _pregnancyDao.getAll();
     final pregnancyFacts = pregnancyMap[patientId];
-    debugPrint('[PatientCtx] pregnancyFacts from snapshot: ${pregnancyFacts != null}');
+    final pregnancyRowMap = await _pregnancyDao.getAllRows();
+    final pregnancyRow = pregnancyRowMap[patientId];
+    debugPrint('[PatientCtx] pregnancyFacts from snapshot: ${pregnancyFacts != null} '
+        'deliveryDateInSnapshot=${pregnancyRow?.deliveryDateMillis}');
 
     // Calculate age in months
     final ageMonths = _calculateAgeMonths(patient.dob, patient.age);
@@ -219,13 +222,23 @@ class PatientContextBuilder {
       '[PatientCtx] sex parse: raw="${patient.gender}" → ${sex.name}',
     );
 
-    // Determine pregnancy status (three sources)
-    final pregnantFromFacts = pregnancyFacts != null;
-    final pregnantFromProgramme = programmes.contains(Programme.anc);
-    final pregnantFromRaw = _isPregnantFromRaw(patient.rawJson);
+    // Extract delivery date: prefer locally-written snapshot value (set after
+    // PREGNANCY_OUTCOME submission) over rawJson field — local write is immediate,
+    // rawJson only updates after a full server re-sync.
+    final deliveryDateMillis = pregnancyRow?.deliveryDateMillis
+        ?? _extractDeliveryDate(patient.rawJson);
+    final hasDelivered = deliveryDateMillis != null;
+
+    // Determine pregnancy status (three sources minus delivery gate).
+    // If delivery date is known (postpartum) the patient is NOT pregnant —
+    // mirrors Android PregnancyCohortRules.isActivePregnancy() which returns
+    // false when dateOfDelivery is set.
+    final pregnantFromFacts = pregnancyFacts != null && !hasDelivered;
+    final pregnantFromProgramme = programmes.contains(Programme.anc) && !hasDelivered;
+    final pregnantFromRaw = _isPregnantFromRaw(patient.rawJson) && !hasDelivered;
     final isPregnant = pregnantFromFacts || pregnantFromProgramme || pregnantFromRaw;
     debugPrint(
-      '[PatientCtx] isPregnant=$isPregnant '
+      '[PatientCtx] isPregnant=$isPregnant hasDelivered=$hasDelivered '
       '(facts=$pregnantFromFacts programme=$pregnantFromProgramme raw=$pregnantFromRaw)',
     );
 
@@ -235,9 +248,6 @@ class PatientContextBuilder {
     // Extract known conditions from raw JSON
     final knownConditions = _extractConditions(patient.rawJson);
     debugPrint('[PatientCtx] knownConditions: $knownConditions');
-
-    // Extract delivery date for PNC
-    final deliveryDateMillis = _extractDeliveryDate(patient.rawJson);
 
     // Overdue immunizations — computed from EPI schedule engine when DOB is
     // available and an ImmunisationDao is provided.
