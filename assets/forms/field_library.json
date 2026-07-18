@@ -1454,13 +1454,23 @@
     ],
     "condition": [
       {
+        "eq": "fasting",
+        "targetId": "fastingBloodSugar",
+        "visibility": "visible"
+      },
+      {
         "eq": "random",
         "targetId": "randomBloodSugar",
         "visibility": "visible"
       },
       {
         "eq": "fasting",
-        "targetId": "fastingBloodSugar",
+        "targetId": "bloodSugarFasting",
+        "visibility": "visible"
+      },
+      {
+        "eq": "random",
+        "targetId": "bloodSugarRandom",
         "visibility": "visible"
       }
     ]
@@ -7038,11 +7048,11 @@
     "condition": [
       {
         "eqList": [
-          "+1.00",
-          "+1.50",
-          "+2.00",
-          "+2.50",
-          "+3.00"
+          "1.0",
+          "1.5",
+          "2.0",
+          "2.5",
+          "3.0"
         ],
         "targetId": "haveTheGlassesBeenSold",
         "visibility": "visible"
@@ -7110,13 +7120,8 @@
     ],
     "condition": [
       {
-        "eq": "Yes",
+        "eq": "yes",
         "targetId": "typeOfGlass",
-        "visibility": "visible"
-      },
-      {
-        "eq": "No",
-        "targetId": "ncdServiceProvided",
         "visibility": "visible"
       }
     ]
@@ -7169,8 +7174,8 @@
     "condition": [
       {
         "eqList": [
-          "biFocal",
-          "singleVision"
+          "bf",
+          "sv"
         ],
         "targetId": "typeOfFrame",
         "visibility": "visible"
@@ -7225,8 +7230,8 @@
     "condition": [
       {
         "eqList": [
-          "Metal",
-          "Plastic"
+          "metal",
+          "plastic"
         ],
         "targetId": "firstTimeUser",
         "visibility": "visible"
@@ -7643,8 +7648,8 @@
       {
         "eqList": [
           "cataracts",
-          "DCT",
-          "DCR",
+          "dct",
+          "dcr",
           "pterygium",
           "other"
         ],
@@ -8312,22 +8317,6 @@
         "eq": "Yes",
         "targetId": "medicationFrequencyBg",
         "visibility": "visible"
-      },
-      {
-        "eqList": [
-          "Yes",
-          "No"
-        ],
-        "targetId": "referralInformation",
-        "visibility": "visible"
-      },
-      {
-        "eqList": [
-          "Yes",
-          "No"
-        ],
-        "targetId": "whoReferredThisPerson",
-        "visibility": "visible"
       }
     ]
   },
@@ -8464,7 +8453,8 @@
       {
         "eqList": [
           "fbs",
-          "rbs"
+          "rbs",
+          "ppbs"
         ],
         "targetId": "glucose",
         "visibility": "visible"
@@ -8696,9 +8686,9 @@
         "visibility": "visible"
       },
       {
-        "eq": "No",
+        "eq": "Yes",
         "targetId": "newWorseningSymptoms",
-        "visibility": "gone"
+        "visibility": "visible"
       }
     ]
   },
@@ -10930,6 +10920,353 @@
         "id": "pregnancyOutcome",
         "workflowId": 102,
         "workflowName": "Pregnancy Outcome"
+      }
+    ]
+  },
+  "hasCough": {
+    "id": "hasCough",
+    "label": "Does the patient have a cough?",
+    "widgetHint": "RadioGroup",
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "hint": "Select",
+    "optionsList": [
+      {
+        "id": "yes",
+        "name": "Yes"
+      },
+      {
+        "id": "no",
+        "name": "No"
+      }
+    ],
+    "clinicalConcept": [
+      {
+        "system": "SNOMED_CT",
+        "code": "49727002",
+        "display": "Cough (finding)"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "tb",
+        "workflowId": 5,
+        "workflowName": "TB"
+      }
+    ],
+    "condition": [
+      {
+        "eq": "Yes",
+        "targetId": "hasCoughLastedLonger",
+        "visibility": "visible"
+      },
+      {
+        "eq": "Yes",
+        "targetId": "hasNightSweats",
+        "visibility": "visible"
+      },
+      {
+        "eq": "Yes",
+        "targetId": "hasTbFever",
+        "visibility": "visible"
+      },
+      {
+        "eq": "Yes",
+        "targetId": "hasWeightLoss",
+        "visibility": "visible"
+      }
+    ]
+  },
+  "hasCoughLastedLonger": {
+    "id": "hasCoughLastedLonger",
+    "label": "Cough lasting 2 weeks or longer?",
+    "widgetHint": "RadioGroup",
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "gone",
+    "hint": "Select",
+    "optionsList": [
+      {
+        "id": "yes",
+        "name": "Yes"
+      },
+      {
+        "id": "no",
+        "name": "No"
+      }
+    ],
+    "clinicalConcept": [
+      {
+        "system": "SNOMED_CT",
+        "code": "68154008",
+        "display": "Chronic cough (finding)"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "tb",
+        "workflowId": 5,
+        "workflowName": "TB"
+      }
+    ],
+    "dependantOn": [
+      {
+        "optionId": "yes",
+        "id": "hasCough"
+      }
+    ]
+  },
+  "hasNightSweats": {
+    "id": "hasNightSweats",
+    "label": "Night sweats?",
+    "widgetHint": "RadioGroup",
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "gone",
+    "hint": "Select",
+    "optionsList": [
+      {
+        "id": "yes",
+        "name": "Yes"
+      },
+      {
+        "id": "no",
+        "name": "No"
+      }
+    ],
+    "clinicalConcept": [
+      {
+        "system": "SNOMED_CT",
+        "code": "42984000",
+        "display": "Night sweats (finding)"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "tb",
+        "workflowId": 5,
+        "workflowName": "TB"
+      }
+    ]
+  },
+  "hasTbFever": {
+    "id": "hasTbFever",
+    "label": "Fever?",
+    "widgetHint": "RadioGroup",
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "gone",
+    "hint": "Select",
+    "optionsList": [
+      {
+        "id": "yes",
+        "name": "Yes"
+      },
+      {
+        "id": "no",
+        "name": "No"
+      }
+    ],
+    "clinicalConcept": [
+      {
+        "system": "SNOMED_CT",
+        "code": "386661006",
+        "display": "Fever (finding)"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "tb",
+        "workflowId": 5,
+        "workflowName": "TB"
+      }
+    ]
+  },
+  "hasWeightLoss": {
+    "id": "hasWeightLoss",
+    "label": "Unexplained weight loss?",
+    "widgetHint": "RadioGroup",
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "gone",
+    "hint": "Select",
+    "optionsList": [
+      {
+        "id": "yes",
+        "name": "Yes"
+      },
+      {
+        "id": "no",
+        "name": "No"
+      }
+    ],
+    "clinicalConcept": [
+      {
+        "system": "SNOMED_CT",
+        "code": "161833006",
+        "display": "Weight loss (finding)"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "tb",
+        "workflowId": 5,
+        "workflowName": "TB"
+      }
+    ]
+  },
+  "tbDateOfOnset": {
+    "id": "tbDateOfOnset",
+    "label": "Date symptoms started",
+    "widgetHint": "DateField",
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "hint": "Select date",
+    "clinicalConcept": [
+      {
+        "system": "SNOMED_CT",
+        "code": "85causal",
+        "display": "Date of symptom onset"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "tb",
+        "workflowId": 5,
+        "workflowName": "TB"
+      }
+    ]
+  },
+  "tbRelationshipToIC": {
+    "id": "tbRelationshipToIC",
+    "label": "Relationship to TB index case",
+    "widgetHint": "Spinner",
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "hint": "Select relationship",
+    "optionsList": [
+      {
+        "id": "parent",
+        "name": "Parent"
+      },
+      {
+        "id": "child",
+        "name": "Child"
+      },
+      {
+        "id": "sibling",
+        "name": "Sibling"
+      },
+      {
+        "id": "spouse",
+        "name": "Spouse"
+      },
+      {
+        "id": "grandparent",
+        "name": "Grandparent"
+      },
+      {
+        "id": "grandchild",
+        "name": "Grandchild"
+      },
+      {
+        "id": "otherRelative",
+        "name": "Other relative"
+      },
+      {
+        "id": "nonRelativeHousehold",
+        "name": "Non-relative household member"
+      },
+      {
+        "id": "other",
+        "name": "Other"
+      }
+    ],
+    "clinicalConcept": [
+      {
+        "system": "SNOMED_CT",
+        "code": "408731000",
+        "display": "Contact with TB patient"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "tb",
+        "workflowId": 5,
+        "workflowName": "TB"
+      }
+    ]
+  },
+  "tbSleepLocation": {
+    "id": "tbSleepLocation",
+    "label": "Sleeping location relative to index case",
+    "widgetHint": "Spinner",
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "hint": "Select",
+    "optionsList": [
+      {
+        "id": "sameRoom",
+        "name": "Same room as index case"
+      },
+      {
+        "id": "differentRoom",
+        "name": "Different room, same house"
+      },
+      {
+        "id": "differentHouse",
+        "name": "Different house"
+      }
+    ],
+    "clinicalConcept": [
+      {
+        "system": "SNOMED_CT",
+        "code": "224249004",
+        "display": "Sleeping environment"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "tb",
+        "workflowId": 5,
+        "workflowName": "TB"
+      }
+    ]
+  },
+  "hasPreviouslyTreatedForTB": {
+    "id": "hasPreviouslyTreatedForTB",
+    "label": "Previously treated for TB?",
+    "widgetHint": "RadioGroup",
+    "isMandatory": false,
+    "isEnabled": true,
+    "visibility": "visible",
+    "hint": "Select",
+    "optionsList": [
+      {
+        "id": "yes",
+        "name": "Yes"
+      },
+      {
+        "id": "no",
+        "name": "No"
+      }
+    ],
+    "clinicalConcept": [
+      {
+        "system": "SNOMED_CT",
+        "code": "312004007",
+        "display": "TB treatment history"
+      }
+    ],
+    "programmes": [
+      {
+        "id": "tb",
+        "workflowId": 5,
+        "workflowName": "TB"
       }
     ]
   }
