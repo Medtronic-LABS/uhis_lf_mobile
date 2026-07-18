@@ -39,6 +39,7 @@ import '../features/household/enrollment/add_household_member_screen.dart';
 import '../features/household/enrollment/enrollment_controller.dart';
 import '../features/household/enrollment/select_household_screen.dart';
 import '../features/household/enrollment/link_member_screen.dart';
+import '../features/consent/consent_screen.dart';
 import '../core/db/household_dao.dart';
 import '../core/db/member_dao.dart';
 import '../core/db/patient_dao.dart';
@@ -493,6 +494,17 @@ GoRouter buildRouter(AuthState auth) {
             ),
           ),
         ],
+      ),
+
+      // Informed consent — push before /household/enrollment/create
+      // Returns bool: true = consented, false/null = declined.
+      GoRoute(
+        path: '/household/enrollment/consent',
+        name: 'enrollment-consent',
+        pageBuilder: (context, state) => const MaterialPage(
+          key: ValueKey('enrollment-consent'),
+          child: ConsentScreen(),
+        ),
       ),
 
       // Select existing household → link new member
