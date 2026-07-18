@@ -12,6 +12,7 @@ import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
 import '../../core/db/pregnancy_snapshot_dao.dart';
+import '../../core/mission/mission_pregnancy_facts.dart';
 import '../../core/models/programme.dart';
 import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
@@ -263,6 +264,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     );
 
     debugPrint('[VisitForm] ── form-type resolution ──────────────────────');
+    debugPrint('[VisitForm]   isDeliveryVisit    : ${widget.isDeliveryVisit}');
     debugPrint('[VisitForm]   activated pathways : ${rawPathways.join(', ')}');
     debugPrint('[VisitForm]   activeFormTypes    : ${formTypes.join(', ')}');
     debugPrint('[VisitForm]   enrolledFormTypes  : ${enrolledFormTypes.join(', ')}');
@@ -362,6 +364,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     final patientDao = ctx.read<PatientDao>();
     final worklistRepo = ctx.read<WorklistRepository>();
     final progDao = ctx.read<PatientProgrammesDao>();
+    final pregnancySnapshotDao = ctx.read<PregnancySnapshotDao>();
     // Read referral result computed by UnifiedFormNotifier.submit() so
     // _referralRecommended propagates correctly to Step-3's onAdvance callback.
     setState(() => _sectionedReferralTriggered = formNotifier.lastIsReferred);
@@ -412,6 +415,39 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
               await encounterDao.updateVitals(encounterId, vitalsMap);
               debugPrint('[VisitForm] encounter vitals written: $vitalsMap');
             }
+
+            // After PREGNANCY_OUTCOME submission: flip snapshot to postpartum
+            // so next visit correctly shows PNC (not ANC).
+            // Mirrors Android PregnancyCohortRules: dateOfDelivery set → isPostpartum.
+            if (patientId != null && widget.isDeliveryVisit) {
+              final deliveryRaw = fieldValues['dateOfDelivery']
+                  ?? fieldValues['deliveryDate'];
+              final deliveryMs = deliveryRaw is String
+                  ? DateTime.tryParse(deliveryRaw)?.millisecondsSinceEpoch
+                  : null;
+              final existing = await pregnancySnapshotDao.byPatient(patientId);
+              final updated = PregnancySnapshotRow(
+                patientId: patientId,
+                facts: const PregnancyFacts(
+                  isPostpartumWindow: true,
+                  highRiskPregnantWoman: false,
+                  hasGapsInAnc: false,
+                  isNearTermAnc: false,
+                  hadDeliveryComplications: false,
+                  hasPncIllness: false,
+                ),
+                updatedAt: DateTime.now().millisecondsSinceEpoch,
+                // Preserve EDD/LMP for reference; delivery date drives postpartum gate.
+                eddDate: existing?.eddDate,
+                lmpDate: existing?.lmpDate,
+                deliveryDateMillis: deliveryMs
+                    ?? DateTime.now().millisecondsSinceEpoch,
+              );
+              await pregnancySnapshotDao.upsertOne(updated);
+              debugPrint('[VisitForm] pregnancy snapshot → postpartum '
+                  'deliveryMs=$deliveryMs patientId=$patientId');
+            }
+
             debugPrint('[VisitForm] triggering syncPendingAssessments');
             await assessmentRepo.syncPendingAssessments().then(
               (n) => debugPrint('[VisitForm] syncPendingAssessments → synced $n'),

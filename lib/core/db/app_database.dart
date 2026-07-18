@@ -21,7 +21,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 26;
+  static const int schemaVersion = 27;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -1364,6 +1364,16 @@ class AppDatabase {
           'CREATE INDEX IF NOT EXISTS idx_rx_buddy_date ON $tableRxBuddyCheckins(check_date DESC)');
       await addIdx26(
           'CREATE INDEX IF NOT EXISTS idx_rx_buddy_sync ON $tableRxBuddyCheckins(sync_status)');
+
+      // v27 — delivery_date_millis on pregnancy snapshot so postpartum state
+      // survives across visits without waiting for a server re-sync.
+      Future<void> addCol27(String ddl) async {
+        try {
+          await db.execute(ddl);
+        } catch (_) {/* column already present */}
+      }
+      await addCol27(
+          'ALTER TABLE $tablePregnancySnapshot ADD COLUMN delivery_date_millis INTEGER');
     }
   }
 
