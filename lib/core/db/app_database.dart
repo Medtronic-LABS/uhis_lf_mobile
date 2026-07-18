@@ -419,7 +419,8 @@ class AppDatabase {
         has_pnc_illness INTEGER NOT NULL DEFAULT 0,
         updated_at INTEGER,
         edd_date INTEGER,
-        lmp_date INTEGER
+        lmp_date INTEGER,
+        delivery_date_millis INTEGER
       )''');
     await db.execute('''
       CREATE TABLE $tableTreatmentPresence (
