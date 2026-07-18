@@ -21,7 +21,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 27;
+  static const int schemaVersion = 28;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -1376,6 +1376,16 @@ class AppDatabase {
       }
       await addCol27(
           'ALTER TABLE $tablePregnancySnapshot ADD COLUMN delivery_date_millis INTEGER');
+    }
+    if (from < 28) {
+      // v28 — Remediation: devices that were upgraded to v27 by a commit where
+      // the v27 migration was misplaced inside the v26 block never got the
+      // ALTER TABLE and are stuck at schemaVersion=27 with the column absent.
+      // Safe to re-run — catch swallows "duplicate column" if already present.
+      try {
+        await db.execute(
+            'ALTER TABLE $tablePregnancySnapshot ADD COLUMN delivery_date_millis INTEGER');
+      } catch (_) {/* column already present — no-op */}
     }
   }
 
