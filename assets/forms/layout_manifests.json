@@ -702,13 +702,6 @@
         ]
       },
       {
-        "sectionId": "ancDangerSignsSection",
-        "title": "Danger Signs",
-        "fieldRefs": [
-          "ancDangerSigns"
-        ]
-      },
-      {
         "sectionId": "ancServicesBirthPreparedness",
         "title": "ANC Services & Birth Preparedness",
         "fieldRefs": [
@@ -727,6 +720,13 @@
             "fieldName": "Facility identified for delivery",
             "isMandatory": false
           }
+        ]
+      },
+      {
+        "sectionId": "ancDangerSignsSection",
+        "title": "Danger Signs",
+        "fieldRefs": [
+          "ancDangerSigns"
         ]
       }
     ]
@@ -1014,6 +1014,51 @@
     "clinicalWorkflowId": 21,
     "sections": [
       {
+        "sectionId": "symptomsLog",
+        "title": "Symptoms & Compliance",
+        "fieldRefs": [
+          {
+            "id": "compliance",
+            "fieldName": "Medication compliance",
+            "isMandatory": false
+          },
+          {
+            "id": "hasSymptoms",
+            "fieldName": "Has symptoms",
+            "isMandatory": false
+          },
+          {
+            "id": "ncdSymptoms",
+            "fieldName": "NCD symptoms",
+            "isMandatory": false
+          },
+          {
+            "id": "newWorseningSymptoms",
+            "fieldName": "New or worsening symptoms",
+            "isMandatory": false
+          }
+        ]
+      },
+      {
+        "sectionId": "ncdBiometrics",
+        "title": "Biometrics",
+        "fieldRefs": [
+          {
+            "id": "height",
+            "fieldName": "Height (cm)",
+            "inputType": 8192,
+            "isMandatory": false
+          },
+          {
+            "id": "weight",
+            "fieldName": "Weight (kg)",
+            "inputType": 8192,
+            "isMandatory": false
+          },
+          "bmi"
+        ]
+      },
+      {
         "sectionId": "bpLog",
         "title": "Blood Pressure",
         "fieldRefs": [
@@ -1079,51 +1124,6 @@
           {
             "id": "hba1c",
             "fieldName": "HbA1c (%)",
-            "isMandatory": false
-          }
-        ]
-      },
-      {
-        "sectionId": "ncdBiometrics",
-        "title": "Biometrics",
-        "fieldRefs": [
-          {
-            "id": "height",
-            "fieldName": "Height (cm)",
-            "inputType": 8192,
-            "isMandatory": false
-          },
-          {
-            "id": "weight",
-            "fieldName": "Weight (kg)",
-            "inputType": 8192,
-            "isMandatory": false
-          },
-          "bmi"
-        ]
-      },
-      {
-        "sectionId": "symptomsLog",
-        "title": "Symptoms & Compliance",
-        "fieldRefs": [
-          {
-            "id": "compliance",
-            "fieldName": "Medication compliance",
-            "isMandatory": false
-          },
-          {
-            "id": "hasSymptoms",
-            "fieldName": "Has symptoms",
-            "isMandatory": false
-          },
-          {
-            "id": "ncdSymptoms",
-            "fieldName": "NCD symptoms",
-            "isMandatory": false
-          },
-          {
-            "id": "newWorseningSymptoms",
-            "fieldName": "New or worsening symptoms",
             "isMandatory": false
           }
         ]
@@ -1446,6 +1446,61 @@
           {
             "isMandatory": false,
             "id": "referralFacility"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "formType": "tb",
+    "workflowName": "TB",
+    "clinicalWorkflowId": 5,
+    "sections": [
+      {
+        "sectionId": "tbScreening",
+        "title": "TB Symptom Screening",
+        "fieldRefs": [
+          {
+            "isMandatory": false,
+            "id": "hasCough"
+          },
+          {
+            "isMandatory": false,
+            "id": "hasCoughLastedLonger"
+          },
+          {
+            "isMandatory": false,
+            "id": "hasNightSweats"
+          },
+          {
+            "isMandatory": false,
+            "id": "hasTbFever"
+          },
+          {
+            "isMandatory": false,
+            "id": "hasWeightLoss"
+          },
+          {
+            "isMandatory": false,
+            "id": "tbDateOfOnset"
+          }
+        ]
+      },
+      {
+        "sectionId": "contactTracing",
+        "title": "Contact Tracing",
+        "fieldRefs": [
+          {
+            "isMandatory": false,
+            "id": "tbRelationshipToIC"
+          },
+          {
+            "isMandatory": false,
+            "id": "tbSleepLocation"
+          },
+          {
+            "isMandatory": false,
+            "id": "hasPreviouslyTreatedForTB"
           }
         ]
       }
