@@ -156,6 +156,7 @@ class PregnancySnapshotDao {
         updatedAt: rowAt >= prevAt ? row.updatedAt : prev.updatedAt,
         eddDate: row.eddDate ?? prev.eddDate,
         lmpDate: row.lmpDate ?? prev.lmpDate,
+        deliveryDateMillis: row.deliveryDateMillis ?? prev.deliveryDateMillis,
       );
     }
     return byId.values.toList(growable: false);
@@ -185,6 +186,7 @@ class PregnancySnapshotDao {
               updatedAt: row.updatedAt,
               eddDate: row.eddDate ?? prev.eddDate,
               lmpDate: row.lmpDate ?? prev.lmpDate,
+              deliveryDateMillis: row.deliveryDateMillis ?? prev.deliveryDateMillis,
             ));
     }
     for (final entry in prior.entries) {
