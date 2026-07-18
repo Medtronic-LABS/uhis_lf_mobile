@@ -118,7 +118,13 @@ abstract final class UnifiedPayloadMapper {
       ));
     }
 
-    // TODO: add TB form + mapper when TB is added to kPilotProgrammes (GAP 12).
+    if (activeFormTypes.contains('tb')) {
+      payloads.add(ProgrammePayload(
+        assessmentType: 'TB',
+        details: _toTb(data),
+      ));
+    }
+
     // TODO: add EPI form + mapper when EPI is added to kPilotProgrammes (GAP 12).
     // TODO: add HIV form + mapper when HIV is in scope (GAP 12).
     // TODO: add NUTRITION form + mapper when NUTRITION is in scope (GAP 12).
@@ -807,6 +813,26 @@ abstract final class UnifiedPayloadMapper {
       'referralFacility': d.getValue('referralFacility'),
       // CBS follow-up fields are added by Android's updateCbsForRMNCH when CBS
       // form data is present; Flutter has no CBS form section yet — omit for now.
+    });
+  }
+
+  // ── TB Screening ───────────────────────────────────────────────────────────
+  // Android wire type: "TB", wrapped under "tb" key by toApiRequest().
+  // Form sections: "tbScreening" + "contactTracing".
+
+  static Map<String, dynamic> _toTb(CanonicalVisitData d) {
+    return _compact({
+      // WHO 4-symptom screen
+      'hasCough': d.getValue('hasCough'),
+      'hasCoughLastedLonger': d.getValue('hasCoughLastedLonger'),
+      'hasNightSweats': d.getValue('hasNightSweats'),
+      'hasFever': d.getValue('hasTbFever') ?? d.getValue('hasFever'),
+      'hasWeightLoss': d.getValue('hasWeightLoss'),
+      'tbDateOfOnset': d.getValue('tbDateOfOnset'),
+      // Contact tracing
+      'relationshipToIC': d.getValue('tbRelationshipToIC'),
+      'sleepLocation': d.getValue('tbSleepLocation'),
+      'hasPreviouslyTreatedForTB': d.getValue('hasPreviouslyTreatedForTB'),
     });
   }
 

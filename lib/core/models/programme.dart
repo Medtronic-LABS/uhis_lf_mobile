@@ -37,6 +37,10 @@ enum Programme {
     Programme.pw,
     Programme.pnc,
     Programme.ncd,
+    Programme.tb,
+    Programme.familyPlanning,
+    Programme.cataract,
+    Programme.eyeCare,
   };
 
   /// True when this programme is included in the v1 pilot scope.
