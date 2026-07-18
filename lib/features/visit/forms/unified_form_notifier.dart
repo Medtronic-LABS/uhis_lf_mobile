@@ -303,6 +303,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
     if (fieldId == 'height' || fieldId == 'weight') {
       _recomputeBmi();
     }
+    if (fieldId == 'deliveryOutcomeType') {
+      debugPrint('[DeliveryOutcome] updateField deliveryOutcomeType=$value → notifyListeners');
+    }
     notifyListeners();
     _saveDraft();
   }
