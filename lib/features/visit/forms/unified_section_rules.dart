@@ -299,6 +299,12 @@ abstract final class UnifiedSectionRules {
     int? gestationalWeeks,
   }) {
     final id = section.sectionId;
+    if (section.formType == 'pregnancyOutcome') {
+      // ignore: avoid_print
+      print('[SectionVisibility] pregnancyOutcome section=$id '
+          'activeFormTypes=$activeFormTypes '
+          'containsPregnancyOutcome=${activeFormTypes.contains('pregnancyOutcome')}');
+    }
 
     // pregnancyDetailsAndHistory: only for first-time pregnancy registration.
     // Once PW/ANC is on file the LMP cannot be re-edited — hide on all
@@ -318,6 +324,29 @@ abstract final class UnifiedSectionRules {
     // activeFormTypes by _toFormTypes). Never shown on routine PNC visits.
     if (id == 'pregnancyOutcome') {
       return activeFormTypes.contains('pregnancyOutcome');
+    }
+
+    // pregnancyOutcome sub-sections: gated by deliveryOutcomeType selection.
+    // outcomeType is the picker itself — always shown when pregnancyOutcome active.
+    // All other sub-sections only appear once an outcome type is chosen.
+    if (section.formType == 'pregnancyOutcome' && id != 'outcomeType') {
+      final outcome = currentData.getValue('deliveryOutcomeType')?.toString();
+      // ignore: avoid_print
+      print('[SectionVisibility] pregnancyOutcome sub-section=$id outcome=$outcome');
+      if (outcome == null || outcome.isEmpty) return false;
+      switch (id) {
+        case 'maternalDeath':
+          return outcome == 'maternalDeath';
+        case 'abortion':
+          return outcome == 'abortion';
+        case 'deliveryOutcomes':
+        case 'newbornDetails':
+          return outcome == 'liveBirth' || outcome == 'stillbirth';
+        case 'counsellingAdverseEvent':
+          return true; // show counselling for all outcome types
+        default:
+          return true;
+      }
     }
 
     // pncChild / pncNeonatal: child alive field must be 'yes'.

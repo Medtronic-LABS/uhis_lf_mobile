@@ -402,6 +402,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
             _programmesExplicitlyChosen = true;
           },
           onDeliverySelected: (isDelivery) {
+            debugPrint('[DeliveryGate] onDeliverySelected: $isDelivery → _isDeliveryVisit=$isDelivery');
             _isDeliveryVisit = isDelivery;
           },
           onProgrammesLive: (programmes) {

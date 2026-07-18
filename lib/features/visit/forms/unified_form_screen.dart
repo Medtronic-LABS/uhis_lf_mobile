@@ -187,6 +187,12 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
           gestationalWeeks: widget.gestationalWeeks,
           enrolledFormTypes: widget.enrolledFormTypes,
         );
+        final outcomeValue = notifier.data.getValue('deliveryOutcomeType');
+        if (widget.activeFormTypes.contains('pregnancyOutcome')) {
+          debugPrint('[DeliveryOutcome] rebuild sections=${annotated.length} '
+              'deliveryOutcomeType=$outcomeValue '
+              'sectionIds=${annotated.map((a) => a.section.sectionId).join(', ')}');
+        }
 
         // Only emit the [Form] debug summary when the section/field count
         // changes — suppresses per-keystroke log spam during form filling.
@@ -1432,11 +1438,18 @@ class _SectionCard extends StatelessWidget {
 
       final def = config.fields[ref.id];
       if (def == null) continue;
-      if (!FieldVisibilityRules.isFieldVisible(
+      final visible = FieldVisibilityRules.isFieldVisible(
         field: def,
         data: data,
         rulesByTargetId: config.visibilityRulesByTargetId,
-      )) {
+      );
+      if (section.formType == 'pregnancyOutcome') {
+        // ignore: avoid_print
+        print('[FieldVisibility] pregnancyOutcome.${section.sectionId}.${ref.id} '
+            'baseVisibility=${def.visibility} visible=$visible '
+            'deliveryOutcomeType=${data.getValue('deliveryOutcomeType')}');
+      }
+      if (!visible) {
         continue;
       }
       final questionNumber = section.sectionId == 'pregnancyHistory'
@@ -1528,6 +1541,12 @@ class _SectionCard extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: AppSpacing.lg),
         child: child,
       ));
+    }
+
+    if (section.formType == 'pregnancyOutcome') {
+      // ignore: avoid_print
+      print('[FieldRender] pregnancyOutcome.${section.sectionId} '
+          'rendered=${fieldWidgets.length}/${section.fieldRefs.length} fields');
     }
 
     final inner = Padding(
