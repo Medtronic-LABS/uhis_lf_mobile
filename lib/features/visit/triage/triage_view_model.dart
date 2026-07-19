@@ -659,7 +659,8 @@ class TriageViewModel extends ChangeNotifier {
     final enrolled = ctx.activeProgrammes;
     final sections = <SymptomSection>[];
 
-    if (ctx.isPregnant || enrolled.contains(Programme.anc)) {
+    // ANC: enrolled, or patient is pregnant (may not be formally enrolled yet).
+    if (enrolled.contains(Programme.anc) || ctx.isPregnant) {
       sections.add(SymptomSection(
         programme: Programme.anc,
         codes: SymptomCatalog.byProgramme(Programme.anc)
@@ -668,7 +669,8 @@ class TriageViewModel extends ChangeNotifier {
       ));
     }
 
-    if (ctx.isPostpartum || enrolled.contains(Programme.pnc)) {
+    // PNC: enrolled, or patient is postpartum.
+    if (enrolled.contains(Programme.pnc) || ctx.isPostpartum) {
       sections.add(SymptomSection(
         programme: Programme.pnc,
         codes: SymptomCatalog.byProgramme(Programme.pnc)
@@ -677,18 +679,18 @@ class TriageViewModel extends ChangeNotifier {
       ));
     }
 
-    // Show NCD + TB for adults. When age is unknown, default to showing them
-    // (age 0 default must not silently hide clinical sections for adults).
-    const adultThresholdMonths = 180;
-    final isAdult =
-        !ctx.ageKnown || ctx.ageMonths >= adultThresholdMonths;
-    if (isAdult) {
+    // NCD + TB: only show when the patient is actually enrolled.
+    // Eligibility (adult age) alone does not add a section — the SK selects
+    // these programmes in the service grid first.
+    if (enrolled.contains(Programme.ncd)) {
       sections.add(SymptomSection(
         programme: Programme.ncd,
         codes: SymptomCatalog.byProgramme(Programme.ncd)
             .map((s) => s.code)
             .toList(),
       ));
+    }
+    if (enrolled.contains(Programme.tb)) {
       sections.add(SymptomSection(
         programme: Programme.tb,
         codes: SymptomCatalog.byProgramme(Programme.tb)

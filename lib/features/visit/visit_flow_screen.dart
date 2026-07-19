@@ -518,8 +518,10 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     }
   }
 
-  Future<bool?> _confirmExit() => showLeaveVisitDialog(context);
+  Future<bool?> _confirmExit() {
     debugPrint('[_VisitFlowState] _confirmExit');
+    return showLeaveVisitDialog(context);
+  }
 }
 
 /// Shared leave-visit confirmation dialog.
