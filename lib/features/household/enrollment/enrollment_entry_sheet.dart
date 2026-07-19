@@ -186,6 +186,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
       case NidScanStatus.error:
         _showSnack(EnrollmentStrings.nidScanError);
       case NidScanStatus.cancelled:
+      case NidScanStatus.skipped:
         break;
     }
   }
@@ -394,6 +395,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
           );
         }
       case NidScanStatus.cancelled:
+      case NidScanStatus.skipped:
         break;
     }
   }
@@ -417,6 +419,8 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
             onCreateHousehold: () {},
             onCancel: () => Navigator.of(context).pop(null),
             showCreateHousehold: false,
+            onRegisterManually: () => Navigator.of(context)
+                .pop(const NidScanResult(NidScanStatus.skipped)),
           ),
         ),
       ),
@@ -439,6 +443,7 @@ class _ScannerBody extends StatelessWidget {
     this.autoScanActive = false,
     this.showCreateHousehold = true,
     this.onLinkToExisting,
+    this.onRegisterManually,
   });
 
   final bool isScanning;
@@ -457,6 +462,8 @@ class _ScannerBody extends StatelessWidget {
   final bool showCreateHousehold;
   /// Optional: navigates to SelectHouseholdScreen.
   final VoidCallback? onLinkToExisting;
+  /// Optional: skips NID scan and opens manual registration form.
+  final VoidCallback? onRegisterManually;
 
   bool get _canCapture =>
       !isScanning && !readingCard && cameraController != null;
@@ -641,6 +648,45 @@ class _ScannerBody extends StatelessWidget {
           const SizedBox(height: 8),
           const Text('Tap to capture', style: TextStyle(fontSize: 11, color: AppColors.onDarkFaint)),
           const SizedBox(height: 20),
+          // Register without NID
+          if (onRegisterManually != null) ...[
+            GestureDetector(
+              onTap: onRegisterManually,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.20), width: 1.5),
+                  borderRadius: BorderRadius.circular(AppRadius.patRow),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.person_add_outlined, color: Colors.white, size: 18),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'No NID? Register manually',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Colors.white),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Fill in member details by hand',
+                            style: TextStyle(fontSize: 10, color: AppColors.onDarkLow),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, color: AppColors.onDarkFaint, size: 16),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
           // Cancel
           GestureDetector(
             onTap: onCancel,
