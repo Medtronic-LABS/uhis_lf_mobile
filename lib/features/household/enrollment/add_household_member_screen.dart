@@ -145,6 +145,9 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
         _showSnack(EnrollmentStrings.nidScanError);
       case NidScanStatus.cancelled:
         break;
+      case NidScanStatus.skipped:
+        // SK chose manual entry — leave all fields blank for hand-fill.
+        break;
     }
   }
 
