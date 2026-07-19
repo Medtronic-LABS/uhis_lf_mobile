@@ -779,6 +779,7 @@ class _SectionLabel extends StatelessWidget {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 void _openModule(BuildContext context, CoachingModule module) {
+  debugPrint('[_VideoModuleCard] _openModule moduleId=${module.id} title=${module.titleEn}');
   Navigator.of(context).push(
     MaterialPageRoute<void>(
       builder: (_) => ModulePlayerScreen(module: module),

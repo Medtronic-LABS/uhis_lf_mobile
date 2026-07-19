@@ -47,12 +47,14 @@ abstract class PhiScreenState<T extends PhiScreen> extends State<T> {
 
   @override
   void initState() {
+    debugPrint('[PhiScreenState] initState');
     super.initState();
     _setSecure(true);
   }
 
   @override
   void dispose() {
+    debugPrint('[PhiScreenState] dispose');
     _setSecure(false);
     super.dispose();
   }

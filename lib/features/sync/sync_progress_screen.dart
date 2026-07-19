@@ -42,6 +42,7 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
 
   @override
   void initState() {
+    debugPrint('[_SyncProgressScreenState] initState');
     super.initState();
     _pulseController = AnimationController(
       vsync: this,
@@ -56,6 +57,7 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
 
   @override
   void dispose() {
+    debugPrint('[_SyncProgressScreenState] dispose');
     _progressSub?.cancel();
     _pulseController.dispose();
     super.dispose();

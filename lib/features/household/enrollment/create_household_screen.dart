@@ -72,6 +72,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[_CreateHouseholdScreenState] initState');
 
     // Household controllers
     _houseNumberCtrl = TextEditingController()..addListener(_onFormChanged);
@@ -167,6 +168,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
 
   @override
   void dispose() {
+    debugPrint('[_CreateHouseholdScreenState] dispose');
     _houseNumberCtrl
       ..removeListener(_onFormChanged)
       ..dispose();
@@ -241,6 +243,7 @@ class _CreateHouseholdScreenState extends State<CreateHouseholdScreen> {
   }
 
   Future<void> _handleContinue(EnrollmentController controller) async {
+    debugPrint('[_CreateHouseholdScreenState] _handleContinue householdType=$_householdType ssWorker=${_selectedSsWorker?.id} village=${_selectedVillage?.id} fromNidScan=${widget.fromNidScan}');
     // Guarantee a valid sub-village even if the SK never opened the dropdown.
     // Android scopes member/assessment sync to sub-village IDs, so a household
     // enrolled with an empty sub-village (→ 0) is invisible in the Spice app.

@@ -23,6 +23,7 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
   bool _busy = false;
 
   Future<void> _onChanged(String v) async {
+    debugPrint('[_PinUnlockScreenState] _onChanged v=$v');
     setState(() {
       _value = v;
       _error = null;

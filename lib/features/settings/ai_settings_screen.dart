@@ -59,6 +59,7 @@ class AiSettingsScreen extends StatelessWidget {
   }
 
   Future<void> _confirmReset(BuildContext context) async {
+    debugPrint('[AiSettingsScreen] _confirmReset context=${context}');
     final notifier = context.read<VadTuningNotifier>();
     await notifier.resetToDefaults();
     if (!context.mounted) return;

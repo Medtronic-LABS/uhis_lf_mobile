@@ -57,10 +57,12 @@ class _VisitLandingScreenState extends State<VisitLandingScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[_VisitLandingScreenState] initState');
     _loadData();
   }
 
   void _loadData() {
+    debugPrint('[_VisitLandingScreenState] _loadData');
     final encounterRepo = context.read<EncounterRepository>();
     final householdRepo = context.read<HouseholdRepository>();
 

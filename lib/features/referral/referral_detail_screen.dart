@@ -39,7 +39,9 @@ class _ReferralDetailScreenState extends State<ReferralDetailScreen>
 
   @override
   void initState() {
+    debugPrint('[_ReferralDetailScreenState] initState patientId=${widget.patientId}');
     super.initState();
+    debugPrint('[_ReferralDetailScreenState] initState');
     _tabController = TabController(length: 2, vsync: this);
   }
 
@@ -59,12 +61,15 @@ class _ReferralDetailScreenState extends State<ReferralDetailScreen>
 
   @override
   void dispose() {
+    debugPrint('[_ReferralDetailScreenState] dispose patientId=${widget.patientId}');
     _repo?.changes.removeListener(_onChanges);
     _tabController.dispose();
+    debugPrint('[_ReferralDetailScreenState] dispose');
     super.dispose();
   }
 
   void _onChanges() {
+    debugPrint('[_ReferralDetailScreenState] _onChanges patientId=${widget.patientId}');
     if (!mounted) return;
     _reload();
   }
@@ -78,6 +83,7 @@ class _ReferralDetailScreenState extends State<ReferralDetailScreen>
   }
 
   Future<_PatientReferrals> _load() async {
+    debugPrint('[_ReferralDetailScreenState] _load');
     final repo = _repo;
     final patientDao = _patientDao;
     // Return empty data if dependencies aren't ready

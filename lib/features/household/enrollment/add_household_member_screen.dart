@@ -56,6 +56,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
 
   @override
   void initState() {
+    debugPrint('[_AddHouseholdMemberScreenState] initState');
     super.initState();
     _brnCtrl = TextEditingController();
     _nameCtrl = TextEditingController();
@@ -67,6 +68,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
 
   @override
   void dispose() {
+    debugPrint('[_AddHouseholdMemberScreenState] dispose');
     _brnCtrl.dispose();
     _nameCtrl.dispose();
     _dobCtrl.dispose();
@@ -116,6 +118,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   }
 
   Future<void> _scanNid() async {
+    debugPrint('[_AddHouseholdMemberScreenState] _scanNid');
     final result = await showNidScannerForMember(context);
     if (!mounted || result == null) return;
 
@@ -195,6 +198,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   }
 
   Future<void> _handleSaveMember(EnrollmentController controller) async {
+    debugPrint('[_AddHouseholdMemberScreenState] _handleSaveMember name=${_nameCtrl.text} gender=$_gender maritalStatus=$_maritalStatus');
     if (_nameCtrl.text.isEmpty || _gender == null || _maritalStatus == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

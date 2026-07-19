@@ -91,12 +91,14 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
 
   @override
   void dispose() {
+    debugPrint('[_PatientAiSheetState] dispose');
     _input.dispose();
     _scroll.dispose();
     super.dispose();
   }
 
   Future<void> _send(String question) async {
+    debugPrint('[_PatientAiSheetState] _send question=$question');
     final q = question.trim();
     if (q.isEmpty || _loading) return;
     _input.clear();
@@ -152,6 +154,7 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
   // ── Actions — reuse the exact routines the patient screen uses ─────────────
 
   Future<void> _runAction(AssistantActionType type) async {
+    debugPrint('[_PatientAiSheetState] _runAction type=$type');
     switch (type) {
       case AssistantActionType.startVisit:
         await _startVisit();
@@ -166,6 +169,7 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
   }
 
   Future<void> _startVisit() async {
+    debugPrint('[_PatientAiSheetState] _startVisit patientId=${widget.ctx.patientId} patientName=${widget.ctx.patientName}');
     final c = widget.ctx;
     final controller = context.read<VisitController>();
     final programme =
@@ -198,6 +202,7 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
   }
 
   Future<void> _openReferral() async {
+    debugPrint('[_PatientAiSheetState] _openReferral patientId=${widget.ctx.patientId} diagnosisLabel=${widget.ctx.diagnosisLabel}');
     final c = widget.ctx;
     try {
       await context.read<ReferralRepository>().create(
@@ -214,6 +219,7 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
   }
 
   Future<void> _call() async {
+    debugPrint('[_PatientAiSheetState] _call phone=${widget.ctx.phone}');
     final phone = widget.ctx.phone;
     if (phone == null || phone.trim().isEmpty) {
       _snack(PatientAiStrings.noPhone);

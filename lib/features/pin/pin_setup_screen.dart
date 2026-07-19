@@ -27,6 +27,7 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
   bool get _confirming => _firstEntry != null;
 
   Future<void> _onChanged(String v) async {
+    debugPrint('[_PinSetupScreenState] _onChanged v.length=${v.length} confirming=$_confirming');
     setState(() {
       _value = v;
       _error = null;

@@ -130,6 +130,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
   @override
   void dispose() {
     if (_scribeInitialized) _scribeCtrl.dispose();
+    debugPrint('[_VisitFormScreenState] dispose');
     super.dispose();
   }
 
@@ -338,6 +339,10 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
           // PW registration — show only the pwProfile layout (LMP, gravida, parity).
           // Not a clinical ANC visit; does not add ANC sections.
           out.add('pwProfile');
+        case 'eyeCare':
+          out.add('eye_care');
+        case 'familyPlanning':
+          out.add('family_planning');
         default:
           out.add(p);
       }

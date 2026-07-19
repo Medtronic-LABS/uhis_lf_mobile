@@ -128,6 +128,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[_SymptomPickerScreenState] initState');
     // Defer to after first frame to ensure context is available
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadPatientContext();
@@ -135,6 +136,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   }
 
   Future<void> _loadPatientContext() async {
+    debugPrint('[_SymptomPickerScreenState] _loadPatientContext');
     debugPrint(
       '[SymptomPicker] Starting load for encounterId=${widget.encounterId}, patientId=${widget.patientId}',
     );
@@ -384,10 +386,12 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   void dispose() {
     _viewModel?.removeListener(_syncPathwaysToServiceGrid);
     _viewModel?.dispose();
+    debugPrint('[_SymptomPickerScreenState] dispose');
     super.dispose();
   }
 
   void _openVaccinationTimeline() {
+    debugPrint('[_SymptomPickerScreenState] _openVaccinationTimeline');
     final ctx = _patientContext;
     if (ctx == null) return;
     // Fetch DOB from patient DAO to pass to timeline screen
@@ -412,6 +416,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   /// vaccination step by calling [_onContinue], which fires [onAdvance].
   /// In standalone mode: pushes the immunisation timeline route directly.
   void _onVaccination() {
+    debugPrint('[_SymptomPickerScreenState] _onVaccination');
     final vm = _viewModel;
     if (vm == null) return;
     if (widget.onAdvance != null) {
@@ -423,6 +428,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   }
 
   void _onContinue() {
+    debugPrint('[_SymptomPickerScreenState] _onContinue');
     final vm = _viewModel;
     if (vm == null || _patientContext == null) return;
 
@@ -555,6 +561,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   }
 
   void _navigateToForm(List<ActivatedPathway> pathways) {
+    debugPrint('[_SymptomPickerScreenState] _navigateToForm pathways=${pathways}');
     final origin = widget.origin;
     final originParam = origin != null ? '?origin=$origin' : '';
 
@@ -1392,6 +1399,7 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[_UnifiedSymptomPickerState] initState');
     _searchCtrl.addListener(() {
       setState(() => _query = _searchCtrl.text.trim().toLowerCase());
     });
@@ -1400,6 +1408,7 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
   @override
   void dispose() {
     _searchCtrl.dispose();
+    debugPrint('[_UnifiedSymptomPickerState] dispose');
     super.dispose();
   }
 
@@ -1846,6 +1855,7 @@ class _InlineServiceSelector extends StatelessWidget {
   }
 
   void _handleTap(BuildContext context, _ServiceCardDef card) {
+    debugPrint('[_InlineServiceSelector] _handleTap context=${context} card=${card}');
     // Lock only blocks *adding* when the PW/Delivery gate is closed.
     // Already-selected cards can always be deselected (e.g. enrolled PNC that
     // was seeded incorrectly, or pathway ANC the SK does not want this visit).

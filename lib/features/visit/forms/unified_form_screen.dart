@@ -100,6 +100,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[_UnifiedFormScreenState] initState');
     _loadConfig();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -151,10 +152,12 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   @override
   void dispose() {
     _scrollCtrl.dispose();
+    debugPrint('[_UnifiedFormScreenState] dispose');
     super.dispose();
   }
 
   Future<void> _loadConfig() async {
+    debugPrint('[_UnifiedFormScreenState] _loadConfig');
     try {
       final cfg = await FormConfig.loadAndCache(rootBundle);
       if (mounted) setState(() { _config = cfg; _configLoading = false; });
@@ -367,6 +370,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     UnifiedFormNotifier notifier,
     List<AnnotatedFormSection> annotated,
   ) async {
+    debugPrint('[_UnifiedFormScreenState] _onSubmit');
     if (_config == null) return;
 
     // Strip stale values for fields that are no longer visible (e.g. Parity
@@ -3011,6 +3015,7 @@ class _BloodGlucoseEntryFieldState extends State<_BloodGlucoseEntryField> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[_BloodGlucoseEntryFieldState] initState');
     _ctrl = TextEditingController(
       text: widget.glucoseValue?.toString() ?? '',
     );
@@ -3038,6 +3043,7 @@ class _BloodGlucoseEntryFieldState extends State<_BloodGlucoseEntryField> {
   @override
   void dispose() {
     _ctrl.dispose();
+    debugPrint('[_BloodGlucoseEntryFieldState] dispose');
     super.dispose();
   }
 
@@ -3167,6 +3173,7 @@ class _NumericFieldState extends State<_NumericField> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[_NumericFieldState] initState');
     _ctrl = TextEditingController(text: widget.initialValue ?? '');
   }
 
@@ -3196,6 +3203,7 @@ class _NumericFieldState extends State<_NumericField> {
   @override
   void dispose() {
     _ctrl.dispose();
+    debugPrint('[_NumericFieldState] dispose');
     super.dispose();
   }
 
@@ -3320,6 +3328,7 @@ class _DateFieldState extends State<_DateField> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[_DateFieldState] initState');
     _ctrl = TextEditingController(text: widget.currentValue ?? '');
   }
 
@@ -3339,6 +3348,7 @@ class _DateFieldState extends State<_DateField> {
   @override
   void dispose() {
     _ctrl.dispose();
+    debugPrint('[_DateFieldState] dispose');
     super.dispose();
   }
 
@@ -3398,6 +3408,7 @@ class _BpReadingFieldState extends State<_BpReadingField> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[_BpReadingFieldState] initState');
     final first =
         widget.readings.isNotEmpty ? widget.readings.first : const {};
     _sys = TextEditingController(text: first['systolic']?.toString() ?? '');
@@ -3429,6 +3440,7 @@ class _BpReadingFieldState extends State<_BpReadingField> {
     _sys.dispose();
     _dia.dispose();
     _pulse.dispose();
+    debugPrint('[_BpReadingFieldState] dispose');
     super.dispose();
   }
 

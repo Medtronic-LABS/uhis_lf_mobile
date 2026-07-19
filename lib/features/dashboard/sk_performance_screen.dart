@@ -19,11 +19,13 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen> {
 
   @override
   void initState() {
+    debugPrint('[_SkPerformanceScreenState] initState');
     super.initState();
     _load();
   }
 
   void _load() {
+    debugPrint('[_SkPerformanceScreenState] _load');
     final db = context.read<AppDatabase>();
     _statsFuture = SkPerformanceRepository(db).load();
   }

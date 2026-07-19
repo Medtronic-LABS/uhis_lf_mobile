@@ -60,6 +60,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
 
   @override
   void initState() {
+    debugPrint('[_HouseholdListScreenState] initState');
     super.initState();
     // Defer loading until after first frame when context is available.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -73,6 +74,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
   /// Loads the mission queue so a household's flagged member (if any) can
   /// render with its real urgency badge/status.
   Future<void> _loadQueueItems() async {
+    debugPrint('[_HouseholdListScreenState] _loadQueueItems');
     if (!mounted) return;
     try {
       final missionRepo = context.read<MissionDashboardRepository>();
@@ -93,6 +95,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
 
   @override
   void dispose() {
+    debugPrint('[_HouseholdListScreenState] dispose');
     _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -100,6 +103,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
 
 
   void _loadData() {
+    debugPrint('[_HouseholdListScreenState] _loadData');
     final householdDao = context.read<HouseholdDao>();
     final memberDao = context.read<MemberDao>();
     final repo = context.read<DashboardRepository>();
@@ -149,6 +153,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
     MemberDao memberDao,
     DashboardRepository repo,
   ) async {
+    debugPrint('[_HouseholdListScreenState] _fetchHouseholds');
     try {
       final localHouseholds = await householdDao.getAll(limit: 1000);
 
@@ -627,6 +632,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
   }
 
   void _navigateToDetail(BuildContext context, _HouseholdItem item) {
+    debugPrint('[_HouseholdListScreenState] _navigateToDetail id=${item.id}');
     final id = item.id;
     if (id == null || id.isEmpty) {
       debugPrint('[HouseholdList] Skipping nav — household has empty ID');
@@ -636,6 +642,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
   }
 
   void _navigateToMemberDetail(BuildContext context, _MemberInfo member) {
+    debugPrint('[_HouseholdListScreenState] _navigateToMemberDetail patientId=${member.patientId} id=${member.id} name=${member.name}');
     final id = (member.patientId != null && member.patientId!.isNotEmpty)
         ? member.patientId!
         : member.id;

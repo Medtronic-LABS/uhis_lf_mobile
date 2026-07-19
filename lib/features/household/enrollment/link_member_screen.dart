@@ -83,6 +83,7 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
 
   @override
   void initState() {
+    debugPrint('[_LinkMemberScreenState] initState householdId=${widget.householdId} householdReferenceId=${widget.householdReferenceId} fromNidScan=${widget.fromNidScan}');
     super.initState();
     // Pre-fill from NID scan when coming via the "link to existing" flow.
     if (widget.fromNidScan) {
@@ -120,6 +121,7 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
 
   @override
   void dispose() {
+    debugPrint('[_LinkMemberScreenState] dispose');
     _nameCtrl.dispose();
     _dobCtrl.dispose();
     _ageCtrl.dispose();
@@ -154,6 +156,7 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
   }
 
   Future<void> _submit() async {
+    debugPrint('[_LinkMemberScreenState] _submit householdId=${widget.householdId} householdReferenceId=${widget.householdReferenceId}');
     if (!_validate()) return;
     setState(() => _loading = true);
     try {

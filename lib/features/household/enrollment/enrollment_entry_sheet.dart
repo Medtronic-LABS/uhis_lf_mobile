@@ -87,6 +87,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
   @override
   void initState() {
     super.initState();
+    debugPrint('[_EnrollmentOverlayState] initState');
     _sweepCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1800),
@@ -146,6 +147,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
 
   @override
   void dispose() {
+    debugPrint('[_EnrollmentOverlayState] dispose');
     _autoScanTimer?.cancel();
     _cameraController?.dispose();
     _sweepCtrl.dispose();
@@ -154,6 +156,7 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
 
   /// Capture a frame from the live preview and read the NID number from it.
   Future<void> _handleCapture() async {
+    debugPrint('[_EnrollmentOverlayState] _handleCapture');
     final controller = _cameraController;
     if (_isScanning || controller == null || !_cameraReady) return;
     setState(() => _isScanning = true);
@@ -297,6 +300,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
   @override
   void initState() {
     super.initState();
+    debugPrint('[_MemberNidScanOverlayState] initState');
     _sweepCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1800),
@@ -345,6 +349,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
 
   @override
   void dispose() {
+    debugPrint('[_MemberNidScanOverlayState] dispose');
     _autoScanTimer?.cancel();
     _cameraController?.dispose();
     _sweepCtrl.dispose();
@@ -352,6 +357,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
   }
 
   Future<void> _handleCapture() async {
+    debugPrint('[_MemberNidScanOverlayState] _handleCapture');
     final controller = _cameraController;
     if (_isScanning || controller == null || !_cameraReady) return;
     setState(() => _isScanning = true);

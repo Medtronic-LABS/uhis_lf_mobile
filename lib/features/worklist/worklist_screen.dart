@@ -33,6 +33,7 @@ class _WorklistViewState extends State<WorklistView> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[_WorklistViewState] initState');
     _repo = context.read<WorklistRepository>();
     _sync = context.read<OfflineSyncService>();
     // Initialize directly without setState since widget isn't mounted yet
@@ -45,10 +46,12 @@ class _WorklistViewState extends State<WorklistView> {
   @override
   void dispose() {
     _repo.changes.removeListener(_onChanges);
+    debugPrint('[_WorklistViewState] dispose');
     super.dispose();
   }
 
   void _onChanges() {
+    debugPrint('[_WorklistViewState] _onChanges');
     if (!mounted) return;
     _reload();
   }
@@ -97,6 +100,7 @@ class _WorklistViewState extends State<WorklistView> {
   }
 
   void _onFilterChanged(Set<Programme> next) {
+    debugPrint('[_WorklistViewState] _onFilterChanged next=${next}');
     setState(() => _filter = next);
     _reload();
   }

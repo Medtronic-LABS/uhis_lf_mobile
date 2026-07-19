@@ -115,6 +115,7 @@ class _NewPatientVisitScreenState extends State<NewPatientVisitScreen> {
       (svc == _Svc.anc || svc == _Svc.pnc) && !_pwSelected;
 
   void _onSvcTap(_Svc svc) {
+    debugPrint('[_NewPatientVisitScreenState] _onSvcTap svc=${svc}');
     if (svc == _Svc.pw) {
       setState(() {
         _pwSelected = !_pwSelected;

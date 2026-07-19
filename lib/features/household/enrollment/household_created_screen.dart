@@ -28,10 +28,12 @@ class HouseholdCreatedScreen extends StatefulWidget {
 class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
   @override
   void initState() {
+    debugPrint('[_HouseholdCreatedScreenState] initState');
     super.initState();
   }
 
   Future<void> _handleSave(EnrollmentController controller) async {
+    debugPrint('[_HouseholdCreatedScreenState] _handleSave');
     final success = await controller.submitHousehold();
 
     if (mounted) {

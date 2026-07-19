@@ -71,6 +71,7 @@ class _PathwayReviewSheetState extends State<PathwayReviewSheet> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[_PathwayReviewSheetState] initState');
     _confirmedPathways = List.from(widget.activatedPathways);
   }
 

@@ -25,10 +25,12 @@ class _ConsentScreenState extends State<ConsentScreen> {
   bool _agreed = false;
 
   void _onConfirm() {
+    debugPrint('[_ConsentScreenState] _onConfirm');
     context.pop(true);
   }
 
   Future<void> _onDecline() async {
+    debugPrint('[_ConsentScreenState] _onDecline');
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
