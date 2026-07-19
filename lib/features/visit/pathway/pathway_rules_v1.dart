@@ -356,6 +356,8 @@ abstract final class PathwayRulesV1 {
         'fever',
         'vaginal_bleeding',
         'headache_severe',
+        'headache',    // triage catalog alias
+        'dizziness',   // triage catalog symptom
         'blurred_vision',
         'swelling_face_hands',
         'abdominal_pain',
@@ -405,12 +407,15 @@ abstract final class PathwayRulesV1 {
       priority: 30,
       anyOf: {
         'cough_over_2_weeks',
+        'cough',       // triage catalog alias (SK-facing label 'Cough')
         'hemoptysis',
         'tb_contact',
       },
       combinations: [
         {'night_sweats', 'weight_loss'},
         {'night_sweats', 'fever'},
+        {'weakness', 'weight_loss'}, // triage catalog: 'Feeling weak' + 'Losing weight'
+        {'weakness', 'fever'},
       ],
       gate: DemographicGate.any,
       historyTriggers: {'TB_SCREEN_DUE', 'TUBERCULOSIS', 'PRESUMPTIVE_TB'},

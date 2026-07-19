@@ -7,6 +7,7 @@ import '../pathway/ai_pathway_client.dart';
 import '../pathway/pathway_engine.dart';
 import 'ai_scribe_triage_vocab.dart';
 import 'patient_context_builder.dart';
+import 'symptom_catalog.dart';
 import 'unified_symptom_catalog.dart';
 
 /// ViewModel for the symptom picker screen.
@@ -640,6 +641,63 @@ class TriageViewModel extends ChangeNotifier {
           SymptomSection(programme: entry.key, codes: entry.value),
       if (general.isNotEmpty) SymptomSection(programme: null, codes: general),
     ];
+  }
+
+  /// Simplified 4-programme symptom grid for Step 1 triage.
+  ///
+  /// Visibility rules:
+  ///   - ANC : patient is pregnant or enrolled in ANC
+  ///   - PNC : patient is postpartum or enrolled in PNC
+  ///   - NCD : adult (≥ 180 months = 15 yrs) or age unknown
+  ///   - TB  : adult (≥ 180 months = 15 yrs) or age unknown
+  ///
+  /// Used by [_UnifiedSymptomPickerState] as the default programme-grouped
+  /// chip grid. [groupedVocabSections] is kept for AI Scribe pre-tick
+  /// compatibility and the expanded cross-programme search pool.
+  List<SymptomSection> get simpleProgrammeSections {
+    final ctx = _patientContext;
+    final enrolled = ctx.activeProgrammes;
+    final sections = <SymptomSection>[];
+
+    if (ctx.isPregnant || enrolled.contains(Programme.anc)) {
+      sections.add(SymptomSection(
+        programme: Programme.anc,
+        codes: SymptomCatalog.byProgramme(Programme.anc)
+            .map((s) => s.code)
+            .toList(),
+      ));
+    }
+
+    if (ctx.isPostpartum || enrolled.contains(Programme.pnc)) {
+      sections.add(SymptomSection(
+        programme: Programme.pnc,
+        codes: SymptomCatalog.byProgramme(Programme.pnc)
+            .map((s) => s.code)
+            .toList(),
+      ));
+    }
+
+    // Show NCD + TB for adults. When age is unknown, default to showing them
+    // (age 0 default must not silently hide clinical sections for adults).
+    const adultThresholdMonths = 180;
+    final isAdult =
+        !ctx.ageKnown || ctx.ageMonths >= adultThresholdMonths;
+    if (isAdult) {
+      sections.add(SymptomSection(
+        programme: Programme.ncd,
+        codes: SymptomCatalog.byProgramme(Programme.ncd)
+            .map((s) => s.code)
+            .toList(),
+      ));
+      sections.add(SymptomSection(
+        programme: Programme.tb,
+        codes: SymptomCatalog.byProgramme(Programme.tb)
+            .map((s) => s.code)
+            .toList(),
+      ));
+    }
+
+    return sections;
   }
 
   /// Returns `true` when [code] belongs to a programme the patient is NOT

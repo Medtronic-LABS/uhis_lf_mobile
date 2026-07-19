@@ -22,6 +22,7 @@ import '../briefing/visit_briefing_repository.dart';
 import '../pathway/pathway_engine.dart';
 import 'patient_context_builder.dart';
 import 'programme_grid_sync.dart';
+import 'symptom_catalog.dart';
 import 'visit_step_header.dart';
 import 'triage_view_model.dart';
 
@@ -1429,6 +1430,21 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
     }
   }
 
+  static String _sectionLabel(Programme? p) {
+    switch (p) {
+      case Programme.anc:
+        return 'ANC';
+      case Programme.pnc:
+        return 'PNC';
+      case Programme.ncd:
+        return 'NCD';
+      case Programme.tb:
+        return 'TB';
+      default:
+        return p?.wireTag.toUpperCase() ?? '';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -1438,20 +1454,15 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
         final selected = vm.selectedSymptoms;
         final isSearching = _query.isNotEmpty;
 
-        // Default grid: enrolled-programme symptoms only (or all primary codes
-        // when the patient has no enrolled programmes).
-        final defaultCodes = vm.enrolledProgrammeVocabCodes;
-
-        // Once the SK types 3+ chars, open up the full applicable vocab so
-        // cross-programme symptoms become discoverable via search.
+        // Search pool: full applicable vocab for cross-programme discovery
+        // once the SK types 3+ chars; otherwise restricted to catalog codes.
         final searchPool = _query.length >= _secondaryThreshold
             ? vm.applicableVocabCodes
-            : defaultCodes;
+            : SymptomCatalog.all.map((s) => s.code).toList();
 
         // Determine which sections to show in the grid.
-        // Searching → one flat headerless section of matches. Otherwise →
-        // per-programme sections plus any selected codes that fall outside
-        // the default list (e.g. found via search from other programmes).
+        // Searching → flat headerless section of matches.
+        // Default → per-programme sections with headers from simpleProgrammeSections.
         final List<(String?, List<String>)> gridSections;
         if (isSearching) {
           gridSections = [
@@ -1470,98 +1481,181 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
           ];
         } else {
           gridSections = [
-            for (final s in vm.groupedVocabSections)
-              (null, s.codes.where((c) => !selected.contains(c)).toList()),
+            for (final s in vm.simpleProgrammeSections)
+              (
+                _sectionLabel(s.programme),
+                s.codes.where((c) => !selected.contains(c)).toList(),
+              ),
           ];
         }
-        final gridIsEmpty =
-            gridSections.every((s) => s.$2.isEmpty);
+        final gridIsEmpty = gridSections.every((s) => s.$2.isEmpty);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-              // ── Search bar ────────────────────────────────────────────────
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: TextField(
-                  key: const Key('triage_symptom_search'),
-                  controller: _searchCtrl,
-                  decoration: InputDecoration(
-                    hintText: SymptomPickerStrings.searchSymptomsHint,
-                    prefixIcon: const Icon(
-                      Icons.search_rounded,
-                      size: 18,
-                      color: AppColors.textMuted,
-                    ),
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 12,
-                    ),
-                    filled: false,
-                    suffixIcon: _query.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(
-                              Icons.close_rounded,
-                              size: 16,
-                              color: AppColors.textMuted,
-                            ),
-                            onPressed: () {
-                              _searchCtrl.clear();
-                              FocusScope.of(context).unfocus();
-                            },
-                          )
-                        : null,
+            // ── Search bar ────────────────────────────────────────────────
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: TextField(
+                key: const Key('triage_symptom_search'),
+                controller: _searchCtrl,
+                decoration: InputDecoration(
+                  hintText: SymptomPickerStrings.searchSymptomsHint,
+                  prefixIcon: const Icon(
+                    Icons.search_rounded,
+                    size: 18,
+                    color: AppColors.textMuted,
                   ),
-                  maxLines: 1,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
+                  filled: false,
+                  suffixIcon: _query.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            size: 16,
+                            color: AppColors.textMuted,
+                          ),
+                          onPressed: () {
+                            _searchCtrl.clear();
+                            FocusScope.of(context).unfocus();
+                          },
+                        )
+                      : null,
+                ),
+                maxLines: 1,
+              ),
+            ),
+
+            const SizedBox(height: 14),
+
+            // ── Chip grid ─────────────────────────────────────────────────
+            if (gridIsEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  isSearching
+                      ? SymptomPickerStrings.searchNoResults
+                      : SymptomPickerStrings.searchOnlyEmptyHint,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textMuted,
+                  ),
                 ),
               ),
-
-              const SizedBox(height: 14),
-
-              // ── Chip grid (single flat Wrap — no per-section gaps) ───────
-              if (gridIsEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    isSearching
-                        ? SymptomPickerStrings.searchNoResults
-                        : SymptomPickerStrings.searchOnlyEmptyHint,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textMuted,
+              // When searching and no match — offer to add as free-text chip.
+              if (isSearching && _query.isNotEmpty)
+                GestureDetector(
+                  onTap: () {
+                    vm.addOtherChip(_query);
+                    _searchCtrl.clear();
+                    FocusScope.of(context).unfocus();
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEEF0FF),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFC4B5FD)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.add_rounded,
+                          size: 14,
+                          color: Color(0xFF6B63D4),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Add "$_query" as symptom',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF6B63D4),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                )
-              else
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: gridSections
-                      .expand((s) => s.$2)
-                      .map(
-                        (code) => _PickerChip(
-                          key: ValueKey('triage_chip_$code'),
-                          code: code,
-                          isSelected: selected.contains(code),
-                          isAi: vm.isScribePreTick(code),
-                          onTap: () => _toggleSymptom(code),
-                        ),
-                      )
-                      .toList(),
                 ),
+            ] else if (isSearching)
+              // Search results — flat wrap, no headers.
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: gridSections
+                    .expand((s) => s.$2)
+                    .map(
+                      (code) => _PickerChip(
+                        key: ValueKey('triage_chip_$code'),
+                        code: code,
+                        isSelected: selected.contains(code),
+                        isAi: vm.isScribePreTick(code),
+                        onTap: () => _toggleSymptom(code),
+                      ),
+                    )
+                    .toList(),
+              )
+            else
+              // Default grid — one Wrap per programme section with a label.
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final section in gridSections)
+                    if (section.$2.isNotEmpty) ...[
+                      if (section.$1 != null && section.$1!.isNotEmpty) ...[
+                        Text(
+                          section.$1!,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textMuted,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                      ],
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: section.$2
+                            .map(
+                              (code) => _PickerChip(
+                                key: ValueKey(
+                                  'triage_chip_${section.$1}_$code',
+                                ),
+                                code: code,
+                                isSelected: selected.contains(code),
+                                isAi: vm.isScribePreTick(code),
+                                onTap: () => _toggleSymptom(code),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                ],
+              ),
 
-              const SizedBox(height: 10),
-            ],
-          );
+            const SizedBox(height: 10),
+          ],
+        );
       },
     );
   }
