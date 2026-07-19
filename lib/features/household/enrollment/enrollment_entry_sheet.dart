@@ -237,6 +237,10 @@ class _EnrollmentOverlayState extends State<_EnrollmentOverlay>
                   context.push('/household/enrollment/create');
                 },
                 onCancel: () => Navigator.of(context).pop(),
+                onRegisterManually: () {
+                  Navigator.of(context).pop();
+                  context.push('/household/enrollment/select-household');
+                },
               ),
               if (_overlayState == _OverlayState.postScan)
                 _PostScanSheet(
@@ -471,7 +475,7 @@ class _ScannerBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final content = Column(
-      mainAxisSize: MainAxisSize.min,
+      mainAxisSize: MainAxisSize.max,
       children: [
           // ── Create Household (primary) ─────────────────────────────────
           if (showCreateHousehold) ...[
@@ -576,6 +580,56 @@ class _ScannerBody extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           ], // end if (showCreateHousehold)
+          // ── Register without NID (primary escape hatch) ───────────────
+          if (onRegisterManually != null) ...[
+            GestureDetector(
+              onTap: onRegisterManually,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.20), width: 1.5),
+                  borderRadius: BorderRadius.circular(AppRadius.patRow),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.person_add_outlined, color: Colors.white, size: 18),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'No NID? Register manually',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Colors.white),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Fill in member details by hand',
+                            style: TextStyle(fontSize: 10, color: AppColors.onDarkLow),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, color: AppColors.onDarkFaint, size: 16),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(child: Container(height: 1, color: Colors.white.withValues(alpha: 0.15))),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12),
+                  child: Text('or scan NID', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.onDarkFaint)),
+                ),
+                Expanded(child: Container(height: 1, color: Colors.white.withValues(alpha: 0.15))),
+              ],
+            ),
+            const SizedBox(height: 14),
+          ],
           // ── Camera scanner (secondary) ─────────────────────────────────
           Text(
             readingCard
@@ -599,11 +653,13 @@ class _ScannerBody extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
-          _Viewfinder(
-            isScanning: isScanning,
-            sweep: sweep,
-            cameraController: cameraController,
-            cameraUnavailable: cameraUnavailable,
+          Expanded(
+            child: _Viewfinder(
+              isScanning: isScanning,
+              sweep: sweep,
+              cameraController: cameraController,
+              cameraUnavailable: cameraUnavailable,
+            ),
           ),
           const SizedBox(height: 10),
           const Text(
@@ -648,45 +704,6 @@ class _ScannerBody extends StatelessWidget {
           const SizedBox(height: 8),
           const Text('Tap to capture', style: TextStyle(fontSize: 11, color: AppColors.onDarkFaint)),
           const SizedBox(height: 20),
-          // Register without NID
-          if (onRegisterManually != null) ...[
-            GestureDetector(
-              onTap: onRegisterManually,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.08),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.20), width: 1.5),
-                  borderRadius: BorderRadius.circular(AppRadius.patRow),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.person_add_outlined, color: Colors.white, size: 18),
-                    SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'No NID? Register manually',
-                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Colors.white),
-                          ),
-                          SizedBox(height: 2),
-                          Text(
-                            'Fill in member details by hand',
-                            style: TextStyle(fontSize: 10, color: AppColors.onDarkLow),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Icon(Icons.chevron_right, color: AppColors.onDarkFaint, size: 16),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-          ],
           // Cancel
           GestureDetector(
             onTap: onCancel,
@@ -714,20 +731,16 @@ class _ScannerBody extends StatelessWidget {
     );
 
     final screenH = MediaQuery.of(context).size.height;
-    final vPad = AppSpacing.h5xl + AppSpacing.h6xl;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.h5xl,
-        AppSpacing.h5xl,
-        AppSpacing.h5xl,
-        AppSpacing.h6xl,
-      ),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(minHeight: screenH - vPad),
-        child: Align(
-          alignment: Alignment.center,
-          child: content,
+    return SizedBox(
+      height: screenH,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.h5xl,
+          AppSpacing.h5xl,
+          AppSpacing.h5xl,
+          AppSpacing.h6xl,
         ),
+        child: content,
       ),
     );
   }
