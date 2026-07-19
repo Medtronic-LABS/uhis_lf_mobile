@@ -1430,20 +1430,7 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
     }
   }
 
-  static String _sectionLabel(Programme? p) {
-    switch (p) {
-      case Programme.anc:
-        return 'ANC';
-      case Programme.pnc:
-        return 'PNC';
-      case Programme.ncd:
-        return 'NCD';
-      case Programme.tb:
-        return 'TB';
-      default:
-        return p?.wireTag.toUpperCase() ?? '';
-    }
-  }
+  static String? _sectionLabel(Programme? p) => null;
 
   @override
   Widget build(BuildContext context) {
