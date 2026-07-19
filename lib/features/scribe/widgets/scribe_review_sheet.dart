@@ -442,6 +442,7 @@ class _SoapSectionState extends State<_SoapSection> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[_SoapSectionState] initState');
     _ctrl = TextEditingController(text: widget.text);
     // Mark seen on first build via post-frame callback.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -456,6 +457,7 @@ class _SoapSectionState extends State<_SoapSection> {
   @override
   void dispose() {
     _ctrl.dispose();
+    debugPrint('[_SoapSectionState] dispose');
     super.dispose();
   }
 

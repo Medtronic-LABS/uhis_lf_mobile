@@ -46,6 +46,7 @@ class _ProgrammeSelectionScreenState extends State<ProgrammeSelectionScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[_ProgrammeSelectionScreenState] initState');
     _vm = ProgrammeSelectionViewModel(
       repository: context.read<ProgrammeRecommendationRepository>(),
       request: widget.request,
@@ -57,6 +58,7 @@ class _ProgrammeSelectionScreenState extends State<ProgrammeSelectionScreen> {
   @override
   void dispose() {
     _vm.dispose();
+    debugPrint('[_ProgrammeSelectionScreenState] dispose');
     super.dispose();
   }
 
@@ -172,6 +174,7 @@ class _ProgrammeSelectionScreenState extends State<ProgrammeSelectionScreen> {
     BuildContext context,
     ProgrammeSelectionViewModel vm,
   ) async {
+    debugPrint('[_ProgrammeSelectionScreenState] _openReviewSheet');
     final confirmed = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -196,6 +199,7 @@ class _ProgrammeSelectionScreenState extends State<ProgrammeSelectionScreen> {
     BuildContext context,
     ProgrammeSelectionViewModel vm,
   ) async {
+    debugPrint('[_ProgrammeSelectionScreenState] _openAddProgrammeSheet');
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,

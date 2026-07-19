@@ -73,10 +73,12 @@ class _ImmunisationTimelineScreenState
   @override
   void initState() {
     super.initState();
+    debugPrint('[_ImmunisationTimelineScreenState] initState');
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
   Future<void> _load() async {
+    debugPrint('[_ImmunisationTimelineScreenState] _load');
     final immunisationDao = context.read<ImmunisationDao>();
     final immunisationRepo = context.read<ImmunisationRepository>();
     final patientDao = context.read<PatientDao>();
@@ -1019,6 +1021,7 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
   @override
   void dispose() {
     _notesCtrl.dispose();
+    debugPrint('[_UpdateStatusSheetState] dispose');
     super.dispose();
   }
 
@@ -1030,6 +1033,7 @@ class _UpdateStatusSheetState extends State<_UpdateStatusSheet> {
   }
 
   Future<void> _save() async {
+    debugPrint('[_UpdateStatusSheetState] _save');
     setState(() => _saving = true);
     final immunisationDao = context.read<ImmunisationDao>();
     final immunisationRepo = context.read<ImmunisationRepository>();

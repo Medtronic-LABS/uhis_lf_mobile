@@ -340,6 +340,7 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
 
   @override
   void initState() {
+    debugPrint('[_HouseholdDetailScreenState] initState householdId=${widget.household.id}');
     super.initState();
     // Derive household name from head if not available
     final derivedName = _deriveHouseholdName(
@@ -389,6 +390,7 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
   /// .dart's own `_loadQueueItems`. Tolerates failure: a badge-less roster
   /// is an acceptable degradation, a blocked screen is not.
   Future<void> _loadQueueItems() async {
+    debugPrint('[_HouseholdDetailScreenState] _loadQueueItems householdId=${_household.id}');
     if (!mounted) return;
     try {
       final missionRepo = context.read<MissionDashboardRepository>();
@@ -478,6 +480,7 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
   }
 
   Future<void> _fetchMembers() async {
+    debugPrint('[_HouseholdDetailScreenState] _fetchMembers householdId=${_household.id}');
     // Guard only blocks concurrent re-fetches triggered by pull-to-refresh
     // while a fetch is already running. The initState path sets _loadingMembers
     // synchronously BEFORE calling here, so we must not bail on that case.
@@ -938,6 +941,7 @@ class _HouseholdDetailScreenState extends State<HouseholdDetailScreen> {
   /// `/patients/:id` — the `/patient/:id` redirect alias exists for backward
   /// compat but GoRouter drops `extra` when redirecting, losing referenceId.
   void _navigateToPatientDetails(BuildContext context, HouseholdMemberData member) {
+    debugPrint('[_HouseholdDetailScreenState] _navigateToPatientDetails patientId=${member.patientId} memberId=${member.id} name=${member.name}');
     final navId = (member.patientId != null && member.patientId!.isNotEmpty)
         ? member.patientId!
         : member.id;

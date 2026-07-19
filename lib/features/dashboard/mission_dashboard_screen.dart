@@ -109,6 +109,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void initState() {
+    debugPrint('[_DashboardScreenState] initState');
     super.initState();
     _reloadStats();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -149,6 +150,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void dispose() {
+    debugPrint('[_DashboardScreenState] dispose');
     _globalSearchDebounce?.cancel();
     _missionRepo?.changes.removeListener(_onMissionChanges);
     super.dispose();
@@ -182,6 +184,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// string once data has landed. Empty-result paths leave [_villagesLine]
   /// null so the existing fallback continues to show.
   Future<void> _loadVillagesLine() async {
+    debugPrint('[_DashboardScreenState] _loadVillagesLine');
     if (!mounted) return;
     try {
       final hhDao = context.read<HouseholdDao>();
@@ -206,6 +209,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _loadSummary(AuthState auth) async {
+    debugPrint('[_DashboardScreenState] _loadSummary');
     if (!mounted) return;
     final s = await auth.userProfileSummary();
     if (!mounted) return;
@@ -229,6 +233,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _loadMissionData() {
+    debugPrint('[_DashboardScreenState] _loadMissionData');
     if (!mounted) return;
     // Provider registers MissionDashboardRepository as non-nullable; reading
     // `T?` would silently return null on miss and strand the screen on its
@@ -556,6 +561,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// prototype's "Visit now" — single tap drops the SK into triage.
   /// Falls back to opening the patient detail when the visit can't start.
   Future<void> _startVisitFromQueue(MissionQueueItem item) async {
+    debugPrint('[_DashboardScreenState] _startVisitFromQueue patientId=${item.patientId} patientName=${item.patientName}');
     assert(() {
       final code = '${item.band.wireTag.replaceFirst('band', '')}'
           '${item.modifier == Modifier.none ? '' : item.modifier.wireTag}';
@@ -705,6 +711,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _navigateToFirstQueueItem() async {
+    debugPrint('[_DashboardScreenState] _navigateToFirstQueueItem');
     // Navigate to Tasks screen (Visits tab)
     if (mounted) context.push('/tasks');
   }
@@ -1518,6 +1525,7 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner>
 
   @override
   void initState() {
+    debugPrint('[_ReferralAlertBannerState] initState');
     super.initState();
     _pulseCtrl = AnimationController(
       vsync: this,
@@ -1530,6 +1538,7 @@ class _ReferralAlertBannerState extends State<_ReferralAlertBanner>
 
   @override
   void dispose() {
+    debugPrint('[_ReferralAlertBannerState] dispose');
     _pulseCtrl.dispose();
     super.dispose();
   }
@@ -1837,6 +1846,7 @@ class _NotificationBellState extends State<_NotificationBell>
 
   @override
   void initState() {
+    debugPrint('[_NotificationBellState] initState');
     super.initState();
     _pulseCtrl = AnimationController(
       vsync: this,
@@ -1847,6 +1857,7 @@ class _NotificationBellState extends State<_NotificationBell>
 
   @override
   void dispose() {
+    debugPrint('[_NotificationBellState] dispose');
     _pulseCtrl.dispose();
     super.dispose();
   }

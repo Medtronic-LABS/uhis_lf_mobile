@@ -99,7 +99,9 @@ class _ReferralListScreenState extends State<ReferralListScreen>
 
   @override
   void initState() {
+    debugPrint('[_ReferralListScreenState] initState');
     super.initState();
+    debugPrint('[_ReferralListScreenState] initState');
     _tabController = TabController(length: 2, vsync: this);
     // Defer to didChangeDependencies where context is valid
   }
@@ -127,11 +129,13 @@ class _ReferralListScreenState extends State<ReferralListScreen>
 
   @override
   void dispose() {
+    debugPrint('[_ReferralListScreenState] dispose');
     _tabController.dispose();
     _repo?.changes.removeListener(_onChanges);
     _missionRepo?.changes.removeListener(_onMissionChanges);
     _autoRefreshTimer?.cancel();
     _connectivitySubscription?.cancel();
+    debugPrint('[_ReferralListScreenState] dispose');
     super.dispose();
   }
 
@@ -162,12 +166,14 @@ class _ReferralListScreenState extends State<ReferralListScreen>
   }
 
   void _onChanges() {
+    debugPrint('[_ReferralListScreenState] _onChanges');
     if (!mounted) return;
     _reload();
   }
 
   /// Called when mission dashboard data changes (e.g., after assessment completion).
   void _onMissionChanges() {
+    debugPrint('[_ReferralListScreenState] _onMissionChanges');
     if (!mounted) return;
     debugPrint('[Tasks] Mission data changed, reloading queue...');
     _reloadMissionQueue();
@@ -228,6 +234,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
   }
 
   Future<_DashboardData> _loadAll(SlaPriority? filter) async {
+    debugPrint('[_ReferralListScreenState] _loadAll filter=${filter}');
     final repo = _repo;
     final patientDao = _patientDao;
     final sync = _sync;
@@ -902,6 +909,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
 
   /// Handle tap on a visit card - navigate to patient.
   void _handleVisitTap(MissionQueueItem item) {
+    debugPrint('[_ReferralListScreenState] _handleVisitTap item=${item}');
     if (item.patientId != null) {
       context.push('/patient/${item.patientId}?origin=tasks');
     }
@@ -909,6 +917,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
 
   /// Handle action button on a visit card - start visit.
   Future<void> _handleVisitAction(MissionQueueItem item) async {
+    debugPrint('[_ReferralListScreenState] _handleVisitAction item=${item}');
     if (item.patientId == null) return;
     try {
       final visitController = context.read<VisitController>();
@@ -1164,6 +1173,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
   // ── Action Handlers ─────────────────────────────────────────────────────────
 
   void _handleCallFamily(Referral r, Patient? patient) {
+    debugPrint('[_ReferralListScreenState] _handleCallFamily patient=${patient}');
     final phone = patient?.phone;
     if (phone == null || phone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1340,10 +1350,12 @@ class _ReferralListScreenState extends State<ReferralListScreen>
   }
 
   void _handleUpdateStatus(Referral r) {
+    debugPrint('[_ReferralListScreenState] _handleUpdateStatus');
     _showStatusUpdateSheet(r);
   }
 
   void _handleLocate(Referral r, Patient? patient) {
+    debugPrint('[_ReferralListScreenState] _handleLocate patient=${patient}');
     // Try to get location from patient's raw JSON or household
     final patientName = patient?.name ?? 'Patient';
     final villageId = patient?.villageId;
@@ -1466,6 +1478,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
   }
 
   void _handleEscalate(Referral r) async {
+    debugPrint('[_ReferralListScreenState] _handleEscalate');
     final reasonController = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1541,6 +1554,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
   }
 
   void _handleCallFacility(Referral r) {
+    debugPrint('[_ReferralListScreenState] _handleCallFacility');
     // Try to get facility phone from referral raw JSON
     // In production, fetch from facility metadata via ReferralApiService
     const facilityPhone = '+8801700000000';
@@ -1552,14 +1566,17 @@ class _ReferralListScreenState extends State<ReferralListScreen>
   }
 
   void _handleUpdateQueue(Referral r) {
+    debugPrint('[_ReferralListScreenState] _handleUpdateQueue');
     _showQueueUpdateSheet(r);
   }
 
   void _handleOpenReferral(Referral r) {
+    debugPrint('[_ReferralListScreenState] _handleOpenReferral');
     context.push('/patient/${r.patientId}/referrals');
   }
 
   Future<void> _handleViewPrescription(Referral r, Patient? patient) async {
+    debugPrint('[_ReferralListScreenState] _handleViewPrescription patient=${patient}');
     // Show loading indicator
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -1632,6 +1649,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
   }
 
   Future<void> _handleScheduleFollowUp(Referral r, Patient? patient) async {
+    debugPrint('[_ReferralListScreenState] _handleScheduleFollowUp patient=${patient}');
     final followUpCalls = context.read<FollowUpCallService>();
     final success = await FollowUpScheduler.show(
       context,
@@ -1675,6 +1693,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
   }
 
   void _handleSendReminder(Referral r, Patient? patient) {
+    debugPrint('[_ReferralListScreenState] _handleSendReminder patient=${patient}');
     final phone = patient?.phone;
     if (phone == null || phone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1691,6 +1710,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
   }
 
   void _handleCloseCase(Referral r) async {
+    debugPrint('[_ReferralListScreenState] _handleCloseCase');
     final outcomeController = TextEditingController();
     ReferralStatus selectedOutcome = ReferralStatus.closedRecovered;
     

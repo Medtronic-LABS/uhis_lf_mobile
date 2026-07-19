@@ -157,6 +157,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[_VisitFlowState] initState');
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Always load — even when patientName is supplied we still need DOB + age
       // for the smart age label (months for infants). ??-guards inside prevent
@@ -176,6 +177,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   }
 
   Future<void> _loadPatientNameFromDb() async {
+    debugPrint('[_VisitFlowState] _loadPatientNameFromDb');
     try {
       final dao = context.read<PatientDao>();
       final p = await dao.byId(widget.patientId);
@@ -191,6 +193,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   }
 
   Future<void> _loadPostpartumFromDb() async {
+    debugPrint('[_VisitFlowState] _loadPostpartumFromDb');
     try {
       final dao = context.read<PregnancySnapshotDao>();
       final all = await dao.getAll();
@@ -207,6 +210,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   }
 
   Future<void> _loadPregnancySnapshotFromDb() async {
+    debugPrint('[_VisitFlowState] _loadPregnancySnapshotFromDb');
     try {
       final dao = context.read<PregnancySnapshotDao>();
       final snap = await dao.byPatient(widget.patientId);
@@ -280,6 +284,10 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   bool _referralRecommended = false;
   List<String> _referredReasons = const [];
 
+  /// True once triage (Step 1) has been submitted. Blocks back-navigation to
+  /// Step 1 from Step 2+ — re-entering triage would create a duplicate assessment.
+  bool _triageSubmitted = false;
+
   /// Smart age label: months for under-2, years otherwise.
   /// Falls back to DOB when age-in-years is null (common for infants).
   String? get _ageDisplay {
@@ -322,7 +330,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        if (_step > 0) {
+        if (_step > 1 || (_step == 1 && !_triageSubmitted)) {
           setState(() => _step -= 1);
         } else {
           await _exitFlow();
@@ -350,7 +358,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
                       ? _step1LiveProgrammes.map((p) => p.name).toList()
                       : _confirmedProgrammes.map((p) => p.name).toList(),
                   onBack: () {
-                    if (_step > 0) {
+                    if (_step > 1 || (_step == 1 && !_triageSubmitted)) {
                       setState(() => _step -= 1);
                     } else {
                       _exitFlow();
@@ -417,7 +425,10 @@ class _VisitFlowState extends State<VisitFlowScreen> {
               _confirmedProgrammes =
                   pathways.map((p) => p.programme).toSet();
             }
-            setState(() => _step = 1);
+            setState(() {
+              _step = 1;
+              _triageSubmitted = true;
+            });
           },
         );
       case 1:
@@ -508,6 +519,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   }
 
   Future<bool?> _confirmExit() => showLeaveVisitDialog(context);
+    debugPrint('[_VisitFlowState] _confirmExit');
 }
 
 /// Shared leave-visit confirmation dialog.
@@ -811,10 +823,12 @@ class _Step2VaccinationState extends State<_Step2Vaccination> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[_Step2VaccinationState] initState');
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadDob());
   }
 
   Future<void> _loadDob() async {
+    debugPrint('[_Step2VaccinationState] _loadDob');
     try {
       final dao = context.read<PatientDao>();
       final patient = await dao.byId(widget.patientId);
@@ -927,6 +941,7 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[_Step2ProgrammesThenFormState] initState');
     _selectedProgrammes = widget.seedProgrammes;
     // AI programme recommendation disabled — use rule-based PathwayEngine result directly.
     _phase = _Step2Phase.form;
@@ -1137,6 +1152,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   @override
   void initState() {
     super.initState();
+    debugPrint('[_Step3AiRecoState] initState');
     _future = _fetchNaba();
     _shimmer = AnimationController(
       vsync: this,
@@ -1147,6 +1163,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   }
 
   Future<void> _loadPatientPhone() async {
+    debugPrint('[_Step3AiRecoState] _loadPatientPhone');
     final member = await context
         .read<MemberDao>()
         .getByPatientId(widget.patientId);
@@ -1157,6 +1174,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   }
 
   Future<void> _loadHouseholdMembers() async {
+    debugPrint('[_Step3AiRecoState] _loadHouseholdMembers');
     String? hid = widget.householdId;
 
     // patients.household_id is sparsely populated; members.household_id is
@@ -1216,10 +1234,12 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   @override
   void dispose() {
     _shimmer.dispose();
+    debugPrint('[_Step3AiRecoState] dispose');
     super.dispose();
   }
 
   Future<NabaResponse> _fetchNaba() async {
+    debugPrint('[_Step3AiRecoState] _fetchNaba');
     final apiClient = context.read<ApiClient>(); // read before any await
     await _loadVitalsAndLabs();
     try {
@@ -1294,6 +1314,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   }
 
   Future<void> _loadVitalsAndLabs() async {
+    debugPrint('[_Step3AiRecoState] _loadVitalsAndLabs');
     try {
       final dao = context.read<LocalAssessmentDao>(); // read before first await
       final assessments = await dao.getByPatientId(widget.patientId);
@@ -1900,6 +1921,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
   }
 
   Future<void> _onAccepted(NabaResponse naba) async {
+    debugPrint('[_Step3AiRecoState] _onAccepted naba=${naba}');
     if (_accepted) return;
     setState(() => _accepted = true);
     if (!mounted) return;
@@ -2732,6 +2754,7 @@ class _FollowUpDateRowState extends State<_FollowUpDateRow> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[_FollowUpDateRowState] initState');
     _date = _initialDate();
   }
 

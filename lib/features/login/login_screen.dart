@@ -25,6 +25,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void initState() {
+    debugPrint('[_LoginScreenState] initState');
     super.initState();
     final auth = context.read<AuthState>();
     final last = auth.username;
@@ -45,12 +46,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
+    debugPrint('[_LoginScreenState] dispose');
     _userCtl.dispose();
     _passCtl.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
+    debugPrint('[_LoginScreenState] _submit username=${_userCtl.text.trim()}');
     if (!_formKey.currentState!.validate()) return;
     final auth = context.read<AuthState>();
     final ok = await auth.login(_userCtl.text.trim(), _passCtl.text);

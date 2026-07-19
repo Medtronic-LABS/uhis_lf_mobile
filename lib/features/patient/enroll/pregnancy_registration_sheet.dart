@@ -108,6 +108,7 @@ class _PregnancyRegistrationSheetState
   }
 
   Future<void> _save() async {
+    debugPrint('[_PregnancyRegistrationSheetState] _save patientId=${widget.patientId}');
     if (_lmp == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text(PregnancyRegStrings.lmpRequiredError)),

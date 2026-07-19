@@ -24,11 +24,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   void dispose() {
+    debugPrint('[_ForgotPasswordScreenState] dispose');
     _emailCtl.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
+    debugPrint('[_ForgotPasswordScreenState] _submit');
     if (!_formKey.currentState!.validate()) return;
     setState(() {
       _busy = true;

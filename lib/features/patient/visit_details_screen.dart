@@ -38,6 +38,7 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
   }
 
   void _fetchDetails() {
+    debugPrint('[_VisitDetailsScreenState] _fetchDetails encounterId=${widget.visit.id}');
     final repo = context.read<MemberDetailRepository>();
     final encounterId = widget.visit.id;
     final patientRef = widget.visit.rawJson['patientReference']?.toString();

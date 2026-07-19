@@ -74,6 +74,7 @@ class _ProgrammeEnrollScreenState extends State<ProgrammeEnrollScreen> {
   }
 
   void _togglePregnantWoman(bool v) {
+    debugPrint('[_ProgrammeEnrollScreenState] _togglePregnantWoman v=$v');
     setState(() {
       _pregnantWoman = v;
       if (!v) {
@@ -84,6 +85,7 @@ class _ProgrammeEnrollScreenState extends State<ProgrammeEnrollScreen> {
   }
 
   void _toggleProgramme(Programme p) {
+    debugPrint('[_ProgrammeEnrollScreenState] _toggleProgramme p=$p');
     if (p == Programme.anc || p == Programme.pnc) {
       if (!_pregnantWoman) {
         final msg = p == Programme.anc
@@ -104,6 +106,7 @@ class _ProgrammeEnrollScreenState extends State<ProgrammeEnrollScreen> {
   }
 
   Future<void> _confirm() async {
+    debugPrint('[_ProgrammeEnrollScreenState] _confirm patientId=${widget.patientId} selected=$_selected');
     if (_selected.isEmpty) return;
     setState(() => _saving = true);
     try {

@@ -46,11 +46,14 @@ class _HouseholdFollowUpScreenState extends State<HouseholdFollowUpScreen> {
 
   @override
   void initState() {
+    debugPrint('[_HouseholdFollowUpScreenState] initState householdId=${widget.householdId} excludePatientId=${widget.excludePatientId}');
     super.initState();
+    debugPrint('[_HouseholdFollowUpScreenState] initState');
     _load();
   }
 
   Future<void> _load() async {
+    debugPrint('[_HouseholdFollowUpScreenState] _load');
     final patientDao = context.read<PatientDao>();
     final progDao = context.read<PatientProgrammesDao>();
 

@@ -187,11 +187,13 @@ class _PatientContextScreenState
   @override
   void initState() {
     super.initState();
+    debugPrint('[_PatientContextScreenState] initState patientId=${widget.patientId}');
     // Initialize directly without setState since widget isn't mounted yet
     _future = _fetchData();
   }
 
   void _load() {
+    debugPrint('[_PatientContextScreenState] _load');
     final future = _fetchData();
     setState(() {
       _future = future;
@@ -358,6 +360,7 @@ class _PatientContextScreenState
   }
 
   Future<PatientOrMemberData> _fetchData() async {
+    debugPrint('[_PatientContextScreenState] _fetchData');
     // ignore: avoid_print
     print('[PatientContextScreen] _fetchData for patientId: ${widget.patientId}');
 
@@ -3203,11 +3206,13 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
   bool _expanded = false;
 
   Future<void> _openContact() async {
+    debugPrint('[_PatientProfileCardState] _openContact');
     if (!mounted) return;
     await showContactSheet(context, widget.data);
   }
 
   Future<void> _openMaps(String place) async {
+    debugPrint('[_PatientProfileCardState] _openMaps place=${place}');
     final uri = Uri.parse(
         'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(place.trim())}');
     try {

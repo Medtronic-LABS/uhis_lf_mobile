@@ -85,6 +85,7 @@ class _ChatTabState extends State<_ChatTab> {
 
   @override
   void dispose() {
+    debugPrint('[_ChatTabState] dispose');
     _input.dispose();
     _scroll.dispose();
     super.dispose();
@@ -397,6 +398,7 @@ class _TypingIndicatorState extends State<_TypingIndicator>
 
   @override
   void initState() {
+    debugPrint('[_TypingIndicatorState] initState');
     super.initState();
     _ctrl = AnimationController(
       vsync: this,
@@ -406,6 +408,7 @@ class _TypingIndicatorState extends State<_TypingIndicator>
 
   @override
   void dispose() {
+    debugPrint('[_TypingIndicatorState] dispose');
     _ctrl.dispose();
     super.dispose();
   }

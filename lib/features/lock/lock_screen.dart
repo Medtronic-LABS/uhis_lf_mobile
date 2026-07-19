@@ -28,6 +28,7 @@ class _LockScreenState extends State<LockScreen> {
 
   @override
   void initState() {
+    debugPrint('[_LockScreenState] initState');
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadSummary();
@@ -42,6 +43,7 @@ class _LockScreenState extends State<LockScreen> {
 
   @override
   void dispose() {
+    debugPrint('[_LockScreenState] dispose');
     _connectivitySub?.cancel();
     super.dispose();
   }
@@ -62,6 +64,7 @@ class _LockScreenState extends State<LockScreen> {
   }
 
   Future<void> _loadSummary() async {
+    debugPrint('[_LockScreenState] _loadSummary');
     if (!mounted) return;
     final auth = context.read<AuthState>();
     final s = await auth.userProfileSummary();
@@ -165,6 +168,7 @@ class _LockContentState extends State<LockContent>
 
   @override
   void initState() {
+    debugPrint('[_LockContentState] initState');
     super.initState();
     _entranceCtrl = AnimationController(
       vsync: this,
@@ -185,6 +189,7 @@ class _LockContentState extends State<LockContent>
 
   @override
   void dispose() {
+    debugPrint('[_LockContentState] dispose');
     _entranceCtrl.dispose();
     super.dispose();
   }
@@ -548,6 +553,7 @@ class _FingerprintCardState extends State<_FingerprintCard>
 
   @override
   void initState() {
+    debugPrint('[_FingerprintCardState] initState');
     super.initState();
     _glowCtrl = AnimationController(
       vsync: this,
@@ -592,6 +598,7 @@ class _FingerprintCardState extends State<_FingerprintCard>
 
   @override
   void dispose() {
+    debugPrint('[_FingerprintCardState] dispose');
     _glowCtrl.dispose();
     _scanCtrl.dispose();
     _verifyCtrl.dispose();

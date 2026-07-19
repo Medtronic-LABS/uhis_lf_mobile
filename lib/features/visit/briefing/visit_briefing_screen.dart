@@ -47,17 +47,21 @@ class _VisitBriefingScreenState extends State<VisitBriefingScreen> {
 
   @override
   void initState() {
+    debugPrint('[_VisitBriefingScreenState] initState');
     super.initState();
+    debugPrint('[_VisitBriefingScreenState] initState');
     _briefingFuture = _fetchBriefing();
   }
 
   @override
   void dispose() {
     _pageController.dispose();
+    debugPrint('[_VisitBriefingScreenState] dispose');
     super.dispose();
   }
 
   Future<VisitBriefingResponse?> _fetchBriefing() async {
+    debugPrint('[_VisitBriefingScreenState] _fetchBriefing');
     try {
       final vitalsRepo = context.read<VitalsRepository>();
       final followUpRepo = context.read<FollowUpRepository>();
@@ -151,6 +155,7 @@ class _VisitBriefingScreenState extends State<VisitBriefingScreen> {
   }
 
   void _navigateToTriage() {
+    debugPrint('[_VisitBriefingScreenState] _navigateToTriage');
     final originParam =
         widget.origin != null ? '?origin=${widget.origin}' : '';
     context.go(

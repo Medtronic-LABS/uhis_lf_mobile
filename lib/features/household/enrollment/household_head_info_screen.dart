@@ -55,6 +55,7 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
 
   @override
   void initState() {
+    debugPrint('[_HouseholdHeadInfoScreenState] initState fromNidScan=${widget.fromNidScan}');
     super.initState();
     _nameCtrl = TextEditingController();
     _fatherCtrl = TextEditingController();
@@ -94,6 +95,7 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
 
   @override
   void dispose() {
+    debugPrint('[_HouseholdHeadInfoScreenState] dispose');
     _nameCtrl.removeListener(_onFormChanged);
     _idNumberCtrl.removeListener(_onFormChanged);
     _nameCtrl.dispose();
@@ -155,6 +157,7 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
   }
 
   void _handleNext(EnrollmentController controller) {
+    debugPrint('[_HouseholdHeadInfoScreenState] _handleNext idType=$_idType gender=$_gender maritalStatus=$_maritalStatus');
     if (_nameCtrl.text.isEmpty ||
         _idNumberCtrl.text.isEmpty ||
         _gender == null ||
