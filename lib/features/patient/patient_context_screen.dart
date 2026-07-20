@@ -901,10 +901,11 @@ class _PatientContextScreenState
                     const SizedBox(height: 12),
 
                     // ── BP / BG trend sparklines ──────────────────────────
-                    _BpBgTrendSection(vitalHistory: data.vitalHistory),
-                    if (data.vitalHistory.any((v) => v.readings.any((r) =>
-                        r.type == VitalType.bloodPressure || r.type == VitalType.glucose)))
-                      const SizedBox(height: 12),
+                    _BpBgTrendSection(
+                      vitalHistory: data.vitalHistory,
+                      assessments: data.assessments,
+                    ),
+                    if (data.vitalHistory.isNotEmpty) const SizedBox(height: 12),
 
                     // ── Active care threads ───────────────────────────────
                     _CareThreadChipRow(threads: threads),
@@ -2677,34 +2678,80 @@ class _DetailRow extends StatelessWidget {
 
 // ─── BP / BG Trend Charts ──────────────────────────────────────────────────
 
-/// Two side-by-side sparkline charts built from [VisitVitals] history.
-/// Skips visits where the relevant reading is absent — no missing-data artefacts.
+/// One data point for a trend chart: a visit's reading + tap target.
+class _TrendPoint {
+  const _TrendPoint({
+    required this.date,
+    required this.displayLabel,
+    required this.primaryVal,
+    this.secondaryVal,
+    this.assessment,
+  });
+
+  final DateTime date;
+  final String displayLabel;
+  final double primaryVal;
+  final double? secondaryVal;
+  final MemberAssessment? assessment;
+}
+
+/// Two stacked expandable trend cards (BP + BG).
+/// Each card collapses to sparkline + latest value + date.
+/// Expanded state shows history list; each row taps to full assessment sheet.
 class _BpBgTrendSection extends StatelessWidget {
-  const _BpBgTrendSection({required this.vitalHistory});
+  const _BpBgTrendSection({
+    required this.vitalHistory,
+    required this.assessments,
+  });
 
   final List<VisitVitals> vitalHistory;
+  final List<MemberAssessment> assessments;
 
-  @override
-  Widget build(BuildContext context) {
-    // Newest-first → take up to 6 visits that carry BP, then reverse for oldest-left display.
-    final bpPoints = vitalHistory
-        .where((v) => v.readings.any(
-            (r) => r.type == VitalType.bloodPressure && r.systolic != null && r.diastolic != null))
+  List<_TrendPoint> _buildBpPoints() {
+    return vitalHistory
+        .where((v) => v.readings.any((r) =>
+            r.type == VitalType.bloodPressure &&
+            r.systolic != null &&
+            r.diastolic != null))
         .take(6)
         .toList()
         .reversed
-        .map((v) => v.readings.firstWhere((r) => r.type == VitalType.bloodPressure))
+        .map((v) {
+          final r = v.readings.firstWhere((r) => r.type == VitalType.bloodPressure);
+          return _TrendPoint(
+            date: v.date,
+            displayLabel: '${r.systolic!.toInt()}/${r.diastolic!.toInt()} mmHg',
+            primaryVal: r.systolic!,
+            secondaryVal: r.diastolic,
+            assessment: assessments.where((a) => a.id == v.encounterId).firstOrNull,
+          );
+        })
         .toList();
+  }
 
-    final bgPoints = vitalHistory
+  List<_TrendPoint> _buildBgPoints() {
+    return vitalHistory
         .where((v) =>
             v.readings.any((r) => r.type == VitalType.glucose && r.value != null))
         .take(6)
         .toList()
         .reversed
-        .map((v) => v.readings.firstWhere((r) => r.type == VitalType.glucose))
+        .map((v) {
+          final r = v.readings.firstWhere((r) => r.type == VitalType.glucose);
+          return _TrendPoint(
+            date: v.date,
+            displayLabel: '${r.value!.toStringAsFixed(1)} mg/dL',
+            primaryVal: r.value!,
+            assessment: assessments.where((a) => a.id == v.encounterId).firstOrNull,
+          );
+        })
         .toList();
+  }
 
+  @override
+  Widget build(BuildContext context) {
+    final bpPoints = _buildBpPoints();
+    final bgPoints = _buildBgPoints();
     if (bpPoints.isEmpty && bgPoints.isEmpty) return const SizedBox.shrink();
 
     final lc = Theme.of(context).extension<LeapfrogColors>()!;
@@ -2721,87 +2768,176 @@ class _BpBgTrendSection extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (bpPoints.isNotEmpty)
-              Expanded(
-                child: _TrendChartCard(
-                  title: PatientProfileStrings.bpChartLabel,
-                  latestLabel: '${bpPoints.last.systolic!.toInt()}/${bpPoints.last.diastolic!.toInt()} mmHg',
-                  lc: lc,
-                  child: CustomPaint(
-                    painter: _BpSparklinePainter(readings: bpPoints, lc: lc),
-                    child: const SizedBox(height: 72),
-                  ),
-                ),
-              ),
-            if (bpPoints.isNotEmpty && bgPoints.isNotEmpty) const SizedBox(width: 10),
-            if (bgPoints.isNotEmpty)
-              Expanded(
-                child: _TrendChartCard(
-                  title: PatientProfileStrings.bgChartLabel,
-                  latestLabel: '${bgPoints.last.value!.toStringAsFixed(1)} mg/dL',
-                  lc: lc,
-                  child: CustomPaint(
-                    painter: _BgSparklinePainter(readings: bgPoints, lc: lc),
-                    child: const SizedBox(height: 72),
-                  ),
-                ),
-              ),
-          ],
-        ),
+        if (bpPoints.isNotEmpty)
+          _VitalTrendCard(
+            title: PatientProfileStrings.bpChartLabel,
+            points: bpPoints,
+            isBp: true,
+          ),
+        if (bpPoints.isNotEmpty && bgPoints.isNotEmpty) const SizedBox(height: 8),
+        if (bgPoints.isNotEmpty)
+          _VitalTrendCard(
+            title: PatientProfileStrings.bgChartLabel,
+            points: bgPoints,
+            isBp: false,
+          ),
       ],
     );
   }
 }
 
-class _TrendChartCard extends StatelessWidget {
-  const _TrendChartCard({
+class _VitalTrendCard extends StatefulWidget {
+  const _VitalTrendCard({
     required this.title,
-    required this.latestLabel,
-    required this.lc,
-    required this.child,
+    required this.points,
+    required this.isBp,
   });
 
   final String title;
-  final String latestLabel;
-  final LeapfrogColors lc;
-  final Widget child;
+  final List<_TrendPoint> points; // oldest-first
+  final bool isBp;
+
+  @override
+  State<_VitalTrendCard> createState() => _VitalTrendCardState();
+}
+
+class _VitalTrendCardState extends State<_VitalTrendCard> {
+  bool _expanded = false;
+
+  List<VitalReading> get _readingsForChart => widget.points
+      .map((p) => VitalReading(
+            type: widget.isBp ? VitalType.bloodPressure : VitalType.glucose,
+            date: p.date,
+            systolic: p.primaryVal,
+            diastolic: p.secondaryVal,
+            value: widget.isBp ? null : p.primaryVal,
+            unit: widget.isBp ? 'mmHg' : 'mg/dL',
+          ))
+      .toList();
 
   @override
   Widget build(BuildContext context) {
+    final lc = Theme.of(context).extension<LeapfrogColors>()!;
+    final latest = widget.points.last;
+    final dateLabel = DateFormat('d MMM').format(latest.date);
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
       decoration: BoxDecoration(
         color: lc.cardSurface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: lc.borderDefault),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: lc.textMuted,
-              letterSpacing: 0.2,
+          // ── Collapsed header ────────────────────────────────────
+          InkWell(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 80,
+                    height: 48,
+                    child: CustomPaint(
+                      painter: widget.isBp
+                          ? _BpSparklinePainter(readings: _readingsForChart, lc: lc)
+                          : _BgSparklinePainter(readings: _readingsForChart, lc: lc),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.title,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: lc.textMuted,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          latest.displayLabel,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: lc.textPrimary,
+                          ),
+                        ),
+                        Text(
+                          dateLabel,
+                          style: TextStyle(fontSize: 11, color: lc.textMuted),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    _expanded ? Icons.expand_less : Icons.expand_more,
+                    size: 20,
+                    color: lc.textMuted,
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 2),
-          Text(
-            latestLabel,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: lc.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 6),
-          SizedBox(width: double.infinity, child: child),
+          // ── Expanded history list ───────────────────────────────
+          if (_expanded) ...[
+            Divider(height: 1, thickness: 1, color: lc.borderDefault),
+            // Newest first in list
+            ...widget.points.reversed.map((pt) => _TrendHistoryRow(point: pt, lc: lc)),
+            const SizedBox(height: 4),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+class _TrendHistoryRow extends StatelessWidget {
+  const _TrendHistoryRow({required this.point, required this.lc});
+
+  final _TrendPoint point;
+  final LeapfrogColors lc;
+
+  @override
+  Widget build(BuildContext context) {
+    final canTap = point.assessment != null;
+    return InkWell(
+      onTap: canTap
+          ? () => _TimelineEventSheet.show(context, point.assessment!)
+          : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Row(
+          children: [
+            Text(
+              DateFormat('d MMM yyyy').format(point.date),
+              style: TextStyle(
+                fontSize: 12,
+                color: lc.textMuted,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              point.displayLabel,
+              style: TextStyle(
+                fontSize: 13,
+                color: lc.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            if (canTap) ...[
+              const SizedBox(width: 4),
+              Icon(Icons.chevron_right, size: 16, color: lc.textMuted),
+            ],
+          ],
+        ),
       ),
     );
   }
