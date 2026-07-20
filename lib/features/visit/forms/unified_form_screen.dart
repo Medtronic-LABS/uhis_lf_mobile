@@ -97,6 +97,10 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
   /// programme types — used for the weight-delta badge.  `null` until loaded.
   double? _lastRecordedWeight;
 
+  // One GlobalKey per section — used to scroll to the first error section
+  // on submit so the SK doesn't have to hunt for the highlighted field.
+  final Map<String, GlobalKey> _sectionKeys = {};
+
   @override
   void initState() {
     super.initState();
@@ -288,6 +292,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             }
           }
           items.add(_SectionCard(
+            key: _sectionKeyFor(annotatedSection.section.sectionId),
             section: annotatedSection.section,
             config: _config!,
             data: notifier.data,
@@ -389,12 +394,9 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
     final errors = _computeValidationErrors(notifier, annotated);
     if (errors.isNotEmpty) {
       notifier.setValidationErrors(errors);
-      // Scroll to top so the SK sees the highlighted fields.
-      _scrollCtrl.animateTo(
-        0,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
+      // Scroll to the first section containing an error so the SK lands
+      // directly on the highlighted field rather than hunting from the top.
+      _scrollToFirstError(annotated, errors);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(
@@ -457,6 +459,38 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
       }
     }
     return errors;
+  }
+
+  /// Returns or creates the [GlobalKey] for a section (by sectionId).
+  GlobalKey _sectionKeyFor(String sectionId) =>
+      _sectionKeys.putIfAbsent(sectionId, GlobalKey.new);
+
+  /// Scrolls to the first section that contains a validation error.
+  void _scrollToFirstError(
+    List<AnnotatedFormSection> annotated,
+    Set<String> errors,
+  ) {
+    for (final a in annotated) {
+      final hasError = a.section.fieldRefs.any((r) => errors.contains(r.id));
+      if (!hasError) continue;
+      final key = _sectionKeys[a.section.sectionId];
+      final ctx = key?.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeOut,
+          alignment: 0.1,
+        );
+        return;
+      }
+    }
+    // Fallback: scroll to top if no key context found yet.
+    _scrollCtrl.animateTo(
+      0,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
   }
 
   /// Returns the set of field IDs that are currently hidden (per the same
@@ -1277,6 +1311,7 @@ class _AiFilledBadgeWrap extends StatelessWidget {
 
 class _SectionCard extends StatelessWidget {
   const _SectionCard({
+    super.key,
     required this.section,
     required this.config,
     required this.data,
