@@ -37,6 +37,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
     String? villageId,
     int householdMemberLocalId = 0,
     String? pregnancyEpisodeId,
+    String? defaultReferralSiteId,
   })  : _encounterId = encounterId,
         _patientId = patientId,
         _activeFormTypes = activeFormTypes,
@@ -48,7 +49,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
         _householdId = householdId,
         _villageId = villageId,
         _householdMemberLocalId = householdMemberLocalId,
-        _pregnancyEpisodeId = pregnancyEpisodeId;
+        _pregnancyEpisodeId = pregnancyEpisodeId,
+        _defaultReferralSiteId = defaultReferralSiteId;
 
   final String _encounterId;
   final String _patientId;
@@ -62,6 +64,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
   final String? _villageId;
   final int _householdMemberLocalId;
   final String? _pregnancyEpisodeId;
+  final String? _defaultReferralSiteId;
 
   DateTime? _lmpDate;
   DateTime? _eddDate;
@@ -87,6 +90,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
 
   bool _lastIsReferred = false;
   List<String> _lastReferredReasons = const [];
+  String? _lastReferralFacility;
 
   /// Provenance per fieldId — who last set the value (SK vs AI scribe).
   /// Fields never touched have no entry (treated as manual-owned once typed).
@@ -103,6 +107,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// Read by [visit_form_screen] after submit to propagate to the Step-3 card.
   bool get lastIsReferred => _lastIsReferred;
   List<String> get lastReferredReasons => _lastReferredReasons;
+  String? get lastReferralFacility => _lastReferralFacility;
   String? get submitError => _submitError;
   Set<String> get validationErrors => _validationErrors;
 
@@ -132,6 +137,36 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// prior visit, or `null` when no prior weight exists.
   Future<double?> lastRecordedWeight() =>
       _assessmentRepo.lastRecordedWeight(_patientId);
+
+  /// Returns the most-recent height (cm) recorded for this patient from ANY
+  /// prior visit, or `null` when no prior height exists.
+  Future<double?> lastRecordedHeight() =>
+      _assessmentRepo.lastRecordedHeight(_patientId);
+
+  /// Pre-seeds height and weight from the patient's most-recent prior visit
+  /// when those fields are not yet filled in this visit. Called after
+  /// [loadDraft] so a saved draft always wins over historical values.
+  Future<void> preloadBiometrics() async {
+    var changed = false;
+    if (_data.getValue('height') == null) {
+      final h = await _assessmentRepo.lastRecordedHeight(_patientId);
+      if (h != null) {
+        _data = _data.setValue('height', h);
+        changed = true;
+      }
+    }
+    if (_data.getValue('weight') == null) {
+      final w = await _assessmentRepo.lastRecordedWeight(_patientId);
+      if (w != null) {
+        _data = _data.setValue('weight', w);
+        changed = true;
+      }
+    }
+    if (changed) {
+      _recomputeBmi();
+      notifyListeners();
+    }
+  }
 
   /// Marks the given field IDs as having validation errors and notifies
   /// listeners so the form can highlight them.
@@ -303,6 +338,27 @@ class UnifiedFormNotifier extends ChangeNotifier {
             : FieldSource.manual;
     if (fieldId == 'height' || fieldId == 'weight') {
       _recomputeBmi();
+    }
+    // Mirror bpLogDetails latest reading pulse → standalone 'pulse' field so
+    // PNC maternalHealthAssessment pulse stays in sync with NCD BP readings.
+    if (fieldId == 'bpLogDetails' && value is List && value.isNotEmpty) {
+      final last = value.last;
+      if (last is Map) {
+        final p = last['pulse'];
+        if (p != null) _data = _data.setValue('pulse', p);
+      }
+    }
+    // Mirror standalone 'pulse' → latest bpLogDetails reading so NCD BP
+    // readings stay consistent when pulse is entered in PNC section.
+    if (fieldId == 'pulse') {
+      final readings = _data.getValue('bpLogDetails');
+      if (readings is List && readings.isNotEmpty) {
+        final updated = List<dynamic>.from(readings);
+        final last = Map<String, dynamic>.from(updated.last as Map);
+        last['pulse'] = value;
+        updated[updated.length - 1] = last;
+        _data = _data.setValue('bpLogDetails', updated);
+      }
     }
     if (fieldId == 'deliveryOutcomeType') {
       debugPrint('[DeliveryOutcome] updateField deliveryOutcomeType=$value → notifyListeners');
@@ -620,6 +676,15 @@ class UnifiedFormNotifier extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // For NCD: auto-set referralFacilityType from the user's default site
+      // when no form field has supplied it. Android auto-sets this from
+      // SecuredPreference.DEFAULT_SITE_ID at submit time.
+      if (_defaultReferralSiteId != null &&
+          _activeFormTypes.contains('ncd') &&
+          _data.getValue('referralFacilityType') == null) {
+        _data = _data.setValue('referralFacilityType', _defaultReferralSiteId);
+      }
+
       final payloads = UnifiedPayloadMapper.decompose(
         _data,
         _activeFormTypes.toSet(),
@@ -628,6 +693,9 @@ class UnifiedFormNotifier extends ChangeNotifier {
       final (isReferred, referredReasons) = _computeReferral();
       _lastIsReferred = isReferred;
       _lastReferredReasons = referredReasons;
+      _lastReferralFacility = _data.getValue('referralFacility') as String? ??
+          _data.getValue('referralFacilityType') as String?;
+      ConsoleLog.step('[ReferralFacility] form submit — referralFacility=${_data.getValue('referralFacility')} referralFacilityType=${_data.getValue('referralFacilityType')} → _lastReferralFacility=$_lastReferralFacility');
 
       final savedIds = <String>[];
       for (final payload in payloads) {
@@ -700,6 +768,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
         diastolic: dia,
         fastingGlucoseMmol: isFbs ? glVal : null,
         randomGlucoseMmol: !isFbs ? glVal : null,
+        hba1cPercent: asDouble('hba1c'),
         symptoms:
             (_data.getValue('ncdSymptoms') as List?)?.cast<String>() ??
                 const [],

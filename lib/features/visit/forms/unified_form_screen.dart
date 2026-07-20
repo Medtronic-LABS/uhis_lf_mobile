@@ -128,7 +128,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
         }
       }
 
-      notifier.loadDraft();
+      notifier.loadDraft().then((_) => notifier.preloadBiometrics());
 
       // Load the patient's most-recent weight from ANY prior visit so the
       // weight-delta badge shows "Last: X kg" regardless of programme type.
@@ -1423,9 +1423,13 @@ class _SectionCard extends StatelessWidget {
 
     final hasBpPulseTriple = hasBpPair && sectionIds.contains('pulse');
 
-    // Blood-glucose pair: fasting + random shown side-by-side.
+    // Blood-glucose pair: fasting + random shown side-by-side (ANC/PNC forms).
     final hasGlucosePair = sectionIds.contains('fastingBloodSugar') &&
         sectionIds.contains('randomBloodSugar');
+
+    // BloodGlucoseEntry drives both type toggle and numeric value via 'glucose'.
+    // The standalone 'glucose' EditText must not render alongside it.
+    final hasBloodGlucoseEntry = sectionIds.contains('glucoseType');
 
     // Height + weight pair: physical measurements shown side-by-side.
     final hasHeightWeightPair = sectionIds.contains('height') &&
@@ -1451,6 +1455,8 @@ class _SectionCard extends StatelessWidget {
       if (hasBpPulseTriple) 'pulse',
       // Combined glucose pair — skip the random field (fasting card drives).
       if (hasGlucosePair) 'randomBloodSugar',
+      // BloodGlucoseEntry handles glucose numeric value — skip the standalone field.
+      if (hasBloodGlucoseEntry) ...const {'glucose', 'bloodSugar', 'ancBloodGlucose'},
       // Combined height+weight pair — skip weight (height card drives).
       if (hasHeightWeightPair) 'weight',
       // For each supplement pair, skip the "provided" counterpart field —
@@ -2209,6 +2215,15 @@ class _SectionCard extends StatelessWidget {
           }
           return null;
         };
+      case 'hba1c':
+        return (v) {
+          if (v == null || v.isEmpty) return null;
+          final n = double.tryParse(v);
+          if (n == null || n < hba1cFormMin || n > hba1cFormMax) {
+            return ComposerStrings.hba1cValidationError;
+          }
+          return null;
+        };
       case 'fundalHeight':
         return (v) {
           if (v == null || v.isEmpty) return null;
@@ -2367,6 +2382,17 @@ class _SectionCard extends StatelessWidget {
 
       case WidgetHint.numeric:
       case WidgetHint.bloodGlucose:
+        // inputType 0 = text (e.g. newWorseningSymptoms comment field) — no
+        // numeric keyboard, no unit, no parse. Render as plain text input.
+        if (ref.inputType == 0 && def.unitMeasurement == null) {
+          return TextFormField(
+            initialValue: currentValue?.toString(),
+            style: Theme.of(context).textTheme.bodyMedium,
+            decoration: _filledInputDecoration(hintText: def.hintText),
+            maxLines: 3,
+            onChanged: (v) => onFieldChanged(def.id, v.isEmpty ? null : v),
+          );
+        }
         // inputType 2 = numberDecimal; "decimal" string (from EditText fields) is
         // also treated as decimal — use isDecimal flag.
         final isDecimal = ref.inputType == 2 ||

@@ -47,12 +47,11 @@ abstract final class UnifiedSectionRules {
 
   /// Section IDs whose sections are pinned to the top as the "Vitals" group.
   ///
-  /// `commonVitals` captures Height, Weight, BMI, Blood Pressure exactly once.
-  /// ANC-specific clinical exam fields (urineProtein, fundalHeight,
-  /// fetalMovement) live in `ancSpecificVitals`; NCD has no extra vitals.
-  /// Lab investigations (urinaryAlbumin, urinarySugar, hemoglobin,
-  /// blood glucose) live in `labInvestigations`.
-  static const _vitalsSectionIds = {'commonVitals'};
+  /// Empty: each programme now owns its own vitals sections (ncdBiometrics,
+  /// ancSpecificVitals, maternalHealthAssessment, iccmVitals, etc.) and
+  /// commonVitals is no longer injected as a shared pre-section. All sections
+  /// are rendered under their programme group header instead.
+  static const _vitalsSectionIds = <String>{};
 
   /// Semantic field equivalence groups.
   ///
@@ -60,11 +59,11 @@ abstract final class UnifiedSectionRules {
   /// that two programmes that represent the same measurement with different
   /// field IDs do not both render a capture widget.
   ///
-  /// BP: `commonVitals` uses {bloodPressure, systolic, diastolic}; cataract's
-  ///   bpLog uses {bpLogDetails}. Claiming the common set pre-claims bpLogDetails
-  ///   so cataract does not show a duplicate BP widget.
-  /// Height / Weight / BMI: commonVitals claims these; any programme-specific
-  ///   section that also lists them gets deduplicated.
+  /// BP: ANC `ancSpecificVitals` uses {bloodPressure, systolic, diastolic};
+  ///   NCD/cataract `bpLog` uses {bpLogDetails}. Claiming one pre-claims all
+  ///   aliases so a multi-programme visit never shows duplicate BP widgets.
+  /// Height / Weight / BMI: NCD `ncdBiometrics` claims these; any other section
+  ///   that also lists them is deduplicated on the second pass.
   /// Glucose: NCD glucoseLog uses {glucoseType} rendered as BloodGlucoseEntry
   ///   which internally handles the glucose value too.  All aliases (bloodSugar,
   ///   fastingBloodSugar, randomBloodSugar, ancBloodGlucose, glucose) are merged
@@ -92,7 +91,7 @@ abstract final class UnifiedSectionRules {
     // Used in both ANC labInvestigations and NCD glucoseLog.
     // glucose / bloodSugar / ancBloodGlucose are aliases — claiming glucoseType
     // pre-claims every alias so no duplicate widget can appear.
-    {'glucoseType', 'glucose', 'bloodSugar', 'ancBloodGlucose'},
+    {'glucoseType', 'glucose', 'bloodSugar', 'ancBloodGlucose', 'fastingBloodSugar', 'randomBloodSugar'},
   ];
 
   /// Returns a human-readable description of which semantic groups had members
@@ -105,7 +104,7 @@ abstract final class UnifiedSectionRules {
       {'ifaProvided', 'ifaTabletsProvided'}: 'IFA provided',
       {'calciumTotalConsumed', 'calciumTabletsConsumed', 'calciumTablets'}: 'Calcium consumed',
       {'calciumProvided', 'calciumTabletsProvided'}: 'Calcium provided',
-      {'glucoseType', 'glucose', 'bloodSugar', 'ancBloodGlucose'}: 'Blood glucose (NCD combined)',
+      {'glucoseType', 'glucose', 'bloodSugar', 'ancBloodGlucose', 'fastingBloodSugar', 'randomBloodSugar'}: 'Blood glucose (NCD combined)',
     };
     final merged = <String>[];
     for (final entry in groupLabels.entries) {

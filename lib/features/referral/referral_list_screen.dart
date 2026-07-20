@@ -1134,6 +1134,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
                                   onScheduleFollowUp: () => _handleScheduleFollowUp(r, patient),
                                   onSendReminder: () => _handleSendReminder(r, patient),
                                   onCloseCase: () => _handleCloseCase(r),
+                                  facilityName: r.facilityName,
                                 );
                                 return SelectableReferralCard(
                                   referralId: r.id,

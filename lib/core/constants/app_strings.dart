@@ -3160,6 +3160,7 @@ abstract final class ComposerStrings {
   static const String haemoglobinValidationError = 'Enter a Hb reading between 1.0 and 20.0 g/dL';
   static const String temperatureValidationError = 'Enter a temperature between 90 and 110°F, or 0 if it could not be measured';
   static const String fundalHeightValidationError = 'Enter a fundal height between 8 and 45 cm';
+  static const String hba1cValidationError = 'Enter an HbA1c reading between 4.0% and 14.0%';
   static const String ageLabel = 'Age';
   static const String dobLabel = 'Date of Birth';
   static const String yearsShort = 'Y';

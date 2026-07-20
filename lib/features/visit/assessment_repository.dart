@@ -361,6 +361,23 @@ class AssessmentRepository extends ChangeNotifier {
     return null;
   }
 
+  /// Most-recent locally-saved height reading for [patientId] from ANY visit
+  /// type. Returns `null` when no prior visit has a height value.
+  Future<double?> lastRecordedHeight(String patientId) async {
+    if (patientId.isEmpty) return null;
+    final rows = await _dao.getByPatientId(patientId); // newest-first
+    for (final row in rows) {
+      try {
+        final map = jsonDecode(row.assessmentDetails) as Map<String, dynamic>;
+        final raw = map['height'];
+        if (raw == null) continue;
+        final h = raw is num ? raw.toDouble() : double.tryParse(raw.toString());
+        if (h != null && h > 0) return h;
+      } catch (_) {}
+    }
+    return null;
+  }
+
   /// Prior locally-saved ANC visits for [patientId] as trend snapshots,
   /// oldest-first.
   ///

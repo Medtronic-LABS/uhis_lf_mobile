@@ -12,6 +12,8 @@ library;
 
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 /// Tier of the referral, which drives the SLA windows in [SlaEvaluator].
 ///
 /// Tier is a property of the referral itself (set at creation from the
@@ -214,6 +216,28 @@ class Referral {
   final int? closedAt;
   final String? rawJson;
 
+  /// Best-effort referral target facility name, parsed from [rawJson].
+  /// Tries multiple keys the server wire has used across versions.
+  String? get facilityName {
+    if (rawJson == null || rawJson!.isEmpty) {
+      debugPrint('[ReferralFacility] Referral($id) rawJson=null → facilityName=null');
+      return null;
+    }
+    try {
+      final m = jsonDecode(rawJson!);
+      if (m is! Map) return null;
+      for (final k in const ['facilityName', 'referredTo', 'referredSiteName', 'referredSite']) {
+        final v = m[k];
+        if (v is String && v.trim().isNotEmpty) {
+          debugPrint('[ReferralFacility] Referral($id) key=$k → ${v.trim()}');
+          return v.trim();
+        }
+      }
+    } catch (_) {}
+    debugPrint('[ReferralFacility] Referral($id) rawJson present but no facility key matched');
+    return null;
+  }
+
   Map<String, Object?> toDb() => {
         'id': id,
         'patient_id': patientId,
@@ -281,6 +305,7 @@ class Referral {
     String? villageId,
     String? diagnosisCode,
     String? diagnosisLabel,
+    String? facilityName,
     DateTime? now,
   }) {
     final ts = (now ?? DateTime.now()).millisecondsSinceEpoch;
@@ -295,6 +320,7 @@ class Referral {
       state: ReferralStatus.created,
       createdAt: ts,
       updatedAt: ts,
+      rawJson: facilityName != null ? jsonEncode({'facilityName': facilityName}) : null,
     );
   }
 

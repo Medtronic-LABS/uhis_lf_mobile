@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/api/api_client.dart';
 import '../../core/api/scribe_api_service.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/db/encounter_dao.dart';
@@ -83,6 +84,7 @@ class VisitFormScreen extends StatefulWidget {
     Programme primaryProgramme,
     bool referralRecommended,
     List<String> referredReasons,
+    String? referralFacility,
   )? onAdvance;
 
   /// Programmes the patient is already enrolled in (from [PatientProgrammesDao]).
@@ -285,6 +287,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
       householdId: widget.householdId,
       villageId: widget.villageId,
       householdMemberLocalId: widget.householdMemberLocalId ?? 0,
+      defaultReferralSiteId: ctx.read<ApiClient>().organizationFhirId,
     );
 
     return ChangeNotifierProvider<UnifiedFormNotifier>.value(
@@ -314,7 +317,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     List<String> programmeNames, {
     bool isDelivery = false,
   }) {
-    final out = <String>['commonVitals'];
+    final out = <String>[];
     for (final p in programmeNames) {
       switch (p) {
         case 'pnc':
@@ -473,10 +476,12 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
         final onAdvance = widget.onAdvance;
         if (onAdvance != null) {
           debugPrint('[VisitForm] calling onAdvance');
+          debugPrint('[ReferralFacility] onAdvance — facility=${formNotifier.lastReferralFacility} referralRecommended=$_referralRecommended reasons=${formNotifier.lastReferredReasons}');
           onAdvance(
             _getPrimaryProgramme(),
             _referralRecommended,
             formNotifier.lastReferredReasons,
+            formNotifier.lastReferralFacility,
           );
         } else {
           ctx.go(

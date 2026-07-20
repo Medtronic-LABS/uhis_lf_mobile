@@ -68,6 +68,7 @@ class ReferralRepository {
     String? villageId,
     String? diagnosisCode,
     String? diagnosisLabel,
+    String? facilityName,
     String actor = 'sk',
   }) async {
     final now = _clock();
@@ -80,6 +81,7 @@ class ReferralRepository {
       villageId: villageId,
       diagnosisCode: diagnosisCode,
       diagnosisLabel: diagnosisLabel,
+      facilityName: facilityName,
       now: now,
     );
     await _referrals.upsertMany([draft]);
