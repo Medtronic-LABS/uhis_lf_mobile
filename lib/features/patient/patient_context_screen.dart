@@ -24,7 +24,6 @@ import '../../core/sync/offline_sync_service.dart';
 import '../../core/models/programme.dart';
 import '../../core/models/risk.dart';
 import 'member_detail_repository.dart';
-import 'open_followups_section.dart';
 import 'patient_actions_row.dart';
 import 'patient_repository.dart';
 import '../assistant/patient_ai_sheet.dart';
@@ -920,13 +919,6 @@ class _PatientContextScreenState
                       isLoading: remoteLoading,
                     ),
                     const SizedBox(height: 12),
-
-                    // ── Open follow-ups ───────────────────────────────────
-                    OpenFollowupsSection(
-                      patientId: widget.patientId,
-                      memberReference: data.memberReference,
-                    ),
-                    const SizedBox(height: 10),
 
                     // ── Action row ────────────────────────────────────────
                     PatientActionsRow(
