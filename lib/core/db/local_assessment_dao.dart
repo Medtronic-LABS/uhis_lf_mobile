@@ -255,6 +255,7 @@ class LocalAssessmentEntity {
       'villageId': villageId,
       'assessmentDate': createdAt?.toUtc().toIso8601String(),
       'patientStatus': referralStatus ?? 'Recovered',
+      'assessmentStatus': _buildCustomStatus(isReferred, referralStatus),
       'peerSupervisorId': ?peerSupervisorId,
       // Android sends a joined String, not a JSON array.
       'referredReasons': _joinedReferredReasons(referredReasons),

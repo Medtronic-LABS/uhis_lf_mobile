@@ -60,6 +60,13 @@ class AncGapsResult {
   bool get hasGaps => gaps.isNotEmpty;
 }
 
+/// PNC care-gap summary (mirrors Android PNCAssessmentEvaluator.evaluateGapsInPNC).
+class PncGapsResult {
+  const PncGapsResult({this.gaps = const []});
+  final List<String> gaps;
+  bool get hasGaps => gaps.isNotEmpty;
+}
+
 class PncReferralResult {
   const PncReferralResult({
     this.urgentConditions = const [],
@@ -162,6 +169,12 @@ class AncReferralEvaluator {
     int? pulseBpm,
     bool? hasChronicIllness,
     bool? chronicIllnessOnTreatment,
+    double? previousWeightKg,
+    int? daysSinceLastVisit,
+    bool? historyOfConvulsions,
+    bool? historyOfPph,
+    bool? historyOfSevereAnaemia,
+    bool? historyOfGdm,
   }) {
     final exam = assessment.medicalHistoryPhysicalExamination;
     final poci = assessment.pointOfCareInvestigations;
@@ -227,6 +240,16 @@ class AncReferralEvaluator {
       emergency.add('Chronic illness untreated');
     }
 
+    // Abnormal weight gain: negative or > 2× expected (0.5 kg/week)
+    if (weight != null && previousWeightKg != null &&
+        daysSinceLastVisit != null && daysSinceLastVisit > 0) {
+      final delta = weight - previousWeightKg;
+      final expectedGain = (daysSinceLastVisit / 7.0) * 0.5;
+      if (delta < 0 || delta > expectedGain * 2) {
+        emergency.add('Abnormal weight gain');
+      }
+    }
+
     // ── Non-emergency conditions ──────────────────────────────────────────────
 
     // High-risk age: < 18 or > 35
@@ -284,6 +307,12 @@ class AncReferralEvaluator {
     if (highBp && !emergency.contains('Suspected pre-eclampsia')) {
       nonEmergency.add('High blood pressure');
     }
+
+    // H/O obstetric complications
+    if (historyOfConvulsions == true) nonEmergency.add('H/O Convulsions');
+    if (historyOfPph == true) nonEmergency.add('H/O Postpartum haemorrhage');
+    if (historyOfSevereAnaemia == true) nonEmergency.add('H/O Severe anaemia');
+    if (historyOfGdm == true) nonEmergency.add('H/O Gestational diabetes');
 
     return AncReferralResult(
       emergencyConditions: emergency,
@@ -384,6 +413,7 @@ class PncReferralEvaluator {
 
   static PncReferralResult evaluate({
     bool hasDangerSigns = false,
+    List<String> dangerSignsList = const [],
     double? systolic,
     double? diastolic,
     double? temperatureCelsius,
@@ -501,6 +531,48 @@ class PncReferralEvaluator {
       urgentConditions: urgent,
       nonUrgentConditions: nonUrgent,
     );
+  }
+
+  /// Evaluates 4 PNC care-gap conditions from the form data.
+  ///
+  /// Mirrors Android `PNCAssessmentEvaluator.evaluateGapsInPNC()`.
+  static PncGapsResult evaluateGaps({
+    bool? vitaminAConsumed,
+    int? daysSinceDelivery,
+    int? ifaTabletsConsumed,
+    int? calciumTabletsConsumed,
+    String? familyPlanningMethod,
+  }) {
+    final gaps = <String>[];
+
+    // 1. Vitamin A not consumed within 56 days of delivery.
+    if (vitaminAConsumed == false &&
+        daysSinceDelivery != null &&
+        daysSinceDelivery <= 56) {
+      gaps.add('Vitamin A not consumed (within 8 weeks)');
+    }
+
+    // 2. Inadequate IFA tablet consumption (< 30).
+    if (ifaTabletsConsumed != null &&
+        ifaTabletsConsumed < ancTabletConsumptionMin) {
+      gaps.add('Inadequate IFA consumption (<$ancTabletConsumptionMin tablets)');
+    }
+
+    // 3. Inadequate Calcium tablet consumption (< 30).
+    if (calciumTabletsConsumed != null &&
+        calciumTabletsConsumed < ancTabletConsumptionMin) {
+      gaps.add('Inadequate Calcium consumption (<$ancTabletConsumptionMin tablets)');
+    }
+
+    // 4. No contraception method ≥ 42 days after delivery.
+    if (daysSinceDelivery != null && daysSinceDelivery >= 42) {
+      final method = familyPlanningMethod?.toLowerCase() ?? '';
+      if (method.isEmpty || method == 'none' || method == 'notused') {
+        gaps.add('No contraception method (≥42 days postpartum)');
+      }
+    }
+
+    return PncGapsResult(gaps: gaps);
   }
 
   static bool _isPresent(String? value) {

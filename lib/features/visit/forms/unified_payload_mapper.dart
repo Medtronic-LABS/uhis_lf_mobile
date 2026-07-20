@@ -524,6 +524,7 @@ abstract final class UnifiedPayloadMapper {
       if (glucoseType != null) glucoseLog['glucoseType'] = glucoseType;
       glucoseLog['glucoseUnit'] =
           d.getValue('glucoseUnit') as String? ?? 'mmol/L';
+      glucoseLog['bgTakenOn'] = DateTime.now().toUtc().toIso8601String();
       final hba1c = asNum(d.getValue('hba1c'));
       if (hba1c != null) {
         glucoseLog['hba1c'] = hba1c;
@@ -668,6 +669,14 @@ abstract final class UnifiedPayloadMapper {
       if (hasRbs) 'randomBloodSugar': glucoseValue,
       if (hasRbs) 'randomBloodSugarUnit': 'mmol/L',
     });
+    if (hasFbs || hasRbs) maternal['bgTakenOn'] = DateTime.now().toUtc().toIso8601String();
+    for (final sign in const [
+      'heavyBleeding', 'foulSmellDischarge', 'severeAbdominalPain',
+      'difficultyBreathing', 'convulsions', 'unconsciousness',
+    ]) {
+      final v = d.getValue(sign);
+      if (v != null) maternal[sign] = v;
+    }
 
     final pregnancy = _compact({
       'parity': d.getValue('parity'),
