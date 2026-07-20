@@ -1587,6 +1587,7 @@ class _UnifiedSymptomPickerState extends State<_UnifiedSymptomPicker> {
                 runSpacing: 8,
                 children: gridSections
                     .expand((s) => s.$2)
+                    .toSet()
                     .map(
                       (code) => _PickerChip(
                         key: ValueKey('triage_chip_$code'),
