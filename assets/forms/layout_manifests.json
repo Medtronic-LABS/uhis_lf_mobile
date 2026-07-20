@@ -1168,26 +1168,8 @@
             "id": "medicationFrequencyBp"
           },
           {
-            "id": "bloodPressure",
+            "id": "bpLogDetails",
             "fieldName": "Blood Pressure",
-            "isMandatory": false
-          },
-          {
-            "id": "systolic",
-            "fieldName": "Systolic",
-            "inputType": 3,
-            "isMandatory": false
-          },
-          {
-            "id": "diastolic",
-            "fieldName": "Diastolic",
-            "inputType": 3,
-            "isMandatory": false
-          },
-          {
-            "id": "pulse",
-            "fieldName": "Pulse (bpm)",
-            "inputType": 3,
             "isMandatory": false
           },
           {

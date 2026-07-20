@@ -4223,6 +4223,11 @@ abstract final class UnifiedFormStrings {
   static const String bpUnit = 'mmHg';
   static const String bpPulseUnit = '/min';
 
+  // Multi-reading BP widget (Android parity — up to 3 readings).
+  static const String bpAddReadingLabel = '+ Add Reading';
+  static const String bpReadingNumberLabel = 'Reading';
+  static const String bpRemoveReadingTooltip = 'Remove reading';
+
   // Combined BP card (v13 reference — one card, side-by-side systolic|diastolic).
   static const String bpCardLabel = 'Blood Pressure';
   static const String bpCardSubLabel = 'রক্তচাপ';

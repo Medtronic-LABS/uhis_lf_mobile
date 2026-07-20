@@ -3386,16 +3386,19 @@ class _DateFieldState extends State<_DateField> {
 
 // ── BP reading field ──────────────────────────────────────────────────────────
 
-/// Systolic / diastolic pair that matches Android's `bpLogDetails` wire format.
+/// Multi-reading BP widget matching Android's `bpLogDetails` wire format.
 ///
-/// Stores value as `List<Map<String, dynamic>>` with one entry per reading:
-/// `[{'systolic': 120, 'diastolic': 80, 'pulse': 72}]`.
+/// Supports up to 3 readings (Android parity). Each row captures systolic,
+/// diastolic, and pulse. Stores value as `List<Map<String, dynamic>>`:
+/// `[{'systolic': 120, 'diastolic': 80, 'pulse': 72}, ...]`.
 class _BpReadingField extends StatefulWidget {
   const _BpReadingField({
     super.key,
     required this.readings,
     required this.onChanged,
   });
+
+  static const int _maxReadings = 3;
 
   final List<Map<String, dynamic>> readings;
   final ValueChanged<List<Map<String, dynamic>>> onChanged;
@@ -3405,30 +3408,49 @@ class _BpReadingField extends StatefulWidget {
 }
 
 class _BpReadingFieldState extends State<_BpReadingField> {
-  late TextEditingController _sys;
-  late TextEditingController _dia;
-  late TextEditingController _pulse;
+  // One triplet of controllers per row (up to _maxReadings).
+  late List<(TextEditingController, TextEditingController, TextEditingController)> _rows;
 
   @override
   void initState() {
     super.initState();
-    debugPrint('[_BpReadingFieldState] initState');
-    final first =
-        widget.readings.isNotEmpty ? widget.readings.first : const {};
-    _sys = TextEditingController(text: first['systolic']?.toString() ?? '');
-    _dia = TextEditingController(text: first['diastolic']?.toString() ?? '');
-    _pulse = TextEditingController(text: first['pulse']?.toString() ?? '');
+    _rows = _buildRows(widget.readings);
+  }
+
+  List<(TextEditingController, TextEditingController, TextEditingController)> _buildRows(
+    List<Map<String, dynamic>> readings,
+  ) {
+    final source = readings.isNotEmpty ? readings : [const <String, dynamic>{}];
+    return source.map((r) {
+      return (
+        TextEditingController(text: r['systolic']?.toString() ?? ''),
+        TextEditingController(text: r['diastolic']?.toString() ?? ''),
+        TextEditingController(text: r['pulse']?.toString() ?? ''),
+      );
+    }).toList();
   }
 
   @override
   void didUpdateWidget(_BpReadingField old) {
     super.didUpdateWidget(old);
     if (old.readings != widget.readings) {
-      final first =
-          widget.readings.isNotEmpty ? widget.readings.first : const {};
-      _syncCtrl(_sys, first['systolic']?.toString() ?? '');
-      _syncCtrl(_dia, first['diastolic']?.toString() ?? '');
-      _syncCtrl(_pulse, first['pulse']?.toString() ?? '');
+      // Sync only rows that haven't changed length; rebuild otherwise.
+      if (widget.readings.length != _rows.length) {
+        for (final (s, d, p) in _rows) {
+          s.dispose();
+          d.dispose();
+          p.dispose();
+        }
+        setState(() => _rows = _buildRows(widget.readings));
+      } else {
+        for (var i = 0; i < _rows.length; i++) {
+          final r = widget.readings[i];
+          final (s, d, p) = _rows[i];
+          _syncCtrl(s, r['systolic']?.toString() ?? '');
+          _syncCtrl(d, r['diastolic']?.toString() ?? '');
+          _syncCtrl(p, r['pulse']?.toString() ?? '');
+        }
+      }
     }
   }
 
@@ -3441,40 +3463,135 @@ class _BpReadingFieldState extends State<_BpReadingField> {
 
   @override
   void dispose() {
-    _sys.dispose();
-    _dia.dispose();
-    _pulse.dispose();
-    debugPrint('[_BpReadingFieldState] dispose');
+    for (final (s, d, p) in _rows) {
+      s.dispose();
+      d.dispose();
+      p.dispose();
+    }
     super.dispose();
   }
 
   void _emit() {
-    final sys = int.tryParse(_sys.text);
-    final dia = int.tryParse(_dia.text);
-    if (sys == null && dia == null) {
-      widget.onChanged([]);
-      return;
+    final out = <Map<String, dynamic>>[];
+    for (final (s, d, p) in _rows) {
+      final sys = int.tryParse(s.text);
+      final dia = int.tryParse(d.text);
+      if (sys == null && dia == null) continue;
+      final reading = <String, dynamic>{};
+      if (sys != null) reading['systolic'] = sys;
+      if (dia != null) reading['diastolic'] = dia;
+      final pulse = int.tryParse(p.text);
+      if (pulse != null) reading['pulse'] = pulse;
+      out.add(reading);
     }
-    final reading = <String, dynamic>{};
-    if (sys != null) reading['systolic'] = sys;
-    if (dia != null) reading['diastolic'] = dia;
-    final pulse = int.tryParse(_pulse.text);
-    if (pulse != null) reading['pulse'] = pulse;
-    widget.onChanged([reading]);
+    widget.onChanged(out);
   }
+
+  void _addRow() {
+    if (_rows.length >= _BpReadingField._maxReadings) return;
+    setState(() {
+      _rows.add((
+        TextEditingController(),
+        TextEditingController(),
+        TextEditingController(),
+      ));
+    });
+  }
+
+  void _removeRow(int index) {
+    if (_rows.length <= 1) return;
+    final (s, d, p) = _rows[index];
+    s.dispose();
+    d.dispose();
+    p.dispose();
+    setState(() => _rows.removeAt(index));
+    _emit();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < _rows.length; i++) ...[
+          if (_rows.length > 1)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                children: [
+                  Text(
+                    '${UnifiedFormStrings.bpReadingNumberLabel} ${i + 1}',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: AppColors.textMuted,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (i > 0)
+                    GestureDetector(
+                      onTap: () => _removeRow(i),
+                      child: Text(
+                        UnifiedFormStrings.bpRemoveReadingTooltip,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: AppColors.statusCritical,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          _BpReadingRow(
+            sysCtrl: _rows[i].$1,
+            diaCtrl: _rows[i].$2,
+            pulseCtrl: _rows[i].$3,
+            onChanged: (_) => _emit(),
+          ),
+          if (i < _rows.length - 1) const SizedBox(height: 10),
+        ],
+        if (_rows.length < _BpReadingField._maxReadings) ...[
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: _addRow,
+            child: Text(
+              UnifiedFormStrings.bpAddReadingLabel,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: AppColors.navy,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Single systolic / diastolic / pulse row inside [_BpReadingField].
+class _BpReadingRow extends StatelessWidget {
+  const _BpReadingRow({
+    required this.sysCtrl,
+    required this.diaCtrl,
+    required this.pulseCtrl,
+    required this.onChanged,
+  });
+
+  final TextEditingController sysCtrl;
+  final TextEditingController diaCtrl;
+  final TextEditingController pulseCtrl;
+  final ValueChanged<void> onChanged;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        // Systolic / diastolic pair joined by a "/" separator.
         Expanded(
           flex: 3,
           child: _bpCell(
             context,
             caption: UnifiedFormStrings.bpSystolicLabel,
-            controller: _sys,
+            controller: sysCtrl,
             suffixText: UnifiedFormStrings.bpUnit,
             validator: _SectionCard._numericRangeValidator('systolic'),
           ),
@@ -3494,18 +3611,17 @@ class _BpReadingFieldState extends State<_BpReadingField> {
           child: _bpCell(
             context,
             caption: UnifiedFormStrings.bpDiastolicLabel,
-            controller: _dia,
+            controller: diaCtrl,
             validator: _SectionCard._numericRangeValidator('diastolic'),
           ),
         ),
         const SizedBox(width: 10),
-        // Pulse.
         Expanded(
           flex: 3,
           child: _bpCell(
             context,
             caption: UnifiedFormStrings.bpPulseLabel,
-            controller: _pulse,
+            controller: pulseCtrl,
             suffixText: UnifiedFormStrings.bpPulseUnit,
           ),
         ),
@@ -3513,7 +3629,6 @@ class _BpReadingFieldState extends State<_BpReadingField> {
     );
   }
 
-  /// One captioned, filled numeric input used for systolic / diastolic / pulse.
   Widget _bpCell(
     BuildContext context, {
     required String caption,
@@ -3521,15 +3636,13 @@ class _BpReadingFieldState extends State<_BpReadingField> {
     String? suffixText,
     FormFieldValidator<String>? validator,
   }) {
-    // Placeholder-inside-input, matching the mockup — disappears once the SK
-    // starts typing, rather than a permanent label above the field.
     return TextFormField(
       controller: controller,
       keyboardType: TextInputType.number,
       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
       style: Theme.of(context).textTheme.bodyMedium,
       decoration: _filledInputDecoration(hintText: caption, suffixText: suffixText),
-      onChanged: (_) => _emit(),
+      onChanged: (_) => onChanged(null),
       validator: validator,
     );
   }
