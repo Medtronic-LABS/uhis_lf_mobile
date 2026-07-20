@@ -3595,6 +3595,7 @@ class _TimelineEventSheet extends StatelessWidget {
     addIfPresent('stroke', 'Stroke history');
     addIfPresent('kidneyDisease', 'Kidney disease');
     addIfPresent('copd', 'COPD');
+    addIfPresent('referralFacilityType', 'Referred to');
 
     // ── ANC ────────────────────────────────────────────────────────────────
     addIfPresent('hemoglobin', 'Hb (g/dL)');

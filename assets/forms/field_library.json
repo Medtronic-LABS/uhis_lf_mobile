@@ -8109,7 +8109,7 @@
     "orderId": 2.0,
     "isMandatory": true,
     "isEnabled": true,
-    "visibility": "gone",
+    "visibility": "visible",
     "titleCulture": "রক্তচাপ",
     "errorMessage": "Please enter a blood pressure value",
     "minValue": 30.0,

@@ -95,15 +95,19 @@ class NcdReferralEvaluator {
     double? diastolic,
     double? fastingGlucoseMmol,
     double? randomGlucoseMmol,
+    double? hba1cPercent,
     List<String> symptoms = const [],
   }) {
     final bpBand = _bpBand(systolic, diastolic, symptoms);
     final bgBand = _bgBand(fastingGlucoseMmol, randomGlucoseMmol);
-    final band = _worse(bpBand, bgBand);
+    final hba1cBand = _hba1cBand(hba1cPercent);
+    final band = _worse(_worse(bpBand, bgBand), hba1cBand);
 
     final reasons = <String>[];
     if (bpBand != NcdRiskBand.green) reasons.add('bloodPressure');
-    if (bgBand != NcdRiskBand.green) reasons.add('bloodGlucose');
+    if (bgBand != NcdRiskBand.green || hba1cBand != NcdRiskBand.green) {
+      reasons.add('bloodGlucose');
+    }
     if (symptoms.isNotEmpty && bpBand == NcdRiskBand.red) reasons.add('symptoms');
 
     return NcdReferralResult(band: band, referralReasons: reasons);
@@ -135,6 +139,14 @@ class NcdReferralEvaluator {
     // Bangladesh spec: RBS ≥ 11.1 mmol/L → CC referral (yellowHigh), not just monitor.
     if (rbs != null && rbs >= ncdUncontrolledRbs) return NcdRiskBand.yellowHigh;
     if (rbs != null && rbs > rbsGreenHighMmol) return NcdRiskBand.yellowLow;
+    return NcdRiskBand.green;
+  }
+
+  static NcdRiskBand _hba1cBand(double? pct) {
+    if (pct == null) return NcdRiskBand.green;
+    if (pct >= hba1cCrisis) return NcdRiskBand.orange;
+    if (pct >= hba1cUncontrolled) return NcdRiskBand.yellowHigh;
+    if (pct >= hba1cDiabetesThreshold) return NcdRiskBand.yellowLow;
     return NcdRiskBand.green;
   }
 

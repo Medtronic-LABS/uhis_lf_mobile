@@ -93,6 +93,17 @@ const double fbsScreeningMax = 15.0;
 const double rbsScreeningNormal = 7.8;
 const double rbsScreeningMax = 15.0;
 
+// ── HbA1c (% — referral and form bounds) ──
+// ≥ 6.5% = diabetes diagnosis threshold
+// ≥ 8.0% = uncontrolled DM → yellowHigh referral
+// ≥ 10.0% = very poorly controlled → orange referral
+// Form bounds: 4.0–14.0% (clinically plausible range)
+const double hba1cFormMin = 4.0;
+const double hba1cFormMax = 14.0;
+const double hba1cDiabetesThreshold = 6.5;
+const double hba1cUncontrolled = 8.0;
+const double hba1cCrisis = 10.0;
+
 // ── BMI (kg/m²) ──
 const double bmiUnderweight = 18.5;
 const double bmiOverweight = 25.0;

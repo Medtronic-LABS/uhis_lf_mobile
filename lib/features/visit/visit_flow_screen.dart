@@ -288,6 +288,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   Programme _primaryProgramme = Programme.unknown;
   bool _referralRecommended = false;
   List<String> _referredReasons = const [];
+  String? _referralFacility;
 
   /// True once triage (Step 1) has been submitted. Blocks back-navigation to
   /// Step 1 from Step 2+ — re-entering triage would create a duplicate assessment.
@@ -505,11 +506,13 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           seedProgrammes: _confirmedProgrammes,
           isDeliveryVisit: _isDeliveryVisit,
           origin: widget.origin,
-          onAdvance: (programme, referral, reasons) {
+          onAdvance: (programme, referral, reasons, facility) {
+            debugPrint('[ReferralFacility] flow captured — facility=$facility referral=$referral');
             setState(() {
               _primaryProgramme = programme;
               _referralRecommended = referral;
               _referredReasons = reasons;
+              _referralFacility = facility;
               _step = 2;
             });
           },
@@ -531,6 +534,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           primaryProgramme: _primaryProgramme,
           referralRecommended: _referralRecommended,
           referredReasons: _referredReasons,
+          referralFacility: _referralFacility,
           memberId: widget.memberId,
           householdId: widget.householdId,
           origin: widget.origin ?? 'patients',
@@ -784,6 +788,7 @@ class _Step2VitalsForm extends StatelessWidget {
     Programme primaryProgramme,
     bool referralRecommended,
     List<String> referredReasons,
+    String? referralFacility,
   ) onAdvance;
 
   @override
@@ -946,6 +951,7 @@ class _Step2ProgrammesThenForm extends StatefulWidget {
     Programme primaryProgramme,
     bool referralRecommended,
     List<String> referredReasons,
+    String? referralFacility,
   ) onAdvance;
 
   @override
@@ -1177,6 +1183,7 @@ class _Step3AiReco extends StatefulWidget {
     this.eddMs,
     this.memberId,
     this.householdId,
+    this.referralFacility,
   });
 
   final String visitId;
@@ -1197,6 +1204,7 @@ class _Step3AiReco extends StatefulWidget {
   final String? memberId;
   final String? householdId;
   final String origin;
+  final String? referralFacility;
 
   @override
   State<_Step3AiReco> createState() => _Step3AiRecoState();
@@ -1517,6 +1525,17 @@ class _Step3AiRecoState extends State<_Step3AiReco>
         unit: glucose['glucoseUnit'] as String? ?? 'mg/dL',
         referenceRange: isFasting ? '<100 mg/dL' : '<140 mg/dL',
         abnormal: isFasting ? v >= 126 : v >= 200,
+      ));
+    }
+    final hba1cRaw = glucose['hba1c'];
+    if (hba1cRaw != null) {
+      final v = (hba1cRaw as num).toDouble();
+      labs.add(NabaLabResult(
+        name: 'HbA1c',
+        value: v.toStringAsFixed(1),
+        unit: '%',
+        referenceRange: '<6.5%',
+        abnormal: v >= 6.5,
       ));
     }
     _loadedLabs = labs;
@@ -1849,11 +1868,18 @@ class _Step3AiRecoState extends State<_Step3AiReco>
       final isFasting = gl?.name.contains('Fasting') ?? false;
       final glVal = double.tryParse(gl?.value ?? '');
 
+      final hba1cLab = _loadedLabs.cast<NabaLabResult?>().firstWhere(
+            (l) => l?.name == 'HbA1c',
+            orElse: () => null,
+          );
+      final hba1cVal = hba1cLab != null ? double.tryParse(hba1cLab.value) : null;
+
       final result = NcdReferralEvaluator.evaluate(
         systolic: sys,
         diastolic: dia,
         fastingGlucoseMmol: isFasting ? glVal : null,
         randomGlucoseMmol: isFasting ? null : glVal,
+        hba1cPercent: hba1cVal,
         symptoms: widget.confirmedSymptoms.toList(),
       );
 
@@ -2244,6 +2270,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
                           ? naba.dangerSigns.take(2).join(', ')
                           : 'Referral recommended')),
               urgency: naba.referralRecommendation?.urgency ?? 'Today',
+              facilityName: widget.referralFacility,
             ),
             Container(height: 1.5, color: const Color(0xFFFECACA)),
           ],
@@ -2360,9 +2387,11 @@ class _ReferralAlertCard extends StatelessWidget {
   const _ReferralAlertCard({
     required this.reason,
     required this.urgency,
+    this.facilityName,
   });
   final String reason;
   final String urgency;
+  final String? facilityName;
 
   // Maps raw API camelCase referral keys → human-readable labels (fallback path).
   static const _reasonLabels = <String, String>{
@@ -2471,6 +2500,27 @@ class _ReferralAlertCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (facilityName != null) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.location_on_outlined,
+                          size: 12, color: accent.withValues(alpha: 0.75)),
+                      const SizedBox(width: 3),
+                      Flexible(
+                        child: Text(
+                          facilityName!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: accent.withValues(alpha: 0.85),
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

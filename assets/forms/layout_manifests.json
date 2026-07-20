@@ -1109,32 +1109,6 @@
     "clinicalWorkflowId": 21,
     "sections": [
       {
-        "sectionId": "symptomsLog",
-        "title": "Symptoms & Compliance",
-        "fieldRefs": [
-          {
-            "id": "compliance",
-            "fieldName": "Medication compliance",
-            "isMandatory": false
-          },
-          {
-            "id": "hasSymptoms",
-            "fieldName": "Has symptoms",
-            "isMandatory": false
-          },
-          {
-            "id": "ncdSymptoms",
-            "fieldName": "NCD symptoms",
-            "isMandatory": false
-          },
-          {
-            "id": "newWorseningSymptoms",
-            "fieldName": "New or worsening symptoms",
-            "isMandatory": false
-          }
-        ]
-      },
-      {
         "sectionId": "ncdBiometrics",
         "title": "Biometrics",
         "fieldRefs": [
@@ -1176,6 +1150,32 @@
             "fieldName": "Are you a regular smoker or have you been a regular smoker in the past 12 months?",
             "isMandatory": false,
             "id": "isRegularSmoker"
+          }
+        ]
+      },
+      {
+        "sectionId": "symptomsLog",
+        "title": "Symptoms & Compliance",
+        "fieldRefs": [
+          {
+            "id": "compliance",
+            "fieldName": "Medication compliance",
+            "isMandatory": false
+          },
+          {
+            "id": "hasSymptoms",
+            "fieldName": "Has symptoms",
+            "isMandatory": false
+          },
+          {
+            "id": "ncdSymptoms",
+            "fieldName": "NCD symptoms",
+            "isMandatory": false
+          },
+          {
+            "id": "newWorseningSymptoms",
+            "fieldName": "New or worsening symptoms",
+            "isMandatory": false
           }
         ]
       },

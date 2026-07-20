@@ -240,7 +240,7 @@ class FieldDef {
 
   factory FieldDef.fromJson(String id, Map<String, dynamic> json) {
     final rawHint = json['widgetHint'] as String?;
-    final optionsList = (json['optionsList'] as List<dynamic>? ?? [])
+    final optionsList = ((json['optionsList'] ?? json['options']) as List<dynamic>? ?? [])
         .whereType<Map<String, dynamic>>()
         .map(FieldOption.fromJson)
         .toList();
