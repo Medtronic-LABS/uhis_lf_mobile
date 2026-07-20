@@ -2846,11 +2846,47 @@ class _VitalTrendCardState extends State<_VitalTrendCard> {
           ))
       .toList();
 
+  // Delta = latest primaryVal minus previous primaryVal. Null if < 2 points.
+  double? get _delta {
+    if (widget.points.length < 2) return null;
+    return widget.points.last.primaryVal -
+        widget.points[widget.points.length - 2].primaryVal;
+  }
+
+  Widget _deltaChip(double delta, LeapfrogColors lc) {
+    final isUp = delta > 0;
+    final color = isUp ? AppColors.statusSuccess : AppColors.statusCritical;
+    final prefix = isUp ? '+' : '';
+    final label = widget.isBp
+        ? '$prefix${delta.round()}'
+        : '$prefix${delta.toStringAsFixed(1)}';
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          isUp ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+          color: color,
+          size: 12,
+        ),
+        const SizedBox(width: 1),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final lc = Theme.of(context).extension<LeapfrogColors>()!;
     final latest = widget.points.last;
     final dateLabel = DateFormat('d MMM').format(latest.date);
+    final delta = _delta;
 
     return Container(
       decoration: BoxDecoration(
@@ -2892,13 +2928,24 @@ class _VitalTrendCardState extends State<_VitalTrendCard> {
                           ),
                         ),
                         const SizedBox(height: 2),
-                        Text(
-                          latest.displayLabel,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: lc.textPrimary,
-                          ),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                latest.displayLabel,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: lc.textPrimary,
+                                ),
+                              ),
+                            ),
+                            if (delta != null && delta != 0) ...[
+                              const SizedBox(width: 5),
+                              _deltaChip(delta, lc),
+                            ],
+                          ],
                         ),
                         Text(
                           dateLabel,
