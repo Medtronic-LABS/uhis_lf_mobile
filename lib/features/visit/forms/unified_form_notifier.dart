@@ -328,6 +328,12 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// When `height` or `weight` changes, BMI is automatically recomputed and
   /// stored under the `bmi` field so the `_InfoLabelField` stays in sync.
   void updateField(String fieldId, dynamic value) {
+    final valueType = value?.runtimeType ?? 'null';
+    if (value is List) {
+      ConsoleLog.step('[FormField] $fieldId (List[${value.length}]) = $value');
+    } else {
+      ConsoleLog.step('[FormField] $fieldId ($valueType) = $value');
+    }
     _data = _data.setValue(fieldId, value);
     // SK edit of an AI-filled value → aiModified (audit trail keeps the AI
     // origin); any other SK entry → manual. Either way the field is now

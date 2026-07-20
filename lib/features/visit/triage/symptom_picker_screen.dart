@@ -1924,8 +1924,10 @@ class _InlineServiceSelector extends StatelessWidget {
   }
 
   bool _isLocked(_ServiceCardDef card) {
-    if (card.programme == Programme.anc) return !isPW;
+    if (card.programme == Programme.anc) return !isPW || isDelivery;
     if (card.programme == Programme.pnc) return !isDelivery;
+    // Delivery and ANC are mutually exclusive — they belong to separate visits.
+    if (card.isDelivery) return selectedProgrammes.contains(Programme.anc);
     return false;
   }
 
@@ -1943,9 +1945,18 @@ class _InlineServiceSelector extends StatelessWidget {
     // was seeded incorrectly, or pathway ANC the SK does not want this visit).
     final alreadySelected = _isCardSelected(card);
     if (_isLocked(card) && !alreadySelected) {
-      final hint = card.programme == Programme.anc
-          ? TriageStrings.pwHint
-          : TriageStrings.deliveryHint;
+      final String hint;
+      if (card.programme == Programme.anc) {
+        hint = isDelivery
+            ? TriageStrings.ancDeliveryConflictHint
+            : TriageStrings.pwHint;
+      } else if (card.isDelivery) {
+        hint = selectedProgrammes.contains(Programme.anc)
+            ? TriageStrings.ancDeliveryConflictHint
+            : TriageStrings.deliveryHint;
+      } else {
+        hint = TriageStrings.deliveryHint;
+      }
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(
