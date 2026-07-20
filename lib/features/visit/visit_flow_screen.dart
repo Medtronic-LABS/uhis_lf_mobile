@@ -1075,12 +1075,12 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
     return showDialog<void>(
       context: ctx,
       barrierDismissible: false,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         title: Text(title),
         content: Text(message),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
+            onPressed: () => Navigator.of(dialogCtx).pop(),
             child: const Text('OK'),
           ),
         ],
