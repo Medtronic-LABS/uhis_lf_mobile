@@ -719,16 +719,66 @@ abstract final class UnifiedPayloadMapper {
   }
 
   // ── Pregnancy Outcome ──────────────────────────────────────────────────────
+  // Android wire structure (FormResultComposer.groupValues groups by sectionId):
+  //   pregnancyOutcome → {
+  //     outcomeType:     { deliveryOutcomeType },
+  //     maternalDeath:   { timeOfDeath, gestationMonthAtDeath, causeOfDeath },
+  //     abortion:        { gestationMonthAtAbortion, typeOfAbortion },
+  //     deliveryOutcomes: { deliveryOutcome, liveBirthNumbers, stillbirthNumbers,
+  //                         placeOfDelivery, dateOfDelivery, modeOfDelivery,
+  //                         birthAttendant, anyComplicationsDuringDelivery,
+  //                         complicationsDuringDelivery },
+  //     newbornDetails:  [{ isBabyAlive, sex, birthWeight, essentialNewbornCare,
+  //                         causeOfNeonatalDeath }]   ← single entry from flat form
+  //   }
+  // Field-ID renames (Flutter form id → Android wire key):
+  //   babyAlive        → isBabyAlive
+  //   babySex          → sex
+  //   neonatalDeathCause → causeOfNeonatalDeath
+  // _wrapDetailsForType wraps this map under "pregnancyOutcome" automatically.
 
   static Map<String, dynamic> _toPregnancyOutcome(CanonicalVisitData d) {
-    return _compact({
-      'deliveryType': d.getValue('deliveryType'),
-      'deliveryAt': d.getValue('deliveryAt'),
-      'deliveryDate': d.getValue('deliveryDate'),
-      'deliveryStatus': d.getValue('deliveryStatus'),
-      'motherAlive': d.getValue('motherAlive'),
-      'neonateOutcome': d.getValue('neonateOutcome'),
-      'stateOfBaby': d.getValue('stateOfBaby'),
+    final outcomeType = _compact({
+      'deliveryOutcomeType': d.getValue('deliveryOutcomeType'),
+    });
+
+    final maternalDeath = _compact({
+      'timeOfDeath': d.getValue('timeOfDeath'),
+      'gestationMonthAtDeath': d.getValue('gestationMonthAtDeath'),
+      'causeOfDeath': d.getValue('causeOfDeath'),
+    });
+
+    final abortion = _compact({
+      'gestationMonthAtAbortion': d.getValue('gestationMonthAtAbortion'),
+      'typeOfAbortion': d.getValue('typeOfAbortion'),
+    });
+
+    final deliveryOutcomes = _compact({
+      'deliveryOutcome': d.getValue('deliveryOutcome'),
+      'liveBirthNumbers': d.getValue('liveBirthNumbers'),
+      'stillbirthNumbers': d.getValue('stillbirthNumbers'),
+      'placeOfDelivery': d.getValue('placeOfDelivery'),
+      'dateOfDelivery': d.getValue('dateOfDelivery'),
+      'modeOfDelivery': d.getValue('modeOfDelivery'),
+      'birthAttendant': d.getValue('birthAttendant'),
+      'anyComplicationsDuringDelivery': d.getValue('anyComplicationsDuringDelivery'),
+      'complicationsDuringDelivery': d.getValue('complicationsDuringDelivery'),
+    });
+
+    final babyEntry = _compact({
+      'isBabyAlive': d.getValue('babyAlive'),
+      'sex': d.getValue('babySex'),
+      'birthWeight': d.getValue('birthWeight'),
+      'essentialNewbornCare': d.getValue('essentialNewbornCare'),
+      'causeOfNeonatalDeath': d.getValue('neonatalDeathCause'),
+    });
+
+    return _compact(<String, dynamic>{
+      if (outcomeType.isNotEmpty) 'outcomeType': outcomeType,
+      if (maternalDeath.isNotEmpty) 'maternalDeath': maternalDeath,
+      if (abortion.isNotEmpty) 'abortion': abortion,
+      if (deliveryOutcomes.isNotEmpty) 'deliveryOutcomes': deliveryOutcomes,
+      if (babyEntry.isNotEmpty) 'newbornDetails': [babyEntry],
     });
   }
 
