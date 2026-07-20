@@ -1379,7 +1379,7 @@ abstract final class MissionDashboardStrings {
   // ── HTML Dashboard composition ───────────────────────────────────────────
   static String aiSortedVisits(int n) => AppLocale.isBangla
       ? 'এআই রাতারাতি আপনার $n টি ভিজিট সাজিয়েছে'
-      : 'AI sorted your $n visits overnight';
+      : 'sorted your $n visits overnight';
   static String get visitsToday =>
       AppLocale.isBangla ? 'আজকের ভিজিট' : 'Visits today';
 
@@ -1429,16 +1429,16 @@ abstract final class MissionDashboardStrings {
       ? 'আসন্ন কাজ — প্রথমে সবচেয়ে জরুরি'
       : 'Upcoming work — earliest first';
   static String get aiSortedBadge =>
-      AppLocale.isBangla ? '✦ এআই সাজানো' : '✦ AI sorted';
+      AppLocale.isBangla ? '✦ সাজানো' : '✦ sorted';
 
   /// Badge copy for the dashboard header — always the unfiltered today count.
   static String aiSortedVisitsToday(int n) {
     if (AppLocale.isBangla) {
-      return n == 1 ? '✦ এআই সাজানো 1 টি ভিজিট আজ' : '✦ এআই সাজানো $n টি ভিজিট আজ';
+      return n == 1 ? '✦ সাজানো 1 টি ভিজিট আজ' : '✦ সাজানো $n টি ভিজিট আজ';
     }
     return n == 1
-        ? '✦ AI sorted 1 visit today'
-        : '✦ AI sorted $n visits today';
+        ? '✦ sorted 1 visit today'
+        : '✦ sorted $n visits today';
   }
   static String get actionVisitNow =>
       AppLocale.isBangla ? 'এখনই ভিজিট করুন' : 'Visit now';
