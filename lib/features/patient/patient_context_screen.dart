@@ -5211,29 +5211,77 @@ class TrendsScreen extends StatelessWidget {
     addCard(PatientProfileStrings.tempChartLabel, tempPoints,
         lineColor: const Color(0xFFF97316));
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          patientName != null
-              ? '${PatientProfileStrings.allTrendsTitle} · $patientName'
-              : PatientProfileStrings.allTrendsTitle,
-        ),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: _lightStatusBar,
+      child: Scaffold(
         backgroundColor: lc.canvas,
-        foregroundColor: lc.textPrimary,
-        elevation: 0,
-      ),
-      backgroundColor: lc.canvas,
-      body: cards.isEmpty
-          ? Center(
-              child: Text(
-                PatientProfileStrings.noVitalsYet,
-                style: theme.textTheme.bodyMedium?.copyWith(color: lc.textMuted),
+        body: Column(
+          children: [
+            // ── Navy header matching _PatientDetailHeader ────────────
+            Container(
+              color: AppColors.navy,
+              padding: EdgeInsets.fromLTRB(
+                8,
+                MediaQuery.of(context).padding.top + 8,
+                16,
+                14,
               ),
-            )
-          : ListView(
-              padding: const EdgeInsets.all(14),
-              children: cards,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  HeaderIconButton(
+                    icon: Icons.arrow_back,
+                    tooltip: PatientContextStrings.backToWorklist,
+                    onTap: () => Navigator.of(context).maybePop(),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          patientName ?? PatientProfileStrings.allTrendsTitle,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (patientName != null)
+                          Text(
+                            PatientProfileStrings.allTrendsTitle,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
+            // ── Trend cards ──────────────────────────────────────────
+            Expanded(
+              child: cards.isEmpty
+                  ? Center(
+                      child: Text(
+                        PatientProfileStrings.noVitalsYet,
+                        style: theme.textTheme.bodyMedium
+                            ?.copyWith(color: lc.textMuted),
+                      ),
+                    )
+                  : ListView(
+                      padding: const EdgeInsets.all(14),
+                      children: cards,
+                    ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
