@@ -900,6 +900,12 @@ class _PatientContextScreenState
                     ),
                     const SizedBox(height: 12),
 
+                    // ── BP / BG trend sparklines ──────────────────────────
+                    _BpBgTrendSection(vitalHistory: data.vitalHistory),
+                    if (data.vitalHistory.any((v) => v.readings.any((r) =>
+                        r.type == VitalType.bloodPressure || r.type == VitalType.glucose)))
+                      const SizedBox(height: 12),
+
                     // ── Active care threads ───────────────────────────────
                     _CareThreadChipRow(threads: threads),
                     const SizedBox(height: 12),
@@ -2667,6 +2673,294 @@ class _DetailRow extends StatelessWidget {
       ),
     );
   }
+}
+
+// ─── BP / BG Trend Charts ──────────────────────────────────────────────────
+
+/// Two side-by-side sparkline charts built from [VisitVitals] history.
+/// Skips visits where the relevant reading is absent — no missing-data artefacts.
+class _BpBgTrendSection extends StatelessWidget {
+  const _BpBgTrendSection({required this.vitalHistory});
+
+  final List<VisitVitals> vitalHistory;
+
+  @override
+  Widget build(BuildContext context) {
+    // Newest-first → take up to 6 visits that carry BP, then reverse for oldest-left display.
+    final bpPoints = vitalHistory
+        .where((v) => v.readings.any(
+            (r) => r.type == VitalType.bloodPressure && r.systolic != null && r.diastolic != null))
+        .take(6)
+        .toList()
+        .reversed
+        .map((v) => v.readings.firstWhere((r) => r.type == VitalType.bloodPressure))
+        .toList();
+
+    final bgPoints = vitalHistory
+        .where((v) =>
+            v.readings.any((r) => r.type == VitalType.glucose && r.value != null))
+        .take(6)
+        .toList()
+        .reversed
+        .map((v) => v.readings.firstWhere((r) => r.type == VitalType.glucose))
+        .toList();
+
+    if (bpPoints.isEmpty && bgPoints.isEmpty) return const SizedBox.shrink();
+
+    final lc = Theme.of(context).extension<LeapfrogColors>()!;
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          PatientProfileStrings.trendsTitle,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: lc.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (bpPoints.isNotEmpty)
+              Expanded(
+                child: _TrendChartCard(
+                  title: PatientProfileStrings.bpChartLabel,
+                  latestLabel: '${bpPoints.last.systolic!.toInt()}/${bpPoints.last.diastolic!.toInt()} mmHg',
+                  lc: lc,
+                  child: CustomPaint(
+                    painter: _BpSparklinePainter(readings: bpPoints, lc: lc),
+                    child: const SizedBox(height: 72),
+                  ),
+                ),
+              ),
+            if (bpPoints.isNotEmpty && bgPoints.isNotEmpty) const SizedBox(width: 10),
+            if (bgPoints.isNotEmpty)
+              Expanded(
+                child: _TrendChartCard(
+                  title: PatientProfileStrings.bgChartLabel,
+                  latestLabel: '${bgPoints.last.value!.toStringAsFixed(1)} mg/dL',
+                  lc: lc,
+                  child: CustomPaint(
+                    painter: _BgSparklinePainter(readings: bgPoints, lc: lc),
+                    child: const SizedBox(height: 72),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _TrendChartCard extends StatelessWidget {
+  const _TrendChartCard({
+    required this.title,
+    required this.latestLabel,
+    required this.lc,
+    required this.child,
+  });
+
+  final String title;
+  final String latestLabel;
+  final LeapfrogColors lc;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+      decoration: BoxDecoration(
+        color: lc.cardSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: lc.borderDefault),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: lc.textMuted,
+              letterSpacing: 0.2,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            latestLabel,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: lc.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          SizedBox(width: double.infinity, child: child),
+        ],
+      ),
+    );
+  }
+}
+
+/// Paints systolic (solid navy) + diastolic (lighter blue) lines with a
+/// semi-transparent fill between them.
+class _BpSparklinePainter extends CustomPainter {
+  const _BpSparklinePainter({required this.readings, required this.lc});
+
+  final List<VitalReading> readings;
+  final LeapfrogColors lc;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (readings.length < 2) {
+      _drawDot(canvas, size, readings);
+      return;
+    }
+
+    final sys = readings.map((r) => r.systolic!).toList();
+    final dia = readings.map((r) => r.diastolic!).toList();
+
+    final allVals = [...sys, ...dia];
+    final minVal = allVals.reduce((a, b) => a < b ? a : b) - 10;
+    final maxVal = allVals.reduce((a, b) => a > b ? a : b) + 10;
+    final range = (maxVal - minVal).clamp(1.0, double.infinity);
+
+    double xAt(int i) => i / (readings.length - 1) * size.width;
+    double yAt(double v) => size.height - ((v - minVal) / range) * size.height;
+
+    final sysPath = Path()..moveTo(xAt(0), yAt(sys[0]));
+    for (int i = 1; i < sys.length; i++) {
+      sysPath.lineTo(xAt(i), yAt(sys[i]));
+    }
+
+    final diaPath = Path()..moveTo(xAt(0), yAt(dia[0]));
+    for (int i = 1; i < dia.length; i++) {
+      diaPath.lineTo(xAt(i), yAt(dia[i]));
+    }
+
+    // Fill between sys and dia
+    final fillPath = Path()..moveTo(xAt(0), yAt(sys[0]));
+    for (int i = 1; i < sys.length; i++) {
+      fillPath.lineTo(xAt(i), yAt(sys[i]));
+    }
+    for (int i = readings.length - 1; i >= 0; i--) {
+      fillPath.lineTo(xAt(i), yAt(dia[i]));
+    }
+    fillPath.close();
+
+    canvas.drawPath(
+      fillPath,
+      Paint()..color = AppColors.navy.withValues(alpha: 0.10),
+    );
+
+    final sysPaint = Paint()
+      ..color = AppColors.navy
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final diaPaint = Paint()
+      ..color = AppColors.navy.withValues(alpha: 0.50)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    canvas.drawPath(sysPath, sysPaint);
+    canvas.drawPath(diaPath, diaPaint);
+
+    // Endpoint dots
+    _dotAt(canvas, xAt(sys.length - 1), yAt(sys.last), AppColors.navy, 3.5);
+    _dotAt(canvas, xAt(dia.length - 1), yAt(dia.last),
+        AppColors.navy.withValues(alpha: 0.60), 3.0);
+  }
+
+  void _drawDot(Canvas canvas, Size size, List<VitalReading> readings) {
+    if (readings.isEmpty) return;
+    _dotAt(canvas, size.width / 2, size.height / 2, AppColors.navy, 4);
+  }
+
+  void _dotAt(Canvas canvas, double x, double y, Color color, double r) {
+    canvas.drawCircle(
+      Offset(x, y),
+      r,
+      Paint()..color = color,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_BpSparklinePainter old) => old.readings != readings;
+}
+
+/// Paints a single blood-glucose line with area fill below.
+class _BgSparklinePainter extends CustomPainter {
+  const _BgSparklinePainter({required this.readings, required this.lc});
+
+  final List<VitalReading> readings;
+  final LeapfrogColors lc;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (readings.isEmpty) return;
+    if (readings.length < 2) {
+      canvas.drawCircle(
+        Offset(size.width / 2, size.height / 2),
+        4,
+        Paint()..color = AppColors.statusWarning,
+      );
+      return;
+    }
+
+    final vals = readings.map((r) => r.value!).toList();
+    final minVal = (vals.reduce((a, b) => a < b ? a : b) - 10).clamp(0.0, double.infinity);
+    final maxVal = vals.reduce((a, b) => a > b ? a : b) + 10;
+    final range = (maxVal - minVal).clamp(1.0, double.infinity);
+
+    double xAt(int i) => i / (readings.length - 1) * size.width;
+    double yAt(double v) => size.height - ((v - minVal) / range) * size.height;
+
+    final line = Path()..moveTo(xAt(0), yAt(vals[0]));
+    for (int i = 1; i < vals.length; i++) {
+      line.lineTo(xAt(i), yAt(vals[i]));
+    }
+
+    final fill = Path()
+      ..moveTo(xAt(0), size.height)
+      ..lineTo(xAt(0), yAt(vals[0]));
+    for (int i = 1; i < vals.length; i++) {
+      fill.lineTo(xAt(i), yAt(vals[i]));
+    }
+    fill.lineTo(xAt(vals.length - 1), size.height);
+    fill.close();
+
+    canvas.drawPath(
+      fill,
+      Paint()..color = AppColors.statusWarning.withValues(alpha: 0.12),
+    );
+    canvas.drawPath(
+      line,
+      Paint()
+        ..color = AppColors.statusWarning
+        ..strokeWidth = 2
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+    canvas.drawCircle(
+      Offset(xAt(vals.length - 1), yAt(vals.last)),
+      3.5,
+      Paint()..color = AppColors.statusWarning,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_BgSparklinePainter old) => old.readings != readings;
 }
 
 // ─── Combined Timeline ─────────────────────────────────────────────────────

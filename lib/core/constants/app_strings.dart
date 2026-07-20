@@ -1018,6 +1018,9 @@ abstract final class PatientProfileStrings {
   static const String breastfeeding = 'Breastfeeding';
   static const String aiInsightUnavailable =
       'AI insight unavailable — check patient record manually';
+  static const String trendsTitle = 'Trends';
+  static const String bpChartLabel = 'Blood Pressure';
+  static const String bgChartLabel = 'Blood Glucose';
 }
 
 abstract final class ContactSheetStrings {
