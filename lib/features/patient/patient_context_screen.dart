@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' show TextDirection;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
