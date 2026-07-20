@@ -561,7 +561,9 @@ abstract final class UnifiedPayloadMapper {
     if (ncdSymptoms != null) symptomsLog['ncdSymptoms'] = ncdSymptoms;
     final newWorseningSymptoms = d.getValue('newWorseningSymptoms');
     if (newWorseningSymptoms != null) symptomsLog['newWorseningSymptoms'] = newWorseningSymptoms;
-    final ncdSymptomsMedication = d.getValue('ncdSymptomsMedication');
+    // Android wire key is ncdSymptomsMedication; Flutter layout uses 'compliance' (same field).
+    // Read ncdSymptomsMedication first; fall back to compliance so either layout ID works.
+    final ncdSymptomsMedication = d.getValue('ncdSymptomsMedication') ?? complianceStr;
     if (ncdSymptomsMedication != null) symptomsLog['ncdSymptomsMedication'] = ncdSymptomsMedication;
 
     return {
