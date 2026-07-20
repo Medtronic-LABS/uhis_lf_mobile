@@ -1021,6 +1021,12 @@ abstract final class PatientProfileStrings {
   static const String trendsTitle = 'Trends';
   static const String bpChartLabel = 'Blood Pressure';
   static const String bgChartLabel = 'Blood Glucose';
+  static const String viewAllTrends = 'View all trends';
+  static const String allTrendsTitle = 'All Trends';
+  static const String weightChartLabel = 'Weight';
+  static const String spO2ChartLabel = 'SpO₂';
+  static const String haemoglobinChartLabel = 'Haemoglobin';
+  static const String tempChartLabel = 'Temperature';
 }
 
 abstract final class ContactSheetStrings {

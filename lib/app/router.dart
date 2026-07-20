@@ -17,6 +17,8 @@ import '../features/login/login_screen.dart';
 import '../features/login/forgot_password_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
 import '../features/patient/patient_context_screen.dart';
+import '../features/patient/vitals_repository.dart';
+import '../features/patient/member_detail_repository.dart';
 import '../features/pin/pin_setup_screen.dart';
 import '../features/pin/pin_unlock_screen.dart';
 import '../features/referral/referral_detail_screen.dart';
@@ -239,6 +241,31 @@ GoRouter buildRouter(AuthState auth) {
                           memberId: extra['memberId'] as String?,
                           householdMemberLocalId:
                               extra['householdMemberLocalId'] as int?,
+                        ),
+                      );
+                    },
+                  ),
+                  // All-trends full-screen viewer
+                  GoRoute(
+                    path: ':id/trends',
+                    name: 'patient-trends',
+                    pageBuilder: (context, state) {
+                      final extra = state.extra is Map<String, dynamic>
+                          ? state.extra as Map<String, dynamic>
+                          : <String, dynamic>{};
+                      return MaterialPage(
+                        key: ValueKey('trends-${state.pathParameters['id']}'),
+                        child: TrendsScreen(
+                          patientId: state.pathParameters['id']!,
+                          patientName: extra['patientName'] as String?,
+                          vitalHistory: extra['vitalHistory'] is List
+                              ? List<VisitVitals>.from(
+                                  extra['vitalHistory'] as List)
+                              : const [],
+                          assessments: extra['assessments'] is List
+                              ? List<MemberAssessment>.from(
+                                  extra['assessments'] as List)
+                              : const [],
                         ),
                       );
                     },
