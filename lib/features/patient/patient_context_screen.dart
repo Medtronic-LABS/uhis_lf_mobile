@@ -904,6 +904,8 @@ class _PatientContextScreenState
                     _BpBgTrendSection(
                       vitalHistory: data.vitalHistory,
                       assessments: data.assessments,
+                      patientId: widget.patientId,
+                      patientName: data.name,
                     ),
                     if (data.vitalHistory.isNotEmpty) const SizedBox(height: 12),
 
@@ -2702,10 +2704,14 @@ class _BpBgTrendSection extends StatelessWidget {
   const _BpBgTrendSection({
     required this.vitalHistory,
     required this.assessments,
+    required this.patientId,
+    this.patientName,
   });
 
   final List<VisitVitals> vitalHistory;
   final List<MemberAssessment> assessments;
+  final String patientId;
+  final String? patientName;
 
   List<_TrendPoint> _buildBpPoints() {
     return vitalHistory
@@ -2773,6 +2779,7 @@ class _BpBgTrendSection extends StatelessWidget {
             title: PatientProfileStrings.bpChartLabel,
             points: bpPoints,
             isBp: true,
+            onAssessmentTap: (ctx, a) => _TimelineEventSheet.show(ctx, a),
           ),
         if (bpPoints.isNotEmpty && bgPoints.isNotEmpty) const SizedBox(height: 8),
         if (bgPoints.isNotEmpty)
@@ -2780,7 +2787,27 @@ class _BpBgTrendSection extends StatelessWidget {
             title: PatientProfileStrings.bgChartLabel,
             points: bgPoints,
             isBp: false,
+            onAssessmentTap: (ctx, a) => _TimelineEventSheet.show(ctx, a),
           ),
+        const SizedBox(height: 4),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: () => context.push(
+              '/patients/$patientId/trends',
+              extra: <String, dynamic>{
+                'patientName': patientName,
+                'vitalHistory': vitalHistory,
+                'assessments': assessments,
+              },
+            ),
+            icon: const Icon(Icons.trending_up, size: 16),
+            label: Text(PatientProfileStrings.viewAllTrends),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -2791,11 +2818,15 @@ class _VitalTrendCard extends StatefulWidget {
     required this.title,
     required this.points,
     required this.isBp,
+    this.lineColor = AppColors.statusWarning,
+    this.onAssessmentTap,
   });
 
   final String title;
   final List<_TrendPoint> points; // oldest-first
   final bool isBp;
+  final Color lineColor;
+  final void Function(BuildContext context, MemberAssessment assessment)? onAssessmentTap;
 
   @override
   State<_VitalTrendCard> createState() => _VitalTrendCardState();
@@ -2843,7 +2874,7 @@ class _VitalTrendCardState extends State<_VitalTrendCard> {
                     child: CustomPaint(
                       painter: widget.isBp
                           ? _BpSparklinePainter(readings: _readingsForChart, lc: lc)
-                          : _BgSparklinePainter(readings: _readingsForChart, lc: lc),
+                          : _SingleLinePainter(readings: _readingsForChart, lc: lc, color: widget.lineColor),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -2889,7 +2920,13 @@ class _VitalTrendCardState extends State<_VitalTrendCard> {
           if (_expanded) ...[
             Divider(height: 1, thickness: 1, color: lc.borderDefault),
             // Newest first in list
-            ...widget.points.reversed.map((pt) => _TrendHistoryRow(point: pt, lc: lc)),
+            ...widget.points.reversed.map((pt) => _TrendHistoryRow(
+                  point: pt,
+                  lc: lc,
+                  onTap: pt.assessment != null
+                      ? () => widget.onAssessmentTap?.call(context, pt.assessment!)
+                      : null,
+                )),
             const SizedBox(height: 4),
           ],
         ],
@@ -2899,18 +2936,16 @@ class _VitalTrendCardState extends State<_VitalTrendCard> {
 }
 
 class _TrendHistoryRow extends StatelessWidget {
-  const _TrendHistoryRow({required this.point, required this.lc});
+  const _TrendHistoryRow({required this.point, required this.lc, this.onTap});
 
   final _TrendPoint point;
   final LeapfrogColors lc;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final canTap = point.assessment != null;
     return InkWell(
-      onTap: canTap
-          ? () => _TimelineEventSheet.show(context, point.assessment!)
-          : null,
+      onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         child: Row(
@@ -2932,7 +2967,7 @@ class _TrendHistoryRow extends StatelessWidget {
                 fontWeight: FontWeight.w600,
               ),
             ),
-            if (canTap) ...[
+            if (onTap != null) ...[
               const SizedBox(width: 4),
               Icon(Icons.chevron_right, size: 16, color: lc.textMuted),
             ],
@@ -3011,10 +3046,13 @@ class _BpSparklinePainter extends CustomPainter {
     canvas.drawPath(sysPath, sysPaint);
     canvas.drawPath(diaPath, diaPaint);
 
-    // Endpoint dots
-    _dotAt(canvas, xAt(sys.length - 1), yAt(sys.last), AppColors.navy, 3.5);
-    _dotAt(canvas, xAt(dia.length - 1), yAt(dia.last),
-        AppColors.navy.withValues(alpha: 0.60), 3.0);
+    // Data point dots at every reading
+    for (int i = 0; i < readings.length; i++) {
+      _dotAt(canvas, xAt(i), yAt(sys[i]), AppColors.navy,
+          i == sys.length - 1 ? 3.5 : 2.5);
+      _dotAt(canvas, xAt(i), yAt(dia[i]),
+          AppColors.navy.withValues(alpha: 0.60), i == dia.length - 1 ? 3.0 : 2.0);
+    }
   }
 
   void _drawDot(Canvas canvas, Size size, List<VitalReading> readings) {
@@ -3034,12 +3072,17 @@ class _BpSparklinePainter extends CustomPainter {
   bool shouldRepaint(_BpSparklinePainter old) => old.readings != readings;
 }
 
-/// Paints a single blood-glucose line with area fill below.
-class _BgSparklinePainter extends CustomPainter {
-  const _BgSparklinePainter({required this.readings, required this.lc});
+/// Generic single-line sparkline with area fill below. Color-parameterised.
+class _SingleLinePainter extends CustomPainter {
+  const _SingleLinePainter({
+    required this.readings,
+    required this.lc,
+    this.color = AppColors.statusWarning,
+  });
 
   final List<VitalReading> readings;
   final LeapfrogColors lc;
+  final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -3048,7 +3091,7 @@ class _BgSparklinePainter extends CustomPainter {
       canvas.drawCircle(
         Offset(size.width / 2, size.height / 2),
         4,
-        Paint()..color = AppColors.statusWarning,
+        Paint()..color = color,
       );
       return;
     }
@@ -3077,26 +3120,30 @@ class _BgSparklinePainter extends CustomPainter {
 
     canvas.drawPath(
       fill,
-      Paint()..color = AppColors.statusWarning.withValues(alpha: 0.12),
+      Paint()..color = color.withValues(alpha: 0.12),
     );
     canvas.drawPath(
       line,
       Paint()
-        ..color = AppColors.statusWarning
+        ..color = color
         ..strokeWidth = 2
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round,
     );
-    canvas.drawCircle(
-      Offset(xAt(vals.length - 1), yAt(vals.last)),
-      3.5,
-      Paint()..color = AppColors.statusWarning,
-    );
+
+    // Data point dots at every reading
+    for (int i = 0; i < vals.length; i++) {
+      canvas.drawCircle(
+        Offset(xAt(i), yAt(vals[i])),
+        i == vals.length - 1 ? 3.5 : 2.5,
+        Paint()..color = color,
+      );
+    }
   }
 
   @override
-  bool shouldRepaint(_BgSparklinePainter old) => old.readings != readings;
+  bool shouldRepaint(_SingleLinePainter old) => old.readings != readings || old.color != color;
 }
 
 // ─── Combined Timeline ─────────────────────────────────────────────────────
@@ -4927,6 +4974,166 @@ class _NoServicesCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ─── Trends Screen ─────────────────────────────────────────────────────────
+
+/// Full-page trend viewer: BP, BG, Weight, SpO2, Haemoglobin (ANC), Temperature.
+/// Data passed via GoRouter extra from PatientContextScreen to avoid reload.
+class TrendsScreen extends StatelessWidget {
+  const TrendsScreen({
+    super.key,
+    required this.patientId,
+    required this.vitalHistory,
+    required this.assessments,
+    this.patientName,
+  });
+
+  final String patientId;
+  final List<VisitVitals> vitalHistory;
+  final List<MemberAssessment> assessments;
+  final String? patientName;
+
+  List<_TrendPoint> _pointsForType(VitalType type) {
+    return vitalHistory
+        .where((v) => v.readings.any((r) => r.type == type && _hasValue(r, type)))
+        .take(10)
+        .toList()
+        .reversed
+        .map((v) {
+          final r = v.readings.firstWhere((r) => r.type == type);
+          final match = assessments.where((a) => a.id == v.encounterId).firstOrNull;
+          return _TrendPoint(
+            date: v.date,
+            displayLabel: _formatReading(r, type),
+            primaryVal: type == VitalType.bloodPressure ? r.systolic! : r.value!,
+            secondaryVal: type == VitalType.bloodPressure ? r.diastolic : null,
+            assessment: match,
+          );
+        })
+        .toList();
+  }
+
+  bool _hasValue(VitalReading r, VitalType type) {
+    if (type == VitalType.bloodPressure) return r.systolic != null && r.diastolic != null;
+    return r.value != null;
+  }
+
+  String _formatReading(VitalReading r, VitalType type) {
+    switch (type) {
+      case VitalType.bloodPressure:
+        return '${r.systolic!.toInt()}/${r.diastolic!.toInt()} mmHg';
+      case VitalType.glucose:
+        return '${r.value!.toStringAsFixed(1)} mg/dL';
+      case VitalType.weight:
+        return '${r.value!.toStringAsFixed(1)} kg';
+      case VitalType.spO2:
+        return '${r.value!.toStringAsFixed(0)}%';
+      case VitalType.temperature:
+        return '${r.value!.toStringAsFixed(1)}°C';
+      default:
+        return r.value!.toStringAsFixed(1);
+    }
+  }
+
+  List<_TrendPoint> _haemoglobinPoints() {
+    final pts = <_TrendPoint>[];
+    for (final a in assessments) {
+      if (Programme.fromString(a.type) != Programme.anc) continue;
+      String? hbStr;
+      final rawJson = a.rawJson;
+      hbStr = rawJson['hemoglobin'] as String?;
+      if (hbStr == null || hbStr.isEmpty) {
+        final obs = rawJson['observations'];
+        if (obs is Map) hbStr = obs['hemoglobin'] as String?;
+      }
+      if (hbStr == null || hbStr.isEmpty) {
+        final ad = rawJson['assessmentDetails'];
+        if (ad is Map) {
+          final anc = ad['anc'];
+          hbStr = (anc is Map ? anc['hemoglobin'] : ad['hemoglobin']) as String?;
+        }
+      }
+      if (hbStr == null || hbStr.isEmpty) continue;
+      final val = double.tryParse(hbStr);
+      if (val == null) continue;
+      pts.add(_TrendPoint(
+        date: a.date,
+        displayLabel: '${val.toStringAsFixed(1)} g/dL',
+        primaryVal: val,
+        assessment: a,
+      ));
+    }
+    return pts.take(10).toList().reversed.toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lc = Theme.of(context).extension<LeapfrogColors>()!;
+    final theme = Theme.of(context);
+
+    final bpPoints = _pointsForType(VitalType.bloodPressure);
+    final bgPoints = _pointsForType(VitalType.glucose);
+    final wtPoints = _pointsForType(VitalType.weight);
+    final spO2Points = _pointsForType(VitalType.spO2);
+    final tempPoints = _pointsForType(VitalType.temperature);
+    final hbPoints = _haemoglobinPoints();
+
+    final cards = <Widget>[];
+
+    void addCard(
+      String title,
+      List<_TrendPoint> points, {
+      bool isBp = false,
+      Color lineColor = AppColors.statusWarning,
+    }) {
+      if (points.isEmpty) return;
+      cards.add(_VitalTrendCard(
+        title: title,
+        points: points,
+        isBp: isBp,
+        lineColor: lineColor,
+        onAssessmentTap: (ctx, a) => _TimelineEventSheet.show(ctx, a),
+      ));
+      cards.add(const SizedBox(height: 10));
+    }
+
+    addCard(PatientProfileStrings.bpChartLabel, bpPoints, isBp: true);
+    addCard(PatientProfileStrings.bgChartLabel, bgPoints);
+    addCard(PatientProfileStrings.weightChartLabel, wtPoints,
+        lineColor: AppColors.navy);
+    addCard(PatientProfileStrings.haemoglobinChartLabel, hbPoints,
+        lineColor: AppColors.statusCritical);
+    addCard(PatientProfileStrings.spO2ChartLabel, spO2Points,
+        lineColor: const Color(0xFF10B981));
+    addCard(PatientProfileStrings.tempChartLabel, tempPoints,
+        lineColor: const Color(0xFFF97316));
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          patientName != null
+              ? '${PatientProfileStrings.allTrendsTitle} · $patientName'
+              : PatientProfileStrings.allTrendsTitle,
+        ),
+        backgroundColor: lc.canvas,
+        foregroundColor: lc.textPrimary,
+        elevation: 0,
+      ),
+      backgroundColor: lc.canvas,
+      body: cards.isEmpty
+          ? Center(
+              child: Text(
+                PatientProfileStrings.noVitalsYet,
+                style: theme.textTheme.bodyMedium?.copyWith(color: lc.textMuted),
+              ),
+            )
+          : ListView(
+              padding: const EdgeInsets.all(14),
+              children: cards,
+            ),
     );
   }
 }
