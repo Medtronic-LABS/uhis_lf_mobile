@@ -999,6 +999,8 @@ abstract final class PatientProfileStrings {
   static const String pregnancyProgress = 'Pregnancy progress';
   static const String careHistory = 'Care history';
   static const String noVitalsYet = 'No vitals recorded yet';
+  static const String showLess = 'Show less';
+  static String showMoreEntries(int n) => 'Show $n more';
   static const String vitalsConfirmAtVisit = "Confirm at today's visit";
   static const String weeksToGo = 'weeks to go';
   static const String visitsCompleted = 'Visits completed';
