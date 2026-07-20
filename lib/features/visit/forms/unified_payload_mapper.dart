@@ -482,6 +482,8 @@ abstract final class UnifiedPayloadMapper {
       bpLog['avgDiastolic'] = avgDia;
       bpLog['avgBloodPressure'] = '$avgSys/$avgDia';
       bpLog['bpLogDetails'] = bpDetails;
+      // Android CommonUtils stamps bpTakenOn on every NCD BP log (UTC ISO-8601).
+      bpLog['bpTakenOn'] = DateTime.now().toUtc().toIso8601String();
       // Biometric data inside bpLog (Android stores weight/height/bmi here).
       final weight = asNum(d.getValue('weight'));
       if (weight != null) bpLog['weight'] = weight;
@@ -489,6 +491,8 @@ abstract final class UnifiedPayloadMapper {
       if (height != null) bpLog['height'] = height;
       final bmi = asNum(d.getValue('bmi'));
       if (bmi != null) bpLog['bmi'] = bmi;
+      final bmiCategory = d.getValue('bmiCategory');
+      if (bmiCategory != null) bpLog['bmiCategory'] = bmiCategory;
       final isRegularSmoker = d.getValue('isRegularSmoker');
       if (isRegularSmoker != null) {
         // Spice-service BpLogDTO field is Boolean — coerce "Yes"/"yes"/true → true.
@@ -837,7 +841,8 @@ abstract final class UnifiedPayloadMapper {
       'hasNightSweats': d.getValue('hasNightSweats'),
       'hasFever': d.getValue('hasTbFever') ?? d.getValue('hasFever'),
       'hasWeightLoss': d.getValue('hasWeightLoss'),
-      'tbDateOfOnset': d.getValue('tbDateOfOnset'),
+      // Android wire key is "dateOfOnset"; form field ID is "tbDateOfOnset".
+      'dateOfOnset': d.getValue('tbDateOfOnset') ?? d.getValue('dateOfOnset'),
       // Contact tracing
       'relationshipToIC': d.getValue('tbRelationshipToIC'),
       'sleepLocation': d.getValue('tbSleepLocation'),

@@ -659,8 +659,14 @@ class TriageViewModel extends ChangeNotifier {
     final enrolled = ctx.activeProgrammes;
     final sections = <SymptomSection>[];
 
+    // Maternal symptoms (ANC/PNC) only apply to patients old enough to be a
+    // mother. A neonate or infant enrolled in 'pnc' is a neonatal PNC case —
+    // those patients must never see vaginal_bleeding or other maternal symptoms.
+    final isMaternalAge =
+        ctx.ageMonths >= AiScribeTriageVocab.maternalMinAgeMonths;
+
     // ANC: enrolled, or patient is pregnant (may not be formally enrolled yet).
-    if (enrolled.contains(Programme.anc) || ctx.isPregnant) {
+    if (isMaternalAge && (enrolled.contains(Programme.anc) || ctx.isPregnant)) {
       sections.add(SymptomSection(
         programme: Programme.anc,
         codes: SymptomCatalog.byProgramme(Programme.anc)
@@ -670,7 +676,7 @@ class TriageViewModel extends ChangeNotifier {
     }
 
     // PNC: enrolled, or patient is postpartum.
-    if (enrolled.contains(Programme.pnc) || ctx.isPostpartum) {
+    if (isMaternalAge && (enrolled.contains(Programme.pnc) || ctx.isPostpartum)) {
       sections.add(SymptomSection(
         programme: Programme.pnc,
         codes: SymptomCatalog.byProgramme(Programme.pnc)
