@@ -10,6 +10,8 @@ import '../../../core/db/patient_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
 import '../../../core/debug/console_log.dart';
 import '../../../core/models/json_read.dart';
+import '../../../core/models/referral.dart';
+import '../../referral/referral_repository.dart';
 import '../../scribe/models/ai_extracted_field.dart';
 import '../assessment_repository.dart';
 import '../models/anc_assessment.dart';
@@ -39,6 +41,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
     int householdMemberLocalId = 0,
     String? pregnancyEpisodeId,
     String? defaultReferralSiteId,
+    ReferralRepository? referralRepo,
   })  : _encounterId = encounterId,
         _patientId = patientId,
         _activeFormTypes = activeFormTypes,
@@ -51,7 +54,8 @@ class UnifiedFormNotifier extends ChangeNotifier {
         _villageId = villageId,
         _householdMemberLocalId = householdMemberLocalId,
         _pregnancyEpisodeId = pregnancyEpisodeId,
-        _defaultReferralSiteId = defaultReferralSiteId;
+        _defaultReferralSiteId = defaultReferralSiteId,
+        _referralRepo = referralRepo;
 
   final String _encounterId;
   final String _patientId;
@@ -66,6 +70,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
   final int _householdMemberLocalId;
   final String? _pregnancyEpisodeId;
   final String? _defaultReferralSiteId;
+  final ReferralRepository? _referralRepo;
 
   DateTime? _lmpDate;
   DateTime? _eddDate;
@@ -902,6 +907,18 @@ class UnifiedFormNotifier extends ChangeNotifier {
         );
         savedIds.add(id);
       }
+
+      // CCE: bridge referred assessments into the local referrals table so
+      // the dashboard bell / drawer see the case without waiting for sync.
+      if (isReferred && savedIds.isNotEmpty) {
+        await _ensureLocalReferral(
+          assessmentId: savedIds.first,
+          reasons: referredReasons,
+          assessmentType: payloads.isNotEmpty
+              ? payloads.first.assessmentType
+              : null,
+        );
+      }
       return savedIds;
     } catch (e) {
       _submitError = e.toString();
@@ -909,6 +926,39 @@ class UnifiedFormNotifier extends ChangeNotifier {
     } finally {
       _submitting = false;
       notifyListeners();
+    }
+  }
+
+  /// Creates a local [Referral] for CCE when this visit was referred.
+  /// Idempotent on `ref-assess-{assessmentId}` so re-submit does not duplicate.
+  Future<void> _ensureLocalReferral({
+    required String assessmentId,
+    required List<String> reasons,
+    String? assessmentType,
+  }) async {
+    final repo = _referralRepo;
+    if (repo == null || _patientId.isEmpty) return;
+    final referralId = 'ref-assess-$assessmentId';
+    try {
+      final existing = await repo.byId(referralId);
+      if (existing != null) return;
+      final label = reasons.where((r) => r.trim().isNotEmpty).join(', ');
+      await repo.create(
+        id: referralId,
+        patientId: _patientId,
+        slaTier: SlaTier.inferFromReason(label.isEmpty ? null : label),
+        householdId: _householdId,
+        villageId: _villageId,
+        diagnosisCode: assessmentType,
+        diagnosisLabel: label.isEmpty ? null : label,
+        facilityName: _lastReferralFacility ?? _defaultReferralSiteId,
+      );
+      debugPrint(
+        '[Referral] CCE local create id=$referralId reasons=$label',
+      );
+    } catch (e) {
+      // Non-fatal — assessment is already saved; CCE can catch up on next sync.
+      debugPrint('[Referral] CCE local create failed: $e');
     }
   }
 

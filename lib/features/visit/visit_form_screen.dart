@@ -19,6 +19,7 @@ import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
 import '../scribe/scribe_session.dart';
 import '../scribe/widgets/scribe_review_sheet.dart';
+import '../referral/referral_repository.dart';
 import '../worklist/worklist_repository.dart';
 import 'pathway/pathway_engine.dart';
 import 'assessment_repository.dart';
@@ -299,6 +300,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
       villageId: widget.villageId,
       householdMemberLocalId: widget.householdMemberLocalId ?? 0,
       defaultReferralSiteId: ctx.read<ApiClient>().organizationFhirId,
+      referralRepo: ctx.read<ReferralRepository>(),
     );
 
     return ChangeNotifierProvider<UnifiedFormNotifier>.value(

@@ -6,6 +6,7 @@ import '../../core/constants/app_strings.dart';
 import '../../core/models/programme.dart';
 import '../../core/models/worklist_entry.dart';
 import '../../core/sync/offline_sync_service.dart';
+import '../referral/referral_repository.dart';
 import 'widgets/programme_chip_row.dart';
 import 'widgets/sync_strip.dart';
 import 'widgets/urgent_banner.dart';
@@ -79,6 +80,8 @@ class _WorklistViewState extends State<WorklistView> {
     if (!mounted) return;
     await _repo.recomputeAllAfterSync();
     if (!mounted) return;
+    await context.read<ReferralRepository>().recomputeAllAfterSync();
+    if (!mounted) return;
     _refreshLastSyncedLabel();
     if (report.errors.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -91,6 +94,8 @@ class _WorklistViewState extends State<WorklistView> {
     final report = await _sync.warmSync();
     if (!mounted) return;
     await _repo.recomputeAllAfterSync();
+    if (!mounted) return;
+    await context.read<ReferralRepository>().recomputeAllAfterSync();
     _refreshLastSyncedLabel();
     if (!mounted) return;
     final msg = report.errors.isNotEmpty

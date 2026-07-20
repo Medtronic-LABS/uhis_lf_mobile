@@ -3,8 +3,10 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/api/endpoints.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/config/app_config.dart';
+import '../../core/debug/console_log.dart';
 import 'coaching_dao.dart';
 import 'coaching_models.dart';
 import 'coaching_telemetry_service.dart';
@@ -20,17 +22,22 @@ class CoachingRepository extends ChangeNotifier {
   final CoachingTelemetryService _telemetry;
 
   List<CoachingModule> _modules = [];
+  bool _syncing = false;
 
   List<CoachingModule> get modules => List.unmodifiable(_modules);
 
+  /// Modules ranked for today (morning endpoint / gap fallback). Highest
+  /// priority first — matches SQLite `ORDER BY priority_today DESC`.
   List<CoachingModule> get todaysPriorities =>
       _modules.where((m) => m.priorityToday).toList();
+
+  bool get isSyncing => _syncing;
 
   /// Drops the in-memory module/progress snapshot. Call on logout — this
   /// repository is a single long-lived instance for the app's whole process
   /// (see main.dart), so without this the next user to log in on the same
   /// device would briefly see the previous user's cached training progress
-  /// until [initialize] or [syncFromApi] runs again.
+  /// until [initialize] or [refresh] runs again.
   void clear() {
     _modules = [];
     notifyListeners();
@@ -55,36 +62,71 @@ class CoachingRepository extends ChangeNotifier {
     }
   }
 
-  /// Fetches from the spice-coaching backend and persists to SQLite.
+  /// Resolves the signed-in user and pulls modules + morning priorities from
+  /// the coaching service. On network failure, keeps whatever [initialize]
+  /// already loaded (SQLite / debug mock). Safe to call repeatedly.
+  Future<void> refresh() async {
+    final userId = await _authRepo.userId();
+    if (userId == null) {
+      await initialize();
+      return;
+    }
+    await syncFromApi(userId);
+  }
+
+  /// Fetches modules, gaps, and morning priorities from spice-coaching and
+  /// persists them to SQLite. Non-fatal on failure (offline-first).
   Future<void> syncFromApi(int userId) async {
+    if (_syncing) return;
+    _syncing = true;
+    notifyListeners();
     try {
       final since = _lastSyncIso();
+      final base = AppConfig.coachingServiceUrl;
       final modulesUrl =
-          '${AppConfig.coachingServiceUrl}/medtronics-api/sync/modules'
-          '?since=$since&user_id=$userId';
+          '$base${Endpoints.coachingSyncModules}?since=$since&user_id=$userId';
       final gapsUrl =
-          '${AppConfig.coachingServiceUrl}/medtronics-api/sync/gaps'
-          '?chw_id=$userId&since=$since';
+          '$base${Endpoints.coachingSyncGaps}?chw_id=$userId&since=$since';
+      final morningUrl =
+          '$base${Endpoints.coachingMorning}?chw_id=$userId';
 
-      final [modulesRes, gapsRes] = await Future.wait([
+      ConsoleLog.banner(
+        '[PayloadDebug] coaching-sync\n'
+        'modules=$modulesUrl\n'
+        'gaps=$gapsUrl\n'
+        'morning=$morningUrl',
+      );
+
+      final [modulesRes, gapsRes, morningRes] = await Future.wait([
         _api.dio.get<Map<String, dynamic>>(modulesUrl),
         _api.dio.get<Map<String, dynamic>>(gapsUrl),
+        _api.dio.get<Map<String, dynamic>>(morningUrl),
       ]);
 
+      ConsoleLog.success(
+        '[PayloadDebug] coaching-sync → '
+        'modules=${modulesRes.statusCode} '
+        'gaps=${gapsRes.statusCode} '
+        'morning=${morningRes.statusCode}',
+      );
+
       final gapIds = <String>{};
-      final gaps =
-          (gapsRes.data?['gaps'] as List<dynamic>?) ?? [];
+      final gaps = (gapsRes.data?['gaps'] as List<dynamic>?) ?? [];
       for (final g in gaps) {
-        final mid = (g as Map)['module_id'];
-        if (mid is String) gapIds.add(mid);
+        if (g is! Map) continue;
+        final mid = g['module_id'] ?? g['id'];
+        if (mid is String && mid.isNotEmpty) gapIds.add(mid);
       }
+
+      final morningIds = parseMorningModuleIds(morningRes.data);
 
       final rawModules =
           (modulesRes.data?['modules'] as List<dynamic>?) ?? [];
       for (final raw in rawModules) {
-        final m = raw as Map<String, dynamic>;
-        final id = m['id'] as String;
-        final parsed = _parseModule(m, null, gapIds.contains(id));
+        if (raw is! Map) continue;
+        final m = Map<String, dynamic>.from(raw);
+        final parsed = _parseModule(m, null, false);
+        if (parsed.id.isEmpty) continue;
         await _dao.upsertModule(
           id: parsed.id,
           domain: parsed.domain.name,
@@ -92,16 +134,37 @@ class CoachingRepository extends ChangeNotifier {
           titleBn: parsed.titleBn,
           estimatedMinutes: parsed.estimatedMinutes,
           rawJson: jsonEncode(m),
-          priorityToday: parsed.priorityToday,
+          priorityRank: 0,
         );
       }
 
-      // Reload from DB after sync.
+      // Morning list wins; if the morning endpoint is empty/unavailable,
+      // fall back to gap-flagged modules so the Today section is not blank.
+      if (morningIds.isNotEmpty) {
+        await _dao.applyMorningPriorities(morningIds);
+      } else if (gapIds.isNotEmpty) {
+        await _dao.applyMorningPriorities(gapIds.toList());
+      } else {
+        await _dao.clearAllPriorities();
+      }
+
       final rows = await _dao.allModulesWithProgress();
-      _modules = rows.map(_rowToModule).toList();
+      if (rows.isNotEmpty) {
+        _modules = rows.map(_rowToModule).toList();
+      } else if (kDebugMode && _modules.isEmpty) {
+        _modules = MockCoachingData.allModules;
+      }
       notifyListeners();
     } catch (e) {
+      ConsoleLog.warn('[PayloadDebug] coaching-sync failed: $e');
       debugPrint('[CoachingRepository] syncFromApi failed: $e');
+      // Keep cached / mock content — offline-first.
+      if (_modules.isEmpty) {
+        await initialize();
+      }
+    } finally {
+      _syncing = false;
+      notifyListeners();
     }
   }
 
@@ -150,12 +213,36 @@ class CoachingRepository extends ChangeNotifier {
 
   // ─── Parsing ──────────────────────────────────────────────────────────────
 
+  /// Extracts an ordered module-id list from a `/morning` response body.
+  /// Accepts `{modules|module_ids|priorities: [string|{module_id|id}]}`.
+  @visibleForTesting
+  static List<String> parseMorningModuleIds(Map<String, dynamic>? data) {
+    if (data == null) return const [];
+    final modules =
+        data['modules'] ?? data['module_ids'] ?? data['priorities'];
+    if (modules is! List) return const [];
+    final ids = <String>[];
+    for (final item in modules) {
+      if (item is String && item.isNotEmpty) {
+        ids.add(item);
+      } else if (item is Map) {
+        final id = item['module_id'] ??
+            item['id'] ??
+            item['moduleFamilyId'] ??
+            item['module_family_id'];
+        if (id is String && id.isNotEmpty) ids.add(id);
+      }
+    }
+    return ids;
+  }
+
   CoachingModule _rowToModule(Map<String, dynamic> row) {
     final rawJson = row['raw_json'] as String? ?? '{}';
     final raw = jsonDecode(rawJson) as Map<String, dynamic>;
     final passed = (row['passed'] as int?) == 1;
     final quizScore = (row['quiz_score'] as num?)?.toDouble() ?? 0.0;
-    final priorityToday = (row['priority_today'] as int?) == 1;
+    // priority_today stores a rank integer (>0 = in today's list).
+    final priorityToday = ((row['priority_today'] as int?) ?? 0) > 0;
     return _parseModule(raw, {'passed': passed, 'quiz_score': quizScore},
         priorityToday);
   }

@@ -45,7 +45,7 @@ void main() {
       titleBn: 'বিপদ চিহ্ন',
       estimatedMinutes: 5,
       rawJson: '{"id":"m-1","domain":"anc","title":{"en":"Danger signs"}}',
-      priorityToday: true,
+      priorityRank: 1,
     );
     repo = CoachingRepository(dao, await ApiClient.create(), AuthRepository(await ApiClient.create()));
     await repo.initialize();

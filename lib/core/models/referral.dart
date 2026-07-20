@@ -46,6 +46,46 @@ enum SlaTier {
         return SlaTier.routine;
     }
   }
+
+  /// Heuristic: map a referral reason string into an SLA tier when the wire
+  /// payload doesn't carry an explicit category. Pilot-grade — clinical lead
+  /// to tune (OQ #2 in spec). Match is case-insensitive substring.
+  static SlaTier inferFromReason(String? reason) {
+    if (reason == null || reason.isEmpty) return SlaTier.routine;
+    final r = reason.toLowerCase().replaceAll('_', ' ');
+    const emergencyMarkers = <String>[
+      'severe',
+      'convulsion',
+      'eclampsia',
+      'obstetric emergency',
+      'dehydration',
+      'shock',
+      'stroke',
+      'one sided',
+      'one-sided',
+      'chest pain',
+      'angina',
+    ];
+    if (emergencyMarkers.any(r.contains)) return SlaTier.emergency;
+    const urgentMarkers = <String>[
+      'high-risk',
+      'hypertensive crisis',
+      'hypertension',
+      'hypertensive',
+      'bloodpressure',
+      'blood pressure',
+      'moderate pneumonia',
+      'severe anemia',
+      'anemia',
+      'bloodglucose',
+      'blood glucose',
+      'glucose',
+      'diabetes',
+      'hba1c',
+    ];
+    if (urgentMarkers.any(r.contains)) return SlaTier.urgent;
+    return SlaTier.routine;
+  }
 }
 
 /// Referral lifecycle state. Eight lifecycle values + six exception values.
@@ -333,7 +373,7 @@ class Referral {
     return Referral(
       id: (p['id'] ?? '') as String,
       patientId: (p['memberId'] ?? p['patientId'] ?? '') as String,
-      slaTier: _inferTier(p['referredReason'] as String?),
+      slaTier: SlaTier.inferFromReason(p['referredReason'] as String?),
       diagnosisLabel: p['referredReason'] as String?,
       state: ReferralStatus.fromWireTag(p['patientStatus'] as String?),
       createdAt: _parseDateMs(p['referredDate']) ?? ts,
@@ -378,32 +418,6 @@ class Referral {
         closedAt: closedAt ?? this.closedAt,
         rawJson: rawJson,
       );
-
-  /// Heuristic: map a referral reason string into an SLA tier when the wire
-  /// payload doesn't carry an explicit category. Pilot-grade — clinical lead
-  /// to tune (OQ #2 in spec). Match is case-insensitive substring.
-  static SlaTier _inferTier(String? reason) {
-    if (reason == null || reason.isEmpty) return SlaTier.routine;
-    final r = reason.toLowerCase();
-    const emergencyMarkers = <String>[
-      'severe',
-      'convulsion',
-      'eclampsia',
-      'obstetric emergency',
-      'dehydration',
-      'shock',
-    ];
-    if (emergencyMarkers.any(r.contains)) return SlaTier.emergency;
-    const urgentMarkers = <String>[
-      'high-risk',
-      'hypertensive crisis',
-      'moderate pneumonia',
-      'severe anemia',
-      'anemia',
-    ];
-    if (urgentMarkers.any(r.contains)) return SlaTier.urgent;
-    return SlaTier.routine;
-  }
 
   static int? _parseDateMs(Object? v) {
     if (v == null) return null;

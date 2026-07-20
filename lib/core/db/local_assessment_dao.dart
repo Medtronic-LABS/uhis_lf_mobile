@@ -514,6 +514,20 @@ class LocalAssessmentDao {
     return result.first['count'] as int? ?? 0;
   }
 
+  /// Open referred assessments (still `Referred` / `OnTreatment` or flagged
+  /// `is_referred` without a closed status). Used to backfill the CCE
+  /// `referrals` table for locally-created visits.
+  Future<List<LocalAssessmentEntity>> getOpenReferred({int limit = 500}) async {
+    final rows = await _db.db.query(
+      tableName,
+      where: 'is_referred = 1 AND (referral_status IS NULL OR referral_status '
+          "NOT IN ('Recovered', 'Died', 'closedRecovered', 'closedDeceased'))",
+      orderBy: 'created_at DESC',
+      limit: limit,
+    );
+    return rows.map(LocalAssessmentEntity.fromDb).toList();
+  }
+
   /// Get assessments by patient ID.
   Future<List<LocalAssessmentEntity>> getByPatientId(String patientId) async {
     final rows = await _db.db.query(

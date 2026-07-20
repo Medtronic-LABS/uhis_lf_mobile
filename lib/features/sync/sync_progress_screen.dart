@@ -12,6 +12,8 @@ import '../../core/sync/offline_sync_service.dart';
 import '../../core/sync/sync_progress.dart';
 import '../../core/sync/sync_report.dart';
 import '../dashboard/mission_dashboard_repository.dart';
+import '../referral/referral_repository.dart';
+import '../training/coaching_repository.dart';
 import '../visit/assessment_repository.dart';
 import '../worklist/worklist_repository.dart';
 
@@ -129,6 +131,10 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
       // Recompute risk scores and next-due-at for proper worklist sorting
       final worklist = context.read<WorklistRepository>();
       await worklist.recomputeAllAfterSync();
+
+      // CCE: score SLA / priority on referrals just ingested from sync.
+      if (!mounted) return;
+      await context.read<ReferralRepository>().recomputeAllAfterSync();
       
       if (!mounted) return;
       setState(() => _preparingMessage = SyncStrings.preparingDashboard);
@@ -144,10 +150,13 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
       final missionRepo = context.read<MissionDashboardRepository>();
       final encounterDao = context.read<EncounterDao>();
 
-      // Load in parallel
+      // Load in parallel. Coaching sync is non-fatal — Training tab falls
+      // back to SQLite / debug mock if spice-coaching is unreachable.
+      final coaching = context.read<CoachingRepository>();
       await Future.wait([
         missionRepo.refresh(),
         encounterDao.completedTodayPatientIds(),
+        coaching.refresh(),
       ]);
       
       debugPrint('[Sync] Dashboard data prepared');
