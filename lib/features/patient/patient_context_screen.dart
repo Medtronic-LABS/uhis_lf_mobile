@@ -2687,6 +2687,9 @@ class _CombinedTimeline extends StatefulWidget {
 }
 
 class _CombinedTimelineState extends State<_CombinedTimeline> {
+  static const _kInitialCount = 3;
+  bool _expanded = false;
+
   @override
   Widget build(BuildContext context) {
     final sw = Stopwatch()..start();
@@ -2703,12 +2706,37 @@ class _CombinedTimelineState extends State<_CombinedTimeline> {
         ),
       );
     } else {
+      final hasMore = widget.entries.length > _kInitialCount;
+      final visible = (_expanded || !hasMore)
+          ? widget.entries
+          : widget.entries.take(_kInitialCount).toList();
       final rows = <Widget>[];
-      for (int i = 0; i < widget.entries.length; i++) {
+      for (int i = 0; i < visible.length; i++) {
         rows.add(_TimelineEntryRow(
-          entry: widget.entries[i],
-          isLast: i == widget.entries.length - 1,
+          entry: visible[i],
+          isLast: i == visible.length - 1 && (!hasMore || _expanded),
         ));
+      }
+      if (hasMore) {
+        final remaining = widget.entries.length - _kInitialCount;
+        rows.add(
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: TextButton.icon(
+              onPressed: () => setState(() => _expanded = !_expanded),
+              icon: Icon(_expanded ? Icons.expand_less : Icons.expand_more, size: 16),
+              label: Text(_expanded
+                  ? PatientProfileStrings.showLess
+                  : PatientProfileStrings.showMoreEntries(remaining)),
+              style: TextButton.styleFrom(
+                foregroundColor: _expanded ? AppColors.textMuted : AppColors.aiPurple,
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 32),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          ),
+        );
       }
       body = Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows);
     }
