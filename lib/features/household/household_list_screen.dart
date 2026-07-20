@@ -262,7 +262,6 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
         statusBarBrightness: Brightness.dark,
       ),
       child: Scaffold(
-        backgroundColor: AppColors.canvas,
         body: SafeArea(
           top: false,
           bottom: false,
@@ -376,6 +375,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
     int householdCount,
     int patientCount,
   ) {
+    final lc = Theme.of(context).extension<LeapfrogColors>()!;
     return Container(
       color: AppColors.navy,
       padding: EdgeInsets.fromLTRB(
@@ -436,7 +436,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
           const SizedBox(height: 12),
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: lc.cardSurface,
               borderRadius: BorderRadius.circular(12),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
@@ -486,10 +486,10 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
                       _searchController.clear();
                       setState(() { _searchQuery = ''; });
                     },
-                    child: const Icon(
+                    child: Icon(
                       Icons.clear,
                       size: 18,
-                      color: Color(0xFF9CA3AF),
+                      color: lc.textMuted,
                     ),
                   ),
               ],
@@ -782,6 +782,7 @@ class _HouseholdCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lc = Theme.of(context).extension<LeapfrogColors>()!;
     final count = item.memberCount ?? 0;
     // Bare head name (mockup shows just the name, e.g. "Nasrin Begum") — the
     // "'s Household" suffix on `item.name` is this screen's own construction
@@ -803,7 +804,7 @@ class _HouseholdCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: lc.cardSurface,
         borderRadius: BorderRadius.circular(14),
         boxShadow: AppShadows.householdCard,
       ),
@@ -816,11 +817,11 @@ class _HouseholdCard extends StatelessWidget {
             child: InkWell(
               onTap: onTap,
               child: Container(
-                decoration: const BoxDecoration(
-                  color: AppColors.cardSurfaceMuted,
+                decoration: BoxDecoration(
+                  color: lc.cardSurfaceMuted,
                   border: Border(
                     bottom: BorderSide(
-                      color: AppColors.progressTrack,
+                      color: lc.surfaceTrack,
                       width: 1,
                     ),
                   ),
@@ -869,15 +870,15 @@ class _HouseholdCard extends StatelessWidget {
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: AppColors.aiSurfaceStart,
+                        color: lc.aiSurfaceStart,
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
                         HouseholdListStrings.membersCount(count),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 9.5,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.aiPurpleDark,
+                          color: lc.aiPurple,
                         ),
                       ),
                     ),
@@ -948,7 +949,7 @@ class _HouseholdCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const Divider(height: 1, color: AppColors.progressTrack),
+                          Divider(height: 1, color: lc.surfaceTrack),
                           for (final other in otherMembers)
                             _OtherMemberRow(
                               member: other,
