@@ -359,59 +359,52 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     widget.onProgrammesLive?.call(Set.unmodifiable(_selectedProgrammes));
   }
 
-  void _handleRMNCHFlowSelected(_RMNCHFlow? flow) {
+  void _onPWToggle(bool selected) {
     setState(() {
-      switch (flow) {
-        case _RMNCHFlow.anc:
-          _isDelivery = false;
-          _selectedProgrammes
-            ..add(Programme.anc)
-            ..remove(Programme.pnc);
+      _isPW = selected;
+      if (!selected) {
+        _selectedProgrammes.remove(Programme.anc);
+        _selectedProgrammes.remove(Programme.pw);
+        _skDismissedProgrammes.add(Programme.anc);
+        _skDismissedProgrammes.add(Programme.pw);
+      } else {
+        _skDismissedProgrammes.remove(Programme.anc);
+        _skDismissedProgrammes.remove(Programme.pw);
+        _selectedProgrammes.add(Programme.pw);
+        if (_patientContext!.activeProgrammes.contains(Programme.anc) ||
+            _pathwayActivatedProgrammes.contains(Programme.anc)) {
+          _selectedProgrammes.add(Programme.anc);
+        }
+      }
+    });
+    _fireProgrammesLive();
+  }
+
+  void _onDeliveryToggle(bool selected) {
+    setState(() {
+      _isDelivery = selected;
+      if (!selected) {
+        _selectedProgrammes.remove(Programme.pnc);
+        _skDismissedProgrammes.add(Programme.pnc);
+        if (_isPW) {
+          _skDismissedProgrammes.remove(Programme.anc);
+          _skDismissedProgrammes.remove(Programme.pw);
+          _selectedProgrammes.add(Programme.anc);
           if (_patientContext!.activeProgrammes.contains(Programme.pw)) {
             _selectedProgrammes.add(Programme.pw);
           }
-          _skDismissedProgrammes
-            ..remove(Programme.anc)
-            ..remove(Programme.pw)
-            ..add(Programme.pnc);
-          break;
-        case _RMNCHFlow.delivery:
-          _isDelivery = true;
-          _selectedProgrammes
-            ..remove(Programme.anc)
-            ..remove(Programme.pw)
-            ..add(Programme.pnc);
-          _skDismissedProgrammes
-            ..add(Programme.anc)
-            ..add(Programme.pw)
-            ..remove(Programme.pnc);
-          break;
-        case _RMNCHFlow.pnc:
-          _isDelivery = false;
-          _selectedProgrammes
-            ..add(Programme.pnc)
-            ..remove(Programme.anc)
-            ..remove(Programme.pw);
-          _skDismissedProgrammes
-            ..add(Programme.anc)
-            ..add(Programme.pw)
-            ..remove(Programme.pnc);
-          break;
-        case null:
-          _isDelivery = false;
-          _selectedProgrammes
-            ..remove(Programme.anc)
-            ..remove(Programme.pw)
-            ..remove(Programme.pnc);
-          _skDismissedProgrammes
-            ..remove(Programme.anc)
-            ..remove(Programme.pw)
-            ..remove(Programme.pnc);
-          break;
+        }
+      } else {
+        _selectedProgrammes.remove(Programme.anc);
+        _selectedProgrammes.remove(Programme.pw);
+        _skDismissedProgrammes.add(Programme.anc);
+        _skDismissedProgrammes.add(Programme.pw);
+        _skDismissedProgrammes.remove(Programme.pnc);
+        _selectedProgrammes.add(Programme.pnc);
       }
     });
-    debugPrint('[RMNCHFlow] selected: ${flow?.name ?? "none"} → '
-        'delivery=$_isDelivery programmes=${_selectedProgrammes.map((p) => p.name).join(", ")}');
+    debugPrint('[DeliveryGate] chip toggled: selected=$selected '
+        'programmes=${_selectedProgrammes.map((p) => p.name).join(", ")}');
     _fireProgrammesLive();
   }
 
@@ -830,7 +823,8 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                           });
                           _fireProgrammesLive();
                         },
-                        onRMNCHFlowSelected: _handleRMNCHFlowSelected,
+                        onPWToggle: _onPWToggle,
+                        onDeliveryToggle: _onDeliveryToggle,
                       ),
                     ),
                   ),
@@ -1847,7 +1841,6 @@ class _PickerChip extends StatelessWidget {
 
 enum _ServiceCardKind { programme, pw, delivery, general, rmnch }
 
-enum _RMNCHFlow { anc, delivery, pnc }
 
 class _ServiceCardDef {
   const _ServiceCardDef({
@@ -1891,7 +1884,8 @@ class _InlineServiceSelector extends StatelessWidget {
     required this.isPW,
     required this.isDelivery,
     required this.onProgrammeToggle,
-    required this.onRMNCHFlowSelected,
+    required this.onPWToggle,
+    required this.onDeliveryToggle,
   });
 
   final PatientContext patientContext;
@@ -1905,14 +1899,8 @@ class _InlineServiceSelector extends StatelessWidget {
   final bool isPW;
   final bool isDelivery;
   final void Function(Programme programme, bool selected) onProgrammeToggle;
-  final ValueChanged<_RMNCHFlow?> onRMNCHFlowSelected;
-
-  _RMNCHFlow? get _currentRMNCHFlow {
-    if (isDelivery) return _RMNCHFlow.delivery;
-    if (selectedProgrammes.contains(Programme.anc)) return _RMNCHFlow.anc;
-    if (selectedProgrammes.contains(Programme.pnc)) return _RMNCHFlow.pnc;
-    return null;
-  }
+  final ValueChanged<bool> onPWToggle;
+  final ValueChanged<bool> onDeliveryToggle;
 
   List<_ServiceCardDef> _visibleCards() {
     final ctx = patientContext;
@@ -1920,13 +1908,15 @@ class _InlineServiceSelector extends StatelessWidget {
       switch (c.kind) {
         case _ServiceCardKind.pw:
         case _ServiceCardKind.delivery:
-          return false;
-        case _ServiceCardKind.rmnch:
           return ctx.isFemale;
+        case _ServiceCardKind.rmnch:
+          return false;
         case _ServiceCardKind.programme:
           final p = c.programme!;
-          if (p == Programme.anc || p == Programme.pnc) return false;
-          if (p == Programme.familyPlanning) return ctx.isFemale && ctx.ageYears >= 15;
+          if (p == Programme.anc || p == Programme.familyPlanning) {
+            return ctx.isFemale && ctx.ageYears >= 15;
+          }
+          if (p == Programme.pnc) return ctx.isFemale;
           if (p == Programme.eyeCare || p == Programme.cataract) return true;
           return ctx.ageYears >= 15;
         case _ServiceCardKind.general:
@@ -1935,31 +1925,52 @@ class _InlineServiceSelector extends StatelessWidget {
     }).toList();
   }
 
-  bool _isLocked(_ServiceCardDef card) => false;
+  bool _isLocked(_ServiceCardDef card) {
+    if (card.isPW) return isDelivery;
+    if (card.programme == Programme.anc) return !isPW || isDelivery;
+    if (card.programme == Programme.pnc) return !isDelivery;
+    // Delivery and ANC are mutually exclusive — they belong to separate visits.
+    if (card.isDelivery) return selectedProgrammes.contains(Programme.anc);
+    return false;
+  }
 
   bool _isCardSelected(_ServiceCardDef card) {
-    if (card.isRMNCH) return _currentRMNCHFlow != null;
+    if (card.isPW) return isPW && !isDelivery;
+    if (card.isDelivery) return isDelivery;
+    if (card.isRMNCH) return false;
     if (card.programme != null) return selectedProgrammes.contains(card.programme);
     return false;
   }
 
   void _handleTap(BuildContext context, _ServiceCardDef card) {
-    if (card.isRMNCH) {
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        builder: (_) => _RMNCHFlowSheet(
-          currentFlow: _currentRMNCHFlow,
-          isPW: isPW,
-          onSelected: onRMNCHFlowSelected,
-        ),
-      );
+    final alreadySelected = _isCardSelected(card);
+    if (_isLocked(card) && !alreadySelected) {
+      final String hint;
+      if (card.programme == Programme.anc) {
+        hint = isDelivery
+            ? TriageStrings.ancDeliveryConflictHint
+            : TriageStrings.pwHint;
+      } else if (card.isDelivery) {
+        hint = selectedProgrammes.contains(Programme.anc)
+            ? TriageStrings.ancDeliveryConflictHint
+            : TriageStrings.deliveryHint;
+      } else {
+        hint = TriageStrings.deliveryHint;
+      }
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text(hint),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ));
       return;
     }
-    if (card.programme != null) {
+    if (card.isPW) {
+      onPWToggle(!isPW);
+    } else if (card.isDelivery) {
+      onDeliveryToggle(!isDelivery);
+    } else if (card.programme != null) {
       onProgrammeToggle(card.programme!, !selectedProgrammes.contains(card.programme));
     }
   }
@@ -2015,12 +2026,9 @@ class _InlineServiceSelector extends StatelessWidget {
                     def: c,
                     isSelected: _isCardSelected(c),
                     isLocked: _isLocked(c),
-                    sublabel: c.isRMNCH ? _currentRMNCHFlow?.name.toUpperCase() : null,
                     isEnrolled: (c.programme != null &&
                             enrolledProgrammes.contains(c.programme)) ||
-                        (c.isRMNCH &&
-                            (enrolledProgrammes.contains(Programme.anc) ||
-                                enrolledProgrammes.contains(Programme.pnc))),
+                        (c.isPW && enrolledProgrammes.contains(Programme.anc)),
                     isPathwaySuggested: c.programme != null &&
                         pathwayProgrammes.contains(c.programme),
                     onTap: () => _handleTap(context, c),
@@ -2040,13 +2048,11 @@ class _ServiceTile extends StatelessWidget {
     required this.isEnrolled,
     required this.isPathwaySuggested,
     required this.onTap,
-    this.sublabel,
   });
 
   final _ServiceCardDef def;
   final bool isSelected;
   final bool isLocked;
-  final String? sublabel;
 
   /// Patient is already enrolled in this programme from past visits.
   /// Shows an "Enrolled" badge; the card remains selectable for this visit.
@@ -2152,17 +2158,6 @@ class _ServiceTile extends StatelessWidget {
                           color: labelColor,
                         ),
                       ),
-                      if (sublabel != null) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          sublabel!,
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.navy,
-                          ),
-                        ),
-                      ],
                       if (isEnrolled) ...[
                         const SizedBox(height: 3),
                         Container(
@@ -2187,153 +2182,6 @@ class _ServiceTile extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RMNCHFlowSheet extends StatelessWidget {
-  const _RMNCHFlowSheet({
-    required this.currentFlow,
-    required this.isPW,
-    required this.onSelected,
-  });
-
-  final _RMNCHFlow? currentFlow;
-  final bool isPW;
-  final ValueChanged<_RMNCHFlow?> onSelected;
-
-  void _pick(BuildContext context, _RMNCHFlow flow) {
-    Navigator.pop(context);
-    onSelected(currentFlow == flow ? null : flow);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Select Maternal Flow',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: AppColors.navy,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Choose one flow for this visit',
-              style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 16),
-            _FlowOption(
-              emoji: '🏥',
-              title: 'ANC',
-              subtitle: 'Antenatal Care',
-              isSelected: currentFlow == _RMNCHFlow.anc,
-              isEnabled: isPW,
-              disabledHint: 'Enroll patient as PW first to unlock ANC',
-              onTap: () => _pick(context, _RMNCHFlow.anc),
-            ),
-            const SizedBox(height: 8),
-            _FlowOption(
-              emoji: '🚼',
-              title: 'Labour & Delivery',
-              subtitle: 'Delivery and Pregnancy Outcome',
-              isSelected: currentFlow == _RMNCHFlow.delivery,
-              isEnabled: true,
-              onTap: () => _pick(context, _RMNCHFlow.delivery),
-            ),
-            const SizedBox(height: 8),
-            _FlowOption(
-              emoji: '👶',
-              title: 'PNC',
-              subtitle: 'Postnatal Care (Mother & Child)',
-              isSelected: currentFlow == _RMNCHFlow.pnc,
-              isEnabled: true,
-              onTap: () => _pick(context, _RMNCHFlow.pnc),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _FlowOption extends StatelessWidget {
-  const _FlowOption({
-    required this.emoji,
-    required this.title,
-    required this.subtitle,
-    required this.isSelected,
-    required this.isEnabled,
-    required this.onTap,
-    this.disabledHint,
-  });
-
-  final String emoji;
-  final String title;
-  final String subtitle;
-  final bool isSelected;
-  final bool isEnabled;
-  final VoidCallback onTap;
-  final String? disabledHint;
-
-  @override
-  Widget build(BuildContext context) {
-    return Opacity(
-      opacity: isEnabled ? 1.0 : 0.45,
-      child: GestureDetector(
-        onTap: isEnabled ? onTap : null,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: isSelected ? AppColors.navy.withValues(alpha: 0.07) : Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isSelected ? AppColors.navy : const Color(0xFFE5E7EB),
-              width: isSelected ? 1.5 : 1.0,
-            ),
-          ),
-          child: Row(
-            children: [
-              Text(emoji, style: const TextStyle(fontSize: 24)),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.navy,
-                      ),
-                    ),
-                    Text(
-                      subtitle,
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    ),
-                    if (!isEnabled && disabledHint != null)
-                      Text(
-                        disabledHint!,
-                        style: const TextStyle(fontSize: 10, color: Colors.red),
-                      ),
-                  ],
-                ),
-              ),
-              if (isSelected)
-                const Icon(Icons.check_circle, color: AppColors.navy, size: 20),
-            ],
           ),
         ),
       ),
