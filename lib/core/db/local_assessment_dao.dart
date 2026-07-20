@@ -581,6 +581,21 @@ class LocalAssessmentDao {
     await _db.db.delete(tableName, where: 'id = ?', whereArgs: [id]);
   }
 
+  /// Returns true when an ANC assessment already exists today for [patientId].
+  /// Used to block duplicate same-day ANC visits.
+  Future<bool> hasAncAssessmentTodayForPatient(String patientId) async {
+    final todayStart = DateTime.now()
+        .copyWith(hour: 0, minute: 0, second: 0, millisecond: 0);
+    final result = await _db.db.rawQuery(
+      "SELECT COUNT(*) as count FROM $tableName "
+      "WHERE patient_id = ? "
+      "AND assessment_type IN ('ANC', 'anc') "
+      "AND created_at >= ?",
+      [patientId, todayStart.millisecondsSinceEpoch],
+    );
+    return (result.first['count'] as int) > 0;
+  }
+
   /// Get all assessments for a household member.
   Future<List<LocalAssessmentEntity>> getByHouseholdMemberId(
       int memberId) async {

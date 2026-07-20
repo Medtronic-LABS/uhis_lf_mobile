@@ -27,6 +27,22 @@ abstract final class AppStrings {
   static const String appName = 'UHIS Next';
   static const String appTagline = 'MedtronicLabs · Frontline Health';
   static const String poweredBy = 'Powered by Medtronic Labs';
+
+  // ── ANC visit blocking ────────────────────────────────────────────────────
+  static const String ancBlockedPostpartumTitle = 'ANC Not Available';
+  static const String ancBlockedPostpartumMessage =
+      'This patient has completed a delivery or PNC visit. '
+      'ANC assessments cannot be started after delivery.';
+  static const String ancBlockedDuplicateTitle = 'ANC Already Recorded Today';
+  static const String ancBlockedDuplicateMessage =
+      'An ANC assessment has already been recorded for this patient today. '
+      'Only one ANC visit is allowed per day.';
+
+  // ── PW registration blocking ──────────────────────────────────────────────
+  static const String pwAlreadyEnrolledTitle = 'Already Registered';
+  static const String pwAlreadyEnrolledMessage =
+      'Pregnant Woman registration has already been completed for this patient. '
+      'The PW profile cannot be re-submitted.';
 }
 
 /// Shared, cross-screen labels reused in more than one feature.
@@ -3494,6 +3510,7 @@ abstract final class PathwayStrings {
 
   // ── Programme display names ──────────────────────────────────────────────
   static const String programmeImci = 'ICCM / Child Illness';
+  static const String programmePw = 'Pregnant Woman Registration';
   static const String programmeAnc = 'ANC';
   static const String programmePnc = 'PNC';
   static const String programmeNcd = 'NCD';

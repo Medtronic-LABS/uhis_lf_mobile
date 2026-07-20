@@ -738,8 +738,10 @@ abstract final class UnifiedPayloadMapper {
   // _wrapDetailsForType wraps this map under "pregnancyOutcome" automatically.
 
   static Map<String, dynamic> _toPregnancyOutcome(CanonicalVisitData d) {
+    // Android wire key is "pregnancyOutcomeType"; Flutter form field ID is
+    // "deliveryOutcomeType" — remap so the server receives the expected key.
     final outcomeType = _compact({
-      'deliveryOutcomeType': d.getValue('deliveryOutcomeType'),
+      'pregnancyOutcomeType': d.getValue('deliveryOutcomeType'),
     });
 
     final maternalDeath = _compact({

@@ -584,6 +584,27 @@
     "clinicalWorkflowId": 4,
     "sections": [
       {
+        "sectionId": "ancMedicalHistory",
+        "title": "Medical History",
+        "fieldRefs": [
+          {
+            "id": "previousPregnancyComplications",
+            "fieldName": "Any complication during previous pregnancies",
+            "isMandatory": false
+          },
+          {
+            "id": "pregnantWomanExistingIllness",
+            "fieldName": "Pregnant woman has any existing illness",
+            "isMandatory": false
+          },
+          {
+            "id": "pregnantWomanOnTreatment",
+            "fieldName": "Pregnant woman on treatment for existing illness",
+            "isMandatory": false
+          }
+        ]
+      },
+      {
         "sectionId": "ancSpecificVitals",
         "title": "Clinical Examination",
         "fieldRefs": [
@@ -605,9 +626,26 @@
             "isMandatory": false
           },
           {
+            "id": "temperature",
+            "fieldName": "Temperature (°F)",
+            "inputType": 8192,
+            "isMandatory": false
+          },
+          {
+            "id": "pulse",
+            "fieldName": "Pulse (per min)",
+            "inputType": 3,
+            "isMandatory": false
+          },
+          {
             "id": "weight",
             "fieldName": "Weight (kg)",
             "inputType": 8192,
+            "isMandatory": false
+          },
+          {
+            "id": "edema",
+            "fieldName": "Edema",
             "isMandatory": false
           },
           {
@@ -620,7 +658,12 @@
             "fieldName": "Fundal Height (cm)",
             "isMandatory": false
           },
-          "fetalMovement"
+          "fetalMovement",
+          {
+            "id": "highRiskPregnantWoman",
+            "fieldName": "High risk pregnant woman",
+            "isMandatory": false
+          }
         ]
       },
       {
@@ -706,6 +749,12 @@
         "title": "ANC Services & Birth Preparedness",
         "fieldRefs": [
           {
+            "id": "ancVisitsOtherProviders",
+            "fieldName": "No. of ANC visits with other providers",
+            "inputType": 3,
+            "isMandatory": false
+          },
+          {
             "id": "ancFromMedicalDoctor",
             "fieldName": "ANC from medical doctor",
             "isMandatory": false
@@ -726,7 +775,53 @@
         "sectionId": "ancDangerSignsSection",
         "title": "Danger Signs",
         "fieldRefs": [
-          "ancDangerSigns"
+          {
+            "id": "dangerSignsExperienced12",
+            "fieldName": "Danger signs (up to 12 weeks)",
+            "isMandatory": false
+          },
+          {
+            "id": "dangerSignsExperienced13To27",
+            "fieldName": "Danger signs (13–27 weeks)",
+            "isMandatory": false
+          },
+          {
+            "id": "dangerSignsExperienced28To40",
+            "fieldName": "Danger signs (28–40 weeks)",
+            "isMandatory": false
+          }
+        ]
+      },
+      {
+        "sectionId": "ancFollowUp",
+        "title": "Follow-Up",
+        "fieldRefs": [
+          {
+            "id": "followUpVisit",
+            "fieldName": "Follow-up visit date",
+            "isMandatory": false
+          },
+          {
+            "id": "referralFacility",
+            "fieldName": "Referral facility",
+            "isMandatory": false
+          },
+          {
+            "id": "gapsInAnc",
+            "fieldName": "Gaps in ANC",
+            "isMandatory": false
+          }
+        ]
+      },
+      {
+        "sectionId": "ancCounselling",
+        "title": "Counselling",
+        "fieldRefs": [
+          "nutritionCounselling",
+          "careDuringAntenatalPeriod",
+          "dangerSignsDuringPregnancy",
+          "birthPreparedness",
+          "newbornCareEducation"
         ]
       }
     ]

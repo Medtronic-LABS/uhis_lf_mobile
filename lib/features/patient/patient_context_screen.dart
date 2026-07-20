@@ -1235,9 +1235,6 @@ _TimelineEntry? _derivePendingEntry(PatientOrMemberData data) {
 List<_TimelineEntry> _buildTimelineEntries(PatientOrMemberData data) {
   final entries = <_TimelineEntry>[];
 
-  final pending = _derivePendingEntry(data);
-  if (pending != null) entries.add(pending);
-
   for (final a in data.assessments) {
     entries.add(_assessmentToEntry(a));
   }
@@ -5087,6 +5084,12 @@ class TrendsScreen extends StatelessWidget {
   final List<VisitVitals> vitalHistory;
   final List<MemberAssessment> assessments;
   final String? patientName;
+
+  static const _lightStatusBar = SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+    statusBarBrightness: Brightness.dark,
+  );
 
   List<_TrendPoint> _pointsForType(VitalType type) {
     return vitalHistory
