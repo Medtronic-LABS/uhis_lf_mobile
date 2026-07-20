@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:ui' show TextDirection;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -3131,7 +3131,7 @@ class _BpSparklinePainter extends CustomPainter {
           fontWeight: FontWeight.w500,
         ),
       ),
-      textDirection: TextDirection.ltr,
+      textDirection: ui.TextDirection.ltr,
     )..layout(maxWidth: 36);
     final dx = align == TextAlign.right ? x - tp.width : x;
     tp.paint(canvas, Offset(dx, y));
@@ -3236,7 +3236,7 @@ class _SingleLinePainter extends CustomPainter {
           fontWeight: FontWeight.w500,
         ),
       ),
-      textDirection: TextDirection.ltr,
+      textDirection: ui.TextDirection.ltr,
     )..layout(maxWidth: 36);
     final dx = align == TextAlign.right ? x - tp.width : x;
     tp.paint(canvas, Offset(dx, y));
