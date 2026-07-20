@@ -321,6 +321,7 @@ class FieldRef {
     required this.id,
     required this.isMandatory,
     required this.inputType,
+    this.fieldName,
   });
 
   final String id;
@@ -329,12 +330,21 @@ class FieldRef {
   /// inputType codes: 0=text, 2=numberDecimal, 3=number, 8192=date.
   final int inputType;
 
-  factory FieldRef.fromJson(Map<String, dynamic> json) => FieldRef(
-        id: json['id'] as String? ?? '',
-        isMandatory: json['isMandatory'] as bool? ?? false,
-        // inputType may be double (e.g. 8192.0) in some JSON tooling exports
-        inputType: (json['inputType'] as num?)?.toInt() ?? 0,
-      );
+  /// Optional layout override label from `layout_manifests.json` `fieldName`.
+  /// Prefer this in the UI when present so section-specific copy (e.g. BP vs
+  /// diabetes medication) wins over the shared field_library label.
+  final String? fieldName;
+
+  factory FieldRef.fromJson(Map<String, dynamic> json) {
+    final rawName = (json['fieldName'] as String?)?.trim();
+    return FieldRef(
+      id: json['id'] as String? ?? '',
+      isMandatory: json['isMandatory'] as bool? ?? false,
+      // inputType may be double (e.g. 8192.0) in some JSON tooling exports
+      inputType: (json['inputType'] as num?)?.toInt() ?? 0,
+      fieldName: (rawName == null || rawName.isEmpty) ? null : rawName,
+    );
+  }
 }
 
 class FormSection {

@@ -228,7 +228,7 @@ class FormPrefillResult {
 
   factory FormPrefillResult.fromJson(Map<String, dynamic> json) {
     final fieldsJson = json['fields'] as List<dynamic>? ?? [];
-    return FormPrefillResult(
+    final result = FormPrefillResult(
       fields: fieldsJson
           .whereType<Map<String, dynamic>>()
           .map(AIExtractedField.fromJson)
@@ -239,6 +239,89 @@ class FormPrefillResult {
           [],
       transcriptText: json['transcriptText'] as String?,
       noteId: json['noteId'] as String?,
+    );
+    // Client-side safety net: LLM often drops height/hba1c in Hindi–Bangla
+    // code-mix while weight/BP still arrive. Recover from the transcript.
+    return result.withRecoveredVitals();
+  }
+
+  /// Deterministic height / weight / hba1c fill when the server omitted them.
+  FormPrefillResult withRecoveredVitals() {
+    final transcript = transcriptText;
+    if (transcript == null || transcript.trim().isEmpty) return this;
+
+    final present = fields.map((f) => f.fieldId).toSet();
+    final extra = <AIExtractedField>[];
+    final now = DateTime.now();
+
+    void tryAdd(String fieldId, RegExp pattern, double lo, double hi) {
+      if (present.contains(fieldId)) return;
+      final matches = pattern.allMatches(transcript);
+      if (matches.isEmpty) return;
+      final m = matches.last;
+      final raw = m.group(1)?.replaceAll(',', '.');
+      final v = double.tryParse(raw ?? '');
+      if (v == null || v < lo || v > hi) return;
+      // "120/80" is BP, not height — digit must not be followed by '/'.
+      if (fieldId == 'height') {
+        final end = m.end;
+        if (end < transcript.length && transcript[end] == '/') return;
+      }
+      extra.add(AIExtractedField(
+        fieldId: fieldId,
+        value: v == v.roundToDouble() ? v.toInt() : v,
+        confidence: 1.0,
+        source: FieldSource.aiPending,
+        sourceSegment: m.group(0)!.trim(),
+        extractedAt: now,
+      ));
+      present.add(fieldId);
+    }
+
+    tryAdd(
+      'height',
+      RegExp(
+        r'(?:height|हाइट|हाईट|হাইট|উচ্চতা)'
+        r'(?:\s*(?:is|=|:|হ্যায়|है|হয়))?\s*'
+        r'(\d{2,3}(?:\.\d+)?)'
+        r'(?:\s*(?:cm|সেন্টি(?:মিটার)?|सेंटी(?:मीटर)?))?',
+        caseSensitive: false,
+      ),
+      30,
+      250,
+    );
+    tryAdd(
+      'weight',
+      RegExp(
+        r'(?:weight|ওজন|वजन|वेट)'
+        r'(?:\s*(?:is|=|:|হ্যায়|है))?\s*'
+        r'(\d{2,3}(?:\.\d+)?)'
+        r'(?:\s*(?:kg|কেজি|किलो))?',
+        caseSensitive: false,
+      ),
+      1,
+      250,
+    );
+    tryAdd(
+      'hba1c',
+      // Dart RegExp is picky with mixed Devanagari/Bangla alternations —
+      // keep this permissive (keyword then nearest number within ~40 chars).
+      RegExp(
+        r'(?:hba1c|hb\s*a\s*1\s*c|(?:এইচ|एच)).{0,40}?'
+        r'(\d+(?:[.,]\d+)?)',
+        caseSensitive: false,
+        unicode: true,
+      ),
+      3,
+      20,
+    );
+
+    if (extra.isEmpty) return this;
+    return FormPrefillResult(
+      fields: [...fields, ...extra],
+      unmappedFindings: unmappedFindings,
+      transcriptText: transcriptText,
+      noteId: noteId,
     );
   }
 

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../core/clinical/assessment_thresholds.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/i18n/app_locale.dart';
 import '../../../core/theme/app_theme.dart';
 import '../widgets/form_fields/radio_form_field.dart';
 import 'canonical_visit_data.dart';
@@ -2231,7 +2232,15 @@ class _SectionCard extends StatelessWidget {
             }
         }
 
-        final primary = def.displayLabel;
+        // Layout fieldName disambiguates shared library labels (e.g. three
+        // medication questions on NCD). Prefer Bangla [displayLabel] when
+        // the locale switcher is on — layout fieldName is English-only.
+        final override = ref.fieldName?.trim();
+        final primary = (!AppLocale.isBangla &&
+                override != null &&
+                override.isNotEmpty)
+            ? override
+            : def.displayLabel;
         return _FieldShell(
           label: questionNumber != null ? '$questionNumber. $primary' : primary,
           subLabel: subParts.isEmpty ? null : subParts.join(' · '),
