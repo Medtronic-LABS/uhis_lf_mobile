@@ -8,6 +8,7 @@ import '../../../core/clinical/referral_evaluator.dart';
 import '../../../core/db/local_assessment_dao.dart';
 import '../../../core/db/patient_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
+import '../../../core/debug/console_log.dart';
 import '../../../core/models/json_read.dart';
 import '../../scribe/models/ai_extracted_field.dart';
 import '../assessment_repository.dart';
@@ -630,6 +631,10 @@ class UnifiedFormNotifier extends ChangeNotifier {
 
       final savedIds = <String>[];
       for (final payload in payloads) {
+        ConsoleLog.banner(
+          '[PayloadDebug] submit — ${payload.assessmentType} payload:\n'
+          '${const JsonEncoder.withIndent("  ").convert(payload.details)}',
+        );
         final id = await _assessmentRepo.saveAssessment(
           assessmentType: payload.assessmentType,
           assessmentDetails: payload.details,

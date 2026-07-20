@@ -314,15 +314,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     List<String> programmeNames, {
     bool isDelivery = false,
   }) {
-    // For ANC-only and NCD-only visits, omit commonVitals from activeFormTypes
-    // — vitals fields are embedded directly in programme sections so the
-    // clinical workflow order is preserved (ANC: Pregnancy → Physical → Lab →
-    // Danger Signs; NCD: Symptoms → BP → Glucose → Biometrics).
-    // For any multi-programme visit, commonVitals leads as usual so shared
-    // measurements (height, weight, BP, pulse) are captured exactly once.
-    final omitCommonVitals = programmeNames.length == 1 &&
-        (programmeNames.contains('anc') || programmeNames.contains('ncd'));
-    final out = <String>[if (!omitCommonVitals) 'commonVitals'];
+    final out = <String>['commonVitals'];
     for (final p in programmeNames) {
       switch (p) {
         case 'pnc':

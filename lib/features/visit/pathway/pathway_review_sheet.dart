@@ -89,6 +89,7 @@ class _PathwayReviewSheetState extends State<PathwayReviewSheet> {
       case Programme.imci:
         return PathwayStrings.programmeImci;
       case Programme.pw:
+        return PathwayStrings.programmePw;
       case Programme.anc:
         return PathwayStrings.programmeAnc;
       case Programme.pnc:
@@ -454,6 +455,7 @@ class _ManualProgrammeSheet extends StatelessWidget {
       case Programme.imci:
         return PathwayStrings.programmeImci;
       case Programme.pw:
+        return PathwayStrings.programmePw;
       case Programme.anc:
         return PathwayStrings.programmeAnc;
       case Programme.pnc:

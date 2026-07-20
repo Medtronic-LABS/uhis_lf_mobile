@@ -29,7 +29,6 @@ import '../../core/api/scribe_api_service.dart';
 import '../../core/clinical/referral_evaluator.dart';
 import '../../core/constants/app_strings.dart';
 import 'models/anc_assessment.dart';
-import '../patient/enroll/pregnancy_registration_sheet.dart';
 import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
@@ -979,22 +978,70 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
       final progs = await dao.programmesFor(widget.patientId);
       if (!mounted) return;
 
-      // If ANC is active and PW registration was NOT selected (i.e. returning
-      // ANC patient with missing snapshot), collect LMP via sheet BEFORE the
-      // form renders. When Programme.pw is selected, LMP is captured inline in
-      // the unified form — do not show the sheet in that case.
-      if (_selectedProgrammes.contains(Programme.anc) &&
-          !_selectedProgrammes.contains(Programme.pw)) {
-        final snapshotDao = context.read<PregnancySnapshotDao>();
-        final snapshot = await snapshotDao.byPatient(widget.patientId);
-        if ((snapshot?.lmpDate == null) && mounted) {
-          await PregnancyRegistrationSheet.show(
+      final hasAnc = _selectedProgrammes.contains(Programme.anc);
+
+      // Task 3 — PW once-only: block re-submission if already enrolled.
+      if (_selectedProgrammes.contains(Programme.pw) &&
+          progs.contains(Programme.pw)) {
+        debugPrint(
+          '[Step2][PayloadDebug] PW block: patient=${widget.patientId} '
+          'already enrolled in PW — re-enrollment blocked.',
+        );
+        await _showAncBlockedDialog(
+          context,
+          AppStrings.pwAlreadyEnrolledTitle,
+          AppStrings.pwAlreadyEnrolledMessage,
+        );
+        if (!mounted) return;
+        // Remove PW from selected; if nothing remains, pop back.
+        _selectedProgrammes =
+            _selectedProgrammes.difference({Programme.pw});
+        if (_selectedProgrammes.isEmpty) {
+          Navigator.of(context).pop();
+          return;
+        }
+      }
+
+      // Task 2 — Block ANC when patient is postpartum (PNC/Delivery Outcome
+      // completed). ANC must not be started after delivery.
+      if (hasAnc && widget.isPostpartum) {
+        await _showAncBlockedDialog(
+          context,
+          AppStrings.ancBlockedPostpartumTitle,
+          AppStrings.ancBlockedPostpartumMessage,
+        );
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        return;
+      }
+
+      // Task 1 — Block duplicate ANC on same calendar day.
+      if (hasAnc) {
+        final assessmentDao = context.read<LocalAssessmentDao>();
+        final hasTodayAnc = await assessmentDao
+            .hasAncAssessmentTodayForPatient(widget.patientId);
+        if (!mounted) return;
+        if (hasTodayAnc) {
+          await _showAncBlockedDialog(
             context,
-            patientId: widget.patientId,
-            patientName: widget.patientName ?? 'Patient',
-            patientAge: widget.patientAge,
+            AppStrings.ancBlockedDuplicateTitle,
+            AppStrings.ancBlockedDuplicateMessage,
           );
           if (!mounted) return;
+          Navigator.of(context).pop();
+          return;
+        }
+      }
+
+      // Task 5 — When ANC is selected for a first-time pregnancy (no LMP
+      // snapshot yet) and PW was not explicitly chosen, auto-include PW so the
+      // pregnancy profile form is submitted alongside the ANC visit.
+      if (hasAnc && !_selectedProgrammes.contains(Programme.pw)) {
+        final snapshotDao = context.read<PregnancySnapshotDao>();
+        final snapshot = await snapshotDao.byPatient(widget.patientId);
+        if (!mounted) return;
+        if (snapshot?.lmpDate == null) {
+          _selectedProgrammes = {..._selectedProgrammes, Programme.pw};
         }
       }
 
@@ -1012,6 +1059,27 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
         _ready = true;
       });
     }
+  }
+
+  Future<void> _showAncBlockedDialog(
+    BuildContext ctx,
+    String title,
+    String message,
+  ) {
+    return showDialog<void>(
+      context: ctx,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   Map<String, dynamic> _buildRequest(Set<Programme> currentProgrammes) {
