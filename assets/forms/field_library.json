@@ -2081,7 +2081,7 @@
     "widgetHint": "TextLabel",
     "family": "counselling",
     "orderId": 1,
-    "visibility": "visible",
+    "visibility": "gone",
     "titleCulture": "মায়ের যত্ন",
     "isSummary": true,
     "programmes": [
@@ -2098,7 +2098,7 @@
     "widgetHint": "Instruction",
     "family": "counselling",
     "orderId": 2,
-    "visibility": "visible",
+    "visibility": "gone",
     "titleCulture": "সব পরবর্তী মায়ের পরিচর্যাঃ",
     "isSummary": true,
     "programmes": [
@@ -2115,7 +2115,7 @@
     "widgetHint": "Instruction",
     "family": "counselling",
     "orderId": 3,
-    "visibility": "visible",
+    "visibility": "gone",
     "titleCulture": "নবজাতকের যত্ন",
     "isSummary": true,
     "programmes": [
