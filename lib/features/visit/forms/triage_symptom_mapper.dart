@@ -8,7 +8,7 @@
 ///
 /// | formType | field seeded | option-ID format |
 /// |---|---|---|
-/// | `ncd` | `ncdSymptoms` (DialogCheckbox) | display names ("Headache") |
+/// | `ncd` | `ncdSymptoms` (DialogCheckbox) | field_library option `id` |
 /// | `ncd` | `hasSymptoms` (radio) | `"Yes"` if any NCD symptom maps |
 /// | `anc` | `ancDangerSigns` (DialogCheckbox) | camelCase IDs |
 /// | `pncMother` | `postpartumDangerSigns` (DialogCheckbox) | numeric string IDs |
@@ -16,39 +16,54 @@ abstract final class TriageSymptomMapper {
   TriageSymptomMapper._();
 
   // ── NCD symptoms ──────────────────────────────────────────────────────────
-  // Option IDs for `ncdSymptoms` equal their display name.
+  // Keys = UnifiedSymptomCatalog codes. Values = ncdSymptoms option `id`
+  // from field_library.json (DialogCheckbox stores ids, not display names).
 
   static const Map<String, String> _ncdSymptomByCode = {
-    'headache': 'Headache',
-    'blurred_vision': 'Blurred Vision',
-    'chest_pain': 'Chest Pain',
-    'breathlessness': 'Shortness of Breath',
-    'one_sided_weakness': 'Weakness',
-    'foot_numbness': 'Numbness',
-    'dizziness': 'Dizziness',
-    'palpitations': 'Palpitations',
-    'swelling_both_feet': 'Leg Swelling',
-    'swelling_one_leg': 'Leg Swelling',
-    'excessive_thirst': 'Excessive Thirst',
-    'weight_loss': 'Unexplained Weight Loss',
-    'epigastric_pain': 'Chest Pain', // closest NCD option
+    'shortness_breath': '1',
+    'difficulty_breathing': '1',
+    'dizziness': '2',
+    'one_sided_weakness': '3',
+    'edema_both_feet': '4',
+    'swelling_both_feet': '4',
+    'swelling_one_leg': '4',
+    'blurred_vision': '5',
+    'palpitations': '7',
+    'chest_pain': '8',
+    'headache_severe': '10',
+    'headache': '10',
+    // No dedicated checkbox — Android "Any new or worsening symptoms".
+    'numbness': 'anyNewOrWorseningSymptoms',
+    'foot_numbness': 'anyNewOrWorseningSymptoms',
+    'polyuria': 'anyNewOrWorseningSymptoms',
+    'polydipsia': 'anyNewOrWorseningSymptoms',
+    'excessive_thirst': 'anyNewOrWorseningSymptoms',
+    'weight_loss': 'anyNewOrWorseningSymptoms',
+    'foot_pain': 'anyNewOrWorseningSymptoms',
+    'foot_wound': 'anyNewOrWorseningSymptoms',
+    'weakness': 'anyNewOrWorseningSymptoms',
+    'fatigue': 'anyNewOrWorseningSymptoms',
   };
 
   // ── ANC danger signs ──────────────────────────────────────────────────────
-  // Option IDs for `ancDangerSigns` are camelCase.
+  // Option IDs for `ancDangerSigns` are camelCase (field_library.json).
 
   static const Map<String, String> _ancDangerSignByCode = {
     'heavy_bleeding': 'vaginalBleeding',
     'vaginal_bleeding': 'vaginalBleeding',
     'leaking_fluid_vagina': 'leakingFluid',
+    'water_break': 'leakingFluid',
     'painful_uterine_contractions': 'painfulContractions',
+    'labor_signs': 'painfulContractions',
     'headache': 'headacheVision',
+    'headache_severe': 'headacheVision',
     'blurred_vision': 'headacheVision',
     'swelling_face_hands': 'headacheVision',
+    'convulsions': 'headacheVision',
     'epigastric_pain': 'epigastricPain',
-    'reduced_fetal_movement': 'reducedFetalMovement',
     'painful_urination': 'feverUrination',
     'fever': 'feverUrination',
+    'reduced_fetal_movement': 'reducedFetalMovement',
   };
 
   // ── PNC (postpartum) danger signs ─────────────────────────────────────────
@@ -60,6 +75,7 @@ abstract final class TriageSymptomMapper {
     'foul_smelling_vaginal_discharge': '2',
     'abdominal_pain': '3',
     'headache': '4',
+    'headache_severe': '4',
     'blurred_vision': '4',
     'convulsions': '4',
     'perineal_wound_discharge': '5',

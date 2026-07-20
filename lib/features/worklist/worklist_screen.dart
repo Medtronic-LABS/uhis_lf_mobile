@@ -228,7 +228,7 @@ class _ErrorState extends StatelessWidget {
             OutlinedButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh),
-              label: const Text(CommonStrings.retry),
+              label: Text(CommonStrings.retry),
             ),
           ],
         ),

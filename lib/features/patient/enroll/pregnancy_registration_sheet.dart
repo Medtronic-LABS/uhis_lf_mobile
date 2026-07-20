@@ -111,7 +111,7 @@ class _PregnancyRegistrationSheetState
     debugPrint('[_PregnancyRegistrationSheetState] _save patientId=${widget.patientId}');
     if (_lmp == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(PregnancyRegStrings.lmpRequiredError)),
+        SnackBar(content: Text(PregnancyRegStrings.lmpRequiredError)),
       );
       return;
     }
@@ -135,7 +135,7 @@ class _PregnancyRegistrationSheetState
       await dao.upsertOne(row);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(PregnancyRegStrings.savedToast)),
+        SnackBar(content: Text(PregnancyRegStrings.savedToast)),
       );
       Navigator.of(context).pop(PregnancyRegistrationResult(
         lmp: _lmp!,
@@ -191,7 +191,7 @@ class _PregnancyRegistrationSheetState
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         PregnancyRegStrings.sheetTitle,
                         style: TextStyle(
                           fontSize: 18,
@@ -222,7 +222,7 @@ class _PregnancyRegistrationSheetState
             child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
               children: [
-                const _SectionHeader(PregnancyRegStrings.sectionDates),
+                _SectionHeader(PregnancyRegStrings.sectionDates),
                 const SizedBox(height: 12),
                 _LmpField(lmp: _lmp, onTap: _pickLmp),
                 const SizedBox(height: 12),
@@ -254,7 +254,7 @@ class _PregnancyRegistrationSheetState
                   const _TooEarlyBanner(),
                 ],
                 const SizedBox(height: 24),
-                const _SectionHeader(PregnancyRegStrings.sectionHistory),
+                _SectionHeader(PregnancyRegStrings.sectionHistory),
                 const SizedBox(height: 12),
                 _StepperField(
                   label: PregnancyRegStrings.gravidaLabel,
@@ -277,15 +277,15 @@ class _PregnancyRegistrationSheetState
                 ),
                 if (_gravida > 4) ...[
                   const SizedBox(height: 8),
-                  const _WarningChip(PregnancyRegStrings.multiparaWarning),
+                  _WarningChip(PregnancyRegStrings.multiparaWarning),
                 ],
                 if (!_tooEarly) ...[
                   const SizedBox(height: 24),
-                  const _SectionHeader(PregnancyRegStrings.sectionRisk),
+                  _SectionHeader(PregnancyRegStrings.sectionRisk),
                   const SizedBox(height: 12),
                   _AgeRiskChip(age: widget.patientAge),
                   const SizedBox(height: 12),
-                  const Text(
+                  Text(
                     PregnancyRegStrings.conditionsLabel,
                     style: TextStyle(
                       fontSize: 13,
@@ -334,7 +334,7 @@ class _PregnancyRegistrationSheetState
                             color: Colors.white,
                           ),
                         )
-                      : const Text(
+                      : Text(
                           PregnancyRegStrings.registerCta,
                           style: TextStyle(
                             fontSize: 15,
@@ -453,7 +453,7 @@ class _LmpField extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     PregnancyRegStrings.lmpLabel,
                     style: TextStyle(
                       fontSize: 11,

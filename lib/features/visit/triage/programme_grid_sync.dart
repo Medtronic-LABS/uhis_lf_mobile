@@ -49,4 +49,24 @@ abstract final class ProgrammeGridSync {
       }
     }).toSet();
   }
+
+  /// Apply Pregnancy Outcome (delivery) selection to the service grid.
+  ///
+  /// Clears **only** ANC and PW. Other selected programmes stay on; PNC is
+  /// ensured so pregnancy-outcome / mother / child forms can open.
+  static ({Set<Programme> selected, Set<Programme> dismissedBySk})
+      applyDeliverySelected({
+    required Set<Programme> selected,
+    required Set<Programme> dismissedBySk,
+  }) {
+    final nextSelected = Set<Programme>.from(selected)
+      ..remove(Programme.anc)
+      ..remove(Programme.pw)
+      ..add(Programme.pnc);
+    final nextDismissed = Set<Programme>.from(dismissedBySk)
+      ..add(Programme.anc)
+      ..add(Programme.pw)
+      ..remove(Programme.pnc);
+    return (selected: nextSelected, dismissedBySk: nextDismissed);
+  }
 }

@@ -51,4 +51,15 @@ void main() {
       expect(seeded, {Programme.pnc});
     });
   });
+
+  group('ProgrammeGridSync.applyDeliverySelected', () {
+    test('clears only ANC and PW; keeps NCD and ensures PNC', () {
+      final next = ProgrammeGridSync.applyDeliverySelected(
+        selected: {Programme.anc, Programme.pw, Programme.ncd},
+        dismissedBySk: const {},
+      );
+      expect(next.selected, {Programme.ncd, Programme.pnc});
+      expect(next.dismissedBySk, {Programme.anc, Programme.pw});
+    });
+  });
 }

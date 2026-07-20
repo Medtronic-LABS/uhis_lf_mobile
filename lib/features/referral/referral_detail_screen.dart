@@ -107,7 +107,7 @@ class _ReferralDetailScreenState extends State<ReferralDetailScreen>
     
     return Scaffold(
       appBar: AppBar(
-        title: const Text(ReferralStrings.dashboardTitle),
+        title: Text(ReferralStrings.dashboardTitle),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [

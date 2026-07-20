@@ -15,6 +15,7 @@ import '../assessment_repository.dart';
 import '../models/anc_assessment.dart';
 import 'canonical_visit_data.dart';
 import 'form_config.dart';
+import 'rmnch_follow_up_calculator.dart';
 import 'unified_payload_mapper.dart';
 import 'vitals_trend.dart';
 
@@ -209,6 +210,37 @@ class UnifiedFormNotifier extends ChangeNotifier {
     }
   }
 
+  /// Android RMNCH summary auto-fills next follow-up; seed when empty so the
+  /// SK does not enter it manually. Draft / SK edits always win.
+  ///
+  /// ANC (community): today + 28 days
+  /// (`AssessmentRMNCHSummaryFragment.bindAncSummary`).
+  /// PNC mother: bands from `daysSinceDelivery` when that field is set.
+  void seedRmnchFollowUpIfNeeded() {
+    final existing = _data.getValue('followUpVisit');
+    if (existing != null && existing.toString().trim().isNotEmpty) return;
+
+    DateTime? next;
+    if (_activeFormTypes.contains('anc')) {
+      next = RmnchFollowUpCalculator.ancCommunityDefault();
+    } else if (_activeFormTypes.contains('pncMother')) {
+      final days = int.tryParse(
+        _data.getValue('daysSinceDelivery')?.toString() ?? '',
+      );
+      if (days != null) {
+        next = RmnchFollowUpCalculator.pncFromDaysSinceDelivery(days);
+      }
+    }
+    if (next == null) return;
+
+    final iso = RmnchFollowUpCalculator.toFormDate(next);
+    debugPrint('[FollowUp] auto-seed followUpVisit=$iso '
+        '(forms=$_activeFormTypes)');
+    _data = _data.setValue('followUpVisit', iso);
+    notifyListeners();
+    _saveDraft();
+  }
+
   /// Restores AI-provenance marking persisted with the draft so restored
   /// AI-filled values are still visibly "AI-filled — verify" rather than
   /// indistinguishable from SK-typed entries.
@@ -235,11 +267,17 @@ class UnifiedFormNotifier extends ChangeNotifier {
   /// Load LMP and EDD for this ANC visit.
   ///
   /// Priority order:
-  /// 1. Pregnancy snapshot (`lmp_date` / `edd_date`) written at sync / enroll.
-  /// 2. LMP from server-synced past ANC assessments via
+  /// 1. Pregnancy snapshot (`lmp_date` / `edd_date`) written at sync / enroll
+  ///    (patientId, then [memberId] if dates still missing).
+  /// 2. Optional seed from VisitFlow (already resolved from the same snapshot).
+  /// 3. LMP from server-synced past ANC assessments via
   ///    [AssessmentRepository.lmpDateFromHistory].
-  /// 3. `lmpDate` / `gestationalWeeks` in patient rawJson (bulk member DTO).
-  Future<void> loadPregnancyData() async {
+  /// 4. Nested-aware patient rawJson (bulk member DTO / pregnancyDetails).
+  Future<void> loadPregnancyData({
+    DateTime? seedLmp,
+    DateTime? seedEdd,
+    int? seedWeeks,
+  }) async {
     try {
       DateTime? lmp;
       DateTime? edd;
@@ -247,9 +285,22 @@ class UnifiedFormNotifier extends ChangeNotifier {
       var source = 'none';
 
       // ── 1. Prefer pregnancy snapshot (stable per-patient store) ───────────
-      final snap = await _pregnancySnapshotDao.byPatient(_patientId);
+      var snap = await _pregnancySnapshotDao.byPatient(_patientId);
+      // Snapshot rows are sometimes keyed by household-member id when the
+      // sync-time FHIR patient map was incomplete — try memberId next.
+      final memberId = _memberId;
+      if ((snap?.lmpDate == null && snap?.eddDate == null) &&
+          memberId != null &&
+          memberId.isNotEmpty &&
+          memberId != _patientId) {
+        final byMember = await _pregnancySnapshotDao.byPatient(memberId);
+        if (byMember?.lmpDate != null || byMember?.eddDate != null) {
+          snap = byMember;
+          debugPrint('[LMP] load using memberId snapshot member=$memberId');
+        }
+      }
       debugPrint(
-        '[LMP] load patient=$_patientId snapshot='
+        '[LMP] load patient=$_patientId member=$_memberId snapshot='
         '${snap == null ? "missing" : "hit"} '
         'lmpMs=${snap?.lmpDate} eddMs=${snap?.eddDate}',
       );
@@ -267,7 +318,27 @@ class UnifiedFormNotifier extends ChangeNotifier {
         edd ??= DateTime.fromMillisecondsSinceEpoch(snap!.eddDate!);
       }
 
-      // ── 2. Fallback: scan server-synced ANC assessment history ────────────
+      // ── 2. Seed from VisitFlow (already resolved before Step 2 mounts) ───
+      if (lmp == null && seedLmp != null) {
+        lmp = seedLmp;
+        weeks = DateTime.now().difference(lmp).inDays ~/ 7;
+        source = 'visitFlow.seedLmp';
+      }
+      if (edd == null && seedEdd != null) {
+        edd = seedEdd;
+        if (lmp == null) {
+          lmp = edd.subtract(const Duration(days: 280));
+          weeks = DateTime.now().difference(lmp).inDays ~/ 7;
+          source = 'visitFlow.seedEdd';
+        }
+      }
+      if (lmp == null && seedWeeks != null && seedWeeks > 0) {
+        weeks = seedWeeks;
+        lmp = DateTime.now().subtract(Duration(days: seedWeeks * 7));
+        source = 'visitFlow.seedWeeks';
+      }
+
+      // ── 3. Fallback: scan server-synced ANC assessment history ────────────
       if (lmp == null) {
         debugPrint('[LMP] load snapshot empty — trying assessment history');
         lmp = await _assessmentRepo.lmpDateFromHistory(_patientId);
@@ -277,7 +348,7 @@ class UnifiedFormNotifier extends ChangeNotifier {
         }
       }
 
-      // ── 3. Fallback: patient rawJson (ISO string or epoch ms) ─────────────
+      // ── 4. Fallback: patient rawJson (flatten nested pregnancy DTOs) ─────
       if (lmp == null) {
         final patient = await _patientDao.byId(_patientId);
         if (patient == null) {
@@ -286,25 +357,49 @@ class UnifiedFormNotifier extends ChangeNotifier {
         if (patient != null) {
           try {
             final json = jsonDecode(patient.rawJson) as Map<String, dynamic>;
+            final flat = _flattenPregnancyRaw(json);
             debugPrint(
-              '[LMP] load rawJson keys lmp=${json['lmpDate']} '
-              'lastMenstrualPeriod=${json['lastMenstrualPeriod']} '
-              'ga=${json['gestationalWeeks']}',
+              '[LMP] load rawJson keys lmp=${flat['lmpDate']} '
+              'lastMenstrualPeriod=${flat['lastMenstrualPeriod']} '
+              'ga=${flat['gestationalWeeks'] ?? flat['gestationalAge']}',
             );
-            lmp = JsonRead.firstDateTime(json, const [
+            lmp = JsonRead.firstDateTime(flat, const [
               'lmpDate',
               'lastMenstrualPeriod',
               'lastMenstrualPeriodDate',
               'lmp',
+              'lmpValue',
+              'menstrualDate',
+              'lastPeriodDate',
             ]);
             if (lmp != null) {
               weeks = DateTime.now().difference(lmp).inDays ~/ 7;
               source = 'patient.rawJson';
-            } else if (json['gestationalWeeks'] != null) {
-              weeks = (json['gestationalWeeks'] as num).toInt();
-              lmp = DateTime.now().subtract(Duration(days: weeks * 7));
-              source = 'patient.gestationalWeeks';
+            } else {
+              for (final key in const [
+                'gestationalWeeks',
+                'gestationalAge',
+                'gaWeeks',
+                'weeksPregnant',
+              ]) {
+                final v = flat[key];
+                int? w;
+                if (v is int) w = v;
+                if (v is num) w = v.toInt();
+                if (v is String) w = int.tryParse(v);
+                if (w != null && w > 0 && w < 45) {
+                  weeks = w;
+                  lmp = DateTime.now().subtract(Duration(days: w * 7));
+                  source = 'patient.$key';
+                  break;
+                }
+              }
             }
+            edd ??= JsonRead.firstDateTime(flat, const [
+              'estimatedDeliveryDate',
+              'edd',
+              'eddDate',
+            ]);
           } catch (_) {}
         }
       }
@@ -321,6 +416,36 @@ class UnifiedFormNotifier extends ChangeNotifier {
     } catch (e) {
       debugPrint('[LMP] load FAILED: $e');
     }
+  }
+
+  /// Flatten nested pregnancy DTOs so LMP/EDD keys are readable at top level.
+  static Map<String, dynamic> _flattenPregnancyRaw(Map<String, dynamic> raw) {
+    final flat = <String, dynamic>{...raw};
+    for (final sub in const [
+      'pregnancyDetails',
+      'pregnancyDetail',
+      'pwProfile',
+      'pregnancyProfile',
+      'obstetricHistory',
+      'observations',
+      'assessmentDetails',
+      'pregnancyInfos',
+    ]) {
+      final nested = raw[sub];
+      if (nested is Map) {
+        for (final e in nested.entries) {
+          flat.putIfAbsent(e.key.toString(), () => e.value);
+        }
+      } else if (nested is List) {
+        for (final item in nested) {
+          if (item is! Map) continue;
+          for (final e in item.entries) {
+            flat.putIfAbsent(e.key.toString(), () => e.value);
+          }
+        }
+      }
+    }
+    return flat;
   }
 
   /// Update a single field and autosave draft.
@@ -345,32 +470,85 @@ class UnifiedFormNotifier extends ChangeNotifier {
     if (fieldId == 'height' || fieldId == 'weight') {
       _recomputeBmi();
     }
-    // Mirror bpLogDetails latest reading pulse → standalone 'pulse' field so
-    // PNC maternalHealthAssessment pulse stays in sync with NCD BP readings.
-    if (fieldId == 'bpLogDetails' && value is List && value.isNotEmpty) {
-      final last = value.last;
-      if (last is Map) {
-        final p = last['pulse'];
-        if (p != null) _data = _data.setValue('pulse', p);
+    // Android resets on-treatment when existing illness changes.
+    if (fieldId == 'pregnantWomanExistingIllness') {
+      _data = _data.setValue('pregnantWomanOnTreatment', null);
+    }
+    // PNC summary recalculates follow-up when days-since-delivery changes.
+    if (fieldId == 'daysSinceDelivery' &&
+        _activeFormTypes.contains('pncMother')) {
+      final days = int.tryParse(value?.toString() ?? '');
+      if (days != null) {
+        final next = RmnchFollowUpCalculator.pncFromDaysSinceDelivery(days);
+        _data = _data.setValue(
+          'followUpVisit',
+          RmnchFollowUpCalculator.toFormDate(next),
+        );
       }
     }
-    // Mirror standalone 'pulse' → latest bpLogDetails reading so NCD BP
-    // readings stay consistent when pulse is entered in PNC section.
-    if (fieldId == 'pulse') {
-      final readings = _data.getValue('bpLogDetails');
-      if (readings is List && readings.isNotEmpty) {
-        final updated = List<dynamic>.from(readings);
-        final last = Map<String, dynamic>.from(updated.last as Map);
-        last['pulse'] = value;
-        updated[updated.length - 1] = last;
-        _data = _data.setValue('bpLogDetails', updated);
-      }
-    }
+    // Cross-programme BP sync: NCD uses `bpLogDetails` list; ANC/PNC use
+    // flat systolic/diastolic/pulse. Keep both shapes aligned so filling
+    // either widget updates the other (pulse already did this; sys/dia
+    // were missing — SK reported only pulse mirrored).
+    _mirrorBpAcrossProgrammes(fieldId, value);
     if (fieldId == 'deliveryOutcomeType') {
       debugPrint('[DeliveryOutcome] updateField deliveryOutcomeType=$value → notifyListeners');
     }
     notifyListeners();
     _saveDraft();
+  }
+
+  /// Keeps NCD `bpLogDetails` and ANC/PNC flat BP keys in sync.
+  void _mirrorBpAcrossProgrammes(String fieldId, dynamic value) {
+    const flatKeys = {'systolic', 'diastolic', 'pulse'};
+
+    if (fieldId == 'bpLogDetails' && value is List && value.isNotEmpty) {
+      final last = value.last;
+      if (last is! Map) return;
+      for (final key in flatKeys) {
+        final v = last[key];
+        if (v != null) _data = _data.setValue(key, v);
+      }
+      return;
+    }
+
+    if (!flatKeys.contains(fieldId)) return;
+
+    final readings = _data.getValue('bpLogDetails');
+    final List<dynamic> updated;
+    final Map<String, dynamic> last;
+    if (readings is List && readings.isNotEmpty) {
+      updated = List<dynamic>.from(readings);
+      last = Map<String, dynamic>.from(
+        updated.last is Map ? updated.last as Map : const {},
+      );
+    } else {
+      // Seed a reading so NCD's BP widget can show ANC/PNC entries.
+      updated = <dynamic>[];
+      last = <String, dynamic>{};
+    }
+    if (value == null) {
+      last.remove(fieldId);
+    } else {
+      last[fieldId] = value;
+    }
+    // Drop empty seed rows (no sys/dia yet) — pulse-only still kept so NCD
+    // can show a mirrored pulse before BP is entered.
+    final hasSysDia = last['systolic'] != null || last['diastolic'] != null;
+    final hasPulse = last['pulse'] != null;
+    if (!hasSysDia && !hasPulse) {
+      if (readings is List && readings.isNotEmpty) {
+        updated[updated.length - 1] = last;
+        _data = _data.setValue('bpLogDetails', updated);
+      }
+      return;
+    }
+    if (updated.isEmpty) {
+      updated.add(last);
+    } else {
+      updated[updated.length - 1] = last;
+    }
+    _data = _data.setValue('bpLogDetails', updated);
   }
 
   void _recomputeBmi() {

@@ -122,7 +122,7 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
                         onPressed: _busy
                             ? null
                             : () => context.go('/login?from=lock'),
-                        child: const Text(CommonStrings.usePassword),
+                        child: Text(CommonStrings.usePassword),
                       ),
                     ],
                   ),

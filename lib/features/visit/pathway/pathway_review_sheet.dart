@@ -135,21 +135,21 @@ class _PathwayReviewSheetState extends State<PathwayReviewSheet> {
     final shouldSkip = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text(PathwayStrings.confirmRemoveTitle),
+        title: Text(PathwayStrings.confirmRemoveTitle),
         content: Text(
           PathwayStrings.confirmRemoveBody(programmeName, trigger),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text(PathwayStrings.keepButton),
+            child: Text(PathwayStrings.keepButton),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
-            child: const Text(PathwayStrings.skipAnywayButton),
+            child: Text(PathwayStrings.skipAnywayButton),
           ),
         ],
       ),
@@ -246,7 +246,7 @@ class _PathwayReviewSheetState extends State<PathwayReviewSheet> {
                 : () {
                     widget.onConfirm(_confirmedPathways, _skippedPathways);
                   },
-            child: const Text(PathwayStrings.startAssessment),
+            child: Text(PathwayStrings.startAssessment),
           ),
         ),
       ),
@@ -280,7 +280,7 @@ class _PathwayReviewSheetState extends State<PathwayReviewSheet> {
           OutlinedButton.icon(
             onPressed: _addManualProgramme,
             icon: const Icon(Icons.add),
-            label: const Text(PathwayStrings.addProgramme),
+            label: Text(PathwayStrings.addProgramme),
           ),
         ],
       ),
@@ -360,7 +360,7 @@ class _PathwayReviewSheetState extends State<PathwayReviewSheet> {
       child: OutlinedButton.icon(
         onPressed: _addManualProgramme,
         icon: const Icon(Icons.add),
-        label: const Text(PathwayStrings.addProgramme),
+        label: Text(PathwayStrings.addProgramme),
       ),
     );
   }

@@ -2137,7 +2137,7 @@
     "visibility": "visible",
     "titleCulture": "রেফারেল স্বাস্থ্যসেবা কেন্দ্র",
     "errorMessage": "Please select a valid option",
-    "isSummary": true,
+    "isSummary": false,
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -4581,11 +4581,11 @@
     "fieldName": "Pregnant woman has any existing illness",
     "family": "medicalHistoryPhysicalExamination",
     "orderId": 1,
-    "isMandatory": false,
+    "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
     "hint": "Illness",
-    "titleCulture": "গর্ভবতী মায়ের আগে থেকে কোনো অসুখ আছে কি?",
+    "titleCulture": "গর্ভবতী মায়ের আগে থেকে কি কি দীর্ঘমেয়াদী রোগ আছে",
     "errorMessage": "Please select a valid option",
     "isSummary": false,
     "localDataCache": "illness",
@@ -4605,40 +4605,44 @@
     ],
     "optionsList": [
       {
-        "id": "anemia",
-        "name": "Anemia"
+        "id": "htn",
+        "name": "HTN",
+        "cultureValue": "উচ্চ রক্তচাপ"
       },
       {
-        "id": "hypertension",
-        "name": "Hypertension"
+        "id": "dm",
+        "name": "DM",
+        "cultureValue": "ডায়াবেটিস"
       },
       {
-        "id": "diabetes",
-        "name": "Diabetes"
+        "id": "heartDisease",
+        "name": "Heart Disease",
+        "cultureValue": "হৃদরোগ"
       },
       {
-        "id": "cardiac_disease",
-        "name": "Cardiac disease"
-      },
-      {
-        "id": "renal_disease",
-        "name": "Renal disease"
-      },
-      {
-        "id": "epilepsy",
-        "name": "Epilepsy / Convulsions"
+        "id": "tuberculosis",
+        "name": "Tuberculosis",
+        "cultureValue": "যক্ষ্মা"
       },
       {
         "id": "asthma",
-        "name": "Asthma"
+        "name": "Asthma",
+        "cultureValue": "হাঁপানি"
       },
       {
-        "id": "thyroid_disorder",
-        "name": "Thyroid disorder"
+        "id": "kidneyDisease",
+        "name": "Kidney Disease",
+        "cultureValue": "কিডনি রোগ"
+      },
+      {
+        "id": "thyroidDisease",
+        "name": "Thyroid disease",
+        "cultureValue": "থাইরয়েড রোগ"
       },
       {
         "id": "none",
-        "name": "None"
+        "name": "None",
+        "cultureValue": "কোনো রোগ নাই"
       }
     ]
   },
@@ -4649,11 +4653,11 @@
     "fieldName": "Pregnant woman on treatment for any existing illness",
     "family": "medicalHistoryPhysicalExamination",
     "orderId": 2,
-    "isMandatory": false,
+    "isMandatory": true,
     "isEnabled": true,
-    "visibility": "visible",
-    "hint": "Illness",
-    "titleCulture": "গর্ভবতী মা কোনো আগের অসুখের জন্য চিকিৎসা নিচ্ছেন কি?",
+    "visibility": "gone",
+    "hint": "Treatment",
+    "titleCulture": "গর্ভবতী মা আগের কোন রোগের চিকিৎসা নিচ্ছেন",
     "errorMessage": "Please select a valid option",
     "isSummary": false,
     "clinicalConcept": [
@@ -4668,6 +4672,13 @@
         "id": "anc",
         "workflowId": 4,
         "workflowName": "RMNCH"
+      }
+    ],
+    "optionsList": [
+      {
+        "id": "none",
+        "name": "Not taking any treatment",
+        "cultureValue": "কোনো চিকিৎসা গ্রহণ করছেন না"
       }
     ]
   },
@@ -5987,7 +5998,7 @@
     "readOnly": true,
     "visibility": "visible",
     "titleCulture": "পরবর্তী পরিদর্শন",
-    "isSummary": true,
+    "isSummary": false,
     "clinicalConcept": [
       {
         "system": "SNOMED_CT",
@@ -8626,15 +8637,15 @@
   },
   "hasSymptoms": {
     "id": "hasSymptoms",
-    "label": "Has the Patient had any symptoms since the last follow up?",
+    "label": "Does the patient have any symptoms?",
     "widgetHint": "SingleSelectionView",
-    "fieldName": "Has the Patient had any symptoms since the last follow up?",
+    "fieldName": "Does the patient have any symptoms?",
     "family": "symptomsLog",
     "orderId": 0.0,
     "isMandatory": true,
     "isEnabled": true,
     "visibility": "visible",
-    "titleCulture": "শেষ ফলোআপের পর থেকে রোগীর কি কোনও লক্ষণ দেখা দিয়েছে?",
+    "titleCulture": "রোগীর কি কোনো উপসর্গ আছে?",
     "errorMessage": "Please select a valid option",
     "isSummary": false,
     "optionType": "boolean",
@@ -8686,9 +8697,9 @@
         "visibility": "visible"
       },
       {
-        "eq": "Yes",
+        "eq": "No",
         "targetId": "newWorseningSymptoms",
-        "visibility": "visible"
+        "visibility": "gone"
       }
     ]
   },
@@ -8722,69 +8733,63 @@
     ],
     "optionsList": [
       {
-        "id": "Headache",
-        "name": "Headache",
-        "cultureValue": "মাথাব্যথা"
+        "id": "1",
+        "name": "Shortness of breath",
+        "cultureValue": "শ্বাসকষ্ট",
+        "value": "shortnessOfBreath"
       },
       {
-        "id": "Blurred Vision",
-        "name": "Blurred Vision",
-        "cultureValue": "ঝাপসা দৃষ্টি"
+        "id": "2",
+        "name": "Dizziness/Fainting",
+        "cultureValue": "মাথা ঘোরা/ অজ্ঞ্যান হয়ে যাওয়া",
+        "value": "dizzinessfainting"
       },
       {
-        "id": "Chest Pain",
-        "name": "Chest Pain",
-        "cultureValue": "বুকে ব্যথা"
+        "id": "3",
+        "name": "Unable to speak/Slurred speech",
+        "cultureValue": "কথা বলতে না পারা,  কথা অস্পষ্ট হয়ে যাওয়া বা কথা জড়িয়ে যাওয়া",
+        "value": "unableToSpeakSlurredSpeech"
       },
       {
-        "id": "Shortness of Breath",
-        "name": "Shortness of Breath",
-        "cultureValue": "শ্বাসকষ্ট"
+        "id": "4",
+        "name": "Swelling of leg",
+        "cultureValue": "পা ফুলে যাওয়া/ পায়ে পানি আসা",
+        "value": "swellingOfLeg"
       },
       {
-        "id": "Weakness",
-        "name": "Weakness",
-        "cultureValue": "দুর্বলতা"
+        "id": "5",
+        "name": "Blurry vision",
+        "cultureValue": "দৃষ্টির সমস্যা (ঝাপসা দেখা",
+        "value": "blurryVision"
       },
       {
-        "id": "Numbness",
-        "name": "Numbness",
-        "cultureValue": "অসাড়তা"
+        "id": "6",
+        "name": "Double vision",
+        "cultureValue": "একই জিনিস দুইটা দেখা",
+        "value": "doubleVision"
       },
       {
-        "id": "Dizziness",
-        "name": "Dizziness",
-        "cultureValue": "মাথা ঘোরা"
-      },
-      {
-        "id": "Palpitations",
+        "id": "7",
         "name": "Palpitations",
-        "cultureValue": "বুক ধড়ফড়"
+        "cultureValue": "বুক ধড়পড় করা",
+        "value": "palpitations"
       },
       {
-        "id": "Leg Swelling",
-        "name": "Leg Swelling",
-        "cultureValue": "পায়ে ফোলা"
+        "id": "8",
+        "name": "Chest pain",
+        "cultureValue": "বুকে ব্যথা",
+        "value": "chest_pain"
       },
       {
-        "id": "Frequent Urination",
-        "name": "Frequent Urination",
-        "cultureValue": "ঘন ঘন প্রস্রাব"
+        "id": "10",
+        "name": "Headache",
+        "cultureValue": "মাথাব্যথা",
+        "value": "headache"
       },
       {
-        "id": "Excessive Thirst",
-        "name": "Excessive Thirst",
-        "cultureValue": "অতিরিক্ত তৃষ্ণা"
-      },
-      {
-        "id": "Unexplained Weight Loss",
-        "name": "Unexplained Weight Loss",
-        "cultureValue": "অকারণ ওজন হ্রাস"
-      },
-      {
-        "id": "None",
-        "name": "None",
-        "cultureValue": "কোনোটি নয়"
+        "id": "anyNewOrWorseningSymptoms",
+        "name": "Any new or worsening symptoms",
+        "cultureValue": "নতুন বা আগের তুলনায় বেড়ে যাওয়া উপসর্গ"
       }
     ],
     "condition": []

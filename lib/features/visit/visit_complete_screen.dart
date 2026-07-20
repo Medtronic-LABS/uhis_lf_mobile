@@ -56,7 +56,7 @@ class VisitCompleteScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.canvas,
       appBar: AppBar(
-        title: const Text(VisitCompleteStrings.title),
+        title: Text(VisitCompleteStrings.title),
         backgroundColor: headerColor,
         foregroundColor: Colors.white,
         automaticallyImplyLeading: false,
@@ -177,7 +177,7 @@ class VisitCompleteScreen extends StatelessWidget {
                         },
                       ),
                       icon: const Icon(Icons.video_call_rounded),
-                      label: const Text(VisitCompleteStrings.bookTeleconsult),
+                      label: Text(VisitCompleteStrings.bookTeleconsult),
                       style: FilledButton.styleFrom(
                         backgroundColor: headerColor,
                         foregroundColor: Colors.white,
@@ -198,7 +198,7 @@ class VisitCompleteScreen extends StatelessWidget {
                         },
                       ),
                       icon: const Icon(Icons.health_and_safety_rounded),
-                      label: const Text(VisitCompleteStrings.sendCounsellingMessage),
+                      label: Text(VisitCompleteStrings.sendCounsellingMessage),
                       style: FilledButton.styleFrom(
                         backgroundColor: headerColor,
                         foregroundColor: Colors.white,
@@ -212,7 +212,7 @@ class VisitCompleteScreen extends StatelessWidget {
                   if (referralRecommended) ...[
                     OutlinedButton(
                       onPressed: () => context.go('/tasks'),
-                      child: const Text(VisitCompleteStrings.createReferral),
+                      child: Text(VisitCompleteStrings.createReferral),
                     ),
                     const SizedBox(height: AppSpacing.xl),
                   ],
@@ -220,7 +220,7 @@ class VisitCompleteScreen extends StatelessWidget {
                   // Back to home — always shown
                   TextButton(
                     onPressed: () => context.go('/home'),
-                    child: const Text(VisitCompleteStrings.backToHome),
+                    child: Text(VisitCompleteStrings.backToHome),
                   ),
                 ],
               ),

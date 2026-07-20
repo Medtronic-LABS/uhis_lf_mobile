@@ -34,17 +34,17 @@ class _ConsentScreenState extends State<ConsentScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text(ConsentStrings.declineButton),
-        content: const Text(ConsentStrings.declineWarning),
+        title: Text(ConsentStrings.declineButton),
+        content: Text(ConsentStrings.declineWarning),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text(ConsentStrings.declineCancel),
+            child: Text(ConsentStrings.declineCancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(foregroundColor: AppColors.statusCritical),
-            child: const Text(ConsentStrings.declineConfirm),
+            child: Text(ConsentStrings.declineConfirm),
           ),
         ],
       ),
@@ -61,7 +61,7 @@ class _ConsentScreenState extends State<ConsentScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.navy,
         foregroundColor: Colors.white,
-        title: const Text(
+        title: Text(
           ConsentStrings.title,
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
         ),
@@ -135,7 +135,7 @@ class _ProgrammeHeader extends StatelessWidget {
         children: [
           const Icon(Icons.health_and_safety_outlined, color: AppColors.navy, size: 22),
           const SizedBox(width: 10),
-          const Expanded(
+          Expanded(
             child: Text(
               ConsentStrings.subtitle,
               style: TextStyle(
@@ -271,7 +271,7 @@ class _ActionBar extends StatelessWidget {
                 side: BorderSide(color: AppColors.border),
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
-              child: const Text(ConsentStrings.declineButton),
+              child: Text(ConsentStrings.declineButton),
             ),
           ),
           const SizedBox(width: 12),
@@ -284,7 +284,7 @@ class _ActionBar extends StatelessWidget {
                 disabledBackgroundColor: AppColors.border,
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
-              child: const Text(ConsentStrings.confirmButton),
+              child: Text(ConsentStrings.confirmButton),
             ),
           ),
         ],

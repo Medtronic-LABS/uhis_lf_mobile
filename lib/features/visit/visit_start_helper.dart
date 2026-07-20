@@ -42,16 +42,16 @@ Future<String?> startOrResumeVisit(
     final resume = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text(ComposerStrings.resumeDraftTitle),
-        content: const Text(ComposerStrings.resumeDraftMessage),
+        title: Text(ComposerStrings.resumeDraftTitle),
+        content: Text(ComposerStrings.resumeDraftMessage),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text(ComposerStrings.startOverButton),
+            child: Text(ComposerStrings.startOverButton),
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text(ComposerStrings.resumeButton),
+            child: Text(ComposerStrings.resumeButton),
           ),
         ],
       ),

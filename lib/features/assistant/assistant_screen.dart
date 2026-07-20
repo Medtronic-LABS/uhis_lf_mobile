@@ -25,7 +25,7 @@ class AssistantScreen extends StatelessWidget {
         appBar: AppBar(
           backgroundColor: AppColors.navy,
           foregroundColor: Colors.white,
-          title: const Text(AssistantStrings.title),
+          title: Text(AssistantStrings.title),
           elevation: 0,
           bottom: const TabBar(
             labelColor: Colors.white,
@@ -214,7 +214,7 @@ class _EmptyState extends StatelessWidget {
               borderRadius: BorderRadius.circular(20),
             ),
             alignment: Alignment.center,
-            child: const Text(
+            child: Text(
               AssistantStrings.badgeLabel,
               style: TextStyle(
                 color: Colors.white,
@@ -236,7 +236,7 @@ class _EmptyState extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             AssistantStrings.emptySubheading,
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -255,7 +255,7 @@ class _EmptyState extends StatelessWidget {
                 .toList(),
           ),
           const SizedBox(height: 32),
-          const Text(
+          Text(
             AssistantStrings.poweredBy,
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -343,7 +343,7 @@ class _MessageBubble extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
               ),
               alignment: Alignment.center,
-              child: const Text(
+              child: Text(
                 AssistantStrings.badgeLabel,
                 style: TextStyle(
                   color: Colors.white,
@@ -431,7 +431,7 @@ class _TypingIndicatorState extends State<_TypingIndicator>
               borderRadius: BorderRadius.circular(10),
             ),
             alignment: Alignment.center,
-            child: const Text(
+            child: Text(
               AssistantStrings.badgeLabel,
               style: TextStyle(
                 color: Colors.white,
@@ -609,7 +609,7 @@ class _ErrorBanner extends StatelessWidget {
           ),
           TextButton(
             onPressed: onRetry,
-            child: const Text(
+            child: Text(
               AssistantStrings.retryLabel,
               style: TextStyle(
                 color: AppColors.slaOverdueText,

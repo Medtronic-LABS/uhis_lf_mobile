@@ -35,7 +35,7 @@ class TrainingScreen extends StatelessWidget {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               TrainingStrings.title,
               style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
             ),
@@ -72,7 +72,7 @@ class TrainingBody extends StatelessWidget {
           const SizedBox(height: 14),
 
           // 2. Section label
-          const _SectionLabel(label: TrainingStrings.sectionTodaysLessons),
+          _SectionLabel(label: TrainingStrings.sectionTodaysLessons),
           const SizedBox(height: 10),
 
           // 3. Video module cards
@@ -790,7 +790,7 @@ void _openModule(BuildContext context, CoachingModule module) {
 void _showLockedSnackbar(BuildContext context) {
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
-      content: const Text(TrainingStrings.lockedSnackbar),
+      content: Text(TrainingStrings.lockedSnackbar),
       behavior: SnackBarBehavior.floating,
     ),
   );

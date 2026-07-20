@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/services.dart';
 
+import '../../../core/i18n/app_locale.dart';
+
 /// Exception thrown when a form config asset cannot be parsed.
 class FormConfigException implements Exception {
   const FormConfigException(this.message, {this.cause});
@@ -72,15 +74,35 @@ enum WidgetHint {
 }
 
 class FieldOption {
-  const FieldOption({required this.id, required this.name});
+  const FieldOption({
+    required this.id,
+    required this.name,
+    this.cultureValue,
+  });
 
   final String id;
+
+  /// English option label from `"name"`.
   final String name;
+
+  /// Bengali option label from `"cultureValue"`.
+  final String? cultureValue;
+
+  /// Locale-pure label for UI: Bangla when available in Bangla mode, else English.
+  String get displayName {
+    if (AppLocale.isBangla &&
+        cultureValue != null &&
+        cultureValue!.trim().isNotEmpty) {
+      return cultureValue!;
+    }
+    return name;
+  }
 
   factory FieldOption.fromJson(Map<String, dynamic> json) => FieldOption(
         // id can be bool (true/false) or int in some exports — coerce to string
         id: json['id']?.toString() ?? '',
         name: json['name']?.toString() ?? '',
+        cultureValue: json['cultureValue']?.toString(),
       );
 }
 
@@ -190,6 +212,7 @@ class FieldDef {
     this.compositeRole,
     this.infoTitle,
     this.isInfoVisible = false,
+    this.isSummary = false,
   });
 
   final String id;
@@ -207,9 +230,18 @@ class FieldDef {
   /// Optional placeholder text for text input fields.
   final String? hintText;
 
-  /// Localized (Bengali) field label from `"titleCulture"`, rendered as the
-  /// second line of the field card's title so the SK sees both languages.
+  /// Bengali field label from `"titleCulture"`. Prefer [displayLabel] in UI.
   final String? labelCulture;
+
+  /// Locale-pure field label: Bangla when available in Bangla mode, else English.
+  String get displayLabel {
+    if (AppLocale.isBangla &&
+        labelCulture != null &&
+        labelCulture!.trim().isNotEmpty) {
+      return labelCulture!;
+    }
+    return label;
+  }
 
   /// Field family/group from `"family"` (e.g. `"maternalHealthAssessment"`),
   /// used to pick a fallback glyph when the field id is not explicitly mapped.
@@ -237,6 +269,13 @@ class FieldDef {
   /// measured") shown under the field when [isInfoVisible] is true.
   final String? infoTitle;
   final bool isInfoVisible;
+
+  /// Android `isSummary`.
+  ///
+  /// On RMNCH / pregnancy-outcome fill forms, fields with this flag are
+  /// summary-only (hidden while filling). On NCD/TB/etc., the flag means
+  /// "also include on the summary screen" — the field still renders on fill.
+  final bool isSummary;
 
   factory FieldDef.fromJson(String id, Map<String, dynamic> json) {
     final rawHint = json['widgetHint'] as String?;
@@ -272,6 +311,7 @@ class FieldDef {
       compositeRole: json['compositeRole'] as String?,
       infoTitle: json['infoTitle'] as String?,
       isInfoVisible: json['isInfo'] == 'visible',
+      isSummary: json['isSummary'] as bool? ?? false,
     );
   }
 }

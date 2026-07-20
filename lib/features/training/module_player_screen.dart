@@ -159,7 +159,7 @@ class _ModulePlayerScreenState extends State<ModulePlayerScreen> {
                     OutlinedButton.icon(
                       onPressed: _prev,
                       icon: const Icon(Icons.arrow_back_rounded, size: 18),
-                      label: const Text(CoachingStrings.prevCard),
+                      label: Text(CoachingStrings.prevCard),
                     ),
                   const Spacer(),
                   FilledButton.icon(

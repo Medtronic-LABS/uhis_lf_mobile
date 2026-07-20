@@ -218,7 +218,19 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     debugPrint('[_VisitFlowState] _loadPregnancySnapshotFromDb');
     try {
       final dao = context.read<PregnancySnapshotDao>();
-      final snap = await dao.byPatient(widget.patientId);
+      var snap = await dao.byPatient(widget.patientId);
+      // Sync sometimes keys the row by household-member id when the FHIR
+      // patient map was incomplete — fall back to memberId.
+      final memberId = widget.memberId;
+      if ((snap?.lmpDate == null && snap?.eddDate == null) &&
+          memberId != null &&
+          memberId.isNotEmpty &&
+          memberId != widget.patientId) {
+        final byMember = await dao.byPatient(memberId);
+        if (byMember?.lmpDate != null || byMember?.eddDate != null) {
+          snap = byMember;
+        }
+      }
       if (!mounted || snap == null) return;
 
       DateTime? lmp;
@@ -497,6 +509,8 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           patientName: widget.patientName,
           patientGender: widget.patientGender,
           gestationalWeeks: _effectiveGestationalWeeks,
+          lmpMs: _resolvedLmpMs,
+          eddMs: _resolvedEddMs,
           isPostpartum: _isPostpartum,
           postpartumWeeks: _postpartumWeeks,
           confirmedSymptoms: _confirmedSymptoms,
@@ -619,7 +633,7 @@ Future<bool?> showLeaveVisitDialog(BuildContext context) {
                       fontWeight: FontWeight.w800,
                     ),
                   ),
-                  child: const Text(VisitFlowStrings.discardCancel),
+                  child: Text(VisitFlowStrings.discardCancel),
                 ),
               ),
               const SizedBox(height: 8),
@@ -638,7 +652,7 @@ Future<bool?> showLeaveVisitDialog(BuildContext context) {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  child: const Text(VisitFlowStrings.discardConfirmCta),
+                  child: Text(VisitFlowStrings.discardConfirmCta),
                 ),
               ),
             ],
@@ -757,6 +771,8 @@ class _Step2VitalsForm extends StatelessWidget {
     this.householdMemberLocalId,
     this.patientAge,
     this.gestationalWeeks,
+    this.lmpMs,
+    this.eddMs,
     this.pathwayNames,
     this.triageNotes,
     this.origin,
@@ -774,6 +790,8 @@ class _Step2VitalsForm extends StatelessWidget {
   final int? householdMemberLocalId;
   final int? patientAge;
   final int? gestationalWeeks;
+  final int? lmpMs;
+  final int? eddMs;
   final List<String>? pathwayNames;
   final String? triageNotes;
   final String? origin;
@@ -802,6 +820,8 @@ class _Step2VitalsForm extends StatelessWidget {
       householdMemberLocalId: householdMemberLocalId,
       patientAge: patientAge,
       gestationalWeeks: gestationalWeeks,
+      lmpMs: lmpMs,
+      eddMs: eddMs,
       activatedPathways: pathwayNames,
       isDeliveryVisit: isDeliveryVisit,
       triageNotes: triageNotes,
@@ -921,6 +941,8 @@ class _Step2ProgrammesThenForm extends StatefulWidget {
     this.patientName,
     this.patientGender,
     this.gestationalWeeks,
+    this.lmpMs,
+    this.eddMs,
     this.isPostpartum = false,
     this.postpartumWeeks,
     this.isDeliveryVisit = false,
@@ -937,6 +959,8 @@ class _Step2ProgrammesThenForm extends StatefulWidget {
   final String? patientName;
   final String? patientGender;
   final int? gestationalWeeks;
+  final int? lmpMs;
+  final int? eddMs;
   final bool isPostpartum;
   final int? postpartumWeeks;
   final bool isDeliveryVisit;
@@ -973,6 +997,16 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
     super.initState();
     debugPrint('[_Step2ProgrammesThenFormState] initState');
     _selectedProgrammes = widget.seedProgrammes;
+    // Delivery visit always needs PNC in the seed so the form opens
+    // pregnancy-outcome even if Step 1 live-set was emptied by a rebuild.
+    if (widget.isDeliveryVisit) {
+      _selectedProgrammes = {..._selectedProgrammes, Programme.pnc};
+    }
+    debugPrint(
+      '[DeliveryGate] Step2 seed programmes='
+      '${_selectedProgrammes.map((p) => p.name).join(', ')} '
+      'isDeliveryVisit=${widget.isDeliveryVisit}',
+    );
     // AI programme recommendation disabled — use rule-based PathwayEngine result directly.
     _phase = _Step2Phase.form;
     WidgetsBinding.instance.addPostFrameCallback((_) => _hydrate());
@@ -986,23 +1020,19 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
 
       final hasAnc = _selectedProgrammes.contains(Programme.anc);
 
-      // Task 3 — PW once-only: block re-submission if already enrolled.
+      // Task 3 — PW once-only: drop PW silently if already enrolled.
+      // Do not show a dialog — ANC/other programmes in the same visit should
+      // continue without interrupting the SK.
       if (_selectedProgrammes.contains(Programme.pw) &&
           progs.contains(Programme.pw)) {
         debugPrint(
           '[Step2][PayloadDebug] PW block: patient=${widget.patientId} '
-          'already enrolled in PW — re-enrollment blocked.',
+          'already enrolled in PW — re-enrollment skipped (no dialog).',
         );
-        await _showAncBlockedDialog(
-          context,
-          AppStrings.pwAlreadyEnrolledTitle,
-          AppStrings.pwAlreadyEnrolledMessage,
-        );
-        if (!mounted) return;
-        // Remove PW from selected; if nothing remains, pop back.
         _selectedProgrammes =
             _selectedProgrammes.difference({Programme.pw});
         if (_selectedProgrammes.isEmpty) {
+          if (!mounted) return;
           Navigator.of(context).pop();
           return;
         }
@@ -1140,6 +1170,8 @@ class _Step2ProgrammesThenFormState extends State<_Step2ProgrammesThenForm> {
       householdMemberLocalId: widget.householdMemberLocalId,
       patientAge: widget.patientAge,
       gestationalWeeks: widget.gestationalWeeks,
+      lmpMs: widget.lmpMs,
+      eddMs: widget.eddMs,
       pathwayNames: _selectedProgrammes
           .where((p) => p != Programme.unknown)
           .map((p) => p.name)
@@ -2143,7 +2175,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     NabaStrings.loadingSubtitle,
                     style: TextStyle(
                       fontSize: 13,
@@ -2202,7 +2234,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
+            Text(
               NabaStrings.errorTitle,
               style: TextStyle(
                 fontWeight: FontWeight.w800,
@@ -2212,7 +2244,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               NabaStrings.errorSubtitle,
               style: TextStyle(
                 fontSize: 13,
@@ -2227,7 +2259,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
               child: FilledButton.icon(
                 onPressed: _retry,
                 icon: const Icon(Icons.refresh_rounded),
-                label: const Text(NabaStrings.retryButton),
+                label: Text(NabaStrings.retryButton),
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.navy,
                   padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxl),
@@ -2237,7 +2269,7 @@ class _Step3AiRecoState extends State<_Step3AiReco>
             const SizedBox(height: 10),
             TextButton(
               onPressed: () => context.go(_returnPath),
-              child: const Text(NabaStrings.skipButton),
+              child: Text(NabaStrings.skipButton),
             ),
           ],
         ),
@@ -2582,7 +2614,7 @@ class _AiCounsellingCard extends StatelessWidget {
     }
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
             content: Text(NabaStrings.whatsAppNotInstalled)),
       );
     }
@@ -2619,7 +2651,7 @@ class _AiCounsellingCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           NabaStrings.aiCounsellingGuide,
                           style: TextStyle(
                             fontSize: 10,
@@ -3128,7 +3160,7 @@ class _BottomCtaBar extends StatelessWidget {
                 child: FilledButton.icon(
                   onPressed: accepted ? null : onAccepted,
                   icon: const Icon(Icons.check_rounded),
-                  label: const Text(NabaStrings.acceptProposal),
+                  label: Text(NabaStrings.acceptProposal),
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFFEC4899),
                     foregroundColor: Colors.white,
@@ -3155,7 +3187,7 @@ class _BottomCtaBar extends StatelessWidget {
                       },
                     ),
                     icon: const Icon(Icons.chat_rounded),
-                    label: const Text(VisitCompleteStrings.sendCounsellingMessage),
+                    label: Text(VisitCompleteStrings.sendCounsellingMessage),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: headerColor,
                       side: BorderSide(

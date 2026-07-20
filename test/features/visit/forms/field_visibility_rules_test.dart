@@ -126,27 +126,20 @@ void main() {
       final config = await FormConfig.load(rootBundle);
       const emptyData = CanonicalVisitData();
 
-      for (final id in [
-        // pncMother "counselling" section (COUNSELING & EDUCATION) — was
-        // rendering completely empty; these are static guidance text /
-        // an optional referral dropdown, never meant to be conditional.
-        'counsellingMotherCare',
-        'motherCare',
-        'newbornCare',
-        'referralFacility',
-        // pncChild's own core assessment questions — zero incoming rules.
-        'hrsBreastFed',
-        'monthAdditionalFeedGiven',
-        'childBreastFeeding',
-        'additionalFood24Hrs',
-        'receivedVaccine',
-        'dewormingMedicine',
-        // cataract's computed CVD-risk display — an InformationLabel with
-        // no incoming rule, same unreachable-by-default problem.
-        'cvdRisk',
-        // enrollment's own "Is the patient pregnant?" question.
-        'isPregnant',
+      for (final entry in [
+        // pncChild keeps isSummary fields on fill (Android CHILDHOOD_VISIT).
+        ('hrsBreastFed', 'pncChild'),
+        ('monthAdditionalFeedGiven', 'pncChild'),
+        ('childBreastFeeding', 'pncChild'),
+        ('additionalFood24Hrs', 'pncChild'),
+        ('receivedVaccine', 'pncChild'),
+        ('dewormingMedicine', 'pncChild'),
+        ('cvdRisk', 'cataract'),
+        ('isPregnant', 'enrollment'),
+        ('referralFacility', 'pncMother'),
       ]) {
+        final id = entry.$1;
+        final formType = entry.$2;
         final field = config.fields[id];
         expect(field, isNotNull, reason: '$id should exist in field_library.json');
         expect(
@@ -154,9 +147,25 @@ void main() {
             field: field!,
             data: emptyData,
             rulesByTargetId: config.visibilityRulesByTargetId,
+            formType: formType,
           ),
           isTrue,
           reason: '$id should be visible with no prior answers',
+        );
+      }
+
+      // pncMother counselling text is Android isSummary → fill-form-hidden.
+      for (final id in ['counsellingMotherCare', 'motherCare', 'newbornCare']) {
+        final field = config.fields[id]!;
+        expect(
+          FieldVisibilityRules.isFieldVisible(
+            field: field,
+            data: emptyData,
+            rulesByTargetId: config.visibilityRulesByTargetId,
+            formType: 'pncMother',
+          ),
+          isFalse,
+          reason: '$id is Android isSummary — pncMother fill form hides it',
         );
       }
     });
@@ -204,6 +213,15 @@ void main() {
             // The obstetric-history composite chain is handled by its own
             // dedicated branch in isFieldVisible, not by incoming rules.
             if (field.compositeGroup == 'obstetricHistory') continue;
+            // Android-gated ANC field — revealed when illness ≠ None.
+            if (field.id == 'pregnantWomanOnTreatment') continue;
+            // anc / pncMother / pregnancyOutcome isSummary cards are
+            // fill-form-hidden by design (Android RMNCH filter).
+            if (field.isSummary &&
+                const {'anc', 'pncMother', 'pregnancyOutcome'}
+                    .contains(formType)) {
+              continue;
+            }
 
             final rules = config.visibilityRulesByTargetId[field.id] ?? const [];
             final reachable = rules.isNotEmpty &&
@@ -570,6 +588,307 @@ void main() {
         ),
         isTrue,
       );
+    });
+  });
+
+  // Android AssessmentRMNCHFragment.updateANCConditionalFieldVisibility().
+  group('ANC gestational-age / visit-number gates (Android parity)', () {
+    bool visible(
+      String id, {
+      int? ga,
+      int? visit,
+      CanonicalVisitData data = const CanonicalVisitData(),
+    }) {
+      return FieldVisibilityRules.isFieldVisible(
+        field: _fieldDef(id, {
+          'label': id,
+          'widgetHint': 'EditText',
+          'visibility': 'visible',
+        }),
+        data: data,
+        rulesByTargetId: const {},
+        gestationalWeeks: ga,
+        ancVisitNumber: visit,
+        formType: 'anc',
+      );
+    }
+
+    test('danger signs: only ≤12 band when GA unknown', () {
+      expect(visible('dangerSignsExperienced12'), isTrue);
+      expect(visible('dangerSignsExperienced13To27'), isFalse);
+      expect(visible('dangerSignsExperienced28To40'), isFalse);
+    });
+
+    test('danger signs: trimester bands by GA', () {
+      expect(visible('dangerSignsExperienced12', ga: 10), isTrue);
+      expect(visible('dangerSignsExperienced13To27', ga: 10), isFalse);
+
+      expect(visible('dangerSignsExperienced12', ga: 20), isFalse);
+      expect(visible('dangerSignsExperienced13To27', ga: 20), isTrue);
+      expect(visible('dangerSignsExperienced28To40', ga: 20), isFalse);
+
+      expect(visible('dangerSignsExperienced13To27', ga: 30), isFalse);
+      expect(visible('dangerSignsExperienced28To40', ga: 30), isTrue);
+    });
+
+    test('supplements: folic ≤12; IFA/calcium >12; all when GA null', () {
+      expect(visible('folicAcidProvided'), isTrue);
+      expect(visible('ifaProvided'), isTrue);
+      expect(visible('calciumProvided'), isTrue);
+
+      expect(visible('folicAcidProvided', ga: 8), isTrue);
+      expect(visible('ifaProvided', ga: 8), isFalse);
+      expect(visible('calciumProvided', ga: 8), isFalse);
+
+      expect(visible('folicAcidProvided', ga: 16), isFalse);
+      expect(visible('ifaProvided', ga: 16), isTrue);
+      expect(visible('calciumProvided', ga: 16), isTrue);
+    });
+
+    test('edema ≥12, fundal ≥24, ultrasound/doctor ANC ≥28', () {
+      expect(visible('edema', ga: 8), isFalse);
+      expect(visible('edema', ga: 12), isTrue);
+      expect(visible('fundalHeight', ga: 20), isFalse);
+      expect(visible('fundalHeight', ga: 24), isTrue);
+      expect(visible('ultrasound', ga: 27), isFalse);
+      expect(visible('ultrasound', ga: 28), isTrue);
+      expect(visible('ancFromMedicalDoctor', ga: 28), isTrue);
+    });
+
+    test('height / BMI visit-1 gates', () {
+      expect(visible('height', visit: 1), isTrue);
+      expect(visible('height', visit: 2), isFalse);
+      expect(visible('bmi', visit: 1, ga: 8), isTrue);
+      expect(visible('bmi', visit: 1, ga: 14), isFalse);
+      expect(visible('bmi', visit: 2, ga: 8), isFalse);
+    });
+
+    test('previousPregnancyComplications: visit 1 and gravida > 1', () {
+      const g2 = CanonicalVisitData({'gravida': 2});
+      const g1 = CanonicalVisitData({'gravida': 1});
+      expect(visible('previousPregnancyComplications', visit: 1, data: g2),
+          isTrue);
+      expect(visible('previousPregnancyComplications', visit: 1, data: g1),
+          isFalse);
+      expect(visible('previousPregnancyComplications', visit: 2, data: g2),
+          isFalse);
+    });
+
+    test('urineProtein hidden (Android has urinaryAlbumin only)', () {
+      expect(visible('urineProtein'), isFalse);
+      expect(visible('urinaryAlbumin'), isTrue);
+    });
+  });
+
+  group('isSummary fields (Android RMNCH summary screen)', () {
+    test('hidden on ANC fill form', () {
+      final summary = _fieldDef('gapsInAnc', {
+        'label': 'Gaps in ANC',
+        'isSummary': true,
+        'visibility': 'visible',
+      });
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: summary,
+          data: const CanonicalVisitData(),
+          rulesByTargetId: const {},
+          formType: 'anc',
+        ),
+        isFalse,
+      );
+    });
+
+    test('still visible on NCD fill form (summary flag ≠ hide)', () {
+      final ncdSymptom = _fieldDef('ncdSymptoms', {
+        'label': 'Select Symptoms',
+        'isSummary': true,
+        'visibility': 'gone',
+      });
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: ncdSymptom,
+          data: const CanonicalVisitData({'hasSymptoms': 'Yes'}),
+          rulesByTargetId: {
+            'ncdSymptoms': [
+              const FieldVisibilityRule(
+                driverId: 'hasSymptoms',
+                eq: 'Yes',
+                visibility: 'visible',
+              ),
+            ],
+          },
+          formType: 'ncd',
+        ),
+        isTrue,
+      );
+    });
+  });
+
+  group('NCD symptoms skip (Android BDNCD parity)', () {
+    final ncdSymptoms = _fieldDef('ncdSymptoms', {
+      'label': 'Select Symptoms',
+      'isSummary': true,
+      'visibility': 'gone',
+    });
+    final newWorsening = _fieldDef('newWorseningSymptoms', {
+      'label': 'Any new or worsening symptoms',
+      'isSummary': true,
+      'visibility': 'gone',
+    });
+    final rules = {
+      'ncdSymptoms': [
+        const FieldVisibilityRule(
+          driverId: 'hasSymptoms',
+          eq: 'Yes',
+          visibility: 'visible',
+        ),
+      ],
+    };
+
+    test('Yes reveals symptom picker; No keeps it gone', () {
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: ncdSymptoms,
+          data: const CanonicalVisitData({'hasSymptoms': 'Yes'}),
+          rulesByTargetId: rules,
+          formType: 'ncd',
+        ),
+        isTrue,
+      );
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: ncdSymptoms,
+          data: const CanonicalVisitData({'hasSymptoms': 'No'}),
+          rulesByTargetId: rules,
+          formType: 'ncd',
+        ),
+        isFalse,
+      );
+    });
+
+    test('newWorsening only when that symptom option is selected', () {
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: newWorsening,
+          data: CanonicalVisitData({
+            'hasSymptoms': 'Yes',
+            'ncdSymptoms': ['Headache'],
+          }),
+          rulesByTargetId: const {},
+          formType: 'ncd',
+        ),
+        isFalse,
+      );
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: newWorsening,
+          data: CanonicalVisitData({
+            'hasSymptoms': 'Yes',
+            'ncdSymptoms': [
+              FieldVisibilityRules.ncdAnyNewOrWorseningSymptomOption,
+            ],
+          }),
+          rulesByTargetId: const {},
+          formType: 'ncd',
+        ),
+        isTrue,
+      );
+    });
+
+    test('NCD height ignores ANC visit-number gate', () {
+      final height = _fieldDef('height', {
+        'label': 'Height',
+        'visibility': 'visible',
+      });
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: height,
+          data: const CanonicalVisitData(),
+          rulesByTargetId: const {},
+          formType: 'ncd',
+          ancVisitNumber: 3,
+          gestationalWeeks: 28,
+        ),
+        isTrue,
+      );
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: height,
+          data: const CanonicalVisitData(),
+          rulesByTargetId: const {},
+          formType: 'anc',
+          ancVisitNumber: 3,
+          gestationalWeeks: 28,
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  group('pregnantWomanOnTreatment (Android illness-gated)', () {
+    final onTreatment = _fieldDef('pregnantWomanOnTreatment', {
+      'label': 'Pregnant woman on treatment for any existing illness',
+      'visibility': 'gone',
+      'optionsList': [
+        {'id': 'none', 'name': 'Not taking any treatment'},
+      ],
+    });
+    final illness = _fieldDef('pregnantWomanExistingIllness', {
+      'label': 'Pregnant woman has any existing illness',
+      'visibility': 'visible',
+      'optionsList': [
+        {'id': 'htn', 'name': 'HTN'},
+        {'id': 'dm', 'name': 'DM'},
+        {'id': 'none', 'name': 'None'},
+      ],
+    });
+
+    test('hidden when no illness or None selected', () {
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: onTreatment,
+          data: const CanonicalVisitData(),
+          rulesByTargetId: const {},
+          formType: 'anc',
+        ),
+        isFalse,
+      );
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: onTreatment,
+          data: const CanonicalVisitData({
+            'pregnantWomanExistingIllness': ['none'],
+          }),
+          rulesByTargetId: const {},
+          formType: 'anc',
+        ),
+        isFalse,
+      );
+    });
+
+    test('visible when a real illness is selected', () {
+      expect(
+        FieldVisibilityRules.isFieldVisible(
+          field: onTreatment,
+          data: const CanonicalVisitData({
+            'pregnantWomanExistingIllness': ['htn', 'dm'],
+          }),
+          rulesByTargetId: const {},
+          formType: 'anc',
+        ),
+        isTrue,
+      );
+    });
+
+    test('options = selected illnesses + not taking treatment', () {
+      final opts = FieldVisibilityRules.ancOnTreatmentOptions(
+        illnessField: illness,
+        onTreatmentField: onTreatment,
+        data: const CanonicalVisitData({
+          'pregnantWomanExistingIllness': ['htn'],
+        }),
+      );
+      expect(opts.map((o) => o.id).toList(), ['htn', 'none']);
     });
   });
 }

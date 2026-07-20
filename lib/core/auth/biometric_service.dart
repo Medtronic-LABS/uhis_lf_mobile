@@ -69,12 +69,12 @@ class BiometricService {
         ),
         authMessages: [
           if (defaultTargetPlatform == TargetPlatform.android)
-            const AndroidAuthMessages(
+            AndroidAuthMessages(
               signInTitle: BiometricStrings.promptTitle,
               cancelButton: BiometricStrings.cancelButton,
             ),
           if (defaultTargetPlatform == TargetPlatform.iOS)
-            const IOSAuthMessages(
+            IOSAuthMessages(
               cancelButton: BiometricStrings.cancelButton,
             ),
         ],

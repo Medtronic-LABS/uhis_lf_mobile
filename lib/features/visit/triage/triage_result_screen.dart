@@ -92,42 +92,42 @@ class TriageResultScreen extends StatelessWidget {
     switch (p.programme) {
       case Programme.imci:
         return [
-          const _MeasureItem('🌡️', TriageResultStrings.measureTempLabel, TriageResultStrings.measureTempHint),
-          const _MeasureItem('🫁', TriageResultStrings.measureBreathLabel, TriageResultStrings.measureBreathHint),
-          const _MeasureItem('👁️', TriageResultStrings.measureChestLabel, TriageResultStrings.measureChestHint),
+          _MeasureItem('🌡️', TriageResultStrings.measureTempLabel, TriageResultStrings.measureTempHint),
+          _MeasureItem('🫁', TriageResultStrings.measureBreathLabel, TriageResultStrings.measureBreathHint),
+          _MeasureItem('👁️', TriageResultStrings.measureChestLabel, TriageResultStrings.measureChestHint),
         ];
       case Programme.ncd:
         return [
-          const _MeasureItem('💊', TriageResultStrings.measureBpLabel, TriageResultStrings.measureBpHint),
-          const _MeasureItem('⚖️', TriageResultStrings.measureWeightLabel, TriageResultStrings.measureWeightHint),
+          _MeasureItem('💊', TriageResultStrings.measureBpLabel, TriageResultStrings.measureBpHint),
+          _MeasureItem('⚖️', TriageResultStrings.measureWeightLabel, TriageResultStrings.measureWeightHint),
         ];
       case Programme.anc:
       case Programme.pnc:
         return [
-          const _MeasureItem('💊', TriageResultStrings.measureBpLabel, TriageResultStrings.measureBpHint),
-          const _MeasureItem('⚖️', TriageResultStrings.measureWeightLabel, TriageResultStrings.measureWeightHint),
-          const _MeasureItem('📏', TriageResultStrings.measureFundalLabel, TriageResultStrings.measureFundalHint),
+          _MeasureItem('💊', TriageResultStrings.measureBpLabel, TriageResultStrings.measureBpHint),
+          _MeasureItem('⚖️', TriageResultStrings.measureWeightLabel, TriageResultStrings.measureWeightHint),
+          _MeasureItem('📏', TriageResultStrings.measureFundalLabel, TriageResultStrings.measureFundalHint),
         ];
       case Programme.tb:
         return [
-          const _MeasureItem('🌡️', TriageResultStrings.measureTempLabel, TriageResultStrings.measureTempHint),
-          const _MeasureItem('🫁', TriageResultStrings.measureBreathLabel, TriageResultStrings.measureBreathHint),
+          _MeasureItem('🌡️', TriageResultStrings.measureTempLabel, TriageResultStrings.measureTempHint),
+          _MeasureItem('🫁', TriageResultStrings.measureBreathLabel, TriageResultStrings.measureBreathHint),
         ];
       case Programme.familyPlanning:
         return [
-          const _MeasureItem('⚖️', TriageResultStrings.measureWeightLabel, TriageResultStrings.measureWeightHint),
-          const _MeasureItem('💊', TriageResultStrings.measureBpLabel, TriageResultStrings.measureBpHint),
+          _MeasureItem('⚖️', TriageResultStrings.measureWeightLabel, TriageResultStrings.measureWeightHint),
+          _MeasureItem('💊', TriageResultStrings.measureBpLabel, TriageResultStrings.measureBpHint),
         ];
       case Programme.cataract:
       case Programme.eyeCare:
         return [
           const _MeasureItem('👁️', 'Visual acuity', 'Test each eye separately'),
-          const _MeasureItem('💊', TriageResultStrings.measureBpLabel, TriageResultStrings.measureBpHint),
+          _MeasureItem('💊', TriageResultStrings.measureBpLabel, TriageResultStrings.measureBpHint),
         ];
       default:
         return [
-          const _MeasureItem('💊', TriageResultStrings.measureBpLabel, TriageResultStrings.measureBpHint),
-          const _MeasureItem('⚖️', TriageResultStrings.measureWeightLabel, TriageResultStrings.measureWeightHint),
+          _MeasureItem('💊', TriageResultStrings.measureBpLabel, TriageResultStrings.measureBpHint),
+          _MeasureItem('⚖️', TriageResultStrings.measureWeightLabel, TriageResultStrings.measureWeightHint),
         ];
     }
   }

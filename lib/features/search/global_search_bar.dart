@@ -220,17 +220,17 @@ class _SearchViewState extends State<_SearchView> {
               spacing: 8,
               children: [
                 ChoiceChip(
-                  label: const Text(SearchStrings.scopeAll),
+                  label: Text(SearchStrings.scopeAll),
                   selected: _scope == SearchScope.all,
                   onSelected: (_) => _setScope(SearchScope.all),
                 ),
                 ChoiceChip(
-                  label: const Text(SearchStrings.scopePatients),
+                  label: Text(SearchStrings.scopePatients),
                   selected: _scope == SearchScope.patients,
                   onSelected: (_) => _setScope(SearchScope.patients),
                 ),
                 ChoiceChip(
-                  label: const Text(SearchStrings.scopeHouseholds),
+                  label: Text(SearchStrings.scopeHouseholds),
                   selected: _scope == SearchScope.households,
                   onSelected: (_) => _setScope(SearchScope.households),
                 ),
@@ -261,11 +261,11 @@ class _SearchViewState extends State<_SearchView> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text(SearchStrings.searchFailed),
+          Text(SearchStrings.searchFailed),
           const SizedBox(height: 12),
           FilledButton.tonal(
             onPressed: () => _runSearch(_lastQuery),
-            child: const Text(CommonStrings.retry),
+            child: Text(CommonStrings.retry),
           ),
         ],
       ),
@@ -277,7 +277,7 @@ class _SearchViewState extends State<_SearchView> {
       return _failureView();
     }
     if (_lastQuery.isEmpty) {
-      return const _Centered(
+      return _Centered(
         child: Text(
           SearchStrings.emptyPrompt,
           textAlign: TextAlign.center,
@@ -292,29 +292,29 @@ class _SearchViewState extends State<_SearchView> {
     if (hits.isEmpty && !_busy) {
       // Distinguish a failed search from a genuinely empty result.
       if (hits.error != null) return _failureView();
-      return const _Centered(child: Text(SearchStrings.noMatches));
+      return _Centered(child: Text(SearchStrings.noMatches));
     }
     return ListView(
       children: [
         if (showMembers) ...[
           _SectionHeader(label: SearchStrings.scopePatients, count: hits.members.length),
           if (hits.members.isEmpty)
-            const _EmptyRow(SearchStrings.noPatientMatches)
+            _EmptyRow(SearchStrings.noPatientMatches)
           else
             ...hits.members.map((m) => _MemberTile(
               hit: m,
               onTap: () => _navigateToMember(m),
             )),
           if (hits.membersTruncated)
-            const ListTile(
-              leading: Icon(Icons.info_outline),
+            ListTile(
+              leading: const Icon(Icons.info_outline),
               title: Text(SearchStrings.resultsCapped),
             ),
         ],
         if (showHouseholds) ...[
           _SectionHeader(label: SearchStrings.scopeHouseholds, count: hits.households.length),
           if (hits.households.isEmpty)
-            const _EmptyRow(SearchStrings.noHouseholdMatches)
+            _EmptyRow(SearchStrings.noHouseholdMatches)
           else
             ...hits.households.map(
               (h) => _HouseholdTile(
@@ -323,8 +323,8 @@ class _SearchViewState extends State<_SearchView> {
               ),
             ),
           if (hits.householdsTruncated)
-            const ListTile(
-              leading: Icon(Icons.info_outline),
+            ListTile(
+              leading: const Icon(Icons.info_outline),
               title: Text(SearchStrings.resultsCapped),
             ),
         ],

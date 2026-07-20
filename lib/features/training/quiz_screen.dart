@@ -113,7 +113,7 @@ class _QuestionScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.canvas,
       appBar: AppBar(
-        title: const Text(CoachingStrings.quizTitle),
+        title: Text(CoachingStrings.quizTitle),
         backgroundColor: AppColors.aiPurpleDark,
         foregroundColor: Colors.white,
         bottom: PreferredSize(
@@ -216,7 +216,7 @@ class _QuestionScreen extends StatelessWidget {
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.aiPurpleDark,
                   ),
-                  child: const Text(CoachingStrings.nextQuestion),
+                  child: Text(CoachingStrings.nextQuestion),
                 ),
               ),
             ),
@@ -408,7 +408,7 @@ class _ResultScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.canvas,
       appBar: AppBar(
-        title: const Text(CoachingStrings.quizResult),
+        title: Text(CoachingStrings.quizResult),
         backgroundColor: AppColors.aiPurpleDark,
         foregroundColor: Colors.white,
         automaticallyImplyLeading: false,
@@ -485,7 +485,7 @@ class _ResultScreen extends StatelessWidget {
                 child: FilledButton.icon(
                   onPressed: state._restart,
                   icon: const Icon(Icons.replay_rounded, size: 18),
-                  label: const Text(CoachingStrings.tryAgain),
+                  label: Text(CoachingStrings.tryAgain),
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.aiPurpleDark,
                   ),
@@ -497,7 +497,7 @@ class _ResultScreen extends StatelessWidget {
                 child: FilledButton.icon(
                   onPressed: state._backToModule,
                   icon: const Icon(Icons.check_rounded, size: 18),
-                  label: const Text(CoachingStrings.backToModules),
+                  label: Text(CoachingStrings.backToModules),
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.statusSuccessAction,
                   ),
