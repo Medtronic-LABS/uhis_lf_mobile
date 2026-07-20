@@ -223,4 +223,20 @@ class Endpoints {
       '/ai-scribe/upload/$uploadId/status';
   static String scribeUploadComplete(String uploadId) =>
       '/ai-scribe/upload/$uploadId/complete';
+
+  // ── Micro-coaching (spice-coaching / medtronics-api) ─────────────────────
+  // Hosted separately from the UHIS gateway; base URL is
+  // [AppConfig.coachingServiceUrl] (`--dart-define=COACHING_SERVICE_URL=...`).
+  /// Full module + card + quiz bundle (incremental via `?since=`).
+  static const String coachingSyncModules = '/medtronics-api/sync/modules';
+
+  /// CHW gap profile + module completions.
+  static const String coachingSyncGaps = '/medtronics-api/sync/gaps';
+
+  /// Ordered list of today's modules by CHW gap priority.
+  static const String coachingMorning = '/medtronics-api/morning';
+
+  /// Card-viewed / quiz-attempted telemetry events.
+  static const String coachingTelemetryEvents =
+      '/medtronics-api/telemetry/events';
 }

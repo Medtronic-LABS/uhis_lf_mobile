@@ -17,7 +17,7 @@ class CoachingDao {
     required String titleBn,
     required int estimatedMinutes,
     required String rawJson,
-    required bool priorityToday,
+    int priorityRank = 0,
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     await _db.db.insert(
@@ -29,7 +29,8 @@ class CoachingDao {
         'title_bn': titleBn,
         'estimated_minutes': estimatedMinutes,
         'raw_json': rawJson,
-        'priority_today': priorityToday ? 1 : 0,
+        // Higher rank floats first (ORDER BY priority_today DESC). 0 = not today.
+        'priority_today': priorityRank,
         'synced_at': now,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
@@ -45,10 +46,31 @@ class CoachingDao {
     ''');
   }
 
-  Future<void> setPriorityToday(String moduleId, bool priority) async {
+  /// Clears every module's morning rank (sets `priority_today` to 0).
+  Future<void> clearAllPriorities() async {
+    await _db.db.update(tableModules, {'priority_today': 0});
+  }
+
+  /// Sets morning priority ranks. [orderedIds] is highest-priority first;
+  /// the first id gets rank = length, the last gets rank = 1.
+  Future<void> applyMorningPriorities(List<String> orderedIds) async {
+    await clearAllPriorities();
+    if (orderedIds.isEmpty) return;
+    final n = orderedIds.length;
+    for (var i = 0; i < n; i++) {
+      await _db.db.update(
+        tableModules,
+        {'priority_today': n - i},
+        where: 'id = ?',
+        whereArgs: [orderedIds[i]],
+      );
+    }
+  }
+
+  Future<void> setPriorityRank(String moduleId, int rank) async {
     await _db.db.update(
       tableModules,
-      {'priority_today': priority ? 1 : 0},
+      {'priority_today': rank},
       where: 'id = ?',
       whereArgs: [moduleId],
     );

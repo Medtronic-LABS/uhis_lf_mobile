@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import '../../core/db/follow_up_dao.dart';
+import '../../core/db/local_assessment_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
 import '../../core/db/referral_dao.dart';
@@ -13,6 +14,7 @@ import '../../core/models/referral.dart';
 import '../../core/models/sla.dart';
 import '../../core/notifications/channel_registry.dart';
 import '../../core/notifications/repeat_scheduler.dart';
+import '../../core/referral/referral_ingest_mapper.dart';
 import '../../core/sla/priority_scorer.dart';
 import '../../core/sla/sla_evaluator.dart';
 import '../../core/time/calendar_day.dart';
@@ -33,6 +35,7 @@ class ReferralRepository {
     required SlaEvaluator slaEvaluator,
     required PriorityScorer priorityScorer,
     RepeatScheduler? notificationScheduler,
+    LocalAssessmentDao? localAssessments,
     DateTime Function()? clock,
   })  : _referrals = referrals,
         _patients = patients,
@@ -41,6 +44,7 @@ class ReferralRepository {
         _sla = slaEvaluator,
         _priority = priorityScorer,
         _notifications = notificationScheduler,
+        _localAssessments = localAssessments,
         _clock = clock ?? DateTime.now;
 
   final ReferralDao _referrals;
@@ -50,6 +54,7 @@ class ReferralRepository {
   final SlaEvaluator _sla;
   final PriorityScorer _priority;
   final RepeatScheduler? _notifications;
+  final LocalAssessmentDao? _localAssessments;
   final DateTime Function() _clock;
 
   final _changes = ValueNotifier<int>(0);
@@ -150,6 +155,7 @@ class ReferralRepository {
   /// open referral. Mirrors `WorklistRepository.recomputeAllAfterSync`.
   /// Returns the count of referrals re-scored.
   Future<int> recomputeAllAfterSync() async {
+    await _backfillFromLocalAssessments();
     final open = await _referrals.allOpen();
     if (open.isEmpty) return 0;
     final patientIds = open.map((r) => r.patientId).toSet().toList();
@@ -174,6 +180,67 @@ class ReferralRepository {
     }
     _changes.value++;
     return reprocessed;
+  }
+
+  /// Ensure locally-created referred assessments have a CCE `referrals` row.
+  /// Idempotent via `ref-assess-{assessmentId}`.
+  Future<void> _backfillFromLocalAssessments() async {
+    final dao = _localAssessments;
+    if (dao == null) return;
+    final rows = await dao.getOpenReferred();
+    if (rows.isEmpty) return;
+    var created = 0;
+    for (final a in rows) {
+      final patientId = a.patientId;
+      if (patientId == null || patientId.isEmpty) continue;
+      final referralId = 'ref-assess-${a.id}';
+      final existing = await _referrals.byId(referralId);
+      if (existing != null) continue;
+      final reasons = _decodeReasonList(a.referredReasons);
+      final draft = ReferralIngestMapper.fromLocalAssessment(
+        assessmentId: a.id,
+        patientId: patientId,
+        reasons: reasons,
+        householdId: a.householdId,
+        villageId: a.villageId,
+        diagnosisCode: a.assessmentType,
+        now: a.createdAt ?? _clock(),
+      );
+      await _referrals.upsertMany([draft]);
+      await _referrals.appendStatusEvent(ReferralStatusEventRow(
+        id: '$referralId:create:${_clock().millisecondsSinceEpoch}',
+        referralId: referralId,
+        toState: ReferralStatus.created,
+        occurredAt: (a.createdAt ?? _clock()).millisecondsSinceEpoch,
+        actor: 'local-backfill',
+      ));
+      created++;
+    }
+    if (created > 0) {
+      debugPrint(
+        '[ReferralRepository] CCE backfill: created $created from local_assessments',
+      );
+    }
+  }
+
+  static List<String> _decodeReasonList(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded
+            .map((e) => e.toString().trim())
+            .where((s) => s.isNotEmpty)
+            .toList(growable: false);
+      }
+    } catch (_) {
+      // Fall through — treat as comma-joined plain text.
+    }
+    return raw
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList(growable: false);
   }
 
   /// Re-emit notifications for any newly-breached or newly-warning referrals.

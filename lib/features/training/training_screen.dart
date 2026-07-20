@@ -1,16 +1,15 @@
-/// Training Hub — micro-coaching pilot (mock UI, no API calls).
+/// Training Hub — micro-coaching pilot (Learn loop).
 ///
 /// Matches Screen 9 of apon_sushashthya_v10.html exactly:
 ///   1. Leaderboard card (navy gradient #1B2B5E → #2d3f7a)
 ///   2. Section label "TODAY'S LESSONS — BASED ON YOUR VISITS"
-///   3. Video module cards (vertical: thumbnail top, body below)
+///   3. Morning-prioritized module cards from [CoachingRepository]
 ///   4. Monthly progress card (3 columns)
 ///
 /// Engineering Design Standards:
-///   - Pure UI — no I/O, no business logic.
+///   - UI watches [CoachingRepository]; sync lives in the repository layer.
 ///   - All strings from [TrainingStrings] / [CoachingStrings].
-///   - Mock data from [MockCoachingData]; swap for repository when
-///     coaching endpoints are approved.
+///   - Leaderboard / monthly stats remain mock until supervisor APIs land.
 library;
 
 import 'package:flutter/material.dart';
@@ -54,12 +53,31 @@ class TrainingScreen extends StatelessWidget {
   }
 }
 
-class TrainingBody extends StatelessWidget {
+class TrainingBody extends StatefulWidget {
   const TrainingBody({super.key});
+
+  @override
+  State<TrainingBody> createState() => _TrainingBodyState();
+}
+
+class _TrainingBodyState extends State<TrainingBody> {
+  @override
+  void initState() {
+    super.initState();
+    // Pull latest morning priorities when the SK opens Training (covers
+    // sessions that skipped /sync, e.g. biometric re-entry).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<CoachingRepository>().refresh();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final repo = context.watch<CoachingRepository>();
+    // Full library, morning-ranked first (SQLite ORDER BY priority_today DESC;
+    // mock data keeps its authored order). Filtering to todaysPriorities alone
+    // hid 4/5 mock modules — only one has priorityToday: true.
     final modules = repo.modules;
 
     return SingleChildScrollView(
@@ -75,13 +93,19 @@ class TrainingBody extends StatelessWidget {
           _SectionLabel(label: TrainingStrings.sectionTodaysLessons),
           const SizedBox(height: 10),
 
-          // 3. Video module cards
-          ...modules.map(
-            (m) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _VideoModuleCard(module: m),
+          // 3. Morning-prioritized module cards
+          if (repo.isSyncing && modules.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else
+            ...modules.map(
+              (m) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _VideoModuleCard(module: m),
+              ),
             ),
-          ),
           const SizedBox(height: 4),
 
           // 4. Monthly progress

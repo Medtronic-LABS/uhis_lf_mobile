@@ -178,6 +178,8 @@ class _UhisNextAppState extends State<UhisNextApp>
     pregnancySnapshot: _pregnancySnapshotDao,
     treatmentPresence: _treatmentPresenceDao,
     encounterDao: _encounterDao,
+    // CCE: project followUp / assessment-history referrals into `referrals`.
+    referrals: _referralDao,
     // P1: share the same UserHierarchyService instance so OfflineSyncService
     // can reuse already-fetched static-data without a second user-data call.
     hierarchy: _userHierarchy,
@@ -213,6 +215,7 @@ class _UhisNextAppState extends State<UhisNextApp>
     slaEvaluator: _slaEvaluator,
     priorityScorer: _priorityScorer,
     notificationScheduler: _repeatScheduler,
+    localAssessments: _localAssessmentDao,
   );
 
   // ── Mission Dashboard wiring ──────────────────────────────────────────
@@ -246,20 +249,19 @@ class _UhisNextAppState extends State<UhisNextApp>
   late final UserHierarchyService _userHierarchy =
       UserHierarchyService(widget.api, widget.authRepo);
 
-  // ── Connectivity-aware auto-sync ─────────────────────────────────────────
-  // Monitors network state changes and triggers AutomaticSync (outbound push +
-  // inbound warm pull) when connectivity is restored — mirrors Android's
-  // ScheduledSyncWork with NetworkType.CONNECTED constraint.
-  late final SyncConnectivityService _connectivitySync = SyncConnectivityService(
-    assessmentRepo: _assessmentRepo,
-    syncService: _sync,
-    authState: widget.authState,
-  );
-
   // ── Micro-coaching ────────────────────────────────────────────────────────
   late final CoachingDao _coachingDao = CoachingDao(widget.appDb);
   late final CoachingRepository _coachingRepo =
       CoachingRepository(_coachingDao, widget.api, widget.authRepo);
+
+  // Connectivity-aware auto-sync: outbound push + inbound warm pull + coaching
+  // refresh on reconnect (mirrors Android ScheduledSyncWork CONNECTED).
+  late final SyncConnectivityService _connectivitySync = SyncConnectivityService(
+    assessmentRepo: _assessmentRepo,
+    syncService: _sync,
+    authState: widget.authState,
+    coachingRepo: _coachingRepo,
+  );
 
   @override
   void initState() {
