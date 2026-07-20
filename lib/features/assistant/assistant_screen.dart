@@ -22,7 +22,6 @@ class AssistantScreen extends StatelessWidget {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        backgroundColor: AppColors.canvas,
         appBar: AppBar(
           backgroundColor: AppColors.navy,
           foregroundColor: Colors.white,
@@ -201,6 +200,7 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lc = Theme.of(context).extension<LeapfrogColors>()!;
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(24, 40, 24, 24),
       child: Column(
@@ -225,13 +225,13 @@ class _EmptyState extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
-          const Text(
+          Text(
             AssistantStrings.emptyHeading,
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w700,
-              color: AppColors.canvasDark,
+              color: lc.textPrimary,
               letterSpacing: -0.4,
             ),
           ),
@@ -276,6 +276,7 @@ class _StarterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lc = Theme.of(context).extension<LeapfrogColors>()!;
     return ActionChip(
       label: Text(label),
       labelStyle: const TextStyle(
@@ -283,8 +284,8 @@ class _StarterChip extends StatelessWidget {
         color: AppColors.navy,
         fontWeight: FontWeight.w500,
       ),
-      backgroundColor: Colors.white,
-      side: const BorderSide(color: AppColors.border),
+      backgroundColor: lc.cardSurface,
+      side: BorderSide(color: lc.borderDefault),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       onPressed: onTap,
     );
@@ -325,6 +326,7 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isUser = message.role == MessageRole.user;
+    final lc = Theme.of(context).extension<LeapfrogColors>()!;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -337,7 +339,7 @@ class _MessageBubble extends StatelessWidget {
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                color: const Color(0xFF4F46E5),
+                color: AppColors.aiPurple,
                 borderRadius: BorderRadius.circular(10),
               ),
               alignment: Alignment.center,
@@ -357,7 +359,7 @@ class _MessageBubble extends StatelessWidget {
               padding:
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: isUser ? AppColors.navy : Colors.white,
+                color: isUser ? AppColors.navy : lc.cardSurface,
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(16),
                   topRight: const Radius.circular(16),
@@ -366,12 +368,12 @@ class _MessageBubble extends StatelessWidget {
                 ),
                 border: isUser
                     ? null
-                    : Border.all(color: AppColors.border),
+                    : Border.all(color: lc.borderDefault),
               ),
               child: Text(
                 message.text,
                 style: TextStyle(
-                  color: isUser ? Colors.white : AppColors.canvasDark,
+                  color: isUser ? Colors.white : lc.textPrimary,
                   fontSize: 14,
                   height: 1.5,
                 ),
@@ -415,6 +417,7 @@ class _TypingIndicatorState extends State<_TypingIndicator>
 
   @override
   Widget build(BuildContext context) {
+    final lc = Theme.of(context).extension<LeapfrogColors>()!;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -424,7 +427,7 @@ class _TypingIndicatorState extends State<_TypingIndicator>
             width: 32,
             height: 32,
             decoration: BoxDecoration(
-              color: const Color(0xFF4F46E5),
+              color: AppColors.aiPurple,
               borderRadius: BorderRadius.circular(10),
             ),
             alignment: Alignment.center,
@@ -441,14 +444,14 @@ class _TypingIndicatorState extends State<_TypingIndicator>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: lc.cardSurface,
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(16),
                 topRight: Radius.circular(16),
                 bottomRight: Radius.circular(16),
                 bottomLeft: Radius.circular(4),
               ),
-              border: Border.all(color: AppColors.border),
+              border: Border.all(color: lc.borderDefault),
             ),
             child: AnimatedBuilder(
               animation: _ctrl,
@@ -501,8 +504,9 @@ class _InputBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lc = Theme.of(context).extension<LeapfrogColors>()!;
     return Container(
-      color: Colors.white,
+      color: lc.cardSurface,
       padding: EdgeInsets.only(
         left: 16,
         right: 8,
@@ -525,14 +529,14 @@ class _InputBar extends StatelessWidget {
                   hintStyle:
                       const TextStyle(color: AppColors.textMuted, fontSize: 14),
                   filled: true,
-                  fillColor: AppColors.canvas,
+                  fillColor: lc.canvas,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(22),
-                    borderSide: const BorderSide(color: AppColors.border),
+                    borderSide: BorderSide(color: lc.borderDefault),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(22),
-                    borderSide: const BorderSide(color: AppColors.border),
+                    borderSide: BorderSide(color: lc.borderDefault),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(22),
@@ -585,8 +589,9 @@ class _ErrorBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lc = Theme.of(context).extension<LeapfrogColors>()!;
     return Container(
-      color: const Color(0xFFFEF2F2),
+      color: lc.statusCriticalSurface,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
