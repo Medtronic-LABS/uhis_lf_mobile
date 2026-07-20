@@ -50,6 +50,14 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
   bool _mobileNotAvailable = false;
   bool _nidScanned = false;
 
+  static String? _validatePhone(String? value) {
+    if (value == null || value.isEmpty) return null;
+    final digits = value.replaceAll(RegExp(r'\D'), '');
+    if (digits.length < 10) return 'Invalid phone number';
+    if (RegExp(r'(\d)\1{4,}').hasMatch(digits)) return 'Invalid phone number';
+    return null;
+  }
+
   /// Set when the scanned NID matches a patient already registered on the
   /// server — surfaces a de-duplication banner and loads authoritative details.
   Patient? _existingPatient;
@@ -581,6 +589,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                         hint: EnrollmentStrings.mobileNumberHint,
                         controller: _mobileCtrl,
                         keyboardType: TextInputType.phone,
+                        validator: _validatePhone,
                       ),
                       const SizedBox(height: 6),
                     ],
