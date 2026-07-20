@@ -818,7 +818,7 @@ class _SplashScreenState extends State<_SplashScreen>
               const SizedBox(height: 20),
               _fade(
                 fade: _titleFade, slide: _titleSlide,
-                child: const Text(
+                child: Text(
                   LockStrings.aponSushashthya,
                   style: TextStyle(
                     fontFamily: AppFonts.display,

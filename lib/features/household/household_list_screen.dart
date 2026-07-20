@@ -321,7 +321,7 @@ class _HouseholdListScreenState extends State<HouseholdListScreen> {
                                   const SizedBox(height: 16),
                                   FilledButton.tonal(
                                     onPressed: () => setState(_loadData),
-                                    child: const Text(CommonStrings.retry),
+                                    child: Text(CommonStrings.retry),
                                   ),
                                 ],
                               ),

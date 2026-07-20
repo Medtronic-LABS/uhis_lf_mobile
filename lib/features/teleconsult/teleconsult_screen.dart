@@ -31,7 +31,7 @@ class TeleconsultScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.canvas,
       appBar: AppBar(
-        title: const Text(TeleconsultStrings.title),
+        title: Text(TeleconsultStrings.title),
         backgroundColor: AppColors.navyDark,
         foregroundColor: Colors.white,
       ),
@@ -64,7 +64,7 @@ class TeleconsultScreen extends StatelessWidget {
 
                 // ── Coming soon chip ──────────────────────────────────────
                 Chip(
-                  label: const Text(TeleconsultStrings.comingSoon),
+                  label: Text(TeleconsultStrings.comingSoon),
                   backgroundColor:
                       AppColors.statusInfo.withValues(alpha: 0.15),
                   side: BorderSide.none,
@@ -90,7 +90,7 @@ class TeleconsultScreen extends StatelessWidget {
                     // ignore: avoid_redundant_argument_values
                     onPressed: null,
                     icon: const Icon(Icons.phone_outlined),
-                    label: const Text(TeleconsultStrings.callAction),
+                    label: Text(TeleconsultStrings.callAction),
                   ),
                 ),
                 const SizedBox(height: AppSpacing.xl),
@@ -101,7 +101,7 @@ class TeleconsultScreen extends StatelessWidget {
                     // ignore: avoid_redundant_argument_values
                     onPressed: null,
                     icon: const Icon(Icons.message_outlined),
-                    label: const Text(TeleconsultStrings.smsAction),
+                    label: Text(TeleconsultStrings.smsAction),
                   ),
                 ),
               ],

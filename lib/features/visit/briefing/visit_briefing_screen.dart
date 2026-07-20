@@ -524,7 +524,7 @@ class _BottomBar extends StatelessWidget {
                     ? FilledButton.icon(
                         onPressed: onBeginAssessment,
                         icon: const Icon(Icons.play_arrow),
-                        label: const Text(VisitBriefingStrings.beginAssessment),
+                        label: Text(VisitBriefingStrings.beginAssessment),
                         style: FilledButton.styleFrom(
                           minimumSize: const Size.fromHeight(52),
                         ),
@@ -537,7 +537,7 @@ class _BottomBar extends StatelessWidget {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Text(ComposerStrings.nextButton),
+                            Text(ComposerStrings.nextButton),
                             const SizedBox(width: 6),
                             const Icon(Icons.arrow_forward, size: 18),
                           ],
@@ -548,7 +548,7 @@ class _BottomBar extends StatelessWidget {
                 const SizedBox(height: 8),
                 TextButton(
                   onPressed: onBeginAssessment,
-                  child: const Text(VisitBriefingStrings.skipBriefing),
+                  child: Text(VisitBriefingStrings.skipBriefing),
                 ),
               ],
             ],

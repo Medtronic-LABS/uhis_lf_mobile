@@ -7,13 +7,13 @@ class LockProgramHeader extends StatelessWidget {
   const LockProgramHeader({
     super.key,
     required this.title,
-    this.subtitle = LockStrings.programSubtitle,
+    this.subtitle,
     this.pageCount = 1,
     this.currentPage = 0,
   });
 
   final String title;
-  final String subtitle;
+  final String? subtitle;
   final int pageCount;
   final int currentPage;
 
@@ -36,7 +36,7 @@ class LockProgramHeader extends StatelessWidget {
             children: [
               Text(title, style: AppTextStyles.headerTitle),
               const SizedBox(height: 2),
-              Text(subtitle, style: AppTextStyles.headerSub),
+              Text(subtitle ?? LockStrings.programSubtitle, style: AppTextStyles.headerSub),
               const SizedBox(height: AppSpacing.xxl),
               Center(child: LockPageDots(count: pageCount, current: currentPage)),
             ],

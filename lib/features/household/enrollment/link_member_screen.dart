@@ -146,7 +146,7 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
 
   bool _validate() {
     if (_nameCtrl.text.trim().isEmpty || _gender == null || _maritalStatus == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(EnrollmentStrings.fieldRequired),
         duration: Duration(seconds: 2),
       ));
@@ -252,7 +252,7 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(LinkMemberStrings.successMessage),
         ));
         context.go('/patients/households');
@@ -347,7 +347,7 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               LinkMemberStrings.title,
               style: TextStyle(
                 fontSize: 18,
@@ -543,7 +543,7 @@ class _LinkMemberScreenState extends State<LinkMemberScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    const Text(
+                    Text(
                       EnrollmentStrings.mobileNotAvailableHint,
                       style: TextStyle(
                           fontSize: 13, color: AppColors.textMuted),

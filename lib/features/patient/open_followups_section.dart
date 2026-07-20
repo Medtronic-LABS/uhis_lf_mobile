@@ -66,13 +66,13 @@ class _OpenFollowupsSectionState extends State<OpenFollowupsSection> {
           );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(FollowUpCallStrings.scheduled)),
+        SnackBar(content: Text(FollowUpCallStrings.scheduled)),
       );
       _load();
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(FollowUpCallStrings.scheduleFailed)),
+        SnackBar(content: Text(FollowUpCallStrings.scheduleFailed)),
       );
     }
   }
@@ -101,7 +101,7 @@ class _OpenFollowupsSectionState extends State<OpenFollowupsSection> {
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
               icon: const Icon(Icons.add, size: 16),
-              label: const Text(FollowUpCallStrings.schedule,
+              label: Text(FollowUpCallStrings.schedule,
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
             ),
           ],
@@ -218,7 +218,7 @@ class _FollowUpTile extends StatelessWidget {
     );
     if (saved && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(FollowUpCallStrings.saved)),
+        SnackBar(content: Text(FollowUpCallStrings.saved)),
       );
       onLogged();
     }
@@ -370,7 +370,7 @@ class _FollowUpTile extends StatelessWidget {
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
             icon: const Icon(Icons.call, size: 15),
-            label: const Text(FollowUpCallStrings.logCall,
+            label: Text(FollowUpCallStrings.logCall,
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
           ),
         ],

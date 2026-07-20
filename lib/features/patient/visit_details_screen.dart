@@ -941,7 +941,7 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
     final rawJson = widget.visit.rawJson;
     
     // Extract additional fields that might be useful
-    const fieldsToShow = VisitDetailsStrings.additionalDetailLabels;
+    final fieldsToShow = VisitDetailsStrings.additionalDetailLabels;
 
     for (final entry in fieldsToShow.entries) {
       final value = rawJson[entry.key];

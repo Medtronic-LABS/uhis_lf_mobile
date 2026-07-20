@@ -210,7 +210,8 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       final pathwaySet = vm.activatedPathways.map((p) => p.programme).toSet();
       final isPw =
           ctx.isPregnant || ctx.activeProgrammes.contains(Programme.anc);
-      final isDelivery = ctx.isPostpartum;
+      // Pregnancy Outcome is an explicit SK choice — never auto-on.
+      // Postpartum mothers get PNC via [enrolledSeed], not this flag.
       final enrolledSeed = ProgrammeGridSync.applicableEnrolledSeed(
         enrolled: ctx.activeProgrammes.toSet(),
         isPregnant: ctx.isPregnant,
@@ -231,7 +232,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           ..clear()
           ..addAll(pathwaySet);
         _isPW = isPw;
-        _isDelivery = isDelivery;
+        _isDelivery = false;
         _isLoading = false;
       });
       debugPrint(
@@ -386,25 +387,45 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       if (!selected) {
         _selectedProgrammes.remove(Programme.pnc);
         _skDismissedProgrammes.add(Programme.pnc);
-        if (_isPW) {
-          _skDismissedProgrammes.remove(Programme.anc);
-          _skDismissedProgrammes.remove(Programme.pw);
-          _selectedProgrammes.add(Programme.anc);
-          if (_patientContext!.activeProgrammes.contains(Programme.pw)) {
-            _selectedProgrammes.add(Programme.pw);
+        // Restore ANC/PW that the delivery gate dismissed (and any pathway
+        // programmes that were previously dismissed for the same reason).
+        _skDismissedProgrammes.remove(Programme.anc);
+        _skDismissedProgrammes.remove(Programme.pw);
+        for (final p in _pathwayActivatedProgrammes) {
+          _skDismissedProgrammes.remove(p);
+          _selectedProgrammes.add(p);
+        }
+        // Re-enable PW gate when patient is still pregnant / ANC-enrolled.
+        final ctx = _patientContext;
+        if (ctx != null &&
+            (ctx.isPregnant || ctx.activeProgrammes.contains(Programme.anc))) {
+          _isPW = true;
+          _selectedProgrammes.add(Programme.pw);
+          if (ctx.activeProgrammes.contains(Programme.anc) ||
+              _pathwayActivatedProgrammes.contains(Programme.anc)) {
+            _selectedProgrammes.add(Programme.anc);
           }
         }
       } else {
-        _selectedProgrammes.remove(Programme.anc);
-        _selectedProgrammes.remove(Programme.pw);
-        _skDismissedProgrammes.add(Programme.anc);
-        _skDismissedProgrammes.add(Programme.pw);
-        _skDismissedProgrammes.remove(Programme.pnc);
-        _selectedProgrammes.add(Programme.pnc);
+        // Delivery / pregnancy-outcome visit: clear only ANC + PW. Other
+        // selected programmes (NCD, TB, etc.) stay open alongside PNC /
+        // pregnancy-outcome forms.
+        _isPW = false;
+        final next = ProgrammeGridSync.applyDeliverySelected(
+          selected: _selectedProgrammes,
+          dismissedBySk: _skDismissedProgrammes,
+        );
+        _selectedProgrammes
+          ..clear()
+          ..addAll(next.selected);
+        _skDismissedProgrammes
+          ..clear()
+          ..addAll(next.dismissedBySk);
       }
     });
     debugPrint('[DeliveryGate] chip toggled: selected=$selected '
-        'programmes=${_selectedProgrammes.map((p) => p.name).join(", ")}');
+        'programmes=${_selectedProgrammes.map((p) => p.name).join(", ")} '
+        'isPW=$_isPW');
     _fireProgrammesLive();
   }
 
@@ -500,7 +521,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
         ..hideCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
-            content: const Text(SymptomPickerStrings.noSymptomsGuard),
+            content: Text(SymptomPickerStrings.noSymptomsGuard),
             duration: const Duration(seconds: 5),
             action: SnackBarAction(
               label: SymptomPickerStrings.noSymptomsGuardCta,
@@ -593,7 +614,12 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
     final onAdvance = widget.onAdvance;
     if (onAdvance != null) {
       if (!(_patientContext?.isUnder5 ?? false)) {
-        widget.onProgrammesSelected?.call(Set.unmodifiable(_selectedProgrammes));
+        // Delivery visit must always carry PNC so Step 2 opens the pregnancy-
+        // outcome / PNC form even if the live set was emptied by a rebuild.
+        final programmes = _isDelivery
+            ? (Set<Programme>.from(_selectedProgrammes)..add(Programme.pnc))
+            : _selectedProgrammes;
+        widget.onProgrammesSelected?.call(Set.unmodifiable(programmes));
         widget.onDeliverySelected?.call(_isDelivery);
       }
       widget.onSymptomsConfirmed?.call(
@@ -668,7 +694,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                     });
                     _loadPatientContext();
                   },
-                  child: const Text(TriageStrings.retryButton),
+                  child: Text(TriageStrings.retryButton),
                 ),
               ],
             ),
@@ -897,7 +923,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                                 backgroundColor: AppColors.pink,
                                 foregroundColor: AppColors.textOnNavy,
                               ),
-                              child: const Text(
+                              child: Text(
                                 ChildAssessmentStrings.vaccinationCta,
                                 style: TextStyle(fontWeight: FontWeight.w700),
                               ),
@@ -916,7 +942,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                                 backgroundColor: AppColors.pink,
                                 foregroundColor: AppColors.textOnNavy,
                               ),
-                              child: const Text(
+                              child: Text(
                                   SymptomPickerStrings.ctaStartCheckup),
                             ),
                           ),
@@ -1872,7 +1898,8 @@ const _kAllServiceCards = [
   _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🫁', label: 'TB',       programme: Programme.tb),
   _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '👁️', label: 'Eye Care', programme: Programme.eyeCare),
   _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🔬', label: 'Cataract', programme: Programme.cataract),
-  _ServiceCardDef(kind: _ServiceCardKind.delivery,  emoji: '🚼', label: 'Delivery'),
+  // Label overridden at render — see [_cardLabel]. Placeholder kept for const.
+  _ServiceCardDef(kind: _ServiceCardKind.delivery, emoji: '🚼', label: 'Pregnancy Outcome'),
 ];
 
 class _InlineServiceSelector extends StatelessWidget {
@@ -1902,21 +1929,34 @@ class _InlineServiceSelector extends StatelessWidget {
   final ValueChanged<bool> onPWToggle;
   final ValueChanged<bool> onDeliveryToggle;
 
+  /// Android parity:
+  /// - Active pregnancy → Pregnancy Outcome chip (not mother PNC)
+  /// - Postpartum (delivery date set, ≤42d) → mother PNC chip (not outcome)
   List<_ServiceCardDef> _visibleCards() {
     final ctx = patientContext;
+    final showPregnancyOutcome = ctx.isFemale && ctx.isPregnant && !ctx.isPostpartum;
+    final showMotherPnc = ctx.isFemale && ctx.isPostpartum;
     return _kAllServiceCards.where((c) {
       switch (c.kind) {
         case _ServiceCardKind.pw:
+          return ctx.isFemale && ctx.isPregnant && !ctx.isPostpartum;
         case _ServiceCardKind.delivery:
-          return ctx.isFemale;
+          return showPregnancyOutcome;
         case _ServiceCardKind.rmnch:
           return false;
         case _ServiceCardKind.programme:
           final p = c.programme!;
-          if (p == Programme.anc || p == Programme.familyPlanning) {
+          // ANC only during active pregnancy (Android: off after delivery).
+          if (p == Programme.anc) {
+            return ctx.isFemale &&
+                ctx.ageYears >= 15 &&
+                ctx.isPregnant &&
+                !ctx.isPostpartum;
+          }
+          if (p == Programme.familyPlanning) {
             return ctx.isFemale && ctx.ageYears >= 15;
           }
-          if (p == Programme.pnc) return ctx.isFemale;
+          if (p == Programme.pnc) return showMotherPnc;
           if (p == Programme.eyeCare || p == Programme.cataract) return true;
           return ctx.ageYears >= 15;
         case _ServiceCardKind.general:
@@ -1925,12 +1965,16 @@ class _InlineServiceSelector extends StatelessWidget {
     }).toList();
   }
 
+  String _cardLabel(_ServiceCardDef card) {
+    if (card.isDelivery) return TriageStrings.pregnancyOutcomeChip;
+    return card.label;
+  }
+
   bool _isLocked(_ServiceCardDef card) {
+    // Pregnancy Outcome stays tappable with ANC on — tap clears ANC/PW.
+    // ANC needs PW first; both lock once pregnancy-outcome visit is active.
     if (card.isPW) return isDelivery;
     if (card.programme == Programme.anc) return !isPW || isDelivery;
-    if (card.programme == Programme.pnc) return !isDelivery;
-    // Delivery and ANC are mutually exclusive — they belong to separate visits.
-    if (card.isDelivery) return selectedProgrammes.contains(Programme.anc);
     return false;
   }
 
@@ -1945,18 +1989,9 @@ class _InlineServiceSelector extends StatelessWidget {
   void _handleTap(BuildContext context, _ServiceCardDef card) {
     final alreadySelected = _isCardSelected(card);
     if (_isLocked(card) && !alreadySelected) {
-      final String hint;
-      if (card.programme == Programme.anc) {
-        hint = isDelivery
-            ? TriageStrings.ancDeliveryConflictHint
-            : TriageStrings.pwHint;
-      } else if (card.isDelivery) {
-        hint = selectedProgrammes.contains(Programme.anc)
-            ? TriageStrings.ancDeliveryConflictHint
-            : TriageStrings.deliveryHint;
-      } else {
-        hint = TriageStrings.deliveryHint;
-      }
+      final hint = isDelivery
+          ? TriageStrings.ancDeliveryConflictHint
+          : TriageStrings.pwHint;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(
@@ -1969,9 +2004,15 @@ class _InlineServiceSelector extends StatelessWidget {
     if (card.isPW) {
       onPWToggle(!isPW);
     } else if (card.isDelivery) {
-      onDeliveryToggle(!isDelivery);
+      // Pregnancy Outcome visit — clears ANC/PW only; other services stay on.
+      onDeliveryToggle(!alreadySelected);
     } else if (card.programme != null) {
-      onProgrammeToggle(card.programme!, !selectedProgrammes.contains(card.programme));
+      // Mother PNC is a normal programme toggle (postpartum only — chip hidden
+      // while pregnant). Never routes through pregnancy-outcome.
+      onProgrammeToggle(
+        card.programme!,
+        !selectedProgrammes.contains(card.programme),
+      );
     }
   }
 
@@ -1986,7 +2027,7 @@ class _InlineServiceSelector extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Text(
+            Text(
               TriageStrings.eligibleServicesHeader,
               style: TextStyle(
                 fontSize: 12,
@@ -2001,7 +2042,7 @@ class _InlineServiceSelector extends StatelessWidget {
                 color: const Color(0xFFEEF0FF),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Text(
+              child: Text(
                 TriageStrings.eligibleServicesTag,
                 style: TextStyle(
                   fontSize: 9.5,
@@ -2024,6 +2065,7 @@ class _InlineServiceSelector extends StatelessWidget {
           children: cards
               .map((c) => _ServiceTile(
                     def: c,
+                    label: _cardLabel(c),
                     isSelected: _isCardSelected(c),
                     isLocked: _isLocked(c),
                     isEnrolled: (c.programme != null &&
@@ -2043,6 +2085,7 @@ class _InlineServiceSelector extends StatelessWidget {
 class _ServiceTile extends StatelessWidget {
   const _ServiceTile({
     required this.def,
+    required this.label,
     required this.isSelected,
     required this.isLocked,
     required this.isEnrolled,
@@ -2051,6 +2094,7 @@ class _ServiceTile extends StatelessWidget {
   });
 
   final _ServiceCardDef def;
+  final String label;
   final bool isSelected;
   final bool isLocked;
 
@@ -2079,10 +2123,10 @@ class _ServiceTile extends StatelessWidget {
       selected: isSelected,
       enabled: !isLocked,
       label: isEnrolled
-          ? TriageStrings.enrolledProgrammeA11y(def.label)
+          ? TriageStrings.enrolledProgrammeA11y(label)
           : (isSelected
-              ? TriageStrings.deselectProgrammeA11y(def.label)
-              : TriageStrings.selectProgrammeA11y(def.label)),
+              ? TriageStrings.deselectProgrammeA11y(label)
+              : TriageStrings.selectProgrammeA11y(label)),
       child: GestureDetector(
         onTap: onTap,
         child: Opacity(
@@ -2151,7 +2195,7 @@ class _ServiceTile extends StatelessWidget {
                       Text(def.emoji, style: const TextStyle(fontSize: 20)),
                       const SizedBox(height: 4),
                       Text(
-                        def.label,
+                        label,
                         style: TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w800,
@@ -2167,7 +2211,7 @@ class _ServiceTile extends StatelessWidget {
                             color: _enrolledBadgeBg,
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Text(
+                          child: Text(
                             TriageStrings.enrolledBadge,
                             style: TextStyle(
                               fontSize: 8,

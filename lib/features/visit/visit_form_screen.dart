@@ -22,6 +22,7 @@ import '../scribe/widgets/scribe_review_sheet.dart';
 import '../worklist/worklist_repository.dart';
 import 'pathway/pathway_engine.dart';
 import 'assessment_repository.dart';
+import 'forms/form_type_resolver.dart';
 import 'forms/unified_form_notifier.dart';
 import 'forms/unified_form_screen.dart';
 import 'visit_controller.dart';
@@ -46,6 +47,8 @@ class VisitFormScreen extends StatefulWidget {
     this.householdMemberLocalId,
     this.patientAge,
     this.gestationalWeeks,
+    this.lmpMs,
+    this.eddMs,
     this.activatedPathways,
     this.isDeliveryVisit = false,
     this.triageNotes,
@@ -64,6 +67,11 @@ class VisitFormScreen extends StatefulWidget {
   final int? householdMemberLocalId;
   final int? patientAge;
   final int? gestationalWeeks;
+
+  /// LMP / EDD epoch-ms from pregnancy snapshot (VisitFlow) — seeds the ANC
+  /// gestational-age card on Step 2.
+  final int? lmpMs;
+  final int? eddMs;
 
   /// Programme name strings from triage. Non-empty ⇒ sectioned assessment.
   final List<String>? activatedPathways;
@@ -258,8 +266,11 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
     bool embedded,
   ) {
     final rawPathways = widget.activatedPathways ?? const [];
-    final formTypes = _toFormTypes(rawPathways, isDelivery: widget.isDeliveryVisit);
-    final enrolledFormTypes = _toFormTypes(
+    final formTypes = FormTypeResolver.resolve(
+      rawPathways,
+      isDelivery: widget.isDeliveryVisit,
+    );
+    final enrolledFormTypes = FormTypeResolver.resolve(
       widget.enrolledProgrammes
           .where((p) => p != Programme.unknown)
           .map((p) => p.name)
@@ -295,6 +306,8 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
       child: UnifiedFormScreen(
         activeFormTypes: formTypes,
         gestationalWeeks: widget.gestationalWeeks,
+        lmpMs: widget.lmpMs,
+        eddMs: widget.eddMs,
         enrolledFormTypes: enrolledFormTypes,
         confirmedSymptoms: widget.confirmedSymptoms,
         aiPickedSymptoms: widget.aiPickedSymptoms,
@@ -302,47 +315,6 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
             _onSectionedSubmit(ctx, visitCtrl, session, notifier),
       ),
     );
-  }
-
-  /// Expands Programme enum names (from triage) to the formType keys used by
-  /// `layout_manifests.json` and `UnifiedPayloadMapper`.
-  ///
-  /// Rules:
-  /// - `pnc`  → `pncMother` + `pncChild` + `pregnancyOutcome`
-  /// - `anc`  → `anc` (unchanged)
-  /// - `ncd`  → `ncd` (unchanged)
-  /// - `imci` → `iccm` (no manifest yet; harmlessly ignored by form engine)
-  /// - others → passed through unchanged
-  static List<String> _toFormTypes(
-    List<String> programmeNames, {
-    bool isDelivery = false,
-  }) {
-    final out = <String>[];
-    for (final p in programmeNames) {
-      switch (p) {
-        case 'pnc':
-          // pregnancyOutcome sections only appear when SK explicitly selected
-          // the Delivery chip — not on routine postnatal care visits.
-          out.addAll([
-            'pncMother',
-            'pncChild',
-            if (isDelivery) 'pregnancyOutcome',
-          ]);
-        case 'imci':
-          out.add('iccm');
-        case 'pw':
-          // PW registration — show only the pwProfile layout (LMP, gravida, parity).
-          // Not a clinical ANC visit; does not add ANC sections.
-          out.add('pwProfile');
-        case 'eyeCare':
-          out.add('eye_care');
-        case 'familyPlanning':
-          out.add('family_planning');
-        default:
-          out.add(p);
-      }
-    }
-    return out;
   }
 
   Future<void> _onSectionedSubmit(
@@ -502,7 +474,7 @@ class _VisitFormScreenState extends State<VisitFormScreen> {
       debugPrint('[VisitForm] assessment save failed: $e\n$st');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text(VisitFormStrings.saveFailed),
+        content: Text(VisitFormStrings.saveFailed),
         backgroundColor: Theme.of(context).colorScheme.error,
       ));
     }

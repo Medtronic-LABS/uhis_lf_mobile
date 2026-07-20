@@ -658,12 +658,7 @@
             "fieldName": "Fundal Height (cm)",
             "isMandatory": false
           },
-          "fetalMovement",
-          {
-            "id": "highRiskPregnantWoman",
-            "fieldName": "High risk pregnant woman",
-            "isMandatory": false
-          }
+          "fetalMovement"
         ]
       },
       {
@@ -805,23 +800,7 @@
             "id": "referralFacility",
             "fieldName": "Referral facility",
             "isMandatory": false
-          },
-          {
-            "id": "gapsInAnc",
-            "fieldName": "Gaps in ANC",
-            "isMandatory": false
           }
-        ]
-      },
-      {
-        "sectionId": "ancCounselling",
-        "title": "Counselling",
-        "fieldRefs": [
-          "nutritionCounselling",
-          "careDuringAntenatalPeriod",
-          "dangerSignsDuringPregnancy",
-          "birthPreparedness",
-          "newbornCareEducation"
         ]
       }
     ]

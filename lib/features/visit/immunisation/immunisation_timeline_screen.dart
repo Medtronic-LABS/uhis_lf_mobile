@@ -885,7 +885,7 @@ class _UpdateCtaButton extends StatelessWidget {
           color: _kRed,
           borderRadius: BorderRadius.circular(20),
         ),
-        child: const Text(
+        child: Text(
           EpiStrings.updateStatusCta,
           style: TextStyle(
             color: Colors.white,

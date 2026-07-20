@@ -1178,7 +1178,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
     final phone = patient?.phone;
     if (phone == null || phone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(ReferralStrings.errorNoPhone)),
+        SnackBar(content: Text(ReferralStrings.errorNoPhone)),
       );
       return;
     }
@@ -1222,8 +1222,8 @@ class _ReferralListScreenState extends State<ReferralListScreen>
               const SizedBox(height: 16),
               ListTile(
                 leading: Icon(Icons.phone, color: scheme.primary),
-                title: const Text(ReferralStrings.contactCall),
-                subtitle: const Text(ReferralStrings.contactCallSubtitle),
+                title: Text(ReferralStrings.contactCall),
+                subtitle: Text(ReferralStrings.contactCallSubtitle),
                 onTap: () {
                   Navigator.pop(ctx);
                   _launchPhoneDialer(phone);
@@ -1234,8 +1234,8 @@ class _ReferralListScreenState extends State<ReferralListScreen>
                   Icons.message,
                   color: Theme.of(context).extension<LeapfrogColors>()!.whatsapp,
                 ),
-                title: const Text(ReferralStrings.contactWhatsApp),
-                subtitle: const Text(ReferralStrings.contactWhatsAppSubtitle),
+                title: Text(ReferralStrings.contactWhatsApp),
+                subtitle: Text(ReferralStrings.contactWhatsAppSubtitle),
                 onTap: () {
                   Navigator.pop(ctx);
                   _launchWhatsApp(phone, _buildContactMessage(name, referral, patient));
@@ -1243,8 +1243,8 @@ class _ReferralListScreenState extends State<ReferralListScreen>
               ),
               ListTile(
                 leading: Icon(Icons.sms, color: scheme.tertiary),
-                title: const Text(ReferralStrings.contactSms),
-                subtitle: const Text(ReferralStrings.contactSmsSubtitle),
+                title: Text(ReferralStrings.contactSms),
+                subtitle: Text(ReferralStrings.contactSmsSubtitle),
                 onTap: () {
                   Navigator.pop(ctx);
                   _launchSms(phone, _buildContactMessage(name, referral, patient));
@@ -1294,7 +1294,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
       final launched = await launchUrl(uri);
       if (!launched && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(ReferralStrings.errorPhoneDialer)),
+          SnackBar(content: Text(ReferralStrings.errorPhoneDialer)),
         );
       }
     } catch (e) {
@@ -1315,7 +1315,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
       final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!launched && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(ReferralStrings.errorWhatsApp)),
+          SnackBar(content: Text(ReferralStrings.errorWhatsApp)),
         );
       }
     } catch (e) {
@@ -1338,7 +1338,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
       final launched = await launchUrl(uri);
       if (!launched && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(ReferralStrings.errorSms)),
+          SnackBar(content: Text(ReferralStrings.errorSms)),
         );
       }
     } catch (e) {
@@ -1386,8 +1386,8 @@ class _ReferralListScreenState extends State<ReferralListScreen>
               const SizedBox(height: 16),
               ListTile(
                 leading: Icon(Icons.map, color: scheme.primary),
-                title: const Text(ReferralStrings.locateOpenMaps),
-                subtitle: const Text(ReferralStrings.locateOpenMapsSubtitle),
+                title: Text(ReferralStrings.locateOpenMaps),
+                subtitle: Text(ReferralStrings.locateOpenMapsSubtitle),
                 onTap: () {
                   Navigator.pop(ctx);
                   _launchGoogleMaps(patientName, villageId);
@@ -1395,8 +1395,8 @@ class _ReferralListScreenState extends State<ReferralListScreen>
               ),
               ListTile(
                 leading: Icon(Icons.directions, color: scheme.tertiary),
-                title: const Text(ReferralStrings.locateGetDirections),
-                subtitle: const Text(ReferralStrings.locateGetDirectionsSubtitle),
+                title: Text(ReferralStrings.locateGetDirections),
+                subtitle: Text(ReferralStrings.locateGetDirectionsSubtitle),
                 onTap: () {
                   Navigator.pop(ctx);
                   _launchGoogleMapsDirections(patientName, villageId);
@@ -1432,7 +1432,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
       final launched = await launchUrl(webUri, mode: LaunchMode.externalApplication);
       if (!launched && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(ReferralStrings.errorMaps)),
+          SnackBar(content: Text(ReferralStrings.errorMaps)),
         );
       }
     } catch (e) {
@@ -1466,7 +1466,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
       final launched = await launchUrl(webUri, mode: LaunchMode.externalApplication);
       if (!launched && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(ReferralStrings.errorMaps)),
+          SnackBar(content: Text(ReferralStrings.errorMaps)),
         );
       }
     } catch (e) {
@@ -1698,7 +1698,7 @@ class _ReferralListScreenState extends State<ReferralListScreen>
     final phone = patient?.phone;
     if (phone == null || phone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(ReferralStrings.errorNoPhone)),
+        SnackBar(content: Text(ReferralStrings.errorNoPhone)),
       );
       return;
     }

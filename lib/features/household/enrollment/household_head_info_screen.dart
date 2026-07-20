@@ -347,7 +347,7 @@ class _HouseholdHeadInfoScreenState extends State<HouseholdHeadInfoScreen> {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        const Text(
+                        Text(
                           EnrollmentStrings.mobileNotAvailableHint,
                           style: TextStyle(
                             fontSize: 13,

@@ -770,7 +770,7 @@ class _PatientContextScreenState
                         const SizedBox(height: 24),
                         FilledButton.tonal(
                           onPressed: _load,
-                          child: const Text(CommonStrings.retry),
+                          child: Text(CommonStrings.retry),
                         ),
                       ],
                     ),
@@ -3813,13 +3813,13 @@ class _PatientProfileCardState extends State<_PatientProfileCard> {
     try {
       if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(PatientProfileStrings.mapsOpenFailed)),
+          SnackBar(content: Text(PatientProfileStrings.mapsOpenFailed)),
         );
       }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(PatientProfileStrings.mapsOpenFailed)),
+          SnackBar(content: Text(PatientProfileStrings.mapsOpenFailed)),
         );
       }
     }
@@ -4696,13 +4696,13 @@ class _PatientDetailHeader extends StatelessWidget {
       if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
           context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(PatientProfileStrings.mapsOpenFailed)),
+          SnackBar(content: Text(PatientProfileStrings.mapsOpenFailed)),
         );
       }
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(PatientProfileStrings.mapsOpenFailed)),
+          SnackBar(content: Text(PatientProfileStrings.mapsOpenFailed)),
         );
       }
     }
@@ -5045,7 +5045,7 @@ class _NoServicesCard extends StatelessWidget {
                   );
                 },
                 icon: const Icon(Icons.add, size: 18, color: Colors.white),
-                label: const Text(
+                label: Text(
                   EnrollStrings.addServicesCta,
                   style: TextStyle(
                     fontWeight: FontWeight.w800,

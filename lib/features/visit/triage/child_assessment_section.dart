@@ -452,7 +452,7 @@ class _ComplicationPicker extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 3),
-        const Text(
+        Text(
           ChildAssessmentStrings.q13SelectAll,
           style: TextStyle(fontSize: 10, color: Color(0xFF9CA3AF)),
         ),

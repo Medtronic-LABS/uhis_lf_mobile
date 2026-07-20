@@ -273,7 +273,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
     final result = await showDialog<_DuplicateAction>(
       context: context,
       builder: (dlgCtx) => AlertDialog(
-        title: const Text(EnrollmentStrings.duplicateTitle),
+        title: Text(EnrollmentStrings.duplicateTitle),
         content: Text(
           '${EnrollmentStrings.duplicateBody}\n\n$existingName',
         ),
@@ -281,17 +281,17 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
           TextButton(
             onPressed: () =>
                 Navigator.of(dlgCtx).pop(_DuplicateAction.viewRecord),
-            child: const Text(EnrollmentStrings.duplicateViewRecord),
+            child: Text(EnrollmentStrings.duplicateViewRecord),
           ),
           TextButton(
             onPressed: () =>
                 Navigator.of(dlgCtx).pop(_DuplicateAction.continueAnyway),
-            child: const Text(EnrollmentStrings.duplicateContinue),
+            child: Text(EnrollmentStrings.duplicateContinue),
           ),
           FilledButton(
             onPressed: () =>
                 Navigator.of(dlgCtx).pop(_DuplicateAction.cancel),
-            child: const Text(EnrollmentStrings.cancel),
+            child: Text(EnrollmentStrings.cancel),
           ),
         ],
       ),
@@ -385,7 +385,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                                     size: 20,
                                   ),
                                   const SizedBox(width: 10),
-                                  const Text(
+                                  Text(
                                     EnrollmentStrings.nidScanButtonLabel,
                                     style: TextStyle(
                                       fontSize: 14,
@@ -464,7 +464,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: 3),
-                                  const Text(
+                                  Text(
                                     EnrollmentStrings.existingPatientHint,
                                     style: TextStyle(
                                       fontSize: 11,
@@ -610,7 +610,7 @@ class _AddHouseholdMemberScreenState extends State<AddHouseholdMemberScreen> {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        const Text(
+                        Text(
                           EnrollmentStrings.mobileNotAvailableHint,
                           style: TextStyle(
                             fontSize: 13,

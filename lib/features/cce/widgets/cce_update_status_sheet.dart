@@ -134,7 +134,7 @@ class _CceUpdateStatusSheetState extends State<CceUpdateStatusSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           CceStrings.updateSheetTitle,
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
         ),
@@ -144,7 +144,7 @@ class _CceUpdateStatusSheetState extends State<CceUpdateStatusSheet> {
           style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
         ),
         const SizedBox(height: 6),
-        const Text(
+        Text(
           CceStrings.updateSyncNote,
           style: TextStyle(
             fontSize: 12,
@@ -251,7 +251,7 @@ class _CceUpdateStatusSheetState extends State<CceUpdateStatusSheet> {
                   color: Colors.white,
                 ),
               )
-            : const Text(
+            : Text(
                 CceStrings.updateConfirmSync,
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
@@ -275,7 +275,7 @@ class _CceUpdateStatusSheetState extends State<CceUpdateStatusSheet> {
             borderRadius: BorderRadius.circular(12),
           ),
         ),
-        child: const Text(
+        child: Text(
           CceStrings.updateCancel,
           style: TextStyle(
             fontWeight: FontWeight.w700,
@@ -292,7 +292,7 @@ class _CceUpdateStatusSheetState extends State<CceUpdateStatusSheet> {
   Future<void> _save() async {
     if (_selectedIndex == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(CceStrings.selectStatus)),
+        SnackBar(content: Text(CceStrings.selectStatus)),
       );
       return;
     }
@@ -303,7 +303,7 @@ class _CceUpdateStatusSheetState extends State<CceUpdateStatusSheet> {
       final note = _noteController.text.trim();
       if (note.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(CceStrings.updateOtherRequired)),
+          SnackBar(content: Text(CceStrings.updateOtherRequired)),
         );
         return;
       }
@@ -325,7 +325,7 @@ class _CceUpdateStatusSheetState extends State<CceUpdateStatusSheet> {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(ReferralStrings.loadFailed)),
+        SnackBar(content: Text(ReferralStrings.loadFailed)),
       );
     }
   }

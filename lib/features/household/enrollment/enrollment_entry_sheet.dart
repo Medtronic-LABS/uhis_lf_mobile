@@ -383,7 +383,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
       case NidScanStatus.notFound:
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+            SnackBar(
               content: Text(EnrollmentStrings.nidScanNotFound),
               duration: Duration(seconds: 3),
             ),
@@ -392,7 +392,7 @@ class _MemberNidScanOverlayState extends State<_MemberNidScanOverlay>
       case NidScanStatus.error:
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+            SnackBar(
               content: Text(EnrollmentStrings.nidScanError),
               duration: Duration(seconds: 3),
             ),
@@ -1098,7 +1098,7 @@ class _PostScanSheet extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 3),
-                          const Text(
+                          Text(
                             EnrollmentStrings.existingPatientHint,
                             style: TextStyle(
                               fontSize: 11,

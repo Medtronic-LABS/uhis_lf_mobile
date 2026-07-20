@@ -113,7 +113,7 @@ class _LogCallSheetState extends State<LogCallSheet> {
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: Colors.white),
                     )
-                  : const Text(FollowUpCallStrings.save),
+                  : Text(FollowUpCallStrings.save),
             ),
           ),
         ],
@@ -155,7 +155,7 @@ class _LogCallSheetState extends State<LogCallSheet> {
     final status = _status;
     if (status == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(FollowUpCallStrings.selectOutcome)),
+        SnackBar(content: Text(FollowUpCallStrings.selectOutcome)),
       );
       return;
     }
@@ -174,7 +174,7 @@ class _LogCallSheetState extends State<LogCallSheet> {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(FollowUpCallStrings.failed)),
+        SnackBar(content: Text(FollowUpCallStrings.failed)),
       );
     }
   }

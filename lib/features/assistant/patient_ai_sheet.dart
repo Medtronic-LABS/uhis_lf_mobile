@@ -449,7 +449,7 @@ class _PatientAiSheetState extends State<PatientAiSheet> {
                 _send(last.text);
               }
             },
-            child: const Text(AssistantStrings.retryLabel),
+            child: Text(AssistantStrings.retryLabel),
           ),
         ],
       ),

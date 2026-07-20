@@ -125,7 +125,7 @@ class _HouseholdFollowUpScreenState extends State<HouseholdFollowUpScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.navy,
         foregroundColor: Colors.white,
-        title: const Text(HouseholdFollowUpStrings.title),
+        title: Text(HouseholdFollowUpStrings.title),
         leading: IconButton(
           icon: const Icon(Icons.close_rounded),
           onPressed: widget.onDone,
@@ -139,7 +139,7 @@ class _HouseholdFollowUpScreenState extends State<HouseholdFollowUpScreen> {
           Container(
             color: AppColors.navy,
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: const Text(
+            child: Text(
               HouseholdFollowUpStrings.subtitle,
               style: TextStyle(
                 color: Colors.white70,
@@ -179,7 +179,7 @@ class _HouseholdFollowUpScreenState extends State<HouseholdFollowUpScreen> {
                       side: const BorderSide(color: AppColors.navy),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    child: const Text(
+                    child: Text(
                       HouseholdFollowUpStrings.doneButton,
                       style: TextStyle(fontWeight: FontWeight.w600),
                     ),
@@ -478,7 +478,7 @@ class _EmptyState extends StatelessWidget {
         children: [
           const Icon(Icons.home_rounded, size: 56, color: AppColors.border),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             HouseholdFollowUpStrings.emptyState,
             textAlign: TextAlign.center,
             style: TextStyle(color: AppColors.textMuted, fontSize: 14),
@@ -492,7 +492,7 @@ class _EmptyState extends StatelessWidget {
                 backgroundColor: AppColors.navy,
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
-              child: const Text(HouseholdFollowUpStrings.doneButton),
+              child: Text(HouseholdFollowUpStrings.doneButton),
             ),
           ),
         ],

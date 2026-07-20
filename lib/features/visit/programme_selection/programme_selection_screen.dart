@@ -146,7 +146,7 @@ class _ProgrammeSelectionScreenState extends State<ProgrammeSelectionScreen> {
         OutlinedButton.icon(
           onPressed: () => _openAddProgrammeSheet(context, vm),
           icon: const Icon(Icons.add, size: 18),
-          label: const Text(ProgrammeSelectionStrings.addProgrammeCta),
+          label: Text(ProgrammeSelectionStrings.addProgrammeCta),
           style: OutlinedButton.styleFrom(
             foregroundColor: Theme.of(context).colorScheme.onSurface,
             side: const BorderSide(color: AppColors.border),
@@ -268,7 +268,7 @@ Future<bool> _confirmAdd(BuildContext context, Programme programme) async {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(false),
-          child: const Text(ProgrammeSelectionStrings.addConfirmCancel),
+          child: Text(ProgrammeSelectionStrings.addConfirmCancel),
         ),
         FilledButton(
           onPressed: () => Navigator.of(ctx).pop(true),
@@ -276,7 +276,7 @@ Future<bool> _confirmAdd(BuildContext context, Programme programme) async {
             backgroundColor: AppColors.statusSuccess,
             foregroundColor: Colors.white,
           ),
-          child: const Text(ProgrammeSelectionStrings.addConfirmCta),
+          child: Text(ProgrammeSelectionStrings.addConfirmCta),
         ),
       ],
     ),
@@ -337,7 +337,7 @@ Future<bool> _confirmSkip(BuildContext context, Programme programme) async {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(false),
-          child: const Text(ProgrammeSelectionStrings.skipConfirmCancel),
+          child: Text(ProgrammeSelectionStrings.skipConfirmCancel),
         ),
         FilledButton(
           onPressed: () => Navigator.of(ctx).pop(true),
@@ -345,7 +345,7 @@ Future<bool> _confirmSkip(BuildContext context, Programme programme) async {
             backgroundColor: AppColors.statusCritical,
             foregroundColor: Colors.white,
           ),
-          child: const Text(ProgrammeSelectionStrings.skipConfirmCta),
+          child: Text(ProgrammeSelectionStrings.skipConfirmCta),
         ),
       ],
     ),
@@ -539,7 +539,7 @@ class _ErrorState extends StatelessWidget {
             const SizedBox(height: 16),
             FilledButton(
               onPressed: onRetry,
-              child: const Text(ProgrammeSelectionStrings.retry),
+              child: Text(ProgrammeSelectionStrings.retry),
             ),
           ],
         ),
@@ -687,7 +687,7 @@ class _CrossProgrammeNoticeCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   ProgrammeSelectionStrings.crossNoticeTitle,
                   style: TextStyle(
                     fontSize: 12,
@@ -879,7 +879,7 @@ class _RecommendationCard extends StatelessWidget {
                 child: OutlinedButton.icon(
                   onPressed: isSelected ? onSkip : null,
                   icon: const Icon(Icons.close_rounded, size: 16),
-                  label: const Text(ProgrammeSelectionStrings.rejectCta),
+                  label: Text(ProgrammeSelectionStrings.rejectCta),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.statusCritical,
                     side: BorderSide(
@@ -1229,7 +1229,7 @@ class _ReviewBeforeContinueSheet extends StatelessWidget {
                 OutlinedButton.icon(
                   onPressed: onAdd,
                   icon: const Icon(Icons.add, size: 16),
-                  label: const Text(
+                  label: Text(
                     ProgrammeSelectionStrings.reviewSheetAddMore,
                   ),
                   style: OutlinedButton.styleFrom(
@@ -1270,7 +1270,7 @@ class _ReviewBeforeContinueSheet extends StatelessWidget {
                             ),
                             textStyle: Theme.of(context).textTheme.titleSmall,
                           ),
-                          child: const Text(
+                          child: Text(
                             ProgrammeSelectionStrings.reviewSheetBack,
                           ),
                         ),

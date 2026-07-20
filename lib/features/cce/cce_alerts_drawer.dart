@@ -102,7 +102,7 @@ class _CceAlertsDrawerState extends State<CceAlertsDrawer> {
           Expanded(
             child: Row(
               children: [
-                const Text(
+                Text(
                   CceStrings.drawerTitle,
                   style: TextStyle(
                       fontSize: 18,
@@ -138,7 +138,7 @@ class _CceAlertsDrawerState extends State<CceAlertsDrawer> {
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             ),
-            child: const Text(CceStrings.done,
+            child: Text(CceStrings.done,
                 style: TextStyle(fontWeight: FontWeight.w700)),
           ),
         ],
@@ -173,7 +173,7 @@ class _CceAlertsDrawerState extends State<CceAlertsDrawer> {
     if (!mounted) return;
     if (saved) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(CceStrings.updateSaved)),
+        SnackBar(content: Text(CceStrings.updateSaved)),
       );
       setState(_reload);
     }

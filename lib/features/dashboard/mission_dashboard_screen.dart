@@ -1091,8 +1091,8 @@ class _SettingsMenu extends StatelessWidget {
               final confirmPin = await showDialog<bool>(
                 context: ctx,
                 builder: (dlgCtx) => AlertDialog(
-                  title: const Text(PinStrings.confirmRemovePin),
-                  content: const Text(PinStrings.confirmRemovePinBody),
+                  title: Text(PinStrings.confirmRemovePin),
+                  content: Text(PinStrings.confirmRemovePinBody),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.of(dlgCtx).pop(false),
@@ -1100,7 +1100,7 @@ class _SettingsMenu extends StatelessWidget {
                     ),
                     FilledButton(
                       onPressed: () => Navigator.of(dlgCtx).pop(true),
-                      child: const Text(CommonStrings.remove),
+                      child: Text(CommonStrings.remove),
                     ),
                   ],
                 ),
@@ -1109,7 +1109,7 @@ class _SettingsMenu extends StatelessWidget {
               await auth.disablePin();
               if (ctx.mounted) {
                 ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(content: Text(PinStrings.disabledSnack)),
+                  SnackBar(content: Text(PinStrings.disabledSnack)),
                 );
               }
               break;

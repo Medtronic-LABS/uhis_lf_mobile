@@ -321,12 +321,12 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
                 FilledButton.icon(
                   onPressed: _retry,
                   icon: const Icon(Icons.refresh_rounded),
-                  label: const Text(SyncStrings.retry),
+                  label: Text(SyncStrings.retry),
                 ),
                 const SizedBox(height: 12),
                 TextButton(
                   onPressed: _continueOffline,
-                  child: const Text(SyncStrings.continueOffline),
+                  child: Text(SyncStrings.continueOffline),
                 ),
               ],
               

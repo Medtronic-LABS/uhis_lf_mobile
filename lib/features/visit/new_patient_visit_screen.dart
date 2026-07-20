@@ -581,7 +581,7 @@ class _ServicesSection extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Text(
+            Text(
               NewPatientVisitStrings.eligibleServicesHeader,
               style: TextStyle(
                 fontSize: 15,
@@ -596,7 +596,7 @@ class _ServicesSection extends StatelessWidget {
                 color: const Color(0xFFEDE9FE),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Text(
+              child: Text(
                 NewPatientVisitStrings.eligibleServicesTag,
                 style: TextStyle(
                   fontSize: 10,

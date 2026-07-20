@@ -39,7 +39,7 @@ class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
     if (mounted) {
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(EnrollmentStrings.enrollmentSuccess),
             duration: Duration(seconds: 2),
           ),
@@ -146,7 +146,7 @@ class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text(
+                                  Text(
                                     EnrollmentStrings.householdDetailsTitle,
                                     style: TextStyle(
                                       fontSize: 10,
@@ -207,7 +207,7 @@ class _HouseholdCreatedScreenState extends State<HouseholdCreatedScreen> {
                           // Members section header + count badge
                           Row(
                             children: [
-                              const Text(
+                              Text(
                                 EnrollmentStrings.householdMembersSectionHeader,
                                 style: TextStyle(
                                   fontSize: 12,

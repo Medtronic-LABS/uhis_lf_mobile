@@ -25,7 +25,7 @@ class AiSettingsScreen extends StatelessWidget {
         foregroundColor: Colors.white,
         elevation: 0,
         toolbarHeight: 60,
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
@@ -64,7 +64,7 @@ class AiSettingsScreen extends StatelessWidget {
     await notifier.resetToDefaults();
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text(AiSettingsStrings.resetConfirmation)),
+      SnackBar(content: Text(AiSettingsStrings.resetConfirmation)),
     );
   }
 }
@@ -100,7 +100,7 @@ class _VadTuningBody extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 AiSettingsStrings.sectionHeader,
                 style: TextStyle(
                   fontSize: 11,

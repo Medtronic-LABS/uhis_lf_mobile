@@ -112,7 +112,7 @@ class _SelectHouseholdScreenState extends State<SelectHouseholdScreen> {
         backgroundColor: AppColors.navy,
         foregroundColor: Colors.white,
         elevation: 0,
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
