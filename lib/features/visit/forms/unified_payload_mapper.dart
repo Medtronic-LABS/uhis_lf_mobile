@@ -359,10 +359,10 @@ abstract final class UnifiedPayloadMapper {
         ? DateTime.tryParse(lmpStr)?.millisecondsSinceEpoch
         : null;
     return _compact({
-      if (lmpMs != null) 'lmpDate': lmpMs,
+      if (lmpMs != null) 'lastMenstrualPeriod': lmpMs,
       'gravida': d.getValue('gravida'),
       'parity': d.getValue('parity'),
-      'livingChildren': d.getValue('livingChildren'),
+      'numberOfLivingChildren': d.getValue('livingChildren'),
       'ageOfLastChild': d.getValue('ageOfLastChild'),
       'pregnancyTest': d.getValue('pregnancyTest'),
     });
