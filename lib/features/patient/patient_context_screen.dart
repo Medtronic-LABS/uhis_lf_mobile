@@ -2870,7 +2870,7 @@ class _VitalTrendCardState extends State<_VitalTrendCard> {
                 children: [
                   SizedBox(
                     width: 80,
-                    height: 48,
+                    height: 62,
                     child: CustomPaint(
                       painter: widget.isBp
                           ? _BpSparklinePainter(readings: _readingsForChart, lc: lc)
@@ -2986,10 +2986,14 @@ class _BpSparklinePainter extends CustomPainter {
   final List<VitalReading> readings;
   final LeapfrogColors lc;
 
+  static const double _kDateLabelH = 14.0;
+
   @override
   void paint(Canvas canvas, Size size) {
+    final chartH = size.height - _kDateLabelH;
     if (readings.length < 2) {
-      _drawDot(canvas, size, readings);
+      _dotAt(canvas, size.width / 2, chartH / 2, AppColors.navy, 4);
+      _drawDateLabels(canvas, size, readings);
       return;
     }
 
@@ -3002,7 +3006,7 @@ class _BpSparklinePainter extends CustomPainter {
     final range = (maxVal - minVal).clamp(1.0, double.infinity);
 
     double xAt(int i) => i / (readings.length - 1) * size.width;
-    double yAt(double v) => size.height - ((v - minVal) / range) * size.height;
+    double yAt(double v) => chartH - ((v - minVal) / range) * chartH;
 
     final sysPath = Path()..moveTo(xAt(0), yAt(sys[0]));
     for (int i = 1; i < sys.length; i++) {
@@ -3053,19 +3057,40 @@ class _BpSparklinePainter extends CustomPainter {
       _dotAt(canvas, xAt(i), yAt(dia[i]),
           AppColors.navy.withValues(alpha: 0.60), i == dia.length - 1 ? 3.0 : 2.0);
     }
+
+    _drawDateLabels(canvas, size, readings);
   }
 
-  void _drawDot(Canvas canvas, Size size, List<VitalReading> readings) {
-    if (readings.isEmpty) return;
-    _dotAt(canvas, size.width / 2, size.height / 2, AppColors.navy, 4);
+  void _drawDateLabels(Canvas canvas, Size size, List<VitalReading> r) {
+    if (r.isEmpty) return;
+    final labelY = size.height - _kDateLabelH + 2;
+    final fmt = DateFormat('d MMM');
+    _paintLabel(canvas, fmt.format(r.first.date), 0, labelY, align: TextAlign.left);
+    if (r.length > 1) {
+      _paintLabel(canvas, fmt.format(r.last.date), size.width, labelY,
+          align: TextAlign.right);
+    }
+  }
+
+  void _paintLabel(Canvas canvas, String text, double x, double y,
+      {TextAlign align = TextAlign.left}) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: const TextStyle(
+          fontSize: 8.5,
+          color: AppColors.textMuted,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: 36);
+    final dx = align == TextAlign.right ? x - tp.width : x;
+    tp.paint(canvas, Offset(dx, y));
   }
 
   void _dotAt(Canvas canvas, double x, double y, Color color, double r) {
-    canvas.drawCircle(
-      Offset(x, y),
-      r,
-      Paint()..color = color,
-    );
+    canvas.drawCircle(Offset(x, y), r, Paint()..color = color);
   }
 
   @override
@@ -3084,15 +3109,15 @@ class _SingleLinePainter extends CustomPainter {
   final LeapfrogColors lc;
   final Color color;
 
+  static const double _kDateLabelH = 14.0;
+
   @override
   void paint(Canvas canvas, Size size) {
+    final chartH = size.height - _kDateLabelH;
     if (readings.isEmpty) return;
     if (readings.length < 2) {
-      canvas.drawCircle(
-        Offset(size.width / 2, size.height / 2),
-        4,
-        Paint()..color = color,
-      );
+      canvas.drawCircle(Offset(size.width / 2, chartH / 2), 4, Paint()..color = color);
+      _drawDateLabels(canvas, size, readings);
       return;
     }
 
@@ -3102,7 +3127,7 @@ class _SingleLinePainter extends CustomPainter {
     final range = (maxVal - minVal).clamp(1.0, double.infinity);
 
     double xAt(int i) => i / (readings.length - 1) * size.width;
-    double yAt(double v) => size.height - ((v - minVal) / range) * size.height;
+    double yAt(double v) => chartH - ((v - minVal) / range) * chartH;
 
     final line = Path()..moveTo(xAt(0), yAt(vals[0]));
     for (int i = 1; i < vals.length; i++) {
@@ -3110,18 +3135,15 @@ class _SingleLinePainter extends CustomPainter {
     }
 
     final fill = Path()
-      ..moveTo(xAt(0), size.height)
+      ..moveTo(xAt(0), chartH)
       ..lineTo(xAt(0), yAt(vals[0]));
     for (int i = 1; i < vals.length; i++) {
       fill.lineTo(xAt(i), yAt(vals[i]));
     }
-    fill.lineTo(xAt(vals.length - 1), size.height);
+    fill.lineTo(xAt(vals.length - 1), chartH);
     fill.close();
 
-    canvas.drawPath(
-      fill,
-      Paint()..color = color.withValues(alpha: 0.12),
-    );
+    canvas.drawPath(fill, Paint()..color = color.withValues(alpha: 0.12));
     canvas.drawPath(
       line,
       Paint()
@@ -3140,6 +3162,36 @@ class _SingleLinePainter extends CustomPainter {
         Paint()..color = color,
       );
     }
+
+    _drawDateLabels(canvas, size, readings);
+  }
+
+  void _drawDateLabels(Canvas canvas, Size size, List<VitalReading> r) {
+    if (r.isEmpty) return;
+    final labelY = size.height - _kDateLabelH + 2;
+    final fmt = DateFormat('d MMM');
+    _paintLabel(canvas, fmt.format(r.first.date), 0, labelY, align: TextAlign.left);
+    if (r.length > 1) {
+      _paintLabel(canvas, fmt.format(r.last.date), size.width, labelY,
+          align: TextAlign.right);
+    }
+  }
+
+  void _paintLabel(Canvas canvas, String text, double x, double y,
+      {TextAlign align = TextAlign.left}) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: const TextStyle(
+          fontSize: 8.5,
+          color: AppColors.textMuted,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: 36);
+    final dx = align == TextAlign.right ? x - tp.width : x;
+    tp.paint(canvas, Offset(dx, y));
   }
 
   @override
