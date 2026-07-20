@@ -176,6 +176,12 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     });
   }
 
+  @override
+  void dispose() {
+    _step1Scribe?.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadPatientNameFromDb() async {
     debugPrint('[_VisitFlowState] _loadPatientNameFromDb');
     try {
@@ -286,7 +292,17 @@ class _VisitFlowState extends State<VisitFlowScreen> {
 
   /// True once triage (Step 1) has been submitted. Blocks back-navigation to
   /// Step 1 from Step 2+ — re-entering triage would create a duplicate assessment.
-  bool _triageSubmitted = false;
+  ///
+  /// Initialised to true when [widget.initialStep] > 0 (e.g. flows launched
+  /// from NewPatientVisitScreen that already captured symptoms on a separate
+  /// screen). This prevents back-navigation from landing on an empty step 0.
+  late bool _triageSubmitted = widget.initialStep > 0;
+
+  /// AI Scribe controller for step 0 (symptom picker). Owned here so the
+  /// controller — and any in-progress or completed transcript — survives
+  /// step transitions instead of being discarded when the step-0 widget is
+  /// replaced in the widget tree.
+  ScribeController? _step1Scribe;
 
   /// Smart age label: months for under-2, years otherwise.
   /// Falls back to DOB when age-in-years is null (common for infants).
@@ -386,6 +402,10 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   Widget _buildStepBody() {
     switch (_step) {
       case 0:
+        _step1Scribe ??= ScribeController(
+          api: context.read<ScribeApiService>(),
+          permissionService: ScribePermissionService(),
+        );
         return _Step1Symptoms(
           key: ValueKey('flow-step1-${widget.visitId}'),
           encounterId: widget.visitId,
@@ -396,6 +416,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           patientName: widget.patientName,
           patientGender: widget.patientGender,
           origin: widget.origin,
+          scribeController: _step1Scribe!,
           onSymptomsConfirmed: (symptoms, duration, other, aiPicked) {
             // Captured before onAdvance fires (see SymptomPickerScreen).
             _confirmedSymptoms = symptoms;
@@ -654,6 +675,7 @@ class _Step1Symptoms extends StatelessWidget {
     required this.patientId,
     required this.onAdvance,
     required this.onSymptomsConfirmed,
+    required this.scribeController,
     this.memberId,
     this.householdId,
     this.patientAge,
@@ -681,6 +703,10 @@ class _Step1Symptoms extends StatelessWidget {
     Set<String> aiPickedSymptoms,
   ) onSymptomsConfirmed;
 
+  /// Controller owned by [_VisitFlowState] so the AI Scribe session and
+  /// transcript survive step transitions (e.g. step 0 → 1 → back to 0).
+  final ScribeController scribeController;
+
   /// Fired just before [onAdvance] with the SK-confirmed programme set from
   /// the inline eligible-services grid. Absent for child visits (under-5).
   final ValueChanged<Set<Programme>>? onProgrammesSelected;
@@ -693,11 +719,8 @@ class _Step1Symptoms extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<ScribeController>(
-      create: (ctx) => ScribeController(
-        api: ctx.read<ScribeApiService>(),
-        permissionService: ScribePermissionService(),
-      ),
+    return ChangeNotifierProvider<ScribeController>.value(
+      value: scribeController,
       child: SymptomPickerScreen(
         encounterId: encounterId,
         patientId: patientId,
