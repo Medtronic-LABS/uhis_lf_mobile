@@ -23,12 +23,18 @@ class CoachingRepository extends ChangeNotifier {
 
   List<CoachingModule> _modules = [];
   List<String> _cachedFaqs = [];
+  List<String> _gapIds = [];
   bool _syncing = false;
 
   List<CoachingModule> get modules => List.unmodifiable(_modules);
 
   /// FAQ suggestion strings synced from the coaching backend, ordered by rank.
   List<String> get cachedFaqs => List.unmodifiable(_cachedFaqs);
+
+  /// Modules flagged as behavioural gaps from the last sync.
+  /// These populate the Refreshers section.
+  List<CoachingModule> get gapModules =>
+      _modules.where((m) => _gapIds.contains(m.id)).toList();
 
   /// Modules ranked for today (morning endpoint / gap fallback). Highest
   /// priority first — matches SQLite `ORDER BY priority_today DESC`.
@@ -44,6 +50,7 @@ class CoachingRepository extends ChangeNotifier {
   /// until [initialize] or [refresh] runs again.
   void clear() {
     _modules = [];
+    _gapIds = [];
     notifyListeners();
   }
 
@@ -114,6 +121,9 @@ class CoachingRepository extends ChangeNotifier {
         'morning=${morningRes.statusCode}',
       );
 
+      ConsoleLog.banner('[PayloadDebug] coaching-gaps-raw → ${gapsRes.data}');
+      ConsoleLog.banner('[PayloadDebug] coaching-morning-raw → ${morningRes.data}');
+
       // Non-blocking: FAQ sync failures don't abort the main sync.
       await syncChatFaqs(userId);
 
@@ -126,6 +136,8 @@ class CoachingRepository extends ChangeNotifier {
       }
 
       final morningIds = parseMorningModuleIds(morningRes.data);
+      _gapIds = gapIds.toList();
+      ConsoleLog.step('[PayloadDebug] coaching-parsed → gaps=${_gapIds.length}:$_gapIds morningIds=${morningIds.length}:$morningIds');
 
       final rawModules =
           (modulesRes.data?['modules'] as List<dynamic>?) ?? [];

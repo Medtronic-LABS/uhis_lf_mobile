@@ -113,6 +113,8 @@ class _CoachingTabState extends State<_CoachingTab> {
     final repo = context.watch<CoachingRepository>();
     final modules = repo.modules;
     final priorities = repo.todaysPriorities;
+    final gaps = repo.gapModules;
+    ConsoleLog.step('[AssistantScreen] coaching modules=${modules.length} priorities=${priorities.length} gaps=${gaps.length}');
 
     if (repo.isSyncing && modules.isEmpty) {
       return const Center(child: CircularProgressIndicator());
@@ -131,7 +133,13 @@ class _CoachingTabState extends State<_CoachingTab> {
           ],
           const _SectionHeader(label: 'Refreshers'),
           const SizedBox(height: 8),
-          const _EmptyState(msg: 'No refreshers yet.'),
+          if (gaps.isEmpty)
+            const _EmptyState(msg: 'No refreshers yet.')
+          else
+            ...gaps.map((m) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _RefresherTile(module: m),
+            )),
           const SizedBox(height: 20),
           _TrainingHeader(modules: modules),
           const SizedBox(height: 10),
@@ -366,6 +374,66 @@ class _ModuleCard extends StatelessWidget {
   }
 }
 
+// ─── Refresher tile ───────────────────────────────────────────────────────────
+
+class _RefresherTile extends StatelessWidget {
+  const _RefresherTile({required this.module});
+
+  final CoachingModule module;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = module.titleBn.isNotEmpty ? module.titleBn : module.titleEn;
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: Colors.white,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => ModuleDetailScreen(module: module)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: _kSpiceBlueContainer,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.refresh_rounded, color: _kSpiceBlue, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${module.estimatedMinutes} min',
+                      style: const TextStyle(fontSize: 12, color: _kMetaGray),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: _kMetaGray),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
 class _SectionHeader extends StatelessWidget {
@@ -415,6 +483,7 @@ class _LeaderboardTabState extends State<_LeaderboardTab> {
   @override
   Widget build(BuildContext context) {
     final entries = MockCoachingData.leaderboard;
+    ConsoleLog.step('[AssistantScreen] leaderboard entries=${entries.length} (mock — no leaderboard API connected)');
     final top3 = entries.where((e) => e.rank <= 3).toList()
       ..sort((a, b) => a.rank.compareTo(b.rank));
     final rest = entries.where((e) => e.rank > 3 && !e.isCurrentUser).toList()
