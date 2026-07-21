@@ -223,7 +223,8 @@ class CoachingRepository extends ChangeNotifier {
   Future<void> syncChatFaqs(int userId) async {
     try {
       final base = AppConfig.coachingServiceUrl;
-      final url = '$base${Endpoints.coachingSyncChatFaqs}';
+      final since = _lastSyncIso();
+      final url = '$base${Endpoints.coachingSyncChatFaqs}?since=$since';
       ConsoleLog.step('[PayloadDebug] coaching-faqs → $url');
       final res = await _api.dio.get<Map<String, dynamic>>(url);
       ConsoleLog.step('[PayloadDebug] coaching-faqs → ${res.statusCode}');
@@ -333,11 +334,19 @@ class CoachingRepository extends ChangeNotifier {
     final body = raw['body'];
     List<ContentBlock> blocks;
     if (body is Map && body['type'] == 'doc') {
+      // Bare ProseMirror doc (legacy unlocalized format).
       blocks = _parseProseMirror(body);
     } else if (body is Map) {
-      // Plain locale dict
-      final text = _locale(body, 'en') ?? '';
-      blocks = [ContentBlock(type: ContentBlockType.paragraph, text: text)];
+      // Localized body: {'en': <ProseMirror|string>, 'bn': ...}.
+      final localized = body['en'] ?? body['bn'];
+      if (localized is Map && localized['type'] == 'doc') {
+        blocks = _parseProseMirror(localized);
+      } else {
+        final text = localized is String ? localized : '';
+        blocks = text.isNotEmpty
+            ? [ContentBlock(type: ContentBlockType.paragraph, text: text)]
+            : [];
+      }
     } else {
       blocks = [];
     }
@@ -434,8 +443,9 @@ class CoachingRepository extends ChangeNotifier {
       };
 
   String? _locale(dynamic value, String lang) {
-    if (value is Map) return value[lang] as String?;
-    return null;
+    if (value is! Map) return null;
+    final v = value[lang];
+    return v is String ? v : null;
   }
 
   String _lastSyncIso() {

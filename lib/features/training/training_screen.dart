@@ -19,7 +19,7 @@ import '../../core/constants/app_strings.dart';
 import '../../core/theme/app_theme.dart';
 import 'coaching_models.dart';
 import 'coaching_repository.dart';
-import 'module_player_screen.dart';
+import 'module_detail_screen.dart';
 
 // ─── Screen & body ────────────────────────────────────────────────────────────
 
@@ -75,40 +75,41 @@ class _TrainingBodyState extends State<TrainingBody> {
   @override
   Widget build(BuildContext context) {
     final repo = context.watch<CoachingRepository>();
-    // Full library, morning-ranked first (SQLite ORDER BY priority_today DESC;
-    // mock data keeps its authored order). Filtering to todaysPriorities alone
-    // hid 4/5 mock modules — only one has priorityToday: true.
     final modules = repo.modules;
+    final priorities = repo.todaysPriorities;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. Leaderboard
-          const _LeaderboardCard(),
-          const SizedBox(height: 14),
-
-          // 2. Section label
-          _SectionLabel(label: TrainingStrings.sectionTodaysLessons),
-          const SizedBox(height: 10),
-
-          // 3. Morning-prioritized module cards
           if (repo.isSyncing && modules.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 24),
               child: Center(child: CircularProgressIndicator()),
             )
-          else
-            ...modules.map(
-              (m) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: _VideoModuleCard(module: m),
+          else ...[
+            // 1. Today's focus — morning priority modules
+            if (priorities.isNotEmpty) ...[
+              _SectionLabel(label: CoachingStrings.sectionMorningCards),
+              const SizedBox(height: 10),
+              ...priorities.map(
+                (m) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _MorningModuleCard(module: m),
+                ),
               ),
-            ),
-          const SizedBox(height: 4),
+              const SizedBox(height: 14),
+            ],
 
-          // 4. Monthly progress
+            // 2. All modules grid
+            _SectionLabel(label: CoachingStrings.sectionAllModulesGrid),
+            const SizedBox(height: 10),
+            _ModuleGrid(modules: modules),
+            const SizedBox(height: 4),
+          ],
+
+          // 3. Monthly progress
           const _MonthlyProgressCard(),
         ],
       ),
@@ -116,282 +117,221 @@ class _TrainingBodyState extends State<TrainingBody> {
   }
 }
 
-// ─── Leaderboard card ─────────────────────────────────────────────────────────
+// ─── Morning module card (SDK: MorningCard) ───────────────────────────────────
+// Matches SDK MorningCard.kt exactly: horizontal tile, icon block, eyebrow,
+// title, Skip text button, Start filled pill.
 
-class _LeaderboardCard extends StatelessWidget {
-  const _LeaderboardCard();
+class _MorningModuleCard extends StatelessWidget {
+  const _MorningModuleCard({required this.module});
+
+  final CoachingModule module;
+
+  static const _iconBg = Color(0xFFE8F0FE);
+  static const _navy = Color(0xFF1B2B5E);
+  static const _skipGray = Color(0xFF6B7280);
+
+  String _eyebrow() {
+    final hasCards = module.cards.isNotEmpty;
+    final hasQuiz = module.quiz.isNotEmpty;
+    if (hasCards && hasQuiz) return CoachingStrings.refresherTypeMicrocoaching;
+    if (hasCards) return CoachingStrings.refresherTypeLearningCard;
+    return CoachingStrings.refresherTypeQuiz;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final entries = MockCoachingData.leaderboard;
-    final me = entries.where((e) => e.isCurrentUser).firstOrNull;
-    final first = entries.first;
-    final ptGap = me != null ? first.points - me.points : 0;
-
-    return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.navy, AppColors.navyMid],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  TrainingStrings.leaderboardTitle,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-              Text(
-                'Ward 4 · Manikganj',
-                style: const TextStyle(
-                  color: Colors.white54,
-                  fontSize: 10,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          // Rows
-          ...entries.map((e) => _LeaderboardRow(entry: e)),
-
-          // Motivation nudge
-          if (me != null && ptGap > 0) ...[
-            const SizedBox(height: 10),
+    final theme = Theme.of(context);
+    return Card(
+      elevation: 1,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Leading icon block
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              width: 48,
+              height: 48,
               decoration: BoxDecoration(
-                color: const Color(0x1FFFD700),
-                border: Border.all(color: const Color(0x40FFD700)),
-                borderRadius: BorderRadius.circular(10),
+                color: _iconBg,
+                borderRadius: BorderRadius.circular(12),
               ),
-              child: Text.rich(
-                TextSpan(
-                  style: const TextStyle(
-                    color: Color(0xCCFFFFFF),
-                    fontSize: 11,
-                  ),
-                  children: [
-                    TextSpan(text: TrainingStrings.leaderboardMotivationPrefix),
-                    TextSpan(
-                      text: '$ptGap pts',
-                      style: const TextStyle(
-                        color: AppColors.tagGold,
-                        fontWeight: FontWeight.w800,
-                      ),
+              child: const Icon(Icons.groups_outlined, color: _navy, size: 24),
+            ),
+            const SizedBox(width: 12),
+
+            // Eyebrow + title
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _eyebrow(),
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.4,
+                      color: _navy,
                     ),
-                    TextSpan(text: TrainingStrings.leaderboardMotivationSuffix),
-                  ],
+                  ),
+                  Text(
+                    module.titleEn,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: _navy,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+
+            // Skip
+            TextButton(
+              onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Skipped'), duration: Duration(seconds: 1)),
+              ),
+              child: Text(
+                CoachingStrings.morningCardSkip,
+                style: const TextStyle(color: _skipGray, fontWeight: FontWeight.w500),
+              ),
+            ),
+
+            // Start
+            FilledButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => ModuleDetailScreen(module: module),
                 ),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: _navy,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              ),
+              child: Text(
+                CoachingStrings.morningCardStart,
+                style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
           ],
-        ],
+        ),
       ),
     );
   }
 }
 
-class _LeaderboardRow extends StatelessWidget {
-  const _LeaderboardRow({required this.entry});
+// ─── 2-column module grid (SDK: AllModulesScreen) ─────────────────────────────
 
-  final LeaderboardEntry entry;
+// SDK ModuleTile TRAINING variant — full-width horizontal row.
+// Layout: 56dp thumbnail | Column(title + subtitle) | 40dp CompletionRing
+const _kSpiceBlueContainer = Color(0xFFE8F0FE);
+const _kSpiceNavy = Color(0xFF1B2B5E);
+const _kSpiceBlueDark = Color(0xFF1565C0);
+const _kMetaTextColor = Color(0xFF6B7280);
+
+class _ModuleGrid extends StatelessWidget {
+  const _ModuleGrid({required this.modules});
+
+  final List<CoachingModule> modules;
 
   @override
   Widget build(BuildContext context) {
-    final isTop2 = entry.rank <= 2;
-    final rankLabel = switch (entry.rank) {
-      1 => '🥇',
-      2 => '🥈',
-      _ => '${entry.rank}',
-    };
-
-    final avatarBg = switch (entry.rank) {
-      1 => AppColors.tagGold,
-      2 => const Color(0xFFC0C0C0),
-      _ => entry.isCurrentUser
-          ? AppColors.pink
-          : AppColors.aiPurple,
-    };
-    final avatarFg = switch (entry.rank) {
-      1 => const Color(0xFF78350F),
-      2 => const Color(0xFF374151),
-      _ => Colors.white,
-    };
-
-    final subText = entry.isCurrentUser && entry.weeklyRankChangeLabel != null
-        ? '${entry.wardLabel} · ${entry.videoCount} videos · ${entry.weeklyRankChangeLabel}'
-        : '${entry.wardLabel} · ${entry.videoCount} videos';
-
-    Widget rowContent = Row(
-      children: [
-        // Rank
-        SizedBox(
-          width: 24,
-          child: Text(
-            rankLabel,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: isTop2 || entry.isCurrentUser
-                  ? AppColors.tagGold
-                  : Colors.white54,
-              fontWeight: FontWeight.w800,
-              fontSize: isTop2 ? 17 : 12,
-            ),
-          ),
-        ),
-        const SizedBox(width: 10),
-
-        // Avatar
-        Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: avatarBg,
-            border: entry.isCurrentUser
-                ? Border.all(color: AppColors.tagGold, width: 2)
-                : null,
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            entry.initials,
-            style: TextStyle(
-              color: avatarFg,
-              fontWeight: FontWeight.w800,
-              fontSize: 11,
-            ),
-          ),
-        ),
-        const SizedBox(width: 10),
-
-        // Name + sub
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    entry.name,
-                    style: const TextStyle(
-                      color: AppColors.onDarkHigh,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                    ),
-                  ),
-                  if (entry.isCurrentUser) ...[
-                    const SizedBox(width: 4),
-                    Text(
-                      TrainingStrings.leaderboardYou,
-                      style: const TextStyle(
-                        color: Color(0xCCFFD700),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              Text(
-                subText,
-                style: const TextStyle(color: Colors.white38, fontSize: 10),
-              ),
-            ],
-          ),
-        ),
-
-        // Score
-        Text(
-          '${entry.points}',
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w800,
-            fontSize: 13,
-          ),
-        ),
-        const Text(
-          'pts',
-          style: TextStyle(color: Colors.white54, fontSize: 10),
-        ),
-      ],
-    );
-
-    // Wrap current-user row in a gold-tinted rounded container
-    if (entry.isCurrentUser) {
-      rowContent = Container(
-        decoration: BoxDecoration(
-          color: const Color(0x1FFFD700),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-        child: rowContent,
-      );
-    } else {
-      rowContent = Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: rowContent,
-      );
-    }
-
     return Column(
-      children: [
-        rowContent,
-        if (entry != MockCoachingData.leaderboard.last)
-          const Divider(color: Color(0x12FFFFFF), height: 1),
-      ],
+      children: modules
+          .map(
+            (m) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _ModuleTile(module: m),
+            ),
+          )
+          .toList(),
     );
   }
 }
 
-// ─── Video module card — vertical layout ─────────────────────────────────────
-
-class _VideoModuleCard extends StatelessWidget {
-  const _VideoModuleCard({required this.module});
+class _ModuleTile extends StatelessWidget {
+  const _ModuleTile({required this.module});
 
   final CoachingModule module;
 
+  void _onTap(BuildContext context) {
+    if (module.isLocked) {
+      _showLockedSnackbar(context);
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => ModuleDetailScreen(module: module)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final subtitle =
+        '${module.estimatedMinutes} ${CoachingStrings.minLabel} · '
+        '${module.quiz.length} ${CoachingStrings.detailQuestions}';
+
     return Opacity(
       opacity: module.isLocked ? 0.6 : 1.0,
-      child: GestureDetector(
-        onTap: module.isLocked
-            ? () => _showLockedSnackbar(context)
-            : () => _openModule(context, module),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.border, width: 1.5),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x12000000),
-                blurRadius: 10,
-                offset: Offset(0, 2),
-              ),
-            ],
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _VideoThumbnail(module: module),
-              _VideoCardBody(module: module),
-            ],
+      child: Card(
+        elevation: 1,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        color: Colors.white,
+        child: InkWell(
+          onTap: () => _onTap(context),
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // 56dp thumbnail — SpiceBlueContainer fallback
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    width: 56,
+                    height: 56,
+                    color: _kSpiceBlueContainer,
+                    child: module.isLocked
+                        ? const Icon(Icons.lock_rounded, color: _kSpiceBlueDark, size: 24)
+                        : null,
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                // Title + subtitle
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        module.titleEn,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: _kSpiceNavy,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: theme.textTheme.bodySmall?.copyWith(color: _kMetaTextColor),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                // 40dp completion ring
+                _CompletionRing(progress: module.progressFraction),
+              ],
+            ),
           ),
         ),
       ),
@@ -399,279 +339,34 @@ class _VideoModuleCard extends StatelessWidget {
   }
 }
 
-class _VideoThumbnail extends StatelessWidget {
-  const _VideoThumbnail({required this.module});
+class _CompletionRing extends StatelessWidget {
+  const _CompletionRing({required this.progress});
 
-  final CoachingModule module;
+  final double progress;
 
   @override
   Widget build(BuildContext context) {
-    final gradientColors = _gradientFor(module);
-    final isPlaying = module.isPlaying;
-    final isLocked = module.isLocked;
-    final isCompleted = module.isCompleted;
-
     return SizedBox(
-      height: 96,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Gradient background
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: gradientColors,
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-          ),
-
-          // Play / pause / lock button (centered)
-          Center(
-            child: _PlayButton(
-              isPlaying: isPlaying,
-              isLocked: isLocked,
-              isCompleted: isCompleted,
-              domain: module.domain,
-            ),
-          ),
-
-          // State badge — top left
-          if (isPlaying || isCompleted || isLocked)
-            Positioned(
-              top: 8,
-              left: 8,
-              child: _ThumbnailBadge(module: module),
-            ),
-
-          // Progress bar — bottom
-          if (module.progressFraction > 0)
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: LinearProgressIndicator(
-                value: module.progressFraction,
-                minHeight: 3,
-                backgroundColor: Colors.transparent,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  isCompleted
-                      ? AppColors.statusSuccess
-                      : AppColors.pink,
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  List<Color> _gradientFor(CoachingModule m) {
-    if (m.isLocked) return const [AppColors.textStrong, AppColors.textMid];
-    return switch (m.domain) {
-      CoachingDomain.imci => const [AppColors.rangeCrisis, AppColors.statusCritical],
-      CoachingDomain.ncd => const [Color(0xFF022C22), AppColors.statusSuccess],
-      CoachingDomain.anc => const [AppColors.ancHeader, Color(0xFFEC4899)],
-      CoachingDomain.tb => const [Color(0xFF0C2340), Color(0xFF1D4ED8)],
-      CoachingDomain.epi => const [Color(0xFF1E3A5F), AppColors.statusInfo],
-      CoachingDomain.nutrition => const [Color(0xFF3B1F00), AppColors.statusWarning],
-    };
-  }
-}
-
-class _PlayButton extends StatelessWidget {
-  const _PlayButton({
-    required this.isPlaying,
-    required this.isLocked,
-    required this.isCompleted,
-    required this.domain,
-  });
-
-  final bool isPlaying;
-  final bool isLocked;
-  final bool isCompleted;
-  final CoachingDomain domain;
-
-  @override
-  Widget build(BuildContext context) {
-    final Color iconColor;
-    final Color bgColor;
-    final IconData icon;
-
-    if (isLocked) {
-      bgColor = Colors.white24;
-      iconColor = AppColors.textDisabled;
-      icon = Icons.lock_rounded;
-    } else if (isPlaying) {
-      bgColor = AppColors.pink;
-      iconColor = AppColors.pink;
-      icon = Icons.pause_rounded;
-    } else if (isCompleted) {
-      bgColor = Colors.white;
-      iconColor = AppColors.statusSuccess;
-      icon = Icons.play_arrow_rounded;
-    } else {
-      bgColor = Colors.white;
-      iconColor = _domainPlayColor(domain);
-      icon = Icons.play_arrow_rounded;
-    }
-
-    return Container(
       width: 40,
       height: 40,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: isPlaying ? bgColor : const Color(0xEBFFFFFF),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x33000000),
-            blurRadius: 12,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Icon(icon, color: iconColor, size: isLocked ? 18 : 20),
-    );
-  }
-
-  Color _domainPlayColor(CoachingDomain d) => switch (d) {
-        CoachingDomain.imci => AppColors.statusCritical,
-        CoachingDomain.ncd => AppColors.statusSuccess,
-        CoachingDomain.anc => const Color(0xFFEC4899),
-        CoachingDomain.tb => const Color(0xFF1D4ED8),
-        CoachingDomain.epi => AppColors.statusInfo,
-        CoachingDomain.nutrition => AppColors.statusWarning,
-      };
-}
-
-class _ThumbnailBadge extends StatelessWidget {
-  const _ThumbnailBadge({required this.module});
-
-  final CoachingModule module;
-
-  @override
-  Widget build(BuildContext context) {
-    final String label;
-    final Color bg;
-
-    if (module.isLocked) {
-      label = TrainingStrings.badgeLocked;
-      bg = const Color(0x80000000);
-    } else if (module.isCompleted) {
-      label = TrainingStrings.badgeCompleted;
-      bg = const Color(0xD910B981);
-    } else {
-      // isPlaying
-      label = TrainingStrings.badgeNowPlaying;
-      bg = const Color(0x73000000);
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(5),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w700,
-          fontSize: 10,
-        ),
-      ),
-    );
-  }
-}
-
-class _VideoCardBody extends StatelessWidget {
-  const _VideoCardBody({required this.module});
-
-  final CoachingModule module;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
+        alignment: Alignment.center,
         children: [
-          Text(
-            module.titleEn,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
-            ),
+          CircularProgressIndicator(
+            value: progress.clamp(0.0, 1.0),
+            color: _kSpiceBlueDark,
+            backgroundColor: _kSpiceBlueContainer,
+            strokeWidth: 3,
           ),
-          const SizedBox(height: 3),
-          Row(
-            children: [
-              Text(
-                '${module.estimatedMinutes} ${CoachingStrings.minLabel}',
-                style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-              ),
-              const SizedBox(width: 8),
-              _PillBadge(module: module),
-            ],
+          Text(
+            '${(progress * 100).toInt()}%',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: _kSpiceBlueDark,
+                  fontSize: 9,
+                ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ─── Pill badge ───────────────────────────────────────────────────────────────
-
-class _PillBadge extends StatelessWidget {
-  const _PillBadge({required this.module});
-
-  final CoachingModule module;
-
-  @override
-  Widget build(BuildContext context) {
-    final String label;
-    final Color bg;
-    final Color fg;
-
-    if (module.isLocked) {
-      final n = module.unlockAfterN;
-      label = n != null
-          ? TrainingStrings.pillUnlockAfter(n)
-          : TrainingStrings.pillLocked;
-      bg = AppColors.progressTrack;
-      fg = AppColors.textDisabled;
-    } else if (module.isCompleted) {
-      label = TrainingStrings.pillDonePoints(module.pointsEarned);
-      bg = AppColors.statusSuccessSurface;
-      fg = AppColors.statusSuccessText;
-    } else if (module.triggerReason != null) {
-      label = TrainingStrings.pillTriggered(module.triggerReason!);
-      bg = AppColors.tagBlueSurface;
-      fg = AppColors.tagBlueText;
-    } else {
-      label = TrainingStrings.pillNew;
-      bg = AppColors.tagBlueSurface;
-      fg = AppColors.tagBlueText;
-    }
-
-    return Flexible(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          label,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: fg,
-            fontWeight: FontWeight.w700,
-            fontSize: 10,
-          ),
-        ),
       ),
     );
   }
@@ -801,15 +496,6 @@ class _SectionLabel extends StatelessWidget {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-void _openModule(BuildContext context, CoachingModule module) {
-  debugPrint('[_VideoModuleCard] _openModule moduleId=${module.id} title=${module.titleEn}');
-  Navigator.of(context).push(
-    MaterialPageRoute<void>(
-      builder: (_) => ModulePlayerScreen(module: module),
-    ),
-  );
-}
 
 void _showLockedSnackbar(BuildContext context) {
   ScaffoldMessenger.of(context).showSnackBar(

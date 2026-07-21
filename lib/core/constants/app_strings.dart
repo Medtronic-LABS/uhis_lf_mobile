@@ -4211,6 +4211,8 @@ abstract final class CoachingStrings {
   static const String quizFailed = 'Not quite — review the module and try again.';
   static const String tryAgain = 'Try Again';
   static const String backToModules = 'Back to Training';
+  static const String quizNotReady = 'Quiz not available yet';
+  static const String quizNotReadySub = 'Questions for this module are being prepared. Complete the lesson cards and check back later.';
   static const String rationaleLabel = 'Why?';
   static const String domainAnc = 'ANC';
   static const String domainNcd = 'NCD';
@@ -4219,9 +4221,70 @@ abstract final class CoachingStrings {
   static const String domainEpi = 'EPI';
   static const String domainNutrition = 'Nutrition';
 
+  // Module detail screen
+  static const String detailCards = 'cards';
+  static const String detailQuestions = 'questions';
+  static const String startCourse = 'Start Course';
+  static const String doQuiz = 'Take Quiz';
+  static const String reviewCourse = 'Review';
+  static const String curriculumLabel = 'CURRICULUM';
+  static const String quizLabel = 'Quick Quiz';
+  static String statMinLabel(int n) => '$n min read';
+
+  // Morning card
+  static const String morningCardEyebrow = "TODAY'S FOCUS";
+  static const String morningCardStart = 'Start';
+  static const String morningCardSkip = 'Skip';
+  static const String refresherTypeMicrocoaching = 'Micro-coaching';
+  static const String refresherTypeLearningCard = 'Learning Card';
+  static const String refresherTypeQuiz = 'Quiz';
+  static const String sectionMorningCards = "TODAY'S FOCUS — BASED ON YOUR GAPS";
+  static const String lessonPlayerProgress = 'Learning {i} of {n}';
+  static String lessonProgress(int i, int n) => 'Learning $i of $n';
+
+  // All modules grid
+  static const String sectionAllModulesGrid = 'ALL TRAINING MODULES';
+
   static String quizScore(int correct, int total) => '$correct / $total correct';
   static String cardProgress(int current, int total) => '$current of $total';
   static String questionProgress(int current, int total) => 'Question $current of $total';
+
+  // Module detail — locale-aware
+  static String get detailLearningCardsSection =>
+      AppLocale.isBangla ? 'শেখার কার্ড' : 'Learning cards';
+  static String get detailQuizSection =>
+      AppLocale.isBangla ? 'কুইজ' : 'Quiz';
+  static String get detailKnowledgeCheck =>
+      AppLocale.isBangla ? 'জ্ঞান যাচাই' : 'Knowledge check';
+  static String get detailCurriculumCardMin =>
+      AppLocale.isBangla ? '১ মিনিট' : '1 min';
+  static String get detailReadCourse =>
+      AppLocale.isBangla ? 'পুনরায় পড়ুন' : 'Read course';
+  static String quizCurriculumQuestions(int n) =>
+      AppLocale.isBangla ? '$n টি প্রশ্ন' : '$n questions';
+
+  // Quiz question — locale-aware
+  static String get quizSelectAnswer =>
+      AppLocale.isBangla ? 'একটি উত্তর বেছে নিন' : 'Select an answer';
+  static String quizQuestionCounter(int n, int total) =>
+      AppLocale.isBangla ? 'প্রশ্ন $n / $total' : 'Q $n of $total';
+
+  // Quiz result — locale-aware
+  static String get yourAnswers =>
+      AppLocale.isBangla ? 'আপনার উত্তর' : 'Your answers';
+  static String get quizDone =>
+      AppLocale.isBangla ? 'সম্পন্ন' : 'Done';
+  static String get badgeLabelExpert =>
+      AppLocale.isBangla ? 'দক্ষ' : 'Expert';
+  static String get badgeLabelWellDone =>
+      AppLocale.isBangla ? 'চমৎকার!' : 'Well Done!';
+  static String get badgeLabelKeepPractising =>
+      AppLocale.isBangla ? 'চর্চা করুন' : 'Keep Practising';
+  static String badgeLabel(double score) {
+    if (score >= 0.9) return badgeLabelExpert;
+    if (score >= 0.7) return badgeLabelWellDone;
+    return badgeLabelKeepPractising;
+  }
 }
 
 /// NCD assessment form copy — spec §5.2.2 Hypertension Screening section.
@@ -5038,6 +5101,15 @@ abstract final class AssistantStrings {
   static const String tabAsk = 'Ask AI';
   static const String tabTraining = 'Training';
   static const String suggestedFollowUps = 'You might also ask:';
+  static const String voiceStart = 'Tap to speak';
+  static const String voiceStop = 'Tap to stop';
+  static const String voiceListening = 'Listening…';
+  static const String todayLabel = 'Today';
+  static const String aiCoachTitle = 'AI Coach';
+  static const String welcomeMessage =
+      'How can I help you today? Ask me about patient counselling, clinical protocols, or SPICE.';
+  static const String statusOnline = 'Online';
+  static const String clearHistory = 'Clear chat history';
 }
 
 /// Strings for [HouseholdFollowUpScreen].
