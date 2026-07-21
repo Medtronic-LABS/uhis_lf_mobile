@@ -294,11 +294,31 @@ class _ModuleCard extends StatelessWidget {
 
   final CoachingModule module;
 
+  Color get _domainColor => switch (module.domain) {
+    CoachingDomain.ncd       => const Color(0xFFE53935),
+    CoachingDomain.anc       => const Color(0xFF8E24AA),
+    CoachingDomain.imci      => const Color(0xFF00897B),
+    CoachingDomain.tb        => const Color(0xFFF57C00),
+    CoachingDomain.epi       => const Color(0xFF1E88E5),
+    CoachingDomain.nutrition => const Color(0xFF43A047),
+  };
+
+  String get _domainLabel => switch (module.domain) {
+    CoachingDomain.ncd       => 'NCD',
+    CoachingDomain.anc       => 'ANC',
+    CoachingDomain.imci      => 'IMCI',
+    CoachingDomain.tb        => 'TB',
+    CoachingDomain.epi       => 'EPI',
+    CoachingDomain.nutrition => 'NUTRITION',
+  };
+
   @override
   Widget build(BuildContext context) {
     final title = module.titleBn.isNotEmpty ? module.titleBn : module.titleEn;
     final meta = '${module.estimatedMinutes} min · ${module.quiz.length} questions';
-    final pct = '${(module.progressFraction * 100).toInt()}%';
+    final done = module.isCompleted;
+    final pct = done ? '100%' : '${(module.progressFraction * 100).toInt()}%';
+    const kGreen = Color(0xFF2E7D32);
 
     return GestureDetector(
       onTap: () {
@@ -315,58 +335,118 @@ class _ModuleCard extends StatelessWidget {
           MaterialPageRoute<void>(builder: (_) => ModuleDetailScreen(module: module)),
         );
       },
-      child: Opacity(
-        opacity: module.isLocked ? 0.6 : 1.0,
-        child: SizedBox(
-          width: 170,
-          child: Card(
-            elevation: 1,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            color: Colors.white,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                  child: Container(
-                    height: 100,
-                    width: double.infinity,
-                    color: _kSpiceBlueContainer,
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                          height: 1.3,
+      child: SizedBox(
+        width: 170,
+        child: Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          color: Colors.white,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Thumbnail with badge overlays
+              ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                child: Stack(
+                  children: [
+                    Container(height: 100, width: double.infinity, color: _kSpiceBlueContainer),
+                    // Domain badge — top-left
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: _domainColor.withValues(alpha: 0.9),
+                          borderRadius: BorderRadius.circular(6),
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                        child: Text(
+                          _domainLabel,
+                          style: const TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(meta, style: const TextStyle(fontSize: 11, color: _kMetaGray)),
-                      const SizedBox(height: 8),
-                      LinearProgressIndicator(
-                        value: module.progressFraction.clamp(0.0, 1.0),
-                        color: _kUserBlue,
-                        backgroundColor: _kSpiceBlueContainer,
-                        minHeight: 3,
-                        borderRadius: BorderRadius.circular(2),
+                    ),
+                    // Completed checkmark — top-right
+                    if (done)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Container(
+                          width: 22,
+                          height: 22,
+                          decoration: const BoxDecoration(color: kGreen, shape: BoxShape.circle),
+                          child: const Icon(Icons.check_rounded, size: 14, color: Colors.white),
+                        ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(pct, style: const TextStyle(fontSize: 11, color: _kMetaGray)),
-                    ],
-                  ),
+                    // Lock overlay with icon
+                    if (module.isLocked)
+                      Container(
+                        height: 100,
+                        width: double.infinity,
+                        color: Colors.black.withValues(alpha: 0.38),
+                        child: const Center(
+                          child: Icon(Icons.lock_rounded, color: Colors.white, size: 28),
+                        ),
+                      ),
+                    // Playing indicator — bottom-right
+                    if (module.isPlaying && !module.isLocked)
+                      Positioned(
+                        bottom: 8,
+                        right: 8,
+                        child: Container(
+                          width: 26,
+                          height: 26,
+                          decoration: BoxDecoration(
+                            color: _kSpiceBlue.withValues(alpha: 0.92),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.play_arrow_rounded, size: 16, color: Colors.white),
+                        ),
+                      ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              // Content below thumbnail
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: _kNavy,
+                        height: 1.3,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(meta, style: const TextStyle(fontSize: 11, color: _kMetaGray)),
+                    const SizedBox(height: 8),
+                    LinearProgressIndicator(
+                      value: (done ? 1.0 : module.progressFraction).clamp(0.0, 1.0),
+                      color: done ? kGreen : _kSpiceBlue,
+                      backgroundColor: _kSpiceBlueContainer,
+                      minHeight: 3,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      pct,
+                      style: TextStyle(fontSize: 11, color: done ? kGreen : _kMetaGray),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),
