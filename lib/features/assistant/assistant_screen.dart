@@ -5,10 +5,12 @@
 ///   2. "Training" — micro-coaching modules (Learn → Apply → Measure loop).
 library;
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../core/constants/app_strings.dart';
 import '../../core/db/app_database.dart';
@@ -20,6 +22,13 @@ import '../training/training_screen.dart';
 import 'assistant_models.dart';
 import 'assistant_repository.dart';
 
+String _formatTime(DateTime ts) =>
+    '${ts.hour.toString().padLeft(2, '0')}:${ts.minute.toString().padLeft(2, '0')}';
+
+// SDK-matched SpiceBlue for AI Coach branding
+const _kSpiceBlue = Color(0xFF2514BE);
+const _kUserBubbleBlue = Color(0xFF1565C0);
+
 class AssistantScreen extends StatelessWidget {
   const AssistantScreen({super.key});
 
@@ -29,9 +38,46 @@ class AssistantScreen extends StatelessWidget {
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          backgroundColor: AppColors.navy,
+          backgroundColor: _kSpiceBlue,
           foregroundColor: Colors.white,
-          title: Text(AssistantStrings.title),
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: const BoxDecoration(
+                  color: Colors.white24,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.auto_awesome_rounded, size: 18, color: Colors.white),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    AssistantStrings.title,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  Row(
+                    children: [
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF4CAF50),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Text('Online', style: TextStyle(fontSize: 11, color: Colors.white70)),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
           elevation: 0,
           bottom: const TabBar(
             labelColor: Colors.white,
@@ -79,8 +125,13 @@ class _ChatTabState extends State<_ChatTab> {
   final TextEditingController _input = TextEditingController();
   final ScrollController _scroll = ScrollController();
   bool _loading = false;
+  bool _isRecording = false;
   String? _error;
   late final ChatMessageDao _dao;
+
+  int? _streamingMsgIdx;
+  int _streamLen = 0;
+  Timer? _streamTimer;
 
   static const List<String> _fallbackStarters = [
     AssistantStrings.suggestedMuac,
@@ -133,9 +184,32 @@ class _ChatTabState extends State<_ChatTab> {
   @override
   void dispose() {
     debugPrint('[_ChatTabState] dispose');
+    _streamTimer?.cancel();
     _input.dispose();
     _scroll.dispose();
     super.dispose();
+  }
+
+  void _startStreaming(int idx, String text) {
+    _streamTimer?.cancel();
+    setState(() {
+      _streamingMsgIdx = idx;
+      _streamLen = 0;
+    });
+    _streamTimer = Timer.periodic(const Duration(milliseconds: 12), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      final next = (_streamLen + 4).clamp(0, text.length);
+      setState(() => _streamLen = next);
+      if (next >= text.length) {
+        t.cancel();
+        setState(() => _streamingMsgIdx = null);
+      } else {
+        _scrollToBottom();
+      }
+    });
   }
 
   Future<void> _send(String question) async {
@@ -151,7 +225,6 @@ class _ChatTabState extends State<_ChatTab> {
     });
     _scrollToBottom();
 
-    // Persist user message.
     try {
       await _dao.insertMessage(
         id: '${now.millisecondsSinceEpoch}_u',
@@ -179,8 +252,8 @@ class _ChatTabState extends State<_ChatTab> {
         _messages.add(assistantMsg);
         _loading = false;
       });
+      _startStreaming(_messages.length - 1, assistantMsg.text);
 
-      // Persist assistant message.
       try {
         final sqJson = answer.suggestedQuestions.isEmpty
             ? null
@@ -224,23 +297,65 @@ class _ChatTabState extends State<_ChatTab> {
     });
   }
 
+  List<String> _activeSuggestions(List<String> cachedFaqs) {
+    if (_loading) return const [];
+    if (_messages.isEmpty) {
+      return cachedFaqs.isNotEmpty ? cachedFaqs.take(4).toList() : _fallbackStarters;
+    }
+    try {
+      final last = _messages.lastWhere(
+        (m) => m.role == MessageRole.assistant && m.suggestedQuestions.isNotEmpty,
+      );
+      return last.suggestedQuestions;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  List<Widget> _buildMessageItems() {
+    final items = <Widget>[const _TodayPill()];
+
+    if (_messages.isEmpty) {
+      items.add(const _AssistantBubble(
+        text: AssistantStrings.welcomeMessage,
+        timestamp: null,
+      ));
+    } else {
+      for (var i = 0; i < _messages.length; i++) {
+        final msg = _messages[i];
+        final isStreaming = i == _streamingMsgIdx;
+        if (msg.role == MessageRole.user) {
+          items.add(_UserBubble(text: msg.text, timestamp: msg.timestamp));
+        } else {
+          final displayText = isStreaming
+              ? '${msg.text.substring(0, _streamLen.clamp(0, msg.text.length))}▊'
+              : msg.text;
+          items.add(_AssistantBubble(
+            text: displayText,
+            timestamp: isStreaming ? null : msg.timestamp,
+          ));
+        }
+      }
+    }
+
+    if (_loading) items.add(const _StreamingBubble(text: ''));
+    items.add(const SizedBox(height: 8));
+    return items;
+  }
+
   @override
   Widget build(BuildContext context) {
     final cachedFaqs = context.watch<CoachingRepository>().cachedFaqs;
-    final starters = cachedFaqs.isNotEmpty
-        ? cachedFaqs.take(4).toList()
-        : _fallbackStarters;
+    final suggestions = _activeSuggestions(cachedFaqs);
+
     return Column(
       children: [
         Expanded(
-          child: _messages.isEmpty
-              ? _EmptyState(onStarter: _send, starters: starters)
-              : _MessageList(
-                  messages: _messages,
-                  loading: _loading,
-                  scroll: _scroll,
-                  onSuggestedQuestion: _send,
-                ),
+          child: ListView(
+            controller: _scroll,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            children: _buildMessageItems(),
+          ),
         ),
         if (_error != null)
           _ErrorBanner(
@@ -265,270 +380,268 @@ class _ChatTabState extends State<_ChatTab> {
               }
             },
           ),
-        _InputBar(
+        if (!_loading && suggestions.isNotEmpty)
+          _SuggestionChipRow(chips: suggestions, onChipTap: _send),
+        if (_isRecording) const _RecordingBadge(),
+        const Divider(height: 1, thickness: 0.5),
+        _ChatInputBar(
           controller: _input,
           loading: _loading,
           onSend: () => _send(_input.text),
+          onRecordingChanged: (v) => setState(() => _isRecording = v),
         ),
       ],
     );
   }
 }
 
-// ── Empty state ───────────────────────────────────────────────────────────────
+// ── Avatar ────────────────────────────────────────────────────────────────────
 
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.onStarter, required this.starters});
-  final void Function(String) onStarter;
-  final List<String> starters;
+class _Avatar extends StatelessWidget {
+  const _Avatar();
 
   @override
   Widget build(BuildContext context) {
-    final lc = Theme.of(context).extension<LeapfrogColors>()!;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 40, 24, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(
-              color: AppColors.navy,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              AssistantStrings.badgeLabel,
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.5,
-              ),
-            ),
+    return Container(
+      width: 32,
+      height: 32,
+      decoration: const BoxDecoration(
+        color: _kSpiceBlue,
+        shape: BoxShape.circle,
+      ),
+      child: const Icon(Icons.auto_awesome_rounded, size: 18, color: Colors.white),
+    );
+  }
+}
+
+// ── Today pill ────────────────────────────────────────────────────────────────
+
+class _TodayPill extends StatelessWidget {
+  const _TodayPill();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 12),
+      child: Center(
+        child: Chip(
+          label: Text(
+            AssistantStrings.todayLabel,
+            style: Theme.of(context).textTheme.labelMedium,
           ),
-          const SizedBox(height: 20),
-          Text(
-            AssistantStrings.emptyHeading,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              color: lc.textPrimary,
-              letterSpacing: -0.4,
-            ),
+          backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(50)),
           ),
-          const SizedBox(height: 8),
-          Text(
-            AssistantStrings.emptySubheading,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 14,
-              color: AppColors.textMuted,
-              height: 1.5,
-            ),
-          ),
-          const SizedBox(height: 32),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            alignment: WrapAlignment.center,
-            children: starters
-                .map((s) => _StarterChip(label: s, onTap: () => onStarter(s)))
-                .toList(),
-          ),
-          const SizedBox(height: 32),
-          Text(
-            AssistantStrings.poweredBy,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 11,
-              color: AppColors.textMuted,
-            ),
-          ),
-        ],
+          side: BorderSide.none,
+        ),
       ),
     );
   }
 }
 
-class _StarterChip extends StatelessWidget {
-  const _StarterChip({required this.label, required this.onTap});
-  final String label;
-  final VoidCallback onTap;
+// ── Assistant bubble ──────────────────────────────────────────────────────────
+
+class _AssistantBubble extends StatelessWidget {
+  const _AssistantBubble({required this.text, required this.timestamp});
+
+  final String text;
+  final DateTime? timestamp;
 
   @override
   Widget build(BuildContext context) {
-    final lc = Theme.of(context).extension<LeapfrogColors>()!;
-    return ActionChip(
-      label: Text(label),
-      labelStyle: const TextStyle(
-        fontSize: 13,
-        color: AppColors.navy,
-        fontWeight: FontWeight.w500,
-      ),
-      backgroundColor: lc.cardSurface,
-      side: BorderSide(color: lc.borderDefault),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      onPressed: onTap,
-    );
-  }
-}
-
-// ── Message list ──────────────────────────────────────────────────────────────
-
-class _MessageList extends StatelessWidget {
-  const _MessageList({
-    required this.messages,
-    required this.loading,
-    required this.scroll,
-    required this.onSuggestedQuestion,
-  });
-
-  final List<ChatMessage> messages;
-  final bool loading;
-  final ScrollController scroll;
-  final void Function(String) onSuggestedQuestion;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView.builder(
-      controller: scroll,
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      itemCount: messages.length + (loading ? 1 : 0),
-      itemBuilder: (_, i) {
-        if (i == messages.length) return const _TypingIndicator();
-        return _MessageBubble(
-          message: messages[i],
-          onSuggestedQuestion: onSuggestedQuestion,
-        );
-      },
-    );
-  }
-}
-
-class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({
-    required this.message,
-    required this.onSuggestedQuestion,
-  });
-  final ChatMessage message;
-  final void Function(String) onSuggestedQuestion;
-
-  @override
-  Widget build(BuildContext context) {
-    final isUser = message.role == MessageRole.user;
     final lc = Theme.of(context).extension<LeapfrogColors>()!;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment:
-            isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisAlignment:
-                isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-            children: [
-              if (!isUser) ...[
+          const _Avatar(),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 Container(
-                  width: 32,
-                  height: 32,
+                  constraints: const BoxConstraints(maxWidth: 260),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
-                    color: AppColors.aiPurple,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    AssistantStrings.badgeLabel,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
+                    color: lc.cardSurface,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(4),
+                      topRight: Radius.circular(16),
+                      bottomLeft: Radius.circular(16),
+                      bottomRight: Radius.circular(16),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-              ],
-              Flexible(
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: isUser ? AppColors.navy : lc.cardSurface,
-                    borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(16),
-                      topRight: const Radius.circular(16),
-                      bottomLeft: Radius.circular(isUser ? 16 : 4),
-                      bottomRight: Radius.circular(isUser ? 4 : 16),
-                    ),
-                    border: isUser ? null : Border.all(color: lc.borderDefault),
+                    border: Border.all(color: lc.borderDefault),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withAlpha(13),
+                        blurRadius: 2,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
                   ),
                   child: Text(
-                    message.text,
+                    text,
                     style: TextStyle(
-                      color: isUser ? Colors.white : lc.textPrimary,
                       fontSize: 14,
                       height: 1.5,
+                      color: AppColors.textPrimary,
                     ),
                   ),
                 ),
-              ),
-              if (isUser) const SizedBox(width: 8),
-            ],
-          ),
-          // Suggested follow-up questions (coaching RAG only, assistant messages).
-          if (!isUser && message.suggestedQuestions.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Padding(
-              padding: const EdgeInsets.only(left: 40),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    AssistantStrings.suggestedFollowUps,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textMuted,
-                      fontWeight: FontWeight.w500,
+                if (timestamp != null) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4, left: 4),
+                    child: Text(
+                      _formatTime(timestamp!),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textMuted,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: message.suggestedQuestions
-                        .map((q) => _StarterChip(
-                              label: q,
-                              onTap: () => onSuggestedQuestion(q),
-                            ))
-                        .toList(),
-                  ),
+                  const SizedBox(height: 2),
+                  _MessageActions(),
                 ],
-              ),
+              ],
             ),
-          ],
+          ),
         ],
       ),
     );
   }
 }
 
-class _TypingIndicator extends StatefulWidget {
-  const _TypingIndicator();
+// ── User bubble ───────────────────────────────────────────────────────────────
+
+class _UserBubble extends StatelessWidget {
+  const _UserBubble({required this.text, required this.timestamp});
+
+  final String text;
+  final DateTime timestamp;
 
   @override
-  State<_TypingIndicator> createState() => _TypingIndicatorState();
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Container(
+                  constraints: const BoxConstraints(maxWidth: 280),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: _kUserBubbleBlue,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(4),
+                      bottomLeft: Radius.circular(16),
+                      bottomRight: Radius.circular(16),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withAlpha(26),
+                        blurRadius: 2,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    text,
+                    style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.5),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 4, right: 4),
+                  child: Text(
+                    _formatTime(timestamp),
+                    style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-class _TypingIndicatorState extends State<_TypingIndicator>
+// ── Streaming bubble ──────────────────────────────────────────────────────────
+
+class _StreamingBubble extends StatelessWidget {
+  const _StreamingBubble({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final lc = Theme.of(context).extension<LeapfrogColors>()!;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          const _Avatar(),
+          const SizedBox(width: 8),
+          Container(
+            constraints: const BoxConstraints(maxWidth: 260),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: lc.cardSurface,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(4),
+                topRight: Radius.circular(16),
+                bottomLeft: Radius.circular(16),
+                bottomRight: Radius.circular(16),
+              ),
+              border: Border.all(color: lc.borderDefault),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withAlpha(13),
+                  blurRadius: 2,
+                  offset: const Offset(0, 1),
+                ),
+              ],
+            ),
+            child: text.isEmpty
+                ? const _TypingDots()
+                : Text(
+                    '$text▊',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      height: 1.5,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Typing dots ───────────────────────────────────────────────────────────────
+
+class _TypingDots extends StatefulWidget {
+  const _TypingDots();
+
+  @override
+  State<_TypingDots> createState() => _TypingDotsState();
+}
+
+class _TypingDotsState extends State<_TypingDots>
     with SingleTickerProviderStateMixin {
   late AnimationController _ctrl;
 
   @override
   void initState() {
-    debugPrint('[_TypingIndicatorState] initState');
     super.initState();
     _ctrl = AnimationController(
       vsync: this,
@@ -538,108 +651,305 @@ class _TypingIndicatorState extends State<_TypingIndicator>
 
   @override
   void dispose() {
-    debugPrint('[_TypingIndicatorState] dispose');
     _ctrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final lc = Theme.of(context).extension<LeapfrogColors>()!;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Container(
-            width: 32,
-            height: 32,
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (_, __) {
+        final phase = _ctrl.value * 3;
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(3, (i) {
+            return Padding(
+              padding: EdgeInsets.only(right: i < 2 ? 4.0 : 0),
+              child: Opacity(
+                opacity: phase.toInt() == i ? 1.0 : 0.25,
+                child: Container(
+                  width: 6,
+                  height: 6,
+                  decoration: const BoxDecoration(
+                    color: AppColors.textPrimary,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            );
+          }),
+        );
+      },
+    );
+  }
+}
+
+// ── Message action row (volume + thumbs) ─────────────────────────────────────
+
+class _MessageActions extends StatelessWidget {
+  const _MessageActions();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _ActionIcon(icon: Icons.volume_up_rounded, onTap: () {}),
+        const SizedBox(width: 4),
+        _ActionIcon(icon: Icons.thumb_up_alt_outlined, onTap: () {}),
+        const SizedBox(width: 4),
+        _ActionIcon(icon: Icons.thumb_down_alt_outlined, onTap: () {}),
+      ],
+    );
+  }
+}
+
+class _ActionIcon extends StatelessWidget {
+  const _ActionIcon({required this.icon, required this.onTap});
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Icon(icon, size: 16, color: AppColors.textMuted),
+    );
+  }
+}
+
+// ── Suggestion chip row ───────────────────────────────────────────────────────
+
+class _SuggestionChipRow extends StatelessWidget {
+  const _SuggestionChipRow({required this.chips, required this.onChipTap});
+
+  final List<String> chips;
+  final void Function(String) onChipTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 40,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: chips.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (_, i) => GestureDetector(
+          onTap: () => onChipTap(chips[i]),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
-              color: AppColors.aiPurple,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(50),
+              border: Border.all(color: AppColors.navy.withAlpha(102)),
             ),
-            alignment: Alignment.center,
             child: Text(
-              AssistantStrings.badgeLabel,
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
+              chips[i],
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.navy,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-            decoration: BoxDecoration(
-              color: lc.cardSurface,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(16),
-                topRight: Radius.circular(16),
-                bottomRight: Radius.circular(16),
-                bottomLeft: Radius.circular(4),
-              ),
-              border: Border.all(color: lc.borderDefault),
-            ),
-            child: AnimatedBuilder(
-              animation: _ctrl,
-              builder: (_, _) {
-                return Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: List.generate(3, (i) {
-                    final delay = i / 3;
-                    final t = ((_ctrl.value - delay) % 1.0).clamp(0.0, 1.0);
-                    final opacity = t < 0.5
-                        ? (t * 2).clamp(0.3, 1.0)
-                        : ((1 - t) * 2 + 0.3).clamp(0.3, 1.0);
-                    return Padding(
-                      padding: EdgeInsets.only(right: i < 2 ? 4.0 : 0),
-                      child: Opacity(
-                        opacity: opacity,
-                        child: Container(
-                          width: 7,
-                          height: 7,
-                          decoration: BoxDecoration(
-                            color: AppColors.textMuted,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      ),
-                    );
-                  }),
-                );
-              },
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-// ── Input bar ─────────────────────────────────────────────────────────────────
+// ── Recording badge ───────────────────────────────────────────────────────────
 
-class _InputBar extends StatelessWidget {
-  const _InputBar({
+class _RecordingBadge extends StatefulWidget {
+  const _RecordingBadge();
+
+  @override
+  State<_RecordingBadge> createState() => _RecordingBadgeState();
+}
+
+class _RecordingBadgeState extends State<_RecordingBadge>
+    with TickerProviderStateMixin {
+  late AnimationController _dotCtrl;
+  late AnimationController _waveCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _dotCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    )..repeat(reverse: true);
+    _waveCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 420),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _dotCtrl.dispose();
+    _waveCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(50),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedBuilder(
+                animation: _dotCtrl,
+                builder: (_, __) => Opacity(
+                  opacity: 0.3 + 0.7 * _dotCtrl.value,
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              AnimatedBuilder(
+                animation: _waveCtrl,
+                builder: (_, __) => Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: List.generate(4, (i) {
+                    final phase = (_waveCtrl.value + i * 0.238) % 1.0;
+                    final height = 4.0 + 10.0 * phase;
+                    return Container(
+                      width: 3,
+                      height: height,
+                      margin: EdgeInsets.only(right: i < 3 ? 2.0 : 0),
+                      decoration: BoxDecoration(
+                        color: AppColors.navy,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Text(
+                AssistantStrings.voiceListening,
+                style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Chat input bar ────────────────────────────────────────────────────────────
+
+class _ChatInputBar extends StatefulWidget {
+  const _ChatInputBar({
     required this.controller,
     required this.loading,
     required this.onSend,
+    required this.onRecordingChanged,
   });
 
   final TextEditingController controller;
   final bool loading;
   final VoidCallback onSend;
+  final void Function(bool) onRecordingChanged;
+
+  @override
+  State<_ChatInputBar> createState() => _ChatInputBarState();
+}
+
+class _ChatInputBarState extends State<_ChatInputBar> {
+  final SpeechToText _speech = SpeechToText();
+  bool _speechAvail = false;
+  bool _listening = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _speech
+        .initialize(
+          onStatus: _onStatus,
+          onError: (_) {
+            if (mounted) _setListening(false);
+          },
+        )
+        .then((ok) {
+      if (mounted) setState(() => _speechAvail = ok);
+    });
+    widget.controller.addListener(_onControllerChanged);
+  }
+
+  void _onControllerChanged() => setState(() {});
+
+  void _onStatus(String status) {
+    if (status == 'done' || status == 'notListening') {
+      _setListening(false);
+    }
+  }
+
+  void _setListening(bool value) {
+    if (!mounted) return;
+    setState(() => _listening = value);
+    widget.onRecordingChanged(value);
+  }
+
+  @override
+  void dispose() {
+    _speech.stop();
+    widget.controller.removeListener(_onControllerChanged);
+    super.dispose();
+  }
+
+  void _startListening() {
+    if (!_speechAvail || _listening) return;
+    _speech.listen(
+      onResult: (r) {
+        final words = r.recognizedWords;
+        widget.controller.text = words;
+        widget.controller.selection =
+            TextSelection.fromPosition(TextPosition(offset: words.length));
+        if (r.finalResult) _setListening(false);
+      },
+      pauseFor: const Duration(seconds: 3),
+    );
+    _setListening(true);
+  }
+
+  Future<void> _stopListening() async {
+    await _speech.stop();
+    _setListening(false);
+  }
 
   @override
   Widget build(BuildContext context) {
     final lc = Theme.of(context).extension<LeapfrogColors>()!;
+    final textEmpty = widget.controller.text.isEmpty;
+    final sendEnabled = !textEmpty && !widget.loading;
+    final borderColor = _listening ? Colors.red : lc.borderDefault;
+
     return Container(
       color: lc.cardSurface,
       padding: EdgeInsets.only(
-        left: 16,
-        right: 8,
-        top: 8,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 8,
+        left: 12,
+        right: 12,
+        top: 4,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 4,
       ),
       child: SafeArea(
         top: false,
@@ -647,59 +957,80 @@ class _InputBar extends StatelessWidget {
           children: [
             Expanded(
               child: TextField(
-                controller: controller,
-                enabled: !loading,
+                controller: widget.controller,
+                readOnly: _listening,
+                enabled: !widget.loading,
                 textCapitalization: TextCapitalization.sentences,
                 maxLines: 4,
                 minLines: 1,
                 decoration: InputDecoration(
-                  hintText: AssistantStrings.inputHint,
+                  hintText: _listening
+                      ? AssistantStrings.voiceListening
+                      : AssistantStrings.inputHint,
                   hintStyle:
                       const TextStyle(color: AppColors.textMuted, fontSize: 14),
                   filled: true,
                   fillColor: lc.canvas,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(22),
-                    borderSide: BorderSide(color: lc.borderDefault),
+                    borderRadius: BorderRadius.circular(40),
+                    borderSide: BorderSide(color: borderColor),
                   ),
                   enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(22),
-                    borderSide: BorderSide(color: lc.borderDefault),
+                    borderRadius: BorderRadius.circular(40),
+                    borderSide: BorderSide(color: borderColor),
                   ),
                   focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(22),
-                    borderSide: const BorderSide(color: AppColors.navy),
+                    borderRadius: BorderRadius.circular(40),
+                    borderSide: BorderSide(
+                      color: _listening ? Colors.red : AppColors.navy,
+                    ),
                   ),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 10,
                   ),
                 ),
-                onSubmitted: (_) => onSend(),
+                onSubmitted: (_) => widget.onSend(),
               ),
             ),
             const SizedBox(width: 8),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              child: loading
-                  ? const SizedBox(
-                      width: 44,
-                      height: 44,
-                      child: Padding(
-                        padding: EdgeInsets.all(10),
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    )
-                  : IconButton(
-                      icon: const Icon(Icons.send_rounded),
-                      color: AppColors.navy,
-                      onPressed: onSend,
-                      style: IconButton.styleFrom(
-                        backgroundColor: AppColors.navy,
-                        foregroundColor: Colors.white,
-                        fixedSize: const Size(44, 44),
-                      ),
-                    ),
+            // Mic — always visible when STT available
+            if (_speechAvail)
+              GestureDetector(
+                onTap: _listening ? _stopListening : _startListening,
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: _listening ? Colors.red : AppColors.navy,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _listening ? Icons.stop_rounded : Icons.mic_none_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+              ),
+            const SizedBox(width: 8),
+            // Send
+            GestureDetector(
+              onTap: sendEnabled ? widget.onSend : null,
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: sendEnabled
+                      ? AppColors.navy
+                      : AppColors.textMuted.withAlpha(38),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.send_rounded,
+                  color: sendEnabled ? Colors.white : AppColors.textMuted,
+                  size: 20,
+                ),
+              ),
             ),
           ],
         ),
@@ -739,7 +1070,7 @@ class _ErrorBanner extends StatelessWidget {
             onPressed: onRetry,
             child: Text(
               AssistantStrings.retryLabel,
-              style: TextStyle(
+              style: const TextStyle(
                 color: AppColors.slaOverdueText,
                 fontWeight: FontWeight.w600,
               ),
