@@ -123,8 +123,10 @@ class _CoachingTabState extends State<_CoachingTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (priorities.isNotEmpty) ...[
-            _MorningCard(module: priorities.first),
+          if (modules.isNotEmpty) ...[
+            _MorningCard(
+              module: priorities.isNotEmpty ? priorities.first : modules.first,
+            ),
             const SizedBox(height: 20),
           ],
           const _SectionHeader(label: 'Refreshers'),
