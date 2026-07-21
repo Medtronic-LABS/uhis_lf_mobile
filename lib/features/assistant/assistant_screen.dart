@@ -1,8 +1,6 @@
-/// AI Assistant tab — Tab 3 of the main shell.
-///
-/// Two sub-tabs:
-///   1. "Ask AI"  — conversational Q&A backed by [AssistantRepository].
-///   2. "Training" — micro-coaching modules (Learn → Apply → Measure loop).
+/// Assistant tab — Personalised Coaching hub (Coaching + Leaderboard tabs)
+/// with floating AI Coach chat button.
+/// Built fresh — no imports from training_screen.dart.
 library;
 
 import 'dart:async';
@@ -16,18 +14,31 @@ import '../../core/constants/app_strings.dart';
 import '../../core/db/app_database.dart';
 import '../../core/debug/console_log.dart';
 import '../../core/theme/app_theme.dart';
+import '../training/all_modules_screen.dart';
 import '../training/coaching_dao.dart';
+import '../training/coaching_models.dart';
 import '../training/coaching_repository.dart';
-import '../training/training_screen.dart';
+import '../training/module_detail_screen.dart';
+import '../training/quiz_screen.dart';
 import 'assistant_models.dart';
 import 'assistant_repository.dart';
 
-String _formatTime(DateTime ts) =>
+// ─── Palette ──────────────────────────────────────────────────────────────────
+
+const _kSpiceBlue = Color(0xFF2514BE);
+const _kSpiceBlueDark = Color(0xFF1A0EA0);
+const _kSpiceBlueContainer = Color(0xFFE8F0FE);
+const _kMetaGray = Color(0xFF6B7280);
+const _kNavy = Color(0xFF1B2B5E);
+const _kGold = Color(0xFFFFC107);
+const _kSilver = Color(0xFFBDBDBD);
+const _kBronze = Color(0xFFCD7F32);
+const _kUserBlue = Color(0xFF1565C0);
+
+String _fmt(DateTime ts) =>
     '${ts.hour.toString().padLeft(2, '0')}:${ts.minute.toString().padLeft(2, '0')}';
 
-// SDK-matched SpiceBlue for AI Coach branding
-const _kSpiceBlue = Color(0xFF2514BE);
-const _kUserBubbleBlue = Color(0xFF1565C0);
+// ─── AssistantScreen ──────────────────────────────────────────────────────────
 
 class AssistantScreen extends StatelessWidget {
   const AssistantScreen({super.key});
@@ -37,90 +48,728 @@ class AssistantScreen extends StatelessWidget {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
+        backgroundColor: Colors.white,
         appBar: AppBar(
           backgroundColor: _kSpiceBlue,
           foregroundColor: Colors.white,
-          title: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: const BoxDecoration(
-                  color: Colors.white24,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.auto_awesome_rounded, size: 18, color: Colors.white),
-              ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    AssistantStrings.title,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                  Row(
-                    children: [
-                      Container(
-                        width: 7,
-                        height: 7,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF4CAF50),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      const Text('Online', style: TextStyle(fontSize: 11, color: Colors.white70)),
-                    ],
-                  ),
-                ],
-              ),
-            ],
-          ),
           elevation: 0,
+          title: const Text(
+            'Personalised Coaching',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+          ),
           bottom: const TabBar(
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white60,
             indicatorColor: Colors.white,
             indicatorWeight: 2.5,
-            labelStyle: TextStyle(
-              fontFamily: AppFonts.body,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
-            unselectedLabelStyle: TextStyle(
-              fontFamily: AppFonts.body,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-            ),
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white60,
+            labelStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            unselectedLabelStyle: TextStyle(fontSize: 14),
             tabs: [
-              Tab(icon: Icon(Icons.chat_outlined, size: 18), text: AssistantStrings.tabAsk),
-              Tab(icon: Icon(Icons.school_outlined, size: 18), text: AssistantStrings.tabTraining),
+              Tab(text: 'Coaching'),
+              Tab(text: 'Leaderboard'),
             ],
           ),
         ),
         body: const TabBarView(
           children: [
-            _ChatTab(),
-            TrainingBody(),
+            _CoachingTab(),
+            _LeaderboardTab(),
           ],
+        ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const _AiChatScreen()),
+          ),
+          backgroundColor: _kSpiceBlue,
+          foregroundColor: Colors.white,
+          child: const Icon(Icons.chat_bubble_rounded),
         ),
       ),
     );
   }
 }
 
-// ── Chat tab ──────────────────────────────────────────────────────────────────
+// ─── Coaching tab ─────────────────────────────────────────────────────────────
 
-class _ChatTab extends StatefulWidget {
-  const _ChatTab();
+class _CoachingTab extends StatefulWidget {
+  const _CoachingTab();
 
   @override
-  State<_ChatTab> createState() => _ChatTabState();
+  State<_CoachingTab> createState() => _CoachingTabState();
 }
 
-class _ChatTabState extends State<_ChatTab> {
+class _CoachingTabState extends State<_CoachingTab> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<CoachingRepository>().refresh();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = context.watch<CoachingRepository>();
+    final modules = repo.modules;
+    final priorities = repo.todaysPriorities;
+
+    if (repo.isSyncing && modules.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (priorities.isNotEmpty) ...[
+            _MorningCard(module: priorities.first),
+            const SizedBox(height: 20),
+          ],
+          const _SectionHeader(label: 'Refreshers'),
+          const SizedBox(height: 8),
+          const _EmptyState(msg: 'No refreshers yet.'),
+          const SizedBox(height: 20),
+          _TrainingHeader(modules: modules),
+          const SizedBox(height: 10),
+          _TrainingScroll(modules: modules),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Morning card ─────────────────────────────────────────────────────────────
+
+class _MorningCard extends StatelessWidget {
+  const _MorningCard({required this.module});
+
+  final CoachingModule module;
+
+  String get _questionText {
+    if (module.quiz.isNotEmpty) {
+      final q = module.quiz.first;
+      return q.questionBn.isNotEmpty ? q.questionBn : q.questionEn;
+    }
+    return module.titleBn.isNotEmpty ? module.titleBn : module.titleEn;
+  }
+
+  void _onTap(BuildContext context) {
+    if (module.quiz.isNotEmpty) {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => QuizScreen(module: module)),
+      );
+    } else {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => ModuleDetailScreen(module: module)),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [_kSpiceBlue, _kSpiceBlueDark],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'MICRO-COACHING',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Colors.white70,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            _questionText,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              height: 1.4,
+            ),
+            maxLines: 4,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 18),
+          OutlinedButton(
+            onPressed: () => _onTap(context),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.white,
+              side: const BorderSide(color: Colors.white60, width: 1.5),
+              shape: const StadiumBorder(),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+            ),
+            child: const Text(
+              'Tap to answer',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Training section ─────────────────────────────────────────────────────────
+
+class _TrainingHeader extends StatelessWidget {
+  const _TrainingHeader({required this.modules});
+
+  final List<CoachingModule> modules;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        const Text(
+          'Training',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
+        ),
+        const Spacer(),
+        TextButton(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => AllModulesScreen(modules: modules)),
+          ),
+          child: const Text(
+            'See all',
+            style: TextStyle(color: _kSpiceBlue, fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TrainingScroll extends StatelessWidget {
+  const _TrainingScroll({required this.modules});
+
+  final List<CoachingModule> modules;
+
+  @override
+  Widget build(BuildContext context) {
+    if (modules.isEmpty) {
+      return const _EmptyState(msg: 'No modules yet.');
+    }
+    return SizedBox(
+      height: 215,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.zero,
+        itemCount: modules.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 12),
+        itemBuilder: (ctx, i) => _ModuleCard(module: modules[i]),
+      ),
+    );
+  }
+}
+
+class _ModuleCard extends StatelessWidget {
+  const _ModuleCard({required this.module});
+
+  final CoachingModule module;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = module.titleBn.isNotEmpty ? module.titleBn : module.titleEn;
+    final meta = '${module.estimatedMinutes} min · ${module.quiz.length} questions';
+    final pct = '${(module.progressFraction * 100).toInt()}%';
+
+    return GestureDetector(
+      onTap: () {
+        if (module.isLocked) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(TrainingStrings.lockedSnackbar),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => ModuleDetailScreen(module: module)),
+        );
+      },
+      child: Opacity(
+        opacity: module.isLocked ? 0.6 : 1.0,
+        child: SizedBox(
+          width: 170,
+          child: Card(
+            elevation: 1,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            color: Colors.white,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                  child: Container(
+                    height: 100,
+                    width: double.infinity,
+                    color: _kSpiceBlueContainer,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                          height: 1.3,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(meta, style: const TextStyle(fontSize: 11, color: _kMetaGray)),
+                      const SizedBox(height: 8),
+                      LinearProgressIndicator(
+                        value: module.progressFraction.clamp(0.0, 1.0),
+                        color: _kUserBlue,
+                        backgroundColor: _kSpiceBlueContainer,
+                        minHeight: 3,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(pct, style: const TextStyle(fontSize: 11, color: _kMetaGray)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Shared helpers ───────────────────────────────────────────────────────────
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({required this.msg});
+
+  final String msg;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 80,
+      child: Center(
+        child: Text(msg, style: const TextStyle(color: _kMetaGray, fontSize: 14)),
+      ),
+    );
+  }
+}
+
+// ─── Leaderboard tab ──────────────────────────────────────────────────────────
+
+class _LeaderboardTab extends StatefulWidget {
+  const _LeaderboardTab();
+
+  @override
+  State<_LeaderboardTab> createState() => _LeaderboardTabState();
+}
+
+class _LeaderboardTabState extends State<_LeaderboardTab> {
+  int _filterIdx = 0;
+
+  static const _filters = ['All Time', 'This Month', 'This Week'];
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = MockCoachingData.leaderboard;
+    final top3 = entries.where((e) => e.rank <= 3).toList()
+      ..sort((a, b) => a.rank.compareTo(b.rank));
+    final rest = entries.where((e) => e.rank > 3 && !e.isCurrentUser).toList()
+      ..sort((a, b) => a.rank.compareTo(b.rank));
+    final me = entries.firstWhere(
+      (e) => e.isCurrentUser,
+      orElse: () => entries.last,
+    );
+
+    return Column(
+      children: [
+        // Filter chips
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Row(
+            children: List.generate(_filters.length, (i) {
+              final selected = i == _filterIdx;
+              return Padding(
+                padding: EdgeInsets.only(right: i < _filters.length - 1 ? 8 : 0),
+                child: GestureDetector(
+                  onTap: () => setState(() => _filterIdx = i),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: selected ? _kSpiceBlue : Colors.transparent,
+                      borderRadius: BorderRadius.circular(24),
+                      border: selected ? null : Border.all(color: const Color(0xFFE4E7EC)),
+                    ),
+                    child: Text(
+                      _filters[i],
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: selected ? Colors.white : Colors.black54,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ),
+
+        // Context row
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          child: Row(
+            children: [
+              Text('Dhamrai Upazila · 28 SKs',
+                  style: const TextStyle(fontSize: 12, color: _kMetaGray)),
+              const Spacer(),
+              Text('Updated 12:00', style: const TextStyle(fontSize: 12, color: _kMetaGray)),
+            ],
+          ),
+        ),
+
+        // Podium
+        if (top3.isNotEmpty) _Podium(top3: top3),
+
+        // List
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            itemCount: rest.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 8),
+            itemBuilder: (_, i) => _LeaderRow(entry: rest[i], isYou: false),
+          ),
+        ),
+
+        // Pinned You
+        _YouRow(entry: me),
+      ],
+    );
+  }
+}
+
+// ─── Podium ───────────────────────────────────────────────────────────────────
+
+class _Podium extends StatelessWidget {
+  const _Podium({required this.top3});
+
+  final List<LeaderboardEntry> top3;
+
+  @override
+  Widget build(BuildContext context) {
+    final rank1 = top3.firstWhere((e) => e.rank == 1, orElse: () => top3[0]);
+    final rank2 = top3.firstWhere((e) => e.rank == 2, orElse: () => top3[0]);
+    final rank3 = top3.length >= 3
+        ? top3.firstWhere((e) => e.rank == 3, orElse: () => top3.last)
+        : null;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(child: _PodiumCard(entry: rank2, badgeColor: _kSilver, avatarRadius: 26)),
+          const SizedBox(width: 8),
+          Expanded(child: _PodiumCard(entry: rank1, badgeColor: _kGold, avatarRadius: 32)),
+          const SizedBox(width: 8),
+          if (rank3 != null)
+            Expanded(child: _PodiumCard(entry: rank3, badgeColor: _kBronze, avatarRadius: 26))
+          else
+            const Expanded(child: SizedBox()),
+        ],
+      ),
+    );
+  }
+}
+
+class _PodiumCard extends StatelessWidget {
+  const _PodiumCard({
+    required this.entry,
+    required this.badgeColor,
+    required this.avatarRadius,
+  });
+
+  final LeaderboardEntry entry;
+  final Color badgeColor;
+  final double avatarRadius;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.topCenter,
+      children: [
+        Container(
+          margin: const EdgeInsets.only(top: 14),
+          padding: const EdgeInsets.fromLTRB(8, 20, 8, 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: const [
+              BoxShadow(color: Color(0x12000000), blurRadius: 6, offset: Offset(0, 2)),
+            ],
+          ),
+          child: Column(
+            children: [
+              CircleAvatar(
+                radius: avatarRadius,
+                backgroundColor: _kSpiceBlueContainer,
+                child: Text(
+                  entry.initials,
+                  style: TextStyle(
+                    fontSize: avatarRadius * 0.45,
+                    fontWeight: FontWeight.bold,
+                    color: _kSpiceBlue,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                entry.name,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${entry.points} XP',
+                style: const TextStyle(fontSize: 11, color: _kMetaGray),
+              ),
+              if (entry.streakDays > 0) ...[
+                const SizedBox(height: 2),
+                Text(
+                  '🔥 ${entry.streakDays}d',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ],
+          ),
+        ),
+        CircleAvatar(
+          radius: 14,
+          backgroundColor: badgeColor,
+          child: Text(
+            '${entry.rank}',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Leader row ───────────────────────────────────────────────────────────────
+
+class _LeaderRow extends StatelessWidget {
+  const _LeaderRow({required this.entry, required this.isYou});
+
+  final LeaderboardEntry entry;
+  final bool isYou;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: isYou ? _kNavy : Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: isYou
+            ? null
+            : const [BoxShadow(color: Color(0x0A000000), blurRadius: 4, offset: Offset(0, 1))],
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 28,
+            child: Text(
+              '${entry.rank}',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                color: isYou ? Colors.white : Colors.black87,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: isYou ? Colors.white24 : _kSpiceBlueContainer,
+            child: Text(
+              entry.initials,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: isYou ? Colors.white : _kSpiceBlue,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isYou && entry.isCurrentUser ? 'You' : entry.name,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: isYou ? Colors.white : Colors.black87,
+                  ),
+                ),
+                if (entry.streakDays > 0)
+                  Text(
+                    '🔥 ${entry.streakDays}d',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isYou ? Colors.white70 : _kMetaGray,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: isYou ? Colors.white24 : _kSpiceBlueContainer,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              '${entry.points} XP',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isYou ? Colors.white : _kSpiceBlue,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _YouRow extends StatelessWidget {
+  const _YouRow({required this.entry});
+
+  final LeaderboardEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        bottom: MediaQuery.of(context).padding.bottom + 12,
+        top: 8,
+      ),
+      child: _LeaderRow(entry: entry, isYou: true),
+    );
+  }
+}
+
+// ─── AI Chat screen ───────────────────────────────────────────────────────────
+
+class _AiChatScreen extends StatelessWidget {
+  const _AiChatScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: _kSpiceBlue,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: const BoxDecoration(color: Colors.white24, shape: BoxShape.circle),
+              child: const Icon(Icons.auto_awesome_rounded, size: 18, color: Colors.white),
+            ),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('AI Coach', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                Row(
+                  children: [
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF4CAF50),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Text('Online', style: TextStyle(fontSize: 11, color: Colors.white70)),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      body: const _ChatBody(),
+    );
+  }
+}
+
+// ─── Chat body ────────────────────────────────────────────────────────────────
+
+class _ChatBody extends StatefulWidget {
+  const _ChatBody();
+
+  @override
+  State<_ChatBody> createState() => _ChatBodyState();
+}
+
+class _ChatBodyState extends State<_ChatBody> {
   final List<ChatMessage> _messages = [];
   final TextEditingController _input = TextEditingController();
   final ScrollController _scroll = ScrollController();
@@ -183,7 +832,6 @@ class _ChatTabState extends State<_ChatTab> {
 
   @override
   void dispose() {
-    debugPrint('[_ChatTabState] dispose');
     _streamTimer?.cancel();
     _input.dispose();
     _scroll.dispose();
@@ -224,6 +872,7 @@ class _ChatTabState extends State<_ChatTab> {
       _loading = true;
     });
     _scrollToBottom();
+    final repo = context.read<AssistantRepository>();
 
     try {
       await _dao.insertMessage(
@@ -235,8 +884,6 @@ class _ChatTabState extends State<_ChatTab> {
     } catch (e) {
       ConsoleLog.warn('[PayloadDebug] coaching-chat persist user msg failed: $e');
     }
-
-    final repo = context.read<AssistantRepository>();
     try {
       final answer = await repo.ask(q);
       if (!mounted) return;
@@ -395,7 +1042,7 @@ class _ChatTabState extends State<_ChatTab> {
   }
 }
 
-// ── Avatar ────────────────────────────────────────────────────────────────────
+// ─── Avatar ───────────────────────────────────────────────────────────────────
 
 class _Avatar extends StatelessWidget {
   const _Avatar();
@@ -405,16 +1052,13 @@ class _Avatar extends StatelessWidget {
     return Container(
       width: 32,
       height: 32,
-      decoration: const BoxDecoration(
-        color: _kSpiceBlue,
-        shape: BoxShape.circle,
-      ),
+      decoration: const BoxDecoration(color: _kSpiceBlue, shape: BoxShape.circle),
       child: const Icon(Icons.auto_awesome_rounded, size: 18, color: Colors.white),
     );
   }
 }
 
-// ── Today pill ────────────────────────────────────────────────────────────────
+// ─── Today pill ───────────────────────────────────────────────────────────────
 
 class _TodayPill extends StatelessWidget {
   const _TodayPill();
@@ -440,7 +1084,7 @@ class _TodayPill extends StatelessWidget {
   }
 }
 
-// ── Assistant bubble ──────────────────────────────────────────────────────────
+// ─── Assistant bubble ─────────────────────────────────────────────────────────
 
 class _AssistantBubble extends StatelessWidget {
   const _AssistantBubble({required this.text, required this.timestamp});
@@ -495,15 +1139,12 @@ class _AssistantBubble extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(top: 4, left: 4),
                     child: Text(
-                      _formatTime(timestamp!),
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textMuted,
-                      ),
+                      _fmt(timestamp!),
+                      style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
                     ),
                   ),
                   const SizedBox(height: 2),
-                  _MessageActions(),
+                  const _MessageActions(),
                 ],
               ],
             ),
@@ -514,7 +1155,7 @@ class _AssistantBubble extends StatelessWidget {
   }
 }
 
-// ── User bubble ───────────────────────────────────────────────────────────────
+// ─── User bubble ──────────────────────────────────────────────────────────────
 
 class _UserBubble extends StatelessWidget {
   const _UserBubble({required this.text, required this.timestamp});
@@ -529,43 +1170,41 @@ class _UserBubble extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Container(
-                  constraints: const BoxConstraints(maxWidth: 280),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: _kUserBubbleBlue,
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(16),
-                      topRight: Radius.circular(4),
-                      bottomLeft: Radius.circular(16),
-                      bottomRight: Radius.circular(16),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Container(
+                constraints: const BoxConstraints(maxWidth: 240),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: _kUserBlue,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(4),
+                    bottomLeft: Radius.circular(16),
+                    bottomRight: Radius.circular(16),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withAlpha(26),
+                      blurRadius: 2,
+                      offset: const Offset(0, 1),
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withAlpha(26),
-                        blurRadius: 2,
-                        offset: const Offset(0, 1),
-                      ),
-                    ],
-                  ),
-                  child: Text(
-                    text,
-                    style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.5),
-                  ),
+                  ],
                 ),
-                Padding(
-                  padding: const EdgeInsets.only(top: 4, right: 4),
-                  child: Text(
-                    _formatTime(timestamp),
-                    style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-                  ),
+                child: Text(
+                  text,
+                  style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.5),
                 ),
-              ],
-            ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 4, right: 4),
+                child: Text(
+                  _fmt(timestamp),
+                  style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -573,7 +1212,37 @@ class _UserBubble extends StatelessWidget {
   }
 }
 
-// ── Streaming bubble ──────────────────────────────────────────────────────────
+// ─── Message actions ──────────────────────────────────────────────────────────
+
+class _MessageActions extends StatelessWidget {
+  const _MessageActions();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: const [
+        _ActionBtn(icon: Icons.volume_up_rounded),
+        SizedBox(width: 4),
+        _ActionBtn(icon: Icons.thumb_up_alt_outlined),
+        SizedBox(width: 4),
+        _ActionBtn(icon: Icons.thumb_down_alt_outlined),
+      ],
+    );
+  }
+}
+
+class _ActionBtn extends StatelessWidget {
+  const _ActionBtn({required this.icon});
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Icon(icon, size: 16, color: AppColors.textMuted);
+  }
+}
+
+// ─── Streaming bubble ─────────────────────────────────────────────────────────
 
 class _StreamingBubble extends StatelessWidget {
   const _StreamingBubble({required this.text});
@@ -627,7 +1296,7 @@ class _StreamingBubble extends StatelessWidget {
   }
 }
 
-// ── Typing dots ───────────────────────────────────────────────────────────────
+// ─── Typing dots ──────────────────────────────────────────────────────────────
 
 class _TypingDots extends StatefulWidget {
   const _TypingDots();
@@ -636,17 +1305,14 @@ class _TypingDots extends StatefulWidget {
   State<_TypingDots> createState() => _TypingDotsState();
 }
 
-class _TypingDotsState extends State<_TypingDots>
-    with SingleTickerProviderStateMixin {
+class _TypingDotsState extends State<_TypingDots> with SingleTickerProviderStateMixin {
   late AnimationController _ctrl;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    )..repeat();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))
+      ..repeat();
   }
 
   @override
@@ -659,7 +1325,7 @@ class _TypingDotsState extends State<_TypingDots>
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _ctrl,
-      builder: (_, __) {
+      builder: (_, _) {
         final phase = _ctrl.value * 3;
         return Row(
           mainAxisSize: MainAxisSize.min,
@@ -685,41 +1351,7 @@ class _TypingDotsState extends State<_TypingDots>
   }
 }
 
-// ── Message action row (volume + thumbs) ─────────────────────────────────────
-
-class _MessageActions extends StatelessWidget {
-  const _MessageActions();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _ActionIcon(icon: Icons.volume_up_rounded, onTap: () {}),
-        const SizedBox(width: 4),
-        _ActionIcon(icon: Icons.thumb_up_alt_outlined, onTap: () {}),
-        const SizedBox(width: 4),
-        _ActionIcon(icon: Icons.thumb_down_alt_outlined, onTap: () {}),
-      ],
-    );
-  }
-}
-
-class _ActionIcon extends StatelessWidget {
-  const _ActionIcon({required this.icon, required this.onTap});
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Icon(icon, size: 16, color: AppColors.textMuted),
-    );
-  }
-}
-
-// ── Suggestion chip row ───────────────────────────────────────────────────────
+// ─── Suggestion chip row ──────────────────────────────────────────────────────
 
 class _SuggestionChipRow extends StatelessWidget {
   const _SuggestionChipRow({required this.chips, required this.onChipTap});
@@ -735,7 +1367,7 @@ class _SuggestionChipRow extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         itemCount: chips.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (_, i) => GestureDetector(
           onTap: () => onChipTap(chips[i]),
           child: Container(
@@ -746,11 +1378,7 @@ class _SuggestionChipRow extends StatelessWidget {
             ),
             child: Text(
               chips[i],
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.navy,
-                fontWeight: FontWeight.w500,
-              ),
+              style: const TextStyle(fontSize: 12, color: AppColors.navy, fontWeight: FontWeight.w500),
             ),
           ),
         ),
@@ -759,7 +1387,7 @@ class _SuggestionChipRow extends StatelessWidget {
   }
 }
 
-// ── Recording badge ───────────────────────────────────────────────────────────
+// ─── Recording badge ──────────────────────────────────────────────────────────
 
 class _RecordingBadge extends StatefulWidget {
   const _RecordingBadge();
@@ -768,22 +1396,17 @@ class _RecordingBadge extends StatefulWidget {
   State<_RecordingBadge> createState() => _RecordingBadgeState();
 }
 
-class _RecordingBadgeState extends State<_RecordingBadge>
-    with TickerProviderStateMixin {
+class _RecordingBadgeState extends State<_RecordingBadge> with TickerProviderStateMixin {
   late AnimationController _dotCtrl;
   late AnimationController _waveCtrl;
 
   @override
   void initState() {
     super.initState();
-    _dotCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 700),
-    )..repeat(reverse: true);
-    _waveCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 420),
-    )..repeat(reverse: true);
+    _dotCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 700))
+      ..repeat(reverse: true);
+    _waveCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 420))
+      ..repeat(reverse: true);
   }
 
   @override
@@ -800,31 +1423,25 @@ class _RecordingBadgeState extends State<_RecordingBadge>
       child: Center(
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(50),
-          ),
+          decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(50)),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               AnimatedBuilder(
                 animation: _dotCtrl,
-                builder: (_, __) => Opacity(
+                builder: (_, _) => Opacity(
                   opacity: 0.3 + 0.7 * _dotCtrl.value,
                   child: Container(
                     width: 8,
                     height: 8,
-                    decoration: const BoxDecoration(
-                      color: Colors.red,
-                      shape: BoxShape.circle,
-                    ),
+                    decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
                   ),
                 ),
               ),
               const SizedBox(width: 10),
               AnimatedBuilder(
                 animation: _waveCtrl,
-                builder: (_, __) => Row(
+                builder: (_, _) => Row(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: List.generate(4, (i) {
@@ -855,7 +1472,7 @@ class _RecordingBadgeState extends State<_RecordingBadge>
   }
 }
 
-// ── Chat input bar ────────────────────────────────────────────────────────────
+// ─── Chat input bar ───────────────────────────────────────────────────────────
 
 class _ChatInputBar extends StatefulWidget {
   const _ChatInputBar({
@@ -883,24 +1500,19 @@ class _ChatInputBarState extends State<_ChatInputBar> {
   void initState() {
     super.initState();
     _speech
-        .initialize(
-          onStatus: _onStatus,
-          onError: (_) {
-            if (mounted) _setListening(false);
-          },
-        )
+        .initialize(onStatus: _onStatus, onError: (_) {
+          if (mounted) _setListening(false);
+        })
         .then((ok) {
       if (mounted) setState(() => _speechAvail = ok);
     });
-    widget.controller.addListener(_onControllerChanged);
+    widget.controller.addListener(_onCtrlChanged);
   }
 
-  void _onControllerChanged() => setState(() {});
+  void _onCtrlChanged() => setState(() {});
 
   void _onStatus(String status) {
-    if (status == 'done' || status == 'notListening') {
-      _setListening(false);
-    }
+    if (status == 'done' || status == 'notListening') _setListening(false);
   }
 
   void _setListening(bool value) {
@@ -912,7 +1524,7 @@ class _ChatInputBarState extends State<_ChatInputBar> {
   @override
   void dispose() {
     _speech.stop();
-    widget.controller.removeListener(_onControllerChanged);
+    widget.controller.removeListener(_onCtrlChanged);
     super.dispose();
   }
 
@@ -926,7 +1538,7 @@ class _ChatInputBarState extends State<_ChatInputBar> {
             TextSelection.fromPosition(TextPosition(offset: words.length));
         if (r.finalResult) _setListening(false);
       },
-      pauseFor: const Duration(seconds: 3),
+      listenOptions: SpeechListenOptions(pauseFor: const Duration(seconds: 3)),
     );
     _setListening(true);
   }
@@ -967,8 +1579,7 @@ class _ChatInputBarState extends State<_ChatInputBar> {
                   hintText: _listening
                       ? AssistantStrings.voiceListening
                       : AssistantStrings.inputHint,
-                  hintStyle:
-                      const TextStyle(color: AppColors.textMuted, fontSize: 14),
+                  hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 14),
                   filled: true,
                   fillColor: lc.canvas,
                   border: OutlineInputBorder(
@@ -985,16 +1596,12 @@ class _ChatInputBarState extends State<_ChatInputBar> {
                       color: _listening ? Colors.red : AppColors.navy,
                     ),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 ),
                 onSubmitted: (_) => widget.onSend(),
               ),
             ),
             const SizedBox(width: 8),
-            // Mic — always visible when STT available
             if (_speechAvail)
               GestureDetector(
                 onTap: _listening ? _stopListening : _startListening,
@@ -1013,7 +1620,6 @@ class _ChatInputBarState extends State<_ChatInputBar> {
                 ),
               ),
             const SizedBox(width: 8),
-            // Send
             GestureDetector(
               onTap: sendEnabled ? widget.onSend : null,
               child: Container(
@@ -1039,7 +1645,7 @@ class _ChatInputBarState extends State<_ChatInputBar> {
   }
 }
 
-// ── Error banner ──────────────────────────────────────────────────────────────
+// ─── Error banner ─────────────────────────────────────────────────────────────
 
 class _ErrorBanner extends StatelessWidget {
   const _ErrorBanner({required this.message, required this.onRetry});
@@ -1054,16 +1660,12 @@ class _ErrorBanner extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
-          const Icon(Icons.error_outline_rounded,
-              size: 18, color: AppColors.slaOverdueText),
+          const Icon(Icons.error_outline_rounded, size: 18, color: AppColors.slaOverdueText),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.slaOverdueText,
-              ),
+              style: const TextStyle(fontSize: 13, color: AppColors.slaOverdueText),
             ),
           ),
           TextButton(
