@@ -4185,6 +4185,27 @@ abstract final class TrainingStrings {
   // Locked snackbar
   static const String lockedSnackbar =
       'Complete earlier lessons to unlock this one';
+
+  // SDK-matching strings
+  static const String personalisedCoaching = 'Personalised Coaching';
+  static const String lastSynced = 'Last synced';
+  static const String tabCoaching = 'Coaching';
+  static const String tabLeaderboard = 'Leaderboard';
+  static const String morningCardMicrocoaching = 'MICRO-COACHING';
+  static const String morningCardTapToAnswer = 'Tap to answer';
+  static const String refreshersSection = 'Refreshers';
+  static const String noRefreshersYet = 'No refreshers yet.';
+  static const String trainingSection = 'Training';
+  static const String seeAll = 'See all';
+  static const String allModulesTitle = 'All Modules';
+  static const String leaderboardFilterAllTime = 'All Time';
+  static const String leaderboardFilterThisMonth = 'This Month';
+  static const String leaderboardFilterThisWeek = 'This Week';
+  static const String leaderboardContext = 'Dhamrai Upazila · 28 SKs';
+  static const String leaderboardUpdated = 'Updated';
+  static const String xpSuffix = 'XP';
+  static const String streakDaySuffix = 'd';
+  static const String youLabel = 'You';
 }
 
 /// Micro-coaching pilot strings — three-loop system:

@@ -19,6 +19,7 @@ class LeaderboardEntry {
     required this.wardLabel,
     required this.videoCount,
     required this.points,
+    this.streakDays = 0,
     this.rankChange,
     this.isCurrentUser = false,
     this.weeklyRankChangeLabel,
@@ -30,6 +31,7 @@ class LeaderboardEntry {
   final String wardLabel;
   final int videoCount;
   final int points;
+  final int streakDays;
   /// Positive = moved up, negative = moved down, null = unchanged.
   final int? rankChange;
   final bool isCurrentUser;
@@ -151,40 +153,11 @@ abstract final class MockCoachingData {
   MockCoachingData._();
 
   static const List<LeaderboardEntry> leaderboard = [
-    LeaderboardEntry(
-      rank: 1,
-      initials: 'SR',
-      name: 'Sumaiya Rahman',
-      wardLabel: 'Ward 2',
-      videoCount: 18,
-      points: 980,
-    ),
-    LeaderboardEntry(
-      rank: 2,
-      initials: 'NK',
-      name: 'Nasima Khatun',
-      wardLabel: 'Ward 5',
-      videoCount: 15,
-      points: 845,
-    ),
-    LeaderboardEntry(
-      rank: 4,
-      initials: 'FB',
-      name: 'Fatema Begum',
-      wardLabel: 'Ward 4',
-      videoCount: 11,
-      points: 710,
-      isCurrentUser: true,
-      weeklyRankChangeLabel: '↑2 this week',
-    ),
-    LeaderboardEntry(
-      rank: 5,
-      initials: 'RB',
-      name: 'Roksana Begum',
-      wardLabel: 'Ward 1',
-      videoCount: 9,
-      points: 640,
-    ),
+    LeaderboardEntry(rank: 1, initials: 'FB', name: 'Fatema Begum', wardLabel: 'Dhamrai', videoCount: 18, points: 1840, streakDays: 14),
+    LeaderboardEntry(rank: 2, initials: 'NA', name: 'Nasrin Akter', wardLabel: 'Dhamrai', videoCount: 15, points: 1620, streakDays: 9),
+    LeaderboardEntry(rank: 3, initials: 'RK', name: 'Rahela Khanam', wardLabel: 'Dhamrai', videoCount: 12, points: 1410, streakDays: 7),
+    LeaderboardEntry(rank: 4, initials: 'SI', name: 'Sumaiya Islam', wardLabel: 'Dhamrai', videoCount: 9, points: 1190, streakDays: 5),
+    LeaderboardEntry(rank: 5, initials: 'SK', name: 'You', wardLabel: 'Dhamrai', videoCount: 11, points: 980, streakDays: 12, isCurrentUser: true),
   ];
 
   static const MonthlyStats monthlyStats = MonthlyStats(

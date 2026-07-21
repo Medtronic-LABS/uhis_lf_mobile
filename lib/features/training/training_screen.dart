@@ -1,15 +1,6 @@
-/// Training Hub — micro-coaching pilot (Learn loop).
-///
-/// Matches Screen 9 of apon_sushashthya_v10.html exactly:
-///   1. Leaderboard card (navy gradient #1B2B5E → #2d3f7a)
-///   2. Section label "TODAY'S LESSONS — BASED ON YOUR VISITS"
-///   3. Morning-prioritized module cards from [CoachingRepository]
-///   4. Monthly progress card (3 columns)
-///
-/// Engineering Design Standards:
-///   - UI watches [CoachingRepository]; sync lives in the repository layer.
-///   - All strings from [TrainingStrings] / [CoachingStrings].
-///   - Leaderboard / monthly stats remain mock until supervisor APIs land.
+/// Training screen — matches spice-coaching-android SDK layout exactly.
+/// SDK: PersonalisedCoachingScreen → two tabs (Coaching | Leaderboard).
+/// [TrainingBody] is kept public for use in assistant_screen.dart Training tab.
 library;
 
 import 'package:flutter/material.dart';
@@ -17,55 +8,110 @@ import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
 import '../../core/theme/app_theme.dart';
+import 'all_modules_screen.dart';
 import 'coaching_models.dart';
 import 'coaching_repository.dart';
 import 'module_detail_screen.dart';
+import 'quiz_screen.dart';
 
-// ─── Screen & body ────────────────────────────────────────────────────────────
+// ─── Palette ──────────────────────────────────────────────────────────────────
 
-class TrainingScreen extends StatelessWidget {
+const _kSpiceBlue = Color(0xFF2514BE);
+const _kSpiceBlueDark = Color(0xFF1A0EA0);
+const _kSpiceBlueContainer = Color(0xFFE8F0FE);
+const _kSpiceMid = Color(0xFF1565C0);
+const _kMetaTextColor = Color(0xFF6B7280);
+const _kGold = Color(0xFFFFC107);
+const _kSilver = Color(0xFFBDBDBD);
+const _kBronze = Color(0xFFCD7F32);
+const _kXpBg = Color(0xFFE8F0FE);
+const _kYouBg = Color(0xFF1B2B5E);
+const _kDividerColor = Color(0xFFE4E7EC);
+
+// ─── TrainingScreen ───────────────────────────────────────────────────────────
+
+class TrainingScreen extends StatefulWidget {
   const TrainingScreen({super.key});
+
+  @override
+  State<TrainingScreen> createState() => _TrainingScreenState();
+}
+
+class _TrainingScreenState extends State<TrainingScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tab = TabController(length: 2, vsync: this);
+
+  @override
+  void dispose() {
+    _tab.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.canvas,
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              TrainingStrings.title,
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-            ),
-            Text(
-              TrainingStrings.subtitle,
-              style: const TextStyle(fontSize: 11, color: Colors.white70),
-            ),
+        backgroundColor: _kSpiceBlue,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: const Text(
+          TrainingStrings.personalisedCoaching,
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.home_rounded),
+            onPressed: () => Navigator.of(context).popUntil((r) => r.isFirst),
+          ),
+        ],
+        bottom: TabBar(
+          controller: _tab,
+          indicatorColor: Colors.white,
+          indicatorWeight: 2.5,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white60,
+          labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          unselectedLabelStyle: const TextStyle(fontSize: 14),
+          tabs: const [
+            Tab(text: TrainingStrings.tabCoaching),
+            Tab(text: TrainingStrings.tabLeaderboard),
           ],
         ),
-        backgroundColor: AppColors.aiPurpleDark,
-        foregroundColor: Colors.white,
-        toolbarHeight: 60,
       ),
-      body: const TrainingBody(),
+      body: TabBarView(
+        controller: _tab,
+        children: const [
+          _CoachingContent(),
+          _LeaderboardContent(),
+        ],
+      ),
     );
   }
 }
 
-class TrainingBody extends StatefulWidget {
+// ─── TrainingBody (public — used by assistant_screen.dart) ────────────────────
+
+class TrainingBody extends StatelessWidget {
   const TrainingBody({super.key});
 
   @override
-  State<TrainingBody> createState() => _TrainingBodyState();
+  Widget build(BuildContext context) => const _CoachingContent();
 }
 
-class _TrainingBodyState extends State<TrainingBody> {
+// ─── Coaching tab content ─────────────────────────────────────────────────────
+
+class _CoachingContent extends StatefulWidget {
+  const _CoachingContent();
+
+  @override
+  State<_CoachingContent> createState() => _CoachingContentState();
+}
+
+class _CoachingContentState extends State<_CoachingContent> {
   @override
   void initState() {
     super.initState();
-    // Pull latest morning priorities when the SK opens Training (covers
-    // sessions that skipped /sync, e.g. biometric re-entry).
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       context.read<CoachingRepository>().refresh();
@@ -78,258 +124,305 @@ class _TrainingBodyState extends State<TrainingBody> {
     final modules = repo.modules;
     final priorities = repo.todaysPriorities;
 
+    if (repo.isSyncing && modules.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 32),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (repo.isSyncing && modules.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else ...[
-            // 1. Today's focus — morning priority modules
-            if (priorities.isNotEmpty) ...[
-              _SectionLabel(label: CoachingStrings.sectionMorningCards),
-              const SizedBox(height: 10),
-              ...priorities.map(
-                (m) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: _MorningModuleCard(module: m),
-                ),
-              ),
-              const SizedBox(height: 14),
-            ],
-
-            // 2. All modules grid
-            _SectionLabel(label: CoachingStrings.sectionAllModulesGrid),
-            const SizedBox(height: 10),
-            _ModuleGrid(modules: modules),
-            const SizedBox(height: 4),
+          // Morning quiz card
+          if (priorities.isNotEmpty) ...[
+            _SdkMorningCard(module: priorities.first),
+            const SizedBox(height: 20),
           ],
 
-          // 3. Monthly progress
-          const _MonthlyProgressCard(),
+          // Refreshers section
+          const _SectionHeader(label: TrainingStrings.refreshersSection),
+          const SizedBox(height: 8),
+          const _RefreshersEmpty(),
+          const SizedBox(height: 20),
+
+          // Training section
+          _TrainingSectionHeader(modules: modules),
+          const SizedBox(height: 10),
+          _TrainingHorizontalList(modules: modules),
+          const SizedBox(height: 16),
         ],
       ),
     );
   }
 }
 
-// ─── Morning module card (SDK: MorningCard) ───────────────────────────────────
-// Matches SDK MorningCard.kt exactly: horizontal tile, icon block, eyebrow,
-// title, Skip text button, Start filled pill.
+// ─── SDK Morning card ─────────────────────────────────────────────────────────
 
-class _MorningModuleCard extends StatelessWidget {
-  const _MorningModuleCard({required this.module});
+class _SdkMorningCard extends StatelessWidget {
+  const _SdkMorningCard({required this.module});
 
   final CoachingModule module;
 
-  static const _iconBg = Color(0xFFE8F0FE);
-  static const _navy = Color(0xFF1B2B5E);
-  static const _skipGray = Color(0xFF6B7280);
+  String get _displayText {
+    if (module.quiz.isNotEmpty) {
+      final q = module.quiz.first;
+      return q.questionBn.isNotEmpty ? q.questionBn : q.questionEn;
+    }
+    return module.titleBn.isNotEmpty ? module.titleBn : module.titleEn;
+  }
 
-  String _eyebrow() {
-    final hasCards = module.cards.isNotEmpty;
-    final hasQuiz = module.quiz.isNotEmpty;
-    if (hasCards && hasQuiz) return CoachingStrings.refresherTypeMicrocoaching;
-    if (hasCards) return CoachingStrings.refresherTypeLearningCard;
-    return CoachingStrings.refresherTypeQuiz;
+  void _onTap(BuildContext context) {
+    if (module.quiz.isNotEmpty) {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => QuizScreen(module: module)),
+      );
+    } else {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => ModuleDetailScreen(module: module)),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      elevation: 1,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            // Leading icon block
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: _iconBg,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(Icons.groups_outlined, color: _navy, size: 24),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [_kSpiceBlue, _kSpiceBlueDark],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            TrainingStrings.morningCardMicrocoaching,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Colors.white70,
+              letterSpacing: 1.2,
             ),
-            const SizedBox(width: 12),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            _displayText,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              height: 1.4,
+            ),
+            maxLines: 4,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 18),
+          OutlinedButton(
+            onPressed: () => _onTap(context),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.white,
+              side: const BorderSide(color: Colors.white60, width: 1.5),
+              shape: const StadiumBorder(),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+            ),
+            child: const Text(
+              TrainingStrings.morningCardTapToAnswer,
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-            // Eyebrow + title
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _eyebrow(),
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.4,
-                      color: _navy,
-                    ),
-                  ),
-                  Text(
-                    module.titleEn,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: _navy,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
+// ─── Refreshers empty ─────────────────────────────────────────────────────────
 
-            // Skip
-            TextButton(
-              onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Skipped'), duration: Duration(seconds: 1)),
-              ),
-              child: Text(
-                CoachingStrings.morningCardSkip,
-                style: const TextStyle(color: _skipGray, fontWeight: FontWeight.w500),
-              ),
-            ),
+class _RefreshersEmpty extends StatelessWidget {
+  const _RefreshersEmpty();
 
-            // Start
-            FilledButton(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => ModuleDetailScreen(module: module),
-                ),
-              ),
-              style: FilledButton.styleFrom(
-                backgroundColor: _navy,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-              ),
-              child: Text(
-                CoachingStrings.morningCardStart,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(
+      height: 80,
+      child: Center(
+        child: Text(
+          TrainingStrings.noRefreshersYet,
+          style: TextStyle(color: _kMetaTextColor, fontSize: 14),
         ),
       ),
     );
   }
 }
 
-// ─── 2-column module grid (SDK: AllModulesScreen) ─────────────────────────────
+// ─── Training section ─────────────────────────────────────────────────────────
 
-// SDK ModuleTile TRAINING variant — full-width horizontal row.
-// Layout: 56dp thumbnail | Column(title + subtitle) | 40dp CompletionRing
-const _kSpiceBlueContainer = Color(0xFFE8F0FE);
-const _kSpiceNavy = Color(0xFF1B2B5E);
-const _kSpiceBlueDark = Color(0xFF1565C0);
-const _kMetaTextColor = Color(0xFF6B7280);
-
-class _ModuleGrid extends StatelessWidget {
-  const _ModuleGrid({required this.modules});
+class _TrainingSectionHeader extends StatelessWidget {
+  const _TrainingSectionHeader({required this.modules});
 
   final List<CoachingModule> modules;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: modules
-          .map(
-            (m) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _ModuleTile(module: m),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        const Text(
+          TrainingStrings.trainingSection,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
+        const Spacer(),
+        TextButton(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => AllModulesScreen(modules: modules),
             ),
-          )
-          .toList(),
+          ),
+          child: const Text(
+            TrainingStrings.seeAll,
+            style: TextStyle(color: _kSpiceBlue, fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
     );
   }
 }
 
-class _ModuleTile extends StatelessWidget {
-  const _ModuleTile({required this.module});
+class _TrainingHorizontalList extends StatelessWidget {
+  const _TrainingHorizontalList({required this.modules});
 
-  final CoachingModule module;
-
-  void _onTap(BuildContext context) {
-    if (module.isLocked) {
-      _showLockedSnackbar(context);
-      return;
-    }
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => ModuleDetailScreen(module: module)),
-    );
-  }
+  final List<CoachingModule> modules;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final subtitle =
+    if (modules.isEmpty) {
+      return const SizedBox(
+        height: 60,
+        child: Center(
+          child: Text(
+            'No modules yet.',
+            style: TextStyle(color: _kMetaTextColor),
+          ),
+        ),
+      );
+    }
+    return SizedBox(
+      height: 215,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.zero,
+        itemCount: modules.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (ctx, i) => _TrainingModuleCard(module: modules[i]),
+      ),
+    );
+  }
+}
+
+class _TrainingModuleCard extends StatelessWidget {
+  const _TrainingModuleCard({required this.module});
+
+  final CoachingModule module;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = module.titleBn.isNotEmpty ? module.titleBn : module.titleEn;
+    final meta =
         '${module.estimatedMinutes} ${CoachingStrings.minLabel} · '
         '${module.quiz.length} ${CoachingStrings.detailQuestions}';
+    final pct = '${(module.progressFraction * 100).toInt()}%';
 
-    return Opacity(
-      opacity: module.isLocked ? 0.6 : 1.0,
-      child: Card(
-        elevation: 1,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        color: Colors.white,
-        child: InkWell(
-          onTap: () => _onTap(context),
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+    return GestureDetector(
+      onTap: () {
+        if (module.isLocked) {
+          _showLockedSnackbar(context);
+          return;
+        }
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => ModuleDetailScreen(module: module),
+          ),
+        );
+      },
+      child: Opacity(
+        opacity: module.isLocked ? 0.6 : 1.0,
+        child: SizedBox(
+          width: 170,
+          child: Card(
+            elevation: 1,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            color: Colors.white,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 56dp thumbnail — SpiceBlueContainer fallback
+                // Thumbnail
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(12)),
                   child: Container(
-                    width: 56,
-                    height: 56,
+                    height: 100,
+                    width: double.infinity,
                     color: _kSpiceBlueContainer,
+                    alignment: Alignment.center,
                     child: module.isLocked
-                        ? const Icon(Icons.lock_rounded, color: _kSpiceBlueDark, size: 24)
+                        ? const Icon(Icons.lock_rounded, color: _kSpiceMid, size: 28)
                         : null,
                   ),
                 ),
-                const SizedBox(width: 12),
-
-                // Title + subtitle
-                Expanded(
+                // Body
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        module.titleEn,
-                        style: theme.textTheme.titleSmall?.copyWith(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 13,
                           fontWeight: FontWeight.bold,
-                          color: _kSpiceNavy,
+                          color: Colors.black87,
+                          height: 1.3,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 4),
                       Text(
-                        subtitle,
-                        style: theme.textTheme.bodySmall?.copyWith(color: _kMetaTextColor),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                        meta,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: _kMetaTextColor,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      LinearProgressIndicator(
+                        value: module.progressFraction.clamp(0.0, 1.0),
+                        color: _kSpiceBlue,
+                        backgroundColor: _kSpiceBlueContainer,
+                        minHeight: 3,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        pct,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: _kMetaTextColor,
+                        ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 12),
-
-                // 40dp completion ring
-                _CompletionRing(progress: module.progressFraction),
               ],
             ),
           ),
@@ -339,134 +432,258 @@ class _ModuleTile extends StatelessWidget {
   }
 }
 
-class _CompletionRing extends StatelessWidget {
-  const _CompletionRing({required this.progress});
+// ─── Leaderboard tab ──────────────────────────────────────────────────────────
 
-  final double progress;
+class _LeaderboardContent extends StatefulWidget {
+  const _LeaderboardContent();
 
   @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 40,
-      height: 40,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          CircularProgressIndicator(
-            value: progress.clamp(0.0, 1.0),
-            color: _kSpiceBlueDark,
-            backgroundColor: _kSpiceBlueContainer,
-            strokeWidth: 3,
-          ),
-          Text(
-            '${(progress * 100).toInt()}%',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: _kSpiceBlueDark,
-                  fontSize: 9,
-                ),
-          ),
-        ],
-      ),
-    );
-  }
+  State<_LeaderboardContent> createState() => _LeaderboardContentState();
 }
 
-// ─── Monthly progress card ────────────────────────────────────────────────────
+class _LeaderboardContentState extends State<_LeaderboardContent> {
+  int _filterIdx = 0;
 
-class _MonthlyProgressCard extends StatelessWidget {
-  const _MonthlyProgressCard();
+  static const _filterLabels = [
+    TrainingStrings.leaderboardFilterAllTime,
+    TrainingStrings.leaderboardFilterThisMonth,
+    TrainingStrings.leaderboardFilterThisWeek,
+  ];
 
   @override
   Widget build(BuildContext context) {
-    final stats = MockCoachingData.monthlyStats;
+    final entries = MockCoachingData.leaderboard;
+    final top3 = entries.where((e) => e.rank <= 3).toList()
+      ..sort((a, b) => a.rank.compareTo(b.rank));
+    final rest = entries
+        .where((e) => e.rank > 3 && !e.isCurrentUser)
+        .toList()
+      ..sort((a, b) => a.rank.compareTo(b.rank));
+    final me = entries.firstWhere(
+      (e) => e.isCurrentUser,
+      orElse: () => entries.last,
+    );
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0F000000),
-            blurRadius: 6,
-            offset: Offset(0, 1),
+    return Column(
+      children: [
+        // Filter chips
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Row(
+            children: List.generate(_filterLabels.length, (i) {
+              final selected = i == _filterIdx;
+              return Padding(
+                padding: EdgeInsets.only(
+                  right: i < _filterLabels.length - 1 ? 8 : 0,
+                ),
+                child: GestureDetector(
+                  onTap: () => setState(() => _filterIdx = i),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: selected ? _kSpiceBlue : Colors.transparent,
+                      borderRadius: BorderRadius.circular(24),
+                      border: selected
+                          ? null
+                          : Border.all(color: _kDividerColor),
+                    ),
+                    child: Text(
+                      _filterLabels[i],
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: selected ? Colors.white : Colors.black54,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
           ),
-        ],
-      ),
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            TrainingStrings.sectionMonthlyProgress,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
+        ),
+
+        // Context row
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          child: Row(
             children: [
-              Expanded(
-                child: _StatCell(
-                  value: '${stats.videosWatched}',
-                  label: TrainingStrings.statVideos,
-                  color: AppColors.aiPurple,
-                ),
+              Text(
+                TrainingStrings.leaderboardContext,
+                style: const TextStyle(fontSize: 12, color: _kMetaTextColor),
               ),
-              Expanded(
-                child: _StatCell(
-                  value: '${stats.pointsEarned}',
-                  label: TrainingStrings.statPoints,
-                  color: AppColors.pink,
-                ),
-              ),
-              Expanded(
-                child: _StatCell(
-                  value: '${stats.dayStreak}',
-                  label: TrainingStrings.statStreak,
-                  color: AppColors.statusSuccess,
-                ),
+              const Spacer(),
+              Text(
+                '${TrainingStrings.leaderboardUpdated} 12:00',
+                style: const TextStyle(fontSize: 12, color: _kMetaTextColor),
               ),
             ],
           ),
+        ),
+
+        // Podium
+        if (top3.isNotEmpty) _PodiumSection(top3: top3),
+
+        // Scrollable list (ranks > 3, not current user)
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            itemCount: rest.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (_, i) =>
+                _LeaderboardRow(entry: rest[i], isYou: false),
+          ),
+        ),
+
+        // Pinned "You" row
+        _YouRow(entry: me),
+      ],
+    );
+  }
+}
+
+class _PodiumSection extends StatelessWidget {
+  const _PodiumSection({required this.top3});
+
+  final List<LeaderboardEntry> top3;
+
+  @override
+  Widget build(BuildContext context) {
+    final rank1 = top3.firstWhere(
+      (e) => e.rank == 1,
+      orElse: () => top3.first,
+    );
+    final rank2 = top3.firstWhere(
+      (e) => e.rank == 2,
+      orElse: () => top3.first,
+    );
+    final rank3 = top3.length >= 3
+        ? top3.firstWhere((e) => e.rank == 3, orElse: () => top3.last)
+        : null;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: _PodiumCard(
+              entry: rank2,
+              badgeColor: _kSilver,
+              avatarRadius: 26,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _PodiumCard(
+              entry: rank1,
+              badgeColor: _kGold,
+              avatarRadius: 32,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: rank3 != null
+                ? _PodiumCard(
+                    entry: rank3,
+                    badgeColor: _kBronze,
+                    avatarRadius: 26,
+                  )
+                : const SizedBox(),
+          ),
         ],
       ),
     );
   }
 }
 
-class _StatCell extends StatelessWidget {
-  const _StatCell({
-    required this.value,
-    required this.label,
-    required this.color,
+class _PodiumCard extends StatelessWidget {
+  const _PodiumCard({
+    required this.entry,
+    required this.badgeColor,
+    required this.avatarRadius,
   });
 
-  final String value;
-  final String label;
-  final Color color;
+  final LeaderboardEntry entry;
+  final Color badgeColor;
+  final double avatarRadius;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return Stack(
+      alignment: Alignment.topCenter,
       children: [
-        Text(
-          value,
-          style: TextStyle(
-            color: color,
-            fontWeight: FontWeight.w900,
-            fontSize: 22,
+        Container(
+          margin: const EdgeInsets.only(top: 14),
+          padding: const EdgeInsets.fromLTRB(8, 20, 8, 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x12000000),
+                blurRadius: 6,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircleAvatar(
+                radius: avatarRadius,
+                backgroundColor: _kSpiceBlueContainer,
+                child: Text(
+                  entry.initials,
+                  style: TextStyle(
+                    fontSize: avatarRadius * 0.5,
+                    fontWeight: FontWeight.bold,
+                    color: _kSpiceBlue,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                entry.name,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${entry.points} ${TrainingStrings.xpSuffix}',
+                style: const TextStyle(fontSize: 11, color: _kMetaTextColor),
+              ),
+              if (entry.streakDays > 0) ...[
+                const SizedBox(height: 2),
+                Text(
+                  '🔥 ${entry.streakDays}${TrainingStrings.streakDaySuffix}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 10,
-            color: AppColors.textMuted,
+        // Rank badge
+        CircleAvatar(
+          radius: 14,
+          backgroundColor: badgeColor,
+          child: Text(
+            '${entry.rank}',
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+              color: Colors.white,
+            ),
           ),
         ),
       ],
@@ -474,10 +691,128 @@ class _StatCell extends StatelessWidget {
   }
 }
 
-// ─── Section label ────────────────────────────────────────────────────────────
+class _LeaderboardRow extends StatelessWidget {
+  const _LeaderboardRow({required this.entry, required this.isYou});
 
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel({required this.label});
+  final LeaderboardEntry entry;
+  final bool isYou;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: isYou ? _kYouBg : Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: isYou
+            ? null
+            : const [
+                BoxShadow(
+                  color: Color(0x0A000000),
+                  blurRadius: 4,
+                  offset: Offset(0, 1),
+                ),
+              ],
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 28,
+            child: Text(
+              '${entry.rank}',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                color: isYou ? Colors.white : Colors.black87,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          const SizedBox(width: 10),
+          CircleAvatar(
+            radius: 20,
+            backgroundColor:
+                isYou ? Colors.white24 : _kSpiceBlueContainer,
+            child: Text(
+              entry.initials,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: isYou ? Colors.white : _kSpiceBlue,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  entry.isCurrentUser
+                      ? TrainingStrings.youLabel
+                      : entry.name,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: isYou ? Colors.white : Colors.black87,
+                  ),
+                ),
+                if (entry.streakDays > 0)
+                  Text(
+                    '🔥 ${entry.streakDays}${TrainingStrings.streakDaySuffix}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isYou ? Colors.white70 : _kMetaTextColor,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: isYou ? Colors.white24 : _kXpBg,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              '${entry.points} ${TrainingStrings.xpSuffix}',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isYou ? Colors.white : _kSpiceBlue,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _YouRow extends StatelessWidget {
+  const _YouRow({required this.entry});
+
+  final LeaderboardEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        bottom: MediaQuery.of(context).padding.bottom + 12,
+        top: 8,
+      ),
+      child: _LeaderboardRow(entry: entry, isYou: true),
+    );
+  }
+}
+
+// ─── Section header ───────────────────────────────────────────────────────────
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.label});
 
   final String label;
 
@@ -486,10 +821,9 @@ class _SectionLabel extends StatelessWidget {
     return Text(
       label,
       style: const TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
-        color: AppColors.textMuted,
-        letterSpacing: 0.07 * 11,
+        fontSize: 16,
+        fontWeight: FontWeight.bold,
+        color: Colors.black87,
       ),
     );
   }
@@ -499,7 +833,7 @@ class _SectionLabel extends StatelessWidget {
 
 void _showLockedSnackbar(BuildContext context) {
   ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
+    const SnackBar(
       content: Text(TrainingStrings.lockedSnackbar),
       behavior: SnackBarBehavior.floating,
     ),
