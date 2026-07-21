@@ -22,9 +22,13 @@ class CoachingRepository extends ChangeNotifier {
   final CoachingTelemetryService _telemetry;
 
   List<CoachingModule> _modules = [];
+  List<String> _cachedFaqs = [];
   bool _syncing = false;
 
   List<CoachingModule> get modules => List.unmodifiable(_modules);
+
+  /// FAQ suggestion strings synced from the coaching backend, ordered by rank.
+  List<String> get cachedFaqs => List.unmodifiable(_cachedFaqs);
 
   /// Modules ranked for today (morning endpoint / gap fallback). Highest
   /// priority first — matches SQLite `ORDER BY priority_today DESC`.
@@ -88,7 +92,7 @@ class CoachingRepository extends ChangeNotifier {
       final gapsUrl =
           '$base${Endpoints.coachingSyncGaps}?chw_id=$userId&since=$since';
       final morningUrl =
-          '$base${Endpoints.coachingMorning}?chw_id=$userId';
+          '$base${Endpoints.coachingMorningCards}?chw_id=$userId';
 
       ConsoleLog.banner(
         '[PayloadDebug] coaching-sync\n'
@@ -110,8 +114,11 @@ class CoachingRepository extends ChangeNotifier {
         'morning=${morningRes.statusCode}',
       );
 
+      // Non-blocking: FAQ sync failures don't abort the main sync.
+      await syncChatFaqs(userId);
+
       final gapIds = <String>{};
-      final gaps = (gapsRes.data?['gaps'] as List<dynamic>?) ?? [];
+      final gaps = (gapsRes.data?['behavioural_gaps'] as List<dynamic>?) ?? [];
       for (final g in gaps) {
         if (g is! Map) continue;
         final mid = g['module_id'] ?? g['id'];
@@ -211,13 +218,56 @@ class CoachingRepository extends ChangeNotifier {
     }
   }
 
+  /// Fetches FAQ suggestions from the coaching backend and caches them in
+  /// memory. Failures are non-fatal — the starters fall back to hardcoded copy.
+  Future<void> syncChatFaqs(int userId) async {
+    try {
+      final base = AppConfig.coachingServiceUrl;
+      final url = '$base${Endpoints.coachingSyncChatFaqs}';
+      ConsoleLog.d('[PayloadDebug] coaching-faqs → $url');
+      final res = await _api.dio.get<Map<String, dynamic>>(url);
+      ConsoleLog.d('[PayloadDebug] coaching-faqs → ${res.statusCode}');
+      final faqs = (res.data?['faqs'] as List<dynamic>?) ?? [];
+      final questions = <String>[];
+      for (final faq in faqs) {
+        if (faq is! Map) continue;
+        final q = faq['question'];
+        final en = q is Map ? (q['en'] as String?) : null;
+        if (en != null && en.isNotEmpty) questions.add(en);
+      }
+      _cachedFaqs = questions;
+      notifyListeners();
+    } catch (e) {
+      ConsoleLog.warn('[PayloadDebug] coaching-faqs sync failed: $e');
+    }
+  }
+
   // ─── Parsing ──────────────────────────────────────────────────────────────
 
-  /// Extracts an ordered module-id list from a `/morning` response body.
-  /// Accepts `{modules|module_ids|priorities: [string|{module_id|id}]}`.
+  /// Extracts an ordered module-id list from a `/morning/cards` response body.
+  ///
+  /// Handles the canonical backend shape `{items: [{module_family_id, module_id, ...}]}`
+  /// as well as legacy shapes `{modules|module_ids|priorities: [...]}`.
   @visibleForTesting
   static List<String> parseMorningModuleIds(Map<String, dynamic>? data) {
     if (data == null) return const [];
+    // Canonical: { items: [ { module_family_id, module_id, source, ... } ] }
+    final items = data['items'];
+    if (items is List) {
+      final ids = <String>[];
+      for (final item in items) {
+        if (item is String && item.isNotEmpty) {
+          ids.add(item);
+        } else if (item is Map) {
+          final id = item['module_family_id'] ??
+              item['module_id'] ??
+              item['id'];
+          if (id is String && id.isNotEmpty) ids.add(id);
+        }
+      }
+      if (ids.isNotEmpty) return ids;
+    }
+    // Legacy fallback shapes.
     final modules =
         data['modules'] ?? data['module_ids'] ?? data['priorities'];
     if (modules is! List) return const [];

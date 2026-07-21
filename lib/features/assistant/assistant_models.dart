@@ -67,12 +67,53 @@ class AssistantAction {
   }
 }
 
-/// A parsed assistant reply — the prose answer plus any suggested actions.
+/// One module hit retrieved during a coaching RAG lookup.
+class RagModuleHit {
+  const RagModuleHit({
+    required this.moduleId,
+    required this.title,
+    required this.domain,
+  });
+
+  final String moduleId;
+  final String title;
+  final String domain;
+}
+
+/// Source document cited in a coaching RAG answer.
+class RagSourceAttribution {
+  const RagSourceAttribution({
+    required this.title,
+    required this.sourceType,
+    this.presignedUrl,
+  });
+
+  final String title;
+  final String sourceType; // pdf | pptx | docx | audio | video
+  final String? presignedUrl;
+}
+
+/// A parsed assistant reply — prose answer, optional actions, and RAG metadata.
 class AssistantAnswer {
-  const AssistantAnswer({required this.text, this.actions = const []});
+  const AssistantAnswer({
+    required this.text,
+    this.actions = const [],
+    this.suggestedQuestions = const [],
+    this.retrievedModules = const [],
+    this.sourceDocuments = const [],
+  });
 
   final String text;
   final List<AssistantAction> actions;
+
+  /// Follow-up questions answerable from retrieved module content (coaching RAG).
+  final List<String> suggestedQuestions;
+
+  /// Modules retrieved by the RAG lookup (coaching RAG path only).
+  final List<RagModuleHit> retrievedModules;
+
+  /// Source documents cited in the answer (coaching RAG path only).
+  final List<RagSourceAttribution> sourceDocuments;
 }
 
 class ChatMessage {
@@ -81,15 +122,19 @@ class ChatMessage {
     required this.text,
     required this.timestamp,
     this.actions = const [],
+    this.suggestedQuestions = const [],
   });
 
   final MessageRole role;
   final String text;
   final DateTime timestamp;
 
-  /// Suggested actions attached to an assistant message (empty for user
-  /// messages).
+  /// Suggested actions attached to an assistant message (empty for user messages).
   final List<AssistantAction> actions;
+
+  /// Follow-up questions surfaced by coaching RAG (empty for user messages and
+  /// non-RAG replies).
+  final List<String> suggestedQuestions;
 }
 
 class AssistantException implements Exception {

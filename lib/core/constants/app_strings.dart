@@ -5037,6 +5037,7 @@ abstract final class AssistantStrings {
   static const String badgeLabel = 'AI';
   static const String tabAsk = 'Ask AI';
   static const String tabTraining = 'Training';
+  static const String suggestedFollowUps = 'You might also ask:';
 }
 
 /// Strings for [HouseholdFollowUpScreen].

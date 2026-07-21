@@ -233,10 +233,16 @@ class Endpoints {
   /// CHW gap profile + module completions.
   static const String coachingSyncGaps = '/medtronics-api/sync/gaps';
 
-  /// Ordered list of today's modules by CHW gap priority.
-  static const String coachingMorning = '/medtronics-api/morning';
+  /// Today's ordered module suggestions (gap-priority ranked).
+  static const String coachingMorningCards = '/medtronics-api/morning/cards';
 
   /// Card-viewed / quiz-attempted telemetry events.
   static const String coachingTelemetryEvents =
       '/medtronics-api/telemetry/events';
+
+  /// Coaching RAG: grounded Q&A from published module embeddings.
+  static const String coachingRagQuery = '/medtronics-api/coaching/rag-query';
+
+  /// Frequent chat questions mined from telemetry (suggestion chips).
+  static const String coachingSyncChatFaqs = '/medtronics-api/sync/chat-faqs';
 }

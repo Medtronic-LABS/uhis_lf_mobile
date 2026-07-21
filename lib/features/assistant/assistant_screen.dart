@@ -5,11 +5,17 @@
 ///   2. "Training" — micro-coaching modules (Learn → Apply → Measure loop).
 library;
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
+import '../../core/db/app_database.dart';
+import '../../core/debug/console_log.dart';
 import '../../core/theme/app_theme.dart';
+import '../training/coaching_dao.dart';
+import '../training/coaching_repository.dart';
 import '../training/training_screen.dart';
 import 'assistant_models.dart';
 import 'assistant_repository.dart';
@@ -74,13 +80,55 @@ class _ChatTabState extends State<_ChatTab> {
   final ScrollController _scroll = ScrollController();
   bool _loading = false;
   String? _error;
+  late final ChatMessageDao _dao;
 
-  static const List<String> _starters = [
+  static const List<String> _fallbackStarters = [
     AssistantStrings.suggestedMuac,
     AssistantStrings.suggestedAncDanger,
     AssistantStrings.suggestedNcd,
     AssistantStrings.suggestedReferChild,
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _dao = ChatMessageDao(context.read<AppDatabase>());
+    _loadHistory();
+  }
+
+  Future<void> _loadHistory() async {
+    try {
+      final rows = await _dao.recentMessages(limit: 50);
+      ConsoleLog.d('[PayloadDebug] coaching-chat history: ${rows.length} rows');
+      if (!mounted) return;
+      final messages = <ChatMessage>[];
+      for (final row in rows) {
+        final role = (row['role'] as String?) == 'user'
+            ? MessageRole.user
+            : MessageRole.assistant;
+        final rawSq = row['suggested_questions'] as String?;
+        List<String> sq = const [];
+        if (rawSq != null && rawSq.isNotEmpty) {
+          try {
+            sq = (jsonDecode(rawSq) as List<dynamic>).whereType<String>().toList();
+          } catch (_) {}
+        }
+        messages.add(ChatMessage(
+          role: role,
+          text: (row['text'] as String?) ?? '',
+          timestamp: DateTime.fromMillisecondsSinceEpoch(
+              (row['timestamp_ms'] as int?) ?? 0),
+          suggestedQuestions: sq,
+        ));
+      }
+      if (messages.isNotEmpty) {
+        setState(() => _messages.addAll(messages));
+        _scrollToBottom();
+      }
+    } catch (e) {
+      ConsoleLog.warn('[PayloadDebug] coaching-chat history load failed: $e');
+    }
+  }
 
   @override
   void dispose() {
@@ -94,36 +142,66 @@ class _ChatTabState extends State<_ChatTab> {
     final q = question.trim();
     if (q.isEmpty || _loading) return;
     _input.clear();
+    final now = DateTime.now();
+    final userMsg = ChatMessage(role: MessageRole.user, text: q, timestamp: now);
     setState(() {
       _error = null;
-      _messages.add(ChatMessage(
-        role: MessageRole.user,
-        text: q,
-        timestamp: DateTime.now(),
-      ));
+      _messages.add(userMsg);
       _loading = true;
     });
     _scrollToBottom();
 
+    // Persist user message.
+    try {
+      await _dao.insertMessage(
+        id: '${now.millisecondsSinceEpoch}_u',
+        role: 'user',
+        text: q,
+        timestampMs: now.millisecondsSinceEpoch,
+      );
+    } catch (e) {
+      ConsoleLog.warn('[PayloadDebug] coaching-chat persist user msg failed: $e');
+    }
+
     try {
       final answer = await context.read<AssistantRepository>().ask(q);
       if (!mounted) return;
+      final replyTs = DateTime.now();
+      final assistantMsg = ChatMessage(
+        role: MessageRole.assistant,
+        text: answer.text,
+        timestamp: replyTs,
+        actions: answer.actions,
+        suggestedQuestions: answer.suggestedQuestions,
+      );
       setState(() {
-        _messages.add(ChatMessage(
-          role: MessageRole.assistant,
-          text: answer.text,
-          timestamp: DateTime.now(),
-          actions: answer.actions,
-        ));
+        _messages.add(assistantMsg);
         _loading = false;
       });
+
+      // Persist assistant message.
+      try {
+        final sqJson = answer.suggestedQuestions.isEmpty
+            ? null
+            : jsonEncode(answer.suggestedQuestions);
+        await _dao.insertMessage(
+          id: '${replyTs.millisecondsSinceEpoch}_a',
+          role: 'assistant',
+          text: answer.text,
+          timestampMs: replyTs.millisecondsSinceEpoch,
+          suggestedQuestionsJson: sqJson,
+        );
+      } catch (e) {
+        ConsoleLog.warn('[PayloadDebug] coaching-chat persist reply failed: $e');
+      }
     } on AssistantException catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
         _error = e.message;
       });
-    } on Object catch (_) {
+    } on Object catch (e) {
+      ConsoleLog.error('[PayloadDebug] coaching-chat unexpected error', e);
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -147,15 +225,20 @@ class _ChatTabState extends State<_ChatTab> {
 
   @override
   Widget build(BuildContext context) {
+    final cachedFaqs = context.watch<CoachingRepository>().cachedFaqs;
+    final starters = cachedFaqs.isNotEmpty
+        ? cachedFaqs.take(4).toList()
+        : _fallbackStarters;
     return Column(
       children: [
         Expanded(
           child: _messages.isEmpty
-              ? _EmptyState(onStarter: _send, starters: _starters)
+              ? _EmptyState(onStarter: _send, starters: starters)
               : _MessageList(
                   messages: _messages,
                   loading: _loading,
                   scroll: _scroll,
+                  onSuggestedQuestion: _send,
                 ),
         ),
         if (_error != null)
@@ -299,11 +382,13 @@ class _MessageList extends StatelessWidget {
     required this.messages,
     required this.loading,
     required this.scroll,
+    required this.onSuggestedQuestion,
   });
 
   final List<ChatMessage> messages;
   final bool loading;
   final ScrollController scroll;
+  final void Function(String) onSuggestedQuestion;
 
   @override
   Widget build(BuildContext context) {
@@ -313,15 +398,22 @@ class _MessageList extends StatelessWidget {
       itemCount: messages.length + (loading ? 1 : 0),
       itemBuilder: (_, i) {
         if (i == messages.length) return const _TypingIndicator();
-        return _MessageBubble(message: messages[i]);
+        return _MessageBubble(
+          message: messages[i],
+          onSuggestedQuestion: onSuggestedQuestion,
+        );
       },
     );
   }
 }
 
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message});
+  const _MessageBubble({
+    required this.message,
+    required this.onSuggestedQuestion,
+  });
   final ChatMessage message;
+  final void Function(String) onSuggestedQuestion;
 
   @override
   Widget build(BuildContext context) {
@@ -329,58 +421,93 @@ class _MessageBubble extends StatelessWidget {
     final lc = Theme.of(context).extension<LeapfrogColors>()!;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisAlignment:
-            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment:
+            isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
-          if (!isUser) ...[
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: AppColors.aiPurple,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                AssistantStrings.badgeLabel,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisAlignment:
+                isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+            children: [
+              if (!isUser) ...[
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: AppColors.aiPurple,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    AssistantStrings.badgeLabel,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Flexible(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: isUser ? AppColors.navy : lc.cardSurface,
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(16),
+                      topRight: const Radius.circular(16),
+                      bottomLeft: Radius.circular(isUser ? 16 : 4),
+                      bottomRight: Radius.circular(isUser ? 4 : 16),
+                    ),
+                    border: isUser ? null : Border.all(color: lc.borderDefault),
+                  ),
+                  child: Text(
+                    message.text,
+                    style: TextStyle(
+                      color: isUser ? Colors.white : lc.textPrimary,
+                      fontSize: 14,
+                      height: 1.5,
+                    ),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-          ],
-          Flexible(
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: isUser ? AppColors.navy : lc.cardSurface,
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(16),
-                  topRight: const Radius.circular(16),
-                  bottomLeft: Radius.circular(isUser ? 16 : 4),
-                  bottomRight: Radius.circular(isUser ? 4 : 16),
-                ),
-                border: isUser
-                    ? null
-                    : Border.all(color: lc.borderDefault),
-              ),
-              child: Text(
-                message.text,
-                style: TextStyle(
-                  color: isUser ? Colors.white : lc.textPrimary,
-                  fontSize: 14,
-                  height: 1.5,
-                ),
-              ),
-            ),
+              if (isUser) const SizedBox(width: 8),
+            ],
           ),
-          if (isUser) const SizedBox(width: 8),
+          // Suggested follow-up questions (coaching RAG only, assistant messages).
+          if (!isUser && message.suggestedQuestions.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Padding(
+              padding: const EdgeInsets.only(left: 40),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    AssistantStrings.suggestedFollowUps,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textMuted,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: message.suggestedQuestions
+                        .map((q) => _StarterChip(
+                              label: q,
+                              onTap: () => onSuggestedQuestion(q),
+                            ))
+                        .toList(),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
