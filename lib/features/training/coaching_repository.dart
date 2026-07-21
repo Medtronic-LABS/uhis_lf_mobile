@@ -136,8 +136,7 @@ class CoachingRepository extends ChangeNotifier {
       }
 
       final morningIds = parseMorningModuleIds(morningRes.data);
-      _gapIds = gapIds.toList();
-      ConsoleLog.step('[PayloadDebug] coaching-parsed → gaps=${_gapIds.length}:$_gapIds morningIds=${morningIds.length}:$morningIds');
+      ConsoleLog.step('[PayloadDebug] coaching-parsed → gapDefs=${gapIds.length} morningIds=${morningIds.length}:$morningIds');
 
       final rawModules =
           (modulesRes.data?['modules'] as List<dynamic>?) ?? [];
@@ -156,6 +155,30 @@ class CoachingRepository extends ChangeNotifier {
           priorityRank: 0,
         );
       }
+
+      // Map gap definition UUIDs → module IDs for the Refreshers section.
+      final gapModuleIds = <String>{};
+      for (final raw in rawModules) {
+        if (raw is! Map) continue;
+        final m = Map<String, dynamic>.from(raw);
+        final moduleId = m['id'] as String? ?? '';
+        if (moduleId.isEmpty) continue;
+        final primaryGapId = m['primary_gap_id'] as String?;
+        if (primaryGapId != null && gapIds.contains(primaryGapId)) {
+          gapModuleIds.add(moduleId);
+          continue;
+        }
+        final bgIds = (m['behavioural_gap_ids'] as List<dynamic>?)
+                ?.whereType<String>()
+                .toSet() ??
+            {};
+        if (bgIds.intersection(gapIds).isNotEmpty) {
+          gapModuleIds.add(moduleId);
+        }
+      }
+      _gapIds = gapModuleIds.toList();
+      ConsoleLog.step('[PayloadDebug] coaching-gap-modules → ${_gapIds.length}:$_gapIds');
+      notifyListeners();
 
       // Morning list wins; if the morning endpoint is empty/unavailable,
       // fall back to gap-flagged modules so the Today section is not blank.
@@ -272,8 +295,8 @@ class CoachingRepository extends ChangeNotifier {
         if (item is String && item.isNotEmpty) {
           ids.add(item);
         } else if (item is Map) {
-          final id = item['module_family_id'] ??
-              item['module_id'] ??
+          final id = item['module_id'] ??
+              item['module_family_id'] ??
               item['id'];
           if (id is String && id.isNotEmpty) ids.add(id);
         }
