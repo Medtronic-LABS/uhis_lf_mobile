@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
-import '../../core/theme/app_theme.dart';
 import 'all_modules_screen.dart';
 import 'coaching_models.dart';
 import 'coaching_repository.dart';
@@ -320,7 +319,7 @@ class _TrainingHorizontalList extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         padding: EdgeInsets.zero,
         itemCount: modules.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        separatorBuilder: (_, _) => const SizedBox(width: 12),
         itemBuilder: (ctx, i) => _TrainingModuleCard(module: modules[i]),
       ),
     );
@@ -531,7 +530,7 @@ class _LeaderboardContentState extends State<_LeaderboardContent> {
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             itemCount: rest.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            separatorBuilder: (_, _) => const SizedBox(height: 8),
             itemBuilder: (_, i) =>
                 _LeaderboardRow(entry: rest[i], isYou: false),
           ),
