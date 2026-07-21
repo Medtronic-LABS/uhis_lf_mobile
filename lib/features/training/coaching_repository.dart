@@ -224,9 +224,9 @@ class CoachingRepository extends ChangeNotifier {
     try {
       final base = AppConfig.coachingServiceUrl;
       final url = '$base${Endpoints.coachingSyncChatFaqs}';
-      ConsoleLog.d('[PayloadDebug] coaching-faqs → $url');
+      ConsoleLog.step('[PayloadDebug] coaching-faqs → $url');
       final res = await _api.dio.get<Map<String, dynamic>>(url);
-      ConsoleLog.d('[PayloadDebug] coaching-faqs → ${res.statusCode}');
+      ConsoleLog.step('[PayloadDebug] coaching-faqs → ${res.statusCode}');
       final faqs = (res.data?['faqs'] as List<dynamic>?) ?? [];
       final questions = <String>[];
       for (final faq in faqs) {

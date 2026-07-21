@@ -99,7 +99,7 @@ class _ChatTabState extends State<_ChatTab> {
   Future<void> _loadHistory() async {
     try {
       final rows = await _dao.recentMessages(limit: 50);
-      ConsoleLog.d('[PayloadDebug] coaching-chat history: ${rows.length} rows');
+      ConsoleLog.step('[PayloadDebug] coaching-chat history: ${rows.length} rows');
       if (!mounted) return;
       final messages = <ChatMessage>[];
       for (final row in rows) {
@@ -163,8 +163,9 @@ class _ChatTabState extends State<_ChatTab> {
       ConsoleLog.warn('[PayloadDebug] coaching-chat persist user msg failed: $e');
     }
 
+    final repo = context.read<AssistantRepository>();
     try {
-      final answer = await context.read<AssistantRepository>().ask(q);
+      final answer = await repo.ask(q);
       if (!mounted) return;
       final replyTs = DateTime.now();
       final assistantMsg = ChatMessage(
@@ -201,7 +202,7 @@ class _ChatTabState extends State<_ChatTab> {
         _error = e.message;
       });
     } on Object catch (e) {
-      ConsoleLog.error('[PayloadDebug] coaching-chat unexpected error', e);
+      ConsoleLog.warn('[PayloadDebug] coaching-chat unexpected error: $e');
       if (!mounted) return;
       setState(() {
         _loading = false;

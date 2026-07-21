@@ -64,7 +64,7 @@ class AssistantRepository {
         Endpoints.coachingRagQuery,
         data: {'question': question, 'response_language': 'en'},
       );
-      ConsoleLog.d('[PayloadDebug] coaching-rag → ${response.statusCode}');
+      ConsoleLog.step('[PayloadDebug] coaching-rag → ${response.statusCode}');
       final data = response.data;
       if (data == null) throw const AssistantException('Empty response');
       final answer = data['answer'] as String?;
@@ -108,7 +108,7 @@ class AssistantRepository {
         sourceDocuments: docs,
       );
     } on DioException catch (e) {
-      ConsoleLog.error('[PayloadDebug] coaching-rag error', e);
+      ConsoleLog.warn('[PayloadDebug] coaching-rag error: $e');
       throw AssistantException(NetworkErrorMapper.friendly(e),
           statusCode: e.response?.statusCode);
     }
