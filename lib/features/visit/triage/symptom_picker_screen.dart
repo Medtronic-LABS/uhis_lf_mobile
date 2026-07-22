@@ -1886,20 +1886,18 @@ class _ServiceCardDef {
   bool get isRMNCH => kind == _ServiceCardKind.rmnch;
 }
 
-// Full card set — visibility filtered per patient demographics in the widget.
+// Card order matches the Eligible Services wireframe (apon_sushashthya_v14):
+// Row 1: PW, ANC, Pregnancy Outcome
+// Row 2: PNC, FP, NCD
+// Row 3: TB, Eye care
 const _kAllServiceCards = [
-  _ServiceCardDef(kind: _ServiceCardKind.rmnch,     emoji: '🤱', label: 'RMNCH'),
   _ServiceCardDef(kind: _ServiceCardKind.pw,        emoji: '🤰', label: 'PW'),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🏥', label: 'ANC',      programme: Programme.anc),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🌸', label: 'FP',       programme: Programme.familyPlanning),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '👶', label: 'PNC',      programme: Programme.pnc),
-  _ServiceCardDef(kind: _ServiceCardKind.general,   emoji: '🩺', label: 'General'),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '💊', label: 'NCD',      programme: Programme.ncd),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🫁', label: 'TB',       programme: Programme.tb),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '👁️', label: 'Eye Care', programme: Programme.eyeCare),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🔬', label: 'Cataract', programme: Programme.cataract),
-  // Label overridden at render — see [_cardLabel]. Placeholder kept for const.
-  _ServiceCardDef(kind: _ServiceCardKind.delivery, emoji: '🚼', label: 'Pregnancy Outcome'),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🏥', label: 'ANC',               programme: Programme.anc),
+  _ServiceCardDef(kind: _ServiceCardKind.delivery,  emoji: '🚼', label: 'Pregnancy Outcome'),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '👶', label: 'PNC',               programme: Programme.pnc),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🌸', label: 'FP',                programme: Programme.familyPlanning),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '💊', label: 'NCD',               programme: Programme.ncd),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '👁️', label: 'Eye Care',          programme: Programme.eyeCare),
 ];
 
 class _InlineServiceSelector extends StatelessWidget {
@@ -1929,38 +1927,28 @@ class _InlineServiceSelector extends StatelessWidget {
   final ValueChanged<bool> onPWToggle;
   final ValueChanged<bool> onDeliveryToggle;
 
-  /// Android parity:
-  /// - Active pregnancy → Pregnancy Outcome chip (not mother PNC)
-  /// - Postpartum (delivery date set, ≤42d) → mother PNC chip (not outcome)
+  /// All 8 service cards shown for adult patients; eligibility is communicated
+  /// via lock state (greyed + snackbar on tap) rather than hiding. Order and
+  /// visibility match the Eligible Services wireframe (apon_sushashthya_v14).
   List<_ServiceCardDef> _visibleCards() {
     final ctx = patientContext;
-    final showPregnancyOutcome = ctx.isFemale && ctx.isPregnant && !ctx.isPostpartum;
-    final showMotherPnc = ctx.isFemale && ctx.isPostpartum;
     return _kAllServiceCards.where((c) {
       switch (c.kind) {
         case _ServiceCardKind.pw:
-          return ctx.isFemale && ctx.isPregnant && !ctx.isPostpartum;
         case _ServiceCardKind.delivery:
-          return false;
-        case _ServiceCardKind.rmnch:
-          return showPregnancyOutcome || showMotherPnc;
+          return ctx.isFemale && ctx.ageYears >= 15;
         case _ServiceCardKind.programme:
           final p = c.programme!;
-          // ANC only during active pregnancy (Android: off after delivery).
-          if (p == Programme.anc) {
-            return ctx.isFemale &&
-                ctx.ageYears >= 15 &&
-                ctx.isPregnant &&
-                !ctx.isPostpartum;
+          if (p == Programme.anc || p == Programme.pnc) {
+            return ctx.isFemale && ctx.ageYears >= 15;
           }
           if (p == Programme.familyPlanning) {
             return ctx.isFemale && ctx.ageYears >= 15;
           }
-          if (p == Programme.pnc) return false;
-          if (p == Programme.eyeCare || p == Programme.cataract) return true;
           return ctx.ageYears >= 15;
+        case _ServiceCardKind.rmnch:
         case _ServiceCardKind.general:
-          return ctx.ageYears >= 15;
+          return false;
       }
     }).toList();
   }
@@ -1977,10 +1965,12 @@ class _InlineServiceSelector extends StatelessWidget {
   }
 
   bool _isLocked(_ServiceCardDef card) {
-    // Pregnancy Outcome stays tappable with ANC on — tap clears ANC/PW.
-    // ANC needs PW first; both lock once pregnancy-outcome visit is active.
-    if (card.isPW) return isDelivery;
-    if (card.programme == Programme.anc) return !isPW || isDelivery;
+    final ctx = patientContext;
+    final pregnant = ctx.isPregnant && !ctx.isPostpartum;
+    if (card.isPW) return isDelivery || !pregnant;
+    if (card.programme == Programme.anc) return !isPW || isDelivery || !pregnant;
+    if (card.isDelivery) return !pregnant;
+    if (card.programme == Programme.pnc) return !ctx.isPostpartum;
     return false;
   }
 
@@ -2014,19 +2004,10 @@ class _InlineServiceSelector extends StatelessWidget {
     }
     if (card.isPW) {
       onPWToggle(!isPW);
-    } else if (card.isRMNCH) {
-      final ctx = patientContext;
-      if (ctx.isFemale && ctx.isPregnant && !ctx.isPostpartum) {
-        onDeliveryToggle(!alreadySelected);
-      } else {
-        onProgrammeToggle(Programme.pnc, !selectedProgrammes.contains(Programme.pnc));
-      }
     } else if (card.isDelivery) {
-      // Pregnancy Outcome visit — clears ANC/PW only; other services stay on.
+      // Pregnancy Outcome visit — clears ANC/PW; other services stay on.
       onDeliveryToggle(!alreadySelected);
     } else if (card.programme != null) {
-      // Mother PNC is a normal programme toggle (postpartum only — chip hidden
-      // while pregnant). Never routes through pregnancy-outcome.
       onProgrammeToggle(
         card.programme!,
         !selectedProgrammes.contains(card.programme),
