@@ -625,7 +625,16 @@ class AssessmentRepository extends ChangeNotifier {
         if (s is num) sys = s.toInt();
       }
     }
-    final dia = asInt('diastolic') ?? asInt('bloodPressureDiastolic');
+    int? dia = asInt('diastolic') ?? asInt('bloodPressureDiastolic');
+    // Parse "130/85" slash-string from member-assessment-history observations.bp
+    if (sys == null || dia == null) {
+      final bpStr = flat['bp'] as String?;
+      if (bpStr != null && bpStr.contains('/')) {
+        final parts = bpStr.split('/');
+        if (sys == null && parts.isNotEmpty) sys = int.tryParse(parts[0].trim());
+        if (dia == null && parts.length > 1) dia = int.tryParse(parts[1].trim());
+      }
+    }
     final urine = flat['urinaryAlbumin'] ?? flat['urineProtein'];
 
     return VisitVitals(
