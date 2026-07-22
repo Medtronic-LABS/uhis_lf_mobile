@@ -120,11 +120,15 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   /// undone when symptoms/AI refresh pathway activation.
   final Set<Programme> _skDismissedProgrammes = {};
 
-  /// PW meta-flag — gates ANC. Auto-true when patient is known pregnant.
+  /// PW meta-flag — gates ANC. Auto-true when patient already has PW/ANC registered.
   bool _isPW = false;
 
   /// Delivery meta-flag — gates PNC. Auto-true when patient is postpartum.
   bool _isDelivery = false;
+
+  /// True when patient already has an ANC assessment recorded today — blocks
+  /// a second ANC visit on the same calendar day.
+  bool _ancVisitedToday = false;
 
   @override
   void initState() {
@@ -208,8 +212,15 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       debugPrint('[SymptomPicker] Success! Setting up view model...');
       final vm = TriageViewModel(patientContext: ctx);
       final pathwaySet = vm.activatedPathways.map((p) => p.programme).toSet();
-      final isPw =
-          ctx.isPregnant || ctx.activeProgrammes.contains(Programme.anc);
+      // ANC gates behind PW: only pre-select PW if patient already has a PW
+      // or ANC registration. Brand-new pregnant women start with PW=false so
+      // the SK must explicitly select PW first before ANC becomes available.
+      final isPw = ctx.activeProgrammes.contains(Programme.pw) ||
+          ctx.activeProgrammes.contains(Programme.anc);
+      // Block a second ANC visit on the same calendar day.
+      final ancToday = await context
+          .read<LocalAssessmentDao>()
+          .hasAncAssessmentTodayForPatient(patientId);
       // Pregnancy Outcome is an explicit SK choice — never auto-on.
       // Postpartum mothers get PNC via [enrolledSeed], not this flag.
       final enrolledSeed = ProgrammeGridSync.applicableEnrolledSeed(
@@ -233,6 +244,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           ..addAll(pathwaySet);
         _isPW = isPw;
         _isDelivery = false;
+        _ancVisitedToday = ancToday;
         _isLoading = false;
       });
       debugPrint(
@@ -837,6 +849,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                         enrolledProgrammes: _patientContext!.activeProgrammes.toSet(),
                         isPW: _isPW,
                         isDelivery: _isDelivery,
+                        ancVisitedToday: _ancVisitedToday,
                         onProgrammeToggle: (programme, selected) {
                           setState(() {
                             if (selected) {
@@ -1908,6 +1921,7 @@ class _InlineServiceSelector extends StatelessWidget {
     required this.enrolledProgrammes,
     required this.isPW,
     required this.isDelivery,
+    required this.ancVisitedToday,
     required this.onProgrammeToggle,
     required this.onPWToggle,
     required this.onDeliveryToggle,
@@ -1923,6 +1937,7 @@ class _InlineServiceSelector extends StatelessWidget {
 
   final bool isPW;
   final bool isDelivery;
+  final bool ancVisitedToday;
   final void Function(Programme programme, bool selected) onProgrammeToggle;
   final ValueChanged<bool> onPWToggle;
   final ValueChanged<bool> onDeliveryToggle;
@@ -1968,7 +1983,10 @@ class _InlineServiceSelector extends StatelessWidget {
     final ctx = patientContext;
     final pregnant = ctx.isPregnant && !ctx.isPostpartum;
     if (card.isPW) return isDelivery || !pregnant;
-    if (card.programme == Programme.anc) return !isPW || isDelivery || !pregnant;
+    if (card.programme == Programme.anc) {
+      // ANC requires PW registration first; also blocked if ANC already done today.
+      return !isPW || isDelivery || !pregnant || ancVisitedToday;
+    }
     if (card.isDelivery) return !pregnant;
     if (card.programme == Programme.pnc) return !ctx.isPostpartum;
     return false;
