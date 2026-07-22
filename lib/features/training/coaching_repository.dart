@@ -207,7 +207,7 @@ class CoachingRepository extends ChangeNotifier {
     } catch (e) {
       ConsoleLog.warn('[PayloadDebug] coaching-sync failed: $e');
       debugPrint('[CoachingRepository] syncFromApi failed: $e');
-      // Keep cached / mock content — offline-first.
+      // Keep cached content — offline-first.
       if (_modules.isEmpty) {
         await initialize();
       }
