@@ -80,6 +80,10 @@ abstract final class LoginStrings {
       : 'Biometric cancelled — sign in with password.';
   static String get offlineUsePinHint =>
       'No internet connection. Use your PIN to continue working.';
+  static String get sessionExpiredNeedOnline =>
+      AppLocale.isBangla
+          ? 'সেশন মেয়াদ শেষ। আবার সাইন ইন করতে ইন্টারনেটে সংযুক্ত হন।'
+          : 'Session expired. Connect to the internet to sign in again.';
   static String get forgotPassword =>
       AppLocale.isBangla ? 'পাসওয়ার্ড ভুলে গেছেন?' : 'Forgot password?';
   static String get forgotPasswordTitle =>

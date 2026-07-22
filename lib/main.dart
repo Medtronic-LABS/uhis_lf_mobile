@@ -283,6 +283,9 @@ class _UhisNextAppState extends State<UhisNextApp>
     widget.authState.registerLogoutHook(_missionDashboard.clearCache);
     widget.authState.registerLogoutHook(_userHierarchy.invalidate);
     widget.authState.registerLogoutHook(_coachingRepo.clear);
+    // Reset sync progress so the next user's /sync screen does not see
+    // isComplete=true from the previous session and skip their cold sync.
+    widget.authState.registerLogoutHook(_sync.resetProgress);
   }
 
   Future<void> _bootstrapNotifications() async {
