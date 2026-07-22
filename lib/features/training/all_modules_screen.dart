@@ -2,9 +2,11 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
 import 'coaching_models.dart';
+import 'coaching_repository.dart';
 import 'module_detail_screen.dart';
 
 const _kSpiceBlue = Color(0xFF2514BE);
@@ -84,13 +86,32 @@ class _AllModulesTile extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             child: Row(
               children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    width: 56,
-                    height: 56,
-                    color: _kSpiceBlueContainer,
-                  ),
+                Builder(
+                  builder: (ctx) {
+                    final thumb = ctx.watch<CoachingRepository>().moduleThumbnailUrl(module.id);
+                    return ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: thumb != null
+                          ? Image.network(
+                              thumb,
+                              width: 56,
+                              height: 56,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Container(
+                                width: 56,
+                                height: 56,
+                                color: _kSpiceBlueContainer,
+                                child: const Icon(Icons.school_rounded, color: _kSpiceBlue, size: 28),
+                              ),
+                            )
+                          : Container(
+                              width: 56,
+                              height: 56,
+                              color: _kSpiceBlueContainer,
+                              child: const Icon(Icons.school_rounded, color: _kSpiceBlue, size: 28),
+                            ),
+                    );
+                  },
                 ),
                 const SizedBox(width: 12),
                 Expanded(

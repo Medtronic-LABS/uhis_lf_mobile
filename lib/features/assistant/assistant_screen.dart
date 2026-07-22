@@ -189,57 +189,83 @@ class _MorningCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [_kSpiceBlue, _kSpiceBlueDark],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'MICRO-COACHING',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: Colors.white70,
-              letterSpacing: 1.2,
-            ),
+    return Builder(
+      builder: (ctx) {
+        final thumb = ctx.watch<CoachingRepository>().moduleThumbnailUrl(module.id);
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Stack(
+            children: [
+              if (thumb != null)
+                Positioned.fill(
+                  child: Image.network(
+                    thumb,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  ),
+                ),
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        _kSpiceBlue.withValues(alpha: thumb != null ? 0.82 : 1.0),
+                        _kSpiceBlueDark.withValues(alpha: thumb != null ? 0.82 : 1.0),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                ),
+              ),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'MICRO-COACHING',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white70,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      _questionText,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        height: 1.4,
+                      ),
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 18),
+                    OutlinedButton(
+                      onPressed: () => _onTap(context),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Colors.white60, width: 1.5),
+                        shape: const StadiumBorder(),
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                      ),
+                      child: const Text(
+                        'Tap to answer',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 10),
-          Text(
-            _questionText,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-              height: 1.4,
-            ),
-            maxLines: 4,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 18),
-          OutlinedButton(
-            onPressed: () => _onTap(context),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.white,
-              side: const BorderSide(color: Colors.white60, width: 1.5),
-              shape: const StadiumBorder(),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-            ),
-            child: const Text(
-              'Tap to answer',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
