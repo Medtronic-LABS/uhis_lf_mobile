@@ -882,8 +882,8 @@ class _PatientContextScreenState
                     const SizedBox(height: 12),
 
                     // ── Snapshot cards ────────────────────────────────────
-                    // Pregnancy progress (ANC / PW only)
-                    if (isAnc && snap != null) ...[
+                    // Pregnancy progress (ANC / PW only — hidden after delivery)
+                    if (isAnc && snap != null && snap.deliveryDateMillis == null) ...[
                       _PregnancyProgressSection(
                         snapshot: snap,
                         ancVisitNumber: ancVisitNum,
@@ -918,7 +918,6 @@ class _PatientContextScreenState
                       entries: _buildTimelineEntries(data),
                       isLoading: remoteLoading,
                     ),
-                    const SizedBox(height: 12),
 
                     // ── Action row ────────────────────────────────────────
                     PatientActionsRow(
@@ -1846,7 +1845,9 @@ class _PregnancyProgressSection extends StatelessWidget {
         ? DateTime.fromMillisecondsSinceEpoch(snapshot.eddDate!)
         : null;
 
-    final gaWeeks = lmpDate != null ? now.difference(lmpDate).inDays ~/ 7 : null;
+    // Derive LMP from EDD (EDD − 280 days) when lmpDate is absent but eddDate is set.
+    final effectiveLmp = lmpDate ?? (eddDate?.subtract(const Duration(days: 280)));
+    final gaWeeks = effectiveLmp != null ? now.difference(effectiveLmp).inDays ~/ 7 : null;
     final weeksLeft = eddDate != null ? eddDate.difference(now).inDays ~/ 7 : null;
     final progress = gaWeeks != null ? (gaWeeks / 40.0).clamp(0.0, 1.0) : 0.0;
     final visitsDone = int.tryParse(ancVisitNumber ?? '0') ?? 0;
@@ -1863,8 +1864,8 @@ class _PregnancyProgressSection extends StatelessWidget {
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (lmpDate != null)
-              _DetailRow(label: 'LMP', value: dateFormat.format(lmpDate)),
+            if (effectiveLmp != null)
+              _DetailRow(label: 'LMP', value: dateFormat.format(effectiveLmp)),
             if (eddDate != null)
               _DetailRow(label: 'EDD', value: dateFormat.format(eddDate)),
             if (gaWeeks != null)
@@ -1985,7 +1986,7 @@ class _PregnancyProgressSection extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                if (lmpDate != null)
+                if (effectiveLmp != null)
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1995,7 +1996,7 @@ class _PregnancyProgressSection extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        dateFormat.format(lmpDate),
+                        dateFormat.format(effectiveLmp),
                         style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,

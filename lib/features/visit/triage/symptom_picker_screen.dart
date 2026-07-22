@@ -1941,9 +1941,9 @@ class _InlineServiceSelector extends StatelessWidget {
         case _ServiceCardKind.pw:
           return ctx.isFemale && ctx.isPregnant && !ctx.isPostpartum;
         case _ServiceCardKind.delivery:
-          return showPregnancyOutcome;
-        case _ServiceCardKind.rmnch:
           return false;
+        case _ServiceCardKind.rmnch:
+          return showPregnancyOutcome || showMotherPnc;
         case _ServiceCardKind.programme:
           final p = c.programme!;
           // ANC only during active pregnancy (Android: off after delivery).
@@ -1956,7 +1956,7 @@ class _InlineServiceSelector extends StatelessWidget {
           if (p == Programme.familyPlanning) {
             return ctx.isFemale && ctx.ageYears >= 15;
           }
-          if (p == Programme.pnc) return showMotherPnc;
+          if (p == Programme.pnc) return false;
           if (p == Programme.eyeCare || p == Programme.cataract) return true;
           return ctx.ageYears >= 15;
         case _ServiceCardKind.general:
@@ -1966,6 +1966,12 @@ class _InlineServiceSelector extends StatelessWidget {
   }
 
   String _cardLabel(_ServiceCardDef card) {
+    if (card.isRMNCH) {
+      final ctx = patientContext;
+      return (ctx.isFemale && ctx.isPregnant && !ctx.isPostpartum)
+          ? TriageStrings.pregnancyOutcomeChip
+          : 'PNC';
+    }
     if (card.isDelivery) return TriageStrings.pregnancyOutcomeChip;
     return card.label;
   }
@@ -1981,7 +1987,12 @@ class _InlineServiceSelector extends StatelessWidget {
   bool _isCardSelected(_ServiceCardDef card) {
     if (card.isPW) return isPW && !isDelivery;
     if (card.isDelivery) return isDelivery;
-    if (card.isRMNCH) return false;
+    if (card.isRMNCH) {
+      final ctx = patientContext;
+      return (ctx.isFemale && ctx.isPregnant && !ctx.isPostpartum)
+          ? isDelivery
+          : selectedProgrammes.contains(Programme.pnc);
+    }
     if (card.programme != null) return selectedProgrammes.contains(card.programme);
     return false;
   }
@@ -2003,6 +2014,13 @@ class _InlineServiceSelector extends StatelessWidget {
     }
     if (card.isPW) {
       onPWToggle(!isPW);
+    } else if (card.isRMNCH) {
+      final ctx = patientContext;
+      if (ctx.isFemale && ctx.isPregnant && !ctx.isPostpartum) {
+        onDeliveryToggle(!alreadySelected);
+      } else {
+        onProgrammeToggle(Programme.pnc, !selectedProgrammes.contains(Programme.pnc));
+      }
     } else if (card.isDelivery) {
       // Pregnancy Outcome visit — clears ANC/PW only; other services stay on.
       onDeliveryToggle(!alreadySelected);
