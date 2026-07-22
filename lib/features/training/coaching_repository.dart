@@ -24,6 +24,8 @@ class CoachingRepository extends ChangeNotifier {
   List<CoachingModule> _modules = [];
   List<String> _cachedFaqs = [];
   List<String> _gapIds = [];
+  List<KnowledgeDocument> _knowledgeDocs = [];
+  final Map<String, String> _moduleThumbnails = {};
   bool _syncing = false;
 
   List<CoachingModule> get modules => List.unmodifiable(_modules);
@@ -43,6 +45,12 @@ class CoachingRepository extends ChangeNotifier {
 
   bool get isSyncing => _syncing;
 
+  /// Source documents synced from the coaching backend (knowledge library).
+  List<KnowledgeDocument> get knowledgeDocs => List.unmodifiable(_knowledgeDocs);
+
+  /// Presigned thumbnail URL for a module, or null if none fetched.
+  String? moduleThumbnailUrl(String moduleId) => _moduleThumbnails[moduleId];
+
   /// Drops the in-memory module/progress snapshot. Call on logout — this
   /// repository is a single long-lived instance for the app's whole process
   /// (see main.dart), so without this the next user to log in on the same
@@ -51,25 +59,21 @@ class CoachingRepository extends ChangeNotifier {
   void clear() {
     _modules = [];
     _gapIds = [];
+    _knowledgeDocs = [];
+    _moduleThumbnails.clear();
     notifyListeners();
   }
 
-  /// Loads modules from SQLite; falls back to mock data in debug builds.
+  /// Loads modules from SQLite; shows empty state if none cached.
   Future<void> initialize() async {
     try {
       final rows = await _dao.allModulesWithProgress();
       if (rows.isNotEmpty) {
         _modules = rows.map(_rowToModule).toList();
         notifyListeners();
-        return;
       }
     } catch (e) {
       debugPrint('[CoachingRepository] initialize DB read failed: $e');
-    }
-    // Fallback: mock data in debug builds so the UI is never empty.
-    if (kDebugMode) {
-      _modules = MockCoachingData.allModules;
-      notifyListeners();
     }
   }
 
@@ -124,8 +128,11 @@ class CoachingRepository extends ChangeNotifier {
       ConsoleLog.banner('[PayloadDebug] coaching-gaps-raw → ${gapsRes.data}');
       ConsoleLog.banner('[PayloadDebug] coaching-morning-raw → ${morningRes.data}');
 
-      // Non-blocking: FAQ sync failures don't abort the main sync.
-      await syncChatFaqs(userId);
+      // Non-blocking: FAQ + knowledge sync failures don't abort the main sync.
+      await Future.wait([
+        syncChatFaqs(userId),
+        _syncKnowledgeDocs(),
+      ]);
 
       final gapIds = <String>{};
       final gaps = (gapsRes.data?['behavioural_gaps'] as List<dynamic>?) ?? [];
@@ -178,6 +185,8 @@ class CoachingRepository extends ChangeNotifier {
       }
       _gapIds = gapModuleIds.toList();
       ConsoleLog.step('[PayloadDebug] coaching-gap-modules → ${_gapIds.length}:$_gapIds');
+      // Non-blocking: thumbnail sync — best-effort.
+      await _syncModuleThumbnails(rawModules);
       notifyListeners();
 
       // Morning list wins; if the morning endpoint is empty/unavailable,
@@ -193,8 +202,6 @@ class CoachingRepository extends ChangeNotifier {
       final rows = await _dao.allModulesWithProgress();
       if (rows.isNotEmpty) {
         _modules = rows.map(_rowToModule).toList();
-      } else if (kDebugMode && _modules.isEmpty) {
-        _modules = MockCoachingData.allModules;
       }
       notifyListeners();
     } catch (e) {
@@ -481,6 +488,112 @@ class CoachingRepository extends ChangeNotifier {
     if (value is! Map) return null;
     final v = value[lang];
     return v is String ? v : null;
+  }
+
+  Future<void> _syncKnowledgeDocs() async {
+    try {
+      final base = AppConfig.coachingServiceUrl;
+      final url = '$base${Endpoints.coachingSyncSourceDocuments}';
+      ConsoleLog.step('[PayloadDebug] coaching-knowledge → $url');
+      final res = await _api.dio.get<Map<String, dynamic>>(url);
+      ConsoleLog.step('[PayloadDebug] coaching-knowledge → ${res.statusCode} body=${res.data}');
+      final docs =
+          (res.data?['source_documents'] as List<dynamic>?) ?? [];
+      final parsed = <KnowledgeDocument>[];
+      for (final d in docs) {
+        if (d is! Map) continue;
+        final id = d['source_document_id'] as String? ?? '';
+        if (id.isEmpty) continue;
+        final filename = d['original_filename'] as String? ?? '';
+        final rawTitle = d['title'] as String?;
+        final title = (rawTitle != null && rawTitle.isNotEmpty)
+            ? rawTitle
+            : (filename.isNotEmpty ? filename : id);
+        parsed.add(KnowledgeDocument(
+          id: id,
+          titleEn: title,
+          titleBn: title,
+          domain: _domainFromFilename(filename),
+          docType: _docTypeFromFilename(filename),
+          presignedUrl: d['presigned_url'] as String?,
+          thumbnailPresignedUrl: d['thumbnail_presigned_url'] as String?,
+        ));
+      }
+      if (parsed.isNotEmpty) {
+        _knowledgeDocs = parsed;
+      }
+      ConsoleLog.step('[PayloadDebug] coaching-knowledge → ${_knowledgeDocs.length} docs');
+    } catch (e) {
+      ConsoleLog.warn('[PayloadDebug] coaching-knowledge sync failed: $e');
+    }
+  }
+
+  Future<void> _syncModuleThumbnails(List<dynamic> rawModules) async {
+    try {
+      final ids = rawModules
+          .whereType<Map>()
+          .where((m) => m['has_thumbnail'] == true)
+          .map((m) => m['id'] as String? ?? '')
+          .where((id) => id.isNotEmpty)
+          .toList();
+      if (ids.isEmpty) return;
+      final base = AppConfig.coachingServiceUrl;
+      final url = '$base${Endpoints.coachingModuleThumbnails}';
+      ConsoleLog.step('[PayloadDebug] coaching-thumbnails → $url ids=$ids');
+      final res = await _api.dio.post<Map<String, dynamic>>(
+        url,
+        data: {'module_ids': ids},
+      );
+      ConsoleLog.step('[PayloadDebug] coaching-thumbnails → ${res.statusCode}');
+      for (final u in (res.data?['urls'] as List<dynamic>?) ?? []) {
+        if (u is! Map) continue;
+        final moduleId = u['module_id'] as String? ?? '';
+        final presigned = u['presigned_url'] as String? ?? '';
+        if (moduleId.isNotEmpty && presigned.isNotEmpty) {
+          _moduleThumbnails[moduleId] = presigned;
+        }
+      }
+      ConsoleLog.step(
+          '[PayloadDebug] coaching-thumbnails → ${_moduleThumbnails.length} urls');
+    } catch (e) {
+      ConsoleLog.warn('[PayloadDebug] coaching-thumbnails sync failed: $e');
+    }
+  }
+
+  CoachingDomain _domainFromFilename(String filename) {
+    final lower = filename.toLowerCase();
+    if (lower.contains('anc') || lower.contains('maternal')) {
+      return CoachingDomain.anc;
+    }
+    if (lower.contains('ncd') ||
+        lower.contains('hypertension') ||
+        lower.contains('diabetes')) {
+      return CoachingDomain.ncd;
+    }
+    if (lower.contains('imci') || lower.contains('child')) {
+      return CoachingDomain.imci;
+    }
+    if (lower.contains('tb') || lower.contains('tuberculosis')) {
+      return CoachingDomain.tb;
+    }
+    if (lower.contains('epi') || lower.contains('vaccine')) {
+      return CoachingDomain.epi;
+    }
+    if (lower.contains('nutrition') || lower.contains('muac')) {
+      return CoachingDomain.nutrition;
+    }
+    return CoachingDomain.anc;
+  }
+
+  String _docTypeFromFilename(String filename) {
+    final ext = filename.split('.').last.toLowerCase();
+    return switch (ext) {
+      'pdf' => 'PDF',
+      'doc' || 'docx' => 'Word',
+      'ppt' || 'pptx' => 'Slides',
+      'mp4' || 'mov' || 'avi' => 'Video',
+      _ => 'Doc',
+    };
   }
 
   String _lastSyncIso() {

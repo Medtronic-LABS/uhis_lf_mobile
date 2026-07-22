@@ -12,10 +12,11 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
-import '../../core/theme/app_theme.dart';
 import 'coaching_models.dart';
+import 'coaching_repository.dart';
 import 'module_player_screen.dart';
 import 'quiz_screen.dart';
 
@@ -25,6 +26,11 @@ const _kMetadataColor = Color(0xFF667085);
 const _kDividerColor = Color(0xFFE4E7EC);
 const _kIndexBg = Color(0xFFEFF4FF);
 const _kSpiceBlueContainer = Color(0xFFE8F0FE);
+
+String _fmtDate(DateTime d) {
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return '${d.day} ${months[d.month - 1]} ${d.year}';
+}
 
 class ModuleDetailScreen extends StatelessWidget {
   const ModuleDetailScreen({super.key, required this.module});
@@ -55,9 +61,15 @@ class ModuleDetailScreen extends StatelessWidget {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text(module.titleEn),
-        backgroundColor: AppColors.navy,
+        backgroundColor: const Color(0xFF2514BE),
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.home_rounded),
+            onPressed: () => Navigator.of(context).popUntil((r) => r.isFirst),
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -67,6 +79,28 @@ class ModuleDetailScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Thumbnail — shows presigned URL from coaching backend if available
+                  Builder(
+                    builder: (ctx) {
+                      final thumb =
+                          ctx.watch<CoachingRepository>().moduleThumbnailUrl(module.id);
+                      if (thumb == null) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.network(
+                            thumb,
+                            height: 160,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+
                   // Title
                   Text(
                     module.titleEn,
@@ -74,6 +108,13 @@ class ModuleDetailScreen extends StatelessWidget {
                           fontWeight: FontWeight.bold,
                           fontSize: 20,
                           color: _kTitleColor,
+                        ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Assigned ${_fmtDate(DateTime.now())}',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: _kMetadataColor,
                         ),
                   ),
                   const SizedBox(height: 16),
@@ -102,7 +143,7 @@ class ModuleDetailScreen extends StatelessWidget {
                       CoachingStrings.detailLearningCardsSection,
                       style: Theme.of(context).textTheme.labelMedium?.copyWith(
                             fontWeight: FontWeight.w600,
-                            color: AppColors.navy,
+                            color: const Color(0xFF2514BE),
                           ),
                     ),
                     const SizedBox(height: 8),
@@ -134,7 +175,7 @@ class ModuleDetailScreen extends StatelessWidget {
                       CoachingStrings.detailQuizSection,
                       style: Theme.of(context).textTheme.labelMedium?.copyWith(
                             fontWeight: FontWeight.w600,
-                            color: AppColors.navy,
+                            color: const Color(0xFF2514BE),
                           ),
                     ),
                     const SizedBox(height: 8),
@@ -257,7 +298,7 @@ class _StatItem extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: AppColors.navy),
+            Icon(icon, size: 16, color: const Color(0xFF2514BE)),
             const SizedBox(width: 4),
             Text(
               value,
@@ -320,7 +361,7 @@ class _CurriculumRow extends StatelessWidget {
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
-                    color: AppColors.navy,
+                    color: const Color(0xFF2514BE),
                   ),
             ),
           ),
@@ -378,7 +419,7 @@ class _CtaRow extends StatelessWidget {
               icon: const Icon(Icons.arrow_forward_rounded, size: 16),
               label: Text(CoachingStrings.startCourse),
               style: FilledButton.styleFrom(
-                backgroundColor: AppColors.navy,
+                backgroundColor: const Color(0xFF2514BE),
                 shape: const StadiumBorder(),
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
@@ -416,7 +457,7 @@ class _ReadAgainCta extends StatelessWidget {
         icon: const Icon(Icons.arrow_forward_rounded, size: 16),
         label: Text(CoachingStrings.detailReadCourse),
         style: FilledButton.styleFrom(
-          backgroundColor: AppColors.navy,
+          backgroundColor: const Color(0xFF2514BE),
           shape: const StadiumBorder(),
           padding: const EdgeInsets.symmetric(vertical: 14),
         ),

@@ -9,6 +9,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_strings.dart';
 import '../../core/db/app_database.dart';
@@ -18,8 +19,10 @@ import '../training/all_modules_screen.dart';
 import '../training/coaching_dao.dart';
 import '../training/coaching_models.dart';
 import '../training/coaching_repository.dart';
+import '../training/knowledge_list_screen.dart';
 import '../training/module_detail_screen.dart';
 import '../training/quiz_screen.dart';
+import '../training/training_requests_screen.dart';
 import 'assistant_models.dart';
 import 'assistant_repository.dart';
 
@@ -144,6 +147,12 @@ class _CoachingTabState extends State<_CoachingTab> {
           _TrainingHeader(modules: modules),
           const SizedBox(height: 10),
           _TrainingScroll(modules: modules),
+          const SizedBox(height: 24),
+          const _KnowledgeHeader(),
+          const SizedBox(height: 10),
+          const _KnowledgeScroll(),
+          const SizedBox(height: 20),
+          const _TrainingRequestsCard(),
           const SizedBox(height: 16),
         ],
       ),
@@ -349,7 +358,26 @@ class _ModuleCard extends StatelessWidget {
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
                 child: Stack(
                   children: [
-                    Container(height: 100, width: double.infinity, color: _kSpiceBlueContainer),
+                    Builder(
+                      builder: (ctx) {
+                        final thumb =
+                            ctx.watch<CoachingRepository>().moduleThumbnailUrl(module.id);
+                        if (thumb != null) {
+                          return Image.network(
+                            thumb,
+                            height: 100,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                              height: 100,
+                              width: double.infinity,
+                              color: _kSpiceBlueContainer,
+                            ),
+                          );
+                        }
+                        return Container(height: 100, width: double.infinity, color: _kSpiceBlueContainer);
+                      },
+                    ),
                     // Domain badge — top-left
                     Positioned(
                       top: 8,
@@ -506,6 +534,240 @@ class _RefresherTile extends StatelessWidget {
                 ),
               ),
               const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: _kMetaGray),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Knowledge section ────────────────────────────────────────────────────────
+
+class _KnowledgeHeader extends StatelessWidget {
+  const _KnowledgeHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          CoachingStrings.knowledgeSection,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
+        ),
+        const Spacer(),
+        TextButton(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const KnowledgeListScreen()),
+          ),
+          child: Text(
+            CoachingStrings.seeAll,
+            style: const TextStyle(color: _kSpiceBlue, fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _KnowledgeScroll extends StatelessWidget {
+  const _KnowledgeScroll();
+
+  @override
+  Widget build(BuildContext context) {
+    final docs = context.watch<CoachingRepository>().knowledgeDocs;
+    ConsoleLog.step('[AssistantScreen] knowledge docs=${docs.length}');
+    if (docs.isEmpty) return const _EmptyState(msg: 'No documents yet.');
+    return SizedBox(
+      height: 130,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.zero,
+        itemCount: docs.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 12),
+        itemBuilder: (ctx, i) => _KnowledgeCard(doc: docs[i]),
+      ),
+    );
+  }
+}
+
+class _KnowledgeCard extends StatelessWidget {
+  const _KnowledgeCard({required this.doc});
+
+  final KnowledgeDocument doc;
+
+  Color get _domainColor => switch (doc.domain) {
+    CoachingDomain.ncd       => const Color(0xFFE53935),
+    CoachingDomain.anc       => const Color(0xFF8E24AA),
+    CoachingDomain.imci      => const Color(0xFF00897B),
+    CoachingDomain.tb        => const Color(0xFFF57C00),
+    CoachingDomain.epi       => const Color(0xFF1E88E5),
+    CoachingDomain.nutrition => const Color(0xFF43A047),
+  };
+
+  String get _domainLabel => switch (doc.domain) {
+    CoachingDomain.ncd       => 'NCD',
+    CoachingDomain.anc       => 'ANC',
+    CoachingDomain.imci      => 'IMCI',
+    CoachingDomain.tb        => 'TB',
+    CoachingDomain.epi       => 'EPI',
+    CoachingDomain.nutrition => 'Nutrition',
+  };
+
+  Future<void> _open(BuildContext context) async {
+    final url = doc.presignedUrl;
+    if (url == null || url.isEmpty) return;
+    final uri = Uri.parse(url);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      ConsoleLog.warn('[KnowledgeCard] Could not open $url');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final title = doc.titleBn.isNotEmpty ? doc.titleBn : doc.titleEn;
+    return GestureDetector(
+      onTap: () => _open(context),
+      child: SizedBox(
+        width: 150,
+        child: Card(
+          elevation: 1,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          color: Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: doc.thumbnailPresignedUrl != null
+                          ? Image.network(
+                              doc.thumbnailPresignedUrl!,
+                              width: 36,
+                              height: 36,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Container(
+                                width: 36,
+                                height: 36,
+                                color: _kSpiceBlueContainer,
+                                child: const Icon(Icons.description_rounded, color: _kSpiceBlue, size: 20),
+                              ),
+                            )
+                          : Container(
+                              width: 36,
+                              height: 36,
+                              color: _kSpiceBlueContainer,
+                              child: const Icon(Icons.description_rounded, color: _kSpiceBlue, size: 20),
+                            ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: _domainColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        _domainLabel,
+                        style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: _domainColor),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Color(0xFF101828)),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: _kSpiceBlueContainer,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    doc.docType,
+                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: _kSpiceBlue),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Training requests card ───────────────────────────────────────────────────
+
+class _TrainingRequestsCard extends StatelessWidget {
+  const _TrainingRequestsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final pending = MockCoachingData.trainingRequests
+        .where((r) => r.status == TrainingRequestStatus.pending)
+        .length;
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: Colors.white,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const TrainingRequestsScreen()),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: _kSpiceBlueContainer,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.school_rounded, color: _kSpiceBlue, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      CoachingStrings.trainingRequestsSection,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF101828)),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      pending > 0 ? '$pending pending' : CoachingStrings.requestTrainingCta,
+                      style: const TextStyle(fontSize: 12, color: _kMetaGray),
+                    ),
+                  ],
+                ),
+              ),
+              if (pending > 0)
+                Container(
+                  width: 22,
+                  height: 22,
+                  decoration: const BoxDecoration(color: _kSpiceBlue, shape: BoxShape.circle),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '$pending',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                )
+              else
+                const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Color(0xFF6B7280)),
             ],
           ),
         ),
@@ -869,44 +1131,82 @@ class _AiChatScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: _kSpiceBlue,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
+      body: SafeArea(
+        child: Column(
           children: [
+            // White inline header — matches spice-coaching-android SDK
             Container(
-              width: 32,
-              height: 32,
-              decoration: const BoxDecoration(color: Colors.white24, shape: BoxShape.circle),
-              child: const Icon(Icons.auto_awesome_rounded, size: 18, color: Colors.white),
-            ),
-            const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('AI Coach', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                Row(
-                  children: [
-                    Container(
-                      width: 7,
-                      height: 7,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF4CAF50),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    const Text('Online', style: TextStyle(fontSize: 11, color: Colors.white70)),
-                  ],
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(
+                  bottom: BorderSide(color: Color(0xFFE4E7EC), width: 0.5),
                 ),
-              ],
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFF101828)),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: _kSpiceBlue,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.auto_awesome_rounded, size: 20, color: Colors.white),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'AI Coach',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                            color: Color(0xFF101828),
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            Container(
+                              width: 7,
+                              height: 7,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF4CAF50),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Text(
+                              'Online',
+                              style: TextStyle(fontSize: 11, color: Color(0xFF6B7280)),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.more_vert_rounded, color: Color(0xFF6B7280)),
+                    onPressed: () {},
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, color: Color(0xFF6B7280)),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
             ),
+            const Expanded(child: _ChatBody()),
           ],
         ),
       ),
-      body: const _ChatBody(),
     );
   }
 }

@@ -155,9 +155,15 @@ class _QuestionScreen extends StatelessWidget {
       backgroundColor: AppColors.canvas,
       appBar: AppBar(
         title: Text(module.titleEn),
-        backgroundColor: AppColors.navy,
+        backgroundColor: const Color(0xFF2514BE),
         foregroundColor: Colors.white,
         leading: BackButton(onPressed: onBack),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.home_rounded),
+            onPressed: onBack,
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -312,7 +318,7 @@ class _InlineAnswerFeedback extends StatelessWidget {
           child: FilledButton(
             onPressed: onNext,
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.navy,
+              backgroundColor: const Color(0xFF2514BE),
               shape: const StadiumBorder(),
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
@@ -389,6 +395,31 @@ class _OptionTile extends StatelessWidget {
           ),
           child: Row(
             children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: answered
+                      ? (isCorrect
+                          ? AppColors.statusSuccessSurface
+                          : (index == (selectedIndex ?? -1)
+                              ? AppColors.statusCriticalSurface
+                              : bgColor))
+                      : Colors.white.withValues(alpha: 0.5),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: borderColor.withValues(alpha: 0.5), width: 1),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  String.fromCharCode(65 + index),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   label,
@@ -442,7 +473,7 @@ class _ResultScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.canvas,
       appBar: AppBar(
-        backgroundColor: AppColors.navy,
+        backgroundColor: const Color(0xFF2514BE),
         foregroundColor: Colors.white,
         automaticallyImplyLeading: false,
         title: Text(CoachingStrings.quizResult),
@@ -628,7 +659,7 @@ class _EmptyQuizScreen extends StatelessWidget {
       backgroundColor: AppColors.canvas,
       appBar: AppBar(
         title: Text(CoachingStrings.quizTitle),
-        backgroundColor: AppColors.navy,
+        backgroundColor: const Color(0xFF2514BE),
         foregroundColor: Colors.white,
       ),
       body: Center(
@@ -662,7 +693,7 @@ class _EmptyQuizScreen extends StatelessWidget {
                 icon: const Icon(Icons.arrow_back_rounded, size: 18),
                 label: Text(CoachingStrings.backToModules),
                 style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.navy,
+                  backgroundColor: const Color(0xFF2514BE),
                 ),
               ),
             ],

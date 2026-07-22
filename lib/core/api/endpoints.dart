@@ -245,4 +245,14 @@ class Endpoints {
 
   /// Frequent chat questions mined from telemetry (suggestion chips).
   static const String coachingSyncChatFaqs = '/medtronics-api/sync/chat-faqs';
+
+  /// Published source documents (knowledge library) linked to published modules.
+  /// Query: `?domain=<domain>&limit=<n>&offset=<n>` (all optional).
+  static const String coachingSyncSourceDocuments =
+      '/medtronics-api/sync/source-documents/published';
+
+  /// Presigned GET URLs for module thumbnails (batch POST, max 50 IDs).
+  /// Body: `{"module_ids": [...]}`.
+  static const String coachingModuleThumbnails =
+      '/medtronics-api/sync/modules/presigned-thumbnails';
 }

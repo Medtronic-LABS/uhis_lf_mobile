@@ -38,6 +38,7 @@ dependencies:
   path_provider: ^2.1.4
   audio_waveforms: ^2.0.2
   record: ^7.0.0
+  speech_to_text: ^7.0.0
   web_socket_channel: ^3.0.1
   google_mlkit_text_recognition: ^0.15.1
   image_picker: ^1.2.3

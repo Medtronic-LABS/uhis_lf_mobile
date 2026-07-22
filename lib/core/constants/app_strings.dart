@@ -4306,6 +4306,35 @@ abstract final class CoachingStrings {
     if (score >= 0.7) return badgeLabelWellDone;
     return badgeLabelKeepPractising;
   }
+
+  // Knowledge & Training Requests (mock — no API)
+  static String get knowledgeSection =>
+      AppLocale.isBangla ? 'জ্ঞান' : 'Knowledge';
+  static String get trainingRequestsSection =>
+      AppLocale.isBangla ? 'প্রশিক্ষণ অনুরোধ' : 'Training Requests';
+  static String get requestTrainingCta =>
+      AppLocale.isBangla ? 'প্রশিক্ষণ অনুরোধ করুন' : 'Request Training';
+  static String get requestTopicHint =>
+      AppLocale.isBangla ? 'প্রশিক্ষণের বিষয়' : 'Training topic';
+  static String get requestNotesHint =>
+      AppLocale.isBangla ? 'কোনো মন্তব্য যোগ করুন' : 'Add a note (optional)';
+  static String get requestSubmit =>
+      AppLocale.isBangla ? 'জমা দিন' : 'Submit Request';
+  static String get requestSubmitted =>
+      AppLocale.isBangla ? 'অনুরোধ জমা দেওয়া হয়েছে' : 'Request submitted';
+  static String get requestStatusPending =>
+      AppLocale.isBangla ? 'মুলতুবি' : 'Pending';
+  static String get requestStatusApproved =>
+      AppLocale.isBangla ? 'অনুমোদিত' : 'Approved';
+  static String get requestStatusRejected =>
+      AppLocale.isBangla ? 'প্রত্যাখ্যাত' : 'Rejected';
+  static String get seeAll => AppLocale.isBangla ? 'সব দেখুন' : 'See all';
+  static String get noTrainingRequests =>
+      AppLocale.isBangla ? 'কোনো অনুরোধ নেই' : 'No training requests yet.';
+  static String docTypePages(int n) =>
+      AppLocale.isBangla ? '$n পৃষ্ঠা' : '$n pages';
+  static String get allModulesTitle =>
+      AppLocale.isBangla ? 'সব মডিউল' : 'All Modules';
 }
 
 /// NCD assessment form copy — spec §5.2.2 Hypertension Screening section.

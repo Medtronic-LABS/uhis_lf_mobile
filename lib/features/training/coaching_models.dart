@@ -356,4 +356,100 @@ abstract final class MockCoachingData {
       modules.where((m) => m.priorityToday).toList();
 
   static List<CoachingModule> get allModules => modules;
+
+  static const List<KnowledgeDocument> knowledgeDocs = [
+    KnowledgeDocument(
+      id: 'k1',
+      titleEn: 'ICCM Quick Reference Card',
+      titleBn: 'আইসিসিএম দ্রুত রেফারেন্স কার্ড',
+      domain: CoachingDomain.imci,
+      docType: 'PDF',
+      pageCount: 2,
+    ),
+    KnowledgeDocument(
+      id: 'k2',
+      titleEn: 'ANC Danger Signs Guide',
+      titleBn: 'এএনসি বিপদ চিহ্ন গাইড',
+      domain: CoachingDomain.anc,
+      docType: 'Guide',
+      pageCount: 4,
+    ),
+    KnowledgeDocument(
+      id: 'k3',
+      titleEn: 'NCD Medicine Protocol',
+      titleBn: 'এনসিডি ওষুধ প্রোটোকল',
+      domain: CoachingDomain.ncd,
+      docType: 'Protocol',
+      pageCount: 6,
+    ),
+    KnowledgeDocument(
+      id: 'k4',
+      titleEn: 'TB Symptom Checklist',
+      titleBn: 'টিবি উপসর্গ তালিকা',
+      domain: CoachingDomain.tb,
+      docType: 'PDF',
+      pageCount: 1,
+    ),
+  ];
+
+  static final List<TrainingRequest> trainingRequests = [
+    TrainingRequest(
+      id: 'tr1',
+      topic: 'Advanced ANC risk assessment',
+      notes: 'Need more training on high-risk pregnancy identification.',
+      submittedAt: DateTime(2026, 7, 18),
+      status: TrainingRequestStatus.approved,
+    ),
+    TrainingRequest(
+      id: 'tr2',
+      topic: 'MUAC measurement technique',
+      notes: 'Want refresher on correct MUAC band placement.',
+      submittedAt: DateTime(2026, 7, 20),
+      status: TrainingRequestStatus.pending,
+    ),
+  ];
+}
+
+// ─── Knowledge document ───────────────────────────────────────────────────────
+
+class KnowledgeDocument {
+  const KnowledgeDocument({
+    required this.id,
+    required this.titleEn,
+    required this.titleBn,
+    required this.domain,
+    required this.docType,
+    this.pageCount,
+    this.presignedUrl,
+    this.thumbnailPresignedUrl,
+  });
+
+  final String id;
+  final String titleEn;
+  final String titleBn;
+  final CoachingDomain domain;
+  final String docType;
+  final int? pageCount;
+  final String? presignedUrl;
+  final String? thumbnailPresignedUrl;
+}
+
+// ─── Training request ─────────────────────────────────────────────────────────
+
+enum TrainingRequestStatus { pending, approved, rejected }
+
+class TrainingRequest {
+  TrainingRequest({
+    required this.id,
+    required this.topic,
+    required this.notes,
+    required this.submittedAt,
+    this.status = TrainingRequestStatus.pending,
+  });
+
+  final String id;
+  final String topic;
+  final String notes;
+  final DateTime submittedAt;
+  TrainingRequestStatus status;
 }
