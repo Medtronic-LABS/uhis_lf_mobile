@@ -1968,6 +1968,17 @@ class _InlineServiceSelector extends StatelessWidget {
     }).toList();
   }
 
+  String _enrolledLabel(_ServiceCardDef card) {
+    if (card.isPW) return 'Registered';
+    switch (card.programme) {
+      case Programme.anc:
+      case Programme.pnc:
+        return 'Completed visit';
+      default:
+        return TriageStrings.enrolledBadge;
+    }
+  }
+
   String _cardLabel(_ServiceCardDef card) {
     if (card.isRMNCH) {
       final ctx = patientContext;
@@ -2088,6 +2099,7 @@ class _InlineServiceSelector extends StatelessWidget {
                     isEnrolled: (c.programme != null &&
                             enrolledProgrammes.contains(c.programme)) ||
                         (c.isPW && enrolledProgrammes.contains(Programme.anc)),
+                    enrolledLabel: _enrolledLabel(c),
                     isPathwaySuggested: c.programme != null &&
                         pathwayProgrammes.contains(c.programme),
                     onTap: () => _handleTap(context, c),
@@ -2106,6 +2118,7 @@ class _ServiceTile extends StatelessWidget {
     required this.isSelected,
     required this.isLocked,
     required this.isEnrolled,
+    required this.enrolledLabel,
     required this.isPathwaySuggested,
     required this.onTap,
   });
@@ -2116,8 +2129,12 @@ class _ServiceTile extends StatelessWidget {
   final bool isLocked;
 
   /// Patient is already enrolled in this programme from past visits.
-  /// Shows an "Enrolled" badge; the card remains selectable for this visit.
+  /// Shows an programme-specific badge; the card remains selectable for this visit.
   final bool isEnrolled;
+
+  /// Badge text when [isEnrolled] is true. Defaults to "Enrolled" for most
+  /// programmes; ANC/PNC use "Completed ANC"/"Completed PNC" etc.
+  final String enrolledLabel;
 
   final bool isPathwaySuggested;
   final VoidCallback onTap;
@@ -2229,7 +2246,7 @@ class _ServiceTile extends StatelessWidget {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            TriageStrings.enrolledBadge,
+                            enrolledLabel,
                             style: TextStyle(
                               fontSize: 8,
                               fontWeight: FontWeight.w700,
