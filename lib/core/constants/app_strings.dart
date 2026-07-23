@@ -540,6 +540,18 @@ abstract final class SyncStrings {
 
   static String get done => AppLocale.isBangla ? 'যেতে প্রস্তুত' : 'Ready to go';
   static String get syncFailed => AppLocale.isBangla ? 'আপনার ডেটা ডাউনলোড সম্পন্ন করা যায়নি।' : 'We couldn\'t finish downloading your data.';
+  static String get syncErrorNoInternet => AppLocale.isBangla
+      ? 'ইন্টারনেট সংযোগ নেই। আপনার নেটওয়ার্ক চেক করে আবার চেষ্টা করুন।'
+      : 'No internet connection. Please check your network and try again.';
+  static String get syncErrorTimeout => AppLocale.isBangla
+      ? 'সংযোগ সময় শেষ হয়ে গেছে। আবার চেষ্টা করুন।'
+      : 'Connection timed out. Please try again.';
+  static String get syncErrorServer => AppLocale.isBangla
+      ? 'সার্ভারে পৌঁছানো যাচ্ছে না। একটু পরে আবার চেষ্টা করুন।'
+      : 'Could not reach the server. Please try again later.';
+  static String get syncErrorGeneric => AppLocale.isBangla
+      ? 'কিছু একটা ভুল হয়েছে। আবার চেষ্টা করুন।'
+      : 'Something went wrong. Please try again.';
   static String get continueOffline => AppLocale.isBangla ? 'যা আছে তা দিয়ে চালিয়ে যান' : 'Continue with what we have';
   static String get retry => CommonStrings.retry;
 

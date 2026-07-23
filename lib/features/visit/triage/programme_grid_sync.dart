@@ -36,10 +36,14 @@ abstract final class ProgrammeGridSync {
           return isPostpartum;
         case Programme.unknown:
           return false;
-        // Non-maternal programmes are always applicable when enrolled.
+        // FP: hidden during pregnancy; after delivery only once PNC is enrolled.
+        case Programme.familyPlanning:
+          if (isPregnant) return false;
+          if (isPostpartum) return enrolled.contains(Programme.pnc);
+          return true;
+        // Other non-maternal programmes are always applicable when enrolled.
         case Programme.ncd:
         case Programme.tb:
-        case Programme.familyPlanning:
         case Programme.cataract:
         case Programme.eyeCare:
         case Programme.epi:

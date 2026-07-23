@@ -203,6 +203,27 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
     context.go('/home');
   }
 
+  String _friendlyError(String? raw) {
+    if (raw == null || raw.isEmpty) return SyncStrings.syncErrorGeneric;
+    final lower = raw.toLowerCase();
+    if (lower.contains('host lookup') ||
+        lower.contains('no address associated') ||
+        lower.contains('connection error') ||
+        lower.contains('socketexception') ||
+        lower.contains('network is unreachable')) {
+      return SyncStrings.syncErrorNoInternet;
+    }
+    if (lower.contains('timeout') || lower.contains('timed out')) {
+      return SyncStrings.syncErrorTimeout;
+    }
+    if (lower.contains('connection refused') ||
+        lower.contains('503') ||
+        lower.contains('502')) {
+      return SyncStrings.syncErrorServer;
+    }
+    return SyncStrings.syncErrorGeneric;
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -279,7 +300,7 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
               // Subtitle / current step (or icon summary for complete)
               if (hasError)
                 Text(
-                  _progress.error ?? _report?.errors.first ?? '',
+                  _friendlyError(_progress.error ?? _report?.errors.firstOrNull),
                   style: textTheme.bodyLarge?.copyWith(color: scheme.error),
                   textAlign: TextAlign.center,
                 )

@@ -898,23 +898,6 @@ class _PatientContextScreenState
                       ),
                       const SizedBox(height: 12),
                     ],
-                    // ── Stats grid ────────────────────────────────────────
-                    _StatsGrid(
-                      threads: threads,
-                      assessments: data.assessments,
-                      noDataLabel: PatientProfileStrings.noVitalsYet,
-                    ),
-                    const SizedBox(height: 12),
-
-                    // ── BP / BG trend sparklines ──────────────────────────
-                    _BpBgTrendSection(
-                      vitalHistory: data.vitalHistory,
-                      assessments: data.assessments,
-                      patientId: widget.patientId,
-                      patientName: data.name,
-                    ),
-                    if (data.vitalHistory.isNotEmpty) const SizedBox(height: 12),
-
                     // ── Combined health history ───────────────────────────
                     _CombinedTimeline(
                       entries: _buildTimelineEntries(data),
