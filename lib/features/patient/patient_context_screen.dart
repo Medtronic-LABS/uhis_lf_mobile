@@ -29,6 +29,7 @@ import 'patient_repository.dart';
 import '../assistant/patient_ai_sheet.dart';
 import 'contact_sheet.dart';
 import '../../core/db/pregnancy_snapshot_dao.dart';
+import '../../core/widgets/gestational_age_card.dart';
 import '../../core/widgets/skeleton.dart';
 import 'vitals_repository.dart';
 
@@ -879,20 +880,25 @@ class _PatientContextScreenState
                       riskReasons: data.riskReasons,
                       lastAssessedDate: data.assessments.isNotEmpty ? data.assessments.first.date : null,
                     ),
+                    const SizedBox(height: 10),
+
+                    // ── Active care threads ───────────────────────────────
+                    _CareThreadChipRow(threads: threads),
                     const SizedBox(height: 12),
 
-                    // ── Snapshot cards ────────────────────────────────────
-                    // Pregnancy progress (ANC / PW only — hidden after delivery)
+                    // ── Pregnancy LMP/EDD card (active pregnancy only) ────
                     if (isAnc && snap != null && snap.deliveryDateMillis == null && !snap.facts.isPostpartumWindow && data.isPregnant) ...[
-                      _PregnancyProgressSection(
-                        snapshot: snap,
-                        ancVisitNumber: ancVisitNum,
-                        gravida: gravida,
-                        parity: parity,
+                      GestationalAgeCard(
+                        lmpDate: snap.lmpDate != null
+                            ? DateTime.fromMillisecondsSinceEpoch(snap.lmpDate!)
+                            : null,
+                        eddDate: snap.eddDate != null
+                            ? DateTime.fromMillisecondsSinceEpoch(snap.eddDate!)
+                            : null,
                       ),
                       const SizedBox(height: 12),
                     ],
-                    // Stats grid — shown for all programmes
+                    // ── Stats grid ────────────────────────────────────────
                     _StatsGrid(
                       threads: threads,
                       assessments: data.assessments,
@@ -908,10 +914,6 @@ class _PatientContextScreenState
                       patientName: data.name,
                     ),
                     if (data.vitalHistory.isNotEmpty) const SizedBox(height: 12),
-
-                    // ── Active care threads ───────────────────────────────
-                    _CareThreadChipRow(threads: threads),
-                    const SizedBox(height: 12),
 
                     // ── Combined health history ───────────────────────────
                     _CombinedTimeline(
