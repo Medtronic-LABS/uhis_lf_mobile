@@ -887,7 +887,7 @@ class _PatientContextScreenState
                     const SizedBox(height: 12),
 
                     // ── Pregnancy LMP/EDD card (active pregnancy only) ────
-                    if (isAnc && snap != null && snap.deliveryDateMillis == null && !snap.facts.isPostpartumWindow && data.isPregnant) ...[
+                    if (isAnc && snap != null && snap.deliveryDateMillis == null && !snap.facts.isPostpartumWindow) ...[
                       GestationalAgeCard(
                         lmpDate: snap.lmpDate != null
                             ? DateTime.fromMillisecondsSinceEpoch(snap.lmpDate!)
@@ -1361,11 +1361,7 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
     final stats = <String, String>{};
     final snap = data.pregnancySnapshot;
 
-    if (snap?.eddDate != null) {
-      final weeksLeft =
-          DateTime.fromMillisecondsSinceEpoch(snap!.eddDate!).difference(DateTime.now()).inDays ~/ 7;
-      if (weeksLeft > 0) stats[PatientProfileStrings.weeksToGo] = '$weeksLeft wks';
-    }
+    // EDD/weeks-to-go shown in GestationalAgeCard above — omit here to avoid duplication.
     final visitNum = raw['ancVisitNumber'] as String?;
     if (visitNum != null && visitNum.isNotEmpty) stats[PatientProfileStrings.visitsCompleted] = visitNum;
     final ancBp = raw['bp'] as String?;
