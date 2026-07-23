@@ -130,16 +130,13 @@ extension NeedFilterHelpers on NeedFilter {
               p == Programme.anc || p == Programme.pnc || p == Programme.pw,
         );
       case NeedFilter.childImmunisation:
-        // imci only (epi not in pilot); gated on dueAt so the filter surfaces
-        // patients with a scheduled immunisation date.
-        return item.programmes.contains(Programme.imci) && item.dueAt != null;
+        return item.programmes.contains(Programme.imci) ||
+            (item.age != null && item.age! <= 5);
       case NeedFilter.ncd:
         return item.programmes.contains(Programme.ncd);
       case NeedFilter.eyeCare:
-        // Gated on dueAt so the filter surfaces patients with a scheduled visit.
         return item.programmes
-                .any((p) => p == Programme.eyeCare || p == Programme.cataract) &&
-            item.dueAt != null;
+            .any((p) => p == Programme.eyeCare || p == Programme.cataract);
       case NeedFilter.thisWeek:
         // Calendar schedule 1–7 days out — not clinical tier (may be critical).
         return DashboardTier.fromDueAt(item.dueAt) == DashboardTier.thisWeek;
@@ -169,14 +166,15 @@ Set<NeedFilter> computeAvailableNeeds(List<MissionQueueItem> items) {
     )) {
       available.add(NeedFilter.ancMnch);
     }
-    if (item.programmes.contains(Programme.imci) && item.dueAt != null) {
+    if (item.programmes.contains(Programme.imci) ||
+        (item.age != null && item.age! <= 5)) {
       available.add(NeedFilter.childImmunisation);
     }
     if (item.programmes.contains(Programme.ncd)) {
       available.add(NeedFilter.ncd);
     }
-    if (item.programmes.any((p) => p == Programme.eyeCare || p == Programme.cataract) &&
-        item.dueAt != null) {
+    if (item.programmes
+        .any((p) => p == Programme.eyeCare || p == Programme.cataract)) {
       available.add(NeedFilter.eyeCare);
     }
     if (DashboardTier.fromDueAt(item.dueAt) == DashboardTier.thisWeek) {
