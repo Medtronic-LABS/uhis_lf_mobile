@@ -883,7 +883,7 @@ class _PatientContextScreenState
 
                     // ── Snapshot cards ────────────────────────────────────
                     // Pregnancy progress (ANC / PW only — hidden after delivery)
-                    if (isAnc && snap != null && snap.deliveryDateMillis == null) ...[
+                    if (isAnc && snap != null && snap.deliveryDateMillis == null && !snap.facts.isPostpartumWindow && data.isPregnant) ...[
                       _PregnancyProgressSection(
                         snapshot: snap,
                         ancVisitNumber: ancVisitNum,
