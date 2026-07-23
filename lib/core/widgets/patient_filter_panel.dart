@@ -130,13 +130,16 @@ extension NeedFilterHelpers on NeedFilter {
               p == Programme.anc || p == Programme.pnc || p == Programme.pw,
         );
       case NeedFilter.childImmunisation:
-        // PILOT-SCOPE v1: imci only (epi not in pilot).
-        return item.programmes.contains(Programme.imci);
+        // imci only (epi not in pilot); gated on dueAt so the filter surfaces
+        // patients with a scheduled immunisation date.
+        return item.programmes.contains(Programme.imci) && item.dueAt != null;
       case NeedFilter.ncd:
         return item.programmes.contains(Programme.ncd);
       case NeedFilter.eyeCare:
+        // Gated on dueAt so the filter surfaces patients with a scheduled visit.
         return item.programmes
-            .any((p) => p == Programme.eyeCare || p == Programme.cataract);
+                .any((p) => p == Programme.eyeCare || p == Programme.cataract) &&
+            item.dueAt != null;
       case NeedFilter.thisWeek:
         // Calendar schedule 1–7 days out — not clinical tier (may be critical).
         return DashboardTier.fromDueAt(item.dueAt) == DashboardTier.thisWeek;
@@ -166,16 +169,16 @@ Set<NeedFilter> computeAvailableNeeds(List<MissionQueueItem> items) {
     )) {
       available.add(NeedFilter.ancMnch);
     }
-    if (item.programmes.contains(Programme.imci)) {
+    if (item.programmes.contains(Programme.imci) && item.dueAt != null) {
       available.add(NeedFilter.childImmunisation);
     }
     if (item.programmes.contains(Programme.ncd)) {
       available.add(NeedFilter.ncd);
     }
-    // PILOT-SCOPE v1: eyeCare/cataract chip disabled (not in pilot).
-    // if (item.programmes.any((p) => p == Programme.eyeCare || p == Programme.cataract)) {
-    //   available.add(NeedFilter.eyeCare);
-    // }
+    if (item.programmes.any((p) => p == Programme.eyeCare || p == Programme.cataract) &&
+        item.dueAt != null) {
+      available.add(NeedFilter.eyeCare);
+    }
     if (DashboardTier.fromDueAt(item.dueAt) == DashboardTier.thisWeek) {
       available.add(NeedFilter.thisWeek);
     }
