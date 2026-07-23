@@ -44,6 +44,7 @@ class PatientOrMemberData {
     this.recentVisits = const [],
     this.memberId,
     this.householdName,
+    this.householdHeadPhone,
     this.vitalHistory = const [],
     this.pregnancySnapshot,
   });
@@ -51,6 +52,7 @@ class PatientOrMemberData {
   final PatientWithProgrammes? localPatient;
   final MemberHealthDetails? remoteMember;
   final String? householdName;
+  final String? householdHeadPhone;
   final Set<Programme> programmes;
   final List<MemberAssessment> remoteAssessments;
 
@@ -138,6 +140,7 @@ class PatientOrMemberData {
     List<MemberAssessment>? remoteAssessments,
     List<PatientVisit>? recentVisits,
     String? householdName,
+    String? householdHeadPhone,
     List<VisitVitals>? vitalHistory,
     PregnancySnapshotRow? pregnancySnapshot,
   }) {
@@ -150,6 +153,7 @@ class PatientOrMemberData {
       recentVisits: recentVisits ?? this.recentVisits,
       memberId: memberId,
       householdName: householdName ?? this.householdName,
+      householdHeadPhone: householdHeadPhone ?? this.householdHeadPhone,
       vitalHistory: vitalHistory ?? this.vitalHistory,
       pregnancySnapshot: pregnancySnapshot ?? this.pregnancySnapshot,
     );
@@ -202,14 +206,23 @@ class _PatientContextScreenState
   }
 
   /// Looks up household name from the local DB. Returns null if not found.
-  Future<String?> _householdName(String? householdId) async {
-    if (householdId == null || householdId.isEmpty) return null;
+  Future<({String? name, String? headPhone})> _householdInfo(
+      String? householdId) async {
+    if (householdId == null || householdId.isEmpty) {
+      return (name: null, headPhone: null);
+    }
     try {
       final dao = context.read<HouseholdDao>();
       final entity = await dao.getById(householdId);
-      return entity?.name?.trim().isNotEmpty == true ? entity!.name : null;
+      final name =
+          entity?.name?.trim().isNotEmpty == true ? entity!.name : null;
+      final headPhone =
+          entity?.headPhoneNumber?.trim().isNotEmpty == true
+              ? entity!.headPhoneNumber
+              : null;
+      return (name: name, headPhone: headPhone);
     } on Object {
-      return null;
+      return (name: null, headPhone: null);
     }
   }
 
@@ -468,15 +481,15 @@ class _PatientContextScreenState
       List<MemberAssessment> remoteAssessments = const [];
       if (skipRemote) {
         ConsoleLog.banner('[PatientCtx] phase2 skip remote (sync ${syncAge!.inMinutes}min ago) — householdName only');
-        final householdName = await _householdName(localPatient.patient.householdId);
+        final info = await _householdInfo(localPatient.patient.householdId);
         if (mounted) setState(() => _remoteLoading = false);
         ConsoleLog.banner('[PatientCtx] phase2 done=${tPhase2.elapsedMilliseconds}ms'
             ' remoteSkipped=true total=${t0.elapsedMilliseconds}ms');
-        return localOnly.copyWith(householdName: householdName);
+        return localOnly.copyWith(householdName: info.name, householdHeadPhone: info.headPhone);
       }
 
-      ConsoleLog.banner('[PatientCtx] phase2 start — remote assessments + householdName');
-      final phase2 = await Future.wait([
+      ConsoleLog.banner('[PatientCtx] phase2 start — remote assessments + householdInfo');
+      final phase2Results = await Future.wait([
         memberRepo
             .getMemberAssessments(
               widget.patientId,
@@ -485,10 +498,10 @@ class _PatientContextScreenState
               patientGender: localPatient.patient.gender,
             )
             .catchError((_) => <MemberAssessment>[]),
-        _householdName(localPatient.patient.householdId),
+        _householdInfo(localPatient.patient.householdId),
       ]);
-      remoteAssessments = phase2[0] as List<MemberAssessment>;
-      final householdName = phase2[1] as String?;
+      remoteAssessments = phase2Results[0] as List<MemberAssessment>;
+      final householdInfo = phase2Results[1] as ({String? name, String? headPhone});
       // ignore: avoid_print
       print('[PatientContextScreen] Found ${remoteAssessments.length} remote assessments');
 
@@ -496,7 +509,8 @@ class _PatientContextScreenState
 
       return localOnly.copyWith(
         remoteAssessments: remoteAssessments,
-        householdName: householdName,
+        householdName: householdInfo.name,
+        householdHeadPhone: householdInfo.headPhone,
       );
     }
 
@@ -528,12 +542,14 @@ class _PatientContextScreenState
       }
       
       final localAssessments = await _localAssessmentsFor(widget.patientId);
+      final memberHouseholdInfo = await _householdInfo(member.householdId);
       return PatientOrMemberData(
         remoteMember: member,
         programmes: progs,
         localAssessments: localAssessments,
         memberId: resolvedMemberId,
-        householdName: await _householdName(member.householdId),
+        householdName: memberHouseholdInfo.name,
+        householdHeadPhone: memberHouseholdInfo.headPhone,
         vitalHistory: vitalHistory,
         pregnancySnapshot: pregnancySnapshot,
       );
@@ -590,6 +606,7 @@ class _PatientContextScreenState
       
       final localAssessmentsList =
           await _localAssessmentsFor(widget.patientId);
+      final prePassedHouseholdInfo = await _householdInfo(data['householdId']?.toString());
       return PatientOrMemberData(
         remoteMember: MemberHealthDetails(
           id: memberId,
@@ -607,7 +624,8 @@ class _PatientContextScreenState
         remoteAssessments: assessments,
         localAssessments: localAssessmentsList,
         memberId: resolvedMemberId,
-        householdName: await _householdName(data['householdId']?.toString()),
+        householdName: prePassedHouseholdInfo.name,
+        householdHeadPhone: prePassedHouseholdInfo.headPhone,
         vitalHistory: vitalHistory,
         pregnancySnapshot: pregnancySnapshot,
       );
@@ -787,7 +805,6 @@ class _PatientContextScreenState
   }
   Widget _buildContent(PatientOrMemberData data, {required bool remoteLoading}) {
     final t0 = Stopwatch()..start();
-    final isUrgent = data.riskBand == Band.band1 || data.riskBand == Band.band2;
 
     final threads = _deriveThreads(data);
 
@@ -853,7 +870,6 @@ class _PatientContextScreenState
           children: [
             _PatientDetailHeader(
               data: data,
-              isUrgent: isUrgent,
               refreshing: _refreshing,
               onBack: () => Navigator.of(context).maybePop(),
               onRefresh: _refreshing ? null : _refresh,
@@ -895,6 +911,7 @@ class _PatientContextScreenState
                         eddDate: snap.eddDate != null
                             ? DateTime.fromMillisecondsSinceEpoch(snap.eddDate!)
                             : null,
+                        ancVisitNumber: ancVisitNum,
                       ),
                       const SizedBox(height: 12),
                     ],
@@ -4533,40 +4550,37 @@ class _VitalsSnapshot {
 class _PatientDetailHeader extends StatelessWidget {
   const _PatientDetailHeader({
     required this.data,
-    required this.isUrgent,
     required this.refreshing,
     required this.onBack,
     required this.onRefresh,
   });
 
   final PatientOrMemberData data;
-  final bool isUrgent;
   final bool refreshing;
   final VoidCallback onBack;
   final VoidCallback? onRefresh;
 
   @override
   Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     final name = data.name ?? PatientContextStrings.fallbackTitle;
 
     final ageLabel = _ageLabelFromDob(data.dateOfBirth, data.age);
-    final subtitleParts = <String>[];
-    if (ageLabel != null) subtitleParts.add(ageLabel);
-    if (data.gender != null) subtitleParts.add(data.gender!);
-    if (data.householdId != null) {
-      subtitleParts.add(
-        data.householdName ??
-            PatientContextStrings.householdFallback(data.householdId!),
-      );
-    }
-    final subtitle = subtitleParts.join(' · ');
+    final titleSuffixParts = <String>[];
+    if (ageLabel != null) titleSuffixParts.add(ageLabel);
+    if (data.gender != null) titleSuffixParts.add(data.gender!);
+    final displayName = titleSuffixParts.isEmpty
+        ? name
+        : '$name · ${titleSuffixParts.join(' · ')}';
+    final subtitle = data.householdId != null
+        ? (data.householdName ??
+            PatientContextStrings.householdFallback(data.householdId!))
+        : null;
 
     final chips = <_HeaderChip>[
       if (data.nationalId != null)
         _HeaderChip(Icons.badge_outlined, data.nationalId!),
-      if (data.phoneNumber != null || data.householdId != null)
-        _HeaderChip(Icons.phone_outlined, data.phoneNumber ?? ContactSheetStrings.noContactAvailable,
+      if (data.phoneNumber != null || data.householdHeadPhone != null)
+        _HeaderChip(Icons.phone_outlined, data.phoneNumber ?? data.householdHeadPhone!,
             onTap: () => showContactSheet(context, data)),
       if (data.villageName != null)
         _HeaderChip(Icons.location_on_outlined, data.villageName!,
@@ -4595,25 +4609,12 @@ class _PatientDetailHeader extends StatelessWidget {
                 onTap: onBack,
               ),
               const SizedBox(width: 10),
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: Colors.white.withValues(alpha: 0.18),
-                child: Text(
-                  _initials(name),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      name,
+                      displayName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -4622,7 +4623,7 @@ class _PatientDetailHeader extends StatelessWidget {
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    if (subtitle.isNotEmpty)
+                    if (subtitle != null)
                       Text(
                         subtitle,
                         maxLines: 1,
@@ -4636,26 +4637,6 @@ class _PatientDetailHeader extends StatelessWidget {
                   ],
                 ),
               ),
-              if (isUrgent) ...[
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: tokens.statusCritical,
-                    borderRadius: BorderRadius.circular(5),
-                  ),
-                  child: Text(
-                    PatientContextStrings.urgentBadge,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-              ],
               const SizedBox(width: 8),
               HeaderIconButton(
                 icon: Icons.cloud_download_outlined,
@@ -4739,14 +4720,6 @@ class _PatientDetailHeader extends StatelessWidget {
         );
       }
     }
-  }
-
-  static String _initials(String n) {
-    final parts = n.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty || parts.first.isEmpty) return '?';
-    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
-    return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
-        .toUpperCase();
   }
 
   /// Smart age label: months for under-2, years otherwise.

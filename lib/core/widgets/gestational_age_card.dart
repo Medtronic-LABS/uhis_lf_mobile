@@ -12,12 +12,14 @@ class GestationalAgeCard extends StatelessWidget {
     required this.eddDate,
     this.gestationalWeeks,
     this.bottomPadding = 0,
+    this.ancVisitNumber,
   });
 
   final DateTime? lmpDate;
   final DateTime? eddDate;
   final int? gestationalWeeks;
   final double bottomPadding;
+  final String? ancVisitNumber;
 
   static const _pinkAccent = Color(0xFF9D174D);
   static const _navy = Color(0xFF1B2B5E);
@@ -80,56 +82,75 @@ class GestationalAgeCard extends StatelessWidget {
                   child: const Text('🤰', style: TextStyle(fontSize: 19)),
                 ),
                 const SizedBox(width: 10),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      ComposerStrings.gestationalAgeLabel.toUpperCase(),
-                      style: const TextStyle(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w700,
-                        color: _pinkAccent,
-                        letterSpacing: 0.6,
-                        height: 1,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    RichText(
-                      text: TextSpan(
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        ComposerStrings.gestationalAgeLabel.toUpperCase(),
                         style: const TextStyle(
-                          fontFamily: AppFonts.display,
-                          color: _navy,
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: _pinkAccent,
+                          letterSpacing: 0.6,
                           height: 1,
                         ),
-                        children: weeks != null
-                            ? [
-                                TextSpan(
-                                  text: '$weeks ',
-                                  style: const TextStyle(
-                                    fontSize: 21,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                ),
-                                TextSpan(
-                                  text: ComposerStrings.gestationalAgeWeeks,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: _unitGrey,
-                                  ),
-                                ),
-                                if (days != null && days > 0) ...[
+                      ),
+                      const SizedBox(height: 2),
+                      RichText(
+                        text: TextSpan(
+                          style: const TextStyle(
+                            fontFamily: AppFonts.display,
+                            color: _navy,
+                            height: 1,
+                          ),
+                          children: weeks != null
+                              ? [
                                   TextSpan(
-                                    text: ' $days ',
+                                    text: '$weeks ',
                                     style: const TextStyle(
                                       fontSize: 21,
                                       fontWeight: FontWeight.w900,
-                                      color: _navy,
                                     ),
                                   ),
                                   TextSpan(
-                                    text: ComposerStrings.gestationalAgeDays,
+                                    text: ComposerStrings.gestationalAgeWeeks,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: _unitGrey,
+                                    ),
+                                  ),
+                                  if (days != null && days > 0) ...[
+                                    TextSpan(
+                                      text: ' $days ',
+                                      style: const TextStyle(
+                                        fontSize: 21,
+                                        fontWeight: FontWeight.w900,
+                                        color: _navy,
+                                      ),
+                                    ),
+                                    TextSpan(
+                                      text: ComposerStrings.gestationalAgeDays,
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                        color: _unitGrey,
+                                      ),
+                                    ),
+                                  ],
+                                ]
+                              : [
+                                  TextSpan(
+                                    text: '— ',
+                                    style: const TextStyle(
+                                      fontSize: 21,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: ComposerStrings.gestationalAgeWeeks,
                                     style: const TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w700,
@@ -137,28 +158,29 @@ class GestationalAgeCard extends StatelessWidget {
                                     ),
                                   ),
                                 ],
-                              ]
-                            : [
-                                TextSpan(
-                                  text: '— ',
-                                  style: const TextStyle(
-                                    fontSize: 21,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                ),
-                                TextSpan(
-                                  text: ComposerStrings.gestationalAgeWeeks,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: _unitGrey,
-                                  ),
-                                ),
-                              ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (ancVisitNumber != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _pinkAccent.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: _pinkAccent.withValues(alpha: 0.3)),
+                    ),
+                    child: Text(
+                      '${PatientContextStrings.ancVisitLabel} $ancVisitNumber',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: _pinkAccent,
                       ),
                     ),
-                  ],
-                ),
+                  ),
               ],
             ),
             const SizedBox(height: 10),
