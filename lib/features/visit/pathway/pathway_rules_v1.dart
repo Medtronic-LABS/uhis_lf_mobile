@@ -104,6 +104,7 @@ class DemographicGate {
     this.sex,
     this.requiresPregnancy = false,
     this.requiresPostpartum = false,
+    this.excludesPregnancy = false,
   });
 
   /// Minimum age in months (inclusive). Null = no minimum.
@@ -120,6 +121,9 @@ class DemographicGate {
 
   /// Whether postpartum status is required.
   final bool requiresPostpartum;
+
+  /// Whether the pathway is suppressed while the patient is pregnant.
+  final bool excludesPregnancy;
 
   /// Empty gate — all demographics pass.
   static const any = DemographicGate();
@@ -146,6 +150,11 @@ class DemographicGate {
 
     // Postpartum check
     if (requiresPostpartum && !ctx.isPostpartum) {
+      return false;
+    }
+
+    // Pregnancy exclusion check
+    if (excludesPregnancy && ctx.isPregnant) {
       return false;
     }
 
@@ -511,6 +520,7 @@ abstract final class PathwayRulesV1 {
         sex: Sex.female,
         minAgeMonths: 180,
         maxAgeMonths: 588,
+        excludesPregnancy: true,
       ),
       historyTriggers: {
         'FP_COUNSELLING_DUE',

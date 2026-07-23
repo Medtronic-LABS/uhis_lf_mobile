@@ -174,6 +174,87 @@ class UnifiedFormNotifier extends ChangeNotifier {
     }
   }
 
+  /// Pre-fills `pregnantWomanExistingIllness` and `pregnantWomanOnTreatment`
+  /// from the most recent prior ANC assessment. Only seeds when the SK has not
+  /// already entered a value (i.e., field is null in current data).
+  Future<void> preloadAncMedicalHistory() async {
+    if (_data.getValue('pregnantWomanExistingIllness') != null) return;
+    final prior = await _assessmentRepo.lastAncIllnessData(_patientId);
+    if (prior == null) return;
+    var changed = false;
+    for (final entry in prior.entries) {
+      if (_data.getValue(entry.key) == null) {
+        _data = _data.setValue(entry.key, entry.value);
+        changed = true;
+      }
+    }
+    if (changed) notifyListeners();
+  }
+
+  /// Pre-fills stable ANC obstetric history fields: previousPregnancyComplications,
+  /// ttTdCompleted, facilityIdentifiedForDelivery.
+  Future<void> preloadAncChronic() async {
+    final prior = await _assessmentRepo.lastAncChronicData(_patientId);
+    if (prior == null) return;
+    var changed = false;
+    for (final entry in prior.entries) {
+      if (_data.getValue(entry.key) == null) {
+        _data = _data.setValue(entry.key, entry.value);
+        changed = true;
+      }
+    }
+    if (changed) notifyListeners();
+  }
+
+  /// Pre-fills stable NCD diagnosis/medication/lifestyle fields:
+  /// isBeforeHtnDiagnosis, medicationFrequencyBp, isBeforeDiabetesDiagnosis,
+  /// medicationFrequencyBg, isRegularSmoker.
+  Future<void> preloadNcdChronic() async {
+    if (_data.getValue('isBeforeHtnDiagnosis') != null) return;
+    final prior = await _assessmentRepo.lastNcdChronicData(_patientId);
+    if (prior == null) return;
+    var changed = false;
+    for (final entry in prior.entries) {
+      if (_data.getValue(entry.key) == null) {
+        _data = _data.setValue(entry.key, entry.value);
+        changed = true;
+      }
+    }
+    if (changed) notifyListeners();
+  }
+
+  /// Pre-fills stable PNC Mother history fields: gravida, parity,
+  /// livingChildren, and comorbidity/treatment flags.
+  Future<void> preloadPncMotherChronic() async {
+    if (_data.getValue('gravida') != null) return;
+    final prior = await _assessmentRepo.lastPncMotherChronicData(_patientId);
+    if (prior == null) return;
+    var changed = false;
+    for (final entry in prior.entries) {
+      if (_data.getValue(entry.key) == null) {
+        _data = _data.setValue(entry.key, entry.value);
+        changed = true;
+      }
+    }
+    if (changed) notifyListeners();
+  }
+
+  /// Pre-fills stable Family Planning fields: familyPlanningMethods,
+  /// desireForChildrenInFuture, numberOfLivingChildren.
+  Future<void> preloadFpChronic() async {
+    if (_data.getValue('familyPlanningMethods') != null) return;
+    final prior = await _assessmentRepo.lastFpData(_patientId);
+    if (prior == null) return;
+    var changed = false;
+    for (final entry in prior.entries) {
+      if (_data.getValue(entry.key) == null) {
+        _data = _data.setValue(entry.key, entry.value);
+        changed = true;
+      }
+    }
+    if (changed) notifyListeners();
+  }
+
   /// Marks the given field IDs as having validation errors and notifies
   /// listeners so the form can highlight them.
   void setValidationErrors(Set<String> errors) {

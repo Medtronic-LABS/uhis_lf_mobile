@@ -10,6 +10,7 @@ import 'package:dio/dio.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
 import '../../core/config/app_config.dart';
+import '../../core/debug/console_log.dart';
 import '../../core/errors/domain_exceptions.dart';
 import 'assistant_models.dart';
 
@@ -33,11 +34,87 @@ class AssistantRepository {
     return (_client.dio, Endpoints.assistantAsk);
   }
 
-  /// Ask the assistant a question. Pass [patientContext] to scope the answer
-  /// to a single patient (the patient-context floating assistant); omit it for
-  /// the general Ask-AI tab. Returns the prose answer plus any suggested
-  /// actions the backend selected from the fixed allowlist.
+  /// Ask the assistant a question.
+  ///
+  /// Routes to the coaching RAG backend (`/medtronics-api/coaching/rag-query`)
+  /// when [AppConfig.coachingServiceUrl] is set and no [patientContext] is
+  /// provided. Falls back to the UHIS AI-Scribe assistant endpoint otherwise.
   Future<AssistantAnswer> ask(
+    String question, {
+    Map<String, dynamic>? patientContext,
+  }) async {
+    final coachingUrl = AppConfig.coachingServiceUrl;
+    if (coachingUrl.isNotEmpty && patientContext == null) {
+      return _askCoachingRag(question, coachingUrl);
+    }
+    return _askAiScribe(question, patientContext: patientContext);
+  }
+
+  Future<AssistantAnswer> _askCoachingRag(
+      String question, String baseUrl) async {
+    final dio = Dio(BaseOptions(
+      baseUrl: baseUrl,
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 45),
+    ));
+    ConsoleLog.banner(
+        '[PayloadDebug] coaching-rag → $baseUrl${Endpoints.coachingRagQuery}\nq=$question');
+    try {
+      final response = await dio.post<Map<String, dynamic>>(
+        Endpoints.coachingRagQuery,
+        data: {'question': question, 'response_language': 'en'},
+      );
+      ConsoleLog.step('[PayloadDebug] coaching-rag → ${response.statusCode}');
+      final data = response.data;
+      if (data == null) throw const AssistantException('Empty response');
+      final answer = data['answer'] as String?;
+      if (answer == null || answer.isEmpty) {
+        throw const AssistantException('No answer in response');
+      }
+      final suggestedQuestions =
+          (data['suggested_questions'] as List<dynamic>? ?? [])
+              .whereType<String>()
+              .toList();
+      final rawModules = data['retrieved_modules'] as List<dynamic>? ?? [];
+      final modules = <RagModuleHit>[];
+      for (final m in rawModules) {
+        if (m is! Map) continue;
+        final titleRaw = m['title'];
+        final title = (titleRaw is Map
+                ? (titleRaw['en'] ?? titleRaw.values.firstOrNull)
+                : titleRaw)
+            ?.toString() ??
+            '';
+        modules.add(RagModuleHit(
+          moduleId: (m['module_id'] ?? '').toString(),
+          title: title,
+          domain: (m['domain'] ?? '').toString(),
+        ));
+      }
+      final rawDocs = data['source_documents'] as List<dynamic>? ?? [];
+      final docs = <RagSourceAttribution>[];
+      for (final d in rawDocs) {
+        if (d is! Map) continue;
+        docs.add(RagSourceAttribution(
+          title: (d['title'] ?? '').toString(),
+          sourceType: (d['source_type'] ?? 'pdf').toString(),
+          presignedUrl: d['presigned_url'] as String?,
+        ));
+      }
+      return AssistantAnswer(
+        text: answer,
+        suggestedQuestions: suggestedQuestions,
+        retrievedModules: modules,
+        sourceDocuments: docs,
+      );
+    } on DioException catch (e) {
+      ConsoleLog.warn('[PayloadDebug] coaching-rag error: $e');
+      throw AssistantException(NetworkErrorMapper.friendly(e),
+          statusCode: e.response?.statusCode);
+    }
+  }
+
+  Future<AssistantAnswer> _askAiScribe(
     String question, {
     Map<String, dynamic>? patientContext,
   }) async {
@@ -72,10 +149,8 @@ class AssistantRepository {
       }
       return AssistantAnswer(text: answer, actions: actions);
     } on DioException catch (e) {
-      throw AssistantException(
-        NetworkErrorMapper.friendly(e),
-        statusCode: e.response?.statusCode,
-      );
+      throw AssistantException(NetworkErrorMapper.friendly(e),
+          statusCode: e.response?.statusCode);
     }
   }
 }

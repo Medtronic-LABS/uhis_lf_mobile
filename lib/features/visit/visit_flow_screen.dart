@@ -30,6 +30,7 @@ import '../../core/clinical/referral_evaluator.dart';
 import '../../core/constants/app_strings.dart';
 import 'models/anc_assessment.dart';
 import '../../core/db/local_assessment_dao.dart';
+import 'assessment_repository.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
@@ -153,6 +154,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   int? get _effectiveGestationalWeeks =>
       widget.gestationalWeeks ?? _resolvedGestationalWeeks;
 
+  /// ANC or PNC visit number for the header badge (1-based). Null until loaded.
+  int? _visitNumber;
+
   @override
   void initState() {
     super.initState();
@@ -172,7 +176,36 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       if (widget.patientId.isNotEmpty) {
         _loadPregnancySnapshotFromDb();
       }
+      if (widget.patientId.isNotEmpty) {
+        _loadVisitNumber();
+      }
     });
+  }
+
+  Future<void> _loadVisitNumber({Set<Programme>? programmes}) async {
+    final progs = programmes ?? widget.seedProgrammes;
+    final isAnc = progs.contains(Programme.anc);
+    final isPnc = progs.contains(Programme.pnc);
+    if (!isAnc && !isPnc) return;
+    try {
+      int count;
+      if (isAnc) {
+        final history = await context
+            .read<AssessmentRepository>()
+            .ancVitalsHistory(widget.patientId);
+        count = history.length;
+      } else {
+        final rows = await context
+            .read<LocalAssessmentDao>()
+            .getByPatientId(widget.patientId);
+        count = rows
+            .where((r) => r.assessmentType.toUpperCase() == 'PNC_MOTHER')
+            .length;
+      }
+      if (mounted) setState(() => _visitNumber = count + 1);
+    } catch (e) {
+      debugPrint('[VisitFlow] visit number load failed: $e');
+    }
   }
 
   @override
@@ -379,6 +412,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
                   ageDisplay: _ageDisplay,
                   householdId: widget.householdId,
                   patientGender: widget.patientGender,
+                  visitNumber: _visitNumber,
                   primaryProgramme: _pathways.isNotEmpty
                       ? _pathways.first.programme
                       : _primaryProgramme,
@@ -457,6 +491,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
                 _confirmedProgrammes.isEmpty) {
               _confirmedProgrammes =
                   pathways.map((p) => p.programme).toSet();
+            }
+            if (_visitNumber == null) {
+              _loadVisitNumber(programmes: _confirmedProgrammes);
             }
             setState(() {
               _step = 1;

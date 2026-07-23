@@ -130,8 +130,8 @@ extension NeedFilterHelpers on NeedFilter {
               p == Programme.anc || p == Programme.pnc || p == Programme.pw,
         );
       case NeedFilter.childImmunisation:
-        // PILOT-SCOPE v1: imci only (epi not in pilot).
-        return item.programmes.contains(Programme.imci);
+        return item.programmes.contains(Programme.imci) ||
+            (item.age != null && item.age! <= 5);
       case NeedFilter.ncd:
         return item.programmes.contains(Programme.ncd);
       case NeedFilter.eyeCare:
@@ -166,16 +166,17 @@ Set<NeedFilter> computeAvailableNeeds(List<MissionQueueItem> items) {
     )) {
       available.add(NeedFilter.ancMnch);
     }
-    if (item.programmes.contains(Programme.imci)) {
+    if (item.programmes.contains(Programme.imci) ||
+        (item.age != null && item.age! <= 5)) {
       available.add(NeedFilter.childImmunisation);
     }
     if (item.programmes.contains(Programme.ncd)) {
       available.add(NeedFilter.ncd);
     }
-    // PILOT-SCOPE v1: eyeCare/cataract chip disabled (not in pilot).
-    // if (item.programmes.any((p) => p == Programme.eyeCare || p == Programme.cataract)) {
-    //   available.add(NeedFilter.eyeCare);
-    // }
+    if (item.programmes
+        .any((p) => p == Programme.eyeCare || p == Programme.cataract)) {
+      available.add(NeedFilter.eyeCare);
+    }
     if (DashboardTier.fromDueAt(item.dueAt) == DashboardTier.thisWeek) {
       available.add(NeedFilter.thisWeek);
     }

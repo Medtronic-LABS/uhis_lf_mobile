@@ -26,7 +26,6 @@ import '../features/referral/referral_list_screen.dart';
 import '../features/sync/sync_progress_screen.dart';
 import '../features/counselling/counselling_screen.dart';
 import '../features/teleconsult/teleconsult_screen.dart';
-import '../features/training/training_screen.dart';
 import '../features/assistant/assistant_screen.dart';
 import '../features/visit/briefing/visit_briefing_screen.dart';
 import '../features/visit/immunisation/immunisation_timeline_screen.dart';
@@ -621,10 +620,7 @@ GoRouter buildRouter(AuthState auth) {
       GoRoute(
         path: '/training',
         name: 'training',
-        pageBuilder: (context, state) => const MaterialPage(
-          key: ValueKey('training-page'),
-          child: TrainingScreen(),
-        ),
+        redirect: (_, _) => '/assistant',
       ),
 
       // ─────────────────────────────────────────────────────────────────────

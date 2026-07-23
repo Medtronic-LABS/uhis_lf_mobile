@@ -146,3 +146,86 @@ class CoachingDao {
     return (count ?? 0) == 0;
   }
 }
+
+/// Persists the assistant chat history so the user sees prior messages across
+/// app restarts.
+class ChatMessageDao {
+  const ChatMessageDao(this._db);
+
+  final AppDatabase _db;
+
+  static const String _table = AppDatabase.tableChatMessages;
+
+  Future<void> insertMessage({
+    required String id,
+    required String role,
+    required String text,
+    required int timestampMs,
+    String? suggestedQuestionsJson,
+  }) async {
+    await _db.db.insert(
+      _table,
+      {
+        'id': id,
+        'role': role,
+        'text': text,
+        'timestamp_ms': timestampMs,
+        'suggested_questions': suggestedQuestionsJson,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Returns up to [limit] most recent messages, ordered oldest-first.
+  Future<List<Map<String, dynamic>>> recentMessages({int limit = 50}) async {
+    return _db.db.query(
+      _table,
+      orderBy: 'timestamp_ms ASC',
+      limit: limit,
+    );
+  }
+
+  Future<void> clearAll() async {
+    await _db.db.delete(_table);
+  }
+}
+
+/// Caches coaching FAQ suggestions synced from the platform backend.
+class CoachingFaqDao {
+  const CoachingFaqDao(this._db);
+
+  final AppDatabase _db;
+
+  static const String _table = AppDatabase.tableCoachingFaqs;
+
+  Future<void> upsertFaq({
+    required String id,
+    required String questionEn,
+    String? questionBn,
+    required int occurrenceCount,
+    required int rank,
+  }) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await _db.db.insert(
+      _table,
+      {
+        'id': id,
+        'question_en': questionEn,
+        'question_bn': questionBn,
+        'occurrence_count': occurrenceCount,
+        'rank': rank,
+        'synced_at': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Returns all FAQs ordered by rank ascending (lower rank = higher priority).
+  Future<List<Map<String, dynamic>>> allFaqs() async {
+    return _db.db.query(_table, orderBy: 'rank ASC');
+  }
+
+  Future<void> clearAll() async {
+    await _db.db.delete(_table);
+  }
+}

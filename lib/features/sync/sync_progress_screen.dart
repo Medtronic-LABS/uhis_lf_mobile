@@ -70,21 +70,44 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
     _syncStarted = true;
 
     final sync = context.read<OfflineSyncService>();
-    
-    // Subscribe to progress updates
+
+    // Subscribe to progress updates. progressStream is a broadcast stream so
+    // joining mid-sync (background-started during onboarding) works fine.
     _progressSub = sync.progressStream.listen((progress) {
-      if (mounted) {
-        setState(() => _progress = progress);
+      if (!mounted) return;
+      setState(() => _progress = progress);
+      // Background-started sync: handle completion via stream events.
+      if (progress.isComplete && _report == null) {
+        _prepareDashboardData().then((_) {
+          if (mounted) _navigateAfterSync();
+        });
       }
     });
 
-    // /sync is reached only from a successful online login (never from
-    // biometric/PIN reentry). A first-time login or a different user signing
-    // into a shared device has no local data worth protecting — wipe stale
-    // data before pulling the new caseload. A same-user re-login (e.g. after
-    // a forced session-expiry sign-out) must NOT wipe: push any pending
-    // offline work first, then pull without wiping so in-progress
-    // assessments, drafts, and referrals created offline survive.
+    // Catch up with current state immediately — the stream won't replay past
+    // events for late subscribers.
+    if (mounted) setState(() => _progress = sync.progress);
+
+    debugPrint('[_SyncProgressScreenState] _startSync: isRunning=${sync.isRunning} isComplete=${sync.progress.isComplete} hasError=${sync.progress.hasError}');
+
+    // Sync was already completed in the background (e.g. finished during PIN setup).
+    if (sync.progress.isComplete) {
+      debugPrint('[_SyncProgressScreenState] background sync already done → prep + navigate');
+      await _prepareDashboardData();
+      if (mounted) _navigateAfterSync();
+      return;
+    }
+
+    // Sync already running in background — stream subscription handles the rest.
+    if (sync.isRunning) {
+      debugPrint('[_SyncProgressScreenState] background sync in progress → waiting on stream');
+      return;
+    }
+
+    // Normal path: /sync reached directly from a returning-user login.
+    // A first-time login or a different user signing into a shared device has
+    // no local data worth protecting — wipe before pulling. A same-user
+    // re-login must NOT wipe: push pending offline work first.
     final auth = context.read<AuthState>();
     SyncReport report;
     if (auth.sameUserRelogin) {
@@ -101,21 +124,18 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
     }
 
     if (!mounted) return;
-    
     setState(() => _report = report);
 
-    // If sync completed successfully, prepare dashboard data then navigate
+    debugPrint('[_SyncProgressScreenState] sync done: households=${report.households} members=${report.members} patients=${report.patients} errors=${report.errors}');
+
     if (report.errors.isEmpty) {
       await _prepareDashboardData();
-      if (mounted) {
-        // Check if first-time login needs onboarding (biometric/PIN setup)
-        if (!auth.onboardingComplete && !auth.pinEnabled) {
-          context.go('/onboarding');
-        } else {
-          context.go('/home');
-        }
-      }
+      if (mounted) _navigateAfterSync();
     }
+  }
+
+  void _navigateAfterSync() {
+    context.go('/home');
   }
 
   /// Prepare dashboard data after sync so the dashboard loads instantly.
@@ -180,13 +200,28 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
   }
 
   void _continueOffline() {
-    final auth = context.read<AuthState>();
-    // Check if first-time login needs onboarding (biometric/PIN setup)
-    if (!auth.onboardingComplete && !auth.pinEnabled) {
-      context.go('/onboarding');
-    } else {
-      context.go('/home');
+    context.go('/home');
+  }
+
+  String _friendlyError(String? raw) {
+    if (raw == null || raw.isEmpty) return SyncStrings.syncErrorGeneric;
+    final lower = raw.toLowerCase();
+    if (lower.contains('host lookup') ||
+        lower.contains('no address associated') ||
+        lower.contains('connection error') ||
+        lower.contains('socketexception') ||
+        lower.contains('network is unreachable')) {
+      return SyncStrings.syncErrorNoInternet;
     }
+    if (lower.contains('timeout') || lower.contains('timed out')) {
+      return SyncStrings.syncErrorTimeout;
+    }
+    if (lower.contains('connection refused') ||
+        lower.contains('503') ||
+        lower.contains('502')) {
+      return SyncStrings.syncErrorServer;
+    }
+    return SyncStrings.syncErrorGeneric;
   }
 
   @override
@@ -265,7 +300,7 @@ class _SyncProgressScreenState extends State<SyncProgressScreen>
               // Subtitle / current step (or icon summary for complete)
               if (hasError)
                 Text(
-                  _progress.error ?? _report?.errors.first ?? '',
+                  _friendlyError(_progress.error ?? _report?.errors.firstOrNull),
                   style: textTheme.bodyLarge?.copyWith(color: scheme.error),
                   textAlign: TextAlign.center,
                 )

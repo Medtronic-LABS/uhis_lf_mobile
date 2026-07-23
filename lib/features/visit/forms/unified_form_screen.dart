@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/clinical/assessment_thresholds.dart';
+import '../../../core/widgets/gestational_age_card.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/i18n/app_locale.dart';
@@ -147,6 +148,26 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
           }
         }
         await notifier.preloadBiometrics();
+        final hasAnc = widget.activeFormTypes.contains('anc') ||
+            widget.enrolledFormTypes.contains('anc');
+        if (hasAnc) {
+          await notifier.preloadAncMedicalHistory();
+          await notifier.preloadAncChronic();
+        }
+        if (widget.activeFormTypes.contains('ncd') ||
+            widget.enrolledFormTypes.contains('ncd')) {
+          await notifier.preloadNcdChronic();
+        }
+        if (widget.activeFormTypes.contains('pncMother') ||
+            widget.enrolledFormTypes.contains('pncMother')) {
+          await notifier.preloadPncMotherChronic();
+        }
+        if (widget.activeFormTypes.contains('familyPlanning') ||
+            widget.enrolledFormTypes.contains('familyPlanning') ||
+            widget.activeFormTypes.contains('family_planning') ||
+            widget.enrolledFormTypes.contains('family_planning')) {
+          await notifier.preloadFpChronic();
+        }
         // Android RMNCH summary auto-fills next visit; seed after draft so
         // a saved SK override is never clobbered.
         notifier.seedRmnchFollowUpIfNeeded();
@@ -347,10 +368,12 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             'weeks=$effectiveGa '
             'hasDate=$hasLmpData',
           );
-          items.add(_GestationalAgeCard(
+          items.add(GestationalAgeCard(
             lmpDate: cardLmp,
             eddDate: cardEdd,
             gestationalWeeks: effectiveGa,
+            bottomPadding: AppSpacing.xl,
+            ancVisitNumber: _ancVisitNumber().toString(),
           ));
         } else {
           debugPrint(
@@ -1094,10 +1117,9 @@ class _VitalsTrendCardState extends State<_VitalsTrendCard> {
   }
 }
 
-// ── Gestational age card ──────────────────────────────────────────────────────
+// _GestationalAgeCard and _DateSubBox extracted to
+// lib/core/widgets/gestational_age_card.dart.
 
-/// Navy-gradient card shown at the top of the ANC section displaying the
-/// patient's gestational age, LMP, and EDD loaded from patient rawJson.
 class _GestationalAgeCard extends StatelessWidget {
   const _GestationalAgeCard({
     required this.lmpDate,

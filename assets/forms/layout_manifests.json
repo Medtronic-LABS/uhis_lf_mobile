@@ -786,22 +786,6 @@
             "isMandatory": false
           }
         ]
-      },
-      {
-        "sectionId": "ancFollowUp",
-        "title": "Follow-Up",
-        "fieldRefs": [
-          {
-            "id": "followUpVisit",
-            "fieldName": "Follow-up visit date",
-            "isMandatory": false
-          },
-          {
-            "id": "referralFacility",
-            "fieldName": "Referral facility",
-            "isMandatory": false
-          }
-        ]
       }
     ]
   },

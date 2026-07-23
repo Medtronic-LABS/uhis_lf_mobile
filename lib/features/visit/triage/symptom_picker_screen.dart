@@ -120,11 +120,15 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
   /// undone when symptoms/AI refresh pathway activation.
   final Set<Programme> _skDismissedProgrammes = {};
 
-  /// PW meta-flag — gates ANC. Auto-true when patient is known pregnant.
+  /// PW meta-flag — gates ANC. Auto-true when patient already has PW/ANC registered.
   bool _isPW = false;
 
   /// Delivery meta-flag — gates PNC. Auto-true when patient is postpartum.
   bool _isDelivery = false;
+
+  /// True when patient already has an ANC assessment recorded today — blocks
+  /// a second ANC visit on the same calendar day.
+  bool _ancVisitedToday = false;
 
   @override
   void initState() {
@@ -208,8 +212,15 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
       debugPrint('[SymptomPicker] Success! Setting up view model...');
       final vm = TriageViewModel(patientContext: ctx);
       final pathwaySet = vm.activatedPathways.map((p) => p.programme).toSet();
-      final isPw =
-          ctx.isPregnant || ctx.activeProgrammes.contains(Programme.anc);
+      // ANC gates behind PW: only pre-select PW if patient already has a PW
+      // or ANC registration. Brand-new pregnant women start with PW=false so
+      // the SK must explicitly select PW first before ANC becomes available.
+      final isPw = ctx.activeProgrammes.contains(Programme.pw) ||
+          ctx.activeProgrammes.contains(Programme.anc);
+      // Block a second ANC visit on the same calendar day.
+      final ancToday = await context
+          .read<LocalAssessmentDao>()
+          .hasAncAssessmentTodayForPatient(patientId);
       // Pregnancy Outcome is an explicit SK choice — never auto-on.
       // Postpartum mothers get PNC via [enrolledSeed], not this flag.
       final enrolledSeed = ProgrammeGridSync.applicableEnrolledSeed(
@@ -233,6 +244,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
           ..addAll(pathwaySet);
         _isPW = isPw;
         _isDelivery = false;
+        _ancVisitedToday = ancToday;
         _isLoading = false;
       });
       debugPrint(
@@ -837,6 +849,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                         enrolledProgrammes: _patientContext!.activeProgrammes.toSet(),
                         isPW: _isPW,
                         isDelivery: _isDelivery,
+                        ancVisitedToday: _ancVisitedToday,
                         onProgrammeToggle: (programme, selected) {
                           setState(() {
                             if (selected) {
@@ -1886,20 +1899,18 @@ class _ServiceCardDef {
   bool get isRMNCH => kind == _ServiceCardKind.rmnch;
 }
 
-// Full card set — visibility filtered per patient demographics in the widget.
+// Card order matches the Eligible Services wireframe (apon_sushashthya_v14):
+// Row 1: PW, ANC, Pregnancy Outcome
+// Row 2: PNC, FP, NCD
+// Row 3: TB, Eye care
 const _kAllServiceCards = [
-  _ServiceCardDef(kind: _ServiceCardKind.rmnch,     emoji: '🤱', label: 'RMNCH'),
   _ServiceCardDef(kind: _ServiceCardKind.pw,        emoji: '🤰', label: 'PW'),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🏥', label: 'ANC',      programme: Programme.anc),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🌸', label: 'FP',       programme: Programme.familyPlanning),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '👶', label: 'PNC',      programme: Programme.pnc),
-  _ServiceCardDef(kind: _ServiceCardKind.general,   emoji: '🩺', label: 'General'),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '💊', label: 'NCD',      programme: Programme.ncd),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🫁', label: 'TB',       programme: Programme.tb),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '👁️', label: 'Eye Care', programme: Programme.eyeCare),
-  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🔬', label: 'Cataract', programme: Programme.cataract),
-  // Label overridden at render — see [_cardLabel]. Placeholder kept for const.
-  _ServiceCardDef(kind: _ServiceCardKind.delivery, emoji: '🚼', label: 'Pregnancy Outcome'),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🏥', label: 'ANC',               programme: Programme.anc),
+  _ServiceCardDef(kind: _ServiceCardKind.delivery,  emoji: '🚼', label: 'Pregnancy Outcome'),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '👶', label: 'PNC',               programme: Programme.pnc),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '🌸', label: 'FP',                programme: Programme.familyPlanning),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '💊', label: 'NCD',               programme: Programme.ncd),
+  _ServiceCardDef(kind: _ServiceCardKind.programme, emoji: '👁️', label: 'Eye Care',          programme: Programme.eyeCare),
 ];
 
 class _InlineServiceSelector extends StatelessWidget {
@@ -1910,6 +1921,7 @@ class _InlineServiceSelector extends StatelessWidget {
     required this.enrolledProgrammes,
     required this.isPW,
     required this.isDelivery,
+    required this.ancVisitedToday,
     required this.onProgrammeToggle,
     required this.onPWToggle,
     required this.onDeliveryToggle,
@@ -1925,63 +1937,81 @@ class _InlineServiceSelector extends StatelessWidget {
 
   final bool isPW;
   final bool isDelivery;
+  final bool ancVisitedToday;
   final void Function(Programme programme, bool selected) onProgrammeToggle;
   final ValueChanged<bool> onPWToggle;
   final ValueChanged<bool> onDeliveryToggle;
 
-  /// Android parity:
-  /// - Active pregnancy → Pregnancy Outcome chip (not mother PNC)
-  /// - Postpartum (delivery date set, ≤42d) → mother PNC chip (not outcome)
+  /// All 8 service cards shown for adult patients; eligibility is communicated
+  /// via lock state (greyed + snackbar on tap) rather than hiding. Order and
+  /// visibility match the Eligible Services wireframe (apon_sushashthya_v14).
   List<_ServiceCardDef> _visibleCards() {
     final ctx = patientContext;
-    final showPregnancyOutcome = ctx.isFemale && ctx.isPregnant && !ctx.isPostpartum;
-    final showMotherPnc = ctx.isFemale && ctx.isPostpartum;
     return _kAllServiceCards.where((c) {
       switch (c.kind) {
         case _ServiceCardKind.pw:
-          return ctx.isFemale && ctx.isPregnant && !ctx.isPostpartum;
         case _ServiceCardKind.delivery:
-          return showPregnancyOutcome;
-        case _ServiceCardKind.rmnch:
-          return false;
+          return ctx.isFemale && ctx.ageYears >= 15;
         case _ServiceCardKind.programme:
           final p = c.programme!;
-          // ANC only during active pregnancy (Android: off after delivery).
-          if (p == Programme.anc) {
-            return ctx.isFemale &&
-                ctx.ageYears >= 15 &&
-                ctx.isPregnant &&
-                !ctx.isPostpartum;
+          if (p == Programme.anc || p == Programme.pnc) {
+            return ctx.isFemale && ctx.ageYears >= 15;
           }
           if (p == Programme.familyPlanning) {
             return ctx.isFemale && ctx.ageYears >= 15;
           }
-          if (p == Programme.pnc) return showMotherPnc;
-          if (p == Programme.eyeCare || p == Programme.cataract) return true;
           return ctx.ageYears >= 15;
+        case _ServiceCardKind.rmnch:
         case _ServiceCardKind.general:
-          return ctx.ageYears >= 15;
+          return false;
       }
     }).toList();
   }
 
+  String _enrolledLabel(_ServiceCardDef card) {
+    if (card.isPW) return 'Registered';
+    switch (card.programme) {
+      case Programme.anc:
+      case Programme.pnc:
+        return 'Completed visit';
+      default:
+        return TriageStrings.enrolledBadge;
+    }
+  }
+
   String _cardLabel(_ServiceCardDef card) {
+    if (card.isRMNCH) {
+      final ctx = patientContext;
+      return (ctx.isFemale && ctx.isPregnant && !ctx.isPostpartum)
+          ? TriageStrings.pregnancyOutcomeChip
+          : 'PNC';
+    }
     if (card.isDelivery) return TriageStrings.pregnancyOutcomeChip;
     return card.label;
   }
 
   bool _isLocked(_ServiceCardDef card) {
-    // Pregnancy Outcome stays tappable with ANC on — tap clears ANC/PW.
-    // ANC needs PW first; both lock once pregnancy-outcome visit is active.
-    if (card.isPW) return isDelivery;
-    if (card.programme == Programme.anc) return !isPW || isDelivery;
+    final ctx = patientContext;
+    final pregnant = ctx.isPregnant && !ctx.isPostpartum;
+    if (card.isPW) return isDelivery || !pregnant;
+    if (card.programme == Programme.anc) {
+      // ANC requires PW registration first; also blocked if ANC already done today.
+      return !isPW || isDelivery || !pregnant || ancVisitedToday;
+    }
+    if (card.isDelivery) return !pregnant;
+    if (card.programme == Programme.pnc) return !ctx.isPostpartum;
     return false;
   }
 
   bool _isCardSelected(_ServiceCardDef card) {
     if (card.isPW) return isPW && !isDelivery;
     if (card.isDelivery) return isDelivery;
-    if (card.isRMNCH) return false;
+    if (card.isRMNCH) {
+      final ctx = patientContext;
+      return (ctx.isFemale && ctx.isPregnant && !ctx.isPostpartum)
+          ? isDelivery
+          : selectedProgrammes.contains(Programme.pnc);
+    }
     if (card.programme != null) return selectedProgrammes.contains(card.programme);
     return false;
   }
@@ -2004,11 +2034,9 @@ class _InlineServiceSelector extends StatelessWidget {
     if (card.isPW) {
       onPWToggle(!isPW);
     } else if (card.isDelivery) {
-      // Pregnancy Outcome visit — clears ANC/PW only; other services stay on.
+      // Pregnancy Outcome visit — clears ANC/PW; other services stay on.
       onDeliveryToggle(!alreadySelected);
     } else if (card.programme != null) {
-      // Mother PNC is a normal programme toggle (postpartum only — chip hidden
-      // while pregnant). Never routes through pregnancy-outcome.
       onProgrammeToggle(
         card.programme!,
         !selectedProgrammes.contains(card.programme),
@@ -2071,6 +2099,7 @@ class _InlineServiceSelector extends StatelessWidget {
                     isEnrolled: (c.programme != null &&
                             enrolledProgrammes.contains(c.programme)) ||
                         (c.isPW && enrolledProgrammes.contains(Programme.anc)),
+                    enrolledLabel: _enrolledLabel(c),
                     isPathwaySuggested: c.programme != null &&
                         pathwayProgrammes.contains(c.programme),
                     onTap: () => _handleTap(context, c),
@@ -2089,6 +2118,7 @@ class _ServiceTile extends StatelessWidget {
     required this.isSelected,
     required this.isLocked,
     required this.isEnrolled,
+    required this.enrolledLabel,
     required this.isPathwaySuggested,
     required this.onTap,
   });
@@ -2099,8 +2129,12 @@ class _ServiceTile extends StatelessWidget {
   final bool isLocked;
 
   /// Patient is already enrolled in this programme from past visits.
-  /// Shows an "Enrolled" badge; the card remains selectable for this visit.
+  /// Shows an programme-specific badge; the card remains selectable for this visit.
   final bool isEnrolled;
+
+  /// Badge text when [isEnrolled] is true. Defaults to "Enrolled" for most
+  /// programmes; ANC/PNC use "Completed ANC"/"Completed PNC" etc.
+  final String enrolledLabel;
 
   final bool isPathwaySuggested;
   final VoidCallback onTap;
@@ -2212,7 +2246,7 @@ class _ServiceTile extends StatelessWidget {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            TriageStrings.enrolledBadge,
+                            enrolledLabel,
                             style: TextStyle(
                               fontSize: 8,
                               fontWeight: FontWeight.w700,

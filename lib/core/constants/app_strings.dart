@@ -80,6 +80,10 @@ abstract final class LoginStrings {
       : 'Biometric cancelled — sign in with password.';
   static String get offlineUsePinHint =>
       'No internet connection. Use your PIN to continue working.';
+  static String get sessionExpiredNeedOnline =>
+      AppLocale.isBangla
+          ? 'সেশন মেয়াদ শেষ। আবার সাইন ইন করতে ইন্টারনেটে সংযুক্ত হন।'
+          : 'Session expired. Connect to the internet to sign in again.';
   static String get forgotPassword =>
       AppLocale.isBangla ? 'পাসওয়ার্ড ভুলে গেছেন?' : 'Forgot password?';
   static String get forgotPasswordTitle =>
@@ -536,6 +540,18 @@ abstract final class SyncStrings {
 
   static String get done => AppLocale.isBangla ? 'যেতে প্রস্তুত' : 'Ready to go';
   static String get syncFailed => AppLocale.isBangla ? 'আপনার ডেটা ডাউনলোড সম্পন্ন করা যায়নি।' : 'We couldn\'t finish downloading your data.';
+  static String get syncErrorNoInternet => AppLocale.isBangla
+      ? 'ইন্টারনেট সংযোগ নেই। আপনার নেটওয়ার্ক চেক করে আবার চেষ্টা করুন।'
+      : 'No internet connection. Please check your network and try again.';
+  static String get syncErrorTimeout => AppLocale.isBangla
+      ? 'সংযোগ সময় শেষ হয়ে গেছে। আবার চেষ্টা করুন।'
+      : 'Connection timed out. Please try again.';
+  static String get syncErrorServer => AppLocale.isBangla
+      ? 'সার্ভারে পৌঁছানো যাচ্ছে না। একটু পরে আবার চেষ্টা করুন।'
+      : 'Could not reach the server. Please try again later.';
+  static String get syncErrorGeneric => AppLocale.isBangla
+      ? 'কিছু একটা ভুল হয়েছে। আবার চেষ্টা করুন।'
+      : 'Something went wrong. Please try again.';
   static String get continueOffline => AppLocale.isBangla ? 'যা আছে তা দিয়ে চালিয়ে যান' : 'Continue with what we have';
   static String get retry => CommonStrings.retry;
 
@@ -4185,6 +4201,27 @@ abstract final class TrainingStrings {
   // Locked snackbar
   static const String lockedSnackbar =
       'Complete earlier lessons to unlock this one';
+
+  // SDK-matching strings
+  static const String personalisedCoaching = 'Personalised Coaching';
+  static const String lastSynced = 'Last synced';
+  static const String tabCoaching = 'Coaching';
+  static const String tabLeaderboard = 'Leaderboard';
+  static const String morningCardMicrocoaching = 'MICRO-COACHING';
+  static const String morningCardTapToAnswer = 'Tap to answer';
+  static const String refreshersSection = 'Refreshers';
+  static const String noRefreshersYet = 'No refreshers yet.';
+  static const String trainingSection = 'Training';
+  static const String seeAll = 'See all';
+  static const String allModulesTitle = 'All Modules';
+  static const String leaderboardFilterAllTime = 'All Time';
+  static const String leaderboardFilterThisMonth = 'This Month';
+  static const String leaderboardFilterThisWeek = 'This Week';
+  static const String leaderboardContext = 'Dhamrai Upazila · 28 SKs';
+  static const String leaderboardUpdated = 'Updated';
+  static const String xpSuffix = 'XP';
+  static const String streakDaySuffix = 'd';
+  static const String youLabel = 'You';
 }
 
 /// Micro-coaching pilot strings — three-loop system:
@@ -4211,6 +4248,8 @@ abstract final class CoachingStrings {
   static const String quizFailed = 'Not quite — review the module and try again.';
   static const String tryAgain = 'Try Again';
   static const String backToModules = 'Back to Training';
+  static const String quizNotReady = 'Quiz not available yet';
+  static const String quizNotReadySub = 'Questions for this module are being prepared. Complete the lesson cards and check back later.';
   static const String rationaleLabel = 'Why?';
   static const String domainAnc = 'ANC';
   static const String domainNcd = 'NCD';
@@ -4219,9 +4258,99 @@ abstract final class CoachingStrings {
   static const String domainEpi = 'EPI';
   static const String domainNutrition = 'Nutrition';
 
+  // Module detail screen
+  static const String detailCards = 'cards';
+  static const String detailQuestions = 'questions';
+  static const String startCourse = 'Start Course';
+  static const String doQuiz = 'Take Quiz';
+  static const String reviewCourse = 'Review';
+  static const String curriculumLabel = 'CURRICULUM';
+  static const String quizLabel = 'Quick Quiz';
+  static String statMinLabel(int n) => '$n min read';
+
+  // Morning card
+  static const String morningCardEyebrow = "TODAY'S FOCUS";
+  static const String morningCardStart = 'Start';
+  static const String morningCardSkip = 'Skip';
+  static const String refresherTypeMicrocoaching = 'Micro-coaching';
+  static const String refresherTypeLearningCard = 'Learning Card';
+  static const String refresherTypeQuiz = 'Quiz';
+  static const String sectionMorningCards = "TODAY'S FOCUS — BASED ON YOUR GAPS";
+  static const String lessonPlayerProgress = 'Learning {i} of {n}';
+  static String lessonProgress(int i, int n) => 'Learning $i of $n';
+
+  // All modules grid
+  static const String sectionAllModulesGrid = 'ALL TRAINING MODULES';
+
   static String quizScore(int correct, int total) => '$correct / $total correct';
   static String cardProgress(int current, int total) => '$current of $total';
   static String questionProgress(int current, int total) => 'Question $current of $total';
+
+  // Module detail — locale-aware
+  static String get detailLearningCardsSection =>
+      AppLocale.isBangla ? 'শেখার কার্ড' : 'Learning cards';
+  static String get detailQuizSection =>
+      AppLocale.isBangla ? 'কুইজ' : 'Quiz';
+  static String get detailKnowledgeCheck =>
+      AppLocale.isBangla ? 'জ্ঞান যাচাই' : 'Knowledge check';
+  static String get detailCurriculumCardMin =>
+      AppLocale.isBangla ? '১ মিনিট' : '1 min';
+  static String get detailReadCourse =>
+      AppLocale.isBangla ? 'পুনরায় পড়ুন' : 'Read course';
+  static String quizCurriculumQuestions(int n) =>
+      AppLocale.isBangla ? '$n টি প্রশ্ন' : '$n questions';
+
+  // Quiz question — locale-aware
+  static String get quizSelectAnswer =>
+      AppLocale.isBangla ? 'একটি উত্তর বেছে নিন' : 'Select an answer';
+  static String quizQuestionCounter(int n, int total) =>
+      AppLocale.isBangla ? 'প্রশ্ন $n / $total' : 'Q $n of $total';
+
+  // Quiz result — locale-aware
+  static String get yourAnswers =>
+      AppLocale.isBangla ? 'আপনার উত্তর' : 'Your answers';
+  static String get quizDone =>
+      AppLocale.isBangla ? 'সম্পন্ন' : 'Done';
+  static String get badgeLabelExpert =>
+      AppLocale.isBangla ? 'দক্ষ' : 'Expert';
+  static String get badgeLabelWellDone =>
+      AppLocale.isBangla ? 'চমৎকার!' : 'Well Done!';
+  static String get badgeLabelKeepPractising =>
+      AppLocale.isBangla ? 'চর্চা করুন' : 'Keep Practising';
+  static String badgeLabel(double score) {
+    if (score >= 0.9) return badgeLabelExpert;
+    if (score >= 0.7) return badgeLabelWellDone;
+    return badgeLabelKeepPractising;
+  }
+
+  // Knowledge & Training Requests (mock — no API)
+  static String get knowledgeSection =>
+      AppLocale.isBangla ? 'জ্ঞান' : 'Knowledge';
+  static String get trainingRequestsSection =>
+      AppLocale.isBangla ? 'প্রশিক্ষণ অনুরোধ' : 'Training Requests';
+  static String get requestTrainingCta =>
+      AppLocale.isBangla ? 'প্রশিক্ষণ অনুরোধ করুন' : 'Request Training';
+  static String get requestTopicHint =>
+      AppLocale.isBangla ? 'প্রশিক্ষণের বিষয়' : 'Training topic';
+  static String get requestNotesHint =>
+      AppLocale.isBangla ? 'কোনো মন্তব্য যোগ করুন' : 'Add a note (optional)';
+  static String get requestSubmit =>
+      AppLocale.isBangla ? 'জমা দিন' : 'Submit Request';
+  static String get requestSubmitted =>
+      AppLocale.isBangla ? 'অনুরোধ জমা দেওয়া হয়েছে' : 'Request submitted';
+  static String get requestStatusPending =>
+      AppLocale.isBangla ? 'মুলতুবি' : 'Pending';
+  static String get requestStatusApproved =>
+      AppLocale.isBangla ? 'অনুমোদিত' : 'Approved';
+  static String get requestStatusRejected =>
+      AppLocale.isBangla ? 'প্রত্যাখ্যাত' : 'Rejected';
+  static String get seeAll => AppLocale.isBangla ? 'সব দেখুন' : 'See all';
+  static String get noTrainingRequests =>
+      AppLocale.isBangla ? 'কোনো অনুরোধ নেই' : 'No training requests yet.';
+  static String docTypePages(int n) =>
+      AppLocale.isBangla ? '$n পৃষ্ঠা' : '$n pages';
+  static String get allModulesTitle =>
+      AppLocale.isBangla ? 'সব মডিউল' : 'All Modules';
 }
 
 /// NCD assessment form copy — spec §5.2.2 Hypertension Screening section.
@@ -5037,6 +5166,16 @@ abstract final class AssistantStrings {
   static const String badgeLabel = 'AI';
   static const String tabAsk = 'Ask AI';
   static const String tabTraining = 'Training';
+  static const String suggestedFollowUps = 'You might also ask:';
+  static const String voiceStart = 'Tap to speak';
+  static const String voiceStop = 'Tap to stop';
+  static const String voiceListening = 'Listening…';
+  static const String todayLabel = 'Today';
+  static const String aiCoachTitle = 'AI Coach';
+  static const String welcomeMessage =
+      'How can I help you today? Ask me about patient counselling, clinical protocols, or SPICE.';
+  static const String statusOnline = 'Online';
+  static const String clearHistory = 'Clear chat history';
 }
 
 /// Strings for [HouseholdFollowUpScreen].

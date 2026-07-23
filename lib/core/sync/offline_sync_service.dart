@@ -121,6 +121,14 @@ class OfflineSyncService extends ChangeNotifier {
   /// disable manual refresh.
   bool get isRunning => _running;
 
+  /// Reset progress state on logout so the next user's sync screen starts
+  /// fresh and doesn't see the previous session's isComplete=true shortcut.
+  void resetProgress() {
+    _progress = SyncProgress.initial;
+    _running = false;
+    notifyListeners();
+  }
+
   Future<DateTime?> lastSyncedAt() async {
     final row = await _syncMeta.read(_entityKey);
     final t = row?.lastSyncTime;

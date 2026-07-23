@@ -29,6 +29,7 @@ import 'patient_repository.dart';
 import '../assistant/patient_ai_sheet.dart';
 import 'contact_sheet.dart';
 import '../../core/db/pregnancy_snapshot_dao.dart';
+import '../../core/widgets/gestational_age_card.dart';
 import '../../core/widgets/skeleton.dart';
 import 'vitals_repository.dart';
 
@@ -43,6 +44,7 @@ class PatientOrMemberData {
     this.recentVisits = const [],
     this.memberId,
     this.householdName,
+    this.householdHeadPhone,
     this.vitalHistory = const [],
     this.pregnancySnapshot,
   });
@@ -50,6 +52,7 @@ class PatientOrMemberData {
   final PatientWithProgrammes? localPatient;
   final MemberHealthDetails? remoteMember;
   final String? householdName;
+  final String? householdHeadPhone;
   final Set<Programme> programmes;
   final List<MemberAssessment> remoteAssessments;
 
@@ -137,6 +140,7 @@ class PatientOrMemberData {
     List<MemberAssessment>? remoteAssessments,
     List<PatientVisit>? recentVisits,
     String? householdName,
+    String? householdHeadPhone,
     List<VisitVitals>? vitalHistory,
     PregnancySnapshotRow? pregnancySnapshot,
   }) {
@@ -149,6 +153,7 @@ class PatientOrMemberData {
       recentVisits: recentVisits ?? this.recentVisits,
       memberId: memberId,
       householdName: householdName ?? this.householdName,
+      householdHeadPhone: householdHeadPhone ?? this.householdHeadPhone,
       vitalHistory: vitalHistory ?? this.vitalHistory,
       pregnancySnapshot: pregnancySnapshot ?? this.pregnancySnapshot,
     );
@@ -201,14 +206,23 @@ class _PatientContextScreenState
   }
 
   /// Looks up household name from the local DB. Returns null if not found.
-  Future<String?> _householdName(String? householdId) async {
-    if (householdId == null || householdId.isEmpty) return null;
+  Future<({String? name, String? headPhone})> _householdInfo(
+      String? householdId) async {
+    if (householdId == null || householdId.isEmpty) {
+      return (name: null, headPhone: null);
+    }
     try {
       final dao = context.read<HouseholdDao>();
       final entity = await dao.getById(householdId);
-      return entity?.name?.trim().isNotEmpty == true ? entity!.name : null;
+      final name =
+          entity?.name?.trim().isNotEmpty == true ? entity!.name : null;
+      final headPhone =
+          entity?.headPhoneNumber?.trim().isNotEmpty == true
+              ? entity!.headPhoneNumber
+              : null;
+      return (name: name, headPhone: headPhone);
     } on Object {
-      return null;
+      return (name: null, headPhone: null);
     }
   }
 
@@ -467,15 +481,15 @@ class _PatientContextScreenState
       List<MemberAssessment> remoteAssessments = const [];
       if (skipRemote) {
         ConsoleLog.banner('[PatientCtx] phase2 skip remote (sync ${syncAge!.inMinutes}min ago) — householdName only');
-        final householdName = await _householdName(localPatient.patient.householdId);
+        final info = await _householdInfo(localPatient.patient.householdId);
         if (mounted) setState(() => _remoteLoading = false);
         ConsoleLog.banner('[PatientCtx] phase2 done=${tPhase2.elapsedMilliseconds}ms'
             ' remoteSkipped=true total=${t0.elapsedMilliseconds}ms');
-        return localOnly.copyWith(householdName: householdName);
+        return localOnly.copyWith(householdName: info.name, householdHeadPhone: info.headPhone);
       }
 
-      ConsoleLog.banner('[PatientCtx] phase2 start — remote assessments + householdName');
-      final phase2 = await Future.wait([
+      ConsoleLog.banner('[PatientCtx] phase2 start — remote assessments + householdInfo');
+      final phase2Results = await Future.wait([
         memberRepo
             .getMemberAssessments(
               widget.patientId,
@@ -484,10 +498,10 @@ class _PatientContextScreenState
               patientGender: localPatient.patient.gender,
             )
             .catchError((_) => <MemberAssessment>[]),
-        _householdName(localPatient.patient.householdId),
+        _householdInfo(localPatient.patient.householdId),
       ]);
-      remoteAssessments = phase2[0] as List<MemberAssessment>;
-      final householdName = phase2[1] as String?;
+      remoteAssessments = phase2Results[0] as List<MemberAssessment>;
+      final householdInfo = phase2Results[1] as ({String? name, String? headPhone});
       // ignore: avoid_print
       print('[PatientContextScreen] Found ${remoteAssessments.length} remote assessments');
 
@@ -495,7 +509,8 @@ class _PatientContextScreenState
 
       return localOnly.copyWith(
         remoteAssessments: remoteAssessments,
-        householdName: householdName,
+        householdName: householdInfo.name,
+        householdHeadPhone: householdInfo.headPhone,
       );
     }
 
@@ -527,12 +542,14 @@ class _PatientContextScreenState
       }
       
       final localAssessments = await _localAssessmentsFor(widget.patientId);
+      final memberHouseholdInfo = await _householdInfo(member.householdId);
       return PatientOrMemberData(
         remoteMember: member,
         programmes: progs,
         localAssessments: localAssessments,
         memberId: resolvedMemberId,
-        householdName: await _householdName(member.householdId),
+        householdName: memberHouseholdInfo.name,
+        householdHeadPhone: memberHouseholdInfo.headPhone,
         vitalHistory: vitalHistory,
         pregnancySnapshot: pregnancySnapshot,
       );
@@ -589,6 +606,7 @@ class _PatientContextScreenState
       
       final localAssessmentsList =
           await _localAssessmentsFor(widget.patientId);
+      final prePassedHouseholdInfo = await _householdInfo(data['householdId']?.toString());
       return PatientOrMemberData(
         remoteMember: MemberHealthDetails(
           id: memberId,
@@ -606,7 +624,8 @@ class _PatientContextScreenState
         remoteAssessments: assessments,
         localAssessments: localAssessmentsList,
         memberId: resolvedMemberId,
-        householdName: await _householdName(data['householdId']?.toString()),
+        householdName: prePassedHouseholdInfo.name,
+        householdHeadPhone: prePassedHouseholdInfo.headPhone,
         vitalHistory: vitalHistory,
         pregnancySnapshot: pregnancySnapshot,
       );
@@ -786,7 +805,6 @@ class _PatientContextScreenState
   }
   Widget _buildContent(PatientOrMemberData data, {required bool remoteLoading}) {
     final t0 = Stopwatch()..start();
-    final isUrgent = data.riskBand == Band.band1 || data.riskBand == Band.band2;
 
     final threads = _deriveThreads(data);
 
@@ -852,7 +870,6 @@ class _PatientContextScreenState
           children: [
             _PatientDetailHeader(
               data: data,
-              isUrgent: isUrgent,
               refreshing: _refreshing,
               onBack: () => Navigator.of(context).maybePop(),
               onRefresh: _refreshing ? null : _refresh,
@@ -879,46 +896,30 @@ class _PatientContextScreenState
                       riskReasons: data.riskReasons,
                       lastAssessedDate: data.assessments.isNotEmpty ? data.assessments.first.date : null,
                     ),
-                    const SizedBox(height: 12),
-
-                    // ── Snapshot cards ────────────────────────────────────
-                    // Pregnancy progress (ANC / PW only)
-                    if (isAnc && snap != null) ...[
-                      _PregnancyProgressSection(
-                        snapshot: snap,
-                        ancVisitNumber: ancVisitNum,
-                        gravida: gravida,
-                        parity: parity,
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    // Stats grid — shown for all programmes
-                    _StatsGrid(
-                      threads: threads,
-                      assessments: data.assessments,
-                      noDataLabel: PatientProfileStrings.noVitalsYet,
-                    ),
-                    const SizedBox(height: 12),
-
-                    // ── BP / BG trend sparklines ──────────────────────────
-                    _BpBgTrendSection(
-                      vitalHistory: data.vitalHistory,
-                      assessments: data.assessments,
-                      patientId: widget.patientId,
-                      patientName: data.name,
-                    ),
-                    if (data.vitalHistory.isNotEmpty) const SizedBox(height: 12),
+                    const SizedBox(height: 10),
 
                     // ── Active care threads ───────────────────────────────
                     _CareThreadChipRow(threads: threads),
                     const SizedBox(height: 12),
 
+                    // ── Pregnancy LMP/EDD card (active pregnancy only) ────
+                    if (isAnc && snap != null && snap.deliveryDateMillis == null && !snap.facts.isPostpartumWindow) ...[
+                      GestationalAgeCard(
+                        lmpDate: snap.lmpDate != null
+                            ? DateTime.fromMillisecondsSinceEpoch(snap.lmpDate!)
+                            : null,
+                        eddDate: snap.eddDate != null
+                            ? DateTime.fromMillisecondsSinceEpoch(snap.eddDate!)
+                            : null,
+                        ancVisitNumber: ancVisitNum,
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     // ── Combined health history ───────────────────────────
                     _CombinedTimeline(
                       entries: _buildTimelineEntries(data),
                       isLoading: remoteLoading,
                     ),
-                    const SizedBox(height: 12),
 
                     // ── Action row ────────────────────────────────────────
                     PatientActionsRow(
@@ -1360,11 +1361,7 @@ List<_CareThread> _deriveThreads(PatientOrMemberData data) {
     final stats = <String, String>{};
     final snap = data.pregnancySnapshot;
 
-    if (snap?.eddDate != null) {
-      final weeksLeft =
-          DateTime.fromMillisecondsSinceEpoch(snap!.eddDate!).difference(DateTime.now()).inDays ~/ 7;
-      if (weeksLeft > 0) stats[PatientProfileStrings.weeksToGo] = '$weeksLeft wks';
-    }
+    // EDD/weeks-to-go shown in GestationalAgeCard above — omit here to avoid duplication.
     final visitNum = raw['ancVisitNumber'] as String?;
     if (visitNum != null && visitNum.isNotEmpty) stats[PatientProfileStrings.visitsCompleted] = visitNum;
     final ancBp = raw['bp'] as String?;
@@ -1846,7 +1843,9 @@ class _PregnancyProgressSection extends StatelessWidget {
         ? DateTime.fromMillisecondsSinceEpoch(snapshot.eddDate!)
         : null;
 
-    final gaWeeks = lmpDate != null ? now.difference(lmpDate).inDays ~/ 7 : null;
+    // Derive LMP from EDD (EDD − 280 days) when lmpDate is absent but eddDate is set.
+    final effectiveLmp = lmpDate ?? (eddDate?.subtract(const Duration(days: 280)));
+    final gaWeeks = effectiveLmp != null ? now.difference(effectiveLmp).inDays ~/ 7 : null;
     final weeksLeft = eddDate != null ? eddDate.difference(now).inDays ~/ 7 : null;
     final progress = gaWeeks != null ? (gaWeeks / 40.0).clamp(0.0, 1.0) : 0.0;
     final visitsDone = int.tryParse(ancVisitNumber ?? '0') ?? 0;
@@ -1863,8 +1862,8 @@ class _PregnancyProgressSection extends StatelessWidget {
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (lmpDate != null)
-              _DetailRow(label: 'LMP', value: dateFormat.format(lmpDate)),
+            if (effectiveLmp != null)
+              _DetailRow(label: 'LMP', value: dateFormat.format(effectiveLmp)),
             if (eddDate != null)
               _DetailRow(label: 'EDD', value: dateFormat.format(eddDate)),
             if (gaWeeks != null)
@@ -1985,7 +1984,7 @@ class _PregnancyProgressSection extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                if (lmpDate != null)
+                if (effectiveLmp != null)
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1995,7 +1994,7 @@ class _PregnancyProgressSection extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        dateFormat.format(lmpDate),
+                        dateFormat.format(effectiveLmp),
                         style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
@@ -2073,6 +2072,26 @@ class _StatsGrid extends StatelessWidget {
   final List<_CareThread> threads;
   final List<MemberAssessment> assessments;
   final String noDataLabel;
+
+  static (IconData, Color) _iconFor(String label) {
+    if (label.startsWith('Blood sugar')) {
+      return (Icons.bloodtype_outlined, const Color(0xFFE65100));
+    }
+    return switch (label) {
+      'Last BP'               => (Icons.favorite_rounded,                const Color(0xFFD32F2F)),
+      'Haemoglobin'           => (Icons.water_drop_rounded,              const Color(0xFFD32F2F)),
+      'Weight' || 'Last weight' => (Icons.monitor_weight_outlined,       const Color(0xFF1565C0)),
+      'Visits completed'      => (Icons.assignment_turned_in_outlined,   const Color(0xFF2E7D32)),
+      'Visits'                => (Icons.event_note_outlined,             AppColors.navy),
+      'ANC visits'            => (Icons.pregnant_woman_outlined,         const Color(0xFF7B1FA2)),
+      'Diagnosis'             => (Icons.local_hospital_outlined,         const Color(0xFF7B1FA2)),
+      'Delivery'              => (Icons.child_care_outlined,             const Color(0xFFAD1457)),
+      'PNC visits'            => (Icons.baby_changing_station_outlined,  const Color(0xFF00695C)),
+      'Living children'       => (Icons.people_outline_rounded,          const Color(0xFF2E7D32)),
+      'Gravida / Parity'      => (Icons.pregnant_woman_outlined,         const Color(0xFF7B1FA2)),
+      _                       => (Icons.bar_chart_rounded,               AppColors.navy),
+    };
+  }
 
   // Maps a stat label to the rawJson field name + display unit.
   static const Map<String, (String field, String suffix)> _fieldMap = {
@@ -2377,7 +2396,6 @@ class _StatsGrid extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    final slotW = (MediaQuery.of(context).size.width - 28 - 10) / 2;
     final result = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2391,55 +2409,58 @@ class _StatsGrid extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            for (final e in displayStats)
-              SizedBox(
-                width: slotW,
-                child: Builder(builder: (ctx) {
-                  if (e.key == 'Visits') {
-                    // Combined visits tile — show assessment dates on tap.
-                    final hist = _extractVisitHistory(visitEntries);
-                    return GestureDetector(
-                      onTap: hist.isNotEmpty
-                          ? () => _showStatHistory(ctx, 'Visit history', hist)
-                          : null,
-                      child: _StatTile(
-                        label: e.key,
-                        value: e.value,
-                        hasHistory: hist.isNotEmpty,
-                      ),
-                    );
-                  }
-                  final hist = _extractHistory(e.key);
-                  return GestureDetector(
-                    onTap: hist.isNotEmpty
-                        ? () => _showStatHistory(ctx, e.key, hist)
-                        : null,
-                    child: _StatTile(
-                      label: e.key,
-                      value: e.value,
-                      hasHistory: hist.isNotEmpty,
-                    ),
-                  );
-                }),
-              ),
-            // Single tappable last-check-up tile (newest programme's date).
-            if (latestThread != null)
-              SizedBox(
-                width: slotW,
-                child: GestureDetector(
-                  onTap: () => _showCheckupHistory(context),
-                  child: _LastCheckupTile(
-                    thread: latestThread,
-                    hasHistory: threadsWithDate.length > 1,
-                  ),
+        Builder(builder: (context) {
+          final tiles = <Widget>[];
+          for (final e in displayStats) {
+            final (icon, iconColor) = _iconFor(e.key);
+            if (e.key == 'Visits') {
+              final hist = _extractVisitHistory(visitEntries);
+              tiles.add(GestureDetector(
+                onTap: hist.isNotEmpty
+                    ? () => _showStatHistory(context, 'Visit history', hist)
+                    : null,
+                child: _StatTile(
+                  label: e.key,
+                  value: e.value,
+                  icon: icon,
+                  iconColor: iconColor,
+                  hasHistory: hist.isNotEmpty,
                 ),
+              ));
+            } else {
+              final hist = _extractHistory(e.key);
+              tiles.add(GestureDetector(
+                onTap: hist.isNotEmpty
+                    ? () => _showStatHistory(context, e.key, hist)
+                    : null,
+                child: _StatTile(
+                  label: e.key,
+                  value: e.value,
+                  icon: icon,
+                  iconColor: iconColor,
+                  hasHistory: hist.isNotEmpty,
+                ),
+              ));
+            }
+          }
+          if (latestThread != null) {
+            tiles.add(GestureDetector(
+              onTap: () => _showCheckupHistory(context),
+              child: _LastCheckupTile(
+                thread: latestThread,
+                hasHistory: threadsWithDate.length > 1,
               ),
-          ],
-        ),
+            ));
+          }
+          return Column(
+            children: [
+              for (int i = 0; i < tiles.length; i++) ...[
+                if (i > 0) const SizedBox(height: 6),
+                tiles[i],
+              ],
+            ],
+          );
+        }),
       ],
     );
     debugPrint('⏱ [PatientContext] _StatsGrid ${sw.elapsedMilliseconds}ms stats=${displayStats.length}');
@@ -2447,22 +2468,30 @@ class _StatsGrid extends StatelessWidget {
   }
 }
 
-/// White stat card: muted label (11 px) + large bold navy value (18 px).
-/// When [hasHistory] is true, shows a history icon and the card responds to tap.
+/// Full-width stat row: colored icon + label + large value.
+/// Icon conveys meaning for low-literacy users without reading the label.
 class _StatTile extends StatelessWidget {
-  const _StatTile({required this.label, required this.value, this.hasHistory = false});
+  const _StatTile({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.iconColor,
+    this.hasHistory = false,
+  });
 
   final String label;
   final String value;
+  final IconData icon;
+  final Color iconColor;
   final bool hasHistory;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: AppColors.cardSurface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
             color: AppColors.navy.withValues(alpha: 0.06),
@@ -2471,13 +2500,24 @@ class _StatTile extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            alignment: Alignment.center,
+            child: Icon(icon, size: 18, color: iconColor),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
                   label,
                   style: const TextStyle(
                     fontSize: 11,
@@ -2485,30 +2525,29 @@ class _StatTile extends StatelessWidget {
                     color: AppColors.textMuted,
                   ),
                 ),
-              ),
-              if (hasHistory)
-                const Icon(Icons.history_rounded, size: 13, color: AppColors.textMuted),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: value.contains('\n') ? 14 : 18,
-              fontWeight: FontWeight.w700,
-              color: AppColors.navy,
-              height: value.contains('\n') ? 1.6 : 1.2,
-              fontFeatures: const [FontFeature.tabularFigures()],
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: value.contains('\n') ? 14 : 17,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.navy,
+                    height: value.contains('\n') ? 1.5 : 1.2,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
             ),
           ),
+          if (hasHistory)
+            const Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.textMuted),
         ],
       ),
     );
   }
 }
 
-/// Tappable last-check-up tile showing the most recent programme and date.
-/// A small "history" chevron appears when more than one programme has data.
+/// Tappable last-check-up row — programme emoji icon + relative date.
 class _LastCheckupTile extends StatelessWidget {
   const _LastCheckupTile({required this.thread, required this.hasHistory});
 
@@ -2519,10 +2558,10 @@ class _LastCheckupTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final rel = _relativeDate(thread.checkupDate!);
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       decoration: BoxDecoration(
         color: AppColors.cardSurface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
             color: AppColors.navy.withValues(alpha: 0.06),
@@ -2531,39 +2570,50 @@ class _LastCheckupTile extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              const Text(
-                'Last check-up',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textMuted,
-                ),
-              ),
-              const Spacer(),
-              if (hasHistory)
-                const Icon(Icons.history_rounded, size: 14, color: AppColors.textMuted),
-            ],
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: thread.bg,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            alignment: Alignment.center,
+            child: Text(thread.icon, style: const TextStyle(fontSize: 18)),
           ),
-          const SizedBox(height: 6),
-          Text(
-            rel,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: AppColors.navy,
-              height: 1.2,
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Last check-up',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  rel,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.navy,
+                    height: 1.2,
+                  ),
+                ),
+                Text(
+                  thread.label,
+                  style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 2),
-          Text(
-            thread.label,
-            style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-          ),
+          if (hasHistory)
+            const Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.textMuted),
         ],
       ),
     );
@@ -4500,40 +4550,38 @@ class _VitalsSnapshot {
 class _PatientDetailHeader extends StatelessWidget {
   const _PatientDetailHeader({
     required this.data,
-    required this.isUrgent,
     required this.refreshing,
     required this.onBack,
     required this.onRefresh,
   });
 
   final PatientOrMemberData data;
-  final bool isUrgent;
   final bool refreshing;
   final VoidCallback onBack;
   final VoidCallback? onRefresh;
 
   @override
   Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<LeapfrogColors>()!;
     final name = data.name ?? PatientContextStrings.fallbackTitle;
 
     final ageLabel = _ageLabelFromDob(data.dateOfBirth, data.age);
-    final subtitleParts = <String>[];
-    if (ageLabel != null) subtitleParts.add(ageLabel);
-    if (data.gender != null) subtitleParts.add(data.gender!);
-    if (data.householdId != null) {
-      subtitleParts.add(
-        data.householdName ??
-            PatientContextStrings.householdFallback(data.householdId!),
-      );
-    }
-    final subtitle = subtitleParts.join(' · ');
+    final genderInitial = data.gender != null && data.gender!.isNotEmpty
+        ? data.gender![0].toUpperCase()
+        : null;
+    final ageSuffix = ageLabel != null && genderInitial != null
+        ? '$ageLabel/$genderInitial'
+        : ageLabel ?? genderInitial;
+    final displayName = ageSuffix != null ? '$name $ageSuffix' : name;
+    final subtitle = data.householdId != null
+        ? (data.householdName ??
+            PatientContextStrings.householdFallback(data.householdId!))
+        : null;
 
     final chips = <_HeaderChip>[
       if (data.nationalId != null)
         _HeaderChip(Icons.badge_outlined, data.nationalId!),
-      if (data.phoneNumber != null || data.householdId != null)
-        _HeaderChip(Icons.phone_outlined, data.phoneNumber ?? ContactSheetStrings.noContactAvailable,
+      if (data.phoneNumber != null || data.householdHeadPhone != null)
+        _HeaderChip(Icons.phone_outlined, data.phoneNumber ?? data.householdHeadPhone!,
             onTap: () => showContactSheet(context, data)),
       if (data.villageName != null)
         _HeaderChip(Icons.location_on_outlined, data.villageName!,
@@ -4562,25 +4610,12 @@ class _PatientDetailHeader extends StatelessWidget {
                 onTap: onBack,
               ),
               const SizedBox(width: 10),
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: Colors.white.withValues(alpha: 0.18),
-                child: Text(
-                  _initials(name),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      name,
+                      displayName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -4589,7 +4624,7 @@ class _PatientDetailHeader extends StatelessWidget {
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    if (subtitle.isNotEmpty)
+                    if (subtitle != null)
                       Text(
                         subtitle,
                         maxLines: 1,
@@ -4603,26 +4638,6 @@ class _PatientDetailHeader extends StatelessWidget {
                   ],
                 ),
               ),
-              if (isUrgent) ...[
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: tokens.statusCritical,
-                    borderRadius: BorderRadius.circular(5),
-                  ),
-                  child: Text(
-                    PatientContextStrings.urgentBadge,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-              ],
               const SizedBox(width: 8),
               HeaderIconButton(
                 icon: Icons.cloud_download_outlined,
@@ -4706,14 +4721,6 @@ class _PatientDetailHeader extends StatelessWidget {
         );
       }
     }
-  }
-
-  static String _initials(String n) {
-    final parts = n.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty || parts.first.isEmpty) return '?';
-    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
-    return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
-        .toUpperCase();
   }
 
   /// Smart age label: months for under-2, years otherwise.

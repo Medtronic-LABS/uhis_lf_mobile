@@ -21,7 +21,7 @@ class AppDatabase {
 
   final Database db;
 
-  static const int schemaVersion = 28;
+  static const int schemaVersion = 29;
   static const String _fileName = 'uhis_offline.db';
 
   static const String tableHouseholds = 'households';
@@ -46,6 +46,8 @@ class AppDatabase {
   static const String tableAiResponseCache = 'ai_response_cache';
   static const String tableCoachingModules = 'coaching_modules';
   static const String tableCoachingProgress = 'coaching_progress';
+  static const String tableChatMessages = 'chat_messages';
+  static const String tableCoachingFaqs = 'coaching_faqs';
   static const String tableScreenings = 'screenings';
   static const String tableNcdMedicalReviews = 'ncd_medical_reviews';
   static const String tableDiagnoses = 'diagnoses';
@@ -518,6 +520,25 @@ class AppDatabase {
         quiz_score REAL NOT NULL DEFAULT 0.0,
         last_card_viewed INTEGER NOT NULL DEFAULT -1,
         updated_at INTEGER NOT NULL
+      )''');
+
+    // v29 — Micro-coaching: chat history + FAQ cache.
+    await db.execute('''
+      CREATE TABLE $tableChatMessages (
+        id TEXT PRIMARY KEY,
+        role TEXT NOT NULL,
+        text TEXT NOT NULL,
+        timestamp_ms INTEGER NOT NULL,
+        suggested_questions TEXT
+      )''');
+    await db.execute('''
+      CREATE TABLE $tableCoachingFaqs (
+        id TEXT PRIMARY KEY,
+        question_en TEXT NOT NULL,
+        question_bn TEXT,
+        occurrence_count INTEGER NOT NULL DEFAULT 0,
+        rank INTEGER NOT NULL DEFAULT 0,
+        synced_at INTEGER NOT NULL
       )''');
 
     // v26 — Clinical record tables: screenings, NCD medical reviews,
@@ -1387,6 +1408,26 @@ class AppDatabase {
             'ALTER TABLE $tablePregnancySnapshot ADD COLUMN delivery_date_millis INTEGER');
       } catch (_) {/* column already present — no-op */}
     }
+    if (from < 29) {
+      // v29 — Chat history and coaching FAQ cache tables.
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tableChatMessages (
+          id TEXT PRIMARY KEY,
+          role TEXT NOT NULL,
+          text TEXT NOT NULL,
+          timestamp_ms INTEGER NOT NULL,
+          suggested_questions TEXT
+        )''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $tableCoachingFaqs (
+          id TEXT PRIMARY KEY,
+          question_en TEXT NOT NULL,
+          question_bn TEXT,
+          occurrence_count INTEGER NOT NULL DEFAULT 0,
+          rank INTEGER NOT NULL DEFAULT 0,
+          synced_at INTEGER NOT NULL
+        )''');
+    }
   }
 
   // Single source of truth for "every table" — used by wipeAllData() so a
@@ -1399,6 +1440,7 @@ class AppDatabase {
     tableEncounters, tableLocalAssessments, tablePregnancySnapshot,
     tableTreatmentPresence, tableAssessmentDraft, tableAiSuggestions,
     tableEvalLog, tableAiResponseCache, tableCoachingModules, tableCoachingProgress,
+    tableChatMessages, tableCoachingFaqs,
     tableScreenings, tableNcdMedicalReviews, tableDiagnoses,
     tableTreatmentDetails, tableRxBuddyCheckins,
   ];
