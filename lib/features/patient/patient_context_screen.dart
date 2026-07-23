@@ -2075,6 +2075,26 @@ class _StatsGrid extends StatelessWidget {
   final List<MemberAssessment> assessments;
   final String noDataLabel;
 
+  static (IconData, Color) _iconFor(String label) {
+    if (label.startsWith('Blood sugar')) {
+      return (Icons.bloodtype_outlined, const Color(0xFFE65100));
+    }
+    return switch (label) {
+      'Last BP'               => (Icons.favorite_rounded,                const Color(0xFFD32F2F)),
+      'Haemoglobin'           => (Icons.water_drop_rounded,              const Color(0xFFD32F2F)),
+      'Weight' || 'Last weight' => (Icons.monitor_weight_outlined,       const Color(0xFF1565C0)),
+      'Visits completed'      => (Icons.assignment_turned_in_outlined,   const Color(0xFF2E7D32)),
+      'Visits'                => (Icons.event_note_outlined,             AppColors.navy),
+      'ANC visits'            => (Icons.pregnant_woman_outlined,         const Color(0xFF7B1FA2)),
+      'Diagnosis'             => (Icons.local_hospital_outlined,         const Color(0xFF7B1FA2)),
+      'Delivery'              => (Icons.child_care_outlined,             const Color(0xFFAD1457)),
+      'PNC visits'            => (Icons.baby_changing_station_outlined,  const Color(0xFF00695C)),
+      'Living children'       => (Icons.people_outline_rounded,          const Color(0xFF2E7D32)),
+      'Gravida / Parity'      => (Icons.pregnant_woman_outlined,         const Color(0xFF7B1FA2)),
+      _                       => (Icons.bar_chart_rounded,               AppColors.navy),
+    };
+  }
+
   // Maps a stat label to the rawJson field name + display unit.
   static const Map<String, (String field, String suffix)> _fieldMap = {
     'Last BP': ('bp', ' mmHg'),
@@ -2378,7 +2398,6 @@ class _StatsGrid extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    final slotW = (MediaQuery.of(context).size.width - 28 - 10) / 2;
     final result = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2395,32 +2414,36 @@ class _StatsGrid extends StatelessWidget {
         Builder(builder: (context) {
           final tiles = <Widget>[];
           for (final e in displayStats) {
-            tiles.add(Builder(builder: (ctx) {
-              if (e.key == 'Visits') {
-                final hist = _extractVisitHistory(visitEntries);
-                return GestureDetector(
-                  onTap: hist.isNotEmpty
-                      ? () => _showStatHistory(ctx, 'Visit history', hist)
-                      : null,
-                  child: _StatTile(
-                    label: e.key,
-                    value: e.value,
-                    hasHistory: hist.isNotEmpty,
-                  ),
-                );
-              }
-              final hist = _extractHistory(e.key);
-              return GestureDetector(
+            final (icon, iconColor) = _iconFor(e.key);
+            if (e.key == 'Visits') {
+              final hist = _extractVisitHistory(visitEntries);
+              tiles.add(GestureDetector(
                 onTap: hist.isNotEmpty
-                    ? () => _showStatHistory(ctx, e.key, hist)
+                    ? () => _showStatHistory(context, 'Visit history', hist)
                     : null,
                 child: _StatTile(
                   label: e.key,
                   value: e.value,
+                  icon: icon,
+                  iconColor: iconColor,
                   hasHistory: hist.isNotEmpty,
                 ),
-              );
-            }));
+              ));
+            } else {
+              final hist = _extractHistory(e.key);
+              tiles.add(GestureDetector(
+                onTap: hist.isNotEmpty
+                    ? () => _showStatHistory(context, e.key, hist)
+                    : null,
+                child: _StatTile(
+                  label: e.key,
+                  value: e.value,
+                  icon: icon,
+                  iconColor: iconColor,
+                  hasHistory: hist.isNotEmpty,
+                ),
+              ));
+            }
           }
           if (latestThread != null) {
             tiles.add(GestureDetector(
@@ -2431,16 +2454,12 @@ class _StatsGrid extends StatelessWidget {
               ),
             ));
           }
-          final fullW = slotW * 2 + 10;
-          return Wrap(
-            spacing: 10,
-            runSpacing: 10,
+          return Column(
             children: [
-              for (int i = 0; i < tiles.length; i++)
-                SizedBox(
-                  width: (tiles.length.isOdd && i == tiles.length - 1) ? fullW : slotW,
-                  child: tiles[i],
-                ),
+              for (int i = 0; i < tiles.length; i++) ...[
+                if (i > 0) const SizedBox(height: 8),
+                tiles[i],
+              ],
             ],
           );
         }),
@@ -2451,22 +2470,30 @@ class _StatsGrid extends StatelessWidget {
   }
 }
 
-/// White stat card: muted label (11 px) + large bold navy value (18 px).
-/// When [hasHistory] is true, shows a history icon and the card responds to tap.
+/// Full-width stat row: colored icon + label + large value.
+/// Icon conveys meaning for low-literacy users without reading the label.
 class _StatTile extends StatelessWidget {
-  const _StatTile({required this.label, required this.value, this.hasHistory = false});
+  const _StatTile({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.iconColor,
+    this.hasHistory = false,
+  });
 
   final String label;
   final String value;
+  final IconData icon;
+  final Color iconColor;
   final bool hasHistory;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       decoration: BoxDecoration(
         color: AppColors.cardSurface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
             color: AppColors.navy.withValues(alpha: 0.06),
@@ -2475,13 +2502,24 @@ class _StatTile extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            alignment: Alignment.center,
+            child: Icon(icon, size: 22, color: iconColor),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
                   label,
                   style: const TextStyle(
                     fontSize: 11,
@@ -2489,30 +2527,29 @@ class _StatTile extends StatelessWidget {
                     color: AppColors.textMuted,
                   ),
                 ),
-              ),
-              if (hasHistory)
-                const Icon(Icons.history_rounded, size: 13, color: AppColors.textMuted),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: value.contains('\n') ? 14 : 18,
-              fontWeight: FontWeight.w700,
-              color: AppColors.navy,
-              height: value.contains('\n') ? 1.6 : 1.2,
-              fontFeatures: const [FontFeature.tabularFigures()],
+                const SizedBox(height: 3),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: value.contains('\n') ? 15 : 20,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.navy,
+                    height: value.contains('\n') ? 1.55 : 1.2,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
             ),
           ),
+          if (hasHistory)
+            const Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.textMuted),
         ],
       ),
     );
   }
 }
 
-/// Tappable last-check-up tile showing the most recent programme and date.
-/// A small "history" chevron appears when more than one programme has data.
+/// Tappable last-check-up row — programme emoji icon + relative date.
 class _LastCheckupTile extends StatelessWidget {
   const _LastCheckupTile({required this.thread, required this.hasHistory});
 
@@ -2523,10 +2560,10 @@ class _LastCheckupTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final rel = _relativeDate(thread.checkupDate!);
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       decoration: BoxDecoration(
         color: AppColors.cardSurface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
             color: AppColors.navy.withValues(alpha: 0.06),
@@ -2535,39 +2572,50 @@ class _LastCheckupTile extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              const Text(
-                'Last check-up',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textMuted,
-                ),
-              ),
-              const Spacer(),
-              if (hasHistory)
-                const Icon(Icons.history_rounded, size: 14, color: AppColors.textMuted),
-            ],
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: thread.bg,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            alignment: Alignment.center,
+            child: Text(thread.icon, style: const TextStyle(fontSize: 22)),
           ),
-          const SizedBox(height: 6),
-          Text(
-            rel,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: AppColors.navy,
-              height: 1.2,
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Last check-up',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  rel,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.navy,
+                    height: 1.2,
+                  ),
+                ),
+                Text(
+                  thread.label,
+                  style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 2),
-          Text(
-            thread.label,
-            style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-          ),
+          if (hasHistory)
+            const Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.textMuted),
         ],
       ),
     );
