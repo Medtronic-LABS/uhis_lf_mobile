@@ -2392,55 +2392,58 @@ class _StatsGrid extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            for (final e in displayStats)
-              SizedBox(
-                width: slotW,
-                child: Builder(builder: (ctx) {
-                  if (e.key == 'Visits') {
-                    // Combined visits tile — show assessment dates on tap.
-                    final hist = _extractVisitHistory(visitEntries);
-                    return GestureDetector(
-                      onTap: hist.isNotEmpty
-                          ? () => _showStatHistory(ctx, 'Visit history', hist)
-                          : null,
-                      child: _StatTile(
-                        label: e.key,
-                        value: e.value,
-                        hasHistory: hist.isNotEmpty,
-                      ),
-                    );
-                  }
-                  final hist = _extractHistory(e.key);
-                  return GestureDetector(
-                    onTap: hist.isNotEmpty
-                        ? () => _showStatHistory(ctx, e.key, hist)
-                        : null,
-                    child: _StatTile(
-                      label: e.key,
-                      value: e.value,
-                      hasHistory: hist.isNotEmpty,
-                    ),
-                  );
-                }),
-              ),
-            // Single tappable last-check-up tile (newest programme's date).
-            if (latestThread != null)
-              SizedBox(
-                width: slotW,
-                child: GestureDetector(
-                  onTap: () => _showCheckupHistory(context),
-                  child: _LastCheckupTile(
-                    thread: latestThread,
-                    hasHistory: threadsWithDate.length > 1,
+        Builder(builder: (context) {
+          final tiles = <Widget>[];
+          for (final e in displayStats) {
+            tiles.add(Builder(builder: (ctx) {
+              if (e.key == 'Visits') {
+                final hist = _extractVisitHistory(visitEntries);
+                return GestureDetector(
+                  onTap: hist.isNotEmpty
+                      ? () => _showStatHistory(ctx, 'Visit history', hist)
+                      : null,
+                  child: _StatTile(
+                    label: e.key,
+                    value: e.value,
+                    hasHistory: hist.isNotEmpty,
                   ),
+                );
+              }
+              final hist = _extractHistory(e.key);
+              return GestureDetector(
+                onTap: hist.isNotEmpty
+                    ? () => _showStatHistory(ctx, e.key, hist)
+                    : null,
+                child: _StatTile(
+                  label: e.key,
+                  value: e.value,
+                  hasHistory: hist.isNotEmpty,
                 ),
+              );
+            }));
+          }
+          if (latestThread != null) {
+            tiles.add(GestureDetector(
+              onTap: () => _showCheckupHistory(context),
+              child: _LastCheckupTile(
+                thread: latestThread,
+                hasHistory: threadsWithDate.length > 1,
               ),
-          ],
-        ),
+            ));
+          }
+          final fullW = slotW * 2 + 10;
+          return Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              for (int i = 0; i < tiles.length; i++)
+                SizedBox(
+                  width: (tiles.length.isOdd && i == tiles.length - 1) ? fullW : slotW,
+                  child: tiles[i],
+                ),
+            ],
+          );
+        }),
       ],
     );
     debugPrint('⏱ [PatientContext] _StatsGrid ${sw.elapsedMilliseconds}ms stats=${displayStats.length}');
