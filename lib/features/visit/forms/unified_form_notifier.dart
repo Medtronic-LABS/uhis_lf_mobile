@@ -174,6 +174,23 @@ class UnifiedFormNotifier extends ChangeNotifier {
     }
   }
 
+  /// Pre-fills `pregnantWomanExistingIllness` and `pregnantWomanOnTreatment`
+  /// from the most recent prior ANC assessment. Only seeds when the SK has not
+  /// already entered a value (i.e., field is null in current data).
+  Future<void> preloadAncMedicalHistory() async {
+    if (_data.getValue('pregnantWomanExistingIllness') != null) return;
+    final prior = await _assessmentRepo.lastAncIllnessData(_patientId);
+    if (prior == null) return;
+    var changed = false;
+    for (final entry in prior.entries) {
+      if (_data.getValue(entry.key) == null) {
+        _data = _data.setValue(entry.key, entry.value);
+        changed = true;
+      }
+    }
+    if (changed) notifyListeners();
+  }
+
   /// Marks the given field IDs as having validation errors and notifies
   /// listeners so the form can highlight them.
   void setValidationErrors(Set<String> errors) {

@@ -148,6 +148,10 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
           }
         }
         await notifier.preloadBiometrics();
+        if (widget.activeFormTypes.contains('anc') ||
+            widget.enrolledFormTypes.contains('anc')) {
+          await notifier.preloadAncMedicalHistory();
+        }
         // Android RMNCH summary auto-fills next visit; seed after draft so
         // a saved SK override is never clobbered.
         notifier.seedRmnchFollowUpIfNeeded();

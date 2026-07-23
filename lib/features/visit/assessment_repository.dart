@@ -409,6 +409,10 @@ class AssessmentRepository extends ChangeNotifier {
         final kind = row.kind?.toUpperCase() ?? '';
         debugPrint('[AssessmentRepo] history row kind="$kind" id=${row.id}');
         if (!_isAncKind(kind)) continue;
+        final _previewRaw = row.rawJson.length > 500
+            ? '${row.rawJson.substring(0, 500)}…'
+            : row.rawJson;
+        debugPrint('[AssessmentRepo] history raw id=${row.id}: $_previewRaw');
         final snap = _snapshotFromServerRaw(row.rawJson, row.occurredAt);
         debugPrint('[AssessmentRepo] history snap: sys=${snap.systolic} dia=${snap.diastolic} '
             'wt=${snap.weight} urine=${snap.urineProtein}');
@@ -426,6 +430,60 @@ class AssessmentRepository extends ChangeNotifier {
     debugPrint('[AssessmentRepo] ancVitalsHistory: ${snapshots.length} snapshots '
         'for patient $patientId');
     return snapshots;
+  }
+
+  /// Returns `pregnantWomanExistingIllness` and `pregnantWomanOnTreatment`
+  /// from the most recent prior ANC assessment. Checks local submissions first,
+  /// then server-synced history. Returns null when no prior ANC data found.
+  Future<Map<String, dynamic>?> lastAncIllnessData(String patientId) async {
+    if (patientId.isEmpty) return null;
+
+    // 1. Most-recent local ANC row (newest-first from DAO).
+    final localRows = await _dao.getByPatientId(patientId);
+    for (final row in localRows) {
+      if (row.assessmentType.toUpperCase() != 'ANC') continue;
+      try {
+        final map = jsonDecode(row.assessmentDetails) as Map<String, dynamic>;
+        final illness = map['pregnantWomanExistingIllness'];
+        final treatment = map['pregnantWomanOnTreatment'];
+        if (illness != null) {
+          return {
+            'pregnantWomanExistingIllness': illness,
+            if (treatment != null) 'pregnantWomanOnTreatment': treatment,
+          };
+        }
+      } catch (_) {}
+    }
+
+    // 2. Server-synced history rows (newest-first).
+    if (_historyDao == null) return null;
+    final historyMap = await _historyDao.forMany([patientId]);
+    final historyRows = List<AssessmentRow>.from(
+        historyMap[patientId] ?? const [])
+      ..sort((a, b) => (b.occurredAt ?? 0).compareTo(a.occurredAt ?? 0));
+    for (final row in historyRows) {
+      if (!_isAncKind(row.kind?.toUpperCase() ?? '')) continue;
+      try {
+        final raw = jsonDecode(row.rawJson) as Map<String, dynamic>;
+        final flat = <String, dynamic>{...raw};
+        for (final sub in const [
+          'medicalHistoryPhysicalExamination',
+          'anc',
+          'assessmentDetails',
+        ]) {
+          if (raw[sub] is Map) flat.addAll((raw[sub] as Map).cast<String, dynamic>());
+        }
+        final illness = flat['pregnantWomanExistingIllness'];
+        final treatment = flat['pregnantWomanOnTreatment'];
+        if (illness != null) {
+          return {
+            'pregnantWomanExistingIllness': illness,
+            if (treatment != null) 'pregnantWomanOnTreatment': treatment,
+          };
+        }
+      } catch (_) {}
+    }
+    return null;
   }
 
   /// Reads the most-recent assessment row for [patientId] and returns the LMP
