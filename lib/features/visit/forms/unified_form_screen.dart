@@ -353,6 +353,7 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
             eddDate: cardEdd,
             gestationalWeeks: effectiveGa,
             bottomPadding: AppSpacing.xl,
+            ancVisitNumber: _ancVisitNumber().toString(),
           ));
         } else {
           debugPrint(

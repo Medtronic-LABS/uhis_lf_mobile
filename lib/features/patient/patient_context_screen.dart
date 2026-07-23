@@ -4565,12 +4565,13 @@ class _PatientDetailHeader extends StatelessWidget {
     final name = data.name ?? PatientContextStrings.fallbackTitle;
 
     final ageLabel = _ageLabelFromDob(data.dateOfBirth, data.age);
-    final titleSuffixParts = <String>[];
-    if (ageLabel != null) titleSuffixParts.add(ageLabel);
-    if (data.gender != null) titleSuffixParts.add(data.gender!);
-    final displayName = titleSuffixParts.isEmpty
-        ? name
-        : '$name · ${titleSuffixParts.join(' · ')}';
+    final genderInitial = data.gender != null && data.gender!.isNotEmpty
+        ? data.gender![0].toUpperCase()
+        : null;
+    final ageSuffix = ageLabel != null && genderInitial != null
+        ? '$ageLabel/$genderInitial'
+        : ageLabel ?? genderInitial;
+    final displayName = ageSuffix != null ? '$name $ageSuffix' : name;
     final subtitle = data.householdId != null
         ? (data.householdName ??
             PatientContextStrings.householdFallback(data.householdId!))

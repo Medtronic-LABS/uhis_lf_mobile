@@ -68,14 +68,18 @@ class VisitFlowHeader extends StatelessWidget {
       '3. ${VisitFlowStrings.step3Title}',
     ];
 
-    final subtitleParts = <String>[
-      if (ageDisplay != null) ageDisplay!,
-      if (patientGender != null && patientGender!.isNotEmpty)
-        patientGender!.toUpperCase().startsWith('F') ? 'Female' : 'Male',
-      if (householdId != null && householdId!.isNotEmpty)
-        'House #$householdId',
-    ];
-    final subtitle = subtitleParts.join(' · ');
+    final genderInitial = (patientGender != null && patientGender!.isNotEmpty)
+        ? patientGender![0].toUpperCase()
+        : null;
+    final ageGender = ageDisplay != null && genderInitial != null
+        ? '$ageDisplay/$genderInitial'
+        : ageDisplay ?? genderInitial;
+    final displayName = ageGender != null
+        ? '${patientName ?? '—'} $ageGender'
+        : patientName ?? '—';
+    final subtitle = householdId != null && householdId!.isNotEmpty
+        ? 'House #$householdId'
+        : null;
 
     return Material(
       color: headerColor,
@@ -136,7 +140,7 @@ class VisitFlowHeader extends StatelessWidget {
                               ? () => context.push('/patients/$patientId')
                               : null,
                           child: Text(
-                            patientName ?? '—',
+                            displayName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -150,7 +154,7 @@ class VisitFlowHeader extends StatelessWidget {
                             ),
                           ),
                         ),
-                        if (subtitle.isNotEmpty) ...[
+                        if (subtitle != null) ...[
                           const SizedBox(height: 2),
                           Text(
                             subtitle,
