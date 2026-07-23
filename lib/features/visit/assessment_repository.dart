@@ -439,13 +439,16 @@ class AssessmentRepository extends ChangeNotifier {
     if (patientId.isEmpty) return null;
 
     // 1. Most-recent local ANC row (newest-first from DAO).
+    // Local ANC details are nested: medicalHistoryPhysicalExamination holds
+    // pregnantWomanExistingIllness — unwrap before reading.
     final localRows = await _dao.getByPatientId(patientId);
     for (final row in localRows) {
       if (row.assessmentType.toUpperCase() != 'ANC') continue;
       try {
-        final map = jsonDecode(row.assessmentDetails) as Map<String, dynamic>;
-        final illness = map['pregnantWomanExistingIllness'];
-        final treatment = map['pregnantWomanOnTreatment'];
+        final raw = jsonDecode(row.assessmentDetails) as Map<String, dynamic>;
+        final flat = _flattenMap(raw, _ancSubObjects);
+        final illness = flat['pregnantWomanExistingIllness'];
+        final treatment = flat['pregnantWomanOnTreatment'];
         if (illness != null) {
           return {
             'pregnantWomanExistingIllness': illness,
@@ -465,14 +468,7 @@ class AssessmentRepository extends ChangeNotifier {
       if (!_isAncKind(row.kind?.toUpperCase() ?? '')) continue;
       try {
         final raw = jsonDecode(row.rawJson) as Map<String, dynamic>;
-        final flat = <String, dynamic>{...raw};
-        for (final sub in const [
-          'medicalHistoryPhysicalExamination',
-          'anc',
-          'assessmentDetails',
-        ]) {
-          if (raw[sub] is Map) flat.addAll((raw[sub] as Map).cast<String, dynamic>());
-        }
+        final flat = _flattenMap(raw, _ancSubObjects);
         final illness = flat['pregnantWomanExistingIllness'];
         final treatment = flat['pregnantWomanOnTreatment'];
         if (illness != null) {
@@ -482,6 +478,165 @@ class AssessmentRepository extends ChangeNotifier {
           };
         }
       } catch (_) {}
+    }
+    return null;
+  }
+
+  /// Stable ANC obstetric history fields from the most recent prior ANC:
+  /// `previousPregnancyComplications`, `ttTdCompleted`,
+  /// `facilityIdentifiedForDelivery`. Returns null when no prior ANC found.
+  Future<Map<String, dynamic>?> lastAncChronicData(String patientId) async {
+    if (patientId.isEmpty) return null;
+    const keys = [
+      'previousPregnancyComplications',
+      'ttTdCompleted',
+      'facilityIdentifiedForDelivery',
+    ];
+    final localRows = await _dao.getByPatientId(patientId);
+    for (final row in localRows) {
+      if (row.assessmentType.toUpperCase() != 'ANC') continue;
+      final r = _extractKeys(row.assessmentDetails, keys, _ancSubObjects);
+      if (r != null) return r;
+    }
+    if (_historyDao == null) return null;
+    final historyMap = await _historyDao.forMany([patientId]);
+    final rows = List<AssessmentRow>.from(historyMap[patientId] ?? const [])
+      ..sort((a, b) => (b.occurredAt ?? 0).compareTo(a.occurredAt ?? 0));
+    for (final row in rows) {
+      if (!_isAncKind(row.kind?.toUpperCase() ?? '')) continue;
+      final r = _extractKeys(row.rawJson, keys, _ancSubObjects);
+      if (r != null) return r;
+    }
+    return null;
+  }
+
+  /// Stable NCD diagnosis/medication/lifestyle fields from the most recent
+  /// prior NCD assessment. Wire names are mapped back to form field IDs:
+  ///   diagnosedBP           → isBeforeHtnDiagnosis
+  ///   diagnosedBPMedication → medicationFrequencyBp
+  ///   diagnosedGlucose      → isBeforeDiabetesDiagnosis
+  ///   diagnosedGlucoseMedication → medicationFrequencyBg
+  Future<Map<String, dynamic>?> lastNcdChronicData(String patientId) async {
+    if (patientId.isEmpty) return null;
+    const subObjects = ['bpLog', 'glucoseLog', 'symptomsLog', 'ncd', 'assessmentDetails'];
+
+    Map<String, dynamic>? extract(String jsonStr) {
+      try {
+        final raw = jsonDecode(jsonStr) as Map<String, dynamic>;
+        final flat = _flattenMap(raw, subObjects);
+        final result = <String, dynamic>{};
+        final htn = flat['isBeforeHtnDiagnosis'] ?? flat['diagnosedBP'];
+        if (htn != null) result['isBeforeHtnDiagnosis'] = htn;
+        final htnMed = flat['medicationFrequencyBp'] ?? flat['diagnosedBPMedication'];
+        if (htnMed != null) result['medicationFrequencyBp'] = htnMed;
+        final dm = flat['isBeforeDiabetesDiagnosis'] ?? flat['diagnosedGlucose'];
+        if (dm != null) result['isBeforeDiabetesDiagnosis'] = dm;
+        final dmMed = flat['medicationFrequencyBg'] ?? flat['diagnosedGlucoseMedication'];
+        if (dmMed != null) result['medicationFrequencyBg'] = dmMed;
+        final smoker = flat['isRegularSmoker'];
+        if (smoker != null) result['isRegularSmoker'] = smoker;
+        return result.isEmpty ? null : result;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final localRows = await _dao.getByPatientId(patientId);
+    for (final row in localRows) {
+      if (row.assessmentType.toUpperCase() != 'NCD') continue;
+      final r = extract(row.assessmentDetails);
+      if (r != null) return r;
+    }
+    if (_historyDao == null) return null;
+    final historyMap = await _historyDao.forMany([patientId]);
+    final rows = List<AssessmentRow>.from(historyMap[patientId] ?? const [])
+      ..sort((a, b) => (b.occurredAt ?? 0).compareTo(a.occurredAt ?? 0));
+    for (final row in rows) {
+      if (!_isNcdKind(row.kind?.toUpperCase() ?? '')) continue;
+      final r = extract(row.rawJson);
+      if (r != null) return r;
+    }
+    return null;
+  }
+
+  /// Stable PNC Mother history fields from the most recent prior PNC_MOTHER
+  /// assessment: gravida, parity, livingChildren, comorbidity flags.
+  Future<Map<String, dynamic>?> lastPncMotherChronicData(
+      String patientId) async {
+    if (patientId.isEmpty) return null;
+    const subObjects = [
+      'maternalHealthAssessment',
+      'pregnancyHistory',
+      'pncMother',
+      'assessmentDetails',
+    ];
+    const keys = [
+      'gravida',
+      'parity',
+      'livingChildren',
+      'htnPatient',
+      'eclampsia',
+      'dmPatient',
+      'gdmPatient',
+      'onTreatmentHtnEclampsia',
+      'onTreatmentDmGdm',
+    ];
+    final localRows = await _dao.getByPatientId(patientId);
+    for (final row in localRows) {
+      if (row.assessmentType.toUpperCase() != 'PNC_MOTHER') continue;
+      final r = _extractKeys(row.assessmentDetails, keys, subObjects);
+      if (r != null) return r;
+    }
+    if (_historyDao == null) return null;
+    final historyMap = await _historyDao.forMany([patientId]);
+    final rows = List<AssessmentRow>.from(historyMap[patientId] ?? const [])
+      ..sort((a, b) => (b.occurredAt ?? 0).compareTo(a.occurredAt ?? 0));
+    for (final row in rows) {
+      if (!_isPncMotherKind(row.kind?.toUpperCase() ?? '')) continue;
+      final r = _extractKeys(row.rawJson, keys, subObjects);
+      if (r != null) return r;
+    }
+    return null;
+  }
+
+  /// Stable Family Planning fields from the most recent prior FP assessment:
+  /// familyPlanningMethods, desireForChildrenInFuture, numberOfLivingChildren.
+  Future<Map<String, dynamic>?> lastFpData(String patientId) async {
+    if (patientId.isEmpty) return null;
+    const subObjects = ['familyPlanning', 'family_planning', 'assessmentDetails'];
+
+    Map<String, dynamic>? extract(String jsonStr) {
+      try {
+        final raw = jsonDecode(jsonStr) as Map<String, dynamic>;
+        final flat = _flattenMap(raw, subObjects);
+        final result = <String, dynamic>{};
+        final methods = flat['familyPlanningMethods'];
+        if (methods != null) result['familyPlanningMethods'] = methods;
+        // Wire name is desireForChildren; form field is desireForChildrenInFuture.
+        final desire = flat['desireForChildrenInFuture'] ?? flat['desireForChildren'];
+        if (desire != null) result['desireForChildrenInFuture'] = desire;
+        final children = flat['numberOfLivingChildren'];
+        if (children != null) result['numberOfLivingChildren'] = children;
+        return result.isEmpty ? null : result;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final localRows = await _dao.getByPatientId(patientId);
+    for (final row in localRows) {
+      if (row.assessmentType.toUpperCase() != 'FAMILY_PLANNING') continue;
+      final r = extract(row.assessmentDetails);
+      if (r != null) return r;
+    }
+    if (_historyDao == null) return null;
+    final historyMap = await _historyDao.forMany([patientId]);
+    final rows = List<AssessmentRow>.from(historyMap[patientId] ?? const [])
+      ..sort((a, b) => (b.occurredAt ?? 0).compareTo(a.occurredAt ?? 0));
+    for (final row in rows) {
+      if (!_isFpKind(row.kind?.toUpperCase() ?? '')) continue;
+      final r = extract(row.rawJson);
+      if (r != null) return r;
     }
     return null;
   }
@@ -545,6 +700,52 @@ class AssessmentRepository extends ChangeNotifier {
     return null;
   }
 
+  // ANC sub-object keys used by _toAnc() in UnifiedPayloadMapper.
+  static const _ancSubObjects = [
+    'medicalHistoryPhysicalExamination',
+    'vaccinationAndSupplements',
+    'ancServicesBirthPreparedness',
+    'pointOfCareInvestigations',
+    'dangerSignsRiskIdentification',
+    'anc',
+    'assessmentDetails',
+  ];
+
+  /// Flatten [subObjects] from [raw] into a single map for key lookups.
+  static Map<String, dynamic> _flattenMap(
+    Map<String, dynamic> raw,
+    List<String> subObjects,
+  ) {
+    final flat = <String, dynamic>{...raw};
+    for (final sub in subObjects) {
+      if (raw[sub] is Map) {
+        flat.addAll((raw[sub] as Map).cast<String, dynamic>());
+      }
+    }
+    return flat;
+  }
+
+  /// Extract [keys] from [jsonStr] after unwrapping [subObjects]. Returns null
+  /// when the JSON is unparseable or none of the keys are present.
+  static Map<String, dynamic>? _extractKeys(
+    String jsonStr,
+    List<String> keys,
+    List<String> subObjects,
+  ) {
+    try {
+      final raw = jsonDecode(jsonStr) as Map<String, dynamic>;
+      final flat = _flattenMap(raw, subObjects);
+      final result = <String, dynamic>{};
+      for (final key in keys) {
+        final v = flat[key];
+        if (v != null) result[key] = v;
+      }
+      return result.isEmpty ? null : result;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// True when [kind] (already uppercased) looks like an ANC visit tag.
   /// Covers the many variants the backend may send:
   ///   "ANC", "ANTENATAL", "ANTENATAL_CARE", "ANTENATAL CARE",
@@ -558,6 +759,17 @@ class AssessmentRepository extends ChangeNotifier {
         kind.contains('OBSTETRIC') ||
         kind.contains('PREGNANCY');
   }
+
+  static bool _isNcdKind(String kind) =>
+      kind.contains('NCD') || kind.contains('HYPERTENSION') || kind.contains('DIABETES');
+
+  static bool _isPncMotherKind(String kind) =>
+      kind.contains('PNC') && !kind.contains('CHILD') && !kind.contains('NEONAT');
+
+  static bool _isFpKind(String kind) =>
+      kind.contains('FAMILY_PLANNING') ||
+      kind.contains('FAMILYPLANNING') ||
+      kind == 'FP';
 
   /// Extracts LMP from a server assessment row's rawJson, trying several key
   /// locations the backend may use.  Returns null when nothing recognisable

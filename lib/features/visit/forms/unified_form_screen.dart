@@ -148,9 +148,25 @@ class _UnifiedFormScreenState extends State<UnifiedFormScreen> {
           }
         }
         await notifier.preloadBiometrics();
-        if (widget.activeFormTypes.contains('anc') ||
-            widget.enrolledFormTypes.contains('anc')) {
+        final hasAnc = widget.activeFormTypes.contains('anc') ||
+            widget.enrolledFormTypes.contains('anc');
+        if (hasAnc) {
           await notifier.preloadAncMedicalHistory();
+          await notifier.preloadAncChronic();
+        }
+        if (widget.activeFormTypes.contains('ncd') ||
+            widget.enrolledFormTypes.contains('ncd')) {
+          await notifier.preloadNcdChronic();
+        }
+        if (widget.activeFormTypes.contains('pncMother') ||
+            widget.enrolledFormTypes.contains('pncMother')) {
+          await notifier.preloadPncMotherChronic();
+        }
+        if (widget.activeFormTypes.contains('familyPlanning') ||
+            widget.enrolledFormTypes.contains('familyPlanning') ||
+            widget.activeFormTypes.contains('family_planning') ||
+            widget.enrolledFormTypes.contains('family_planning')) {
+          await notifier.preloadFpChronic();
         }
         // Android RMNCH summary auto-fills next visit; seed after draft so
         // a saved SK override is never clobbered.
