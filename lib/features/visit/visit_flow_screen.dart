@@ -181,10 +181,10 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     });
   }
 
-  Future<void> _loadVisitNumber() async {
-    final seeds = widget.seedProgrammes;
-    final isAnc = seeds.contains(Programme.anc);
-    final isPnc = seeds.contains(Programme.pnc);
+  Future<void> _loadVisitNumber({Set<Programme>? programmes}) async {
+    final progs = programmes ?? widget.seedProgrammes;
+    final isAnc = progs.contains(Programme.anc);
+    final isPnc = progs.contains(Programme.pnc);
     if (!isAnc && !isPnc) return;
     try {
       final dao = context.read<LocalAssessmentDao>();
@@ -482,6 +482,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
                 _confirmedProgrammes.isEmpty) {
               _confirmedProgrammes =
                   pathways.map((p) => p.programme).toSet();
+            }
+            if (_visitNumber == null) {
+              _loadVisitNumber(programmes: _confirmedProgrammes);
             }
             setState(() {
               _step = 1;
