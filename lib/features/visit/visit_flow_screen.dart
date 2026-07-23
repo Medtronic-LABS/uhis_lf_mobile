@@ -153,6 +153,9 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   int? get _effectiveGestationalWeeks =>
       widget.gestationalWeeks ?? _resolvedGestationalWeeks;
 
+  /// ANC or PNC visit number for the header badge (1-based). Null until loaded.
+  int? _visitNumber;
+
   @override
   void initState() {
     super.initState();
@@ -172,7 +175,28 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       if (widget.patientId.isNotEmpty) {
         _loadPregnancySnapshotFromDb();
       }
+      if (widget.patientId.isNotEmpty) {
+        _loadVisitNumber();
+      }
     });
+  }
+
+  Future<void> _loadVisitNumber() async {
+    final seeds = widget.seedProgrammes;
+    final isAnc = seeds.contains(Programme.anc);
+    final isPnc = seeds.contains(Programme.pnc);
+    if (!isAnc && !isPnc) return;
+    try {
+      final dao = context.read<LocalAssessmentDao>();
+      final rows = await dao.getByPatientId(widget.patientId);
+      final targetType = isAnc ? 'ANC' : 'PNC_MOTHER';
+      final count = rows
+          .where((r) => r.assessmentType.toUpperCase() == targetType)
+          .length;
+      if (mounted) setState(() => _visitNumber = count + 1);
+    } catch (e) {
+      debugPrint('[VisitFlow] visit number load failed: $e');
+    }
   }
 
   @override
@@ -379,6 +403,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
                   ageDisplay: _ageDisplay,
                   householdId: widget.householdId,
                   patientGender: widget.patientGender,
+                  visitNumber: _visitNumber,
                   primaryProgramme: _pathways.isNotEmpty
                       ? _pathways.first.programme
                       : _primaryProgramme,
