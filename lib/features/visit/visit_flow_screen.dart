@@ -30,6 +30,7 @@ import '../../core/clinical/referral_evaluator.dart';
 import '../../core/constants/app_strings.dart';
 import 'models/anc_assessment.dart';
 import '../../core/db/local_assessment_dao.dart';
+import 'assessment_repository.dart';
 import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/db/patient_programmes_dao.dart';
@@ -187,12 +188,20 @@ class _VisitFlowState extends State<VisitFlowScreen> {
     final isPnc = progs.contains(Programme.pnc);
     if (!isAnc && !isPnc) return;
     try {
-      final dao = context.read<LocalAssessmentDao>();
-      final rows = await dao.getByPatientId(widget.patientId);
-      final targetType = isAnc ? 'ANC' : 'PNC_MOTHER';
-      final count = rows
-          .where((r) => r.assessmentType.toUpperCase() == targetType)
-          .length;
+      int count;
+      if (isAnc) {
+        final history = await context
+            .read<AssessmentRepository>()
+            .ancVitalsHistory(widget.patientId);
+        count = history.length;
+      } else {
+        final rows = await context
+            .read<LocalAssessmentDao>()
+            .getByPatientId(widget.patientId);
+        count = rows
+            .where((r) => r.assessmentType.toUpperCase() == 'PNC_MOTHER')
+            .length;
+      }
       if (mounted) setState(() => _visitNumber = count + 1);
     } catch (e) {
       debugPrint('[VisitFlow] visit number load failed: $e');
