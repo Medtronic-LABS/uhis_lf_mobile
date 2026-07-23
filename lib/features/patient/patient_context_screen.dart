@@ -2457,7 +2457,7 @@ class _StatsGrid extends StatelessWidget {
           return Column(
             children: [
               for (int i = 0; i < tiles.length; i++) ...[
-                if (i > 0) const SizedBox(height: 8),
+                if (i > 0) const SizedBox(height: 6),
                 tiles[i],
               ],
             ],
@@ -2490,7 +2490,7 @@ class _StatTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: AppColors.cardSurface,
         borderRadius: BorderRadius.circular(14),
@@ -2505,16 +2505,16 @@ class _StatTile extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 44,
-            height: 44,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
               color: iconColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
             ),
             alignment: Alignment.center,
-            child: Icon(icon, size: 22, color: iconColor),
+            child: Icon(icon, size: 18, color: iconColor),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2527,14 +2527,14 @@ class _StatTile extends StatelessWidget {
                     color: AppColors.textMuted,
                   ),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 2),
                 Text(
                   value,
                   style: TextStyle(
-                    fontSize: value.contains('\n') ? 15 : 20,
+                    fontSize: value.contains('\n') ? 14 : 17,
                     fontWeight: FontWeight.w700,
                     color: AppColors.navy,
-                    height: value.contains('\n') ? 1.55 : 1.2,
+                    height: value.contains('\n') ? 1.5 : 1.2,
                     fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
@@ -2542,7 +2542,7 @@ class _StatTile extends StatelessWidget {
             ),
           ),
           if (hasHistory)
-            const Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.textMuted),
+            const Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.textMuted),
         ],
       ),
     );
@@ -2582,7 +2582,7 @@ class _LastCheckupTile extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
             ),
             alignment: Alignment.center,
-            child: Text(thread.icon, style: const TextStyle(fontSize: 22)),
+            child: Text(thread.icon, style: const TextStyle(fontSize: 18)),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -2601,7 +2601,7 @@ class _LastCheckupTile extends StatelessWidget {
                 Text(
                   rel,
                   style: const TextStyle(
-                    fontSize: 20,
+                    fontSize: 17,
                     fontWeight: FontWeight.w700,
                     color: AppColors.navy,
                     height: 1.2,
