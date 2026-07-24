@@ -15,7 +15,6 @@ import '../../../core/db/patient_programmes_dao.dart';
 import '../../../core/db/pregnancy_snapshot_dao.dart';
 import '../../patient/followup_repository.dart';
 import '../../patient/vitals_repository.dart';
-import '../../realtime_asr/chief_complaint_matcher.dart';
 import '../../scribe/models/ai_extracted_field.dart';
 import '../../scribe/widgets/ai_scribe_banner.dart';
 import '../briefing/briefing_models.dart';
@@ -825,6 +824,7 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                         isFemale:
                             vm.patientContext.sex == Sex.female,
                         tapStartsLiveAsr: true,
+                        symptomVocab: vm.applicableVocabCodes,
                         onReviewReady: (ctrl) {
                           final result = ctrl.session.triageExtractionResult;
                           if (result != null) {
@@ -832,21 +832,16 @@ class _SymptomPickerScreenState extends State<SymptomPickerScreen> {
                           }
                           ctrl.resetSession();
                         },
-                        onLiveFields: (fields, transcript) {
-                          if (fields.chiefComplaints.isEmpty) return;
-                          final codes = ChiefComplaintMatcher.match(
-                            fields.chiefComplaints,
-                          );
+                        onLiveSymptomCodes: (codes, transcript) {
                           if (codes.isEmpty) return;
                           vm.applyScribeTriageResult(
                             TriageExtractionResult(
                               symptomCodes: [
-                                for (final code in codes)
+                                for (final entry in codes.hits.entries)
                                   AIExtractedField(
-                                    fieldId: code,
+                                    fieldId: entry.key,
                                     value: true,
-                                    confidence:
-                                        ChiefComplaintMatcher.matchConfidence,
+                                    confidence: entry.value.confidence,
                                   ),
                               ],
                               transcriptText: transcript,
