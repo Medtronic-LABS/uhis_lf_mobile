@@ -8,6 +8,7 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/preferences/vad_tuning_notifier.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../realtime_asr/models/realtime_clinical_fields.dart';
+import '../../realtime_asr/models/realtime_symptom_codes.dart';
 import '../../realtime_asr/realtime_asr_controller.dart';
 import '../form_field_schema_builder.dart';
 import '../models/ai_extracted_field.dart';
@@ -46,6 +47,8 @@ class AiScribeBanner extends StatefulWidget {
     this.tapStartsLiveAsr = false,
     this.assessmentType,
     this.onFormFill,
+    this.symptomVocab,
+    this.onLiveSymptomCodes,
   });
 
   final String encounterId;
@@ -76,6 +79,19 @@ class AiScribeBanner extends StatefulWidget {
   /// when [assessmentType] is set).
   final void Function(FormPrefillResult fill)? onFormFill;
 
+  /// Client-authoritative symptom vocabulary for the generic scribe path —
+  /// when set (and [assessmentType] is null), live extractions come back as
+  /// coded [RealtimeSymptomCodes] (real per-code confidence, no keyword
+  /// matching needed) delivered via [onLiveSymptomCodes] instead of
+  /// [onLiveFields]. Pass the demographically-filtered vocabulary for this
+  /// patient, e.g. `AiScribeTriageVocab.applicableCodes(ctx)`.
+  final List<String>? symptomVocab;
+
+  /// Called each time live ASR delivers a vocab-constrained symptom-code
+  /// extraction (only fires when [symptomVocab] is set).
+  final void Function(RealtimeSymptomCodes codes, String fullTranscript)?
+      onLiveSymptomCodes;
+
   @override
   State<AiScribeBanner> createState() => _AiScribeBannerState();
 }
@@ -95,6 +111,7 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
   late final RealtimeAsrController _liveCtrl;
   RealtimeClinicalFields? _lastAppliedLiveFields;
   FormPrefillResult? _lastAppliedFormFill;
+  RealtimeSymptomCodes? _lastAppliedSymptomCodes;
 
   @override
   void initState() {
@@ -155,6 +172,11 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
       _lastAppliedLiveFields = fields;
       widget.onLiveFields?.call(fields, _liveCtrl.fullTranscript);
     }
+    final symptomCodes = _liveCtrl.symptomCodes;
+    if (symptomCodes != null && !identical(symptomCodes, _lastAppliedSymptomCodes)) {
+      _lastAppliedSymptomCodes = symptomCodes;
+      widget.onLiveSymptomCodes?.call(symptomCodes, _liveCtrl.fullTranscript);
+    }
     // Step 2 form-fill replies — apply each new extraction exactly once.
     final fill = _liveCtrl.formFill;
     if (fill != null && !identical(fill, _lastAppliedFormFill)) {
@@ -181,7 +203,10 @@ class _AiScribeBannerState extends State<AiScribeBanner> {
       debugPrint('<<========== ASR SESSION START — assessmentType='
           '${widget.assessmentType} ==========>>');
     }
-    _liveCtrl.start(assessmentType: widget.assessmentType);
+    _liveCtrl.start(
+      assessmentType: widget.assessmentType,
+      symptomVocab: widget.symptomVocab,
+    );
   }
 
   void _onScribeChanged() {

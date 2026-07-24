@@ -13,6 +13,7 @@ import '../scribe/form_field_schema_builder.dart';
 import '../scribe/models/ai_extracted_field.dart';
 import '../scribe/scribe_permission_service.dart';
 import 'models/realtime_clinical_fields.dart';
+import 'models/realtime_symptom_codes.dart';
 import 'realtime_asr_channel_io.dart'
     if (dart.library.html) 'realtime_asr_channel_web.dart';
 import 'vad_gate.dart';
@@ -111,6 +112,18 @@ class RealtimeAsrController extends ChangeNotifier {
   RealtimeClinicalFields? _fields;
   RealtimeClinicalFields? get fields => _fields;
 
+  /// Set when [start] was given a `symptomVocab` — remembered for the
+  /// session's lifetime so `_onMessage`'s `'symptoms'` case knows to parse
+  /// the coded-symptom shape instead of the legacy free-text ClinicalFields
+  /// shape (the server's response shape depends on whether this session sent
+  /// a vocabulary, since the client itself decided that).
+  List<String>? _symptomVocab;
+
+  /// Result from a vocab-constrained `"symptoms"` reply — populated instead
+  /// of [fields] when [start] was given a `symptomVocab`.
+  RealtimeSymptomCodes? _symptomCodes;
+  RealtimeSymptomCodes? get symptomCodes => _symptomCodes;
+
   /// Result from `form_fill` extraction — populated when [setFormSchema] has
   /// been called before starting the session (Step 2 form mode).
   FormPrefillResult? _formFill;
@@ -153,7 +166,19 @@ class RealtimeAsrController extends ChangeNotifier {
   /// [assessmentType] routes server-side extraction to the programme-specific
   /// prompt (ncd/anc/…) so replies arrive as `"form_fill"` — pass null for
   /// generic symptom extraction (Step 1 behaviour).
-  Future<void> start({String language = 'bn-IN', String? assessmentType}) async {
+  ///
+  /// [symptomVocab], when [assessmentType] is null, constrains the generic
+  /// "symptoms" extraction to exactly these client-supplied codes — pass the
+  /// demographically-filtered vocabulary for this patient (e.g.
+  /// `AiScribeTriageVocab.applicableCodes(ctx)`). The server then returns
+  /// real per-code confidence instead of free-text complaints, so no
+  /// client-side keyword matching is needed. Omit for the legacy free-text
+  /// behaviour (only relevant while any consumer hasn't migrated yet).
+  Future<void> start({
+    String language = 'bn-IN',
+    String? assessmentType,
+    List<String>? symptomVocab,
+  }) async {
     if (isActive) return;
 
     if (!realtimeAsrSupported) {
@@ -170,6 +195,8 @@ class RealtimeAsrController extends ChangeNotifier {
     // visible feedback.
     _segments.clear();
     _fields = null;
+    _symptomCodes = null;
+    _symptomVocab = (symptomVocab != null && symptomVocab.isNotEmpty) ? symptomVocab : null;
     _formFill = null;
     _errorMessage = null;
     _micWarning = null;
@@ -192,6 +219,7 @@ class RealtimeAsrController extends ChangeNotifier {
       final info = await _service.connectionInfo(
         language: language,
         assessmentType: assessmentType,
+        symptomVocab: _symptomVocab,
       );
       debugPrint('[RealtimeASR] connecting to ${info.uri} headers=${info.headers.keys}');
       _channel = connectRealtimeChannel(info.uri, info.headers);
@@ -416,15 +444,23 @@ class RealtimeAsrController extends ChangeNotifier {
         _extracting = false;
         final symptomsData =
             (msg['data'] as Map<String, dynamic>?) ?? const {};
-        _fields = RealtimeClinicalFields.fromJson(symptomsData);
-        // Confirmed live: a deployed ai-service with an assessmentType set
-        // returns "form_fill" (handled below), so this branch is a legacy
-        // fallback for older-deployed backends that still only speak
-        // "symptoms". When Step 2 form-fill mode is active (schema set),
-        // convert the symptoms response into a FormPrefillResult so the
-        // banner can still pre-fill the form fields.
-        if (_formSchema != null && _formSchema!.isNotEmpty) {
-          _formFill = _symptomsToFormFill(_fields!);
+        if (_symptomVocab != null) {
+          // This session supplied its own vocabulary, so the server replied
+          // with real codes + confidence (run_triage_inference's output
+          // shape) instead of free-text chiefComplaints — see
+          // ai-scribe-service's app/services/realtime_bridge.py.
+          _symptomCodes = RealtimeSymptomCodes.fromJson(symptomsData);
+        } else {
+          _fields = RealtimeClinicalFields.fromJson(symptomsData);
+          // Confirmed live: a deployed ai-service with an assessmentType set
+          // returns "form_fill" (handled below), so this branch is a legacy
+          // fallback for older-deployed backends that still only speak
+          // "symptoms". When Step 2 form-fill mode is active (schema set),
+          // convert the symptoms response into a FormPrefillResult so the
+          // banner can still pre-fill the form fields.
+          if (_formSchema != null && _formSchema!.isNotEmpty) {
+            _formFill = _symptomsToFormFill(_fields!);
+          }
         }
         _extractionCompleter?.complete();
         _extractionCompleter = null;

@@ -14,6 +14,19 @@ import '../visit/triage/ai_scribe_triage_vocab.dart';
 /// Chief complaints are expected in English regardless of spoken language
 /// (confirmed in testing: the extraction prompt normalizes non-English
 /// complaints to English chief-complaint phrases).
+///
+/// DEPRECATED: the "proper long-term fix" mentioned above has now shipped —
+/// `AiScribeBanner`'s `symptomVocab` param sends this app's own vocabulary to
+/// the server, which returns real per-code confidence directly (see
+/// `RealtimeSymptomCodes`), no keyword matching needed. Both migrated call
+/// sites (`symptom_picker_screen.dart`, `new_patient_visit_screen.dart`) no
+/// longer use this class. Left in place for one release as a rollback safety
+/// margin before deletion.
+@Deprecated(
+  'Superseded by AiScribeBanner.symptomVocab + RealtimeSymptomCodes, which '
+  'get real per-code confidence directly from the server instead of '
+  'keyword-matching free text. Scheduled for deletion.',
+)
 abstract final class ChiefComplaintMatcher {
   ChiefComplaintMatcher._();
 

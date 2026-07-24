@@ -10,11 +10,11 @@ import '../../core/db/member_dao.dart';
 import '../../core/db/patient_dao.dart';
 import '../../core/models/programme.dart';
 import '../../core/theme/app_theme.dart';
-import '../realtime_asr/chief_complaint_matcher.dart';
 import '../scribe/scribe_controller.dart';
 import '../scribe/scribe_permission_service.dart';
 import '../scribe/widgets/ai_scribe_banner.dart';
 import 'symptom_catalog.dart';
+import 'triage/ai_scribe_triage_vocab.dart';
 import 'visit_controller.dart';
 import 'visit_flow_header.dart';
 import 'visit_start_helper.dart';
@@ -383,6 +383,11 @@ class _SymptomSection extends StatelessWidget {
             patientId: patientId,
             isFemale: isFemale,
             tapStartsLiveAsr: true,
+            // Full vocabulary, not demographically filtered — this screen (a
+            // brand-new patient registration) doesn't have a built PatientContext
+            // available the way the Step-1 triage screen does. Matches today's
+            // behavior, which also applies no demographic filtering here.
+            symptomVocab: AiScribeTriageVocab.codes,
             onReviewReady: (ctrl) {
               final result = ctrl.session.triageExtractionResult;
               if (result != null) {
@@ -390,11 +395,11 @@ class _SymptomSection extends StatelessWidget {
               }
               ctrl.resetSession();
             },
-            onLiveFields: (fields, _) {
-              if (fields.chiefComplaints.isEmpty) return;
-              final codes = ChiefComplaintMatcher.match(fields.chiefComplaints);
+            onLiveSymptomCodes: (codes, _) {
               if (codes.isEmpty) return;
-              _applyScribeSymptoms(codes.toSet());
+              _applyScribeSymptoms(
+                codes.codesAbove(AppConfig.scribeSymptomConfidenceFloor).toSet(),
+              );
             },
           ),
         const SizedBox(height: 12),
