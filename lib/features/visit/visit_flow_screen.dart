@@ -325,7 +325,6 @@ class _VisitFlowState extends State<VisitFlowScreen> {
   /// True once the vaccination sub-step has completed in a combined child
   /// visit (Vaccination + Child Health). While false, step 1 shows the
   /// immunisation timeline; once set, step 1 shows the IMCI assessment form.
-  bool _childVaccinationDone = false;
 
   /// True when the SK confirmed a delivery visit in Step 1. Gates whether
   /// the pregnancyOutcome form sections are included in Step 2.
@@ -397,9 +396,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        if (_childVaccinationDone) {
-          setState(() => _childVaccinationDone = false);
-        } else if (_step > 1 || (_step == 1 && !_triageSubmitted)) {
+        if (_step > 1 || (_step == 1 && !_triageSubmitted)) {
           setState(() => _step -= 1);
         } else {
           await _exitFlow();
@@ -428,9 +425,7 @@ class _VisitFlowState extends State<VisitFlowScreen> {
                       ? _step1LiveProgrammes.map((p) => p.name).toList()
                       : _confirmedProgrammes.map((p) => p.name).toList(),
                   onBack: () {
-                    if (_childVaccinationDone) {
-                      setState(() => _childVaccinationDone = false);
-                    } else if (_step > 1 || (_step == 1 && !_triageSubmitted)) {
+                    if (_step > 1 || (_step == 1 && !_triageSubmitted)) {
                       setState(() => _step -= 1);
                     } else {
                       _exitFlow();
@@ -512,70 +507,25 @@ class _VisitFlowState extends State<VisitFlowScreen> {
           },
         );
       case 1:
-        // Child visits: show vaccination step only when SK selected vaccination
-        // (epi in confirmedProgrammes, or empty set = vaccination-only path via
-        // _onVaccination). IMCI-only visits skip vaccination and go straight to
-        // the child health assessment form.
+        // Child visits always route through _Step2Vaccination (vaccination
+        // timeline + optional ChildAssessmentSection). "Child Health" card
+        // maps to ChildAssessmentSection (weight, breastfeeding, congenital
+        // defect), NOT the ICCM sick-child form. The vaccination timeline is
+        // shown regardless so the SK can update the schedule in the same visit.
         if (_isChildVisit) {
           final hasImci = _confirmedProgrammes.contains(Programme.imci);
-          // Empty confirmedProgrammes = vaccination-only route (_onVaccination
-          // passes {} so auto-activated pathways don't contaminate the set).
-          final hasVaccination = _confirmedProgrammes.isEmpty ||
-              _confirmedProgrammes.contains(Programme.epi);
-          if (hasVaccination && !_childVaccinationDone) {
-            return _Step2Vaccination(
-              key: ValueKey('flow-step2-vacc-${widget.visitId}'),
-              patientId: widget.patientId,
-              patientName: widget.patientName,
-              encounterId: widget.visitId,
-              memberId: widget.memberId,
-              householdMemberLocalId: _householdMemberLocalId,
-              showChildAssessment: hasImci,
-              onAdvance: () {
-                setState(() {
-                  _primaryProgramme = Programme.imci;
-                  _referralRecommended = false;
-                  if (hasImci) {
-                    // Vaccination done; show IMCI form next.
-                    _childVaccinationDone = true;
-                  } else {
-                    // Vaccination only — go straight to summary.
-                    _step = 2;
-                  }
-                });
-              },
-            );
-          }
-          // Vaccination done; now show IMCI assessment form.
-          return _Step2ProgrammesThenForm(
-            key: ValueKey('flow-step2-imci-${widget.visitId}'),
-            visitId: widget.visitId,
+          return _Step2Vaccination(
+            key: ValueKey('flow-step2-vacc-${widget.visitId}'),
             patientId: widget.patientId,
-            memberId: widget.memberId,
-            householdId: widget.householdId,
-            villageId: widget.villageId,
-            householdMemberLocalId: _householdMemberLocalId,
-            patientAge: widget.patientAge,
             patientName: widget.patientName,
-            patientGender: widget.patientGender,
-            gestationalWeeks: _effectiveGestationalWeeks,
-            lmpMs: _resolvedLmpMs,
-            eddMs: _resolvedEddMs,
-            isPostpartum: _isPostpartum,
-            postpartumWeeks: _postpartumWeeks,
-            confirmedSymptoms: _confirmedSymptoms,
-            aiPickedSymptoms: _aiPickedSymptoms,
-            sicknessDuration: _sicknessDuration,
-            otherSymptoms: _otherSymptoms,
-            seedProgrammes: _confirmedProgrammes,
-            isDeliveryVisit: false,
-            origin: widget.origin,
-            onAdvance: (programme, referral, reasons, facility) {
+            encounterId: widget.visitId,
+            memberId: widget.memberId,
+            householdMemberLocalId: _householdMemberLocalId,
+            showChildAssessment: hasImci,
+            onAdvance: () {
               setState(() {
-                _primaryProgramme = programme;
-                _referralRecommended = referral;
-                _referredReasons = reasons;
-                _referralFacility = facility;
+                _primaryProgramme = Programme.imci;
+                _referralRecommended = false;
                 _step = 2;
               });
             },
