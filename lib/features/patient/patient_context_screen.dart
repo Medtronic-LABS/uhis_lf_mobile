@@ -1061,6 +1061,17 @@ int _sys(String bp) => int.tryParse(bp.split('/').firstOrNull ?? '') ?? 0;
 int _dia(String bp) => int.tryParse(bp.split('/').lastOrNull ?? '') ?? 0;
 
 /// Convert a single [MemberAssessment] into a display [_TimelineEntry].
+/// Joins referral reason codes into a sentence, capitalising the first word.
+/// Falls back to [fallback] when [reasons] is null or empty.
+String _narrativeFromReasons(String? reasons, String fallback) {
+  if (reasons == null || reasons.trim().isEmpty) return fallback;
+  final parts = reasons.split(',').map((r) => r.trim()).where((r) => r.isNotEmpty).toList();
+  if (parts.isEmpty) return fallback;
+  final joined = parts.join(', ');
+  final sentence = joined[0].toUpperCase() + joined.substring(1);
+  return '$sentence — follow-up required.';
+}
+
 _TimelineEntry _assessmentToEntry(MemberAssessment a) {
   final raw = _normalizeRaw(a.rawJson);
   final prog = Programme.fromString(a.type);
@@ -1069,6 +1080,11 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a) {
   final dx = (raw['confirmDiagnosis'] as String? ?? '').toLowerCase();
   final notesLower = (a.notes ?? '').toLowerCase();
   final combined = '$dx $notesLower';
+
+  // Backend referral status is the primary clinical signal — more reliable than
+  // re-deriving from raw vitals, which may be missing or contain test data.
+  final rawStatus = (raw['referralStatus'] as String? ?? a.status ?? '').toLowerCase().trim();
+  final referralReasons = a.notes?.isNotEmpty == true ? a.notes! : null;
 
   String emoji;
   String title;
@@ -1343,6 +1359,23 @@ _TimelineEntry _assessmentToEntry(MemberAssessment a) {
         category = 'General';
         description = a.notes?.isNotEmpty == true ? a.notes : null;
       }
+  }
+
+  // Post-switch: referral status overrides vitals-derived severity.
+  // Vitals may be absent or junk in test data; the backend already encoded
+  // the clinical decision in referralStatus + referralReason.
+  if (rawStatus == 'referred') {
+    dotColor = _kDotCritical;
+    badge = 'Referred';
+    badgeColor = _kBadgeCriticalBg;
+    badgeFgColor = _kBadgeCriticalFg;
+    description = _narrativeFromReasons(referralReasons, 'Referred for clinical review.');
+  } else if (rawStatus == 'ontreatment') {
+    dotColor = _kDotHigh;
+    badge = 'On treatment';
+    badgeColor = _kBadgeHighBg;
+    badgeFgColor = _kBadgeHighFg;
+    description = _narrativeFromReasons(referralReasons, 'Under treatment — follow-up as scheduled.');
   }
 
   return _TimelineEntry(
