@@ -1,10 +1,70 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_strings.dart';
 import '../../core/db/app_database.dart';
+import '../../core/db/patient_dao.dart';
+import '../../core/db/patient_programmes_dao.dart';
+import '../../core/models/patient.dart';
+import '../../core/models/programme.dart';
 import '../../core/theme/app_theme.dart';
 import 'sk_performance_repository.dart';
+
+final _cardDateFmt = DateFormat('dd MMM yyyy');
+
+// ── Spice Android due-info colors ─────────────────────────────────────────────
+const _kColorOverdue  = Color(0xFF994242);
+const _kColorToday    = Color(0xFFEB956A);
+const _kColorUpcoming = Color(0xFF54CC90);
+const _kColorRoutine  = Color(0xFF667085);
+
+// ── My Patients data model ────────────────────────────────────────────────────
+
+class _PatientItem {
+  const _PatientItem({
+    required this.patient,
+    required this.programmes,
+  });
+  final Patient patient;
+  final Set<Programme> programmes;
+
+  String get primaryService {
+    if (programmes.contains(Programme.anc)) return 'ANC';
+    if (programmes.contains(Programme.pnc)) return 'PNC';
+    if (programmes.contains(Programme.ncd)) return 'NCD';
+    if (programmes.contains(Programme.imci)) return 'IMCI';
+    if (programmes.contains(Programme.epi)) return 'EPI';
+    if (programmes.contains(Programme.familyPlanning)) return 'FP';
+    if (programmes.contains(Programme.eyeCare)) return 'Eye Care';
+    if (programmes.contains(Programme.cataract)) return 'Cataract';
+    if (programmes.isNotEmpty) return programmes.first.name.toUpperCase();
+    return '—';
+  }
+
+  /// Positive = days overdue, 0 = today, negative = days until due.
+  int? get daysDelta {
+    final due = patient.nextDueAt;
+    if (due == null) return null;
+    final dueDate = DateTime.fromMillisecondsSinceEpoch(due);
+    return DateTime.now().difference(dueDate).inDays;
+  }
+}
+
+Future<List<_PatientItem>> _loadMyPatients(AppDatabase db) async {
+  final patientDao = PatientDao(db);
+  final progDao = PatientProgrammesDao(db);
+  final rows = await patientDao.queryWorklist(limit: 200);
+  final patients = rows.map(Patient.fromDb).toList();
+  final ids = patients.map((p) => p.id).toList();
+  final progMap = await progDao.programmesForMany(ids);
+  return patients
+      .map((p) => _PatientItem(patient: p, programmes: progMap[p.id] ?? const {}))
+      .toList();
+}
+
+// ── Screen ────────────────────────────────────────────────────────────────────
 
 class SkPerformanceScreen extends StatefulWidget {
   const SkPerformanceScreen({super.key});
@@ -13,21 +73,30 @@ class SkPerformanceScreen extends StatefulWidget {
   State<SkPerformanceScreen> createState() => _SkPerformanceScreenState();
 }
 
-class _SkPerformanceScreenState extends State<SkPerformanceScreen> {
+class _SkPerformanceScreenState extends State<SkPerformanceScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabs;
   bool _showMonth = false;
   late Future<SkPerformanceStats> _statsFuture;
+  late Future<List<_PatientItem>> _patientsFuture;
 
   @override
   void initState() {
-    debugPrint('[_SkPerformanceScreenState] initState');
     super.initState();
+    _tabs = TabController(length: 2, vsync: this);
     _load();
   }
 
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
+
   void _load() {
-    debugPrint('[_SkPerformanceScreenState] _load');
     final db = context.read<AppDatabase>();
     _statsFuture = SkPerformanceRepository(db).load();
+    _patientsFuture = _loadMyPatients(db);
   }
 
   void _retry() => setState(_load);
@@ -46,7 +115,7 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen> {
           children: [
             Text(
               '📊 ${PerformanceStrings.title}',
-              style: TextStyle(
+              style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,
                 fontSize: 17,
@@ -62,40 +131,245 @@ class _SkPerformanceScreenState extends State<SkPerformanceScreen> {
             ),
           ],
         ),
+        bottom: TabBar(
+          controller: _tabs,
+          indicatorColor: Colors.white,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white60,
+          labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+          tabs: const [
+            Tab(text: 'Performance'),
+            Tab(text: 'My Patients'),
+          ],
+        ),
       ),
-      body: FutureBuilder<SkPerformanceStats>(
-        future: _statsFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError || !snapshot.hasData) {
-            return _ErrorView(onRetry: _retry);
-          }
-          final stats = snapshot.data!;
-          return ListView(
-            physics: const ClampingScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-            children: [
-              _PeriodToggle(
-                showMonth: _showMonth,
-                onToggle: (v) => setState(() => _showMonth = v),
-              ),
-              const SizedBox(height: 14),
-              _HeroCard(stats: stats, showMonth: _showMonth),
-              const SizedBox(height: 14),
-              _VisitTrendCard(stats: stats, showMonth: _showMonth),
-              const SizedBox(height: 14),
-              _StatsGrid(stats: stats, showMonth: _showMonth),
-              const SizedBox(height: 14),
-              _ServiceBreakdownCard(stats: stats, showMonth: _showMonth),
-              const SizedBox(height: 14),
-              _InsightStrip(stats: stats, showMonth: _showMonth),
-            ],
-          );
-        },
+      body: TabBarView(
+        controller: _tabs,
+        children: [
+          // ── Tab 0: Performance stats ──────────────────────────────────
+          FutureBuilder<SkPerformanceStats>(
+            future: _statsFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError || !snapshot.hasData) {
+                return _ErrorView(onRetry: _retry);
+              }
+              final stats = snapshot.data!;
+              return ListView(
+                physics: const ClampingScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                children: [
+                  _PeriodToggle(
+                    showMonth: _showMonth,
+                    onToggle: (v) => setState(() => _showMonth = v),
+                  ),
+                  const SizedBox(height: 14),
+                  _HeroCard(stats: stats, showMonth: _showMonth),
+                  const SizedBox(height: 14),
+                  _VisitTrendCard(stats: stats, showMonth: _showMonth),
+                  const SizedBox(height: 14),
+                  _StatsGrid(stats: stats, showMonth: _showMonth),
+                  const SizedBox(height: 14),
+                  _ServiceBreakdownCard(stats: stats, showMonth: _showMonth),
+                  const SizedBox(height: 14),
+                  _InsightStrip(stats: stats, showMonth: _showMonth),
+                ],
+              );
+            },
+          ),
+
+          // ── Tab 1: My Patients ────────────────────────────────────────
+          FutureBuilder<List<_PatientItem>>(
+            future: _patientsFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return _ErrorView(onRetry: _retry);
+              }
+              final items = snapshot.data ?? const [];
+              if (items.isEmpty) {
+                return Center(
+                  child: Text(
+                    'No patients',
+                    style: TextStyle(color: AppColors.textMuted),
+                  ),
+                );
+              }
+              return ListView.separated(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                itemCount: items.length,
+                separatorBuilder: (context, i) => const SizedBox(height: 8),
+                itemBuilder: (context, i) => _MyPatientCard(
+                  item: items[i],
+                  onTap: () {
+                    final pid = items[i].patient.id;
+                    if (pid.isNotEmpty) context.push('/patients/$pid');
+                  },
+                ),
+              );
+            },
+          ),
+        ],
       ),
     );
+  }
+}
+
+// ── My Patients card (Spice Android style) ────────────────────────────────────
+
+class _MyPatientCard extends StatelessWidget {
+  const _MyPatientCard({required this.item, required this.onTap});
+  final _PatientItem item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = item.patient;
+    final nextDue = p.nextDueAt != null
+        ? _cardDateFmt.format(DateTime.fromMillisecondsSinceEpoch(p.nextDueAt!))
+        : '—';
+    final lastVisit = p.lastVisitAt != null
+        ? _cardDateFmt.format(DateTime.fromMillisecondsSinceEpoch(p.lastVisitAt!))
+        : HouseholdDetailStrings.neverVisited;
+
+    final agePart = p.age != null ? '${p.age}' : null;
+    final genderPart = p.gender?.substring(0, 1).toUpperCase();
+    final agGender = [agePart, genderPart].whereType<String>().join('/');
+
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      elevation: 1,
+      shadowColor: Colors.black12,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: const Border(
+              left: BorderSide(color: AppColors.border, width: 4),
+            ),
+          ),
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Name + chevron
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      p.name ?? CommonStrings.unnamed,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF101828),
+                      ),
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right, size: 20, color: Color(0xFF9CA3AF)),
+                ],
+              ),
+              // Age / Gender
+              if (agGender.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 1),
+                  child: Text(
+                    agGender,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF6B7280),
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 8),
+              // Service
+              _SpiceRow(label: 'Service', value: item.primaryService),
+              // Next Visit
+              _SpiceRow(label: 'Next Visit', value: nextDue),
+              // Last Visit
+              _SpiceRow(label: 'Last Visit', value: lastVisit),
+              const SizedBox(height: 6),
+              // Due info text
+              _SpiceDueText(delta: item.daysDelta),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SpiceRow extends StatelessWidget {
+  const _SpiceRow({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 3),
+      child: Row(
+        children: [
+          Text(
+            '$label: ',
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: Color(0xFF667085),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF101828),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SpiceDueText extends StatelessWidget {
+  const _SpiceDueText({required this.delta});
+  final int? delta;
+
+  @override
+  Widget build(BuildContext context) {
+    final (text, color) = _resolve();
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        color: color,
+      ),
+    );
+  }
+
+  (String, Color) _resolve() {
+    final d = delta;
+    if (d == null) return ('Routine', _kColorRoutine);
+    if (d < 0) {
+      final days = d.abs();
+      if (days == 1) return ('Tomorrow', _kColorUpcoming);
+      return ('Upcoming in $days days', _kColorUpcoming);
+    }
+    if (d == 0) return ('Today', _kColorToday);
+    return ('$d day(s) Overdue', _kColorOverdue);
   }
 }
 
